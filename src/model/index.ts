@@ -1,4 +1,5 @@
 import { complete, streamModel } from "./streaming/streamModel.js";
+import { createModelRuntime } from "./runtime.js";
 
 export { parseModelConfig, type ParseModelConfigOptions } from "./config/parseModelConfig.js";
 export { resolveApiKey, type CredentialEnv } from "./config/resolveCredentials.js";
@@ -7,6 +8,7 @@ export { buildModelRequest, type ProviderRequestBody } from "./request/buildMode
 export { validateModelRequest, type ResolvedModelRequest } from "./request/validateModelRequest.js";
 export { parseModelResponse } from "./response/parseModelResponse.js";
 export { complete, streamModel, type ModelRuntimeOptions, type ModelTransport } from "./streaming/streamModel.js";
+export { createModelRuntime, type ModelRuntime } from "./runtime.js";
 export {
   normalizeStreamEvent,
   createStreamNormalizerState,
@@ -32,6 +34,7 @@ export type {
   CanonicalToolCallBlock,
   CanonicalToolChoice,
   CanonicalToolResultBlock,
+  CanonicalToolResult,
   CanonicalToolSchema,
   CanonicalUsage,
   ModelConfig,
@@ -63,4 +66,5 @@ export {
 export const Model = {
   complete,
   stream: streamModel,
+  createRuntime: createModelRuntime,
 };

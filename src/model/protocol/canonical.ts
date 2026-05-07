@@ -61,6 +61,8 @@ export type CanonicalToolResultBlock = {
   raw?: unknown;
 };
 
+export type CanonicalToolResult = CanonicalToolResultBlock;
+
 export type CanonicalContentBlock =
   | CanonicalTextBlock
   | CanonicalThinkingBlock
