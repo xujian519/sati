@@ -28,14 +28,15 @@ export async function complete(
   const { provider } = validateModelRequest(nonStreamingRequest, config);
   const body = buildModelRequest(nonStreamingRequest, config);
   const response = await sendProviderRequest(provider, body, false, options.fetch ?? fetch, options.signal);
-  const raw = await response.json();
 
   if (!response.ok) {
+    const raw = await safeReadJson(response);
     throw new ModelProviderError(
       normalizeModelError(provider.id, provider.protocol, raw, response.status),
     );
   }
 
+  const raw = await response.json();
   return parseModelResponse(provider.protocol, raw, provider.id);
 }
 
@@ -147,10 +148,11 @@ function buildHeaders(provider: ProviderConfig): HeadersInit {
 }
 
 async function safeReadJson(response: Response): Promise<unknown> {
+  const text = await response.text();
   try {
-    return await response.json();
+    return JSON.parse(text);
   } catch {
-    return await response.text();
+    return text;
   }
 }
 

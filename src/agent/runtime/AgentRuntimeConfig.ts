@@ -10,6 +10,10 @@ export type AgentRuntimeConfig = {
   temperature?: number;
   thinking?: CanonicalThinkingConfig;
   toolChoice?: CanonicalToolChoice;
+  fallbackProvider?: string;
+  fallbackModel?: string;
+  maxContextMessages?: number;
+  stopOnStructuredOutput?: boolean;
   permissionMode: PermissionMode;
   permissionContext: PermissionContext;
   env?: NodeJS.ProcessEnv;

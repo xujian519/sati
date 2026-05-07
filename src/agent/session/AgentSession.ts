@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AgentEvent } from "../protocol/events.js";
 import type { AgentInput, AgentSubmitOptions } from "../protocol/input.js";
 import type { AgentSessionState as AgentSessionStateShape } from "../protocol/state.js";
+import type { AgentTranscriptReplayResult } from "../transcript/TranscriptReplay.js";
 import type { TurnRunner } from "../turn/TurnRunner.js";
 import {
   appendPermissionDenials,
@@ -14,13 +15,15 @@ export type AgentSessionOptions = {
   sessionId: string;
   turnRunner: TurnRunner;
   uuid?: () => string;
+  initialState?: AgentSessionStateShape;
+  replayEvents?: AgentEvent[];
 };
 
 export class AgentSession {
   private state: AgentSessionStateShape;
 
   constructor(private readonly options: AgentSessionOptions) {
-    this.state = createInitialAgentSessionState(options.sessionId);
+    this.state = options.initialState ?? createInitialAgentSessionState(options.sessionId);
   }
 
   async *submit(input: AgentInput, submitOptions: AgentSubmitOptions = {}): AsyncGenerator<AgentEvent, void, unknown> {
@@ -58,7 +61,25 @@ export class AgentSession {
     return snapshotAgentSessionState(this.state);
   }
 
+  async *replay(): AsyncGenerator<AgentEvent, void, unknown> {
+    for (const event of this.options.replayEvents ?? []) {
+      yield event;
+    }
+  }
+
   private nextId(): string {
     return this.options.uuid?.() ?? randomUUID();
   }
+}
+
+export function createAgentSessionStateFromReplay(
+  sessionId: string,
+  replay: AgentTranscriptReplayResult,
+): AgentSessionStateShape {
+  return {
+    ...createInitialAgentSessionState(sessionId),
+    messages: replay.messages,
+    usage: replay.usage,
+    permissionDenials: replay.permissionDenials,
+  };
 }

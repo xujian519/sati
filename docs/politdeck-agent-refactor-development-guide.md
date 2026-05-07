@@ -125,6 +125,8 @@ agent_unsupported_feature
 | abort controller | `abortController` | `AgentAbortController` | `compare` | 模型流、工具执行、permission 均可被取消 |
 | 输入预处理 | `processUserInput()` | `TurnInputProcessor` | `deferred` | 第一阶段只保留普通文本/blocks；slash/local command/attachment 后续拆到 `context`/adapter |
 | 用户消息先写 transcript | `recordTranscript(messages)` before `query()` | `TranscriptWriter.recordAcceptedInput()` | `compare` | 用户消息一旦 accepted，进入模型前就要可 resume |
+| project transcript storage | `sessionStorage.ts` project JSONL | `JsonlTranscriptWriter` + project chat path | `compare` | 主 agent transcript 写入 `politHome/projects/<projectId>/chats/<sessionId>.jsonl` |
+| resume / replay 主链路 | transcript loader / SDK replay | `resumeAgentSession()` / `AgentSession.replay()` | `compare` | 重建主 session messages、usage、permission denials 和 replay events |
 | system init 输出 | `buildSystemInitMessage()` | `agent_session_initialized` event | `compare` | 内容字段用 PolitDeck 命名和 canonical summary |
 | 不进入模型的本地结果 | `shouldQuery: false` | `TurnInputProcessorResult.shouldCallModel` | `deferred` | slash/local command 第一阶段不做完整迁移 |
 | agent loop async generator | `query()` | `AgentLoop.run()` | `compare` | 产出 request、model、tool、control、result 事件 |
@@ -138,10 +140,10 @@ agent_unsupported_feature
 | missing tool_result 修复 | `yieldMissingToolResultBlocks()` | `ensureToolResultPairing()` | `compare` | 模型/中断错误后不能留下 orphan tool call |
 | max turns | `maxTurns` + `max_turns_reached` attachment | `agent_max_turns_reached` result | `compare` | 计数规则需要 scenario 固化 |
 | prompt too long preempt | blocking token limit | `ContextRuntime.checkBlockingLimit()` | `deferred` | 第一阶段定义接口；具体 token policy 后续实现 |
-| proactive compaction | autocompact/microcompact/snip/collapse | `ContextRuntime.prepareForModel()` | `deferred` | agent 只调用接口，不内联策略 |
-| reactive compact | prompt-too-long recovery | `ContextRuntime.recoverFromModelError()` | `deferred` | 第一阶段可返回 unsupported/deferred |
+| proactive compaction | autocompact/microcompact/snip/collapse | `ContextRuntime.prepareForModel()` | `deferred` | 已有基础 context runtime 和 message retention；高级 compact 策略后续 |
+| reactive compact | prompt-too-long recovery | `AgentRecoveryPolicy` | `deferred` | 已分类 prompt-too-long；自动 reactive compact 后续 |
 | max output tokens recovery | retry with override / meta prompt | `AgentRecoveryPolicy` | `deferred` | 需要 model/runtime 支持后实现 |
-| fallback model | `fallbackModel` | `ModelSelectionPolicy.fallback` | `deferred` | 第一阶段可记录为 unsupported recovery |
+| fallback model | `fallbackModel` | `AgentRecoveryPolicy` | `compare` | retryable model error 可切换 fallback model 一次 |
 | streaming fallback tombstone | `tombstone` events | `agent_message_tombstoned` | `deferred` | 仅在实现 provider fallback 后需要 |
 | assistant/user/system event projection | `normalizeMessage()` to SDK messages | `AgentEventProjector` | `compare` | 不暴露 legacy SDK shape，但要保留流式语义 |
 | progress messages | `createProgressMessage()` | `agent_progress` event | `deferred` | tool runtime 当前无 progress channel |
@@ -607,17 +609,18 @@ abort 需要覆盖三个阶段：
 | complete tool runtime context | yes | `compare` | `ToolRuntime` 依赖 session/turn/cwd/permission/audit/abort/env |
 | permission denial collection | yes | `compare` | result 需要暴露 denial summary |
 | permission mode propagation | yes | `compare` | agent state 与 `PermissionContext.mode` 必须一致 |
-| plan mode state transition | skeleton | `deferred` | `enter_plan_mode` / `exit_plan_mode` 需要 adapter/session 确认 |
-| structured output capture | skeleton | `deferred` | 工具已存在，但 agent 需消费 metadata/data |
+| plan mode state transition | yes | `compare` | agent 已消费 `requestedMode` 并同步 permission context |
+| structured output capture | yes | `compare` | agent 已消费 metadata/data 并可停止 turn |
 | tool result projection | yes | `compare` | 模型工具循环必要协议 |
 | max turns | yes | `compare` | 防止无限循环 |
 | abort propagation | yes | `compare` | 模型和工具都必须支持 |
 | accepted input transcript write | yes | `compare` | resume 正确性关键 |
-| JSONL transcript persistence | skeleton | `deferred` | 第一阶段可先做 memory writer + contract |
-| context prepare interface | skeleton | `deferred` | 复杂压缩后续 |
-| prompt too long recovery | no | `deferred` | 需要 token budget/context |
+| JSONL transcript persistence | yes | `compare` | 已接入 project chat path 和 JSONL writer/reader |
+| resume / replay | yes | `compare` | 已支持主 session transcript replay 和状态重建 |
+| context prepare interface | yes | `compare` | 已有基础 `NullContextRuntime` 和 message retention |
+| prompt too long recovery | partial | `deferred` | 已分类为 `prompt_too_long`；reactive compact 后续 |
 | max output token recovery | no | `deferred` | 需要模型策略 |
-| fallback model retry | no | `deferred` | 需要 model selection policy |
+| fallback model retry | yes | `compare` | retryable model error 可切换 fallback model 一次 |
 | streaming tool executor | no | `deferred` | 当前 tool scheduler 是 sequential |
 | progress event channel | skeleton | `deferred` | tool runtime 暂无 progress |
 | stop hooks | no | `deferred` | extension/hooks 模块未实现 |
@@ -917,17 +920,17 @@ Normalization rules：
 | --- | --- | --- | --- |
 | `agent-input-slash-command` | slash command 和 local command 输入处理 | Context/adapter phase | CLI adapter 需要前置实现 |
 | `agent-attachments` | paste、IDE selection、MCP resource、file attachments | Context phase | 多模态和 IDE 场景需要前置实现 |
-| `agent-context-budget` | tool result budget、snip、microcompact、autocompact、collapse | Context phase | 长会话 release gate |
+| `agent-context-advanced-compaction` | snip、microcompact、autocompact、collapse | Context phase | 长会话 release gate |
 | `agent-reactive-recovery` | prompt too long / media error reactive compact | Context phase | 大上下文模型调用 release gate |
 | `agent-max-output-recovery` | output limit recovery retry | Model/agent recovery phase | 长输出任务 release gate |
-| `agent-fallback-model` | fallback model retry and tombstone | Model selection phase | fallback 配置 release gate |
+| `agent-fallback-tombstone` | fallback retry with tombstone cleanup for partial streaming messages | Model selection phase | fallback UI/transcript release gate |
 | `agent-streaming-tools` | streaming tool execution while model streams | Tool scheduler phase | 并发/长工具 release gate |
 | `agent-progress` | tool/hook progress message channel | Tool/extension phase | UI 进度展示 release gate |
 | `agent-hooks` | pre/post/stop hooks | Extension phase | plugin release gate |
 | `agent-memory-skills-plugins` | memory prompt、skill discovery、plugin cache | Extension/context phase | advanced assistant release gate |
 | `agent-subagent-fork` | AgentTool、forked agent、sidechain transcript | Agent fork phase | subagent release gate |
 | `agent-worktree` | isolated worktree context | Adapter/tool/permission phase | background PR release gate |
-| `agent-jsonl-resume` | 完整 transcript resume/replay | Session phase | persistent CLI/SDK release gate |
+| `agent-resume-compact-boundary` | compact boundary aware resume and replay | Session/context phase | compact release gate |
 
 Deferred 不等于 intentional difference。实现前不得声称 execution parity 覆盖这些行为。
 
