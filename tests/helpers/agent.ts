@@ -42,6 +42,7 @@ export function createAgentLoopFixture(options: {
   permissionMode?: PermissionMode;
   canPrompt?: boolean;
   auditRecorder?: PolitDeckToolAuditRecorder;
+  config?: Partial<AgentRuntimeConfig>;
 }): {
   model: ScriptedAgentModel;
   registry: ToolRegistry;
@@ -71,6 +72,7 @@ export function createAgentLoopFixture(options: {
       mode: permissionMode,
       canPrompt: options.canPrompt ?? false,
     }),
+    ...options.config,
   };
   const dependencies: AgentRuntimeDependencies = {
     model,

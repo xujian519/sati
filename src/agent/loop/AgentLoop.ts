@@ -12,6 +12,8 @@ import type { AgentEvent } from "../protocol/events.js";
 import type { AgentPermissionDenial, AgentTurnResult } from "../protocol/result.js";
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
+import { NullContextRuntime } from "../context/NullContextRuntime.js";
+import { AgentRecoveryPolicy } from "./AgentRecoveryPolicy.js";
 import { collectToolCalls } from "./collectToolCalls.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
 import { projectToolResults } from "./projectToolResults.js";
@@ -33,7 +35,14 @@ export class AgentLoop {
   constructor(
     private readonly config: AgentRuntimeConfig,
     private readonly dependencies: AgentRuntimeDependencies,
-  ) {}
+  ) {
+    this.recoveryPolicy = new AgentRecoveryPolicy({
+      fallbackProvider: config.fallbackProvider,
+      fallbackModel: config.fallbackModel,
+    });
+  }
+
+  private readonly recoveryPolicy: AgentRecoveryPolicy;
 
   async *run(input: AgentLoopInput): AsyncGenerator<AgentEvent, AgentLoopRunResult, unknown> {
     const startedAt = this.now().toISOString();
@@ -59,7 +68,7 @@ export class AgentLoop {
         return { result, messages };
       }
 
-      const request = this.createModelRequest(messages);
+      const request = await this.createModelRequest(messages);
       yield {
         type: "model_request_started",
         sessionId: input.sessionId,
@@ -108,15 +117,23 @@ export class AgentLoop {
           messages.push(projected);
           yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: projected };
         }
+        const recovery = this.recoveryPolicy.decideForModelError(assembled.error);
+        if (recovery.type === "retry") {
+          this.config.provider = recovery.provider;
+          this.config.model = recovery.model;
+          yield { type: "turn_continued", sessionId: input.sessionId, turnId: input.turnId, reason: "model_error" };
+          continue;
+        }
+
         const result = this.createTurnResult(input, {
           type: "error",
-          stopReason: "model_error",
+          stopReason: recovery.stopReason,
           usage,
           permissionDenials,
           turns: turnCount,
           startedAt,
           finalMessage,
-          errors: [agentError("agent_model_error", assembled.error.message, assembled.error)],
+          errors: [recovery.error],
         });
         yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
@@ -154,12 +171,33 @@ export class AgentLoop {
         if (result.type === "success" && result.metadata?.structuredOutput) {
           structuredOutput = result.data;
         }
+        const requestedMode = readRequestedMode(result.type === "success" ? result.data : undefined);
+        if (requestedMode) {
+          this.config.permissionMode = requestedMode;
+          this.config.permissionContext.mode = requestedMode;
+          yield { type: "mode_change_requested", sessionId: input.sessionId, turnId: input.turnId, mode: requestedMode };
+        }
         yield { type: "tool_result", sessionId: input.sessionId, turnId: input.turnId, result };
       }
 
       const projected = projectToolResults(pairedResults);
       messages.push(projected);
       yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: projected };
+
+      if (this.config.stopOnStructuredOutput && structuredOutput !== undefined) {
+        const result = this.createTurnResult(input, {
+          type: "success",
+          stopReason: "completed",
+          usage,
+          permissionDenials,
+          turns: turnCount,
+          startedAt,
+          finalMessage,
+          structuredOutput,
+        });
+        yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+        return { result, messages };
+      }
 
       const nextTurnCount = turnCount + 1;
       if (input.maxTurns && nextTurnCount > input.maxTurns) {
@@ -183,13 +221,20 @@ export class AgentLoop {
     }
   }
 
-  private createModelRequest(messages: CanonicalMessage[]): CanonicalModelRequest {
+  private async createModelRequest(messages: CanonicalMessage[]): Promise<CanonicalModelRequest> {
+    const contextRuntime = this.dependencies.context ?? new NullContextRuntime();
+    const prepared = await contextRuntime.prepareForModel({
+      messages: cloneMessages(messages),
+      tools: this.dependencies.tools.registry.toCanonicalSchemas(),
+      maxMessages: this.config.maxContextMessages,
+    });
+
     return {
       provider: this.config.provider,
       model: this.config.model,
-      messages: cloneMessages(messages),
+      messages: prepared.messages,
       systemPrompt: this.config.systemPrompt,
-      tools: this.dependencies.tools.registry.toCanonicalSchemas(),
+      tools: prepared.tools,
       toolChoice: this.config.toolChoice,
       maxOutputTokens: this.config.maxOutputTokens,
       temperature: this.config.temperature,
@@ -274,4 +319,22 @@ function add(first: number | undefined, second: number | undefined): number | un
     return undefined;
   }
   return (first ?? 0) + (second ?? 0);
+}
+
+function readRequestedMode(value: unknown): AgentRuntimeConfig["permissionMode"] | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const requestedMode = (value as Record<string, unknown>).requestedMode;
+  return isPermissionMode(requestedMode) ? requestedMode : undefined;
+}
+
+function isPermissionMode(value: unknown): value is AgentRuntimeConfig["permissionMode"] {
+  return (
+    value === "default" ||
+    value === "plan" ||
+    value === "acceptEdits" ||
+    value === "bypassPermissions" ||
+    value === "dontAsk"
+  );
 }

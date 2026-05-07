@@ -7,6 +7,7 @@ import {
   ensureToolResultPairing,
   projectToolResults,
 } from "../../src/agent/index.js";
+import { createEnterPlanModeTool, createStructuredOutputTool } from "../../src/tool/index.js";
 import { createPolitDeckTestTool } from "../helpers/tool.js";
 import { collectAsyncGenerator, createAgentLoopFixture } from "../helpers/agent.js";
 
@@ -181,4 +182,58 @@ test("AgentSession preserves messages across turns", async () => {
   assert.equal(model.requests.length, 2);
   assert.equal(model.requests[1]?.messages.length, 3);
   assert.equal(session.snapshot().messages.length, 4);
+});
+
+test("AgentLoop captures structured output and can stop after the tool result", async () => {
+  const { loop, config } = createAgentLoopFixture({
+    tools: [createStructuredOutputTool()],
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        {
+          type: "tool_call_end",
+          toolCall: { id: "call-1", name: "structured_output", input: { value: { ok: true } } },
+        },
+        { type: "message_end", finishReason: "tool_call" },
+      ],
+    ],
+  });
+  config.stopOnStructuredOutput = true;
+
+  const { result } = await collectAsyncGenerator(
+    loop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "user", content: [{ type: "text", text: "json" }] }],
+    }),
+  );
+
+  assert.deepEqual(result.result.structuredOutput, { ok: true });
+  assert.equal(result.result.type, "success");
+});
+
+test("AgentLoop consumes requested plan mode changes from plan tools", async () => {
+  const fixture = createAgentLoopFixture({
+    tools: [createEnterPlanModeTool()],
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "tool_call_end", toolCall: { id: "call-1", name: "enter_plan_mode", input: {} } },
+        { type: "message_end", finishReason: "tool_call" },
+      ],
+    ],
+  });
+
+  const { values } = await collectAsyncGenerator(
+    fixture.loop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "user", content: [{ type: "text", text: "plan" }] }],
+      maxTurns: 1,
+    }),
+  );
+
+  assert.equal(fixture.config.permissionMode, "plan");
+  assert.equal(fixture.config.permissionContext.mode, "plan");
+  assert.ok(values.some((event) => event.type === "mode_change_requested"));
 });

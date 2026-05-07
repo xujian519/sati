@@ -14,6 +14,7 @@ export type AgentEvent =
   | { type: "tool_calls_detected"; sessionId: string; turnId: string; calls: CanonicalToolCall[] }
   | { type: "tool_result"; sessionId: string; turnId: string; result: PolitDeckToolResult }
   | { type: "tool_results_projected"; sessionId: string; turnId: string; message: CanonicalMessage }
+  | { type: "mode_change_requested"; sessionId: string; turnId: string; mode: string }
   | { type: "turn_continued"; sessionId: string; turnId: string; reason: AgentLoopTransition["reason"] }
   | { type: "turn_completed"; sessionId: string; turnId: string; result: AgentTurnResult }
   | { type: "turn_failed"; sessionId: string; turnId: string; error: AgentError }
