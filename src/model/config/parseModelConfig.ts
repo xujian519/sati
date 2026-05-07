@@ -44,6 +44,7 @@ export function parseModelConfig(
 
   const defaultProvider = readRequiredString(rawConfig.defaultProvider, "defaultProvider");
   const defaultModel = readRequiredString(rawConfig.defaultModel, "defaultModel");
+  const fallbackModel = readOptionalString(rawConfig.fallbackModel, "fallbackModel");
 
   if (!isRecord(rawConfig.providers) || Object.keys(rawConfig.providers).length === 0) {
     throw new ModelConfigError("missing_provider", "Model config must contain at least one provider.");
@@ -69,9 +70,16 @@ export function parseModelConfig(
     );
   }
 
+  if (fallbackModel && !Object.values(providers).some((candidate) => candidate.models[fallbackModel])) {
+    throw new ModelConfigError("fallback_model_not_found", `Fallback model ${fallbackModel} does not exist.`, {
+      fallbackModel,
+    });
+  }
+
   return {
     defaultProvider,
     defaultModel,
+    fallbackModel,
     providers,
   };
 }
@@ -226,6 +234,17 @@ function parseMultimodal(protocol: ModelProtocol, rawMultimodal: unknown): Multi
 }
 
 function readRequiredString(value: unknown, key: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new ModelConfigError("invalid_config_value", `${key} must be a non-empty string.`);
+  }
+  return value;
+}
+
+function readOptionalString(value: unknown, key: string): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
   if (typeof value !== "string" || value.length === 0) {
     throw new ModelConfigError("invalid_config_value", `${key} must be a non-empty string.`);
   }

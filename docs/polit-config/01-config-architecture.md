@@ -85,7 +85,7 @@ ${PolitHome}/politdeck.yaml
 ${PolitHome}/projects/<project-id>/chats
 ```
 
-`project-id` 应由项目根目录的稳定标识派生，例如规范化绝对路径 hash，避免不同项目的聊天记录混在一起。
+`project-id` 应由项目根目录的规范化绝对路径派生，把斜杆、空格、冒号等不适合作为目录名的字符替换为短横线。它应保持可读，不使用 hash。
 
 ### PolitConfigSource
 

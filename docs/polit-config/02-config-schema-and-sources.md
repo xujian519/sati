@@ -26,7 +26,7 @@ ${PolitHome}/politdeck.yaml
 ${PolitHome}/projects/<project-id>/chats
 ```
 
-`project-id` 由项目根目录稳定派生，不由 YAML 配置。
+`project-id` 由项目根目录的规范化绝对路径稳定派生：将斜杆、空格、冒号等不适合作目录名的字符替换为短横线，不使用 hash，也不由 YAML 配置。
 
 ## 配置来源
 

@@ -41,3 +41,12 @@ test("rejects unsupported multimodal input", () => {
     (error) => error instanceof ModelConfigError && error.code === "invalid_multimodal_input",
   );
 });
+
+test("accepts fallback model when it exists in any provider", () => {
+  const raw = validModelConfig();
+  raw.fallbackModel = "gpt-5.1";
+
+  const config = parseModelConfig(raw, { env: { ANTHROPIC_API_KEY: "anthropic-key" } });
+
+  assert.equal(config.fallbackModel, "gpt-5.1");
+});
