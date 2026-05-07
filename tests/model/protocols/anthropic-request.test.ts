@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildModelRequest, parseModelConfig, type CanonicalModelRequest } from "../../../src/model/index.js";
+import { parseModelConfig } from "../../../src/model/config/parseModelConfig.js";
+import { buildModelRequest } from "../../../src/model/request/buildModelRequest.js";
+import type { CanonicalModelRequest } from "../../../src/model/protocol/canonical.js";
 import { validModelConfig } from "../helpers.js";
 
 test("builds Anthropic messages request from canonical request", () => {

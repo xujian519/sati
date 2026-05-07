@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ModelConfigError, resolveApiKey } from "../../../src/model/index.js";
+import { resolveApiKey } from "../../../src/model/config/resolveCredentials.js";
+import { ModelConfigError } from "../../../src/model/protocol/errors.js";
 
 test("resolves api key from environment reference", () => {
   assert.equal(resolveApiKey("${OPENAI_API_KEY}", { OPENAI_API_KEY: "sk-test" }), "sk-test");

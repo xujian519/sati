@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ModelConfigError, parseModelConfig } from "../../../src/model/index.js";
+import { parseModelConfig } from "../../../src/model/config/parseModelConfig.js";
+import { ModelConfigError } from "../../../src/model/protocol/errors.js";
 import { validModelConfig } from "../helpers.js";
 
 test("parses provider, model capabilities and multimodal constraints", () => {

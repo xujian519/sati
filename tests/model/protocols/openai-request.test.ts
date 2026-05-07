@@ -1,11 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  ModelRequestError,
-  buildModelRequest,
-  parseModelConfig,
-  type CanonicalModelRequest,
-} from "../../../src/model/index.js";
+import { parseModelConfig } from "../../../src/model/config/parseModelConfig.js";
+import { ModelRequestError } from "../../../src/model/protocol/errors.js";
+import type { CanonicalModelRequest } from "../../../src/model/protocol/canonical.js";
+import { buildModelRequest } from "../../../src/model/request/buildModelRequest.js";
 import { validModelConfig } from "../helpers.js";
 
 test("builds OpenAI chat completions request from canonical request", () => {

@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { parseModelResponse } from "../../../src/model/response/parseModelResponse.js";
 import {
   createStreamNormalizerState,
   normalizeStreamEvent,
-  parseModelResponse,
-} from "../../../src/model/index.js";
+} from "../../../src/model/streaming/normalizeStreamEvent.js";
 
 test("parses Anthropic tool_use response into canonical tool call", () => {
   const response = parseModelResponse("anthropic", {

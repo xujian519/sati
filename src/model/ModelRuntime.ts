@@ -18,30 +18,26 @@ export function createModelRuntime(
   config: ModelConfig,
   options: ModelRuntimeOptions = {},
 ): ModelRuntime {
+  const getModel = (providerId: string, modelId: string) => {
+    const provider = config.providers[providerId];
+    if (!provider) {
+      throw new ModelRequestError("provider_not_found", `Provider ${providerId} does not exist.`);
+    }
+
+    const model = provider.models[modelId];
+    if (!model) {
+      throw new ModelRequestError(
+        "model_not_found",
+        `Model ${modelId} does not exist in provider ${providerId}.`,
+      );
+    }
+
+    return model;
+  };
+
   return {
-    stream(request) {
-      return streamModel(request, config, options);
-    },
-
-    complete(request) {
-      return complete(request, config, options);
-    },
-
-    getCapabilities(providerId, modelId) {
-      const provider = config.providers[providerId];
-      if (!provider) {
-        throw new ModelRequestError("provider_not_found", `Provider ${providerId} does not exist.`);
-      }
-
-      const model = provider.models[modelId];
-      if (!model) {
-        throw new ModelRequestError(
-          "model_not_found",
-          `Model ${modelId} does not exist in provider ${providerId}.`,
-        );
-      }
-
-      return model.capabilities;
-    },
+    stream: (request) => streamModel(request, config, options),
+    complete: (request) => complete(request, config, options),
+    getCapabilities: (providerId, modelId) => getModel(providerId, modelId).capabilities,
   };
 }
