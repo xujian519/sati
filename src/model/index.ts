@@ -1,7 +1,24 @@
 export { createModelRuntime, type ModelRuntime } from "./ModelRuntime.js";
 export { parseModelConfig, type ParseModelConfigOptions } from "./config/parseModelConfig.js";
 export { resolveApiKey, type CredentialEnv } from "./config/resolveCredentials.js";
-export type { ModelRuntimeOptions, ModelTransport } from "./streaming/streamModel.js";
+export { ModelProviderRegistry, type ModelProviderAdapter } from "./providers/registry.js";
+export { buildModelRequest, type ProviderRequestBody } from "./request/buildModelRequest.js";
+export { validateModelRequest, type ResolvedModelRequest } from "./request/validateModelRequest.js";
+export { parseModelResponse } from "./response/parseModelResponse.js";
+export { complete, streamModel, type ModelRuntimeOptions, type ModelTransport } from "./streaming/streamModel.js";
+export {
+  normalizeStreamEvent,
+  createStreamNormalizerState,
+  type StreamNormalizerState,
+} from "./streaming/normalizeStreamEvent.js";
+export {
+  applyModelEventToAssembler,
+  assembleAssistantMessage,
+  createModelMessageAssemblerState,
+  type AssembledAssistantMessage,
+  type ModelMessageAssemblerState,
+} from "./streaming/assembleModelMessage.js";
+export { normalizeModelError } from "./errors/normalizeModelError.js";
 
 export type {
   CanonicalAudioBlock,

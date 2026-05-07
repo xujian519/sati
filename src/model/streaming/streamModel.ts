@@ -16,6 +16,7 @@ export type ModelTransport = typeof fetch;
 
 export type ModelRuntimeOptions = {
   fetch?: ModelTransport;
+  signal?: AbortSignal;
 };
 
 export async function complete(
@@ -26,7 +27,7 @@ export async function complete(
   const nonStreamingRequest = { ...request, stream: false };
   const { provider } = validateModelRequest(nonStreamingRequest, config);
   const body = buildModelRequest(nonStreamingRequest, config);
-  const response = await sendProviderRequest(provider, body, false, options.fetch ?? fetch);
+  const response = await sendProviderRequest(provider, body, false, options.fetch ?? fetch, options.signal);
   const raw = await response.json();
 
   if (!response.ok) {
@@ -54,7 +55,7 @@ export async function* streamModel(
     metadata: streamingRequest.metadata,
   };
 
-  const response = await sendProviderRequest(provider, body, true, options.fetch ?? fetch);
+  const response = await sendProviderRequest(provider, body, true, options.fetch ?? fetch, options.signal);
   if (!response.ok) {
     const raw = await safeReadJson(response);
     yield {
@@ -85,8 +86,10 @@ async function sendProviderRequest(
   body: unknown,
   stream: boolean,
   transport: ModelTransport,
+  signal?: AbortSignal,
 ): Promise<Response> {
   const controller = new AbortController();
+  const detachAbort = signal ? forwardAbort(signal, controller) : undefined;
   const timeout = provider.timeoutMs
     ? setTimeout(() => controller.abort(), provider.timeoutMs)
     : undefined;
@@ -104,7 +107,19 @@ async function sendProviderRequest(
     if (timeout) {
       clearTimeout(timeout);
     }
+    detachAbort?.();
   }
+}
+
+function forwardAbort(source: AbortSignal, target: AbortController): () => void {
+  if (source.aborted) {
+    target.abort(source.reason);
+    return () => {};
+  }
+
+  const onAbort = () => target.abort(source.reason);
+  source.addEventListener("abort", onAbort, { once: true });
+  return () => source.removeEventListener("abort", onAbort);
 }
 
 function buildEndpoint(provider: ProviderConfig, _stream: boolean): string {
