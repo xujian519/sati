@@ -4,7 +4,7 @@
 
 ## 测试目标
 
-`polit/config` 必须从第一天具备确定性测试。配置系统是所有运行时模块的入口，错误会放大到模型、工具、权限和会话系统。
+`polit/config` 必须从第一天具备确定性测试。当前业务只推进到 `model` 模块，因此测试重点是通用配置运行时和 `model` 配置段。
 
 测试应覆盖：
 
@@ -49,8 +49,10 @@ redactConfigForDiagnostics()
 - `${ENV}` 缺失失败。
 - 明文 API key 产生 warning。
 - 默认模型不存在时报错。
-- permission mode 非法时报错。
-- workspace root 越界时报错。
+- provider protocol 非法时报错。
+- provider URL 非法时报错。
+- model capabilities 类型错误时报错。
+- multimodal input 非法时报错。
 
 ## 热重载测试
 
@@ -76,24 +78,24 @@ secret changes are not logged
 - reload 失败时 version 不变。
 - `lastReloadError` 可查询。
 - `config.reload.failed` 事件包含诊断。
-- 当前 turn 绑定旧 snapshot。
-- 后续 turn 使用新 snapshot。
+- 当前模型请求绑定旧 snapshot。
+- 后续模型请求使用新 snapshot。
 
 ## 集成测试
 
-集成测试应覆盖 config 与核心模块的连接。
+集成测试应覆盖 config 与 `model` 模块的连接。
 
 建议场景：
 
-- 修改默认模型后，新 turn 使用新模型。
-- 修改 context budget 后，当前 turn 不变化，新 turn 生效。
-- 禁用工具后，新 turn 不再暴露该工具。
-- 修改 permission mode 后，新 turn 使用新模式。
-- 新增 MCP server 后，后续 registry 出现新 MCP tools。
-- 修改 extension dirs 后，后续 prompt fragment 更新。
-- 切换 storage backend 被标记为 restart-required。
+- 修改默认模型后，新的模型请求使用新模型。
+- 修改 provider URL 后，后续模型请求使用新 URL。
+- 修改 API key 引用后，后续模型请求使用新 secret。
+- 修改 timeout、headers、retry 后，后续 request builder 使用新参数。
+- 修改 model capabilities 后，后续请求校验和构造使用新能力。
+- 修改 multimodal constraints 后，后续 canonical content block 校验使用新限制。
+- 非法 model 配置热重载失败后，旧 provider registry 继续可用。
 
-这些测试可以使用 fake model、fake tool、fake permission、fake session store，不需要真实外部服务。
+这些测试可以使用 fake transport 和 fake provider adapter，不需要真实外部服务。
 
 ## Conformance Tests
 
@@ -108,7 +110,7 @@ remote config loading
 
 同一组 source 输入必须产出相同 snapshot。
 
-adapter 只能增加自己的高优先级 override，不能改变合并和校验语义。
+adapter 不能增加新的 source 类型。当前阶段所有入口只能使用 `default`、`project`、`env` 三类来源，并且必须产出相同 snapshot。
 
 ## 诊断输出
 
@@ -133,7 +135,7 @@ ConfigDiagnostic
 code: CONFIG_MODEL_DEFAULT_NOT_FOUND
 severity: error
 path: model.defaultModel
-source: ~/.politdeck/politdeck.yaml
+source: ${PolitHome}/politdeck.yaml
 hint: Add the model under model.providers.<provider>.models or change model.defaultModel.
 ```
 
@@ -147,7 +149,6 @@ hint: Add the model under model.providers.<provider>.models or change model.defa
 - `authorization` header。
 - `cookie` header。
 - token、secret、password、credential 相关字段。
-- MCP server auth 信息。
 - proxy credential。
 
 脱敏输出：
@@ -192,21 +193,20 @@ config.secret.reference_missing
 
 ## Audit
 
-安全相关配置变化必须进入 audit。
+模型连接相关配置变化必须进入 audit。
 
 包括：
 
-- `permission.permissionMode`。
-- `permission.readOnlyMode`。
-- `permission.workspaceRoots`。
-- `permission.alwaysAllow`。
-- `permission.alwaysDeny`。
-- `tool.mcpServers`。
-- `tool.shellPolicy`。
-- `tool.networkPolicy`。
-- `extension.extensionDirs`。
 - `model.provider.url`。
+- `model.provider.protocol`。
+- `model.provider.apiKey` 引用。
 - `model.provider.headers` 中的认证相关变化。
+- `model.defaultProvider`。
+- `model.defaultModel`。
+- `model.fallbackModel`。
+- `model.providers.<id>.models`。
+- `model.capabilities`。
+- `model.multimodal`。
 
 audit 记录应包含：
 
@@ -221,32 +221,6 @@ changeClass
 ```
 
 交互式 UI 可以把高风险变更显示给用户确认。headless 场景至少要写入 audit sink。
-
-## Metrics
-
-建议指标：
-
-```text
-config_load_total
-config_load_failed_total
-config_reload_total
-config_reload_failed_total
-config_snapshot_version
-config_reload_duration_ms
-config_diagnostics_total
-config_restart_required_total
-config_watcher_errors_total
-```
-
-标签应控制基数：
-
-```text
-result=success|failure
-reason=parse|validation|secret|io|unknown
-source=user|project|env|cli|runtime
-```
-
-不要把配置 path、workspace path 或 secret 名称作为高基数标签。
 
 ## Debug 命令
 
@@ -263,7 +237,7 @@ politdeck config reload
 命令语义：
 
 - `validate`：读取并校验配置，不启动 agent runtime。
-- `doctor`：检查路径、权限、secret 引用、模型默认值、MCP server 基本连通性。
+- `doctor`：检查路径、secret 引用、模型默认值、provider URL 和协议配置。
 - `print --redacted`：输出最终合并后的脱敏配置。
 - `sources`：输出所有参与合并的 source 和优先级。
 - `reload`：对正在运行的 runtime 触发手动 reload。
@@ -274,8 +248,8 @@ politdeck config reload
 
 - YAML 语法错误：阻止启动。
 - 必需 secret 缺失：阻止需要该 provider 的模型请求；是否阻止启动取决于是否有可用默认模型。
-- permission 配置非法：阻止启动。
-- session dir 不可写：如果 transcript 必需则阻止启动。
+- 默认 provider 或默认模型非法：阻止模型请求。
+- provider protocol 或 URL 非法：阻止该 provider 可用。
 
 热重载失败：
 
@@ -283,7 +257,7 @@ politdeck config reload
 - 发布 failure 事件。
 - 记录诊断。
 - UI/CLI 显示错误。
-- 不影响当前 turn。
+- 不影响当前模型请求。
 
 模块资源重建失败：
 
@@ -300,7 +274,7 @@ politdeck config reload
 - secret 解析不能做慢速网络请求。
 - watcher debounce 避免编辑器保存风暴。
 - snapshot diff 只比较结构化配置，不扫描工作区。
-- extension discovery 可以异步进行，但要绑定 snapshot version。
+- provider registry rebuild 可以异步进行，但要绑定 snapshot version。
 
 如果未来 secret backend 或 remote config 需要网络访问，应把它们设计为独立 provider，并明确 timeout、cache 和失败策略。
 
@@ -311,8 +285,8 @@ politdeck config reload
 ```text
 examples/politdeck.yaml
 examples/politdeck.minimal.yaml
-examples/politdeck.headless.yaml
-examples/politdeck.readonly.yaml
+examples/politdeck.model.yaml
+examples/politdeck.model-openai.yaml
 ```
 
 示例必须保持可通过 `config validate`。包含 secret 的示例只能使用 `${ENV_NAME}`。
@@ -323,11 +297,11 @@ examples/politdeck.readonly.yaml
 
 - 是否有总 schema。
 - 是否有默认值表。
-- 是否有 source 优先级测试。
+- 是否有 `default/project/env` source 优先级测试。
 - 是否有热重载失败保旧测试。
 - 是否有 secret 脱敏测试。
 - 是否有 restart-required 变更分类。
-- 是否有当前 turn 绑定 snapshot 的行为测试。
+- 是否有当前模型请求绑定 snapshot 的行为测试。
 - 是否有 CLI/SDK 一致性测试。
 
-配置系统完成后，其他模块才应该接入真实运行时配置。
+配置系统完成后，`model` 模块才应该接入真实运行时配置。其他业务模块进入实现阶段时，再扩展各自的配置 schema、热重载语义和集成测试。

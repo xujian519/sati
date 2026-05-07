@@ -2,37 +2,68 @@
 
 本文定义 `polit/config` 需要支持的配置来源、优先级、总 YAML 结构、配置段拆分和校验规则。
 
+当前业务只推进到 `model` 模块，因此本文只定义通用配置外壳和 `model` 配置段。其他模块的配置段不在当前阶段进入 schema。
+
 ## 配置文件
 
-默认用户级配置文件：
+默认 YAML 配置文件位于 `PolitHome` 目录下：
 
 ```text
-~/.politdeck/politdeck.yaml
+${PolitHome}/politdeck.yaml
 ```
 
-该路径由 `PolitConfigPath` 表达。当前阶段只要求这一份用户级总配置稳定可用；项目级配置和 CLI 覆盖可以进入设计，但实现时可以分阶段交付。
+`PolitHome` 默认是 `~/.politdeck`，只能由内置默认值和环境变量控制，例如 `POLIT_HOME`。`PolitHome`、缓存目录、聊天记录目录等 `polit` 路径配置不允许出现在 YAML 中。
+
+项目级配置文件建议位于项目根目录：
+
+```text
+<project>/.politdeck.yaml
+```
+
+聊天记录保存在 `PolitHome` 下，按 project 区分：
+
+```text
+${PolitHome}/projects/<project-id>/chats
+```
+
+`project-id` 由项目根目录稳定派生，不由 YAML 配置。
 
 ## 配置来源
 
 建议配置来源按优先级从低到高排列：
 
 ```text
-built-in defaults
-  < user config: ~/.politdeck/politdeck.yaml
+default config: ${PolitHome}/politdeck.yaml
   < project config: <workspace>/.politdeck.yaml
-  < environment overrides
-  < adapter/runtime overrides
+  < env overrides
 ```
 
 说明：
 
-- `built-in defaults` 提供安全默认值。
-- `user config` 是主配置。
+- `default config` 是默认 YAML 配置文件，由 `PolitHome` 决定位置。
 - `project config` 只描述工作区相关覆盖，不应保存用户 secret。
-- `environment overrides` 适合 CI/headless 场景。
-- `adapter/runtime overrides` 来自 CLI flag、SDK options 或 remote request。
+- `env overrides` 适合 CI/headless 场景，也负责控制 `PolitHome`。
 
 所有来源都必须记录在 `PolitConfigSnapshot.sources` 中。
+
+当前阶段 `PolitConfigSource.kind` 只允许：
+
+```text
+default
+project
+env
+```
+
+抽象上仍保留 `priority`、`path`、`contentHash`、`loadedAt` 和 `diagnostics` 等字段，未来可扩展 remote config、managed profile 或 adapter override，但当前实现不读取这些来源。
+
+### Env 的两阶段作用
+
+`env` source 有两类作用：
+
+- bootstrap env：在读取任何 YAML 前解析，例如 `POLIT_HOME`。它决定 `${PolitHome}/politdeck.yaml` 的位置。
+- config env override：在 YAML 读取后参与合并，例如默认 provider、默认 model 或 API key 引用。
+
+这两类都归入 `kind: env`，但诊断中应区分 `phase: bootstrap | merge`，避免用户误以为 `POLIT_HOME` 可以写在 YAML 中。
 
 ## 合并规则
 
@@ -41,7 +72,7 @@ built-in defaults
 - map 按 key 深度合并。
 - scalar 由高优先级覆盖低优先级。
 - array 默认整体替换，不做去重拼接。
-- 对于 `alwaysAllow`、`alwaysDeny`、`enabledTools` 这类策略数组，可以未来显式支持 `append` 语法，但不要默认猜测。
+- 对于 `model.providers`、`model.providers.<id>.models` 这类 map，按 provider id 或 model id 深度合并。
 - `null` 表示显式清空可选字段。
 - 未知字段默认报 warning；稳定版可以升级为 error。
 
@@ -54,84 +85,56 @@ built-in defaults
 ```yaml
 schemaVersion: 1
 
-polit:
-  home: ~/.politdeck
-  cacheDir: ~/.politdeck/cache
-  sessionDir: ~/.politdeck/sessions
-  memoryDir: ~/.politdeck/memory
-  extensionDir: ~/.politdeck/extensions
-
 model:
   defaultProvider: anthropic-main
   defaultModel: claude-sonnet-4-5
-  providers: {}
+  fallbackModel: claude-haiku-4-5
+  providers:
+    anthropic-main:
+      protocol: anthropic
+      url: https://api.anthropic.com
+      apiKey: ${ANTHROPIC_API_KEY}
+      timeoutMs: 120000
+      headers:
+        anthropic-version: "2023-06-01"
+      models:
+        claude-sonnet-4-5:
+          displayName: Claude Sonnet 4.5
+          capabilities:
+            supportsToolUse: true
+            supportsStreaming: true
+            supportsParallelToolCalls: true
+            supportsThinking: true
+            supportsJsonSchema: true
+            supportsPromptCache: true
+            maxContextTokens: 200000
+            maxOutputTokens: 8192
+          multimodal:
+            input: [text, image, pdf]
+            maxImagesPerRequest: 20
+            supportedImageMimeTypes:
+              - image/png
+              - image/jpeg
 
-loop:
-  maxTurns: 20
-  streamingToolExecution: true
-  toolConcurrencyLimit: 4
-  continueOnToolError: false
-  abortTimeoutMs: 10000
-
-context:
-  maxContextTokens: 180000
-  autoCompact: true
-  compactThreshold: 0.85
-  toolResultBudget:
-    maxTokensPerResult: 20000
-    maxTotalTokens: 60000
-  memoryEnabled: true
-  contextOverflowRecovery: true
-
-tool:
-  enabledTools: []
-  disabledTools: []
-  toolPresets: []
-  mcpServers: {}
-  shellTimeoutMs: 120000
-  fileReadLimitBytes: 1048576
-  globResultLimit: 200
-
-permission:
-  permissionMode: default
-  workspaceRoots: []
-  alwaysAllow: []
-  alwaysDeny: []
-  alwaysAsk: []
-  readOnlyMode: false
-  headlessAskBehavior: deny
-
-session:
-  transcriptEnabled: true
-  resumeEnabled: true
-  storageBackend: file
-  flushPolicy: after-event
-
-extension:
-  hooksEnabled: true
-  pluginsEnabled: true
-  skillsEnabled: true
-  extensionDirs: []
-  hookTimeoutMs: 30000
-  hookFailurePolicy: warn
-
-telemetry:
-  enabled: false
-  logLevel: info
 ```
 
 ## 配置段职责
 
-### polit
+### 不允许的 polit 路径配置
 
-`polit` 段描述产品级路径和运行时命名空间。
+YAML 中不允许出现 `polit` 段来配置 `PolitHome`、缓存目录、聊天记录目录或其他产品级路径。
 
-关键规则：
+这些路径只能通过：
 
-- 默认值来自 `polit/paths`。
-- 用户可以覆盖目录，但必须经过路径安全校验。
-- 所有路径都应展开 `~`，并归一化为绝对路径。
-- 不允许业务模块自行拼接这些目录。
+- 内置默认值。
+- 环境变量，例如 `POLIT_HOME`。
+- `polit/paths` 基于 `PolitHome` 派生出的固定规则。
+
+原因：
+
+- config loader 必须先知道 `PolitHome`，才能找到默认 YAML。
+- 项目级配置不应改变用户级数据根目录。
+- 聊天记录、缓存等路径应保持全局一致，避免配置热重载时迁移运行时数据。
 
 ### model
 
@@ -139,98 +142,9 @@ telemetry:
 
 具体字段见 `[../model/03-model-configuration.md](../model/03-model-configuration.md)`。
 
-### loop
+### 未来业务配置段
 
-`loop` 段影响 agent loop 状态机。
-
-建议字段：
-
-```text
-maxTurns
-streamingToolExecution
-toolConcurrencyLimit
-continueOnToolError
-abortTimeoutMs
-maxModelRequestsPerTurn
-```
-
-这些配置一般只对新 turn 生效。
-
-### context
-
-`context` 段影响上下文预算、memory、compact 和 overflow recovery。
-
-建议字段：
-
-```text
-maxContextTokens
-autoCompact
-compactThreshold
-toolResultBudget
-memoryEnabled
-contextOverflowRecovery
-attachmentLimits
-```
-
-热重载时，当前 turn 不应中途替换 context budget，避免同一 turn 内压缩边界不稳定。
-
-### tool
-
-`tool` 段描述内置工具、MCP server、shell、文件读取和搜索限制。
-
-关键规则：
-
-- 禁用工具必须优先于启用工具。
-- MCP server 配置热重载需要区分新增、删除、连接参数变化。
-- shell/file/network 类配置属于安全相关配置，热重载必须审计。
-
-### permission
-
-`permission` 段是安全边界。
-
-`permissionMode` 至少支持：
-
-```text
-default
-plan
-bypassPermissions
-```
-
-建议字段：
-
-```text
-workspaceRoots
-alwaysAllow
-alwaysDeny
-alwaysAsk
-readOnlyMode
-headlessAskBehavior
-networkPolicy
-shellPolicy
-fileWritePolicy
-```
-
-权限配置变化可以立即影响尚未执行的工具调用，但不能 retroactively 修改已经完成的权限决策。
-
-### session
-
-`session` 段描述 transcript、resume、storage backend 和 flush policy。
-
-关键规则：
-
-- 已创建的 session 应绑定创建时的 transcript store。
-- 切换 storage backend 通常需要重启。
-- `transcriptEnabled` 关闭后仍应保留最低限度错误和审计事件，除非运行环境明确要求完全无持久化。
-
-### extension
-
-`extension` 段描述插件、技能、hooks 和扩展目录。
-
-关键规则：
-
-- 新增扩展可以对后续 turn 生效。
-- 删除扩展不能中断当前正在执行的 hook。
-- 扩展贡献的工具、权限规则和 prompt fragment 必须重新收集并产生新贡献版本。
+`loop`、`context`、`tool`、`permission`、`session`、`extension` 等配置段等对应模块进入实现阶段后再定义。当前阶段不要提前把这些字段写入正式 schema，避免为尚未实现的业务行为制造兼容负担。
 
 ## Secret 引用
 
@@ -297,10 +211,13 @@ syntax validation
 
 - `model.defaultProvider` 必须存在。
 - `model.defaultModel` 必须属于默认 provider。
-- `permission.workspaceRoots` 必须在允许边界内。
-- `context.compactThreshold` 必须在 `(0, 1]`。
-- `tool.toolConcurrencyLimit` 不能超过 loop 或 runtime 限制。
-- `extension.extensionDirs` 必须是可信目录或经过权限确认。
+- `model.fallbackModel` 如果存在，也必须属于某个可用 provider。
+- `model.providers.<id>.protocol` 必须是当前支持的协议。
+- `model.providers.<id>.url` 必须是合法 URL。
+- `model.providers.<id>.apiKey` 的环境变量引用必须可解析。
+- `model.providers.<id>.models` 不能为空。
+- `model.providers.<id>.models.<model>.capabilities` 必须包含 request builder 所需能力字段。
+- `model.providers.<id>.models.<model>.multimodal.input` 只能包含当前 canonical protocol 支持的输入模态。
 
 ## 错误模型
 
