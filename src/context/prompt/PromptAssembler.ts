@@ -1,0 +1,213 @@
+import type { CanonicalToolSchema } from "../../model/index.js";
+import type {
+  ContributedCommand,
+  ContributedSkill,
+  ExtensionResolver,
+  McpServerInstruction,
+} from "../extension/ExtensionResolver.js";
+
+export type PromptAssemblerInput = {
+  cwd: string;
+  provider: string;
+  model: string;
+  permissionMode: string;
+  additionalWorkingDirectories: string[];
+  tools: CanonicalToolSchema[];
+  /** Custom system prompt (replaces sections 1 + 3). */
+  customSystemPrompt?: string;
+  /** Optional appended fragment (always last). */
+  appendSystemPrompt?: string;
+  /** Optional override for the user-context "now" line. */
+  now?: () => Date;
+};
+
+export type PromptAssemblerSections = {
+  defaultSystemPrompt: string[];
+  userContext: string[];
+  systemContext: string[];
+};
+
+export type PromptAssemblerResult = {
+  parts: string[];
+  joined: string;
+  sections: PromptAssemblerSections;
+};
+
+/**
+ * Build the system prompt for a turn. Mirrors legacy `fetchSystemPromptParts`
+ * information slots (tool catalog / cwd / git / env / mcp instructions /
+ * commands / skills) but uses PolitDeck-authored copy.
+ *
+ * Sections (review decision 2026-05):
+ *   1 default_system_prompt   — product identity + tool catalog + permission mode
+ *                                + additional working directories + mcp instructions
+ *   2 user_context            — cwd + env summary + active model
+ *   3 system_context          — timestamp + extension commands/skills summary
+ *   4 custom_system_prompt    — replaces 1 + 3 when provided
+ *   5 append_system_prompt    — always last
+ */
+export class PromptAssembler {
+  constructor(private readonly extension: ExtensionResolver) {}
+
+  assemble(input: PromptAssemblerInput): PromptAssemblerResult {
+    const sections = this.buildSections(input);
+    const parts: string[] = [];
+    const useCustom = input.customSystemPrompt !== undefined;
+
+    if (useCustom) {
+      if (input.customSystemPrompt && input.customSystemPrompt.trim().length > 0) {
+        parts.push(input.customSystemPrompt.trim());
+      }
+    } else {
+      parts.push(...sections.defaultSystemPrompt);
+    }
+
+    parts.push(...sections.userContext);
+
+    if (!useCustom) {
+      parts.push(...sections.systemContext);
+    }
+
+    if (input.appendSystemPrompt && input.appendSystemPrompt.trim().length > 0) {
+      parts.push(input.appendSystemPrompt.trim());
+    }
+
+    const joined = parts.join("\n\n");
+    return { parts, joined, sections };
+  }
+
+  private buildSections(input: PromptAssemblerInput): PromptAssemblerSections {
+    return {
+      defaultSystemPrompt: this.buildDefaultSystemPrompt(input),
+      userContext: this.buildUserContext(input),
+      systemContext: this.buildSystemContext(input),
+    };
+  }
+
+  private buildDefaultSystemPrompt(input: PromptAssemblerInput): string[] {
+    const lines: string[] = [
+      "You are PolitDeck, an AI agent runtime. You execute tasks across CLI, TUI, web, and chat channels by calling structured tools and reasoning over their results.",
+      "Operate decisively: prefer using available tools to gather facts before answering, prefer concise replies, and surface uncertainty when present.",
+    ];
+
+    const toolCatalog = this.formatToolCatalog(input.tools);
+    if (toolCatalog) {
+      lines.push("");
+      lines.push("Available tools:");
+      lines.push(toolCatalog);
+    }
+
+    const permissionLine = formatPermissionMode(input.permissionMode);
+    if (permissionLine) {
+      lines.push("");
+      lines.push(permissionLine);
+    }
+
+    if (input.additionalWorkingDirectories.length > 0) {
+      lines.push("");
+      lines.push("Additional working directories you may operate in:");
+      for (const dir of input.additionalWorkingDirectories) {
+        lines.push(`- ${dir}`);
+      }
+    }
+
+    const mcpInstructions = this.extension.listMcpInstructions();
+    if (mcpInstructions.length > 0) {
+      lines.push("");
+      lines.push("Connected MCP server instructions:");
+      lines.push(formatMcpInstructions(mcpInstructions));
+    }
+
+    return [lines.join("\n")];
+  }
+
+  private buildUserContext(input: PromptAssemblerInput): string[] {
+    const lines: string[] = [];
+    lines.push("<user-context>");
+    lines.push(`cwd: ${input.cwd}`);
+    lines.push(`model: ${input.provider}/${input.model}`);
+    lines.push(`permission_mode: ${input.permissionMode}`);
+    lines.push(`platform: ${process.platform}`);
+    lines.push(`node: ${process.version}`);
+    lines.push("</user-context>");
+    return [lines.join("\n")];
+  }
+
+  private buildSystemContext(input: PromptAssemblerInput): string[] {
+    const sections: string[] = [];
+    const now = (input.now ?? (() => new Date()))();
+
+    const envLines = [`<environment>`, `now: ${now.toISOString()}`, `</environment>`];
+    sections.push(envLines.join("\n"));
+
+    const commands = this.extension.listCommands();
+    if (commands.length > 0) {
+      sections.push(formatCommands(commands));
+    }
+
+    const skills = this.extension.listSkills();
+    if (skills.length > 0) {
+      sections.push(formatSkills(skills));
+    }
+
+    return sections;
+  }
+
+  private formatToolCatalog(tools: CanonicalToolSchema[]): string {
+    if (tools.length === 0) {
+      return "";
+    }
+    return tools
+      .map((tool) => `- ${tool.name}${tool.description ? `: ${tool.description}` : ""}`)
+      .join("\n");
+  }
+}
+
+function formatPermissionMode(mode: string): string {
+  switch (mode) {
+    case "default":
+      return "Permission mode: default — write/shell tools require explicit approval.";
+    case "plan":
+      return "Permission mode: plan — read-only; do not call tools that mutate the workspace.";
+    case "acceptEdits":
+      return "Permission mode: acceptEdits — file edits are auto-approved; shell still requires approval.";
+    case "bypassPermissions":
+      return "Permission mode: bypassPermissions — all tools are auto-approved; act conservatively.";
+    case "dontAsk":
+      return "Permission mode: dontAsk — do not prompt the user; deny anything ambiguous.";
+    default:
+      return `Permission mode: ${mode}`;
+  }
+}
+
+function formatMcpInstructions(instructions: McpServerInstruction[]): string {
+  return instructions
+    .map((entry) => {
+      if (!entry.instructions) {
+        return `- ${entry.serverName}: (no instructions)`;
+      }
+      return `- ${entry.serverName}:\n  ${entry.instructions.replace(/\n/g, "\n  ")}`;
+    })
+    .join("\n");
+}
+
+function formatCommands(commands: ContributedCommand[]): string {
+  const lines = ["<available-commands>"];
+  for (const command of commands) {
+    const description = command.description ? ` — ${command.description}` : "";
+    const hint = command.argumentHint ? ` ${command.argumentHint}` : "";
+    lines.push(`- /${command.name}${hint}${description}`);
+  }
+  lines.push("</available-commands>");
+  return lines.join("\n");
+}
+
+function formatSkills(skills: ContributedSkill[]): string {
+  const lines = ["<available-skills>"];
+  for (const skill of skills) {
+    const description = skill.description ? ` — ${skill.description}` : "";
+    lines.push(`- ${skill.name}${description}`);
+  }
+  lines.push("</available-skills>");
+  return lines.join("\n");
+}

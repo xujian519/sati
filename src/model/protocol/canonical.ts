@@ -14,6 +14,12 @@ export type CanonicalTextBlock = {
 export type CanonicalThinkingBlock = {
   type: "thinking";
   text: string;
+  /**
+   * Provider-supplied signature accompanying the thinking block (Anthropic
+   * extended-thinking signature_delta). Required for prompt-cache validity
+   * when the message is replayed; preserved verbatim.
+   */
+  signature?: string;
 };
 
 export type CanonicalImageBlock = {
@@ -61,6 +67,29 @@ export type CanonicalToolResultBlock = {
   raw?: unknown;
 };
 
+/**
+ * Reference to a persisted tool result whose body lives on disk. Replaces
+ * legacy `<persisted-output>` XML (intentional_difference §4.4) — the model
+ * sees a stable structured block instead of an XML envelope so providers can
+ * render it however they want.
+ */
+export type CanonicalToolResultReferenceBlock = {
+  type: "tool_result_reference";
+  toolCallId: string;
+  /** Absolute path to the persisted file. */
+  path: string;
+  /** Original size in bytes / characters of the full result. */
+  originalBytes: number;
+  /** Truncated preview (UTF-8 text) sent inline alongside the reference. */
+  preview: string;
+  /** True when `preview` does not contain the entire body. */
+  hasMore: boolean;
+  /** Optional MIME hint (`application/json`, `text/plain`, ...). */
+  mimeType?: string;
+  /** Optional friendly description of why the body was persisted. */
+  reason?: string;
+};
+
 export type CanonicalToolResult = CanonicalToolResultBlock;
 
 export type CanonicalContentBlock =
@@ -70,7 +99,8 @@ export type CanonicalContentBlock =
   | CanonicalPdfBlock
   | CanonicalAudioBlock
   | CanonicalToolCallBlock
-  | CanonicalToolResultBlock;
+  | CanonicalToolResultBlock
+  | CanonicalToolResultReferenceBlock;
 
 export type CanonicalMessage = {
   role: CanonicalRole;
@@ -131,7 +161,7 @@ export type CanonicalModelEvent =
   | { type: "request_started"; provider: string; model: string; metadata?: Record<string, unknown> }
   | { type: "message_start"; role: "assistant"; raw?: unknown }
   | { type: "text_delta"; text: string; raw?: unknown }
-  | { type: "thinking_delta"; text: string; raw?: unknown }
+  | { type: "thinking_delta"; text: string; signature?: string; raw?: unknown }
   | { type: "tool_call_start"; id: string; name: string; raw?: unknown }
   | { type: "tool_call_delta"; id: string; delta: string; raw?: unknown }
   | { type: "tool_call_end"; toolCall: CanonicalToolCall; raw?: unknown }

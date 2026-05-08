@@ -38,6 +38,7 @@ export type {
   CanonicalToolCallBlock,
   CanonicalToolChoice,
   CanonicalToolResultBlock,
+  CanonicalToolResultReferenceBlock,
   CanonicalToolResult,
   CanonicalToolSchema,
   CanonicalUsage,
@@ -52,5 +53,10 @@ export {
   ModelConfigError,
   ModelProviderError,
   ModelRequestError,
+  PROMPT_TOO_LONG_ANTHROPIC_PATTERN,
+  PROMPT_TOO_LONG_OPENAI_PATTERN,
+  REQUEST_TOO_LARGE_PATTERN,
+  MAX_OUTPUT_REACHED_PATTERN,
   type CanonicalModelError,
+  type CanonicalModelErrorCode,
 } from "./protocol/errors.js";

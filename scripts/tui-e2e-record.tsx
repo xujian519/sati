@@ -74,7 +74,7 @@ async function main(): Promise<void> {
     metadata: { test: "tui-e2e-record" },
   };
 
-  const gateway = createGateway({
+  const baseGateway = createGateway({
     session: {
       create: async ({ sessionKey }) =>
         createAgentSession({
@@ -88,6 +88,8 @@ async function main(): Promise<void> {
     },
     serverInfo: { mode: "in_process", projectKey: cwd },
   });
+
+  const gateway = process.env.POLITDECK_E2E_TRACE === "1" ? wrapWithTrace(baseGateway) : baseGateway;
 
   const tree = (
     <TuiApp
@@ -130,6 +132,47 @@ async function main(): Promise<void> {
   if (!finalFrame) {
     throw new Error("Timed out waiting for the assistant final frame.");
   }
+}
+
+function wrapWithTrace(gateway: ReturnType<typeof createGateway>): ReturnType<typeof createGateway> {
+  return new Proxy(gateway, {
+    get(target, prop, receiver) {
+      const original = Reflect.get(target, prop, receiver);
+      if (prop !== "submitTurn" || typeof original !== "function") {
+        return original;
+      }
+      return (...args: Parameters<typeof gateway.submitTurn>) => {
+        const startedAt = Date.now();
+        let lastAt = startedAt;
+        let textChars = 0;
+        const iterable = original.apply(target, args) as AsyncIterable<unknown>;
+        const ms = (now: number) => `${(now - startedAt).toString().padStart(5)} ms`;
+        process.stdout.write(`\n[trace] submitTurn() called\n`);
+        return (async function* () {
+          for await (const event of iterable) {
+            const now = Date.now();
+            const delta = now - lastAt;
+            lastAt = now;
+            const ev = event as { type: string; text?: string; name?: string; toolCallId?: string };
+            const type = ev.type;
+            let detail = "";
+            if (type === "assistant_text_delta") {
+              textChars += ev.text?.length ?? 0;
+              detail = ` text+=${ev.text?.length ?? 0} total=${textChars}`;
+            } else if (type === "tool_call_started" || type === "tool_call_finished") {
+              detail = ` ${ev.name ?? ev.toolCallId ?? ""}`;
+            } else if (type === "error") {
+              detail = ` "${(event as { message?: string }).message ?? ""}"`;
+            }
+            process.stdout.write(`[trace ${ms(now)} +${delta.toString().padStart(4)}ms] ${type}${detail}\n`);
+            yield event;
+          }
+          const total = Date.now() - startedAt;
+          process.stdout.write(`[trace] turn finished after ${total} ms (${textChars} assistant chars)\n`);
+        })();
+      };
+    },
+  });
 }
 
 function wait(ms: number): Promise<void> {

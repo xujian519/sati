@@ -35,12 +35,51 @@ export type AgentTurnResultTranscriptEntry = AgentTranscriptEntryBase & {
   result: AgentTurnResult;
 };
 
+export type CompactBoundaryMetadata = {
+  trigger: "manual" | "auto" | "reactive";
+  preTokens: number;
+  postTokens?: number;
+  /** Number of messages summarized into the boundary's summary section. */
+  messagesSummarized?: number;
+  /** Logical parent uuid before compact (for resume relink). */
+  logicalParentUuid?: string;
+  /** Optional verbatim segment that was preserved across the boundary. */
+  preservedSegment?: {
+    fromIndex: number;
+    toIndex: number;
+  };
+  /**
+   * Tools that were available before compact; used by replay to detect missing
+   * tool references after compact.
+   */
+  preCompactDiscoveredTools?: string[];
+  /** Free-form additional metadata. */
+  extra?: Record<string, unknown>;
+};
+
+export type MicroCompactBoundaryMetadata = {
+  trigger: "time_based" | "cached";
+  toolCallIds: string[];
+  rewrittenBytes?: number;
+};
+
 export type AgentControlBoundaryTranscriptEntry = AgentTranscriptEntryBase & {
   type: "control_boundary";
-  boundary: {
-    kind: "compact" | "resume" | "manual";
-    metadata?: Record<string, unknown>;
-  };
+  boundary:
+    | {
+        kind: "compact";
+        subtype: "compact_boundary";
+        compactMetadata: CompactBoundaryMetadata;
+      }
+    | {
+        kind: "compact";
+        subtype: "microcompact_boundary";
+        microCompactMetadata: MicroCompactBoundaryMetadata;
+      }
+    | {
+        kind: "resume" | "manual";
+        metadata?: Record<string, unknown>;
+      };
 };
 
 export type SessionMetadataValue = {

@@ -5,6 +5,7 @@ import type { CanonicalMessage } from "../../model/index.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
 import {
   classifyDurableMessageEntry,
+  type AgentControlBoundaryTranscriptEntry,
   type AgentMessageTranscriptEntry,
   type AgentTranscriptEntry,
   type SessionMetadataValue,
@@ -56,6 +57,18 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
       type: "session_metadata",
       ...this.baseEntry(sessionId, turnId),
       metadata,
+    });
+  }
+
+  recordControlBoundary(
+    sessionId: string,
+    turnId: string,
+    boundary: AgentControlBoundaryTranscriptEntry["boundary"],
+  ): Promise<void> {
+    return this.recordEntry({
+      type: "control_boundary",
+      ...this.baseEntry(sessionId, turnId),
+      boundary,
     });
   }
 

@@ -10,30 +10,65 @@ export type AgentTranscriptReplayResult = {
   events: AgentEvent[];
   metadata: SessionMetadataValue;
   diagnostics: AgentTranscriptDiagnostic[];
+  /**
+   * Index of the last compact_boundary entry consumed during replay. When
+   * present, only messages after this entry are kept in `messages`.
+   */
+  lastCompactBoundaryIndex?: number;
+  /** Last compact boundary entry encountered (for resume relink). */
+  lastCompactBoundary?: AgentTranscriptEntry & { type: "control_boundary" };
 };
 
+/**
+ * Find the index of the last compact boundary entry. Used by resume / replay
+ * to slice messages after the boundary.
+ */
+export function findLastCompactBoundaryIndex(entries: AgentTranscriptEntry[]): number {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (
+      entry.type === "control_boundary" &&
+      entry.boundary.kind === "compact" &&
+      "subtype" in entry.boundary &&
+      entry.boundary.subtype === "compact_boundary"
+    ) {
+      return index;
+    }
+  }
+  return -1;
+}
+
 export function replayTranscriptEntries(entries: AgentTranscriptEntry[]): AgentTranscriptReplayResult {
+  const lastBoundaryIndex = findLastCompactBoundaryIndex(entries);
   const messages: CanonicalMessage[] = [];
   const events: AgentEvent[] = [];
   const diagnostics: AgentTranscriptDiagnostic[] = [];
   let metadata: SessionMetadataValue = {};
   let usage: CanonicalUsage = {};
   let permissionDenials: AgentPermissionDenial[] = [];
+  let lastCompactBoundary: (AgentTranscriptEntry & { type: "control_boundary" }) | undefined;
 
   const completedTurnIds = new Set(
     entries.filter((entry) => entry.type === "turn_result").map((entry) => entry.turnId),
   );
 
-  for (const entry of entries) {
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    // Past compact boundary: usage / metadata still merge; messages produced
+    // before the boundary are dropped (legacy getMessagesAfterCompactBoundary).
+    const beforeBoundary = lastBoundaryIndex !== -1 && index < lastBoundaryIndex;
+
     switch (entry.type) {
       case "accepted_input":
-        messages.push(...cloneMessages(entry.messages));
-        events.push({
-          type: "input_accepted",
-          sessionId: entry.sessionId,
-          turnId: entry.turnId,
-          messages: cloneMessages(entry.messages),
-        });
+        if (!beforeBoundary) {
+          messages.push(...cloneMessages(entry.messages));
+          events.push({
+            type: "input_accepted",
+            sessionId: entry.sessionId,
+            turnId: entry.turnId,
+            messages: cloneMessages(entry.messages),
+          });
+        }
         break;
       case "assistant_message":
       case "tool_result_message":
@@ -46,20 +81,32 @@ export function replayTranscriptEntries(entries: AgentTranscriptEntry[]): AgentT
           });
           break;
         }
+        if (beforeBoundary) {
+          break;
+        }
         messages.push(cloneMessage(entry.message));
         events.push(projectMessageEvent(entry.sessionId, entry.turnId, entry.message));
         break;
       case "turn_result":
         usage = mergeUsage(usage, entry.result.usage);
         permissionDenials = [...permissionDenials, ...entry.result.permissionDenials];
-        events.push({
-          type: "turn_completed",
-          sessionId: entry.sessionId,
-          turnId: entry.turnId,
-          result: cloneTurnResult(entry.result),
-        });
+        if (!beforeBoundary) {
+          events.push({
+            type: "turn_completed",
+            sessionId: entry.sessionId,
+            turnId: entry.turnId,
+            result: cloneTurnResult(entry.result),
+          });
+        }
         break;
       case "control_boundary":
+        if (
+          entry.boundary.kind === "compact" &&
+          "subtype" in entry.boundary &&
+          entry.boundary.subtype === "compact_boundary"
+        ) {
+          lastCompactBoundary = entry;
+        }
         break;
       case "session_metadata":
         metadata = mergeMetadata(metadata, entry.metadata);
@@ -67,7 +114,16 @@ export function replayTranscriptEntries(entries: AgentTranscriptEntry[]): AgentT
     }
   }
 
-  return { messages, usage, permissionDenials, events, metadata, diagnostics };
+  return {
+    messages,
+    usage,
+    permissionDenials,
+    events,
+    metadata,
+    diagnostics,
+    lastCompactBoundaryIndex: lastBoundaryIndex === -1 ? undefined : lastBoundaryIndex,
+    lastCompactBoundary,
+  };
 }
 
 function projectMessageEvent(sessionId: string, turnId: string, message: CanonicalMessage): AgentEvent {

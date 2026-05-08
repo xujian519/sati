@@ -105,6 +105,11 @@ function contentBlockDeltaEvents(
       return [{ type: "text_delta", text: readString(delta.text) ?? "", raw }];
     case "thinking_delta":
       return [{ type: "thinking_delta", text: readString(delta.thinking) ?? "", raw }];
+    case "signature_delta":
+      // Anthropic extended-thinking signature; emitted as a thinking_delta with
+      // an empty text and the signature payload so the assembler can attach it
+      // to the active thinking block. Required for prompt-cache validity.
+      return [{ type: "thinking_delta", text: "", signature: readString(delta.signature) ?? "", raw }];
     case "input_json_delta":
       if (index !== undefined) {
         const current = state.toolCalls.get(index) ?? { id: String(index), name: "", inputBuffer: "" };

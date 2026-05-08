@@ -1,5 +1,12 @@
 import type { ModelProtocol } from "../protocol/canonical.js";
-import type { CanonicalModelError } from "../protocol/errors.js";
+import {
+  MAX_OUTPUT_REACHED_PATTERN,
+  PROMPT_TOO_LONG_ANTHROPIC_PATTERN,
+  PROMPT_TOO_LONG_OPENAI_PATTERN,
+  REQUEST_TOO_LARGE_PATTERN,
+  type CanonicalModelError,
+  type CanonicalModelErrorCode,
+} from "../protocol/errors.js";
 
 export function normalizeModelError(
   provider: string,
@@ -12,13 +19,16 @@ export function normalizeModelError(
   const nestedError = record && isRecord(record.error) ? record.error : undefined;
   const source = nestedError ?? record;
 
-  const code = readString(source?.code) ?? readString(source?.type) ?? statusCodeToCode(status);
   const message =
     readString(source?.message) ??
     (error instanceof Error ? error.message : undefined) ??
     "Model provider request failed.";
 
-  return {
+  const semanticCode = classifySemanticError(message, status, protocol);
+  const code: CanonicalModelErrorCode | (string & {}) =
+    semanticCode ?? readString(source?.code) ?? readString(source?.type) ?? statusCodeToCode(status);
+
+  const result: CanonicalModelError = {
     provider,
     protocol,
     code,
@@ -27,6 +37,37 @@ export function normalizeModelError(
     retryable: isRetryable(status, code),
     raw,
   };
+  if (code === "prompt_too_long") {
+    result.recoverableViaCompact = true;
+  }
+  return result;
+}
+
+function classifySemanticError(
+  message: string,
+  status: number | undefined,
+  protocol: ModelProtocol,
+): CanonicalModelErrorCode | undefined {
+  // Legacy claude-code matches "prompt is too long" case-insensitively for Anthropic and Vertex.
+  if (PROMPT_TOO_LONG_ANTHROPIC_PATTERN.test(message)) {
+    return "prompt_too_long";
+  }
+  // Legacy OpenAI withRetry path matches the standard OpenAI 400 message.
+  if (PROMPT_TOO_LONG_OPENAI_PATTERN.test(message)) {
+    return "prompt_too_long";
+  }
+  // Legacy splits "request too large" (PDF / body size) from PTL token overruns.
+  if (REQUEST_TOO_LARGE_PATTERN.test(message)) {
+    return "request_too_large";
+  }
+  if (MAX_OUTPUT_REACHED_PATTERN.test(message)) {
+    return "max_output_reached";
+  }
+  if (status === 413) {
+    // 413 with no PTL phrase is treated as request_too_large (Vertex pattern noted in legacy).
+    return protocol === "anthropic" ? "request_too_large" : "request_too_large";
+  }
+  return undefined;
 }
 
 function isRetryable(status: number | undefined, code: string): boolean {

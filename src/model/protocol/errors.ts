@@ -1,12 +1,32 @@
+export type CanonicalModelErrorCode =
+  | "prompt_too_long"
+  | "request_too_large"
+  | "max_output_reached"
+  | "rate_limit_error"
+  | "auth_error"
+  | "server_error"
+  | "timeout"
+  | "overloaded_error"
+  | "invalid_request"
+  | "provider_error"
+  | "unknown";
+
 export type CanonicalModelError = {
   provider: string;
   protocol: "anthropic" | "openai";
-  code: string;
+  code: CanonicalModelErrorCode | (string & {});
   status?: number;
   message: string;
   retryable: boolean;
   raw?: unknown;
+  /** True for prompt-too-long errors that context recovery can attempt to resolve. */
+  recoverableViaCompact?: boolean;
 };
+
+export const PROMPT_TOO_LONG_ANTHROPIC_PATTERN = /prompt is too long/i;
+export const PROMPT_TOO_LONG_OPENAI_PATTERN = /input length and max_tokens exceed context limit/i;
+export const REQUEST_TOO_LARGE_PATTERN = /request too large/i;
+export const MAX_OUTPUT_REACHED_PATTERN = /max(?:imum)? (?:output|completion) tokens? (?:exceeded|reached)/i;
 
 export class ModelConfigError extends Error {
   readonly name = "ModelConfigError";

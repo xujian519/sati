@@ -14,6 +14,7 @@ export type ModelMessageAssemblerState = {
   content: CanonicalContentBlock[];
   textBuffer: string;
   thinkingBuffer: string;
+  thinkingSignature?: string;
   usage: CanonicalUsage;
   finishReason?: CanonicalFinishReason;
   error?: CanonicalModelError;
@@ -53,6 +54,9 @@ export function applyModelEventToAssembler(
       return;
     case "thinking_delta":
       state.thinkingBuffer += event.text;
+      if (event.signature !== undefined && event.signature.length > 0) {
+        state.thinkingSignature = event.signature;
+      }
       return;
     case "tool_call_end":
       flushTextBuffers(state);
@@ -92,12 +96,17 @@ export function assembleAssistantMessage(state: ModelMessageAssemblerState): Ass
 }
 
 function flushTextBuffers(state: ModelMessageAssemblerState): void {
-  if (state.thinkingBuffer.length > 0) {
-    state.content.push({
+  if (state.thinkingBuffer.length > 0 || state.thinkingSignature !== undefined) {
+    const block: CanonicalThinkingBlock = {
       type: "thinking",
       text: state.thinkingBuffer,
-    } satisfies CanonicalThinkingBlock);
+    };
+    if (state.thinkingSignature !== undefined) {
+      block.signature = state.thinkingSignature;
+    }
+    state.content.push(block);
     state.thinkingBuffer = "";
+    state.thinkingSignature = undefined;
   }
 
   if (state.textBuffer.length > 0) {
