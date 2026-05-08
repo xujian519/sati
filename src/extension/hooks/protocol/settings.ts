@@ -39,6 +39,12 @@ export type PolitDeckHookCommand =
       statusMessage?: string;
       once?: boolean;
       timeout?: number;
+    }
+  | {
+      type: "callback";
+      name: string;
+      if?: string;
+      statusMessage?: string;
     };
 
 export type PolitDeckHookMatcher = {

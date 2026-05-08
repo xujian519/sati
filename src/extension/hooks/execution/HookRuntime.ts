@@ -6,6 +6,11 @@ import type { PolitDeckHookInput } from "../protocol/input.js";
 import type { PolitDeckHookOutput, PolitDeckHookSyncOutput } from "../protocol/output.js";
 import type { PolitDeckHookCommand, PolitDeckHooksSettings } from "../protocol/settings.js";
 import { CommandHookExecutor, POLITDECK_SESSION_END_HOOK_TIMEOUT_MS } from "./CommandHookExecutor.js";
+import { PromptHookExecutor } from "./PromptHookExecutor.js";
+import { HttpHookExecutor } from "./HttpHookExecutor.js";
+import { AgentHookExecutor } from "./AgentHookExecutor.js";
+import { AsyncHookRegistry } from "./AsyncHookRegistry.js";
+import { CallbackHookExecutor } from "./CallbackHookExecutor.js";
 import { HookExecutionEventBus, type PolitDeckHookExecutionEvent } from "../events/HookExecutionEventBus.js";
 
 export type HookRuntimeRunInput = {
@@ -29,6 +34,11 @@ export class HookRuntime {
     private readonly settings: PolitDeckHooksSettings = {},
     private readonly commandExecutor = new CommandHookExecutor(),
     private readonly eventBus = new HookExecutionEventBus(),
+    private readonly asyncRegistry = new AsyncHookRegistry(),
+    private readonly promptExecutor = new PromptHookExecutor(),
+    private readonly httpExecutor = new HttpHookExecutor(),
+    private readonly agentExecutor = new AgentHookExecutor(),
+    private readonly callbackExecutor = new CallbackHookExecutor(),
   ) {}
 
   async run(input: HookRuntimeRunInput): Promise<HookRuntimeRunResult> {
@@ -47,23 +57,7 @@ export class HookRuntime {
       events.push(started);
       this.eventBus.emit(started);
 
-      if (hook.type !== "command") {
-        nonBlockingErrors.push({
-          code: "hook_non_blocking_error",
-          message: `${hook.type} hooks are not implemented yet.`,
-          hookName,
-        });
-        continue;
-      }
-
-      const result = await this.commandExecutor.execute({
-        hook,
-        hookInput: input.hookInput,
-        cwd: matcher.pluginRoot ?? input.cwd,
-        env: input.env,
-        signal: input.signal,
-        timeoutMs: input.event === "SessionEnd" ? POLITDECK_SESSION_END_HOOK_TIMEOUT_MS : undefined,
-      });
+      const result = await this.executeHook(hook, input, matcher.pluginRoot);
       const response: PolitDeckHookExecutionEvent = {
         type: "response",
         hookName,
@@ -75,6 +69,19 @@ export class HookRuntime {
       };
       events.push(response);
       this.eventBus.emit(response);
+
+      if (result.output.type === "async") {
+        this.asyncRegistry.register({
+          id: `${hookName}:${Date.now()}`,
+          startedAt: new Date(),
+          hookName,
+          hookEvent: input.event,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          responseDelivered: false,
+          asyncRewake: hook.type === "command" ? hook.asyncRewake : undefined,
+        });
+      }
 
       if (result.outcome === "blocking") {
         const message = result.stderr || result.stdout || "Hook blocked execution.";
@@ -95,6 +102,14 @@ export class HookRuntime {
     return { effects, events, blockingErrors, nonBlockingErrors };
   }
 
+  collectAsyncResponses(): ReturnType<AsyncHookRegistry["collectResponses"]> {
+    return this.asyncRegistry.collectResponses();
+  }
+
+  removeDeliveredAsyncResponses(): void {
+    this.asyncRegistry.removeDelivered();
+  }
+
   private *matchHooks(input: HookRuntimeRunInput): Generator<{
     matcher: NonNullable<PolitDeckHooksSettings[PolitDeckHookEvent]>[number];
     hook: PolitDeckHookCommand;
@@ -113,6 +128,32 @@ export class HookRuntime {
           yield { matcher, hook };
         }
       }
+    }
+  }
+
+  private executeHook(
+    hook: PolitDeckHookCommand,
+    input: HookRuntimeRunInput,
+    pluginRoot: string | undefined,
+  ) {
+    switch (hook.type) {
+      case "command":
+        return this.commandExecutor.execute({
+          hook,
+          hookInput: input.hookInput,
+          cwd: pluginRoot ?? input.cwd,
+          env: input.env,
+          signal: input.signal,
+          timeoutMs: input.event === "SessionEnd" ? POLITDECK_SESSION_END_HOOK_TIMEOUT_MS : undefined,
+        });
+      case "prompt":
+        return this.promptExecutor.execute({ hook, hookInput: input.hookInput, signal: input.signal });
+      case "http":
+        return this.httpExecutor.execute({ hook, hookInput: input.hookInput, env: input.env, signal: input.signal });
+      case "agent":
+        return this.agentExecutor.execute({ hook, hookInput: input.hookInput, signal: input.signal });
+      case "callback":
+        return this.callbackExecutor.execute({ hook, hookInput: input.hookInput, signal: input.signal });
     }
   }
 }
@@ -143,6 +184,9 @@ function effectsFromHookOutput(output: PolitDeckHookOutput, hookName: string): P
     }
     if (specific.watchPaths?.length) {
       effects.push({ type: "watch_paths", paths: specific.watchPaths });
+    }
+    if (specific.worktreePath) {
+      effects.push({ type: "worktree_path", path: specific.worktreePath });
     }
     if (specific.permissionDecision) {
       effects.push({

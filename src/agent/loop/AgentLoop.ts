@@ -12,6 +12,7 @@ import type { AgentEvent } from "../protocol/events.js";
 import type { AgentPermissionDenial, AgentTurnResult } from "../protocol/result.js";
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
+import type { LifecycleDispatchResult } from "../../lifecycle/index.js";
 import { NullContextRuntime } from "../context/NullContextRuntime.js";
 import { AgentRecoveryPolicy } from "./AgentRecoveryPolicy.js";
 import { collectToolCalls } from "./collectToolCalls.js";
@@ -87,6 +88,9 @@ export class AgentLoop {
           }
         }
       } catch (error) {
+        await this.dispatchLifecycle(input, "StopFailure", {
+          error: error instanceof Error ? error.message : String(error),
+        });
         const result = this.createTurnResult(input, {
           type: "error",
           stopReason: "model_error",
@@ -125,6 +129,9 @@ export class AgentLoop {
           continue;
         }
 
+        await this.dispatchLifecycle(input, "StopFailure", {
+          error: assembled.error,
+        });
         const result = this.createTurnResult(input, {
           type: "error",
           stopReason: recovery.stopReason,
@@ -141,6 +148,28 @@ export class AgentLoop {
       }
 
       if (toolCalls.length === 0) {
+        const stopHooks = await this.dispatchLifecycle(input, "Stop", {
+          stopHookActive: false,
+          lastAssistantMessage: textFromMessage(assembled.message),
+        });
+        messages.push(...stopHooks.messages);
+        const stopBlock = findLifecycleBlock(stopHooks);
+        if (stopBlock) {
+          const result = this.createTurnResult(input, {
+            type: "error",
+            stopReason: "tool_error",
+            usage,
+            permissionDenials,
+            turns: turnCount,
+            startedAt,
+            finalMessage,
+            structuredOutput,
+            errors: [agentError("agent_unsupported_feature", stopBlock.reason)],
+          });
+          yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
+          yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+          return { result, messages };
+        }
         const result = this.createTurnResult(input, {
           type: "success",
           stopReason: "completed",
@@ -183,6 +212,24 @@ export class AgentLoop {
       const projected = projectToolResults(pairedResults);
       messages.push(projected);
       yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: projected };
+
+      const lifecycleBlock = findToolLifecycleBlock(pairedResults);
+      if (lifecycleBlock) {
+        const result = this.createTurnResult(input, {
+          type: "error",
+          stopReason: "tool_error",
+          usage,
+          permissionDenials,
+          turns: turnCount,
+          startedAt,
+          finalMessage,
+          structuredOutput,
+          errors: [agentError("agent_unsupported_feature", lifecycleBlock.reason)],
+        });
+        yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
+        yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+        return { result, messages };
+      }
 
       if (this.config.stopOnStructuredOutput && structuredOutput !== undefined) {
         const result = this.createTurnResult(input, {
@@ -259,6 +306,32 @@ export class AgentLoop {
     };
   }
 
+  private async dispatchLifecycle(
+    input: AgentLoopInput,
+    event: "Stop" | "StopFailure",
+    payload: Record<string, unknown>,
+  ): Promise<LifecycleDispatchResult> {
+    return this.dependencies.lifecycle?.dispatch({
+      event,
+      baseInput: {
+        sessionId: input.sessionId,
+        transcriptPath: "",
+        cwd: this.config.cwd,
+        permissionMode: this.config.permissionMode,
+      },
+      payload,
+      matchQuery: event,
+      signal: input.abortSignal,
+      env: this.config.env,
+    }) ?? {
+      effects: [],
+      messages: [],
+      events: [],
+      blockingErrors: [],
+      nonBlockingErrors: [],
+    };
+  }
+
   private createTurnResult(
     input: AgentLoopInput,
     options: Omit<AgentTurnResult, "sessionId" | "turnId" | "completedAt">,
@@ -272,6 +345,36 @@ export class AgentLoop {
   }
 
   private readonly now = (): Date => this.dependencies.now?.() ?? new Date();
+}
+
+function findLifecycleBlock(result: LifecycleDispatchResult): { reason: string; stopReason?: string } | undefined {
+  return result.effects.find(
+    (effect): effect is { type: "block"; reason: string; stopReason?: string } => effect.type === "block",
+  );
+}
+
+function findToolLifecycleBlock(results: PolitDeckToolResult[]): { reason: string; stopReason?: string } | undefined {
+  for (const result of results) {
+    const lifecycle = result.metadata?.lifecycle;
+    if (isRecord(lifecycle) && isRecord(lifecycle.blocked) && typeof lifecycle.blocked.reason === "string") {
+      return {
+        reason: lifecycle.blocked.reason,
+        stopReason: typeof lifecycle.blocked.stopReason === "string" ? lifecycle.blocked.stopReason : undefined,
+      };
+    }
+  }
+  return undefined;
+}
+
+function textFromMessage(message: CanonicalMessage): string {
+  return message.content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function cloneMessages(messages: CanonicalMessage[]): CanonicalMessage[] {

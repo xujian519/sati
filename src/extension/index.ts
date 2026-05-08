@@ -26,12 +26,18 @@ export {
   type CommandHookExecutionOptions,
   type CommandHookExecutionResult,
 } from "./hooks/execution/CommandHookExecutor.js";
+export { PromptHookExecutor, type PromptHookEvaluator } from "./hooks/execution/PromptHookExecutor.js";
+export { HttpHookExecutor, type HttpHookFetch } from "./hooks/execution/HttpHookExecutor.js";
+export { AgentHookExecutor, type AgentHookRunner } from "./hooks/execution/AgentHookExecutor.js";
+export { CallbackHookExecutor, type CallbackHookHandler } from "./hooks/execution/CallbackHookExecutor.js";
 export { HookRuntime, type HookRuntimeRunInput, type HookRuntimeRunResult } from "./hooks/execution/HookRuntime.js";
-export { AsyncHookRegistry, type PendingAsyncHook } from "./hooks/execution/AsyncHookRegistry.js";
+export { AsyncHookRegistry, type AsyncHookResponse, type PendingAsyncHook } from "./hooks/execution/AsyncHookRegistry.js";
 export { HookExecutionEventBus, type PolitDeckHookExecutionEvent } from "./hooks/events/HookExecutionEventBus.js";
 
 export type { PolitDeckPluginManifest } from "./plugins/protocol/manifest.js";
+export type { PolitDeckMarketplaceReference } from "./plugins/protocol/manifest.js";
 export type { PolitDeckLoadedPlugin, PolitDeckPluginSourceKind } from "./plugins/protocol/plugin.js";
+export { resolveMarketplaceReference, type PolitDeckMarketplaceResolution, type PolitDeckPluginMarketplaceStatus } from "./plugins/protocol/marketplace.js";
 export { parsePluginManifest } from "./plugins/config/parsePluginManifest.js";
 export { validateMarketplaceName } from "./plugins/config/validateMarketplaceName.js";
 export { validatePluginSourcePath } from "./plugins/config/validatePluginSource.js";
@@ -40,8 +46,8 @@ export { discoverPluginPaths, type DiscoveredPluginPath } from "./plugins/discov
 export { discoverBuiltinPlugins } from "./plugins/discovery/discoverBuiltinPlugins.js";
 export { loadPluginFromPath } from "./plugins/loading/PluginLoader.js";
 export { loadPluginHooks } from "./plugins/loading/PluginHookLoader.js";
-export { getPluginCommandName } from "./plugins/loading/PluginCommandLoader.js";
-export { PluginRuntime, type PluginRuntimeOptions } from "./plugins/runtime/PluginRuntime.js";
+export { getPluginCommandName, loadPluginCommands, type LoadedPluginCommand } from "./plugins/loading/PluginCommandLoader.js";
+export { PluginRuntime, type PluginRuntimeOptions, type PluginRefreshResult } from "./plugins/runtime/PluginRuntime.js";
 export { PluginRegistry } from "./plugins/runtime/PluginRegistry.js";
 export { defaultPluginReloadPolicy, type PluginReloadPolicy } from "./plugins/runtime/PluginReloadPolicy.js";
 

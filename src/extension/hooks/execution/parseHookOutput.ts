@@ -61,6 +61,7 @@ function parseSpecificOutput(value: unknown): PolitDeckHookSpecificOutput | unde
     updatedMCPToolOutput: record.updatedMCPToolOutput,
     decision: parsePermissionRequestDecision(record.decision),
     retry: booleanOrUndefined(record.retry),
+    worktreePath: stringOrUndefined(record.worktreePath),
   };
 }
 

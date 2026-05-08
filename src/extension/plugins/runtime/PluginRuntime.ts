@@ -8,6 +8,14 @@ export type PluginRuntimeOptions = {
   projectRoot: string;
   politHome: string;
   builtinPlugins?: PolitDeckLoadedPlugin[];
+  builtinPluginsEnabled?: Record<string, boolean>;
+};
+
+export type PluginRefreshResult = {
+  previous: PolitDeckLoadedPlugin[];
+  next: PolitDeckLoadedPlugin[];
+  added: PolitDeckLoadedPlugin[];
+  removed: PolitDeckLoadedPlugin[];
 };
 
 export class PluginRuntime {
@@ -19,7 +27,20 @@ export class PluginRuntime {
     return this.registry.list();
   }
 
+  mcpServers(): Record<string, unknown> {
+    return Object.assign({}, ...this.registry.list().map((plugin) => plugin.mcpServers ?? {})) as Record<string, unknown>;
+  }
+
+  lspServers(): Record<string, unknown> {
+    return Object.assign({}, ...this.registry.list().map((plugin) => plugin.lspServers ?? {})) as Record<string, unknown>;
+  }
+
   async refresh(): Promise<PolitDeckLoadedPlugin[]> {
+    return (await this.refreshWithReport()).next;
+  }
+
+  async refreshWithReport(): Promise<PluginRefreshResult> {
+    const previous = this.registry.list();
     const paths = resolvePluginDirectories({
       projectRoot: this.options.projectRoot,
       politHome: this.options.politHome,
@@ -31,12 +52,31 @@ export class PluginRuntime {
     const loaded = await Promise.all(
       discovered.map((plugin) => loadPluginFromPath(plugin.path, plugin.source).catch(() => undefined)),
     );
-    const plugins = [...(this.options.builtinPlugins ?? []), ...loaded.filter(isLoadedPlugin)];
+    const plugins = [
+      ...enabledBuiltinPlugins(this.options.builtinPlugins ?? [], this.options.builtinPluginsEnabled ?? {}),
+      ...loaded.filter(isLoadedPlugin),
+    ];
     this.registry.replaceAll(plugins);
-    return plugins;
+    return {
+      previous,
+      next: plugins,
+      added: plugins.filter((plugin) => !hasPlugin(previous, plugin)),
+      removed: previous.filter((plugin) => !hasPlugin(plugins, plugin)),
+    };
   }
 }
 
 function isLoadedPlugin(value: PolitDeckLoadedPlugin | undefined): value is PolitDeckLoadedPlugin {
   return value !== undefined;
+}
+
+function enabledBuiltinPlugins(
+  plugins: PolitDeckLoadedPlugin[],
+  enabled: Record<string, boolean>,
+): PolitDeckLoadedPlugin[] {
+  return plugins.filter((plugin) => plugin.source !== "builtin" || enabled[plugin.name] !== false);
+}
+
+function hasPlugin(plugins: PolitDeckLoadedPlugin[], plugin: PolitDeckLoadedPlugin): boolean {
+  return plugins.some((candidate) => candidate.name === plugin.name && candidate.source === plugin.source);
 }

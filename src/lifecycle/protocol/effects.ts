@@ -22,6 +22,7 @@ export type PolitDeckHookEffect =
   | { type: "permission_request_result"; result: PolitDeckPermissionRequestResult }
   | { type: "initial_user_message"; message: string }
   | { type: "watch_paths"; paths: string[] }
+  | { type: "worktree_path"; path: string }
   | { type: "retry_permission_denied" };
 
 export type PolitDeckLifecycleError = {

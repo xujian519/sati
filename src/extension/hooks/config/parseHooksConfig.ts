@@ -126,6 +126,9 @@ function parseHookCommand(eventName: string, rawHook: unknown, diagnostics: stri
         return undefined;
       }
       return { type: "agent", prompt: rawHook.prompt, model: stringOrUndefined(rawHook.model), ...common };
+    case "callback":
+      diagnostics.push(`Callback hook for ${eventName} is runtime-only and cannot be loaded from persistent config.`);
+      return undefined;
     default:
       diagnostics.push(`Unsupported hook type ${rawHook.type} for ${eventName}.`);
       return undefined;

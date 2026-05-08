@@ -117,6 +117,7 @@ src/extension/
 
 ```text
 tests/lifecycle-hooks-plugins/
+  agent-lifecycle.test.ts
   protocol.test.ts
   hook-runtime.test.ts
   tool-integration.test.ts
@@ -545,6 +546,14 @@ Hook 失败行为不通过 `hookFailurePolicy` 配置控制，而是按 hook 输
 - `PermissionRuntime` 或 ToolRuntime 接 PermissionRequest/PermissionDenied。
 - transcript 记录 hook effect 与 additional context。
 
+当前落地状态：
+
+- `AgentSession` 已接 `SessionStart` 和 `SessionEnd`。
+- `TurnRunner` 已接 `UserPromptSubmit`。
+- `AgentLoop` 已接无工具完成前的 `Stop` 和 terminal model error 的 `StopFailure`。
+- `ToolRuntime` 已接 `PreToolUse`、`PermissionRequest`、`PermissionDenied`、`PostToolUse`、`PostToolUseFailure`。
+- `PostToolUse` blocking 目前作为 `tool_result.metadata.lifecycle` 进入 AgentLoop，并可停止后续模型请求。
+
 完成标准：
 
 - 同一工具调用场景下，hook 修改 input、阻止执行、追加 context 的 normalized output 与 legacy 一致。
@@ -556,6 +565,15 @@ Hook 失败行为不通过 `hookFailurePolicy` 配置控制，而是按 hook 输
 - 支持 manifest hooks/commands/skills 基本贡献。
 - 支持 plugin hook atomic reload 与 prune removed。
 - 支持 plugin command markdown 命名和 frontmatter。
+
+当前落地状态：
+
+- `PluginRuntime.refresh()` 已从 builtin/global/project 插件源生成 snapshot。
+- `PluginRuntime.refreshWithReport()` 已返回 previous/next/added/removed，支持删除插件后的 prune 观察。
+- builtin plugin 可通过 `builtinPluginsEnabled` 禁用。
+- `PluginLoader` 已读取 `plugin.json` 与 `hooks/hooks.json`。
+- `PluginCommandLoader` 已读取 markdown commands 与 `SKILL.md`，并解析简单 frontmatter。
+- `PluginLoader` 已收集 manifest 中的 `mcpServers`，`PluginRuntime.mcpServers()` 可汇总当前 snapshot 的 MCP server contributions。
 
 完成标准：
 
@@ -570,6 +588,14 @@ Hook 失败行为不通过 `hookFailurePolicy` 配置控制，而是按 hook 输
 - `agent` hook。
 - asyncRewake 可继续 deferred，直到任务通知队列存在。
 
+当前落地状态：
+
+- `prompt` hook 支持注入 `PromptHookEvaluator`，由外部模型 adapter 提供实际评估。
+- `http` hook 使用 `fetch` POST hook input JSON，并按 `allowedEnvVars` 解析 header 环境变量。
+- `agent` hook 支持注入 `AgentHookRunner`，由外部 agent adapter 提供实际执行。
+- `callback` hook 支持运行时注册回调，不从持久化配置加载。
+- `AsyncHookRegistry` 已支持 pending async hook 注册、同步响应收集、delivered response 清理，以及 asyncRewake 标记；真实任务通知队列唤醒仍 deferred。
+
 完成标准：
 
 - async hook pending/completion normalized output 一致。
@@ -581,6 +607,15 @@ Hook 失败行为不通过 `hookFailurePolicy` 配置控制，而是按 hook 输
 - MCP server contributions。
 - LSP/output style。
 - Worktree hook 事件。
+
+当前落地状态：
+
+- MCP server contributions 已从插件 manifest 读取，并可通过 `PluginRuntime.mcpServers()` 汇总当前 snapshot。
+- LSP server contributions 已从插件 manifest 读取，并可通过 `PluginRuntime.lspServers()` 汇总当前 snapshot。
+- output style markdown 已按插件命名规则读取。
+- WorktreeCreate 与 SubagentStop 已可通过 lifecycle runtime dispatch。
+- marketplace reference 已能解析并区分 local metadata 与 Git/zip/MCPB installer deferred 状态。
+- Git/zip/MCPB 真实下载安装、任务队列 asyncRewake 和完整 Subagent runtime 仍未实现。
 
 完成标准：
 
@@ -596,13 +631,15 @@ Hook 失败行为不通过 `hookFailurePolicy` 配置控制，而是按 hook 输
 | Hook settings schema | `extension/hooks/config/parseHooksConfig.ts` | 1 | compare |
 | `if` permission rule matcher | `extension/hooks/config/matchHookCondition.ts` | 2 | compare |
 | command hook | `CommandHookExecutor` | 2 | compare |
-| prompt hook | `PromptHookExecutor` | 5 | deferred |
-| http hook | `HttpHookExecutor` | 5 | deferred |
-| agent hook | `AgentHookExecutor` | 5 | deferred |
-| callback/function hook | SDK adapter | 5 | deferred |
+| prompt hook | `PromptHookExecutor` | 5 | compare |
+| http hook | `HttpHookExecutor` | 5 | compare |
+| agent hook | `AgentHookExecutor` | 5 | compare |
+| callback/function hook | SDK adapter | 5 | compare |
 | sync JSON output | `parseHookOutput.ts` | 2 | compare |
-| async hook | `AsyncHookRegistry.ts` | 5 | deferred |
-| asyncRewake | notification/task runtime | 6 | deferred |
+| async hook response registry | `AsyncHookRegistry.ts` | 5 | compare |
+| async hook background polling | `AsyncHookRegistry.ts` | 5 | deferred |
+| asyncRewake marker | `AsyncHookRegistry.ts` | 6 | compare |
+| asyncRewake task queue | notification/task runtime | 6 | deferred |
 | SessionStart | `AgentSession` + lifecycle | 3 | compare |
 | Setup | adapter/init lifecycle | 3 | compare |
 | UserPromptSubmit | `TurnRunner` + lifecycle | 3 | compare |
@@ -611,12 +648,19 @@ Hook 失败行为不通过 `hookFailurePolicy` 配置控制，而是按 hook 输
 | PostToolUse | `ToolRuntime` + lifecycle | 3 | compare |
 | PostToolUseFailure | `ToolRuntime` + lifecycle | 3 | compare |
 | PermissionDenied retry | `ToolRuntime` + lifecycle | 3 | compare |
-| Stop/SubagentStop | `AgentLoop`/subagent runtime | 3/6 | partial/deferred |
+| Stop | `AgentLoop` | 3 | compare |
+| SubagentStop dispatch | lifecycle runtime | 6 | compare |
+| Subagent runtime | subagent runtime | 6 | deferred |
 | PreCompact/PostCompact | context runtime | 6 | deferred |
 | Plugin global/project/builtin loading | `PluginLoader` | 4 | compare |
-| Plugin marketplace install | plugin marketplace | 6 | deferred |
+| Plugin marketplace reference | plugin marketplace | 6 | compare |
+| Plugin marketplace installers | plugin marketplace | 6 | deferred |
 | Plugin hooks hot reload | `PluginHookLoader` | 4 | compare |
 | Plugin commands/skills | `PluginCommandLoader` | 4 | compare |
+| Plugin MCP server contributions | `PluginRuntime.mcpServers()` | 6 | compare |
+| Plugin LSP server contributions | `PluginRuntime.lspServers()` | 6 | compare |
+| Plugin output styles | `PluginCommandLoader` | 6 | compare |
+| WorktreeCreate dispatch | lifecycle runtime | 6 | compare |
 | session-only / inline session plugin | 不迁移 | - | not_applicable |
 | TeammateIdle / TaskCreated / TaskCompleted | 不迁移 | - | not_applicable |
 | Legacy telemetry names | audit/event adapter | 2 | intentional_difference |

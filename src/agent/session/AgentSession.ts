@@ -63,6 +63,17 @@ export class AgentSession {
     );
     this.state.status = runResult.result.type === "aborted" ? "aborted" : runResult.result.type === "error" ? "failed" : "idle";
     this.state.currentTurnId = undefined;
+    await this.options.lifecycle?.dispatch({
+      event: "SessionEnd",
+      baseInput: {
+        sessionId: this.state.sessionId,
+        transcriptPath: "",
+        cwd: process.cwd(),
+      },
+      payload: { reason: this.state.status === "aborted" ? "other" : "prompt_input_exit" },
+      matchQuery: "SessionEnd",
+      signal: this.state.abortController.signal,
+    });
   }
 
   abort(reason?: string): void {

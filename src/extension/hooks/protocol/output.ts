@@ -21,6 +21,7 @@ export type PolitDeckHookSpecificOutput = {
   updatedMCPToolOutput?: unknown;
   decision?: PolitDeckPermissionHookDecision;
   retry?: boolean;
+  worktreePath?: string;
 };
 
 export type PolitDeckHookSyncOutput = {

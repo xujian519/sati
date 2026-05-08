@@ -21,6 +21,7 @@
 
 ```text
 tests/lifecycle-hooks-plugins/
+  agent-lifecycle.test.ts
   protocol.test.ts
   hook-runtime.test.ts
   tool-integration.test.ts
@@ -287,7 +288,7 @@ bun run src/politdeck-lifecycle-hooks-plugin-legacy-execution-report.ts
 
 - 文档列出测试分层、场景清单、归一化规则和通过标准。
 - 文档列出所有 deferred 与 intentional difference。
-- PolitDeck 新实现的基础协议、command hook runtime、tool integration 和本地插件加载测试通过。
+- PolitDeck 新实现的基础协议、command/prompt/http/agent/callback hook runtime、async response registry 和 rewake marker、agent lifecycle integration、tool integration、本地插件加载、commands/skills/output-style 读取、MCP/LSP contribution 汇总、SubagentStop/WorktreeCreate dispatch、marketplace reference 解析和 refresh/prune 报告测试通过。
 
 结论只能写：
 

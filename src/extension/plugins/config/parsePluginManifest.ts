@@ -17,6 +17,20 @@ export function parsePluginManifest(raw: unknown): PolitDeckPluginManifest {
     skills: stringOrStringArray(raw.skills),
     hooks: isRecord(raw.hooks) || typeof raw.hooks === "string" ? raw.hooks : undefined,
     mcpServers: isRecord(raw.mcpServers) ? raw.mcpServers : undefined,
+    lspServers: isRecord(raw.lspServers) ? raw.lspServers : undefined,
+    outputStyles: stringOrStringArray(raw.outputStyles),
+    marketplace: isRecord(raw.marketplace) && typeof raw.marketplace.name === "string" && typeof raw.marketplace.plugin === "string"
+      ? {
+          name: raw.marketplace.name,
+          plugin: raw.marketplace.plugin,
+          version: stringOrUndefined(raw.marketplace.version),
+          source: parseMarketplaceSource(raw.marketplace.source),
+          url: stringOrUndefined(raw.marketplace.url),
+        }
+      : undefined,
+    mcpb: typeof raw.mcpb === "string" && (raw.mcpb.endsWith(".mcpb") || raw.mcpb.endsWith(".dxt"))
+      ? raw.mcpb
+      : undefined,
     settings: isRecord(raw.settings) ? raw.settings : undefined,
   };
 }
@@ -37,4 +51,8 @@ function stringOrStringArray(value: unknown): string | string[] | undefined {
     return value;
   }
   return undefined;
+}
+
+function parseMarketplaceSource(value: unknown): "marketplace" | "git" | "zip" | "mcpb" | undefined {
+  return value === "marketplace" || value === "git" || value === "zip" || value === "mcpb" ? value : undefined;
 }

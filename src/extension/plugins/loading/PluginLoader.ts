@@ -4,6 +4,7 @@ import { parseHooksConfig } from "../../hooks/config/parseHooksConfig.js";
 import type { PolitDeckPluginManifest } from "../protocol/manifest.js";
 import type { PolitDeckLoadedPlugin, PolitDeckPluginSourceKind } from "../protocol/plugin.js";
 import { parsePluginManifest } from "../config/parsePluginManifest.js";
+import { loadPluginCommands } from "./PluginCommandLoader.js";
 
 export async function loadPluginFromPath(
   pluginPath: string,
@@ -12,6 +13,9 @@ export async function loadPluginFromPath(
   const manifestPath = join(pluginPath, "plugin.json");
   const manifest = parsePluginManifest(JSON.parse(await readFile(manifestPath, "utf8")) as unknown);
   const hooksConfig = await loadHooksConfig(pluginPath, manifest);
+  const commands = await loadConfiguredMarkdown(pluginPath, manifest.commands, "commands");
+  const skills = await loadConfiguredMarkdown(pluginPath, manifest.skills, "skills");
+  const outputStyles = await loadConfiguredMarkdown(pluginPath, manifest.outputStyles, "output-styles");
 
   return {
     name: manifest.name,
@@ -19,7 +23,11 @@ export async function loadPluginFromPath(
     source,
     manifest,
     hooksConfig,
+    commands,
+    skills,
+    outputStyles,
     mcpServers: manifest.mcpServers,
+    lspServers: manifest.lspServers,
   };
 }
 
@@ -34,4 +42,22 @@ async function loadHooksConfig(pluginPath: string, manifest: PolitDeckPluginMani
   } catch {
     return undefined;
   }
+}
+
+async function loadConfiguredMarkdown(
+  pluginPath: string,
+  configured: string | string[] | undefined,
+  fallbackDir: "commands" | "skills" | "output-styles",
+) {
+  const dirs = configured === undefined ? [fallbackDir] : Array.isArray(configured) ? configured : [configured];
+  const loaded = await Promise.all(
+    dirs.map((dir) => loadPluginCommands({ pluginName: "", baseDir: join(pluginPath, dir) }).catch(() => [])),
+  );
+  const pluginName = pluginPath.split(/[\\/]/u).at(-1) ?? "";
+  return loaded.flat().map((command) => ({
+    ...command,
+    name: command.name.startsWith(":")
+      ? `${pluginName}${command.name}`
+      : command.name.replace(/^:/u, `${pluginName}:`),
+  }));
 }
