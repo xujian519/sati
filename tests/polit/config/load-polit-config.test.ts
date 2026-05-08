@@ -9,13 +9,14 @@ import {
   PolitConfigError,
 } from "../../../src/polit/config/index.js";
 import { getPolitConfigFilePath, getPolitProjectChatDir } from "../../../src/polit/paths.js";
-import { validModelConfig } from "../../model/helpers.js";
+import { validAgentConfig, validModelConfig } from "../../model/helpers.js";
 
 test("loads default config from PolitHome and resolves model env credentials", () => {
   const politHome = makeTempDir();
   try {
     writeJson(getPolitConfigFilePath(politHome), {
       schemaVersion: 1,
+      agent: validAgentConfig(),
       model: validModelConfig(),
     });
 
@@ -27,7 +28,8 @@ test("loads default config from PolitHome and resolves model env credentials", (
     });
 
     assert.equal(snapshot.schemaVersion, 1);
-    assert.equal(snapshot.config.model.defaultProvider, "anthropic-main");
+    assert.equal(snapshot.config.agent.model.provider, "anthropic-main");
+    assert.equal(snapshot.config.agent.model.model, "claude-sonnet-4-5");
     assert.equal(snapshot.config.model.providers["anthropic-main"].apiKey, "anthropic-key");
     assert.deepEqual(
       snapshot.sources.map((source) => `${source.kind}:${source.phase ?? "file"}`),
@@ -44,6 +46,7 @@ test("merges default, project and env sources by priority", () => {
   try {
     writeJson(getPolitConfigFilePath(politHome), {
       schemaVersion: 1,
+      agent: validAgentConfig(),
       model: validModelConfig(),
     });
     writeJson(join(projectRoot, ".politdeck.yaml"), {
@@ -60,12 +63,13 @@ test("merges default, project and env sources by priority", () => {
       projectRoot,
       env: {
         POLIT_HOME: politHome,
-        POLIT_MODEL_DEFAULT_MODEL: "claude-sonnet-4-5",
+        POLIT_AGENT_MODEL: "openai-main/gpt-5.1",
         ANTHROPIC_API_KEY: "anthropic-key",
       },
     });
 
-    assert.equal(snapshot.config.model.defaultModel, "claude-sonnet-4-5");
+    assert.equal(snapshot.config.agent.model.provider, "openai-main");
+    assert.equal(snapshot.config.agent.model.model, "gpt-5.1");
     assert.equal(snapshot.config.model.providers["anthropic-main"].timeoutMs, 1000);
     assert.deepEqual(snapshot.sources.map((source) => source.kind), [
       "env",
@@ -84,6 +88,7 @@ test("rejects polit path configuration in YAML", () => {
   try {
     writeJson(getPolitConfigFilePath(politHome), {
       schemaVersion: 1,
+      agent: validAgentConfig(),
       polit: {
         home: "/tmp/other",
       },
@@ -100,6 +105,60 @@ test("rejects polit path configuration in YAML", () => {
         }),
       (error) =>
         error instanceof PolitConfigError && error.code === "CONFIG_POLIT_SECTION_FORBIDDEN",
+    );
+  } finally {
+    rmSync(politHome, { recursive: true, force: true });
+  }
+});
+
+test("rejects an agent model that does not use provider/model format", () => {
+  const politHome = makeTempDir();
+  try {
+    writeJson(getPolitConfigFilePath(politHome), {
+      schemaVersion: 1,
+      agent: {
+        model: "claude-sonnet-4-5",
+      },
+      model: validModelConfig(),
+    });
+
+    assert.throws(
+      () =>
+        loadPolitConfig({
+          env: {
+            POLIT_HOME: politHome,
+            ANTHROPIC_API_KEY: "anthropic-key",
+          },
+        }),
+      (error) =>
+        error instanceof PolitConfigError && error.code === "CONFIG_AGENT_MODEL_INVALID",
+    );
+  } finally {
+    rmSync(politHome, { recursive: true, force: true });
+  }
+});
+
+test("rejects an agent model outside configured providers", () => {
+  const politHome = makeTempDir();
+  try {
+    writeJson(getPolitConfigFilePath(politHome), {
+      schemaVersion: 1,
+      agent: {
+        model: "anthropic-main/missing-model",
+      },
+      model: validModelConfig(),
+    });
+
+    assert.throws(
+      () =>
+        loadPolitConfig({
+          env: {
+            POLIT_HOME: politHome,
+            ANTHROPIC_API_KEY: "anthropic-key",
+          },
+        }),
+      (error) =>
+        error instanceof PolitConfigError && error.code === "CONFIG_AGENT_MODEL_NOT_FOUND",
     );
   } finally {
     rmSync(politHome, { recursive: true, force: true });
@@ -123,6 +182,7 @@ test("reload failure keeps the previous snapshot", async () => {
     const configPath = getPolitConfigFilePath(politHome);
     writeJson(configPath, {
       schemaVersion: 1,
+      agent: validAgentConfig(),
       model: validModelConfig(),
     });
 
@@ -136,8 +196,11 @@ test("reload failure keeps the previous snapshot", async () => {
 
     writeJson(configPath, {
       schemaVersion: 1,
+      agent: {
+        model: "missing/claude-sonnet-4-5",
+      },
       model: {
-        defaultProvider: "missing",
+        providers: {},
       },
     });
 

@@ -134,7 +134,7 @@ changed path starts with "model." -> next-request
 other changed path                   -> next-runtime
 ```
 
-由于 snapshot 当前只包含 `config.model`，实际发布的业务变更通常都是 `next-request`。当 future 配置段加入 snapshot 后，不能继续用“非 model 一律 next-runtime”的粗粒度规则，需要按字段分类。
+由于 snapshot 当前包含 `config.agent` 和 `config.model`，实际发布的业务变更通常都是 `next-request`。当更多 future 配置段加入 snapshot 后，不能继续用“非 model 一律 next-runtime”的粗粒度规则，需要按字段分类。
 
 ### runtime-live
 

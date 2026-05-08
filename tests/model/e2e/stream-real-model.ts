@@ -4,7 +4,7 @@ import { loadPolitConfig } from "../../../src/polit/index.js";
 const prompt = process.argv.slice(2).join(" ") || "Reply with exactly: PolitDeck streaming OK";
 
 const snapshot = loadPolitConfig();
-const { defaultProvider, defaultModel } = snapshot.config.model;
+const { provider, model } = snapshot.config.agent.model;
 const runtime = createModelRuntime(snapshot.config.model);
 
 const events: CanonicalModelEvent[] = [];
@@ -15,8 +15,8 @@ console.log(
     {
       type: "script_started",
       configSnapshotVersion: snapshot.version,
-      provider: defaultProvider,
-      model: defaultModel,
+      provider,
+      model,
       prompt,
     },
     null,
@@ -25,8 +25,8 @@ console.log(
 );
 
 for await (const event of runtime.stream({
-  provider: defaultProvider,
-  model: defaultModel,
+  provider,
+  model,
   messages: [
     {
       role: "user",

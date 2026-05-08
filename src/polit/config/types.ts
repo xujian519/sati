@@ -32,10 +32,23 @@ export type PolitConfigDiagnostic = {
 
 export type PolitRawConfig = {
   schemaVersion?: unknown;
+  agent?: unknown;
   model?: unknown;
 };
 
+export type PolitAgentModelSelection = {
+  id: string;
+  provider: string;
+  model: string;
+};
+
+export type PolitAgentConfig = {
+  model: PolitAgentModelSelection;
+  fallbackModel?: PolitAgentModelSelection;
+};
+
 export type PolitConfig = {
+  agent: PolitAgentConfig;
   model: ModelConfig;
 };
 

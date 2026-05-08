@@ -1,9 +1,14 @@
 import type { RawModelConfig } from "../../src/model/config/schema.js";
 
+export function validAgentConfig() {
+  return {
+    model: "anthropic-main/claude-sonnet-4-5",
+    fallbackModel: "openai-main/gpt-5.1",
+  };
+}
+
 export function validModelConfig(): RawModelConfig {
   return {
-    defaultProvider: "anthropic-main",
-    defaultModel: "claude-sonnet-4-5",
     providers: {
       "anthropic-main": {
         protocol: "anthropic",

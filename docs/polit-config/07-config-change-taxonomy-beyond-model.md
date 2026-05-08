@@ -1,6 +1,6 @@
 # 多模块配置变更分类
 
-本文定义当 `agent` 等 future 配置段进入 `PolitConfig` 后，`classifyConfigChanges()` 应如何扩展。当前实现只对 `model.*` 返回 `next-request`，其它路径粗略归为 `next-runtime`。
+本文定义 `agent` 和 `model` 配置段的变更分类，以及更多 future 配置段进入 `PolitConfig` 后 `classifyConfigChanges()` 应如何扩展。当前实现对 `agent.*` 和 `model.*` 返回 `next-request`，其它路径粗略归为 `next-runtime`。
 
 ## 分类定义
 

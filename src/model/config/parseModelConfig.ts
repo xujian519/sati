@@ -42,10 +42,6 @@ export function parseModelConfig(
     throw new ModelConfigError("invalid_model_config", "Model config must be an object.");
   }
 
-  const defaultProvider = readRequiredString(rawConfig.defaultProvider, "defaultProvider");
-  const defaultModel = readRequiredString(rawConfig.defaultModel, "defaultModel");
-  const fallbackModel = readOptionalString(rawConfig.fallbackModel, "fallbackModel");
-
   if (!isRecord(rawConfig.providers) || Object.keys(rawConfig.providers).length === 0) {
     throw new ModelConfigError("missing_provider", "Model config must contain at least one provider.");
   }
@@ -55,31 +51,7 @@ export function parseModelConfig(
     providers[providerId] = parseProvider(providerId, rawProvider, options.env);
   }
 
-  const provider = providers[defaultProvider];
-  if (!provider) {
-    throw new ModelConfigError("missing_provider", `Default provider ${defaultProvider} does not exist.`, {
-      defaultProvider,
-    });
-  }
-
-  if (!provider.models[defaultModel]) {
-    throw new ModelConfigError(
-      "default_model_not_found",
-      `Default model ${defaultModel} does not exist in provider ${defaultProvider}.`,
-      { defaultProvider, defaultModel },
-    );
-  }
-
-  if (fallbackModel && !Object.values(providers).some((candidate) => candidate.models[fallbackModel])) {
-    throw new ModelConfigError("fallback_model_not_found", `Fallback model ${fallbackModel} does not exist.`, {
-      fallbackModel,
-    });
-  }
-
   return {
-    defaultProvider,
-    defaultModel,
-    fallbackModel,
     providers,
   };
 }

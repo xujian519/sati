@@ -4,7 +4,7 @@
 
 `polit/config` 是 `PolitDeck` 的全局配置入口，负责从 `PolitHome` 目录加载默认 YAML 配置、叠加项目级配置和受控环境变量覆盖，并向运行时提供稳定的配置快照。
 
-当前源码已经实现 `model`、`agent`、`tool`、`permission`、context 和 session/transcript 等模块。其中只有 `model` 段已经进入 `PolitConfig` schema；`agent` 段是下一步配置入口，用于统一管理默认模型和 fallback 模型。本目录在保留当前实现事实的基础上，补充 `agent.model` 与 `model.providers` 的边界、优先级、热重载语义和测试要求。
+当前源码已经实现 `model`、`agent`、`tool`、`permission`、context 和 session/transcript 等模块。其中 `agent` 和 `model` 段已经进入 `PolitConfig` schema：`agent.model` / `agent.fallbackModel` 统一管理默认模型和 fallback 模型，`model.providers` 描述 provider、连接、认证和模型能力。
 
 ## 文档结构
 
@@ -26,7 +26,7 @@
 ## 核心目标
 
 - 全局配置默认从 `PolitHome/politdeck.yaml` 加载，`PolitHome` 只由默认值和环境变量控制，不写入 YAML。
-- 当前实现只有 `model` 模块消费解析后的业务配置段；目标 schema 中默认模型选择迁移到 `agent.model`，后续模块接入时也必须通过 snapshot，而不是直接读取 YAML、环境变量或用户目录。
+- 当前实现由 `agent` 段管理默认模型选择，`model` 段管理 provider/model 定义；后续模块接入时也必须通过 snapshot，而不是直接读取 YAML、环境变量或用户目录。
 - 配置读取结果以不可变快照形式发布，避免运行时共享可变对象。
 - 支持手动 reload 和 best-effort watcher 热重载，并保证已创建的模型 runtime 不会被 reload 中途改写。
 - 配置错误必须结构化、可展示、可诊断、可恢复。

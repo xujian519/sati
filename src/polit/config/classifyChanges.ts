@@ -11,7 +11,7 @@ export function classifyConfigChanges(changedPaths: string[]): PolitConfigChange
   const classes = new Set<PolitConfigChangeClass>();
 
   for (const path of changedPaths) {
-    if (path.startsWith("model.")) {
+    if (path.startsWith("agent.") || path.startsWith("model.")) {
       classes.add("next-request");
     } else {
       classes.add("next-runtime");

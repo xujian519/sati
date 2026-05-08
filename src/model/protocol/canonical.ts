@@ -168,8 +168,5 @@ export type ProviderConfig = {
 };
 
 export type ModelConfig = {
-  defaultProvider: string;
-  defaultModel: string;
-  fallbackModel?: string;
   providers: Record<string, ProviderConfig>;
 };

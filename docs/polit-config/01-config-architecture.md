@@ -2,7 +2,7 @@
 
 本文定义当前 `src/polit/config` 的职责、边界和内部结构。该模块属于 `polit` 基础层，与 `src/polit/paths` 一起为上层 runtime 提供产品级默认行为。
 
-当前实现中只有 `model` 段已经进入 `PolitConfig` schema。`agent`、`tool`、`permission`、context 和 session/transcript 已在 `src` 中形成运行时边界，但仍主要通过构造参数和依赖注入配置。本文说明当前架构，并把这些模块作为后续配置段扩展目标。
+当前实现中 `agent` 和 `model` 段已经进入 `PolitConfig` schema。`tool`、`permission`、context 和 session/transcript 已在 `src` 中形成运行时边界，但仍主要通过构造参数和依赖注入配置。本文说明当前架构，并把这些模块作为后续配置段扩展目标。
 
 ## 定位
 
@@ -47,7 +47,7 @@ model
   -> polit/config
 ```
 
-当前阶段只有 `model` 相关运行时直接消费 `polit/config` 产出的 `snapshot.config.model`。未来 `agent`、`context`、`tool`、`permission`、`session`、`extension` 等模块接入时，也应通过 snapshot 消费配置，并保持各模块的二次语义校验在自己的模块边界内完成。
+当前阶段 `agent` 和 `model` 相关运行时消费 `polit/config` 产出的 `snapshot.config.agent` 与 `snapshot.config.model`。未来 `context`、`tool`、`permission`、`session`、`extension` 等模块接入时，也应通过 snapshot 消费配置，并保持各模块的二次语义校验在自己的模块边界内完成。
 
 `polit/config` 可以调用 `model/config` 的纯解析逻辑，但不能调用 `ModelRuntime`、provider transport 或任意业务执行代码。
 
@@ -157,10 +157,10 @@ PolitConfigSnapshot
 PolitConfigSnapshot
   config
     model
-    agent        # future
+    agent
 ```
 
-这些 future 段不代表当前 YAML 已支持，只表示后续 schema 扩展的归属边界。
+`agent` 段当前只包含默认模型选择；其他业务段仍是后续 schema 扩展的归属边界。
 
 ### PolitConfigStore
 
@@ -225,7 +225,7 @@ getPolitProjectChatDir(projectRoot) -> ${PolitHome}/projects/<project-id>/chats
 --provider
 ```
 
-当前阶段不实现额外覆盖来源。调用方如需影响配置，只能使用项目级配置或已实现的环境变量覆盖项。目标 schema 迁移后，默认模型选择应覆盖 `agent.model` / `agent.fallbackModel`，不应再绕过 config store 直接修改 `model` 模块。
+当前阶段不实现额外覆盖来源。调用方如需影响默认模型选择，只能使用项目级配置或已实现的环境变量覆盖项来覆盖 `agent.model` / `agent.fallbackModel`，不应绕过 config store 直接修改 `model` 模块。
 
 ### 与业务模块
 

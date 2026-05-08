@@ -8,8 +8,6 @@ import { validModelConfig } from "../helpers.js";
 
 test("builds OpenAI chat completions request from canonical request", () => {
   const raw = validModelConfig();
-  raw.defaultProvider = "openai-main";
-  raw.defaultModel = "gpt-5.1";
   const config = parseModelConfig(raw, {
     env: { ANTHROPIC_API_KEY: "anthropic-key" },
   });

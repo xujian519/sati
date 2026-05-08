@@ -10,7 +10,7 @@
 ~/.politdeck/politdeck.yaml
 ```
 
-该路径由全局 `polit/config` 模块通过 `resolvePolitHome()` 和 `getPolitConfigFilePath()` 统一解析：`PolitHome` 默认是 `~/.politdeck`，可由 `POLIT_HOME` 覆盖；配置文件名固定为 `politdeck.yaml`。全局 config 模块还会按需读取项目根目录 `.politdeck.yaml`，并叠加 `POLIT_MODEL_DEFAULT_PROVIDER`、`POLIT_MODEL_DEFAULT_MODEL`、`POLIT_MODEL_FALLBACK_MODEL` 三个环境变量覆盖项。`model` 模块只校验和消费合并后的 `model` 段，不直接读取 YAML 文件、临时 CLI 参数、用户目录中的其他配置文件或运行时全局状态；API key 的 `${ENV_NAME}` 引用在解析模型配置时解析。
+该路径由全局 `polit/config` 模块通过 `resolvePolitHome()` 和 `getPolitConfigFilePath()` 统一解析：`PolitHome` 默认是 `~/.politdeck`，可由 `POLIT_HOME` 覆盖；配置文件名固定为 `politdeck.yaml`。全局 config 模块还会按需读取项目根目录 `.politdeck.yaml`，并可叠加受控环境变量覆盖项。`model` 模块只校验和消费合并后的 `model` 段，不直接读取 YAML 文件、临时 CLI 参数、用户目录中的其他配置文件或运行时全局状态；默认 provider/model 由 `agent.model` 管理，API key 的 `${ENV_NAME}` 引用在解析模型配置时解析。
 
 ## 当前阶段范围
 
@@ -42,11 +42,11 @@
 ## 配置示例
 
 ```yaml
-model:
-  defaultProvider: anthropic-main
-  defaultModel: claude-sonnet-4-5
-  fallbackModel: claude-haiku-4-5
+agent:
+  model: anthropic-main/claude-sonnet-4-5
+  fallbackModel: anthropic-main/claude-haiku-4-5
 
+model:
   providers:
     anthropic-main:
       protocol: anthropic
@@ -128,15 +128,13 @@ model:
 ### 顶层配置
 
 ```text
-model.defaultProvider
-model.defaultModel
-model.fallbackModel
+agent.model
+agent.fallbackModel
 model.providers
 ```
 
-- `model.defaultProvider`：默认使用的 provider id。
-- `model.defaultModel`：默认使用的 model id，必须存在于默认 provider 的 `models` 中。
-- `model.fallbackModel`：可选 fallback model id，当前校验为必须存在于任意 provider 的 `models` 中。
+- `agent.model`：默认使用的 provider/model，格式为 `provider/model`。
+- `agent.fallbackModel`：可选 fallback provider/model，格式为 `provider/model`。
 - `model.providers`：provider 配置 map。
 
 ### Provider 配置
@@ -251,8 +249,10 @@ load ~/.politdeck/politdeck.yaml in global config
   -> optionally load <project>/.politdeck.yaml
   -> apply supported env overrides
   -> merge sources
+  -> extract agent section
   -> extract model section
   -> parseModelConfig(model)
+  -> validate agent model selections against model providers
   -> resolve env placeholders
   -> validate provider protocol
   -> validate provider models
@@ -271,9 +271,11 @@ load ~/.politdeck/politdeck.yaml in global config
 - protocol 不支持。
 - url 非法。
 - apiKey 缺失。
-- defaultModel 缺失。
-- defaultModel 不属于 defaultProvider。
-- fallbackModel 不存在于任何 provider 的 model list。
+- agent.model 缺失。
+- agent.model 不是 `provider/model` 格式。
+- agent.model 指向不存在的 provider 或 model。
+- agent.fallbackModel 不是 `provider/model` 格式。
+- agent.fallbackModel 指向不存在的 provider 或 model。
 - provider.models 为空。
 - capabilities 类型错误。
 - multimodal 类型或取值错误。

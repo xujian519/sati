@@ -2,7 +2,7 @@
 
 本文定义 `polit/config` 需要支持的配置来源、优先级、总 YAML 结构、配置段拆分和校验规则。
 
-当前实现只定义通用配置外壳和 `model` 配置段。目标 schema 会新增 `agent` 段，由 `agent.model` 和 `agent.fallbackModel` 统一管理默认厂商/模型选择；`model` 段只描述 provider 和 model 定义。
+当前实现定义通用配置外壳、`agent` 配置段和 `model` 配置段。`agent.model` 和 `agent.fallbackModel` 统一管理默认厂商/模型选择；`model` 段只描述 provider 和 model 定义。
 
 ## 配置文件
 
@@ -42,7 +42,7 @@ default config: ${PolitHome}/politdeck.yaml
 
 - `default config` 是默认 YAML 配置文件，由 `PolitHome` 决定位置。
 - `project config` 只描述工作区相关覆盖，不应保存用户 secret。
-- `env overrides` 当前实现仍保留旧的模型默认值覆盖方式。目标 schema 迁移后，应改为覆盖 `agent.model` 和 `agent.fallbackModel` 的受控环境变量。API key 通过配置中的 `${ENV_NAME}` 引用解析，不作为独立配置覆盖项。
+- `env overrides` 当前支持 `POLIT_AGENT_MODEL` 和 `POLIT_AGENT_FALLBACK_MODEL` 覆盖 `agent.model` / `agent.fallbackModel`。API key 通过配置中的 `${ENV_NAME}` 引用解析，不作为独立配置覆盖项。
 
 所有实际参与加载或覆盖的来源都会记录在 `PolitConfigSnapshot.sources` 中；不存在的默认/项目文件不会产生 source 记录。
 
@@ -61,7 +61,7 @@ env
 `env` source 有两类作用：
 
 - bootstrap env：在读取任何 YAML 前解析，例如 `POLIT_HOME`。它决定 `${PolitHome}/politdeck.yaml` 的位置。
-- config env override：在 YAML 读取后参与合并，例如目标 schema 中的 `agent.model` 或 `agent.fallbackModel`。API key 的 `${ENV_NAME}` 是 secret 引用解析，不作为独立 override 字段合并。
+- config env override：在 YAML 读取后参与合并，例如 `agent.model` 或 `agent.fallbackModel`。API key 的 `${ENV_NAME}` 是 secret 引用解析，不作为独立 override 字段合并。
 
 这两类都归入 `kind: env`，但诊断中应区分 `phase: bootstrap | merge`，避免用户误以为 `POLIT_HOME` 可以写在 YAML 中。
 
@@ -154,7 +154,7 @@ agent:
 
 ### model
 
-`model` 段描述 provider、model list、URL、headers、timeout、API key 引用、capabilities 和 multimodal constraints。目标 schema 中，默认模型选择不再放在 `model` 段。
+`model` 段描述 provider、model list、URL、headers、timeout、API key 引用、capabilities 和 multimodal constraints。默认模型选择不再放在 `model` 段。
 
 具体字段见 `[../model/03-model-configuration.md](../model/03-model-configuration.md)`。
 

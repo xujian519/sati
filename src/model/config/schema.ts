@@ -3,9 +3,6 @@ import type { ModelCapabilities } from "../protocol/capabilities.js";
 import type { MultimodalConstraints } from "../protocol/multimodal.js";
 
 export type RawModelConfig = {
-  defaultProvider?: unknown;
-  defaultModel?: unknown;
-  fallbackModel?: unknown;
   providers?: unknown;
 };
 

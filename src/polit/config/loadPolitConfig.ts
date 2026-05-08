@@ -10,6 +10,8 @@ import { mergeConfigSources } from "./merge.js";
 import { redactConfig } from "./redact.js";
 import {
   PolitConfigError,
+  type PolitAgentConfig,
+  type PolitAgentModelSelection,
   type PolitConfigDiagnostic,
   type PolitConfigLoadOptions,
   type PolitConfigSnapshot,
@@ -20,10 +22,9 @@ import {
 const SUPPORTED_SCHEMA_VERSION = 1;
 const PROJECT_CONFIG_FILE_NAME = ".politdeck.yaml";
 
-const ENV_MODEL_OVERRIDES = [
-  ["POLIT_MODEL_DEFAULT_PROVIDER", ["model", "defaultProvider"]],
-  ["POLIT_MODEL_DEFAULT_MODEL", ["model", "defaultModel"]],
-  ["POLIT_MODEL_FALLBACK_MODEL", ["model", "fallbackModel"]],
+const ENV_CONFIG_OVERRIDES = [
+  ["POLIT_AGENT_MODEL", ["agent", "model"]],
+  ["POLIT_AGENT_FALLBACK_MODEL", ["agent", "fallbackModel"]],
 ] as const;
 
 export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConfigSnapshot {
@@ -68,6 +69,16 @@ export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConf
   validateTopLevel(rawConfig, diagnostics);
   const schemaVersion = parseSchemaVersion(rawConfig.schemaVersion, diagnostics);
 
+  if (rawConfig.agent === undefined) {
+    diagnostics.push({
+      code: "CONFIG_AGENT_MISSING",
+      severity: "fatal",
+      message: "Config must contain an agent section.",
+      path: "agent",
+      recoverable: false,
+    });
+  }
+
   if (rawConfig.model === undefined) {
     diagnostics.push({
       code: "CONFIG_MODEL_MISSING",
@@ -76,13 +87,14 @@ export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConf
       path: "model",
       recoverable: false,
     });
-    throwConfigErrorIfFatal(diagnostics);
   }
-
-  const model = parseModel(rawConfig.model, env, diagnostics);
   throwConfigErrorIfFatal(diagnostics);
 
-  const redactedSnapshotConfig = redactConfig({ model });
+  const model = parseModel(rawConfig.model, env, diagnostics);
+  const agent = parseAgent(rawConfig.agent, model, diagnostics);
+  throwConfigErrorIfFatal(diagnostics);
+
+  const redactedSnapshotConfig = redactConfig({ agent, model });
   return deepFreeze({
     version: options.version ?? 1,
     schemaVersion,
@@ -91,6 +103,7 @@ export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConf
     sources,
     diagnostics,
     config: {
+      agent,
       model,
     },
   });
@@ -180,7 +193,7 @@ function readYamlSource(
 function readEnvOverrides(env: Record<string, string | undefined>): Record<string, unknown> | undefined {
   const output: Record<string, unknown> = {};
 
-  for (const [envName, path] of ENV_MODEL_OVERRIDES) {
+  for (const [envName, path] of ENV_CONFIG_OVERRIDES) {
     const value = env[envName];
     if (!value) {
       continue;
@@ -226,7 +239,7 @@ function validateTopLevel(rawConfig: PolitRawConfig, diagnostics: PolitConfigDia
   }
 
   for (const key of Object.keys(rawConfig)) {
-    if (key !== "schemaVersion" && key !== "model") {
+    if (key !== "schemaVersion" && key !== "agent" && key !== "model") {
       diagnostics.push({
         code: "CONFIG_UNKNOWN_FIELD",
         severity: "warning",
@@ -236,6 +249,101 @@ function validateTopLevel(rawConfig: PolitRawConfig, diagnostics: PolitConfigDia
       });
     }
   }
+}
+
+function parseAgent(
+  rawAgent: unknown,
+  modelConfig: ReturnType<typeof parseModel>,
+  diagnostics: PolitConfigDiagnostic[],
+): PolitAgentConfig {
+  if (!isRecord(rawAgent)) {
+    diagnostics.push({
+      code: "CONFIG_AGENT_INVALID",
+      severity: "fatal",
+      message: "Agent config must be an object.",
+      path: "agent",
+      recoverable: false,
+    });
+    throwConfigErrorIfFatal(diagnostics);
+    throw new Error("Unreachable after fatal agent config diagnostic.");
+  }
+
+  const model = parseAgentModelSelection(rawAgent.model, "agent.model", modelConfig, diagnostics);
+  const fallbackModel =
+    rawAgent.fallbackModel === undefined
+      ? undefined
+      : parseAgentModelSelection(rawAgent.fallbackModel, "agent.fallbackModel", modelConfig, diagnostics);
+  throwConfigErrorIfFatal(diagnostics);
+
+  return {
+    model,
+    fallbackModel,
+  };
+}
+
+function parseAgentModelSelection(
+  value: unknown,
+  path: string,
+  modelConfig: ReturnType<typeof parseModel>,
+  diagnostics: PolitConfigDiagnostic[],
+): PolitAgentModelSelection {
+  if (typeof value !== "string" || value.length === 0) {
+    diagnostics.push({
+      code: "CONFIG_AGENT_MODEL_INVALID",
+      severity: "fatal",
+      message: `${path} must be a non-empty provider/model string.`,
+      path,
+      recoverable: false,
+    });
+    throwConfigErrorIfFatal(diagnostics);
+    throw new Error("Unreachable after fatal agent model diagnostic.");
+  }
+
+  const separatorIndex = value.indexOf("/");
+  const providerId = separatorIndex >= 0 ? value.slice(0, separatorIndex) : "";
+  const modelId = separatorIndex >= 0 ? value.slice(separatorIndex + 1) : "";
+  if (!providerId || !modelId) {
+    diagnostics.push({
+      code: "CONFIG_AGENT_MODEL_INVALID",
+      severity: "fatal",
+      message: `${path} must use provider/model format.`,
+      path,
+      recoverable: false,
+    });
+    throwConfigErrorIfFatal(diagnostics);
+    throw new Error("Unreachable after fatal agent model format diagnostic.");
+  }
+
+  const provider = modelConfig.providers[providerId];
+  if (!provider) {
+    diagnostics.push({
+      code: "CONFIG_AGENT_PROVIDER_NOT_FOUND",
+      severity: "fatal",
+      message: `${path} references unknown provider ${providerId}.`,
+      path,
+      recoverable: false,
+    });
+    throwConfigErrorIfFatal(diagnostics);
+    throw new Error("Unreachable after fatal agent provider diagnostic.");
+  }
+
+  if (!provider.models[modelId]) {
+    diagnostics.push({
+      code: "CONFIG_AGENT_MODEL_NOT_FOUND",
+      severity: "fatal",
+      message: `${path} references unknown model ${modelId} for provider ${providerId}.`,
+      path,
+      recoverable: false,
+    });
+    throwConfigErrorIfFatal(diagnostics);
+    throw new Error("Unreachable after fatal agent model lookup diagnostic.");
+  }
+
+  return {
+    id: value,
+    provider: providerId,
+    model: modelId,
+  };
 }
 
 function parseSchemaVersion(

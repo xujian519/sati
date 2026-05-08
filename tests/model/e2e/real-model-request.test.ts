@@ -12,12 +12,12 @@ test("reads PolitHome config and completes a real model request", async (t) => {
   }
 
   const snapshot = loadPolitConfig();
-  const { defaultProvider, defaultModel } = snapshot.config.model;
+  const { provider, model } = snapshot.config.agent.model;
   const runtime = createModelRuntime(snapshot.config.model);
 
   const response = await runtime.complete({
-    provider: defaultProvider,
-    model: defaultModel,
+    provider,
+    model,
     messages: [
       {
         role: "user",

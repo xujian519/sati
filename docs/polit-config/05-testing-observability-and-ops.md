@@ -4,7 +4,7 @@
 
 ## 测试目标
 
-`polit/config` 必须从第一天具备确定性测试。当前已实现的 schema 重点是通用配置运行时和 `model` 配置段；目标 schema 新增 `agent.model` / `agent.fallbackModel` 后，必须同步补齐跨段配置测试。
+`polit/config` 必须从第一天具备确定性测试。当前已实现的 schema 重点是通用配置运行时、`agent` 配置段和 `model` 配置段。
 
 当前测试已经覆盖 YAML 读取、来源合并、env credential 解析、禁止 YAML `polit` 段、project chat dir 派生和 reload 失败保旧。后续测试应继续覆盖：
 
@@ -20,7 +20,7 @@
 - 变更分类。
 - 成功 reload 事件和诊断脱敏。
 - watcher 竞态。
-- future `agent` 段的 schema、默认值、变更分类和模块编译。
+- `agent` 段的 schema、默认值、变更分类和模块编译。
 
 ## 单元测试
 

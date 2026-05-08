@@ -113,9 +113,10 @@ tests/
 输入：
 
 ```yaml
+agent:
+  model: anthropic-main/claude-sonnet-4-5
+
 model:
-  defaultProvider: anthropic-main
-  defaultModel: claude-sonnet-4-5
   providers:
     anthropic-main:
       protocol: anthropic
@@ -140,7 +141,7 @@ model:
 - provider id 为 `anthropic-main`。
 - protocol 为 `anthropic`。
 - API key 从环境变量读取。
-- model id 为 `claude-sonnet-4-5`。
+- `agent.model` 解析为 provider id `anthropic-main` 和 model id `claude-sonnet-4-5`。
 - capabilities 从 model 级别配置合并。
 - multimodal input list 和限制项从 model 级别配置读取。
 
@@ -197,7 +198,8 @@ model:
 - API key 环境变量缺失。
 - protocol 写成未知值。
 - url 不是 URL。
-- defaultModel 不存在于 defaultProvider 的 model list。
+- agent.model 不是 `provider/model` 格式。
+- agent.model 指向不存在的 provider 或 model。
 - multimodal 类型错误。
 - multimodal.input 不是字符串列表。
 - multimodal.input 包含未知 modality。
