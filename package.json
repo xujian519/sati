@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
-    "test": "npm run build && node --test \"dist/tests/**/*.test.js\""
+    "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
+    "e2e:real-agent-lifecycle-hooks": "npm run build && POLITDECK_RUN_REAL_AGENT_LIFECYCLE_E2E=1 node dist/tests/agent/e2e/run-real-agent-lifecycle-hooks.js"
   },
   "devDependencies": {
     "@types/node": "^25.0.0",
