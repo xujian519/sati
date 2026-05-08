@@ -5,6 +5,14 @@ export type PolitPathEnv = Record<string, string | undefined>;
 
 export const DEFAULT_POLIT_HOME = "~/.politdeck";
 export const POLIT_CONFIG_FILE_NAME = "politdeck.yaml";
+export const POLIT_PROJECT_DIR_NAME = ".politdeck";
+
+export type PolitExtensionPaths = {
+  globalPluginsDir: string;
+  globalSkillsDir: string;
+  projectPluginsDir: string;
+  projectSkillsDir: string;
+};
 
 export function resolvePolitHome(env: PolitPathEnv = process.env): string {
   return normalizeHomePath(env.POLIT_HOME ?? DEFAULT_POLIT_HOME);
@@ -16,6 +24,15 @@ export function getPolitConfigFilePath(politHome: string): string {
 
 export function getPolitProjectChatDir(projectRoot: string, politHome: string): string {
   return resolve(politHome, "projects", createProjectId(projectRoot), "chats");
+}
+
+export function getPolitExtensionPaths(projectRoot: string, politHome: string): PolitExtensionPaths {
+  return {
+    globalPluginsDir: resolve(politHome, "plugins"),
+    globalSkillsDir: resolve(politHome, "skills"),
+    projectPluginsDir: resolve(projectRoot, POLIT_PROJECT_DIR_NAME, "plugins"),
+    projectSkillsDir: resolve(projectRoot, POLIT_PROJECT_DIR_NAME, "skills"),
+  };
 }
 
 export function createProjectId(projectRoot: string): string {

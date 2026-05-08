@@ -113,15 +113,14 @@ src/extension/
     PermissionRuleContribution.ts
 ```
 
-后续实现测试时，建议采用以下目录命名。本文档不表示这些测试文件当前已经存在：
+第一批基础测试已按以下目录命名落地。双端 legacy parity runner 仍是后续工作：
 
 ```text
 tests/lifecycle-hooks-plugins/
-  parity-manifest.test.ts
-
-tests/fixtures/lifecycle-hooks-plugins/dual-parity/
-  contractScenarios.ts
-  executionScenarios.ts
+  protocol.test.ts
+  hook-runtime.test.ts
+  tool-integration.test.ts
+  plugin-loader.test.ts
 ```
 
 ## 4. 公共协议

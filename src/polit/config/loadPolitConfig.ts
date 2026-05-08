@@ -13,6 +13,7 @@ import {
   type PolitAgentConfig,
   type PolitAgentModelSelection,
   type PolitConfigDiagnostic,
+  type PolitExtensionConfig,
   type PolitConfigLoadOptions,
   type PolitConfigSnapshot,
   type PolitConfigSource,
@@ -92,9 +93,10 @@ export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConf
 
   const model = parseModel(rawConfig.model, env, diagnostics);
   const agent = parseAgent(rawConfig.agent, model, diagnostics);
+  const extension = parseExtension(rawConfig.extension, diagnostics);
   throwConfigErrorIfFatal(diagnostics);
 
-  const redactedSnapshotConfig = redactConfig({ agent, model });
+  const redactedSnapshotConfig = redactConfig({ agent, model, extension });
   return deepFreeze({
     version: options.version ?? 1,
     schemaVersion,
@@ -105,6 +107,7 @@ export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConf
     config: {
       agent,
       model,
+      extension,
     },
   });
 }
@@ -239,7 +242,7 @@ function validateTopLevel(rawConfig: PolitRawConfig, diagnostics: PolitConfigDia
   }
 
   for (const key of Object.keys(rawConfig)) {
-    if (key !== "schemaVersion" && key !== "agent" && key !== "model") {
+    if (key !== "schemaVersion" && key !== "agent" && key !== "model" && key !== "extension") {
       diagnostics.push({
         code: "CONFIG_UNKNOWN_FIELD",
         severity: "warning",
@@ -396,6 +399,72 @@ function parseModel(
     }
     throw error;
   }
+}
+
+function parseExtension(rawExtension: unknown, diagnostics: PolitConfigDiagnostic[]): PolitExtensionConfig {
+  const defaults: PolitExtensionConfig = {
+    builtinPluginsEnabled: {},
+    includeHookEvents: false,
+  };
+  if (rawExtension === undefined) {
+    return defaults;
+  }
+  if (!isRecord(rawExtension)) {
+    diagnostics.push({
+      code: "CONFIG_EXTENSION_INVALID",
+      severity: "fatal",
+      message: "extension config must be an object.",
+      path: "extension",
+      recoverable: false,
+    });
+    return defaults;
+  }
+
+  const extension = { ...defaults };
+  if (rawExtension.builtinPluginsEnabled !== undefined) {
+    if (isRecord(rawExtension.builtinPluginsEnabled)) {
+      extension.builtinPluginsEnabled = Object.fromEntries(
+        Object.entries(rawExtension.builtinPluginsEnabled).filter(
+          (entry): entry is [string, boolean] => typeof entry[1] === "boolean",
+        ),
+      );
+    } else {
+      diagnostics.push({
+        code: "CONFIG_EXTENSION_BUILTIN_PLUGINS_INVALID",
+        severity: "fatal",
+        message: "extension.builtinPluginsEnabled must be an object of booleans.",
+        path: "extension.builtinPluginsEnabled",
+        recoverable: false,
+      });
+    }
+  }
+  if (rawExtension.includeHookEvents !== undefined) {
+    if (typeof rawExtension.includeHookEvents === "boolean") {
+      extension.includeHookEvents = rawExtension.includeHookEvents;
+    } else {
+      diagnostics.push({
+        code: "CONFIG_EXTENSION_INCLUDE_HOOK_EVENTS_INVALID",
+        severity: "fatal",
+        message: "extension.includeHookEvents must be a boolean.",
+        path: "extension.includeHookEvents",
+        recoverable: false,
+      });
+    }
+  }
+
+  for (const key of Object.keys(rawExtension)) {
+    if (key !== "builtinPluginsEnabled" && key !== "includeHookEvents") {
+      diagnostics.push({
+        code: "CONFIG_EXTENSION_UNKNOWN_FIELD",
+        severity: "warning",
+        message: `Unknown extension config field ${key}.`,
+        path: `extension.${key}`,
+        recoverable: true,
+      });
+    }
+  }
+
+  return extension;
 }
 
 function stringifyDetails(details: unknown): string | undefined {

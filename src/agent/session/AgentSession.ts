@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { AgentEvent } from "../protocol/events.js";
 import type { AgentInput, AgentSubmitOptions } from "../protocol/input.js";
 import type { AgentSessionState as AgentSessionStateShape } from "../protocol/state.js";
@@ -17,6 +18,7 @@ export type AgentSessionOptions = {
   uuid?: () => string;
   initialState?: AgentSessionStateShape;
   replayEvents?: AgentEvent[];
+  lifecycle?: LifecycleRuntime;
 };
 
 export class AgentSession {
@@ -32,6 +34,17 @@ export class AgentSession {
     this.state.currentTurnId = turnId;
     this.state.abortController = new AbortController();
     yield { type: "session_started", sessionId: this.state.sessionId };
+    await this.options.lifecycle?.dispatch({
+      event: "SessionStart",
+      baseInput: {
+        sessionId: this.state.sessionId,
+        transcriptPath: "",
+        cwd: process.cwd(),
+      },
+      payload: { source: "startup" },
+      matchQuery: "SessionStart",
+      signal: this.state.abortController.signal,
+    });
 
     const runResult = yield* this.options.turnRunner.run({
       sessionId: this.state.sessionId,

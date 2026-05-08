@@ -6,6 +6,7 @@ import type { AgentLoop } from "../loop/AgentLoop.js";
 import type { AgentTranscriptWriter } from "../transcript/TranscriptWriter.js";
 import { TurnInputProcessor } from "./TurnInputProcessor.js";
 import type { CanonicalMessage, CanonicalUsage } from "../../model/index.js";
+import type { LifecycleRuntime } from "../../lifecycle/index.js";
 
 export type TurnRunnerOptions = {
   sessionId: string;
@@ -27,6 +28,7 @@ export class TurnRunner {
     private readonly transcript: AgentTranscriptWriter,
     private readonly inputProcessor = new TurnInputProcessor(),
     private readonly now: () => Date = () => new Date(),
+    private readonly lifecycle?: LifecycleRuntime,
   ) {}
 
   async *run(options: TurnRunnerOptions): AsyncGenerator<AgentEvent, TurnRunnerResult, unknown> {
@@ -45,6 +47,28 @@ export class TurnRunner {
     }
 
     yield { type: "input_accepted", sessionId: options.sessionId, turnId: options.turnId, messages: accepted.messages };
+
+    const prompt = inputToPromptText(options.input);
+    const userPromptHooks = await this.lifecycle?.dispatch({
+      event: "UserPromptSubmit",
+      baseInput: {
+        sessionId: options.sessionId,
+        transcriptPath: "",
+        cwd: process.cwd(),
+      },
+      payload: { prompt },
+      matchQuery: "UserPromptSubmit",
+      signal: options.abortSignal,
+    });
+    if (userPromptHooks?.effects.some((effect) => effect.type === "block")) {
+      const result = this.createErrorResult(
+        options,
+        agentError("agent_unsupported_feature", "UserPromptSubmit hook blocked model execution."),
+      );
+      yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
+      return { result, messages };
+    }
+    messages.push(...(userPromptHooks?.messages ?? []));
 
     if (!accepted.shouldCallModel) {
       const result = this.createErrorResult(
@@ -101,4 +125,14 @@ function durableMessagesAfter(offset: number, messages: CanonicalMessage[]): Can
 
 function emptyUsage(): CanonicalUsage {
   return {};
+}
+
+function inputToPromptText(input: AgentInput): string {
+  if (input.type === "text") {
+    return input.text;
+  }
+  return input.content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
 }

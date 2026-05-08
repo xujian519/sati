@@ -15,17 +15,16 @@
 - `Deferred` 必须有原因。
 - `Intentional difference` 必须有原因和风险说明。
 
-## 2. 后续测试落地建议
+## 2. 测试落地状态
 
-本文只定义测试策略和建议命名，不表示当前已经创建以下测试文件。后续实现测试代码时，建议统一放在 `tests/` 下：
+第一批基础测试已经放在 `tests/lifecycle-hooks-plugins/` 下：
 
 ```text
 tests/lifecycle-hooks-plugins/
-  parity-manifest.test.ts
-
-tests/fixtures/lifecycle-hooks-plugins/dual-parity/
-  contractScenarios.ts
-  executionScenarios.ts
+  protocol.test.ts
+  hook-runtime.test.ts
+  tool-integration.test.ts
+  plugin-loader.test.ts
 ```
 
 后续实现双端 runner 时，建议再补充：
@@ -41,7 +40,7 @@ tests/lifecycle-hooks-plugins/parity-dual-contract.test.ts
 tests/lifecycle-hooks-plugins/parity-dual-execution.test.ts
 ```
 
-计划中的 `parity-manifest.test.ts` 只负责守住 fixture 质量：id 唯一、非 compare 有原因、核心场景覆盖完整。它不代表 execution parity passed。
+当前测试只覆盖 PolitDeck 新实现的协议、runtime 和本地插件加载骨架，不代表 contract parity passed 或 execution parity passed。
 
 ## 3. 测试分层
 
@@ -77,11 +76,10 @@ manifest tests
 - snake_case JSON 与内部 camelCase 可以稳定互转。
 - hook output JSON sync/async union 解析一致。
 
-后续建议文件：
+已落地基础文件：
 
 ```text
-tests/lifecycle-hooks-plugins/hook-protocol.test.ts
-tests/lifecycle-hooks-plugins/hook-output.test.ts
+tests/lifecycle-hooks-plugins/protocol.test.ts
 ```
 
 ### 3.3 Config Parser Tests
@@ -91,16 +89,16 @@ tests/lifecycle-hooks-plugins/hook-output.test.ts
 - command/prompt/http/agent hook schema。
 - matcher。
 - `if` 条件。
-- timeout/statusMessage/once/async/asyncRewake。
+- `statusMessage`、`once`、`async`、`asyncRewake` 等 legacy 字段识别。
+- `timeout` 仅作为 legacy-compatible 字段识别，不改变 PolitDeck 代码常量 timeout。
 - http headers 的 env interpolation 白名单。
 - 非法 marketplace 名称、路径穿越、非 ASCII 冒充。
 
-后续建议文件：
+已落地一部分基础文件：
 
 ```text
-tests/lifecycle-hooks-plugins/hooks-config.test.ts
-tests/lifecycle-hooks-plugins/plugin-manifest.test.ts
-tests/lifecycle-hooks-plugins/plugin-source-policy.test.ts
+tests/lifecycle-hooks-plugins/protocol.test.ts
+tests/lifecycle-hooks-plugins/plugin-loader.test.ts
 ```
 
 ### 3.4 Lifecycle Dispatch Tests
@@ -113,10 +111,10 @@ tests/lifecycle-hooks-plugins/plugin-source-policy.test.ts
 - `Stop` blocking 阻止 continuation 并返回 stop reason。
 - `SessionEnd` 使用短超时并并发执行。
 
-后续建议文件：
+已落地基础文件：
 
 ```text
-tests/lifecycle-hooks-plugins/lifecycle-runtime.test.ts
+tests/lifecycle-hooks-plugins/hook-runtime.test.ts
 ```
 
 ### 3.5 Tool/Permission Integration Tests
@@ -131,18 +129,18 @@ tests/lifecycle-hooks-plugins/lifecycle-runtime.test.ts
 - `PostToolUseFailure` 接收 error/isInterrupt。
 - `PermissionDenied.retry` 最多触发一次 retry。
 
-后续建议文件：
+已落地基础文件：
 
 ```text
 tests/lifecycle-hooks-plugins/tool-hook-integration.test.ts
-tests/lifecycle-hooks-plugins/permission-hook-integration.test.ts
+tests/lifecycle-hooks-plugins/tool-integration.test.ts
 ```
 
 ### 3.6 Plugin Loader Tests
 
 验证插件贡献：
 
-- builtin/local/session plugin discovery。
+- builtin/global/project plugin discovery。
 - manifest validation。
 - hooks config 转 matcher。
 - plugin hook atomic reload。
@@ -150,12 +148,10 @@ tests/lifecycle-hooks-plugins/permission-hook-integration.test.ts
 - commands/skills markdown 命名。
 - duplicate path 处理。
 
-后续建议文件：
+已落地基础文件：
 
 ```text
 tests/lifecycle-hooks-plugins/plugin-loader.test.ts
-tests/lifecycle-hooks-plugins/plugin-hooks-reload.test.ts
-tests/lifecycle-hooks-plugins/plugin-commands.test.ts
 ```
 
 ## 4. Dual Parity Harness
@@ -253,7 +249,7 @@ root parity test 必须：
 - command hook success with JSON additional context。
 - command hook exit 2 blocks continuation。
 - command hook exit 1 is non-blocking error。
-- async hook returns pending then later sync response。
+- async hook returns pending then later sync response。该场景仍 deferred；第一批实现只识别 async 输出，不执行后台轮询。
 - PreToolUse updates input before permission and execution。
 - PermissionRequest auto allow with updated permissions。
 - PostToolUse blocks continuation after successful tool run。
@@ -287,15 +283,16 @@ bun run src/politdeck-lifecycle-hooks-plugin-legacy-execution-report.ts
 
 ## 8. 通过标准
 
-### 第一阶段文档状态
+### 第一阶段基础实现状态
 
 - 文档列出测试分层、场景清单、归一化规则和通过标准。
 - 文档列出所有 deferred 与 intentional difference。
+- PolitDeck 新实现的基础协议、command hook runtime、tool integration 和本地插件加载测试通过。
 
 结论只能写：
 
 ```text
-Parity test plan is documented.
+PolitDeck basic lifecycle/hooks/plugin tests passed.
 Contract/execution parity is not claimed yet.
 ```
 

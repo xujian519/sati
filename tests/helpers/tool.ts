@@ -1,4 +1,5 @@
 import { createDefaultPermissionContext, PermissionRuntime, type PermissionMode, type PermissionResult } from "../../src/permission/index.js";
+import type { LifecycleRuntime } from "../../src/lifecycle/index.js";
 import {
   ToolRegistry,
   ToolRuntime,
@@ -45,6 +46,7 @@ export function createPolitDeckToolRuntimeFixture(options?: {
   auditRecorder?: PolitDeckToolAuditRecorder;
   maxResultBytes?: number;
   cwd?: string;
+  lifecycle?: LifecycleRuntime;
 }): {
   registry: ToolRegistry;
   permissionRuntime: PermissionRuntime;
@@ -57,7 +59,7 @@ export function createPolitDeckToolRuntimeFixture(options?: {
   }
 
   const permissionRuntime = new PermissionRuntime();
-  const toolRuntime = new ToolRuntime(registry, permissionRuntime);
+  const toolRuntime = new ToolRuntime(registry, permissionRuntime, options?.lifecycle);
   const cwd = options?.cwd ?? process.cwd();
   const context: PolitDeckToolRuntimeContext = {
     sessionId: "test-session",

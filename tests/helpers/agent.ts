@@ -13,6 +13,7 @@ import {
 import { PermissionRuntime } from "../../src/permission/index.js";
 import { AgentLoop, TurnRunner, InMemoryTranscriptWriter } from "../../src/agent/index.js";
 import type { AgentRuntimeConfig, AgentRuntimeDependencies } from "../../src/agent/index.js";
+import type { LifecycleRuntime } from "../../src/lifecycle/index.js";
 
 export class ScriptedAgentModel {
   readonly requests: CanonicalModelRequest[] = [];
@@ -42,6 +43,7 @@ export function createAgentLoopFixture(options: {
   permissionMode?: PermissionMode;
   canPrompt?: boolean;
   auditRecorder?: PolitDeckToolAuditRecorder;
+  lifecycle?: LifecycleRuntime;
   config?: Partial<AgentRuntimeConfig>;
 }): {
   model: ScriptedAgentModel;
@@ -58,7 +60,7 @@ export function createAgentLoopFixture(options: {
     registry.register(tool);
   }
   const permissionRuntime = new PermissionRuntime();
-  const toolRuntime = new ToolRuntime(registry, permissionRuntime);
+  const toolRuntime = new ToolRuntime(registry, permissionRuntime, options.lifecycle);
   const scheduler = new SequentialToolScheduler(toolRuntime);
   const permissionMode = options.permissionMode ?? "default";
   const cwd = process.cwd();
@@ -78,12 +80,13 @@ export function createAgentLoopFixture(options: {
     model,
     tools: { registry, scheduler },
     auditRecorder: options.auditRecorder,
+    lifecycle: options.lifecycle,
     now: () => new Date("2026-01-01T00:00:00.000Z"),
     uuid: () => "generated-id",
   };
   const loop = new AgentLoop(config, dependencies);
   const transcript = new InMemoryTranscriptWriter();
-  const turnRunner = new TurnRunner(loop, transcript, undefined, dependencies.now);
+  const turnRunner = new TurnRunner(loop, transcript, undefined, dependencies.now, dependencies.lifecycle);
   return { model, registry, loop, transcript, turnRunner, config, dependencies };
 }
 

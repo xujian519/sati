@@ -1,4 +1,5 @@
 import { PermissionRuntime } from "../../permission/index.js";
+import type { LifecycleRuntime, PolitDeckHookEffect } from "../../lifecycle/index.js";
 import { toolError } from "../protocol/errors.js";
 import type { PolitDeckToolErrorCode } from "../protocol/errors.js";
 import {
@@ -16,6 +17,7 @@ export class ToolRuntime {
   constructor(
     private readonly registry: ToolRegistry,
     private readonly permissionRuntime: PermissionRuntime,
+    private readonly lifecycle?: LifecycleRuntime,
   ) {}
 
   async execute(call: PolitDeckToolCall, context: PolitDeckToolRuntimeContext): Promise<PolitDeckToolResult> {
@@ -52,7 +54,39 @@ export class ToolRuntime {
       );
     }
 
-    const toolValidation = await tool.validateInput?.(call.input, context);
+    let executeInput = call.input;
+    const preToolResult = await this.dispatchLifecycle("PreToolUse", tool.name, call.id, executeInput, context);
+    const preBlock = findEffect(preToolResult.effects, "block");
+    const prePermission = findEffect(preToolResult.effects, "permission_decision");
+    const preDeny = prePermission?.behavior === "deny" ? prePermission : undefined;
+    if (preBlock || preDeny) {
+      return this.errorResult(
+        call.id,
+        tool.name,
+        "permission_denied",
+        preBlock?.reason ?? preDeny?.reason ?? `PreToolUse hook denied ${tool.name}.`,
+        startedAt,
+        context,
+      );
+    }
+    const updatedInput = findEffect(preToolResult.effects, "updated_tool_input");
+    if (updatedInput) {
+      executeInput = updatedInput.input;
+      const updatedValidation = validateToolInput(executeInput, tool.inputSchema);
+      if (!updatedValidation.ok) {
+        return this.errorResult(
+          call.id,
+          tool.name,
+          "invalid_tool_input",
+          `PreToolUse hook produced invalid input for ${tool.name}.`,
+          startedAt,
+          context,
+          { issues: updatedValidation.issues },
+        );
+      }
+    }
+
+    const toolValidation = await tool.validateInput?.(executeInput, context);
     if (toolValidation && !toolValidation.ok) {
       return this.errorResult(
         call.id,
@@ -65,7 +99,26 @@ export class ToolRuntime {
       );
     }
 
-    const decision = await this.permissionRuntime.decide(tool, call.input, context, call.id);
+    let decision = await this.permissionRuntime.decide(tool, executeInput, context, call.id);
+    if (decision.type === "ask") {
+      const permissionHookResult = await this.dispatchLifecycle("PermissionRequest", tool.name, call.id, executeInput, context, {
+        permissionSuggestions: decision.request.options,
+      });
+      const permissionRequestResult = findEffect(permissionHookResult.effects, "permission_request_result");
+      if (permissionRequestResult?.result.behavior === "allow") {
+        decision = {
+          type: "allow",
+          reason: { type: "runtime", message: `PermissionRequest hook allowed ${tool.name}.` },
+          updatedInput: permissionRequestResult.result.updatedInput,
+        };
+      } else if (permissionRequestResult?.result.behavior === "deny") {
+        decision = {
+          type: "deny",
+          reason: { type: "runtime", message: permissionRequestResult.result.message ?? `PermissionRequest hook denied ${tool.name}.` },
+          message: permissionRequestResult.result.message ?? `PermissionRequest hook denied ${tool.name}.`,
+        };
+      }
+    }
     await context.auditRecorder?.recordPermission({
       type: "permission",
       sessionId: context.sessionId,
@@ -79,6 +132,9 @@ export class ToolRuntime {
     });
 
     if (decision.type === "deny") {
+      await this.dispatchLifecycle("PermissionDenied", tool.name, call.id, executeInput, context, {
+        reason: decision.message,
+      });
       const code: PolitDeckToolErrorCode =
         decision.reason.type === "runtime" && decision.reason.message.includes("prompt") ?
           "permission_required" :
@@ -102,7 +158,7 @@ export class ToolRuntime {
       );
     }
 
-    const executeInput = decision.updatedInput ?? call.input;
+    executeInput = decision.updatedInput ?? executeInput;
     try {
       const output = await tool.execute(executeInput, context);
       const maxResultBytes = tool.maxResultBytes ?? context.maxResultBytes;
@@ -114,7 +170,17 @@ export class ToolRuntime {
         toolName: tool.name,
         content: limited.content,
         data: output.data,
-        metadata: mergeMetadata(output.metadata, limited.metadata),
+        metadata: mergeMetadata(
+          output.metadata,
+          mergeMetadata(limited.metadata, lifecycleMetadata(await this.dispatchLifecycle(
+            "PostToolUse",
+            tool.name,
+            call.id,
+            executeInput,
+            context,
+            { toolResponse: output.data ?? output.content },
+          ))),
+        ),
         startedAt,
         completedAt,
       };
@@ -122,6 +188,10 @@ export class ToolRuntime {
       return result;
     } catch (error) {
       const normalized = normalizeToolError(error);
+      await this.dispatchLifecycle("PostToolUseFailure", tool.name, call.id, executeInput, context, {
+        error: normalized.message,
+        isInterrupt: normalized.code === "tool_aborted",
+      });
       const result = this.createErrorResult(call.id, tool.name, normalized.code, normalized.message, startedAt, context, {
         details: normalized.details,
       });
@@ -184,6 +254,63 @@ export class ToolRuntime {
       durationMs: new Date(result.completedAt).getTime() - startedAt.getTime(),
     });
   }
+
+  private async dispatchLifecycle(
+    event: "PreToolUse" | "PostToolUse" | "PostToolUseFailure" | "PermissionRequest" | "PermissionDenied",
+    toolName: string,
+    toolCallId: string,
+    toolInput: unknown,
+    context: PolitDeckToolRuntimeContext,
+    extraPayload: Record<string, unknown> = {},
+  ) {
+    return this.lifecycle?.dispatch({
+      event,
+      baseInput: {
+        sessionId: context.sessionId,
+        transcriptPath: "",
+        cwd: context.cwd,
+        permissionMode: context.permissionMode,
+      },
+      matchQuery: toolName,
+      payload: {
+        toolName,
+        toolInput,
+        toolUseId: toolCallId,
+        ...extraPayload,
+      },
+      signal: context.abortSignal,
+      env: context.env,
+    }) ?? {
+      effects: [],
+      messages: [],
+      events: [],
+      blockingErrors: [],
+      nonBlockingErrors: [],
+    };
+  }
+}
+
+function findEffect<Type extends PolitDeckHookEffect["type"]>(
+  effects: PolitDeckHookEffect[],
+  type: Type,
+): Extract<PolitDeckHookEffect, { type: Type }> | undefined {
+  return effects.find((effect): effect is Extract<PolitDeckHookEffect, { type: Type }> => effect.type === type);
+}
+
+function lifecycleMetadata(result: { effects: PolitDeckHookEffect[] }): Record<string, unknown> | undefined {
+  const blocking = result.effects.find((effect) => effect.type === "block");
+  const additionalContext = result.effects.filter((effect) => effect.type === "additional_context");
+  const updatedMcpOutput = result.effects.find((effect) => effect.type === "updated_mcp_tool_output");
+  if (!blocking && additionalContext.length === 0 && !updatedMcpOutput) {
+    return undefined;
+  }
+  return {
+    lifecycle: {
+      blocked: blocking ? { reason: blocking.reason, stopReason: blocking.stopReason } : undefined,
+      additionalContext: additionalContext.map((effect) => effect.content),
+      updatedMcpToolOutput: updatedMcpOutput?.output,
+    },
+  };
 }
 
 function now(context: PolitDeckToolRuntimeContext): Date {

@@ -35,7 +35,7 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
   session: AgentSession;
   storage?: AgentProjectSessionStorage;
 } {
-  const toolRuntime = new ToolRuntime(options.dependencies.tools.registry, new PermissionRuntime());
+  const toolRuntime = new ToolRuntime(options.dependencies.tools.registry, new PermissionRuntime(), options.dependencies.lifecycle);
   const scheduler = options.dependencies.tools.scheduler ?? new SequentialToolScheduler(toolRuntime);
   const dependencies: AgentRuntimeDependencies = {
     ...options.dependencies,
@@ -53,7 +53,7 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
       })
     : undefined;
   const transcript = options.transcript ?? storage?.transcript ?? new InMemoryTranscriptWriter();
-  const turnRunner = new TurnRunner(loop, transcript, undefined, dependencies.now);
+  const turnRunner = new TurnRunner(loop, transcript, undefined, dependencies.now, dependencies.lifecycle);
   return {
     session: new AgentSession({
       sessionId: options.sessionId,
@@ -61,6 +61,7 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
       uuid: dependencies.uuid,
       initialState: options.initialState,
       replayEvents: options.replayEvents,
+      lifecycle: dependencies.lifecycle,
     }),
     storage,
   };

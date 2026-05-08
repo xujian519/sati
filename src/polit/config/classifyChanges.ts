@@ -13,6 +13,10 @@ export function classifyConfigChanges(changedPaths: string[]): PolitConfigChange
   for (const path of changedPaths) {
     if (path.startsWith("agent.") || path.startsWith("model.")) {
       classes.add("next-request");
+    } else if (path === "extension.includeHookEvents") {
+      classes.add("runtime-live");
+    } else if (path.startsWith("extension.")) {
+      classes.add("next-runtime");
     } else {
       classes.add("next-runtime");
     }

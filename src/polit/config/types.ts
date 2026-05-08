@@ -34,6 +34,12 @@ export type PolitRawConfig = {
   schemaVersion?: unknown;
   agent?: unknown;
   model?: unknown;
+  extension?: unknown;
+};
+
+export type PolitExtensionConfig = {
+  builtinPluginsEnabled: Record<string, boolean>;
+  includeHookEvents: boolean;
 };
 
 export type PolitAgentModelSelection = {
@@ -50,6 +56,7 @@ export type PolitAgentConfig = {
 export type PolitConfig = {
   agent: PolitAgentConfig;
   model: ModelConfig;
+  extension: PolitExtensionConfig;
 };
 
 export type PolitConfigSnapshot = {

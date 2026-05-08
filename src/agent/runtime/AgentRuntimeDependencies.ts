@@ -1,5 +1,6 @@
 import type { CanonicalModelEvent, CanonicalModelRequest } from "../../model/index.js";
 import type { PolitDeckToolAuditRecorder, PolitDeckToolScheduler, ToolRegistry } from "../../tool/index.js";
+import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { AgentContextRuntime } from "../context/ContextRuntime.js";
 
 export type AgentModelRuntime = {
@@ -16,4 +17,5 @@ export type AgentRuntimeDependencies = {
   now?: () => Date;
   uuid?: () => string;
   auditRecorder?: PolitDeckToolAuditRecorder;
+  lifecycle?: LifecycleRuntime;
 };

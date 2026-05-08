@@ -13,6 +13,7 @@ export {
   type PolitConfigChangeClass,
   type PolitConfigDiagnostic,
   type PolitConfigDiagnosticSeverity,
+  type PolitExtensionConfig,
   type PolitConfigLoadOptions,
   type PolitConfigReloadEvent,
   type PolitConfigSnapshot,
