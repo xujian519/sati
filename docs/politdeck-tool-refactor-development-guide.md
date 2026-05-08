@@ -32,6 +32,93 @@ agent
 - 所有拟新增代码、配置、事件和错误命名统一使用 `PolitDeck` / `politdeck`。
 - 保留旧项目核心语义，但避免继承旧项目 UI、实验功能、telemetry、swarm、远端会话等复杂耦合。
 
+## 1.5 实施进度（2026-05-08）
+
+| 模块 / 工具 | 状态 | 备注 |
+| --- | --- | --- |
+| `ToolRegistry` / `validateToolInput` / `ToolRuntime` / `SequentialToolScheduler` | ✅ 完成 | Phase 1 全部交付；ToolRuntime 已接入 lifecycle hooks（`PreToolUse` / `PostToolUse` / `PostToolUseFailure` / `PermissionRequest` / `PermissionDenied`） |
+| `PermissionRuntime` + 5 mode | ✅ 完成 | `default` / `plan` / `acceptEdits` / `bypassPermissions` / `dontAsk` 全部按 §6 / §7 实现 |
+| `ToolAuditRecorder` | ✅ 完成 | 持久化到 session 目录 |
+| `read_file` / `glob` / `grep` | ✅ 完成 | 文本路径；`read_file` 内部 image / PDF 二进制读取仍 deferred（context Phase 4 已在 attachment 路径支持 base64 image 和 PDF size 估算，但 `read_file` 工具本体未接） |
+| `edit_file` / `write_file` | ✅ 完成 | 单 edit；multi-edit 批量 deferred |
+| `bash` | ✅ 完成 | timeout / safety deny / readonly 走 §13.4；缺 sed validation / git operation tracking / background task |
+| `web_fetch` | ⚠️ 骨架 | 缺 turndown HTML→Markdown + 工具内调模型做 prompt-driven 提取（与 `agent` 工具同期落地） |
+| `web_search` | ✅ 完成（serp.hk provider） | 仿 openclaw `serp-search`：POST `https://api.serp.hk/serp/google/search/advanced`，Bearer apiKey；返回 organic / knowledge_graph / answer_box / top_stories；apiKey 走 `SERP_API_KEY` env 或 `createWebSearchTool({ apiKey })` 选项；无 key 时 `execute()` 返回 `unsupported_tool`。**legacy parity 偏离**（intentional_difference）：legacy `WebSearchTool` 用 Anthropic `BetaWebSearchTool20250305` server_tool（仅 firstParty / Vertex Claude-4+ / Foundry 启用），与 PolitDeck 默认 OpenRouter Kimi 不兼容；改用 serp.hk 让所有 provider 通用 |
+| `ask_user_question` | ⚠️ 骨架 | 缺 UI elicitation 通道 |
+| `structured_output` | ⚠️ 骨架 | 缺 schema-driven 输出语义 |
+| `mcp__*` / `list_mcp_resources` / `read_mcp_resource` | ⚠️ 骨架 | 缺真实 MCP runtime（connect / handshake / session）；与 context Phase 6 deferred `context-mcp-instructions` 共享依赖 |
+| `enter_plan_mode` / `exit_plan_mode` | ⚠️ 骨架 | 缺 mode 切换具体语义 |
+| `ConcurrentToolScheduler` | ⏳ 设计完成 | §11.1 留接口；尚未实现 |
+| Progress sink | ⏳ 类型已留 | §11.2；未实装 |
+| Background task runtime | ⏳ 未做 | `task_*` / `task_stop` / `task_output` / `bash.allowBackground=true` 全部依赖此 |
+
+下一批可做（依赖已就绪）：
+
+| 工具 | 依赖 | 备注 |
+| --- | --- | --- |
+| `agent` (Task) | agent loop ✅ + session ✅ + lifecycle ✅ | subagent forker + 内建 agent（plan / verify / explore） |
+| `memory_overview` / `memory_list` / `memory_search` / `memory_get` | EdgeClawMemoryProvider ✅ | read 路径都有；`memory_dream` / `memory_flush` 仍 defer |
+| `skill` 调用 | extension 加载 skills ✅ | `PolitDeckLoadedPlugin.skills` 已就绪 |
+| `skill_manage` | extension ✅ + filesystem ✅ | skill 文件 CRUD |
+| `config` (read-only) | polit/config ✅ | read-only 至少 |
+| `notebook_edit` | filesystem ✅ | 纯文本操作 |
+| `todo_write` | session metadata ✅ | session 级状态 |
+
+## 1.6 本轮开发范围
+
+> **Owner 划分**：cron 子系统（`cron_create` / `cron_list` / `cron_delete` + scheduler + Gateway 协议扩展）由**同事认领**实现，不在本轮 owner 范围（§14.1）。本节列出本轮 owner 接手做的 feature。
+
+### 1.6.1 入选标准
+
+只接满足全部条件的 feature：
+
+1. 依赖已就绪（context / session / extension / lifecycle / model 都稳定）；
+2. 不需要新建子系统（如 background task runtime、LSP manager、git worktree runtime、daemon）；
+3. 落地后能跑通 e2e（unit + 真实模型 / 真实文件路径）；
+4. 不与 cron owner 的 Gateway / SessionRouter 公共 surface 改动冲突。
+
+### 1.6.2 入选 feature
+
+按落地优先级排：
+
+| 优先级 | Feature | 范围 | 关键依赖 | 验收 |
+| --- | --- | --- | --- | --- |
+| **P0** | `agent` 工具 + 内建 subagent | 主 loop forked 子会话；`general_purpose` / `plan` / `verify` / `explore` 内建 agent；context isolation；同步路径不开 background | agent loop ✅ + session ✅ + lifecycle ✅ + ToolRuntime ✅ | unit + real-API（kimi）e2e：让 agent 工具开 plan agent 跑一个 read-only 任务 |
+| **P0** | `read_file` 多模态扩展 | 把 `AttachmentResolver`（context Phase 4）的 base64 image / pdf 估算路径接进 `read_file` 工具，让模型可以直接 `read_file` 一个图片/PDF；`mode: "auto"` / `mode: "text"` / `mode: "image"` / `mode: "pdf"` | `AttachmentResolver` ✅ + canonical image/pdf block ✅ | unit：3 种 mime 各一例；image 走 base64，PDF 走 size 估算 |
+| **P1** | `memory_overview` / `memory_list` / `memory_search` / `memory_get` | read-only 4 个 tool；调 `MemoryResolver.retrieve` / 列出 memory 索引；`memory_dream` / `memory_flush` 仍 defer | EdgeClawMemoryProvider ✅ | unit：用 fake `MemoryResolver` 桩；不依赖真实 EdgeClaw 服务 |
+| **P1** | `edit_file` multi-edit | 单 tool call 多次精确替换；批量 edits 数组；任一 edit 失败整批回滚 | `editFile.ts` ✅ | unit：成功批量、单 edit 失败整批回滚、`oldString` 唯一性校验 |
+| **P1** | `skill` 调用工具 | 让模型显式 invoke 一个已加载 skill；输入 `skillName` + `arg`；产出 skill body 内容（让 model 自己执行）| extension `PolitDeckLoadedPlugin.skills` ✅ + ExtensionResolver ✅ | unit：注册 fake skill，调用得到 body |
+| **P1** | `web_search` 完整版 | 仿 openclaw `serp-search` extension：调用 serp.hk 商业 API（POST `/serp/google/search/advanced`，Bearer apiKey），解析 organic / knowledge_graph / answer_box / top_stories；区域 `cn` / `global`；apiKey 取 `SERP_API_KEY` env 或 `createWebSearchTool({ apiKey })` 选项；无 key 时仍注册但 `execute()` 抛 `unsupported_tool` | Node 内置 fetch ✅ | unit：mock fetch 验证 endpoint / Auth header / body / 错误分支 / timeout；e2e（`POLITDECK_RUN_REAL_WEB_SEARCH_E2E=1`）打真 serp.hk |
+| **P2** | `ConcurrentToolScheduler` | §11.1 设计的并发分区调度；`isConcurrencySafe(input)=true` 的只读 tool 并行批，非 safe 串行；输出顺序与 tool call 顺序一致 | `SequentialToolScheduler` ✅ | unit：3 read 工具并行延迟 < 单串总和；mixed pattern 顺序保持 |
+| **P2** | `skill_manage` | 列 skill / 启用禁用 / 重新加载（不做 marketplace install） | extension ✅ + filesystem ✅ | unit：list / enable / disable round-trip |
+| **P2** | `config` 读取工具 | read-only：返回 `PolitConfig` 当前 snapshot 的可公开字段（脱敏 apiKey）| `polit/config` ✅ | unit：apiKey 不出现在 output |
+| **P2** | `notebook_edit` | `.ipynb` JSON 解析 + cell-level edit；不接 jupyter 内核 | filesystem ✅ | unit：单 cell replace、insert、delete |
+| **P3** | `todo_write` | session-scoped todo list；`SessionMetadataValue` 加 `todos: TodoItem[]` | session metadata ✅ | unit：跨 turn 持久化 |
+
+### 1.6.3 不接的 feature（明确 defer）
+
+| Feature | 原因 |
+| --- | --- |
+| `task_*` / `task_stop` / `task_output` | 需要 background task runtime（不在本轮） |
+| `bash` background task | 同上；`bash.allowBackground=false` 维持 |
+| `lsp` | 需要 LSP manager 子系统 |
+| `worktree_*` | 需要 git worktree runtime |
+| `team_*` / `send_message` / `send_user_message` | swarm / Kairos 产品功能 |
+| `mcp__*__authenticate` | OAuth；与真实 MCP runtime 一同推进 |
+| `mcp__*` 真实运行时 | MCP connect / handshake 子系统；与 context Phase 6 deferred `context-mcp-instructions` 共享依赖，单独 PR 起 |
+| `web_fetch` 完整版 | 需要 turndown HTML→Markdown + 工具内调模型做 prompt-driven 提取；与 `agent` 工具同期落地最自然 |
+| `ask_user_question` 真实 elicitation | 需要 adapter 端 UI 通道；保留骨架 |
+| `structured_output` schema-driven | 需要与 model layer 绑定 schema 强制；保留骨架 |
+| `memory_dream` / `memory_flush` | 重写流程；与 EdgeClaw owner 协调 |
+| `powershell` / `cron_*` / `remote_trigger` / `tool_search` | cron 由同事 owner，其余暂无依赖闭环 |
+
+### 1.6.4 范围约束
+
+- 本轮所有改动只触碰 `src/tool/builtin/*`、`src/tool/scheduler/`（仅加 ConcurrentToolScheduler）和测试。
+- 不改 `Gateway` 接口、`SessionRouter` 公共 API、`PolitConfig` 顶层类型——这些归各自 owner 协调；如发现必须扩展，开 issue 与对应 owner（context / session / gateway / cron）协商。
+- 不引新依赖（cron parser、jupyter runtime、image / pdf 处理库都不引）。
+- 每个 P0/P1 feature 必须带 unit test；P0 至少跑一个真实 API 的 e2e。
+
 ## 2. 命名迁移规则
 
 重构后的代码中禁止把旧项目品牌名作为业务类型、事件名、配置名或错误码前缀。只允许在文档中引用旧源码路径。
@@ -1428,18 +1515,62 @@ web_fetch
 名称：
 
 ```text
-web_search
+web_search    (alias: WebSearch)
 ```
 
 功能：
 
-- 搜索互联网。
-- 第一版可留接口，不接具体 provider。
+- 通过 serp.hk 商业 API 搜索 Google，返回 organic / knowledge_graph / answer_box / top_stories。
+- 仿 openclaw `serp-search` extension（`/Users/miwi/edgeclaw-opc/openclaw/extensions/serp-search/`）。
+- **legacy 偏离**：legacy `WebSearchTool` 用 Anthropic `BetaWebSearchTool20250305` server_tool，只在 firstParty / Vertex Claude-4+ / Foundry 启用；PolitDeck 默认 OpenRouter Kimi 用不了。改用 serp.hk 后所有 provider 通用。
+
+输入：
+
+```ts
+type WebSearchInput = {
+  query: string;
+  gl?: string;     // 国家代码 (默认 CN)；"US" 拿英文结果
+};
+```
+
+输出：
+
+```ts
+type WebSearchOutput = {
+  query: string;
+  organic: Array<{ title?: string; link?: string; snippet?: string; source?: string }>;
+  knowledgeGraph?: Record<string, unknown>;
+  answerBox?: Record<string, unknown>;
+  topStories?: Array<Record<string, unknown>>;
+};
+```
+
+Provider 端点：
+
+- `cn` (默认): `https://api.serp.hk/serp/google/search/advanced`
+- `global`: `https://api.serp.global/serp/google/search/advanced`
+
+API key 解析顺序：
+
+1. `createWebSearchTool({ apiKey })`
+2. `process.env.SERP_API_KEY`（运行时通过 `PolitDeckToolRuntimeContext.env`）
+
+无 key 时：仍注册到 `ToolRegistry`，`execute()` 抛 `unsupported_tool` 错误（消息含"Set SERP_API_KEY env var or pass apiKey via createWebSearchTool({ apiKey })."）。
+
+`createBuiltinRegistry({ webSearch: false })` 可显式跳过注册。
 
 权限：
 
-- read-only 但 open-world。
-- default ask 或按配置 allow。
+- read-only / concurrency-safe / open-world。
+- default 模式 `ask`；`acceptEdits` 同 default（acceptEdits 只解锁文件编辑）；`plan` 同 default（read-only，可配 allow）；`bypassPermissions` allow；`dontAsk` deny。
+
+错误码：
+
+- 空 query → `invalid_tool_input`
+- HTTP non-2xx → `tool_execution_failed`（含 status / response body）
+- serp.hk JSON `code !== 0` → `tool_execution_failed`（含 code 和 msg）
+- 超时（默认 30s）→ `tool_timeout`
+- 无 apiKey → `unsupported_tool`
 
 ### 13.10 MCP Tool
 
@@ -1544,7 +1675,7 @@ structured_output
 | Worktree | `EnterWorktree` / `ExitWorktree` | `worktree_*` | 暂缓 | 依赖 git/worktree runtime |
 | SendMessage / Team | `SendMessage` / `TeamCreate` / `TeamDelete` | `team_*` | 暂缓 | swarm 专有 |
 | PowerShell | `PowerShell` | `powershell` | 暂缓 | Windows 后续 |
-| Cron | `CronCreate` / `CronDelete` / `CronList` | `cron_*` | 暂缓 | daemon 后续 |
+| Cron | `CronCreate` / `CronDelete` / `CronList` | `cron_create` / `cron_list` / `cron_delete` | 暂缓 | 由同事 owner 单独落地，不在本轮重构范围 |
 | RemoteTrigger | `RemoteTrigger` | `remote_trigger` | 暂缓 | 远端会话后续 |
 | ToolSearch | `ToolSearch` | `tool_search` | 暂缓 | deferred tools 多后再实现 |
 | MCP tools | `mcp__<server>__<tool>`，另有通用占位 `mcp` | `mcp__*` | 骨架 | adapter 优先 |
@@ -1556,6 +1687,18 @@ structured_output
 | Workflow | `Workflow` | `workflow` | 暂缓 | 特性构建片段，当前 third-party 子树不完整 |
 | Tungsten | `tungsten` | `tungsten` | 不实现 | internal stub |
 | TestingPermission | `TestingPermission` | `testing_permission` | 仅测试 | 不进生产 |
+
+## 14.1 Cron 接入
+
+cron 子系统由**同事认领**，不属于本轮重构范围。设计稿与依赖关系另行单开（owner 自管）。本文档不再保留 cron 设计章节，避免 owner 之间假设漂移。
+
+约束（其他 owner 在做工具相关改动时务必遵守）：
+
+- cron 落地不会改 `tool/`、`gateway/`、`session/`、`polit/config/` 的公共类型与协议。
+- 如果 cron owner 发现需要扩展 `Gateway` 接口、`PolitConfig`、`SessionRouter` 公共 API，必须先 open issue 与对应 owner 协商，不直接改公共 surface。
+
+后续 cron owner 落地后，§1.5 实施进度表 + §14 迁移矩阵的 cron 行将由 cron owner 同步更新。
+
 
 ## 15. Model 集成方式
 
@@ -1916,7 +2059,9 @@ import type { CanonicalToolCall } from "../../model";
 
 ## 22. 需要暂不实现的旧能力
 
-以下能力必须避免在第一版中混入，否则会拖慢 tool runtime 稳定：
+> 2026-05-08 更新：本节列表是第一版（Phase 1–4 范围）。下方"已升级状态"小节标出哪些项目随后已实装或部分实装，编辑代码时以此为准。
+
+第一版（Phase 1–4）必须避免混入的能力：
 
 - React/Ink UI 渲染函数。
 - tool progress message streaming。
@@ -1938,6 +2083,22 @@ import type { CanonicalToolCall } from "../../model";
 - notebook / PDF / image read。
 
 如果需要保留扩展点，只定义 interface，不实现产品逻辑。
+
+### 22.1 已升级状态（自第一版后实装 / 部分实装）
+
+| 原列项 | 当前状态 | 备注 |
+| --- | --- | --- |
+| hooks plugin runtime | ✅ **已实现** | `src/lifecycle` + `src/extension` 全套 hook（PreToolUse / PostToolUse / PostToolUseFailure / PermissionRequest / PermissionDenied / SessionStart / SessionEnd / Stop / UserPromptSubmit / PreCompact / PostCompact），ToolRuntime 已接入 |
+| cron daemon | 🔄 由同事 owner 单独落地 | 不在本轮重构范围 |
+| skill marketplace | 🟡 **部分** | extension 已加载本地 skills；marketplace（discovery / install / publish）仍 defer |
+| OAuth MCP auth | ❌ defer | 与 mcp__* 真实 MCP runtime 一同推进 |
+| background subagent | ❌ defer | 无独立 task runtime；`agent` 工具落地优先用同步路径 |
+| memory dream / flush | ❌ defer | EdgeClaw 提供 retrieve / capture，dream/flush 仍未做 |
+| PDF / image read | 🟡 **部分** | image base64 / PDF size 估算在 context Phase 4 已实现于 `AttachmentResolver`；`read_file` 工具本体仍只读文本，需要后续把 attachment 路径接进去 |
+| notebook | ❌ defer | `notebook_edit` 需要单独实现，第一版仍 defer |
+| telemetry / GrowthBook / classifier auto mode / swarm / team / remote session / managed policy loader / tool progress UI | ❌ defer | 与第一版决策一致 |
+
+下一批工具能否上的判定，参考 §1.5 实施进度的"下一批可做"表。
 
 ## 23. 推荐首批文件实现顺序
 

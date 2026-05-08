@@ -55,7 +55,14 @@ export {
 } from "./builtin/bash.js";
 export { createAskUserQuestionTool, type AskUserQuestionInput } from "./builtin/askUserQuestion.js";
 export { createWebFetchTool, type WebFetchInput } from "./builtin/webFetch.js";
-export { createWebSearchTool, type WebSearchInput } from "./builtin/webSearch.js";
+export {
+  createWebSearchTool,
+  type CreateWebSearchToolOptions,
+  type WebSearchInput,
+  type WebSearchOrganicResult,
+  type WebSearchOutput,
+  type WebSearchRegion,
+} from "./builtin/webSearch.js";
 export {
   buildMcpToolWireName,
   createMcpTool,
