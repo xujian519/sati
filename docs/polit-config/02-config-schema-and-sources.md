@@ -2,7 +2,7 @@
 
 本文定义 `polit/config` 需要支持的配置来源、优先级、总 YAML 结构、配置段拆分和校验规则。
 
-当前业务只推进到 `model` 模块，因此本文只定义通用配置外壳和 `model` 配置段。其他模块的配置段不在当前阶段进入 schema。
+当前实现只定义通用配置外壳和 `model` 配置段。目标 schema 会新增 `agent` 段，由 `agent.model` 和 `agent.fallbackModel` 统一管理默认厂商/模型选择；`model` 段只描述 provider 和 model 定义。
 
 ## 配置文件
 
@@ -42,7 +42,7 @@ default config: ${PolitHome}/politdeck.yaml
 
 - `default config` 是默认 YAML 配置文件，由 `PolitHome` 决定位置。
 - `project config` 只描述工作区相关覆盖，不应保存用户 secret。
-- `env overrides` 当前只支持 `POLIT_HOME` 以及 `POLIT_MODEL_DEFAULT_PROVIDER`、`POLIT_MODEL_DEFAULT_MODEL`、`POLIT_MODEL_FALLBACK_MODEL`。API key 通过配置中的 `${ENV_NAME}` 引用解析，不作为独立配置覆盖项。
+- `env overrides` 当前实现仍保留旧的模型默认值覆盖方式。目标 schema 迁移后，应改为覆盖 `agent.model` 和 `agent.fallbackModel` 的受控环境变量。API key 通过配置中的 `${ENV_NAME}` 引用解析，不作为独立配置覆盖项。
 
 所有实际参与加载或覆盖的来源都会记录在 `PolitConfigSnapshot.sources` 中；不存在的默认/项目文件不会产生 source 记录。
 
@@ -61,7 +61,7 @@ env
 `env` source 有两类作用：
 
 - bootstrap env：在读取任何 YAML 前解析，例如 `POLIT_HOME`。它决定 `${PolitHome}/politdeck.yaml` 的位置。
-- config env override：在 YAML 读取后参与合并，例如默认 provider、默认 model 或 API key 引用。
+- config env override：在 YAML 读取后参与合并，例如目标 schema 中的 `agent.model` 或 `agent.fallbackModel`。API key 的 `${ENV_NAME}` 是 secret 引用解析，不作为独立 override 字段合并。
 
 这两类都归入 `kind: env`，但诊断中应区分 `phase: bootstrap | merge`，避免用户误以为 `POLIT_HOME` 可以写在 YAML 中。
 
@@ -85,10 +85,11 @@ env
 ```yaml
 schemaVersion: 1
 
+agent:
+  model: anthropic-main/claude-sonnet-4-5
+  fallbackModel: anthropic-main/claude-haiku-4-5
+
 model:
-  defaultProvider: anthropic-main
-  defaultModel: claude-sonnet-4-5
-  fallbackModel: claude-haiku-4-5
   providers:
     anthropic-main:
       protocol: anthropic
@@ -136,15 +137,34 @@ YAML 中不允许出现 `polit` 段来配置 `PolitHome`、缓存目录、聊天
 - 项目级配置不应改变用户级数据根目录。
 - 聊天记录、缓存等路径应保持全局一致，避免配置热重载时迁移运行时数据。
 
+### agent
+
+`agent` 段描述默认模型选择：
+
+```yaml
+agent:
+  model: anthropic-main/claude-sonnet-4-5
+  fallbackModel: anthropic-main/claude-haiku-4-5
+```
+
+- `agent.model`：默认 provider/model，格式为 `provider/model`。
+- `agent.fallbackModel`：可选 fallback provider/model，格式为 `provider/model`。
+
+解析时按斜杆拆分；斜杆前是 provider id，斜杆后是 model id。二者必须能在 `model.providers` 中找到。
+
 ### model
 
-`model` 段描述 provider、model list、URL、headers、timeout、API key 引用、capabilities 和 multimodal constraints。
+`model` 段描述 provider、model list、URL、headers、timeout、API key 引用、capabilities 和 multimodal constraints。目标 schema 中，默认模型选择不再放在 `model` 段。
 
 具体字段见 `[../model/03-model-configuration.md](../model/03-model-configuration.md)`。
 
-### 未来业务配置段
+### 其他未来业务配置段
 
-`loop`、`context`、`tool`、`permission`、`session`、`extension` 等配置段等对应模块进入实现阶段后再定义。当前阶段不要提前把这些字段写入正式 schema，避免为尚未实现的业务行为制造兼容负担。
+tool、permission、context、session、extension 等模块对应源码中已经存在或预留的运行时边界，但当前不在本目录继续展开字段级 schema。它们真正进入配置系统时，再加入 `PolitRawConfig`、结构校验、默认值和变更分类。
+
+这些模块后续进入配置系统前，应先明确字段所有权、默认值、热重载分类和与 session state 的边界。
+
+这些段进入正式 schema 前，不应把示例 YAML 写成可运行配置，避免用户误以为当前 loader 会接受并消费这些字段。
 
 ## Secret 引用
 
@@ -208,15 +228,22 @@ syntax validation
 
 `semantic validation` 检查跨字段关系，例如：
 
-- `model.defaultProvider` 必须存在。
-- `model.defaultModel` 必须属于默认 provider。
-- `model.fallbackModel` 如果存在，也必须属于某个可用 provider。
+- `agent.model` 必须是 `provider/model` 格式。
+- `agent.model` 中的 provider 必须存在于 `model.providers`。
+- `agent.model` 中的 model 必须存在于对应 provider 的 `models`。
+- `agent.fallbackModel` 如果存在，也必须是 `provider/model` 格式，并指向可用 provider/model。
 - `model.providers.<id>.protocol` 必须是当前支持的协议。
 - `model.providers.<id>.url` 必须是合法 URL。
 - `model.providers.<id>.apiKey` 的环境变量引用必须可解析。
 - `model.providers.<id>.models` 不能为空。
 - `model.providers.<id>.models.<model>.capabilities` 可以缺省，缺省时使用协议默认值；出现的字段必须类型正确。
 - `model.providers.<id>.models.<model>.multimodal.input` 只能包含当前 canonical protocol 支持的输入模态。
+
+未来新增业务段时还需要增加跨模块语义校验，例如：
+
+- `agent.model` 是默认 provider/model 的唯一配置入口，不能再与旧的 model 默认字段并存。
+- `agent.fallbackModel` 必须满足 fallback recovery policy 规则。
+- 如果未来新增 tool、permission、context 或 session 配置段，应分别补充与 `agent.model`、`model.providers` 和 session state 的跨字段校验。
 
 ## 错误模型
 

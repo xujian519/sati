@@ -4,7 +4,7 @@
 
 ## 测试目标
 
-`polit/config` 必须从第一天具备确定性测试。当前业务只推进到 `model` 模块，因此测试重点是通用配置运行时和 `model` 配置段。
+`polit/config` 必须从第一天具备确定性测试。当前已实现的 schema 重点是通用配置运行时和 `model` 配置段；目标 schema 新增 `agent.model` / `agent.fallbackModel` 后，必须同步补齐跨段配置测试。
 
 当前测试已经覆盖 YAML 读取、来源合并、env credential 解析、禁止 YAML `polit` 段、project chat dir 派生和 reload 失败保旧。后续测试应继续覆盖：
 
@@ -20,6 +20,7 @@
 - 变更分类。
 - 成功 reload 事件和诊断脱敏。
 - watcher 竞态。
+- future `agent` 段的 schema、默认值、变更分类和模块编译。
 
 ## 单元测试
 
@@ -41,7 +42,7 @@ redactConfig()
 - 未知字段产生 warning。
 - 非法 enum 产生 error。
 - array 覆盖而不是拼接。
-- `null` 清空可选字段。
+- `null` 覆盖后的校验行为符合 schema 约定，当前不要假设它能清空可选字段。
 - `${ENV}` 引用成功。
 - `${ENV}` 缺失失败。
 - 明文 API key 被接受且在诊断/输出中脱敏。
@@ -94,6 +95,13 @@ secret changes are not logged
 
 这些测试可以使用 fake transport 和 fake provider adapter，不需要真实外部服务。
 
+当 `agent` 配置段实现后，应新增集成测试：
+
+- `agent`：从 `agent.model` / `agent.fallbackModel` 解析 provider/model，并校验它们存在于 `model.providers`。
+- `agent.model` 缺失、格式错误或指向不存在 provider/model 时返回结构化错误。
+- `agent.fallbackModel` 缺失时不启用 fallback；格式错误或目标不存在时报错。
+- `change taxonomy`：`agent.model` 和 `agent.fallbackModel` 有对应 `classifyConfigChanges()` 用例。
+
 ## Conformance Tests
 
 跨入口一致性测试是未来目标。当前源码尚未实现 CLI/SDK/TUI/remote adapter 入口：
@@ -127,11 +135,11 @@ ConfigDiagnostic
 示例：
 
 ```text
-code: CONFIG_MODEL_DEFAULT_NOT_FOUND
+code: CONFIG_AGENT_MODEL_NOT_FOUND
 severity: error
-path: model.defaultModel
+path: agent.model
 source: ${PolitHome}/politdeck.yaml
-hint: Add the model under model.providers.<provider>.models or change model.defaultModel.
+hint: Use provider/model format and ensure both parts exist under model.providers.
 ```
 
 诊断中的 path 使用配置路径，不使用源码路径。
@@ -196,9 +204,8 @@ config.secret.reference_missing
 - `model.provider.protocol`。
 - `model.provider.apiKey` 引用。
 - `model.provider.headers` 中的认证相关变化。
-- `model.defaultProvider`。
-- `model.defaultModel`。
-- `model.fallbackModel`。
+- `agent.model`。
+- `agent.fallbackModel`。
 - `model.providers.<id>.models`。
 - `model.capabilities`。
 - `model.multimodal`。
@@ -282,6 +289,7 @@ examples/politdeck.yaml
 examples/politdeck.minimal.yaml
 examples/politdeck.model.yaml
 examples/politdeck.model-openai.yaml
+examples/politdeck.agent.yaml
 ```
 
 示例未来必须保持可通过 `config validate`。包含 secret 的示例只能使用 `${ENV_NAME}`。
@@ -298,5 +306,6 @@ examples/politdeck.model-openai.yaml
 - 是否有 restart-required 变更分类（当前类型保留但 diff 不会报告 `POLIT_HOME`）。
 - 是否有当前模型请求绑定 snapshot 的行为测试。
 - 是否有 CLI/SDK 一致性测试。
+- `agent` 配置段是否有 schema、默认值、变更分类和模块编译测试。
 
 当前 `model` 模块已经可以通过 `loadPolitConfig()` 和 `createModelRuntime(snapshot.config.model)` 接入真实运行时配置。其他业务模块进入实现阶段时，再扩展各自的配置 schema、热重载语义和集成测试。

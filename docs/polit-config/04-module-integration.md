@@ -1,6 +1,6 @@
 # Config 与 Model 模块集成
 
-本文定义当前阶段 `model` 模块如何消费 `polit/config`。adapter 接入仍是未来扩展；其他业务模块尚未进入实现阶段，不在本文定义配置字段或热重载语义。
+本文定义当前阶段 `model` 模块如何消费 `polit/config`，并说明目标 schema 中 `agent.model` 如何管理默认厂商/模型。adapter 接入仍是未来扩展。
 
 ## 集成原则
 
@@ -18,6 +18,7 @@
 ```text
 config runtime creates snapshot
   -> model receives snapshot.config.model
+  -> agent receives snapshot.config.agent model selection
   -> createModelRuntime(snapshot.config.model)
   -> request metadata may include snapshot version
 ```
@@ -34,7 +35,7 @@ snapshot.config.model
 
 - 校验 provider 协议。
 - 创建绑定 `ModelConfig` 的 `ModelRuntime`。
-- 根据默认 provider/model 构建请求。
+- 校验 `agent.model` 指向的 provider/model 是否存在。
 - 根据 model capabilities 决定 tool、streaming、thinking、JSON schema 等能力。
 - 根据 multimodal constraints 校验 canonical content blocks。
 
@@ -76,7 +77,7 @@ ModelProviderRegistry
   list() -> ModelProviderAdapter[]
 ```
 
-provider、model list、default provider/default model 和 fallback model 都保存在 `ModelConfig` 中，由 `createModelRuntime(config)` 绑定。snapshot 发布后是否重建 runtime 由调用方决定。
+provider 和 model list 保存在 `ModelConfig` 中，由 `createModelRuntime(config)` 绑定。默认 provider/model 和 fallback model 的选择属于目标 `agent` 段，由 `agent.model` / `agent.fallbackModel` 解析后传给 `AgentRuntimeConfig`。
 
 ## Model 二次校验
 
@@ -85,8 +86,8 @@ provider、model list、default provider/default model 和 fallback model 都保
 - protocol adapter 是否存在。
 - provider URL 是否能被 adapter 接受。
 - API key 是否已解析为可用 secret 或 secret handle。
-- default model 是否可被当前 provider 使用。
-- fallback model 是否存在于任意 provider 的 model list。
+- `agent.model` 指向的 model 是否可被当前 provider 使用。
+- `agent.fallbackModel` 是否指向可用 provider/model。
 - capabilities 是否满足 request builder 需要。
 - multimodal constraints 是否能约束 canonical content block。
 - provider headers 是否包含不支持或冲突的字段。
@@ -130,6 +131,31 @@ SDK 需要能拿到配置诊断，方便调用方在 headless 环境展示错误
 
 UI 不应保存配置事实来源。设置页保存后仍由 config loader 重新读取并发布 snapshot。
 
+## Agent
+
+当前 `AgentRuntimeConfig` 由调用方构造，尚未从 `PolitConfigSnapshot` 直接生成。目标 schema 接入 `agent` 段后，建议增加一个明确的编译步骤：
+
+```text
+PolitConfigSnapshot
+  -> parse snapshot.config.agent.model
+  -> validate against snapshot.config.model.providers
+  -> AgentRuntimeConfig
+  -> createAgentSession()
+```
+
+映射原则：
+
+- `agent.model` 是 agent provider/model 默认值的单一事实来源，格式为 `provider/model`。
+- `agent.fallbackModel` 是 fallback provider/model 的单一事实来源，格式为 `provider/model`。
+- `model` 段只提供 provider/model 定义，不再提供默认模型选择字段。
+- `AgentRuntimeConfig.permissionMode` 与 `permissionContext.mode` 必须保持一致；如果配置系统提供默认权限模式，编译时要同时写入两处。
+- `maxContextMessages` 应优先来自 `context` 段；`agent` 段只保存 loop 行为，不重复定义 token budget。
+- `env`、`now`、`uuid`、`auditRecorder` 等依赖注入项不应进入 YAML。
+
+## 其他运行时模块
+
+tool、permission、context、session/transcript 当前仍由调用方 runtime wiring、session state 或 `polit/paths` 派生路径管理。本轮 `polit/config` 只把默认模型选择收敛到 `agent.model` / `agent.fallbackModel`，不在本文定义这些模块的 YAML 字段。
+
 ## Config Facade
 
 当前给上层暴露的 facade 是 `PolitConfigStore`：
@@ -149,8 +175,8 @@ PolitConfigStore
 
 ```text
 配置项                         默认生效范围
-model.defaultModel             next-request
-model.fallbackModel            next-request
+agent.model                    next-request
+agent.fallbackModel            next-request
 model.provider.url             next-request
 model.provider.apiKey          next-request
 model.provider.timeoutMs       next-request
@@ -162,11 +188,14 @@ model.multimodal               next-request
 POLIT_HOME                     当前不进入 snapshot diff；运行中变化需重启
 ```
 
-当前实现采用保守策略：`model` 业务变更只对使用新 snapshot 创建或选择的后续 runtime/request 生效。`POLIT_HOME` 由环境变量控制，不属于 YAML 配置；运行中变化需要重启，当前不会通过 `classifyConfigChanges()` 自动报告 `restart-required`。
+当前实现采用保守策略：`model` 业务变更只对使用新 snapshot 创建或选择的后续 runtime/request 生效。目标 schema 中，默认模型选择由 `agent.model` / `agent.fallbackModel` 管理。`POLIT_HOME` 由环境变量控制，不属于 YAML 配置；运行中变化需要重启，当前不会通过 `classifyConfigChanges()` 自动报告 `restart-required`。
 
-## 未来业务模块
+## 分册关系
 
-`context`、`tool`、`permission`、`session`、`extension` 等模块接入时，应新增独立文档或扩展本文。当前阶段不要在 `polit/config` 文档中提前定义这些模块的业务配置。
+本文件只描述跨模块集成模式。各模块的目标配置字段和约束分别见：
+
+- `[06-agent-and-session-config.md](./06-agent-and-session-config.md)`
+- `[07-config-change-taxonomy-beyond-model.md](./07-config-change-taxonomy-beyond-model.md)`
 
 ## 禁止模式
 

@@ -2,7 +2,7 @@
 
 本文定义 `polit/config` 热重载的运行时语义。目标是在不重启 `PolitDeck` 的情况下让配置变更对后续模型请求生效，同时保证正在执行的模型请求不被破坏。
 
-当前业务只推进到 `model` 模块，因此本文只展开 `model` 配置的热重载影响。snapshot、watcher、失败保旧、变更分类和成功 reload 订阅事件已经有基础实现；审计日志、命名事件总线和 restart-required 检测仍未实现。
+当前实现只对 `model` 配置发布实际业务变更。snapshot、watcher、失败保旧、变更分类和成功 reload 订阅事件已经有基础实现；审计日志、命名事件总线和 restart-required 检测仍未实现。`agent` 段进入 schema 后的分类原则见 `[07-config-change-taxonomy-beyond-model.md](./07-config-change-taxonomy-beyond-model.md)`。
 
 ## 热重载目标
 
@@ -134,7 +134,7 @@ changed path starts with "model." -> next-request
 other changed path                   -> next-runtime
 ```
 
-由于 snapshot 当前只包含 `config.model`，实际发布的业务变更通常都是 `next-request`。
+由于 snapshot 当前只包含 `config.model`，实际发布的业务变更通常都是 `next-request`。当 future 配置段加入 snapshot 后，不能继续用“非 model 一律 next-runtime”的粗粒度规则，需要按字段分类。
 
 ### runtime-live
 
@@ -152,8 +152,8 @@ other changed path                   -> next-runtime
 
 示例：
 
-- 默认模型。
-- fallback model。
+- `agent.model` 默认模型。
+- `agent.fallbackModel` fallback 模型。
 - provider URL。
 - provider timeout。
 - provider headers。
@@ -262,7 +262,7 @@ listener 要求：
 
 可热重载：
 
-- default model。
+- `agent.model`。
 - provider timeout。
 - headers。
 - retry。
@@ -274,9 +274,17 @@ listener 要求：
 - API key 改变后，新请求使用新 key；已有请求不切换。
 - provider URL 改变后，新请求使用新 URL；连接池可延迟重建。
 
-### 未来业务模块
+### Agent
 
-`context`、`tool`、`permission`、`session`、`extension` 等模块的热重载语义等对应模块进入实现阶段后再定义。当前文档不提前规定这些模块的业务行为。
+`agent` 配置进入 schema 后，多数字段只应影响新 turn 或新 session：
+
+- `agent.model` 对后续模型请求生效。
+- `agent.fallbackModel` 对后续 recovery policy 生效；已经发生过 fallback 的 loop 不应被 reload 重置。
+- `permissionMode` 若作为 session 初始值，应只影响新 session；运行中由工具结果触发的 mode change 属于 session state，不应被配置 reload 覆盖。
+
+### 其他模块
+
+tool、permission、context、session/transcript 等模块当前仍由 runtime wiring 或 session state 管理，不在本轮 `polit/config` schema 中展开字段。未来如果把这些模块纳入 YAML，应先新增独立 schema 文档并补充字段级变更分类；在此之前，`classifyConfigChanges()` 不应假设这些段已经可用。
 
 ## 并发与竞态
 

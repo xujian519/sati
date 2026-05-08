@@ -2,7 +2,7 @@
 
 本文定义当前 `src/polit/config` 的职责、边界和内部结构。该模块属于 `polit` 基础层，与 `src/polit/paths` 一起为上层 runtime 提供产品级默认行为。
 
-当前业务只进行到 `model` 模块，因此本文只把 `model` 作为已接入配置系统的业务模块展开。其他模块的配置段是未来阶段的扩展目标，不在当前阶段设计具体字段或运行时语义。
+当前实现中只有 `model` 段已经进入 `PolitConfig` schema。`agent`、`tool`、`permission`、context 和 session/transcript 已在 `src` 中形成运行时边界，但仍主要通过构造参数和依赖注入配置。本文说明当前架构，并把这些模块作为后续配置段扩展目标。
 
 ## 定位
 
@@ -47,7 +47,7 @@ model
   -> polit/config
 ```
 
-当前阶段只有 `model` 相关运行时需要直接消费 `polit/config` 产出的 `snapshot.config.model`。未来 `agent`、`context`、`tool`、`permission`、`session`、`extension` 等模块接入时，也应通过 snapshot 消费配置。
+当前阶段只有 `model` 相关运行时直接消费 `polit/config` 产出的 `snapshot.config.model`。未来 `agent`、`context`、`tool`、`permission`、`session`、`extension` 等模块接入时，也应通过 snapshot 消费配置，并保持各模块的二次语义校验在自己的模块边界内完成。
 
 `polit/config` 可以调用 `model/config` 的纯解析逻辑，但不能调用 `ModelRuntime`、provider transport 或任意业务执行代码。
 
@@ -151,7 +151,16 @@ PolitConfigSnapshot
     model
 ```
 
-当前阶段 `model` 模块拿到 snapshot 后只读取 `snapshot.config.model`。其他业务段等对应模块进入实现阶段后再加入 snapshot。
+当前阶段 `model` 模块拿到 snapshot 后只读取 `snapshot.config.model`。其他业务段进入配置系统时，snapshot 可以扩展为：
+
+```text
+PolitConfigSnapshot
+  config
+    model
+    agent        # future
+```
+
+这些 future 段不代表当前 YAML 已支持，只表示后续 schema 扩展的归属边界。
 
 ### PolitConfigStore
 
@@ -216,7 +225,7 @@ getPolitProjectChatDir(projectRoot) -> ${PolitHome}/projects/<project-id>/chats
 --provider
 ```
 
-当前阶段不实现额外覆盖来源。调用方如需影响配置，只能使用项目级配置或已实现的环境变量覆盖项：`POLIT_MODEL_DEFAULT_PROVIDER`、`POLIT_MODEL_DEFAULT_MODEL`、`POLIT_MODEL_FALLBACK_MODEL`。它们不应绕过 config store 直接修改 `model` 模块。
+当前阶段不实现额外覆盖来源。调用方如需影响配置，只能使用项目级配置或已实现的环境变量覆盖项。目标 schema 迁移后，默认模型选择应覆盖 `agent.model` / `agent.fallbackModel`，不应再绕过 config store 直接修改 `model` 模块。
 
 ### 与业务模块
 
@@ -227,6 +236,18 @@ model consumes snapshot.config.model
 ```
 
 `model` 模块可以做配置段级别的二次校验，但不能重新读取总 YAML。
+
+未来业务模块接入时遵循同一规则：
+
+```text
+agent consumes snapshot.config.agent + snapshot.config.model providers
+tool consumes runtime wiring until a tools schema exists
+permission consumes runtime/session state until a permission schema exists
+context consumes runtime wiring until a context schema exists
+session consumes polit/paths derived paths until a session schema exists
+```
+
+这些模块不能绕过 `polit/config` 自行读取 `.politdeck.yaml`，也不能把运行中产生的用户选择、permission prompt 结果或 transcript 事实写回配置对象。
 
 ## 生命周期
 
