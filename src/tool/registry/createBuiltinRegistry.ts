@@ -1,3 +1,4 @@
+import { createAgentTool, type CreateAgentToolOptions } from "../builtin/agent.js";
 import { createBashTool, type CreateBashToolOptions } from "../builtin/bash.js";
 import { createEditFileTool } from "../builtin/editFile.js";
 import { createGlobTool } from "../builtin/glob.js";
@@ -18,6 +19,15 @@ export type CreateBuiltinRegistryOptions = {
    * API key from the `SERP_API_KEY` env var at execution time.
    */
   webSearch?: CreateWebSearchToolOptions | false;
+  /**
+   * `agent` subagent tool. **Opt-in** because it requires a model client at
+   * execution time — the AgentLoop forwards the loop's model client through
+   * `PolitDeckToolRuntimeContext.model`, but stand-alone tool runtimes (e.g.
+   * tests) may not have one. Pass `true` (default) to register; pass `false`
+   * to skip; pass an options object to customize the subagent presets or
+   * lock the provider/model.
+   */
+  agent?: CreateAgentToolOptions | boolean;
 };
 
 export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): ToolRegistry {
@@ -30,6 +40,10 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
   registry.register(createBashTool(options?.bash));
   if (options?.webSearch !== false) {
     registry.register(createWebSearchTool(options?.webSearch));
+  }
+  if (options?.agent !== false) {
+    const agentOpts = options?.agent === true || options?.agent === undefined ? undefined : options.agent;
+    registry.register(createAgentTool(agentOpts));
   }
   return registry;
 }

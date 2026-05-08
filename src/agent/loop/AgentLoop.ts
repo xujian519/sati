@@ -3,6 +3,7 @@ import {
   assembleAssistantMessage,
   createModelMessageAssemblerState,
   type CanonicalMessage,
+  type CanonicalModelError,
   type CanonicalModelRequest,
   type CanonicalUsage,
 } from "../../model/index.js";
@@ -14,6 +15,8 @@ import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
 import type { LifecycleDispatchResult } from "../../lifecycle/index.js";
 import { NullContextRuntime } from "../../context/NullContextRuntime.js";
+import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
+import type { ContextRecoveryDecision } from "../../context/index.js";
 import { AgentRecoveryPolicy } from "./AgentRecoveryPolicy.js";
 import { collectToolCalls } from "./collectToolCalls.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
@@ -47,12 +50,24 @@ export class AgentLoop {
 
   async *run(input: AgentLoopInput): AsyncGenerator<AgentEvent, AgentLoopRunResult, unknown> {
     const startedAt = this.now().toISOString();
-    const messages = [...input.messages];
+    let messages = [...input.messages];
     let turnCount = 1;
     let usage: CanonicalUsage = {};
     let permissionDenials: AgentPermissionDenial[] = [];
     let structuredOutput: unknown;
     let finalMessage: CanonicalMessage | undefined;
+    /**
+     * Single-shot reactive truncate-and-retry guard. Set true after the loop
+     * already truncated for a `prompt_too_long` once; subsequent PTL errors
+     * fall through to fallback / fail (legacy single-shot semantics).
+     */
+    let hasAttemptedCompact = false;
+    /**
+     * Single-shot guard for `max_output_reached` retries. The loop bumps
+     * `config.maxOutputTokens` (capped at `OUTPUT_TOKEN_RETRY_CEILING`) once
+     * and retries; a second hit falls through to the recovery policy.
+     */
+    let hasAttemptedOutputRetry = false;
 
     while (true) {
       if (input.abortSignal?.aborted) {
@@ -121,6 +136,48 @@ export class AgentLoop {
           messages.push(projected);
           yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: projected };
         }
+
+        // Reactive recovery: ask context runtime if it can recover from the
+        // model error (e.g. `prompt_too_long` → truncate head and retry).
+        // Single-shot per turn — see legacy parity §3.1 #8.
+        const reactive = await this.tryReactiveRecover(input, assembled.error, messages, hasAttemptedCompact);
+        if (reactive && reactive.type === "truncate_head_and_retry") {
+          // Drop the failed assistant message + any synthetic tool_result we just
+          // pushed so the retry doesn't carry a half-baked tool_call. Then apply
+          // keepRatio so the cap is computed against valid history only.
+          messages = stripTrailingErrorPair(messages);
+          messages = truncateHeadKeepRatio(messages, reactive.keepRatio);
+          hasAttemptedCompact = true;
+          yield {
+            type: "turn_continued",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            reason: "model_error",
+          };
+          continue;
+        }
+
+        // `max_output_reached` (legacy: maximum output tokens hit).
+        // Single-shot bump `maxOutputTokens` and retry; second hit falls
+        // through to fallback / fail. Strip the partial assistant message so
+        // the retry doesn't replay a truncated tool_call.
+        if (
+          assembled.error.code === "max_output_reached" &&
+          !hasAttemptedOutputRetry
+        ) {
+          messages = stripTrailingErrorPair(messages);
+          const previous = this.config.maxOutputTokens ?? OUTPUT_TOKEN_RETRY_DEFAULT;
+          this.config.maxOutputTokens = Math.min(previous * 2, OUTPUT_TOKEN_RETRY_CEILING);
+          hasAttemptedOutputRetry = true;
+          yield {
+            type: "turn_continued",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            reason: "model_error",
+          };
+          continue;
+        }
+
         const recovery = this.recoveryPolicy.decideForModelError(assembled.error);
         if (recovery.type === "retry") {
           this.config.provider = recovery.provider;
@@ -268,6 +325,30 @@ export class AgentLoop {
     }
   }
 
+  private async tryReactiveRecover(
+    input: AgentLoopInput,
+    error: CanonicalModelError,
+    messages: CanonicalMessage[],
+    hasAttemptedCompact: boolean,
+  ): Promise<ContextRecoveryDecision | undefined> {
+    const ctx: AgentContextRuntime | undefined = this.dependencies.context;
+    if (!ctx?.recoverFromModelError) {
+      return undefined;
+    }
+    try {
+      return await ctx.recoverFromModelError({
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        error,
+        messages,
+        hasAttemptedCompact,
+      });
+    } catch {
+      // Recovery probe should never block fallback. Pretend the runtime gave up.
+      return undefined;
+    }
+  }
+
   private async createModelRequest(messages: CanonicalMessage[]): Promise<CanonicalModelRequest> {
     const contextRuntime = this.dependencies.context ?? new NullContextRuntime();
     const prepared = await contextRuntime.prepareForModel({
@@ -303,6 +384,10 @@ export class AgentLoop {
       now: this.now,
       env: this.config.env,
       maxResultBytes: this.config.maxResultBytes,
+      // Forwarded so tools that need secondary model calls (e.g. `agent`
+      // subagents, `web_fetch` extraction) can pull a model client without
+      // wiring one through dependency injection.
+      model: this.dependencies.model,
     };
   }
 
@@ -382,6 +467,39 @@ function cloneMessages(messages: CanonicalMessage[]): CanonicalMessage[] {
     ...message,
     content: message.content.map((block) => ({ ...block })),
   }));
+}
+
+const OUTPUT_TOKEN_RETRY_DEFAULT = 4_096;
+const OUTPUT_TOKEN_RETRY_CEILING = 64_000;
+
+/** Keep only the trailing `keepRatio` portion of the message history. */
+function truncateHeadKeepRatio(messages: CanonicalMessage[], keepRatio: number): CanonicalMessage[] {
+  const ratio = Math.max(0.05, Math.min(1, keepRatio));
+  const keep = Math.max(1, Math.floor(messages.length * ratio));
+  return messages.slice(-keep);
+}
+
+/**
+ * Drop the trailing `[assistant_message_with_partial_tool_call,
+ * synthetic_tool_result]` pair the loop just appended on a model error so a
+ * retry doesn't replay an unfinished tool call. Safe no-op if the trailing
+ * shape doesn't match.
+ */
+function stripTrailingErrorPair(messages: CanonicalMessage[]): CanonicalMessage[] {
+  const out = [...messages];
+  const last = out[out.length - 1];
+  if (
+    last &&
+    last.role === "user" &&
+    last.content.every((block) => block.type === "tool_result")
+  ) {
+    out.pop();
+  }
+  const newLast = out[out.length - 1];
+  if (newLast && newLast.role === "assistant") {
+    out.pop();
+  }
+  return out;
 }
 
 function collectPermissionDenials(results: PolitDeckToolResult[]): AgentPermissionDenial[] {

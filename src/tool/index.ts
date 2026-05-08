@@ -33,6 +33,9 @@ export type {
   PolitDeckToolDefinition,
   PolitDeckToolExecutionOutput,
   PolitDeckToolKind,
+  PolitDeckToolModelClient,
+  PolitDeckToolProgressEvent,
+  PolitDeckToolProgressSink,
   PolitDeckToolResultContent,
   PolitDeckToolRuntimeContext,
 } from "./protocol/types.js";
@@ -40,6 +43,15 @@ export { ToolRegistry } from "./registry/ToolRegistry.js";
 export { createBuiltinRegistry, type CreateBuiltinRegistryOptions } from "./registry/createBuiltinRegistry.js";
 export { SequentialToolScheduler } from "./scheduler/SequentialToolScheduler.js";
 export type { PolitDeckToolScheduler } from "./scheduler/ToolScheduler.js";
+export {
+  BUILTIN_SUBAGENTS,
+  createAgentTool,
+  type AgentSubagentDefinition,
+  type AgentSubagentType,
+  type AgentToolInput,
+  type AgentToolOutput,
+  type CreateAgentToolOptions,
+} from "./builtin/agent.js";
 export { createReadFileTool, type ReadFileInput } from "./builtin/readFile.js";
 export { createGlobTool, type GlobInput } from "./builtin/glob.js";
 export { createGrepTool, type GrepInput } from "./builtin/grep.js";

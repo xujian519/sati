@@ -5,6 +5,10 @@ export type PolitDeckCommandOptions = {
   env?: NodeJS.ProcessEnv;
   timeoutMs: number;
   signal?: AbortSignal;
+  /** Called on each stdout chunk as it arrives. Errors thrown by the callback are swallowed. */
+  onStdout?: (chunk: string) => void;
+  /** Called on each stderr chunk as it arrives. Errors thrown by the callback are swallowed. */
+  onStderr?: (chunk: string) => void;
 };
 
 export type PolitDeckCommandResult = {
@@ -43,9 +47,23 @@ export class NodeShellCommandRunner implements PolitDeckCommandRunner {
       child.stderr?.setEncoding("utf8");
       child.stdout?.on("data", (chunk: string) => {
         stdout += chunk;
+        if (options.onStdout) {
+          try {
+            options.onStdout(chunk);
+          } catch {
+            // Progress callbacks are fire-and-forget; never crash the runner.
+          }
+        }
       });
       child.stderr?.on("data", (chunk: string) => {
         stderr += chunk;
+        if (options.onStderr) {
+          try {
+            options.onStderr(chunk);
+          } catch {
+            // Progress callbacks are fire-and-forget; never crash the runner.
+          }
+        }
       });
       child.on("error", (error) => {
         clearTimeout(timeout);

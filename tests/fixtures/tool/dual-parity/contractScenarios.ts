@@ -160,11 +160,12 @@ export const dualParityContractScenarios: DualParityContractScenario[] = [
   },
   {
     id: "agent-contract",
-    status: "deferred",
+    status: "intentional_difference",
     legacy: { toolName: "Agent", input: { description: "task", prompt: "do it" } },
     politdeck: { toolName: "agent", input: { description: "task", prompt: "do it" } },
     compareFields: ["readOnly", "concurrencySafe", "openWorld"],
-    reason: "PolitDeck agent loop and subagent runtime are deferred.",
+    reason:
+      "PolitDeck `agent` is a P0 minimal subagent (single sync model call against one of 4 built-in presets: general_purpose / plan / verify / explore). Legacy `Agent` ships a full forked loop with async/background/worktree/swarm. Full fork is tracked under deferred gate `agent-subagent-fork-full`.",
   },
   {
     id: "task-output-contract",

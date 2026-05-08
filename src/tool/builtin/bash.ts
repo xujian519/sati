@@ -42,11 +42,33 @@ export function createBashTool(options?: CreateBashToolOptions): PolitDeckToolDe
     checkPermissions: async (input) => classifyBashPermission(input.command),
     execute: async (input, context) => {
       const timeoutMs = Math.min(Math.max(1, input.timeoutMs ?? defaultTimeoutMs), maxTimeoutMs);
+      const progress = context.progress;
+      const toolCallId = ""; // ToolRuntime fills this via metadata; we pull from context if available.
+      const emitProgress = progress
+        ? (stream: "stdout" | "stderr") => (chunk: string) => {
+            try {
+              progress({
+                type: "tool_progress",
+                sessionId: context.sessionId,
+                turnId: context.turnId,
+                toolCallId,
+                toolName: "bash",
+                message: `${stream}: ${chunk.length} bytes`,
+                metadata: { stream, chunk, byteCount: Buffer.byteLength(chunk, "utf8") },
+                createdAt: (context.now?.() ?? new Date()).toISOString(),
+              });
+            } catch {
+              // Progress sinks are fire-and-forget; never crash the tool.
+            }
+          }
+        : undefined;
       const result = await runner.run(input.command, {
         cwd: context.cwd,
         env: context.env,
         timeoutMs,
         signal: context.abortSignal,
+        onStdout: emitProgress?.("stdout"),
+        onStderr: emitProgress?.("stderr"),
       });
 
       if (result.timedOut) {

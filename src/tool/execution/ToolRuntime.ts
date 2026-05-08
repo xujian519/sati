@@ -159,8 +159,19 @@ export class ToolRuntime {
     }
 
     executeInput = decision.updatedInput ?? executeInput;
+    const executeContext: PolitDeckToolRuntimeContext = context.progress
+      ? {
+          ...context,
+          progress: (event) =>
+            context.progress!({
+              ...event,
+              toolCallId: event.toolCallId || call.id,
+              toolName: event.toolName || tool.name,
+            }),
+        }
+      : context;
     try {
-      const output = await tool.execute(executeInput, context);
+      const output = await tool.execute(executeInput, executeContext);
       const maxResultBytes = tool.maxResultBytes ?? context.maxResultBytes;
       const limited = applyResultSizeLimit(output.content, maxResultBytes);
       const completedAt = now(context).toISOString();
