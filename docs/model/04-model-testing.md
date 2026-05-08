@@ -10,7 +10,7 @@
 /Users/gucc1/Codes/work/modelbest/PolitDeck/tests/
 ```
 
-建议组织：
+当前组织：
 
 ```text
 tests/
@@ -21,13 +21,17 @@ tests/
 
     protocols/
       anthropic-request.test.ts
-      anthropic-live.test.ts
       openai-request.test.ts
-      openai-live.test.ts
+      response-and-stream.test.ts
 
-    fixtures/
-      politdeck.valid.yaml
-      politdeck.missing-api-key.yaml
+    runtime/
+      model-runtime.test.ts
+
+    e2e/
+      real-model-request.test.ts
+      stream-real-model.ts
+
+    helpers.ts
 ```
 
 ## 测试方法
@@ -65,7 +69,7 @@ tests/
 
 ### 响应解析测试
 
-响应解析、流式解析和 provider 错误归一化测试采用真实端到端形式。测试从 `Model.stream()` 或 `Model.complete()` 发起真实请求，使用配置中的真实 `url` 和 API key，经过 provider adapter 的请求构造、真实 provider 响应读取、事件归一化和错误归一化，最后断言对 agent loop 暴露的 canonical event、canonical response 或 `CanonicalModelError`。
+默认响应解析、流式解析和 provider 错误归一化测试使用固定 raw response、SSE chunk 或 fake transport，不访问真实网络。它们覆盖 provider adapter 的请求构造、响应读取、事件归一化和错误归一化，最后断言对 agent loop 暴露的 canonical event、canonical response 或 `CanonicalModelError`。
 
 覆盖：
 
@@ -77,7 +81,7 @@ tests/
 
 ### 流式解析测试
 
-流式解析测试使用真实 provider streaming API。断言必须覆盖从 `Model.stream()` 到最终 canonical event 序列的完整链路，而不是只测试某个局部 parser 函数。
+流式解析测试默认使用固定 SSE chunk 或 fake transport。断言覆盖从 `ModelRuntime.stream()` 到最终 canonical event 序列的链路，也保留 provider stream normalizer 的局部解析用例。
 
 覆盖：
 
@@ -90,7 +94,7 @@ tests/
 - usage 事件。
 - stream error。
 
-真实 API 测试应从受控测试配置读取 `url`、API key 和 model id。CI 默认可以跳过这组测试，只有在显式提供密钥和启用集成测试开关时运行，避免普通单元测试依赖外部网络和费用。
+真实 API 测试集中在 `tests/model/e2e/`。`real-model-request.test.ts` 只有在 `POLITDECK_RUN_REAL_MODEL_E2E=1` 时运行，并从当前 PolitHome 配置读取 `url`、API key 和 model id，避免普通单元测试依赖外部网络和费用。
 
 ### Capabilities 测试
 
@@ -149,20 +153,20 @@ model:
 - 选定 model 的 thinking 默认关闭。
 - 选定 model 的 prompt cache 默认关闭。
 
-### 用例 3：Anthropic tool_use 真实端到端解析
+### 用例 3：Anthropic tool_use 解析
 
 断言：
 
-- `Model.stream()` 使用真实 Anthropic-compatible `url` 和 API key 后输出稳定 canonical event 序列。
+- `ModelRuntime.stream()` 在 fake transport 或固定 stream chunk 下输出稳定 canonical event 序列。
 - `tool_use` block 被解析为 `CanonicalToolCall`。
 - tool call id、name、input 保持稳定。
 - 原始响应保留在 raw 字段。
 
-### 用例 4：OpenAI tool_call 真实端到端解析
+### 用例 4：OpenAI tool_call 解析
 
 断言：
 
-- `Model.stream()` 使用真实 OpenAI-compatible `url` 和 API key 后输出稳定 canonical event 序列。
+- `ModelRuntime.stream()` 在 fake transport 或固定 stream chunk 下输出稳定 canonical event 序列。
 - OpenAI tool call delta 可以合并成完整 `CanonicalToolCall`。
 - arguments JSON 解析失败时返回可分类错误。该错误分支可以使用 mock transport 或构造 parser 输入覆盖，因为真实 provider 不稳定地产生非法 JSON 不适合作为常规集成断言。
 
@@ -200,13 +204,13 @@ model:
 
 断言统一返回 `ModelConfigError`。
 
-### 用例 8：provider 错误真实端到端归一化
+### 用例 8：provider 错误归一化
 
-输入真实 provider 请求，覆盖至少一种稳定可触发错误，例如无效 API key、无效 model id 或超过上下文/输出限制。限流这类不稳定错误可保留 mock transport 测试。
+输入 fake transport 或固定错误响应，覆盖至少一种稳定可触发错误，例如无效 API key、无效 model id、非 JSON 错误响应或超过上下文/输出限制。限流这类不稳定错误可保留 mock transport 测试。
 
 断言：
 
-- `Model.stream()` 或 `Model.complete()` 返回统一 `CanonicalModelError`。
+- `ModelRuntime.stream()` 通过 `error` event 返回统一 `CanonicalModelError`，`ModelRuntime.complete()` 通过 `ModelProviderError` 携带统一错误。
 - `status`、`code`、`retryable` 和 `raw` 保持稳定。
 - agent loop 不需要读取 Anthropic/OpenAI SDK 的原始错误类型。
 

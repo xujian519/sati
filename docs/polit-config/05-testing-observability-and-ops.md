@@ -6,7 +6,7 @@
 
 `polit/config` 必须从第一天具备确定性测试。当前业务只推进到 `model` 模块，因此测试重点是通用配置运行时和 `model` 配置段。
 
-测试应覆盖：
+当前测试已经覆盖 YAML 读取、来源合并、env credential 解析、禁止 YAML `polit` 段、project chat dir 派生和 reload 失败保旧。后续测试应继续覆盖：
 
 - YAML 读取。
 - 多来源合并。
@@ -18,28 +18,25 @@
 - 热重载成功。
 - 热重载失败保旧。
 - 变更分类。
-- 事件和诊断脱敏。
+- 成功 reload 事件和诊断脱敏。
 - watcher 竞态。
 
 ## 单元测试
 
-建议测试对象：
+当前源码中的主要测试对象：
 
 ```text
-parseYamlConfig()
+loadPolitConfig()
+createPolitConfigStore()
 mergeConfigSources()
-resolveConfigSecrets()
-validatePolitConfig()
-normalizePolitConfig()
-createConfigSnapshot()
 diffConfigSnapshots()
 classifyConfigChanges()
-redactConfigForDiagnostics()
+redactConfig()
 ```
 
 重点用例：
 
-- 空配置生成安全默认值。
+- 空配置缺少 `model` 段时报 `CONFIG_MODEL_MISSING`。
 - 缺失 `schemaVersion` 产生 warning。
 - 未知字段产生 warning。
 - 非法 enum 产生 error。
@@ -47,7 +44,7 @@ redactConfigForDiagnostics()
 - `null` 清空可选字段。
 - `${ENV}` 引用成功。
 - `${ENV}` 缺失失败。
-- 明文 API key 产生 warning。
+- 明文 API key 被接受且在诊断/输出中脱敏。
 - 默认模型不存在时报错。
 - provider protocol 非法时报错。
 - provider URL 非法时报错。
@@ -68,7 +65,7 @@ delete file falls back or reports diagnostics
 rename temp file save is handled
 concurrent reloads are serialized
 stale async rebuild cannot overwrite newer snapshot
-restart-required changes are reported
+restart-required changes are reported（未来扩展）
 secret changes are not logged
 ```
 
@@ -76,8 +73,8 @@ secret changes are not logged
 
 - `snapshot.version` 单调递增。
 - reload 失败时 version 不变。
-- `lastReloadError` 可查询。
-- `config.reload.failed` 事件包含诊断。
+- `lastReloadDiagnostics` 可通过 `getDiagnostics()` 查询。
+- reload 失败时 `getDiagnostics()` 包含失败诊断；当前失败 reload 不发布 subscriber 事件。
 - 当前模型请求绑定旧 snapshot。
 - 后续模型请求使用新 snapshot。
 
@@ -93,13 +90,13 @@ secret changes are not logged
 - 修改 timeout、headers、retry 后，后续 request builder 使用新参数。
 - 修改 model capabilities 后，后续请求校验和构造使用新能力。
 - 修改 multimodal constraints 后，后续 canonical content block 校验使用新限制。
-- 非法 model 配置热重载失败后，旧 provider registry 继续可用。
+- 非法 model 配置热重载失败后，旧 snapshot 继续可用。
 
 这些测试可以使用 fake transport 和 fake provider adapter，不需要真实外部服务。
 
 ## Conformance Tests
 
-配置系统应提供跨入口一致性测试：
+跨入口一致性测试是未来目标。当前源码尚未实现 CLI/SDK/TUI/remote adapter 入口：
 
 ```text
 CLI config loading
@@ -108,9 +105,7 @@ TUI config loading
 remote config loading
 ```
 
-同一组 source 输入必须产出相同 snapshot。
-
-adapter 不能增加新的 source 类型。当前阶段所有入口只能使用 `default`、`project`、`env` 三类来源，并且必须产出相同 snapshot。
+未来同一组 source 输入必须产出相同 snapshot。adapter 不能增加新的 source 类型；当前阶段所有入口只能使用 `default`、`project`、`env` 三类来源，并且必须产出相同 snapshot。
 
 ## 诊断输出
 
@@ -167,7 +162,7 @@ hint: Add the model under model.providers.<provider>.models or change model.defa
 
 ## 日志
 
-建议日志事件：
+未来可扩展日志事件：
 
 ```text
 config.load.start
@@ -181,7 +176,7 @@ config.change.restart_required
 config.secret.reference_missing
 ```
 
-日志必须包含：
+未来日志应包含：
 
 - snapshot version。
 - source summary。
@@ -193,7 +188,7 @@ config.secret.reference_missing
 
 ## Audit
 
-模型连接相关配置变化必须进入 audit。
+模型连接相关配置变化未来必须进入 audit。当前实现只提供 changed paths、change classes 和诊断，没有 audit sink。
 
 包括：
 
@@ -208,7 +203,7 @@ config.secret.reference_missing
 - `model.capabilities`。
 - `model.multimodal`。
 
-audit 记录应包含：
+未来 audit 记录应包含：
 
 ```text
 timestamp
@@ -220,11 +215,11 @@ changedPaths
 changeClass
 ```
 
-交互式 UI 可以把高风险变更显示给用户确认。headless 场景至少要写入 audit sink。
+未来交互式 UI 可以把高风险变更显示给用户确认。headless 场景至少要写入 audit sink。
 
 ## Debug 命令
 
-建议 CLI 提供：
+未来 CLI 可提供：
 
 ```text
 politdeck config validate
@@ -247,14 +242,14 @@ politdeck config reload
 启动失败：
 
 - YAML 语法错误：阻止启动。
-- 必需 secret 缺失：阻止需要该 provider 的模型请求；是否阻止启动取决于是否有可用默认模型。
+- 任一 provider 的 `apiKey` 缺失或环境变量引用无法解析：当前加载直接失败。
 - 默认 provider 或默认模型非法：阻止模型请求。
 - provider protocol 或 URL 非法：阻止该 provider 可用。
 
 热重载失败：
 
 - 保留旧 snapshot。
-- 发布 failure 事件。
+- 保存失败诊断；当前不发布 failure 事件。
 - 记录诊断。
 - UI/CLI 显示错误。
 - 不影响当前模型请求。
@@ -274,13 +269,13 @@ politdeck config reload
 - secret 解析不能做慢速网络请求。
 - watcher debounce 避免编辑器保存风暴。
 - snapshot diff 只比较结构化配置，不扫描工作区。
-- provider registry rebuild 可以异步进行，但要绑定 snapshot version。
+- 如果调用方异步重建 model runtime，需要绑定 snapshot version。
 
 如果未来 secret backend 或 remote config 需要网络访问，应把它们设计为独立 provider，并明确 timeout、cache 和失败策略。
 
 ## 文档与示例
 
-配置模块应维护示例文件：
+未来配置模块应维护示例文件：
 
 ```text
 examples/politdeck.yaml
@@ -289,7 +284,7 @@ examples/politdeck.model.yaml
 examples/politdeck.model-openai.yaml
 ```
 
-示例必须保持可通过 `config validate`。包含 secret 的示例只能使用 `${ENV_NAME}`。
+示例未来必须保持可通过 `config validate`。包含 secret 的示例只能使用 `${ENV_NAME}`。
 
 ## 发布前检查清单
 
@@ -300,8 +295,8 @@ examples/politdeck.model-openai.yaml
 - 是否有 `default/project/env` source 优先级测试。
 - 是否有热重载失败保旧测试。
 - 是否有 secret 脱敏测试。
-- 是否有 restart-required 变更分类。
+- 是否有 restart-required 变更分类（当前类型保留但 diff 不会报告 `POLIT_HOME`）。
 - 是否有当前模型请求绑定 snapshot 的行为测试。
 - 是否有 CLI/SDK 一致性测试。
 
-配置系统完成后，`model` 模块才应该接入真实运行时配置。其他业务模块进入实现阶段时，再扩展各自的配置 schema、热重载语义和集成测试。
+当前 `model` 模块已经可以通过 `loadPolitConfig()` 和 `createModelRuntime(snapshot.config.model)` 接入真实运行时配置。其他业务模块进入实现阶段时，再扩展各自的配置 schema、热重载语义和集成测试。

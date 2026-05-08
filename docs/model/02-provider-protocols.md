@@ -7,9 +7,9 @@
 当前阶段支持两类协议格式：
 
 - `anthropic`：Anthropic Messages API 风格协议。
-- `openai`：OpenAI Chat Completions / Responses 兼容风格协议。
+- `openai`：OpenAI Chat Completions 兼容风格协议。
 
-这里的协议类型不等于厂商名称。未来其他厂商如果兼容 OpenAI 协议，可以通过 `protocol: openai` 接入；如果提供独立协议，则新增 provider adapter。
+这里的协议类型不等于厂商名称。未来其他厂商如果兼容 OpenAI Chat Completions 协议，可以通过 `protocol: openai` 接入；如果提供独立协议，则新增 provider adapter。当前实现尚未接入 OpenAI Responses API。
 
 ## Canonical Request
 
@@ -59,16 +59,16 @@ Anthropic 响应中需要解析：
 
 ## OpenAI 协议
 
-OpenAI adapter 负责把 canonical request 转换为 OpenAI Chat Completions 或 Responses API 语义。
+OpenAI adapter 负责把 canonical request 转换为 OpenAI Chat Completions 语义，请求发送到 provider URL 下的 `chat/completions`。
 
 转换重点：
 
-- `systemPrompt` 转为 system/developer message。
+- `systemPrompt` 转为 system message。
 - `messages` 转为 OpenAI message list。
 - `tools` 转为 OpenAI function/tool schema。
 - `tool_use` 转为 tool call。
 - `tool_result` 转为 tool role message。
-- `maxOutputTokens` 转为 `max_tokens` 或对应字段。
+- `maxOutputTokens` 转为 `max_tokens`。
 - `thinking` 默认不启用，除非具体 model capabilities 声明支持。
 - 图片、音频等多模态内容必须按选定 model 的 `multimodal.input` 列表和限制项转换。
 - 流式响应解析为统一事件。
@@ -79,7 +79,6 @@ OpenAI 响应中需要解析：
 - tool call delta。
 - finish reason。
 - usage。
-- refusal 或 safety 类响应。
 - API error。
 
 ## 统一事件

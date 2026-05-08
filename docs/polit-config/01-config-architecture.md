@@ -1,6 +1,6 @@
 # Config 模块架构
 
-本文定义重写方案中 `src/polit/config` 的职责、边界和内部结构。该模块属于 `polit` 基础层，与 `src/polit/paths`、`src/polit/runtime` 一起为上层 runtime 提供产品级默认行为。
+本文定义当前 `src/polit/config` 的职责、边界和内部结构。该模块属于 `polit` 基础层，与 `src/polit/paths` 一起为上层 runtime 提供产品级默认行为。
 
 当前业务只进行到 `model` 模块，因此本文只把 `model` 作为已接入配置系统的业务模块展开。其他模块的配置段是未来阶段的扩展目标，不在当前阶段设计具体字段或运行时语义。
 
@@ -19,7 +19,7 @@
 - 生成不可变 `PolitConfigSnapshot`。
 - 向 `model` 模块分发 `model` 配置段。
 - 监听配置变化并热重载。
-- 产出配置诊断、变更事件和审计记录。
+- 产出配置诊断和成功 reload 事件。
 
 它不负责：
 
@@ -30,28 +30,26 @@
 
 ## 依赖方向
 
-`polit/config` 位于架构底层，只能依赖通用基础能力：
+当前 `polit/config` 位于产品基础层，但会调用 `model/config` 对 `model` 配置段做结构和语义校验：
 
 ```text
 polit/config
   -> polit/paths
-  -> shared/fs
-  -> shared/schema
-  -> shared/errors
-  -> shared/events
+  -> model/config/parseModelConfig
+  -> model/config/schema
+  -> model/protocol/errors
 ```
 
 上层模块依赖它：
 
 ```text
 model
-adapters
   -> polit/config
 ```
 
-当前阶段只有 `model` 和 adapter 需要直接接入 `polit/config`。未来 `agent`、`context`、`tool`、`permission`、`session`、`extension` 等模块接入时，也应保持同样依赖方向。
+当前阶段只有 `model` 相关运行时需要直接消费 `polit/config` 产出的 `snapshot.config.model`。未来 `agent`、`context`、`tool`、`permission`、`session`、`extension` 等模块接入时，也应通过 snapshot 消费配置。
 
-`polit/config` 不应反向依赖 `model` 或任意 adapter。配置模块可以知道 `model` 配置段名字，但不能调用 `model` 模块的运行时代码。
+`polit/config` 可以调用 `model/config` 的纯解析逻辑，但不能调用 `ModelRuntime`、provider transport 或任意业务执行代码。
 
 ## 核心对象
 
@@ -115,7 +113,7 @@ contentHash?: string
 - `project`：来自当前项目目录的项目级 YAML 配置。
 - `env`：来自环境变量的覆盖项，包括 `POLIT_HOME` 和 model 相关覆盖。
 
-`source` 用于诊断和审计。用户看到配置冲突、无效字段或热重载失败时，必须能知道问题来自哪一层配置。
+`source` 用于诊断。用户看到配置冲突、无效字段或热重载失败时，必须能知道问题来自哪一层配置。
 
 抽象上保留 `kind`、`priority`、`path`、`contentHash` 等字段，未来可以添加 remote、managed profile、adapter override 等来源，但当前实现不接入这些来源。
 
@@ -176,10 +174,10 @@ PolitConfigSnapshot
 resolve PolitHome from default and env
   -> load ${PolitHome}/politdeck.yaml
   -> load project config
-  -> collect env overrides
+  -> collect supported env overrides
   -> parse YAML
   -> merge
-  -> resolve env and secret refs
+  -> resolve API key env refs while parsing model config
   -> validate
   -> normalize
   -> freeze snapshot
@@ -211,14 +209,14 @@ getPolitProjectChatDir(projectRoot) -> ${PolitHome}/projects/<project-id>/chats
 
 ### 与 adapters
 
-CLI、TUI、SDK、remote adapter 可以传入临时覆盖项，例如：
+未来 CLI、TUI、SDK、remote adapter 可以传入临时覆盖项，例如：
 
 ```text
 --model
 --provider
 ```
 
-当前阶段不实现额外覆盖来源。adapter 如需影响配置，应通过环境变量或项目级配置进入 `polit/config`，不应绕过 config store 直接修改 `model` 模块。
+当前阶段不实现额外覆盖来源。调用方如需影响配置，只能使用项目级配置或已实现的环境变量覆盖项：`POLIT_MODEL_DEFAULT_PROVIDER`、`POLIT_MODEL_DEFAULT_MODEL`、`POLIT_MODEL_FALLBACK_MODEL`。它们不应绕过 config store 直接修改 `model` 模块。
 
 ### 与业务模块
 

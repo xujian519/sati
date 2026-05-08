@@ -2,7 +2,7 @@
 
 本文定义 `polit/config` 热重载的运行时语义。目标是在不重启 `PolitDeck` 的情况下让配置变更对后续模型请求生效，同时保证正在执行的模型请求不被破坏。
 
-当前业务只推进到 `model` 模块，因此本文只展开 `model` 配置的热重载影响。snapshot、watcher、事件、失败保旧、变更分类等属于通用机制，仍在当前阶段设计。
+当前业务只推进到 `model` 模块，因此本文只展开 `model` 配置的热重载影响。snapshot、watcher、失败保旧、变更分类和成功 reload 订阅事件已经有基础实现；审计日志、命名事件总线和 restart-required 检测仍未实现。
 
 ## 热重载目标
 
@@ -14,7 +14,7 @@
 - 无效配置不会覆盖当前有效配置。
 - 当前模型请求的行为保持稳定。
 - 后续模型请求能使用最新有效配置。
-- 关键变更产生事件和审计记录。
+- 成功 reload 通过 `PolitConfigStore.subscribe()` 通知 listener。
 - secret 不泄露到日志、事件或持久化记录。
 
 ## 非目标
@@ -34,15 +34,15 @@
 
 ### Snapshot 绑定
 
-每次模型请求在构造时绑定一个 `PolitConfigSnapshot`：
+当前实现中，调用方先从 `PolitConfigStore` 读取 snapshot，再用 `snapshot.config.model` 创建或调用 `ModelRuntime`：
 
 ```text
-model.request.build
-  -> configStore.getSnapshot()
-  -> modelRequest.configSnapshot = snapshot
+configStore.getSnapshot()
+  -> createModelRuntime(snapshot.config.model)
+  -> ModelRuntime.stream/complete(request)
 ```
 
-该模型请求后续的 request builder、provider adapter、response parser 和 streaming parser 都读取这个 snapshot。这样可以避免同一个模型请求内配置前后不一致。
+`ModelRuntime` 持有创建时传入的 `ModelConfig`。reload 不会改写已经创建的 runtime，因此已发起请求不会在过程中切换 API key、URL、headers 或 capabilities。调用方如需让后续请求使用新配置，需要用新 snapshot 创建或选择新的 runtime。
 
 ### 原子发布
 
@@ -56,7 +56,7 @@ file changed
   -> publish candidate
 ```
 
-只有候选 snapshot 完全有效时，才替换 `ConfigStore.current`。
+只有候选 snapshot 完全有效时，才替换 `currentSnapshot`，并向订阅者发布 `PolitConfigReloadEvent`。
 
 ### 失败保旧
 
@@ -64,15 +64,15 @@ file changed
 
 ```text
 current snapshot remains active
-lastReloadError = diagnostics
-emit config.reload.failed
+lastReloadDiagnostics = diagnostics
+reload promise rejects
 ```
 
-运行时继续使用旧 snapshot。
+运行时继续使用旧 snapshot。当前实现会把失败诊断保存到 `lastReloadDiagnostics`，通过 `getDiagnostics()` 查询；失败 reload 不会向 subscriber 发布事件。
 
 ## Watcher 设计
 
-`PolitConfigWatcher` 应监听：
+`startWatching()` 当前监听：
 
 - `${PolitHome}/politdeck.yaml`。
 - 当前 workspace 的项目级配置。
@@ -85,10 +85,10 @@ emit config.reload.failed
 - 处理符号链接解析后的真实路径。
 - watcher 失败时降级为手动 reload，不应导致 agent loop 崩溃。
 
-建议 debounce：
+当前默认 debounce：
 
 ```text
-100ms - 500ms
+250ms
 ```
 
 配置文件通常很小，不需要复杂增量解析。每次 reload 都可以完整读取和校验。
@@ -98,7 +98,7 @@ emit config.reload.failed
 除自动 watcher 外，应提供手动 reload API：
 
 ```text
-configStore.reload(reason)
+configStore.reload(reason?)
 ```
 
 常见来源：
@@ -113,9 +113,9 @@ configStore.reload(reason)
 
 ## 变更分类
 
-热重载必须对新旧 snapshot 做 diff，并给出变更分类。
+热重载会对新旧 snapshot 的 `config` 字段做结构 diff，并给出变更分类。
 
-建议分类：
+类型中保留以下分类：
 
 ```text
 runtime-live
@@ -124,6 +124,17 @@ next-runtime
 restart-required
 invalid
 ```
+
+### 当前分类实现
+
+当前 `classifyConfigChanges()` 的实现很保守：
+
+```text
+changed path starts with "model." -> next-request
+other changed path                   -> next-runtime
+```
+
+由于 snapshot 当前只包含 `config.model`，实际发布的业务变更通常都是 `next-request`。
 
 ### runtime-live
 
@@ -175,7 +186,7 @@ invalid
 - cache 根目录迁移。
 - 底层进程级 proxy 或证书配置。
 
-`PolitHome` 不来自 YAML，只能由环境变量改变。进程运行期间如果检测到 `POLIT_HOME` 变化，应标记为 `restart-required`，不在当前进程内迁移配置、缓存或聊天记录目录。
+`PolitHome` 不来自 YAML，只能由环境变量改变。当前 snapshot 的业务 config 不包含 `PolitHome`，因此当前实现不会通过 diff 把 `POLIT_HOME` 变化分类为 `restart-required`。如果未来支持运行时检测 `POLIT_HOME` 变化，应标记为 `restart-required`，不在当前进程内迁移配置、缓存或聊天记录目录。
 
 ### invalid
 
@@ -194,9 +205,9 @@ invalid
 
 ## 配置事件
 
-热重载应进入统一事件流，但不要进入模型上下文。
+当前没有独立的命名配置事件总线，只有 `PolitConfigStore.subscribe()` 的成功 reload 事件。事件不要进入模型上下文。
 
-建议事件：
+未来可扩展命名事件：
 
 ```text
 config.load.started
@@ -210,16 +221,13 @@ config.snapshot.published
 config.restart.required
 ```
 
-事件 payload 建议包含：
+当前 `PolitConfigReloadEvent` payload 包含：
 
 ```text
-snapshotVersion
-previousSnapshotVersion
-schemaVersion
+previousSnapshot
+nextSnapshot
 changedPaths
 changeClasses
-sourceSummaries
-diagnostics
 ```
 
 payload 中不能包含未脱敏 secret。
@@ -228,13 +236,13 @@ payload 中不能包含未脱敏 secret。
 
 `ConfigStore.subscribe()` 的 listener 不应直接执行重活。
 
-建议协议：
+当前协议：
 
 ```text
 subscribe((event) => {
   event.previousSnapshot
   event.nextSnapshot
-  event.diff
+  event.changedPaths
   event.changeClasses
 })
 ```
@@ -250,7 +258,7 @@ listener 要求：
 
 ### Model
 
-`model` 模块对后续请求读取新配置。
+`model` 模块对后续请求读取新配置的前提是调用方用最新 snapshot 创建或选择 runtime。
 
 可热重载：
 
@@ -276,7 +284,7 @@ listener 要求：
 
 - 多次 reload 并发触发。
 - reload 时新的模型请求正在构造。
-- reload 时 provider registry 正在重建。
+- reload 时调用方可能正在为新 snapshot 创建 model runtime。
 - reload 时已有模型流正在消费。
 
 建议策略：
@@ -284,8 +292,8 @@ listener 要求：
 - reload 串行化，同一时间只允许一个 reload pipeline。
 - 新模型请求总是读取当时已发布的最新 snapshot。
 - 候选 snapshot 不对外可见。
-- resource rebuild 可以异步，但必须绑定目标 snapshot version。
-- 过期 rebuild 完成后不得覆盖更新版本。
+- 如果调用方在订阅事件后异步重建 runtime，应绑定目标 snapshot version。
+- 过期 runtime rebuild 完成后不得覆盖更新版本。
 
 ## 删除配置文件
 
@@ -293,10 +301,10 @@ listener 要求：
 
 - watcher 应触发 reload。
 - loader 应继续尝试项目级配置和 env overrides。
-- 如果缺失必需配置导致无法构造有效 snapshot，保留旧 snapshot。
-- 诊断应明确提示配置文件缺失。
+- 如果缺失必需 `model` 配置导致无法构造有效 snapshot，保留旧 snapshot。
+- 诊断会保存在 `lastReloadDiagnostics` 中；当前缺失文件本身不会单独记录 source，最终通常表现为 `CONFIG_MODEL_MISSING`。
 
-是否允许无配置启动取决于默认配置是否能满足最小运行条件。若没有可用模型，启动可以成功但发起模型请求时应给出明确模型配置错误。
+当前不允许无有效 `model` 配置启动；启动加载时缺失 `model` 段会抛出 `PolitConfigError`。
 
 ## 回滚
 
@@ -318,7 +326,7 @@ model.registry.reload.failed
 
 ## Model 安全与审计
 
-热重载可能改变模型连接边界，因此必须审计：
+热重载可能改变模型连接边界，因此未来应审计：
 
 - provider URL 变化。
 - provider protocol 变化。
@@ -329,7 +337,7 @@ model.registry.reload.failed
 - model capabilities 变化，尤其是 tool use、streaming、thinking、JSON schema、max context token。
 - multimodal input constraints 变化。
 
-这些变更应进入 audit log，并在交互式 UI 中提示用户。secret 值本身必须脱敏。
+这些变更未来应进入 audit log，并在交互式 UI 中提示用户。当前实现只提供 changed paths 和 change classes，secret 值本身必须脱敏。
 
 ## 推荐默认语义
 
@@ -337,8 +345,8 @@ model.registry.reload.failed
 
 - 当前模型请求绑定旧 snapshot。
 - 后续模型请求使用新 snapshot。
-- 诊断展示项可以 runtime-live。
-- path 大变更要求重启。
+- 当前变更分类主要是 `next-request`。
+- path 大变更的 `restart-required` 分类是未来扩展。
 - reload 失败保留旧 snapshot。
 
 这个语义最容易测试，也最不容易让 agent loop 在真实项目中出现不可解释行为。

@@ -14,7 +14,7 @@ ${PolitHome}/politdeck.yaml
 
 `PolitHome` 默认是 `~/.politdeck`，只能由内置默认值和环境变量控制，例如 `POLIT_HOME`。`PolitHome`、缓存目录、聊天记录目录等 `polit` 路径配置不允许出现在 YAML 中。
 
-项目级配置文件建议位于项目根目录：
+项目级配置文件位于调用方传入的 `projectRoot` 根目录：
 
 ```text
 <project>/.politdeck.yaml
@@ -42,9 +42,9 @@ default config: ${PolitHome}/politdeck.yaml
 
 - `default config` 是默认 YAML 配置文件，由 `PolitHome` 决定位置。
 - `project config` 只描述工作区相关覆盖，不应保存用户 secret。
-- `env overrides` 适合 CI/headless 场景，也负责控制 `PolitHome`。
+- `env overrides` 当前只支持 `POLIT_HOME` 以及 `POLIT_MODEL_DEFAULT_PROVIDER`、`POLIT_MODEL_DEFAULT_MODEL`、`POLIT_MODEL_FALLBACK_MODEL`。API key 通过配置中的 `${ENV_NAME}` 引用解析，不作为独立配置覆盖项。
 
-所有来源都必须记录在 `PolitConfigSnapshot.sources` 中。
+所有实际参与加载或覆盖的来源都会记录在 `PolitConfigSnapshot.sources` 中；不存在的默认/项目文件不会产生 source 记录。
 
 当前阶段 `PolitConfigSource.kind` 只允许：
 
@@ -54,7 +54,7 @@ project
 env
 ```
 
-抽象上仍保留 `priority`、`path`、`contentHash`、`loadedAt` 和 `diagnostics` 等字段，未来可扩展 remote config、managed profile 或 adapter override，但当前实现不读取这些来源。
+抽象上仍保留 `priority`、`path`、`contentHash`、`loadedAt` 和可选 `phase` 等字段，未来可扩展 remote config、managed profile 或 adapter override，但当前实现不读取这些来源。
 
 ### Env 的两阶段作用
 
@@ -73,7 +73,7 @@ env
 - scalar 由高优先级覆盖低优先级。
 - array 默认整体替换，不做去重拼接。
 - 对于 `model.providers`、`model.providers.<id>.models` 这类 map，按 provider id 或 model id 深度合并。
-- `null` 表示显式清空可选字段。
+- `null` 会按普通值参与覆盖；当前 model schema 多数可选字段只接受 `undefined` 或正确类型，因此不要依赖 `null` 清空字段。
 - 未知字段默认报 warning；稳定版可以升级为 error。
 
 不建议支持复杂模板、条件语句或脚本化配置。配置文件应保持声明式。
@@ -161,7 +161,7 @@ model:
 
 - `${NAME}` 从环境变量读取。
 - 缺失环境变量是配置错误。
-- 明文 secret 允许但应产生 warning。
+- 明文 secret 允许；当前实现不会为明文 `apiKey` 单独产生 warning。
 - 日志、诊断、事件和 snapshot debug 输出必须脱敏。
 
 未来可以扩展：
@@ -184,14 +184,13 @@ auth:
 
 ## Schema 版本
 
-`schemaVersion` 必须是顶层字段。
+`schemaVersion` 是顶层字段。当前实现只支持版本 `1`；缺失时按 `1` 处理并产生 warning。
 
 建议策略：
 
 - 缺失时按 `1` 处理并 warning。
 - 大于当前支持版本时报错。
-- 小版本兼容通过迁移器完成。
-- 迁移必须产生诊断，说明从哪个版本迁移到哪个版本。
+- 当前只支持 `schemaVersion: 1`；没有实现迁移器。
 
 ## 校验层次
 
@@ -216,22 +215,23 @@ syntax validation
 - `model.providers.<id>.url` 必须是合法 URL。
 - `model.providers.<id>.apiKey` 的环境变量引用必须可解析。
 - `model.providers.<id>.models` 不能为空。
-- `model.providers.<id>.models.<model>.capabilities` 必须包含 request builder 所需能力字段。
+- `model.providers.<id>.models.<model>.capabilities` 可以缺省，缺省时使用协议默认值；出现的字段必须类型正确。
 - `model.providers.<id>.models.<model>.multimodal.input` 只能包含当前 canonical protocol 支持的输入模态。
 
 ## 错误模型
 
-配置错误建议统一为：
+当前配置诊断结构为：
 
 ```text
-ConfigError
+PolitConfigDiagnostic
   code
-  message
-  source
-  path
   severity
-  recoverable
+  message
+  path?
+  source?
   hint
+  redactedValue?
+  recoverable?
 ```
 
 `severity` 支持：
@@ -243,4 +243,4 @@ error
 fatal
 ```
 
-启动时遇到 `fatal` 应阻止 runtime 启动。热重载时遇到 `fatal` 不应替换当前 snapshot，而是保留旧配置并发布 `config.reload.failed`。
+启动时遇到 `fatal` 会抛出 `PolitConfigError`。热重载时遇到 `fatal` 不替换当前 snapshot，`PolitConfigStore` 会保留旧 snapshot 并保存最近一次失败诊断；当前实现不会为失败 reload 发布订阅事件。
