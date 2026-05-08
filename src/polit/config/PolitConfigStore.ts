@@ -1,6 +1,6 @@
 import { existsSync, watch, type FSWatcher } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { getPolitConfigFilePath, resolvePolitHome } from "../paths.js";
+import { dirname } from "node:path";
+import { getPolitConfigFilePath, getPolitProjectConfigFilePath, resolvePolitHome } from "../paths.js";
 import { classifyConfigChanges, diffConfigSnapshots } from "./classifyChanges.js";
 import { loadPolitConfig } from "./loadPolitConfig.js";
 import {
@@ -148,7 +148,7 @@ class DefaultPolitConfigStore implements PolitConfigStore {
     const politHome = resolvePolitHome(env);
     const paths = [getPolitConfigFilePath(politHome)];
     if (this.options.projectRoot) {
-      paths.push(resolve(this.options.projectRoot, ".politdeck.yaml"));
+      paths.push(getPolitProjectConfigFilePath(this.options.projectRoot));
     }
     return paths;
   }

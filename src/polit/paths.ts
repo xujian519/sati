@@ -22,6 +22,10 @@ export function getPolitConfigFilePath(politHome: string): string {
   return resolve(politHome, POLIT_CONFIG_FILE_NAME);
 }
 
+export function getPolitProjectConfigFilePath(projectRoot: string): string {
+  return resolve(projectRoot, POLIT_PROJECT_DIR_NAME, POLIT_CONFIG_FILE_NAME);
+}
+
 export function getPolitProjectChatDir(projectRoot: string, politHome: string): string {
   return resolve(politHome, "projects", createProjectId(projectRoot), "chats");
 }

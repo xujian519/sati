@@ -15,6 +15,8 @@ import {
 export type AgentSessionOptions = {
   sessionId: string;
   turnRunner: TurnRunner;
+  cwd?: string;
+  transcriptPath?: string;
   uuid?: () => string;
   initialState?: AgentSessionStateShape;
   replayEvents?: AgentEvent[];
@@ -38,8 +40,8 @@ export class AgentSession {
       event: "SessionStart",
       baseInput: {
         sessionId: this.state.sessionId,
-        transcriptPath: "",
-        cwd: process.cwd(),
+        transcriptPath: this.options.transcriptPath ?? "",
+        cwd: this.options.cwd ?? process.cwd(),
       },
       payload: { source: "startup" },
       matchQuery: "SessionStart",
@@ -67,8 +69,8 @@ export class AgentSession {
       event: "SessionEnd",
       baseInput: {
         sessionId: this.state.sessionId,
-        transcriptPath: "",
-        cwd: process.cwd(),
+        transcriptPath: this.options.transcriptPath ?? "",
+        cwd: this.options.cwd ?? process.cwd(),
       },
       payload: { reason: this.state.status === "aborted" ? "other" : "prompt_input_exit" },
       matchQuery: "SessionEnd",

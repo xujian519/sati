@@ -75,8 +75,10 @@ test("AgentLoop runs StopFailure hooks for terminal model errors", async () => {
 
 test("AgentSession dispatches SessionEnd after submit completes", async () => {
   const lifecycle = new RecordingLifecycleRuntime();
+  const cwd = "/tmp/politdeck-project";
   const { turnRunner } = createAgentLoopFixture({
     lifecycle,
+    config: { cwd },
     scripts: [[
       { type: "message_start", role: "assistant" },
       { type: "text_delta", text: "done" },
@@ -86,6 +88,8 @@ test("AgentSession dispatches SessionEnd after submit completes", async () => {
   const session = new AgentSession({
     sessionId: "session",
     turnRunner,
+    cwd,
+    transcriptPath: "/tmp/politdeck-project/transcript.jsonl",
     uuid: () => "turn",
     lifecycle,
   });
@@ -97,5 +101,11 @@ test("AgentSession dispatches SessionEnd after submit completes", async () => {
     "UserPromptSubmit",
     "Stop",
     "SessionEnd",
+  ]);
+  assert.deepEqual(lifecycle.calls.map((call) => call.baseInput.cwd), [
+    cwd,
+    cwd,
+    cwd,
+    cwd,
   ]);
 });

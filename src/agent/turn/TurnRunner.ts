@@ -22,6 +22,11 @@ export type TurnRunnerResult = {
   messages: CanonicalMessage[];
 };
 
+export type TurnRunnerRuntimeContext = {
+  cwd: string;
+  transcriptPath: string;
+};
+
 export class TurnRunner {
   constructor(
     private readonly loop: AgentLoop,
@@ -29,6 +34,10 @@ export class TurnRunner {
     private readonly inputProcessor = new TurnInputProcessor(),
     private readonly now: () => Date = () => new Date(),
     private readonly lifecycle?: LifecycleRuntime,
+    private readonly runtimeContext: TurnRunnerRuntimeContext = {
+      cwd: process.cwd(),
+      transcriptPath: "",
+    },
   ) {}
 
   async *run(options: TurnRunnerOptions): AsyncGenerator<AgentEvent, TurnRunnerResult, unknown> {
@@ -53,8 +62,8 @@ export class TurnRunner {
       event: "UserPromptSubmit",
       baseInput: {
         sessionId: options.sessionId,
-        transcriptPath: "",
-        cwd: process.cwd(),
+        transcriptPath: this.runtimeContext.transcriptPath,
+        cwd: this.runtimeContext.cwd,
       },
       payload: { prompt },
       matchQuery: "UserPromptSubmit",

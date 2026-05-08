@@ -87,7 +87,14 @@ export function createAgentLoopFixture(options: {
   };
   const loop = new AgentLoop(config, dependencies);
   const transcript = new InMemoryTranscriptWriter();
-  const turnRunner = new TurnRunner(loop, transcript, undefined, dependencies.now, dependencies.lifecycle);
+  const turnRunner = new TurnRunner(
+    loop,
+    transcript,
+    undefined,
+    dependencies.now,
+    dependencies.lifecycle,
+    { cwd: config.cwd, transcriptPath: "" },
+  );
   return { model, registry, loop, transcript, turnRunner, config, dependencies };
 }
 

@@ -10,7 +10,7 @@
 ~/.politdeck/politdeck.yaml
 ```
 
-该路径由全局 `polit/config` 模块通过 `resolvePolitHome()` 和 `getPolitConfigFilePath()` 统一解析：`PolitHome` 默认是 `~/.politdeck`，可由 `POLIT_HOME` 覆盖；配置文件名固定为 `politdeck.yaml`。全局 config 模块还会按需读取项目根目录 `.politdeck.yaml`，并可叠加受控环境变量覆盖项。`model` 模块只校验和消费合并后的 `model` 段，不直接读取 YAML 文件、临时 CLI 参数、用户目录中的其他配置文件或运行时全局状态；默认 provider/model 由 `agent.model` 管理，API key 的 `${ENV_NAME}` 引用在解析模型配置时解析。
+该路径由全局 `polit/config` 模块通过 `resolvePolitHome()` 和 `getPolitConfigFilePath()` 统一解析：`PolitHome` 默认是 `~/.politdeck`，可由 `POLIT_HOME` 覆盖；配置文件名固定为 `politdeck.yaml`。全局 config 模块还会按需读取项目根目录 `.politdeck/politdeck.yaml`，并可叠加受控环境变量覆盖项。`model` 模块只校验和消费合并后的 `model` 段，不直接读取 YAML 文件、临时 CLI 参数、用户目录中的其他配置文件或运行时全局状态；默认 provider/model 由 `agent.model` 管理，API key 的 `${ENV_NAME}` 引用在解析模型配置时解析。
 
 ## 当前阶段范围
 
@@ -246,7 +246,7 @@ multimodal.imageDetail
 
 ```text
 load ~/.politdeck/politdeck.yaml in global config
-  -> optionally load <project>/.politdeck.yaml
+  -> optionally load <project>/.politdeck/politdeck.yaml
   -> apply supported env overrides
   -> merge sources
   -> extract agent section

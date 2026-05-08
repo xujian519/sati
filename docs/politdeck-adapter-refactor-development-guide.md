@@ -305,6 +305,8 @@ export type WsEventFrame = {
 | Feishu `/new` 之后 | `feishu:chat=<chatId>:s_<uuid>` | 直到下次 `/new`，该 chat 的后续消息走新 session |
 | Web | `web:project=<projectKey>:s_<uuid>` | UI 自管 sessionKey；新建时由 UI 生成 uuid |
 
+`projectKey` 当前按本地项目根目录解析。同一个 server 内部会按规范化后的 `projectRoot` 缓存独立 project runtime，包括项目级配置、模型 runtime、agent cwd 和 transcript 存储；如果请求没有提供 `projectKey`，server 使用启动时的默认项目根。
+
 `SessionRouter` 负责：
 
 ```ts

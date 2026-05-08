@@ -17,4 +17,4 @@
 
 ## 当前范围
 
-当前阶段由全局 `polit/config` 模块读取 `${PolitHome}/politdeck.yaml`，按需叠加项目根目录 `.politdeck.yaml` 和受控环境变量覆盖，再把合并后的 `model` 段交给 `parseModelConfig()` 校验。该配置段包括默认 provider/model、可选 fallback model、provider URL、API key、协议格式、超时、headers、retry、model list、model 级别 capabilities 和 multimodal input constraints。暂不实现 OAuth 登录、浏览器登录、远端 token 同步等复杂认证方式。
+当前阶段由全局 `polit/config` 模块读取 `${PolitHome}/politdeck.yaml`，按需叠加项目根目录 `.politdeck/politdeck.yaml` 和受控环境变量覆盖，再把合并后的 `model` 段交给 `parseModelConfig()` 校验。该配置段包括默认 provider/model、可选 fallback model、provider URL、API key、协议格式、超时、headers、retry、model list、model 级别 capabilities 和 multimodal input constraints。暂不实现 OAuth 登录、浏览器登录、远端 token 同步等复杂认证方式。

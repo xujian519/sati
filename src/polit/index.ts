@@ -5,6 +5,7 @@ export {
   createProjectId,
   getPolitConfigFilePath,
   getPolitExtensionPaths,
+  getPolitProjectConfigFilePath,
   getPolitProjectChatDir,
   resolvePolitHome,
   type PolitExtensionPaths,

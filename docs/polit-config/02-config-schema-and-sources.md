@@ -17,7 +17,7 @@ ${PolitHome}/politdeck.yaml
 项目级配置文件位于调用方传入的 `projectRoot` 根目录：
 
 ```text
-<project>/.politdeck.yaml
+<project>/.politdeck/politdeck.yaml
 ```
 
 聊天记录保存在 `PolitHome` 下，按 project 区分：
@@ -34,7 +34,7 @@ ${PolitHome}/projects/<project-id>/chats
 
 ```text
 default config: ${PolitHome}/politdeck.yaml
-  < project config: <workspace>/.politdeck.yaml
+  < project config: <workspace>/.politdeck/politdeck.yaml
   < env overrides
 ```
 

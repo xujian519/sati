@@ -1,10 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { parseDocument } from "yaml";
 import { parseModelConfig } from "../../model/config/parseModelConfig.js";
 import { isRecord } from "../../model/config/schema.js";
 import { ModelConfigError } from "../../model/protocol/errors.js";
-import { getPolitConfigFilePath, resolvePolitHome } from "../paths.js";
+import { getPolitConfigFilePath, getPolitProjectConfigFilePath, resolvePolitHome } from "../paths.js";
 import { sha256, stableStringify } from "./hash.js";
 import { mergeConfigSources } from "./merge.js";
 import { parseMemoryConfig } from "./parseMemoryConfig.js";
@@ -23,8 +22,6 @@ import {
 } from "./types.js";
 
 const SUPPORTED_SCHEMA_VERSION = 1;
-const PROJECT_CONFIG_FILE_NAME = ".politdeck.yaml";
-
 const ENV_CONFIG_OVERRIDES = [
   ["POLIT_AGENT_MODEL", ["agent", "model"]],
   ["POLIT_AGENT_FALLBACK_MODEL", ["agent", "fallbackModel"]],
@@ -51,7 +48,7 @@ export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConf
   const defaultConfig = readYamlSource(defaultConfigPath, "default", 10, loadedAt, diagnostics, sources);
 
   const projectConfigPath = options.projectRoot
-    ? resolve(options.projectRoot, PROJECT_CONFIG_FILE_NAME)
+    ? getPolitProjectConfigFilePath(options.projectRoot)
     : undefined;
   const projectConfig = projectConfigPath
     ? readYamlSource(projectConfigPath, "project", 20, loadedAt, diagnostics, sources)

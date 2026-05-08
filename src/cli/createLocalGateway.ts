@@ -1,53 +1,144 @@
-import { createAgentSession, type AgentRuntimeConfig } from "../agent/index.js";
-import { createGateway, type Gateway } from "../gateway/index.js";
-import { createModelRuntime } from "../model/index.js";
+import { resolve } from "node:path";
+import { createAgentSession, type AgentRuntimeConfig, type CreateAgentSessionOptions } from "../agent/index.js";
+import {
+  createGateway,
+  type Gateway,
+  type GatewayProjectStorageOptions,
+  type GatewaySessionContext,
+  type ListSessionsInput,
+  type ListSessionsResult,
+} from "../gateway/index.js";
+import { createModelRuntime, type ModelRuntime } from "../model/index.js";
 import { createDefaultPermissionContext } from "../permission/index.js";
 import { loadPolitConfig, resolvePolitHome } from "../polit/index.js";
+import { listProjectSessions } from "../session/index.js";
 import { createBuiltinRegistry } from "../tool/index.js";
+import type { ToolRegistry } from "../tool/index.js";
 
 export type CreateLocalGatewayOptions = {
   projectRoot?: string;
   politHome?: string;
+  env?: Record<string, string | undefined>;
   permissionMode?: AgentRuntimeConfig["permissionMode"];
 };
 
 export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gateway {
-  const projectRoot = options.projectRoot ?? process.cwd();
-  const politHome = options.politHome ?? resolvePolitHome();
-  const snapshot = loadPolitConfig({ projectRoot });
-  const modelConfig = snapshot.config.model;
-  const agent = snapshot.config.agent;
-  const provider = agent.model.provider;
-  const model = agent.model.model;
-  const permissionMode = options.permissionMode ?? "default";
-  const registry = createBuiltinRegistry();
+  const baseEnv = options.env ?? process.env;
+  const projectRoot = resolve(options.projectRoot ?? process.cwd());
+  const politHome = options.politHome ?? resolvePolitHome(baseEnv);
+  const env = options.politHome ? { ...baseEnv, POLIT_HOME: politHome } : baseEnv;
   const now = () => new Date();
-  const modelRuntime = createModelRuntime(modelConfig);
-  const agentConfig: AgentRuntimeConfig = {
-    provider,
-    model,
-    cwd: projectRoot,
-    fallbackProvider: agent.fallbackModel?.provider,
-    fallbackModel: agent.fallbackModel?.model,
-    permissionMode,
-    permissionContext: createDefaultPermissionContext({
-      cwd: projectRoot,
-      mode: permissionMode,
-      canPrompt: false,
-      bypassAvailable: true,
-    }),
-  };
+  const registry = new ProjectRuntimeRegistry({
+    defaultProjectRoot: projectRoot,
+    politHome,
+    env,
+    permissionMode: options.permissionMode ?? "default",
+    now,
+  });
+  const defaultRuntime = registry.resolve();
 
   return createGateway({
-    projectStorage: { projectRoot, politHome },
-    idleSessionTimeoutMs: (snapshot.config.gateway?.idleSessionTimeoutMinutes ?? 30) * 60_000,
-    agent: {
-      config: agentConfig,
-      dependencies: {
-        model: modelRuntime,
-        tools: { registry },
-        now,
-      },
+    session: {
+      create: (context) => registry.createSession(context),
+      list: (input) => registry.listSessions(input),
+    },
+    idleSessionTimeoutMs: (defaultRuntime.snapshot.config.gateway?.idleSessionTimeoutMinutes ?? 30) * 60_000,
+    now,
+    serverInfo: {
+      projectKey: projectRoot,
     },
   });
+}
+
+type ProjectRuntimeRegistryOptions = {
+  defaultProjectRoot: string;
+  politHome: string;
+  env: Record<string, string | undefined>;
+  permissionMode: AgentRuntimeConfig["permissionMode"];
+  now: () => Date;
+};
+
+type ProjectRuntime = {
+  projectRoot: string;
+  snapshot: ReturnType<typeof loadPolitConfig>;
+  model: ModelRuntime;
+  tools: ToolRegistry;
+  projectStorage: GatewayProjectStorageOptions;
+};
+
+class ProjectRuntimeRegistry {
+  private readonly runtimes = new Map<string, ProjectRuntime>();
+
+  constructor(private readonly options: ProjectRuntimeRegistryOptions) {}
+
+  resolve(projectKey?: string): ProjectRuntime {
+    const projectRoot = resolve(projectKey ?? this.options.defaultProjectRoot);
+    const cached = this.runtimes.get(projectRoot);
+    if (cached) {
+      return cached;
+    }
+
+    const snapshot = loadPolitConfig({ projectRoot, env: this.options.env });
+    const runtime: ProjectRuntime = {
+      projectRoot,
+      snapshot,
+      model: createModelRuntime(snapshot.config.model),
+      tools: createBuiltinRegistry(),
+      projectStorage: {
+        projectRoot,
+        politHome: this.options.politHome,
+      },
+    };
+    this.runtimes.set(projectRoot, runtime);
+    return runtime;
+  }
+
+  createSession(context: GatewaySessionContext) {
+    const runtime = this.resolve(context.projectKey);
+    return createAgentSession({
+      sessionId: context.sessionKey,
+      config: this.createAgentConfig(runtime),
+      dependencies: {
+        model: runtime.model,
+        tools: { registry: runtime.tools },
+        now: this.options.now,
+      },
+      projectStorage: runtime.projectStorage,
+    });
+  }
+
+  async listSessions(input: ListSessionsInput): Promise<ListSessionsResult> {
+    const runtime = this.resolve(input.projectKey);
+    const offset = input.cursor ? Number.parseInt(input.cursor, 10) : 0;
+    const safeOffset = Number.isFinite(offset) ? offset : 0;
+    const sessions = await listProjectSessions({
+      ...runtime.projectStorage,
+      limit: input.limit,
+      offset: safeOffset,
+    });
+    const nextOffset = safeOffset + sessions.length;
+    return {
+      sessions,
+      nextCursor: input.limit && sessions.length === input.limit ? String(nextOffset) : undefined,
+    };
+  }
+
+  private createAgentConfig(runtime: ProjectRuntime): CreateAgentSessionOptions["config"] {
+    const agent = runtime.snapshot.config.agent;
+    const permissionMode = this.options.permissionMode;
+    return {
+      provider: agent.model.provider,
+      model: agent.model.model,
+      cwd: runtime.projectRoot,
+      fallbackProvider: agent.fallbackModel?.provider,
+      fallbackModel: agent.fallbackModel?.model,
+      permissionMode,
+      permissionContext: createDefaultPermissionContext({
+        cwd: runtime.projectRoot,
+        mode: permissionMode,
+        canPrompt: false,
+        bypassAvailable: true,
+      }),
+    };
+  }
 }

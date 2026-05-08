@@ -24,4 +24,9 @@ export type { AgentLoopState, AgentLoopTransition, AgentLoopTransitionReason, Ag
 export type { AgentRuntimeConfig } from "./runtime/AgentRuntimeConfig.js";
 export type { AgentModelRuntime, AgentRuntimeDependencies } from "./runtime/AgentRuntimeDependencies.js";
 export { TurnInputProcessor, type TurnInputProcessorResult } from "./turn/TurnInputProcessor.js";
-export { TurnRunner, type TurnRunnerOptions, type TurnRunnerResult } from "./turn/TurnRunner.js";
+export {
+  TurnRunner,
+  type TurnRunnerOptions,
+  type TurnRunnerResult,
+  type TurnRunnerRuntimeContext,
+} from "./turn/TurnRunner.js";

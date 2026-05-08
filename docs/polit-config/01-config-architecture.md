@@ -110,7 +110,7 @@ contentHash?: string
 说明：
 
 - `default`：来自 `${PolitHome}/politdeck.yaml` 的默认 YAML 配置。
-- `project`：来自当前项目目录的项目级 YAML 配置。
+- `project`：来自当前项目目录 `.politdeck/politdeck.yaml` 的项目级 YAML 配置。
 - `env`：来自环境变量的覆盖项，包括 `POLIT_HOME` 和 model 相关覆盖。
 
 `source` 用于诊断。用户看到配置冲突、无效字段或热重载失败时，必须能知道问题来自哪一层配置。
@@ -247,7 +247,7 @@ context consumes runtime wiring until a context schema exists
 session consumes polit/paths derived paths until a session schema exists
 ```
 
-这些模块不能绕过 `polit/config` 自行读取 `.politdeck.yaml`，也不能把运行中产生的用户选择、permission prompt 结果或 transcript 事实写回配置对象。
+这些模块不能绕过 `polit/config` 自行读取 `.politdeck/politdeck.yaml`，也不能把运行中产生的用户选择、permission prompt 结果或 transcript 事实写回配置对象。
 
 ## 生命周期
 

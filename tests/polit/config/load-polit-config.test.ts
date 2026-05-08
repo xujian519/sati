@@ -1,14 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   createPolitConfigStore,
   loadPolitConfig,
   PolitConfigError,
 } from "../../../src/polit/config/index.js";
-import { getPolitConfigFilePath, getPolitProjectChatDir } from "../../../src/polit/paths.js";
+import {
+  getPolitConfigFilePath,
+  getPolitProjectChatDir,
+  getPolitProjectConfigFilePath,
+} from "../../../src/polit/paths.js";
 import { validAgentConfig, validModelConfig } from "../../model/helpers.js";
 
 test("loads default config from PolitHome and resolves model env credentials", () => {
@@ -53,6 +57,16 @@ test("merges default, project and env sources by priority", () => {
       model: {
         providers: {
           "anthropic-main": {
+            timeoutMs: 2000,
+          },
+        },
+      },
+    });
+    const projectConfigPath = getPolitProjectConfigFilePath(projectRoot);
+    writeJson(projectConfigPath, {
+      model: {
+        providers: {
+          "anthropic-main": {
             timeoutMs: 1000,
           },
         },
@@ -71,6 +85,8 @@ test("merges default, project and env sources by priority", () => {
     assert.equal(snapshot.config.agent.model.provider, "openai-main");
     assert.equal(snapshot.config.agent.model.model, "gpt-5.1");
     assert.equal(snapshot.config.model.providers["anthropic-main"].timeoutMs, 1000);
+    assert.ok(snapshot.sources.some((source) => source.path === projectConfigPath));
+    assert.ok(!snapshot.sources.some((source) => source.path === join(projectRoot, ".politdeck.yaml")));
     assert.deepEqual(snapshot.sources.map((source) => source.kind), [
       "env",
       "default",
@@ -217,5 +233,6 @@ function makeTempDir(): string {
 }
 
 function writeJson(path: string, value: unknown): void {
+  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(value, null, 2), "utf8");
 }

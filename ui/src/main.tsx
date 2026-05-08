@@ -14,7 +14,7 @@ function App() {
     await client.connect();
     client.submitTurn(
       {
-        sessionKey: `web:project=${location.pathname || "default"}:default`,
+        sessionKey: "web:default",
         channelKey: "web",
         message,
       },

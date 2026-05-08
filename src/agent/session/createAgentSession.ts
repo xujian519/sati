@@ -53,11 +53,24 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
       })
     : undefined;
   const transcript = options.transcript ?? storage?.transcript ?? new InMemoryTranscriptWriter();
-  const turnRunner = new TurnRunner(loop, transcript, undefined, dependencies.now, dependencies.lifecycle);
+  const runtimeContext = {
+    cwd: options.config.cwd,
+    transcriptPath: storage?.transcriptPath ?? "",
+  };
+  const turnRunner = new TurnRunner(
+    loop,
+    transcript,
+    undefined,
+    dependencies.now,
+    dependencies.lifecycle,
+    runtimeContext,
+  );
   return {
     session: new AgentSession({
       sessionId: options.sessionId,
       turnRunner,
+      cwd: runtimeContext.cwd,
+      transcriptPath: runtimeContext.transcriptPath,
       uuid: dependencies.uuid,
       initialState: options.initialState,
       replayEvents: options.replayEvents,
