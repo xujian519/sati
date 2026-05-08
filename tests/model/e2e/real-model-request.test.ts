@@ -29,7 +29,10 @@ test("reads PolitHome config and completes a real model request", async (t) => {
         ],
       },
     ],
-    maxOutputTokens: 32,
+    // Reasoning models (Kimi K2.6, DeepSeek R1, Qwen QwQ) emit a long internal
+    // chain-of-thought before any visible content; budgets under ~512 starve
+    // the answer phase and produce empty `text`.
+    maxOutputTokens: 1024,
     temperature: 0,
     metadata: {
       configSnapshotVersion: snapshot.version,

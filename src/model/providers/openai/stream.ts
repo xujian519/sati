@@ -41,6 +41,14 @@ export function normalizeOpenAIStreamEvent(
       events.push({ type: "text_delta", text: delta.content, raw });
     }
 
+    // OpenRouter / DeepInfra / Parasail forward reasoning-model chain-of-
+    // thought via the non-standard `delta.reasoning` field (e.g. Kimi K2.6,
+    // DeepSeek R1, Qwen QwQ). Map it to thinking_delta so PolitDeck can
+    // surface / persist the reasoning instead of silently dropping it.
+    if (typeof delta.reasoning === "string" && delta.reasoning.length > 0) {
+      events.push({ type: "thinking_delta", text: delta.reasoning, raw });
+    }
+
     if (Array.isArray(delta.tool_calls)) {
       events.push(...toolCallEvents(delta.tool_calls, state, raw));
     }

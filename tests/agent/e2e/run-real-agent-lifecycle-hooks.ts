@@ -159,7 +159,10 @@ const config: AgentRuntimeConfig = {
   permissionContext,
   systemPrompt: "You are executing a PolitDeck smoke test. Follow tool instructions exactly and copy requested markers verbatim.",
   toolChoice: { type: "tool", name: TOOL_NAME },
-  maxOutputTokens: 384,
+  // Reasoning-heavy models like Kimi K2.6 spend most tokens on hidden reasoning;
+  // 384 was the old limit and starved the final-answer phase. Use the model
+  // capability cap (8192 for Kimi K2.6) so the second turn can write its text.
+  maxOutputTokens: 4096,
   temperature: 0,
   env: process.env,
   metadata: {
