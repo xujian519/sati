@@ -7,6 +7,8 @@ import { ModelConfigError } from "../../model/protocol/errors.js";
 import { getPolitConfigFilePath, resolvePolitHome } from "../paths.js";
 import { sha256, stableStringify } from "./hash.js";
 import { mergeConfigSources } from "./merge.js";
+import { parseMemoryConfig } from "./parseMemoryConfig.js";
+import { parseAdaptersConfig, parseGatewayConfig } from "./parseGatewayConfig.js";
 import { redactConfig } from "./redact.js";
 import {
   PolitConfigError,
@@ -94,9 +96,12 @@ export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConf
   const model = parseModel(rawConfig.model, env, diagnostics);
   const agent = parseAgent(rawConfig.agent, model, diagnostics);
   const extension = parseExtension(rawConfig.extension, diagnostics);
+  const memory = parseMemoryConfig(rawConfig.memory, diagnostics);
+  const gateway = parseGatewayConfig(rawConfig.gateway, diagnostics);
+  const adapters = parseAdaptersConfig(rawConfig.adapters, diagnostics);
   throwConfigErrorIfFatal(diagnostics);
 
-  const redactedSnapshotConfig = redactConfig({ agent, model, extension });
+  const redactedSnapshotConfig = redactConfig({ agent, model, extension, memory, gateway, adapters });
   return deepFreeze({
     version: options.version ?? 1,
     schemaVersion,
@@ -108,6 +113,9 @@ export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConf
       agent,
       model,
       extension,
+      ...(memory ? { memory } : {}),
+      ...(gateway ? { gateway } : {}),
+      ...(adapters ? { adapters } : {}),
     },
   });
 }
@@ -241,8 +249,17 @@ function validateTopLevel(rawConfig: PolitRawConfig, diagnostics: PolitConfigDia
     });
   }
 
+  const allowedKeys = new Set([
+    "schemaVersion",
+    "agent",
+    "model",
+    "extension",
+    "memory",
+    "gateway",
+    "adapters",
+  ]);
   for (const key of Object.keys(rawConfig)) {
-    if (key !== "schemaVersion" && key !== "agent" && key !== "model" && key !== "extension") {
+    if (!allowedKeys.has(key)) {
       diagnostics.push({
         code: "CONFIG_UNKNOWN_FIELD",
         severity: "warning",

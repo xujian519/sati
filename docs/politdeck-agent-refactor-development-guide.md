@@ -201,19 +201,28 @@ src/agent/
     AgentRuntimeConfig.ts
     AgentRuntimeDependencies.ts
 
-  context/
-    ContextRuntime.ts
-    NullContextRuntime.ts
-
-  transcript/
-    TranscriptWriter.ts
-    InMemoryTranscriptWriter.ts
-    JsonlTranscriptWriter.ts
-
   testing/
     scriptedModel.ts
     scriptedContext.ts
     inMemoryAgentRuntime.ts
+
+src/context/
+  ContextRuntime.ts
+  NullContextRuntime.ts
+
+src/session/
+  index.ts
+  transcript/
+    TranscriptWriter.ts
+    InMemoryTranscriptWriter.ts
+    JsonlTranscriptWriter.ts
+    TranscriptEntry.ts
+    TranscriptReader.ts
+    TranscriptReplay.ts
+  storage/
+    ProjectSessionStorage.ts
+  resume/
+    resumeAgentSession.ts
 ```
 
 对应测试目录：

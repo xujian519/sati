@@ -1,0 +1,128 @@
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { getPolitProjectChatDir } from "../../polit/index.js";
+import { readSessionLite, type SessionLiteFile } from "./SessionLiteReader.js";
+
+export type SessionInfo = {
+  sessionId: string;
+  summary: string;
+  lastModified: number;
+  fileSize?: number;
+  customTitle?: string;
+  aiTitle?: string;
+  firstPrompt?: string;
+  cwd?: string;
+  tag?: string;
+  createdAt?: number;
+};
+
+export type ListProjectSessionsOptions = {
+  projectRoot: string;
+  politHome: string;
+  limit?: number;
+  offset?: number;
+};
+
+export async function listProjectSessions(options: ListProjectSessionsOptions): Promise<SessionInfo[]> {
+  const chatDir = getPolitProjectChatDir(options.projectRoot, options.politHome);
+  let names: string[];
+  try {
+    names = await readdir(chatDir);
+  } catch {
+    return [];
+  }
+
+  const sessions: SessionInfo[] = [];
+  for (const name of names) {
+    if (!name.endsWith(".jsonl")) {
+      continue;
+    }
+    const lite = await readSessionLite(join(chatDir, name));
+    if (!lite) {
+      continue;
+    }
+    const info = parseSessionInfoFromLite(name.slice(0, -".jsonl".length), lite, options.projectRoot);
+    if (info) {
+      sessions.push(info);
+    }
+  }
+
+  sessions.sort((left, right) => right.lastModified - left.lastModified);
+  const offset = Math.max(0, options.offset ?? 0);
+  const limit = options.limit ?? sessions.length;
+  return sessions.slice(offset, limit === 0 ? undefined : offset + limit);
+}
+
+export function parseSessionInfoFromLite(
+  sessionId: string,
+  lite: SessionLiteFile,
+  projectRoot?: string,
+): SessionInfo | null {
+  const source = `${lite.head}\n${lite.tail}`;
+  const customTitle = lastJsonStringField(source, "title");
+  const aiTitle = lastJsonStringField(source, "aiTitle");
+  const tag = lastJsonStringField(source, "tag");
+  const firstPrompt = firstAcceptedInputText(lite.head);
+  const summary = customTitle ?? aiTitle ?? firstPrompt;
+  if (!summary) {
+    return null;
+  }
+
+  const firstCreatedAt = firstJsonStringField(lite.head, "createdAt");
+  return {
+    sessionId,
+    summary,
+    lastModified: lite.mtime,
+    fileSize: lite.size,
+    customTitle,
+    aiTitle,
+    firstPrompt,
+    cwd: projectRoot,
+    tag,
+    createdAt: firstCreatedAt ? Date.parse(firstCreatedAt) : undefined,
+  };
+}
+
+function firstAcceptedInputText(head: string): string | undefined {
+  for (const line of head.split(/\r?\n/)) {
+    if (!line.includes('"type":"accepted_input"')) {
+      continue;
+    }
+    try {
+      const entry = JSON.parse(line) as {
+        messages?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
+      };
+      const text = entry.messages?.flatMap((message) => message.content ?? []).find((block) => block.type === "text")?.text;
+      if (text?.trim()) {
+        return text.trim();
+      }
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function firstJsonStringField(source: string, field: string): string | undefined {
+  const match = source.match(new RegExp(`"${escapeRegExp(field)}"\\s*:\\s*"((?:\\\\.|[^"])*)"`));
+  return match?.[1] ? unescapeJsonString(match[1]) : undefined;
+}
+
+function lastJsonStringField(source: string, field: string): string | undefined {
+  const regex = new RegExp(`"${escapeRegExp(field)}"\\s*:\\s*"((?:\\\\.|[^"])*)"`, "g");
+  let value: string | undefined;
+  for (const match of source.matchAll(regex)) {
+    if (match[1]) {
+      value = unescapeJsonString(match[1]);
+    }
+  }
+  return value;
+}
+
+function unescapeJsonString(value: string): string {
+  return JSON.parse(`"${value}"`) as string;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[\\^$*+?.()|[\]{}]/g, "\\$&");
+}

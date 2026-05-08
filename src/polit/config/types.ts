@@ -35,6 +35,9 @@ export type PolitRawConfig = {
   agent?: unknown;
   model?: unknown;
   extension?: unknown;
+  memory?: unknown;
+  gateway?: unknown;
+  adapters?: unknown;
 };
 
 export type PolitExtensionConfig = {
@@ -53,10 +56,56 @@ export type PolitAgentConfig = {
   fallbackModel?: PolitAgentModelSelection;
 };
 
+export type PolitMemoryLlmConfig = {
+  provider?: string;
+  model?: string;
+  baseUrl?: string;
+  apiKey?: string;
+  apiType?: "openai-responses" | "responses" | "openai-completions";
+};
+
+export type PolitMemoryConfig = {
+  enabled: boolean;
+  provider: "edgeclaw";
+  rootDir?: string;
+  captureStrategy: "last_turn" | "full_session";
+  includeAssistant: boolean;
+  maxMessageChars?: number;
+  llm?: PolitMemoryLlmConfig;
+};
+
+export type PolitGatewayConfig = {
+  port: number;
+  bindAddress: "127.0.0.1";
+  tokenPath?: string;
+  idleSessionTimeoutMinutes: number;
+  staticAssetsPath?: string;
+};
+
+export type PolitAdaptersConfig = {
+  cli?: {
+    autoConnectServer: boolean;
+  };
+  tui?: {
+    autoConnectServer: boolean;
+  };
+  feishu?: {
+    enabled: boolean;
+    appId?: string;
+    appSecret?: string;
+    encryptKey?: string;
+    verifyToken?: string;
+    defaultSessionLabel: string;
+  };
+};
+
 export type PolitConfig = {
   agent: PolitAgentConfig;
   model: ModelConfig;
   extension: PolitExtensionConfig;
+  memory?: PolitMemoryConfig;
+  gateway?: PolitGatewayConfig;
+  adapters?: PolitAdaptersConfig;
 };
 
 export type PolitConfigSnapshot = {

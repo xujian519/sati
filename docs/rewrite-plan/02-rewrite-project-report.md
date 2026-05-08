@@ -55,7 +55,7 @@ src/
 
   context/
     prompt/
-    memory/
+    memory/  替换为edgeclaw memory core
     attachments/
     compaction/
     budget/
@@ -85,12 +85,16 @@ src/
     replay/
     storage/
 
+  gateway/
+
+
   adapters/
+    platform/
     cli/
     tui/
-    sdk/
+    <!-- sdk/ -->
     web/
-    remote/
+    <!-- remote/ -->
 
 ```
 

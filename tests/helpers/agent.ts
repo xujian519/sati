@@ -11,7 +11,8 @@ import {
   type PolitDeckToolDefinition,
 } from "../../src/tool/index.js";
 import { PermissionRuntime } from "../../src/permission/index.js";
-import { AgentLoop, TurnRunner, InMemoryTranscriptWriter } from "../../src/agent/index.js";
+import { AgentLoop, TurnRunner } from "../../src/agent/index.js";
+import { InMemoryTranscriptWriter } from "../../src/session/index.js";
 import type { AgentRuntimeConfig, AgentRuntimeDependencies } from "../../src/agent/index.js";
 import type { LifecycleRuntime } from "../../src/lifecycle/index.js";
 

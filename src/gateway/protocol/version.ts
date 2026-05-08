@@ -1,0 +1,1 @@
+export const POLITDECK_GATEWAY_PROTOCOL_VERSION = "1.0";

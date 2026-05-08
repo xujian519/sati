@@ -7,6 +7,9 @@
 - `[polit-config/](./polit-config/)`：重写方案中 `polit/config` 模块的专项设计，包括总配置、配置来源、热重载、模块集成和运维诊断。
 - `[model/](./model/)`：重写方案中 `model` 模块的专项设计，包括模型协议适配、配置和测试。
 - `[politdeck-agent-refactor-development-guide.md](./politdeck-agent-refactor-development-guide.md)` / `[politdeck-agent-test-maintenance-guide.md](./politdeck-agent-test-maintenance-guide.md)`：重写方案中 `agent` 模块的重构开发文档和 parity 测试维护文档。
+- `[politdeck-session-refactor-development-guide.md](./politdeck-session-refactor-development-guide.md)`：重写方案中 `session` 模块的重构开发文档（transcript / storage / resume / metadata / lite reader / list）。
+- `[politdeck-context-refactor-development-guide.md](./politdeck-context-refactor-development-guide.md)`：重写方案中 `context` 模块的重构开发文档（prompt / projection / budget / memory / EdgeClaw 替换评估）。
+- `[politdeck-adapter-refactor-development-guide.md](./politdeck-adapter-refactor-development-guide.md)` / `[politdeck-adapter-test-maintenance-guide.md](./politdeck-adapter-test-maintenance-guide.md)`：重写方案中 `gateway` + `adapters/` 两层的重构开发文档与测试维护文档（含 `politdeck server` 入口、CLI/TUI/Web/Feishu channel 形态、WS 帧协议）。
 
 ## 阅读顺序
 
@@ -15,6 +18,9 @@
 3. 如需实现全局配置、路径和热重载，阅读 `[polit-config/README.md](./polit-config/README.md)`。
 4. 如需实现模型连接和协议转换，阅读 `[model/README.md](./model/README.md)`。
 5. 如需实现 agent runtime，阅读 `[politdeck-agent-refactor-development-guide.md](./politdeck-agent-refactor-development-guide.md)` 和 `[politdeck-agent-test-maintenance-guide.md](./politdeck-agent-test-maintenance-guide.md)`。
+6. 如需实现 session 持久化与 resume，阅读 `[politdeck-session-refactor-development-guide.md](./politdeck-session-refactor-development-guide.md)`。
+7. 如需实现上下文治理与 memory 集成，阅读 `[politdeck-context-refactor-development-guide.md](./politdeck-context-refactor-development-guide.md)`。
+8. 如需实现 `politdeck server` 入口、CLI / TUI / Web / 飞书 channel 与 WS gateway 协议，阅读 `[politdeck-adapter-refactor-development-guide.md](./politdeck-adapter-refactor-development-guide.md)` 和 `[politdeck-adapter-test-maintenance-guide.md](./politdeck-adapter-test-maintenance-guide.md)`。
 
 ## 目录原则
 

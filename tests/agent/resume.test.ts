@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createAgentSessionWithStorage, resumeAgentSession } from "../../src/agent/index.js";
+import { createAgentSessionWithStorage } from "../../src/agent/index.js";
+import { resumeAgentSession } from "../../src/session/index.js";
 import { createPolitDeckTestTool } from "../helpers/tool.js";
 import { collectAsyncGenerator, createAgentLoopFixture } from "../helpers/agent.js";
 

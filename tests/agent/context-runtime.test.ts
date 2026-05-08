@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { NullContextRuntime } from "../../src/agent/context/NullContextRuntime.js";
+import { NullContextRuntime } from "../../src/context/NullContextRuntime.js";
 
 test("NullContextRuntime can retain only the latest messages", async () => {
   const runtime = new NullContextRuntime({ maxMessages: 2 });

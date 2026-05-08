@@ -1,0 +1,58 @@
+import type { GatewayEvent, GatewayServerInfo } from "./types.js";
+
+export type GatewayWsClientName = "cli" | "tui" | "web" | "feishu" | "test";
+
+export type WsHelloFrame = {
+  type: "hello";
+  protocolVersion: string;
+  clientName: GatewayWsClientName;
+  clientVersion: string;
+  token: string;
+};
+
+export type WsHelloOk = {
+  type: "hello_ok";
+  protocolVersion: string;
+  serverVersion: string;
+  serverInfo: GatewayServerInfo;
+};
+
+export type WsGatewayMethod =
+  | "submit_turn"
+  | "abort_turn"
+  | "list_sessions"
+  | "resume_session"
+  | "new_session"
+  | "close_session"
+  | "describe_server";
+
+export type WsRequestFrame = {
+  type: "request";
+  id: string;
+  method: WsGatewayMethod;
+  params: unknown;
+};
+
+export type WsResponseFrame =
+  | {
+      type: "response";
+      id: string;
+      ok: true;
+      result: unknown;
+    }
+  | {
+      type: "response";
+      id: string;
+      ok: false;
+      error: { code: string; message: string };
+    };
+
+export type WsEventFrame = {
+  type: "event";
+  id: string;
+  seq: number;
+  final: boolean;
+  event: GatewayEvent;
+};
+
+export type WsGatewayFrame = WsHelloFrame | WsHelloOk | WsRequestFrame | WsResponseFrame | WsEventFrame;

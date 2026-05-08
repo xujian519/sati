@@ -3,7 +3,7 @@ import type { AgentEvent } from "../protocol/events.js";
 import type { AgentInput } from "../protocol/input.js";
 import type { AgentTurnResult } from "../protocol/result.js";
 import type { AgentLoop } from "../loop/AgentLoop.js";
-import type { AgentTranscriptWriter } from "../transcript/TranscriptWriter.js";
+import type { AgentTranscriptWriter } from "../../session/transcript/TranscriptWriter.js";
 import { TurnInputProcessor } from "./TurnInputProcessor.js";
 import type { CanonicalMessage, CanonicalUsage } from "../../model/index.js";
 import type { LifecycleRuntime } from "../../lifecycle/index.js";

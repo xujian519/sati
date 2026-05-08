@@ -3,7 +3,7 @@ import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { AgentEvent } from "../protocol/events.js";
 import type { AgentInput, AgentSubmitOptions } from "../protocol/input.js";
 import type { AgentSessionState as AgentSessionStateShape } from "../protocol/state.js";
-import type { AgentTranscriptReplayResult } from "../transcript/TranscriptReplay.js";
+import type { AgentTranscriptReplayResult } from "../../session/transcript/TranscriptReplay.js";
 import type { TurnRunner } from "../turn/TurnRunner.js";
 import {
   appendPermissionDenials,

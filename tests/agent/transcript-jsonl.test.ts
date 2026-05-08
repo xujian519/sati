@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -8,7 +8,7 @@ import {
   createAgentProjectSessionStorage,
   readTranscript,
   replayTranscriptEntries,
-} from "../../src/agent/index.js";
+} from "../../src/session/index.js";
 import { getPolitProjectChatDir } from "../../src/polit/index.js";
 
 test("JsonlTranscriptWriter writes ordered transcript entries", async () => {
@@ -35,10 +35,29 @@ test("JsonlTranscriptWriter writes ordered transcript entries", async () => {
     });
 
     const read = await readTranscript(transcriptPath);
+    const fileStat = await stat(transcriptPath);
 
     assert.deepEqual(read.entries.map((entry) => entry.type), ["accepted_input", "assistant_message", "turn_result"]);
     assert.deepEqual(read.entries.map((entry) => entry.sequence), [1, 2, 3]);
+    assert.ok(read.entries.every((entry) => entry.entryId));
+    assert.equal(read.entries[1]?.parentEntryId, read.entries[0]?.entryId);
+    assert.equal(fileStat.mode & 0o777, 0o600);
     assert.deepEqual(read.diagnostics, []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("readTranscript refuses oversized transcripts", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-agent-large-jsonl-"));
+  try {
+    const transcriptPath = path.join(root, "session.jsonl");
+    await writeFile(transcriptPath, "x".repeat(32), "utf8");
+
+    const read = await readTranscript(transcriptPath, { maxBytes: 8 });
+
+    assert.equal(read.entries.length, 0);
+    assert.equal(read.diagnostics[0]?.code, "transcript_too_large");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

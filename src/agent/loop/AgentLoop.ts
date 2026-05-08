@@ -13,7 +13,7 @@ import type { AgentPermissionDenial, AgentTurnResult } from "../protocol/result.
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
 import type { LifecycleDispatchResult } from "../../lifecycle/index.js";
-import { NullContextRuntime } from "../context/NullContextRuntime.js";
+import { NullContextRuntime } from "../../context/NullContextRuntime.js";
 import { AgentRecoveryPolicy } from "./AgentRecoveryPolicy.js";
 import { collectToolCalls } from "./collectToolCalls.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";

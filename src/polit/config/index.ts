@@ -7,6 +7,7 @@ export {
 export { classifyConfigChanges, diffConfigSnapshots } from "./classifyChanges.js";
 export { mergeConfigSources } from "./merge.js";
 export { redactConfig } from "./redact.js";
+export { parseAdaptersConfig, parseGatewayConfig } from "./parseGatewayConfig.js";
 export {
   PolitConfigError,
   type PolitConfig,
@@ -21,4 +22,6 @@ export {
   type PolitConfigSourceKind,
   type PolitConfigSourcePhase,
   type PolitRawConfig,
+  type PolitAdaptersConfig,
+  type PolitGatewayConfig,
 } from "./types.js";

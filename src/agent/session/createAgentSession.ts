@@ -3,8 +3,8 @@ import { SequentialToolScheduler, ToolRuntime } from "../../tool/index.js";
 import { AgentLoop } from "../loop/AgentLoop.js";
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
-import { InMemoryTranscriptWriter } from "../transcript/InMemoryTranscriptWriter.js";
-import type { AgentTranscriptWriter } from "../transcript/TranscriptWriter.js";
+import { InMemoryTranscriptWriter } from "../../session/transcript/InMemoryTranscriptWriter.js";
+import type { AgentTranscriptWriter } from "../../session/transcript/TranscriptWriter.js";
 import { TurnRunner } from "../turn/TurnRunner.js";
 import { AgentSession } from "./AgentSession.js";
 import type { AgentEvent } from "../protocol/events.js";
@@ -13,7 +13,7 @@ import {
   createAgentProjectSessionStorage,
   type AgentProjectSessionStorage,
   type AgentProjectSessionStorageOptions,
-} from "./AgentSessionStorage.js";
+} from "../../session/storage/ProjectSessionStorage.js";
 
 export type CreateAgentSessionOptions = {
   sessionId: string;
