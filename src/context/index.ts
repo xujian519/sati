@@ -52,7 +52,9 @@ export {
   type ResolvedAttachment,
 } from "./attachments/AttachmentResolver.js";
 export {
+  IMAGE_MAX_TOKEN_SIZE,
   TokenBudgetManager,
+  bytesPerTokenForExt,
   type TokenBudgetManagerOptions,
   type TokenBudgetSnapshot,
   type TokenWarningState,
@@ -78,6 +80,21 @@ export {
   type MicroCompactionInput,
   type MicroCompactionResult,
 } from "./compaction/MicroCompactionEngine.js";
+export {
+  CachedMicroCompactionEngine,
+  COMPACTABLE_TOOL_NAMES,
+  type CachedMicroCompactionInput,
+  type CachedMicroCompactionOptions,
+  type CachedMicroCompactionResult,
+} from "./compaction/CachedMicroCompactionEngine.js";
+export {
+  SnipEngine,
+  createSnipBoundary,
+  isSnipBoundaryMessage,
+  projectSnippedView,
+  type SnipEngineOptions,
+  type SnipResult,
+} from "./compaction/SnipEngine.js";
 export {
   ContextOverflowRecovery,
   type ContextOverflowRecoveryOptions,

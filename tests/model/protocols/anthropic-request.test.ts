@@ -40,3 +40,40 @@ test("builds Anthropic messages request from canonical request", () => {
   assert.equal(body.messages[0].content[0].type, "text");
   assert.equal(body.tools[0].input_schema.type, "object");
 });
+
+test("A4 cacheBreakpoints lower to cache_control: ephemeral on the last block", () => {
+  const config = parseModelConfig(validModelConfig(), {
+    env: { ANTHROPIC_API_KEY: "anthropic-key" },
+  });
+  const body = buildModelRequest(
+    {
+      provider: "anthropic-main",
+      model: "claude-sonnet-4-5",
+      messages: [
+        { role: "user", content: [{ type: "text", text: "first" }] },
+        { role: "assistant", content: [{ type: "text", text: "ack" }] },
+        { role: "user", content: [{ type: "text", text: "second" }] },
+      ],
+      cacheBreakpoints: [1],
+    },
+    config,
+  ) as Record<string, any>;
+  assert.equal(body.messages[0].content[0].cache_control, undefined);
+  assert.deepEqual(body.messages[1].content[0].cache_control, { type: "ephemeral" });
+  assert.equal(body.messages[2].content[0].cache_control, undefined);
+});
+
+test("A4 cacheBreakpoints absent → no cache_control emitted (regression)", () => {
+  const config = parseModelConfig(validModelConfig(), {
+    env: { ANTHROPIC_API_KEY: "anthropic-key" },
+  });
+  const body = buildModelRequest(
+    {
+      provider: "anthropic-main",
+      model: "claude-sonnet-4-5",
+      messages: [{ role: "user", content: [{ type: "text", text: "x" }] }],
+    },
+    config,
+  ) as Record<string, any>;
+  assert.equal(body.messages[0].content[0].cache_control, undefined);
+});

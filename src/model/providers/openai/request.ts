@@ -16,6 +16,19 @@ export type OpenAIRequestBody = {
   temperature?: number;
   stream?: boolean;
   metadata?: Record<string, unknown>;
+  /**
+   * Provider-native structured output. Set when `request.outputSchema` is
+   * provided. `strict` defaults to true unless the schema opts out.
+   */
+  response_format?: {
+    type: "json_schema";
+    json_schema: {
+      name: string;
+      description?: string;
+      schema: Record<string, unknown>;
+      strict?: boolean;
+    };
+  };
 };
 
 type OpenAIMessage = {
@@ -43,7 +56,7 @@ export function buildOpenAIRequest(
     messages.unshift({ role: "system", content: request.systemPrompt });
   }
 
-  return {
+  const body: OpenAIRequestBody = {
     model: request.model,
     messages,
     max_tokens: request.maxOutputTokens ?? model.capabilities.maxOutputTokens,
@@ -53,6 +66,20 @@ export function buildOpenAIRequest(
     stream: request.stream,
     metadata: request.metadata,
   };
+
+  if (request.outputSchema) {
+    body.response_format = {
+      type: "json_schema",
+      json_schema: {
+        name: request.outputSchema.name,
+        description: request.outputSchema.description,
+        schema: request.outputSchema.schema,
+        strict: request.outputSchema.strict ?? true,
+      },
+    };
+  }
+
+  return body;
 }
 
 function toOpenAIMessages(message: CanonicalMessage): OpenAIMessage[] {

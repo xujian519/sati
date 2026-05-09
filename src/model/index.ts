@@ -29,6 +29,7 @@ export type {
   CanonicalModelEvent,
   CanonicalModelRequest,
   CanonicalModelResponse,
+  CanonicalOutputSchema,
   CanonicalPdfBlock,
   CanonicalRole,
   CanonicalTextBlock,
@@ -47,6 +48,15 @@ export type {
   ModelProtocol,
   ProviderConfig,
 } from "./protocol/canonical.js";
+export {
+  ANTHROPIC_STRUCTURED_OUTPUT_TOOL_NAME,
+} from "./providers/anthropic/request.js";
+export {
+  extractStructuredOutput,
+  type ExtractStructuredOutputOptions,
+  type StructuredOutputExtraction,
+  type StructuredOutputExtractionError,
+} from "./structuredOutput/extractStructuredOutput.js";
 export type { ModelCapabilities } from "./protocol/capabilities.js";
 export type { InputModality, MultimodalConstraints } from "./protocol/multimodal.js";
 export {

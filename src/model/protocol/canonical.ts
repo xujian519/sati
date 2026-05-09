@@ -127,6 +127,34 @@ export type CanonicalThinkingConfig = {
   budgetTokens?: number;
 };
 
+/**
+ * Provider-native structured output (A3). Pinned at the request layer:
+ *   - OpenAI: lowered to `response_format: { type: "json_schema", json_schema }`.
+ *     `strict: true` is set unless the schema explicitly opts out.
+ *   - Anthropic: lowered to a forced hidden tool (`__output__`) plus
+ *     `tool_choice: { type: "tool", name: "__output__" }`. The structured
+ *     payload is then read back from the assistant's `tool_use` block.
+ *
+ * Behaviour rationale: legacy `structured_output` is an SDK-side hook tool;
+ * PolitDeck adopts provider-native enforcement. Tagged `intentional_difference`
+ * in the dual-parity table.
+ */
+export type CanonicalOutputSchema = {
+  /** Stable name passed to the provider (also used as the Anthropic tool name). */
+  name: string;
+  /** Free-form description forwarded verbatim. */
+  description?: string;
+  /** JSON schema (object or top-level scalar). */
+  schema: Record<string, unknown>;
+  /**
+   * When true (default), enforces strict adherence:
+   *   - OpenAI: `strict: true` on the json_schema entry.
+   *   - Anthropic: forces tool_choice; passing `false` leaves the tool
+   *     definition without forcing it.
+   */
+  strict?: boolean;
+};
+
 export type CanonicalModelRequest = {
   model: string;
   provider: string;
@@ -139,6 +167,14 @@ export type CanonicalModelRequest = {
   thinking?: CanonicalThinkingConfig;
   stream?: boolean;
   metadata?: Record<string, unknown>;
+  /** A3: provider-native structured output (see CanonicalOutputSchema). */
+  outputSchema?: CanonicalOutputSchema;
+  /**
+   * A4: indices into `messages` whose final content block should be marked
+   * `cache_control: { type: "ephemeral" }` when lowered to Anthropic. Other
+   * providers ignore this. Set by `CachedMicroCompactionEngine`.
+   */
+  cacheBreakpoints?: number[];
 };
 
 export type CanonicalUsage = {

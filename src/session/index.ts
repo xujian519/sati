@@ -36,3 +36,8 @@ export type {
   SessionMetadataValue,
 } from "./transcript/TranscriptEntry.js";
 export type { AgentTranscriptWriter } from "./transcript/TranscriptWriter.js";
+export {
+  findCanonicalProjectRoot,
+  findGitRoot,
+  resolveCanonicalRoot,
+} from "./worktree/index.js";
