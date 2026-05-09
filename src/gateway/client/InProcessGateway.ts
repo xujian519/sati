@@ -3,9 +3,12 @@ import type { AgentEvent, AgentTurnResult } from "../../agent/index.js";
 import type { CanonicalModelEvent } from "../../model/index.js";
 import { contentToText } from "../../tool/index.js";
 import type { SessionRouter } from "../SessionRouter.js";
+import { GatewayElicitationBus } from "../elicitation/GatewayElicitationBus.js";
+import { AsyncQueue } from "../util/AsyncQueue.js";
 import type {
   GatewayCronController,
   Gateway,
+  GatewayElicitationResponseInput,
   GatewayEvent,
   GatewayServerInfo,
   GatewaySubmitTurnInput,
@@ -34,6 +37,15 @@ export type InProcessGatewayOptions = {
 export class InProcessGateway implements Gateway {
   private readonly now: () => Date;
   private readonly uuid: () => string;
+  /**
+   * B1 — registry of active per-session emit sinks. The gateway shares this
+   * map with the per-session `GatewayElicitationChannel` so an `askUser`
+   * call can surface an `elicitation_request` event into the active
+   * `submitTurn` stream from outside the agent's event iterator.
+   */
+  private readonly emitSinks = new Map<string, (event: GatewayEvent) => void>();
+  /** B1 — pending askUser() promises keyed by sessionKey + requestId. */
+  private readonly elicitationBus = new GatewayElicitationBus();
 
   constructor(
     private readonly router: SessionRouter,
@@ -41,6 +53,26 @@ export class InProcessGateway implements Gateway {
   ) {
     this.now = options.now ?? (() => new Date());
     this.uuid = options.uuid ?? randomUUID;
+  }
+
+  /**
+   * B1 — exposed so per-session bridge channels can find the bus / emit
+   * sink without going through `respondElicitation`. Caller MUST already
+   * hold a sessionKey.
+   */
+  getElicitationBus(): GatewayElicitationBus {
+    return this.elicitationBus;
+  }
+
+  /**
+   * B1 — install a sink to receive `elicitation_request` /
+   * `elicitation_cancelled` events for `sessionKey` while a turn is active.
+   * Returns the sink the channel should call. The function is replaced /
+   * cleared by `submitTurn` lifecycle.
+   */
+  emitForSession(sessionKey: string, event: GatewayEvent): void {
+    const sink = this.emitSinks.get(sessionKey);
+    if (sink) sink(event);
   }
 
   async *submitTurn(input: GatewaySubmitTurnInput): AsyncIterable<GatewayEvent> {
@@ -55,27 +87,46 @@ export class InProcessGateway implements Gateway {
       return;
     }
 
-    try {
-      const session = await this.router.getOrCreate({
-        sessionKey: input.sessionKey,
-        projectKey: input.projectKey,
-        channelKey: input.channelKey,
-      });
+    const queue = new AsyncQueue<GatewayEvent>();
+    this.emitSinks.set(input.sessionKey, (event) => queue.enqueue(event));
 
-      for await (const event of session.submit({ type: "text", text: input.message }, { turnId: runId })) {
-        for (const gatewayEvent of mapAgentEvent(event, runId)) {
-          yield gatewayEvent;
+    // Background pump: agent events → queue.
+    const pump = (async () => {
+      try {
+        const session = await this.router.getOrCreate({
+          sessionKey: input.sessionKey,
+          projectKey: input.projectKey,
+          channelKey: input.channelKey,
+        });
+        for await (const event of session.submit({ type: "text", text: input.message }, { turnId: runId })) {
+          for (const gatewayEvent of mapAgentEvent(event, runId)) {
+            queue.enqueue(gatewayEvent);
+          }
         }
+      } catch (error) {
+        queue.enqueue({
+          type: "error",
+          code: "gateway_submit_failed",
+          message: error instanceof Error ? error.message : String(error),
+          recoverable: false,
+        });
+      } finally {
+        queue.close();
       }
-    } catch (error) {
-      yield {
-        type: "error",
-        code: "gateway_submit_failed",
-        message: error instanceof Error ? error.message : String(error),
-        recoverable: false,
-      };
+    })();
+
+    try {
+      for await (const event of queue) {
+        yield event;
+      }
     } finally {
+      // Clean up the emit-sink and any orphaned elicitation entries before
+      // returning so a subsequent turn doesn't see stale state.
+      this.emitSinks.delete(input.sessionKey);
+      this.elicitationBus.rejectSession(input.sessionKey, "turn_ended");
       this.router.endTurn(input.sessionKey, runId);
+      // Defensive — make sure the pump promise is settled before we resolve.
+      await pump.catch(() => undefined);
     }
   }
 
@@ -123,6 +174,13 @@ export class InProcessGateway implements Gateway {
 
   async cronStop(input: CronStopInput): Promise<CronStopResult> {
     return this.requireCron().stopTask(input);
+  }
+
+  async respondElicitation(input: GatewayElicitationResponseInput): Promise<{ delivered: boolean }> {
+    const entry = this.elicitationBus.consume(input.sessionKey, input.requestId);
+    if (!entry) return { delivered: false };
+    entry.resolve(input.answer);
+    return { delivered: true };
   }
 
   private requireCron(): GatewayCronController {

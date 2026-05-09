@@ -1,9 +1,12 @@
 import type {
   ContextBoundary,
+  ContextCaptureTurnInput,
   ContextDiagnostic,
   ContextPrepareInput,
   ContextRecoveryDecision,
   ContextRecoveryInput,
+  ContextToolResultInput,
+  ContextToolResultResult,
   ModelContext,
 } from "./protocol/types.js";
 
@@ -18,6 +21,9 @@ export type AgentContextDiagnostic = ContextDiagnostic;
  * loop slices `messages` and retries the model call once per turn.
  */
 export type AgentContextRecoveryInput = ContextRecoveryInput;
+export type AgentContextToolResultInput = ContextToolResultInput;
+export type AgentContextToolResultResult = ContextToolResultResult;
+export type AgentContextCaptureTurnInput = ContextCaptureTurnInput;
 
 export type AgentContextRuntime = {
   prepareForModel(input: AgentContextPrepareInput): Promise<AgentPreparedContext>;
@@ -27,4 +33,16 @@ export type AgentContextRuntime = {
    * loop falls back to `AgentRecoveryPolicy` directly.
    */
   recoverFromModelError?(input: AgentContextRecoveryInput): Promise<ContextRecoveryDecision>;
+  /**
+   * Optional. Real implementations route through `ToolResultBudget` so large
+   * tool results land on disk. Minimal runtimes leave this undefined and the
+   * loop appends the raw `toolResultMessage` directly.
+   */
+  applyToolResults?(input: AgentContextToolResultInput): Promise<AgentContextToolResultResult>;
+  /**
+   * Optional. Real implementations forward the turn-end snapshot into the
+   * configured memory provider's `captureTurn`. Errors must not bubble — the
+   * implementation swallows so a failing memory backend never breaks a turn.
+   */
+  captureTurn?(input: AgentContextCaptureTurnInput): Promise<void>;
 };

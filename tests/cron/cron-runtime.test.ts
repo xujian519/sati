@@ -64,6 +64,7 @@ function makeGateway(): Gateway & {
     cronStop: async (_input: CronStopInput) => {
       throw new Error("not used");
     },
+    respondElicitation: async () => ({ delivered: false }),
     waitForSubmit: () => submitPromise,
   };
   return gateway;

@@ -84,6 +84,21 @@ export type ContextRecoveryDecision =
   | { type: "give_up"; reason: string };
 
 /**
+ * Hand-off after a turn finishes (success, failure, or aborted). When a
+ * memory provider is wired into context, this is where the runtime forwards
+ * the conversation snapshot to the provider's capture pipeline. The hook is
+ * advisory — context implementations without memory simply no-op.
+ */
+export type ContextCaptureTurnInput = {
+  sessionId: string;
+  turnId: string;
+  /** Whole turn-end message history (not the in-flight projection). */
+  messages: CanonicalMessage[];
+  /** True if the turn ended in error/abort; false on completed success. */
+  errored: boolean;
+};
+
+/**
  * Public ContextRuntime contract consumed by the agent loop. The runtime is
  * **not** model-aware — `recoverFromModelError` only returns a decision; the
  * loop is responsible for any model calls (CompactionEngine.summarize) needed
@@ -93,4 +108,10 @@ export interface ContextRuntime {
   prepareForModel(input: ContextPrepareInput): Promise<ModelContext>;
   applyToolResults(input: ContextToolResultInput): Promise<ContextToolResultResult>;
   recoverFromModelError(input: ContextRecoveryInput): Promise<ContextRecoveryDecision>;
+  /**
+   * Optional turn-end hook (memory capture). Implementations without a
+   * memory provider should leave this absent so the agent loop can short-
+   * circuit. Throwing must not break the turn — implementations swallow.
+   */
+  captureTurn?(input: ContextCaptureTurnInput): Promise<void>;
 }

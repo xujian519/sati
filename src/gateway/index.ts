@@ -21,6 +21,7 @@ export type {
   Gateway,
   GatewayChannelKey,
   GatewayCronController,
+  GatewayElicitationResponseInput,
   GatewayError,
   GatewayEvent,
   GatewayMode,
@@ -32,6 +33,9 @@ export type {
   NewSessionInput,
   TurnUsage,
 } from "./protocol/index.js";
+export { GatewayElicitationBus } from "./elicitation/GatewayElicitationBus.js";
+export { GatewayElicitationChannel } from "./elicitation/GatewayElicitationChannel.js";
+export { AsyncQueue } from "./util/AsyncQueue.js";
 export type {
   GatewayWsClientName,
   WsEventFrame,

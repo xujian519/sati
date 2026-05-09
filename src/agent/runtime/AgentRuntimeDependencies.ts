@@ -1,5 +1,11 @@
 import type { CanonicalMessage, CanonicalModelEvent, CanonicalModelRequest } from "../../model/index.js";
-import type { PolitDeckToolAuditRecorder, PolitDeckToolScheduler, ToolRegistry } from "../../tool/index.js";
+import type {
+  PolitDeckElicitationChannel,
+  PolitDeckToolAuditRecorder,
+  PolitDeckToolFileHistorySink,
+  PolitDeckToolScheduler,
+  ToolRegistry,
+} from "../../tool/index.js";
 import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
 import type { RouterRuntime } from "../../router/index.js";
@@ -74,6 +80,18 @@ export type AgentRuntimeDependencies = {
   lifecycle?: LifecycleRuntime;
   /** C3 sidechain transcript hooks (optional). */
   subagentTranscript?: AgentSubagentTranscriptHooks;
+  /**
+   * Elicitation channel — wired into the per-tool `PolitDeckToolRuntimeContext`
+   * so `ask_user_question` (B1) can drive the gateway. When omitted, the
+   * tool returns a `mcp_unavailable` error instead of crashing.
+   */
+  elicitation?: PolitDeckElicitationChannel;
+  /**
+   * File-history sink — wired into the per-tool runtime context so
+   * `edit_file` / `write_file` (C4) snapshot the file before mutation.
+   * `FileHistoryStore` directly satisfies this contract.
+   */
+  fileHistory?: PolitDeckToolFileHistorySink;
 };
 
 export type AgentLegacyModelRuntime = {
