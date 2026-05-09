@@ -146,3 +146,7 @@ vite.config.ts.timestamp-*
 artifacts/
 
 # third-party
+third-party/
+
+# Project-local PolitDeck overrides (per-project .politdeck/politdeck.yaml etc)
+.politdeck/
