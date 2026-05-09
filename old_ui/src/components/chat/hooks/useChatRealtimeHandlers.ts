@@ -55,6 +55,7 @@ interface UseChatRealtimeHandlersArgs {
   setCurrentSessionId: (sessionId: string | null) => void;
   setIsLoading: (loading: boolean) => void;
   setCanAbortSession: (canAbort: boolean) => void;
+  setIsAborting: (aborting: boolean) => void;
   setClaudeStatus: (status: { text: string; tokens: number; can_interrupt: boolean } | null) => void;
   setTokenBudget: (budget: Record<string, unknown> | null) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
@@ -83,6 +84,7 @@ export function useChatRealtimeHandlers({
   setCurrentSessionId,
   setIsLoading,
   setCanAbortSession,
+  setIsAborting,
   setClaudeStatus,
   setTokenBudget,
   setPendingPermissionRequests,
@@ -278,6 +280,9 @@ export function useChatRealtimeHandlers({
       }
 
       case 'complete': {
+        // #region agent log
+        fetch('http://127.0.0.1:7450/ingest/6d23a73d-7d80-486b-b66d-c1253f9689d3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ad403'},body:JSON.stringify({sessionId:'5ad403',location:'useChatRealtimeHandlers.ts:complete',message:'complete event clears all pending permissions',data:{sid,currentSessionId,selectedSessionId:selectedSession?.id},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
         // Flush any remaining streaming state
         if (streamTimerRef.current) {
           clearTimeout(streamTimerRef.current);
@@ -292,8 +297,11 @@ export function useChatRealtimeHandlers({
 
         setIsLoading(false);
         setCanAbortSession(false);
+        setIsAborting(false);
         setClaudeStatus(null);
-        setPendingPermissionRequests([]);
+        setPendingPermissionRequests((prev) =>
+          prev.filter((r) => r.sessionId && r.sessionId !== sid),
+        );
         onSessionInactive?.(sid);
         onSessionNotProcessing?.(sid);
 
@@ -326,6 +334,7 @@ export function useChatRealtimeHandlers({
       case 'error': {
         setIsLoading(false);
         setCanAbortSession(false);
+        setIsAborting(false);
         setClaudeStatus(null);
         onSessionInactive?.(sid);
         onSessionNotProcessing?.(sid);
@@ -334,6 +343,16 @@ export function useChatRealtimeHandlers({
 
       case 'permission_request': {
         if (!msg.requestId) break;
+        const permSid = msg.sessionId || sid;
+        const isForCurrentSession =
+          !permSid ||
+          permSid === currentSessionId ||
+          permSid === selectedSession?.id ||
+          permSid === activeViewSessionId;
+        // #region agent log
+        fetch('http://127.0.0.1:7450/ingest/6d23a73d-7d80-486b-b66d-c1253f9689d3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ad403'},body:JSON.stringify({sessionId:'5ad403',location:'useChatRealtimeHandlers.ts:permission_request',message:'permission_request received',data:{msgSessionId:msg.sessionId,permSid,activeViewSessionId,currentSessionId,selectedSessionId:selectedSession?.id,requestId:msg.requestId,toolName:msg.toolName,isForCurrentSession},timestamp:Date.now(),hypothesisId:'A,B,E'})}).catch(()=>{});
+        // #endregion
+        if (!isForCurrentSession) break;
         setPendingPermissionRequests((prev) => {
           if (prev.some((r: PendingPermissionRequest) => r.requestId === msg.requestId)) return prev;
           return [...prev, {
@@ -341,7 +360,7 @@ export function useChatRealtimeHandlers({
             toolName: msg.toolName || 'UnknownTool',
             input: msg.input,
             context: msg.context,
-            sessionId: sid || null,
+            sessionId: permSid || null,
             receivedAt: new Date(),
           }];
         });
@@ -386,6 +405,7 @@ export function useChatRealtimeHandlers({
     setCurrentSessionId,
     setIsLoading,
     setCanAbortSession,
+    setIsAborting,
     setClaudeStatus,
     setTokenBudget,
     setPendingPermissionRequests,

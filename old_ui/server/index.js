@@ -43,7 +43,7 @@ import os from 'os';
 import http from 'http';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
-import { spawn } from 'child_process';
+import { spawn, exec } from 'child_process';
 import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
@@ -2625,21 +2625,6 @@ async function startServer() {
                     }
                 }
 
-                // Start global Chrome for browser-use CDP sharing
-                if (!process.env.CDP_URL) {
-                    try {
-                        const { ensureGlobalChrome, startChromeHealthCheck } = await import('./utils/globalChrome.js');
-                        const cdpUrl = await ensureGlobalChrome();
-                        if (cdpUrl) {
-                            process.env.CDP_URL = cdpUrl;
-                            startChromeHealthCheck(30_000);
-                            console.log(`${c.ok('[BROWSER]')} Global Chrome ready at ${c.bright(cdpUrl)}`);
-                        }
-                    } catch (err) {
-                        console.warn(`${c.warn('[BROWSER]')} Global Chrome not started: ${err.message}`);
-                    }
-                }
-
                 console.log(`${c.info('[INFO]')} To run in development mode with hot-module replacement, go to http://${DISPLAY_HOST}:${VITE_PORT}`);
 
                 server.listen(SERVER_PORT, HOST, async () => {
@@ -2654,6 +2639,12 @@ async function startServer() {
                     console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
                     console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
                     console.log('');
+
+                    const serverUrl = `http://${DISPLAY_HOST === '0.0.0.0' ? 'localhost' : DISPLAY_HOST}:${SERVER_PORT}`;
+                    const openCmd = process.platform === 'darwin' ? 'open'
+                                  : process.platform === 'win32' ? 'start'
+                                  : 'xdg-open';
+                    exec(`${openCmd} "${serverUrl}"`, () => {});
 
                     // Start watching the projects folder for changes
                     await setupProjectsWatcher();
