@@ -163,14 +163,12 @@ displayName
 capabilities
 multimodal
 aliases
-request
 ```
 
 - `displayName`：用户可见模型名称。
 - `capabilities`：该具体模型的能力声明。
 - `multimodal`：该具体模型的多模态输入能力和结构化限制。
 - `aliases`：可选别名。
-- `request`：可选模型级请求参数覆盖，例如 temperature 默认值、reasoning 参数名或厂商特定开关。
 
 ## API Key 解析
 

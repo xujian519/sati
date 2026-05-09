@@ -406,7 +406,6 @@ politdeck resume <id>     等价 `politdeck` + 自动 sessionKey 解析
 gateway:
   port: 18789
   bindAddress: 127.0.0.1
-  tokenPath: ~/.politdeck/server-token
   idleSessionTimeoutMinutes: 30
   staticAssetsPath: ./ui/dist
 

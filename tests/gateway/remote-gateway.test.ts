@@ -1,13 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { InProcessGateway, RemoteGateway, SessionRouter, startGatewayServer, GatewayWsClient } from "../../src/gateway/index.js";
 import type { AgentEvent, AgentSession } from "../../src/agent/index.js";
 
 test("RemoteGateway streams events through GatewayServer WebSocket", async () => {
-  const tempDir = await mkdtemp(join(tmpdir(), "politdeck-gateway-"));
   const router = new SessionRouter({
     createSession: async () =>
       fakeSession("session-1", [
@@ -39,7 +35,7 @@ test("RemoteGateway streams events through GatewayServer WebSocket", async () =>
   const server = await startGatewayServer({
     gateway: new InProcessGateway(router, { uuid: () => "run-1" }),
     port: 0,
-    tokenPath: join(tempDir, "server-token"),
+    token: "test-token",
   });
 
   const client = new GatewayWsClient({ url: server.wsUrl, token: server.token, clientName: "test" });
@@ -63,7 +59,6 @@ test("RemoteGateway streams events through GatewayServer WebSocket", async () =>
   } finally {
     client.close();
     await server.close();
-    await rm(tempDir, { recursive: true, force: true });
   }
 });
 

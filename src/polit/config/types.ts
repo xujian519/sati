@@ -89,7 +89,6 @@ export type PolitMemoryConfig = {
 export type PolitGatewayConfig = {
   port: number;
   bindAddress: "127.0.0.1";
-  tokenPath?: string;
   idleSessionTimeoutMinutes: number;
   staticAssetsPath?: string;
 };

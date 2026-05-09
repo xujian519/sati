@@ -130,6 +130,11 @@ YAML 中不允许出现 `polit` 段来配置 `PolitHome`、缓存目录、聊天
 - 环境变量，例如 `POLIT_HOME`。
 - `polit/paths` 基于 `PolitHome` 派生出的固定规则。
 
+当前固定派生路径包括：
+
+- Gateway 本地鉴权 token：`${PolitHome}/server-token`，不接受 `gateway.tokenPath` 覆盖。
+- Memory 默认根目录：`${PolitHome}/memory`；`memory.rootDir` 仍可作为 memory 模块自身的数据目录覆盖项。
+
 原因：
 
 - config loader 必须先知道 `PolitHome`，才能找到默认 YAML。

@@ -183,7 +183,6 @@ export type ModelDefinition = {
   capabilities: ModelCapabilities;
   multimodal: MultimodalConstraints;
   aliases?: string[];
-  request?: Record<string, unknown>;
 };
 
 export type ProviderConfig = {

@@ -26,11 +26,19 @@ export function parseGatewayConfig(rawGateway: unknown, diagnostics: PolitConfig
       recoverable: false,
     });
   }
+  if (rawGateway.tokenPath !== undefined) {
+    diagnostics.push({
+      code: "GATEWAY_TOKEN_PATH_REMOVED",
+      severity: "warning",
+      message: "gateway.tokenPath is no longer configurable; the gateway token is stored under PolitHome.",
+      path: "gateway.tokenPath",
+      recoverable: true,
+    });
+  }
 
   return {
     port: numberField(rawGateway, "port", 18789),
     bindAddress: "127.0.0.1",
-    tokenPath: stringField(rawGateway, "tokenPath"),
     idleSessionTimeoutMinutes: numberField(rawGateway, "idleSessionTimeoutMinutes", 30),
     staticAssetsPath: stringField(rawGateway, "staticAssetsPath"),
   };

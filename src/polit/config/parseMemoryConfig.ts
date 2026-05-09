@@ -1,7 +1,11 @@
 import { isRecord } from "../../model/config/schema.js";
 import { PolitConfigError, type PolitConfigDiagnostic, type PolitMemoryConfig, type PolitMemoryLlmConfig } from "./types.js";
 
-export function parseMemoryConfig(rawMemory: unknown, diagnostics: PolitConfigDiagnostic[]): PolitMemoryConfig | undefined {
+export function parseMemoryConfig(
+  rawMemory: unknown,
+  diagnostics: PolitConfigDiagnostic[],
+  defaultRootDir: string,
+): PolitMemoryConfig | undefined {
   if (rawMemory === undefined) {
     return undefined;
   }
@@ -33,7 +37,7 @@ export function parseMemoryConfig(rawMemory: unknown, diagnostics: PolitConfigDi
   return {
     enabled,
     provider,
-    rootDir: readOptionalString(rawMemory.rootDir, "memory.rootDir"),
+    rootDir: readOptionalString(rawMemory.rootDir, "memory.rootDir") ?? defaultRootDir,
     captureStrategy: readCaptureStrategy(rawMemory.captureStrategy),
     includeAssistant: readBoolean(rawMemory.includeAssistant, true, "memory.includeAssistant"),
     maxMessageChars: readOptionalPositiveNumber(rawMemory.maxMessageChars, "memory.maxMessageChars"),
