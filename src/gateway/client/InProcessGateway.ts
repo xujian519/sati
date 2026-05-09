@@ -4,6 +4,7 @@ import type { CanonicalModelEvent } from "../../model/index.js";
 import { contentToText } from "../../tool/index.js";
 import type { SessionRouter } from "../SessionRouter.js";
 import type {
+  GatewayCronController,
   Gateway,
   GatewayEvent,
   GatewayServerInfo,
@@ -12,11 +13,22 @@ import type {
   ListSessionsResult,
   NewSessionInput,
 } from "../protocol/types.js";
+import type {
+  CronCreateInput,
+  CronCreateResult,
+  CronDeleteInput,
+  CronDeleteResult,
+  CronListInput,
+  CronListResult,
+  CronStopInput,
+  CronStopResult,
+} from "../../cron/protocol/types.js";
 
 export type InProcessGatewayOptions = {
   now?: () => Date;
   uuid?: () => string;
   serverInfo?: Partial<GatewayServerInfo>;
+  cron?: GatewayCronController;
 };
 
 export class InProcessGateway implements Gateway {
@@ -95,6 +107,29 @@ export class InProcessGateway implements Gateway {
       sessionCount: this.router.sessionCount(),
       ...this.options.serverInfo,
     };
+  }
+
+  async cronCreate(input: CronCreateInput): Promise<CronCreateResult> {
+    return this.requireCron().createTask(input);
+  }
+
+  async cronList(input: CronListInput): Promise<CronListResult> {
+    return this.requireCron().listTasks(input);
+  }
+
+  async cronDelete(input: CronDeleteInput): Promise<CronDeleteResult> {
+    return this.requireCron().deleteTask(input);
+  }
+
+  async cronStop(input: CronStopInput): Promise<CronStopResult> {
+    return this.requireCron().stopTask(input);
+  }
+
+  private requireCron(): GatewayCronController {
+    if (!this.options.cron) {
+      throw new Error("Cron runtime is not configured.");
+    }
+    return this.options.cron;
   }
 }
 

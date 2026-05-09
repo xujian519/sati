@@ -7,6 +7,16 @@ import type {
   ListSessionsResult,
   NewSessionInput,
 } from "../protocol/types.js";
+import type {
+  CronCreateInput,
+  CronCreateResult,
+  CronDeleteInput,
+  CronDeleteResult,
+  CronListInput,
+  CronListResult,
+  CronStopInput,
+  CronStopResult,
+} from "../../cron/protocol/types.js";
 import { GatewayWsClient } from "./GatewayWsClient.js";
 
 export class RemoteGateway implements Gateway {
@@ -38,6 +48,22 @@ export class RemoteGateway implements Gateway {
 
   async describeServer(): Promise<GatewayServerInfo> {
     return (await this.client.request("describe_server", {})) as GatewayServerInfo;
+  }
+
+  async cronCreate(input: CronCreateInput): Promise<CronCreateResult> {
+    return (await this.client.request("cron_create", input)) as CronCreateResult;
+  }
+
+  async cronList(input: CronListInput): Promise<CronListResult> {
+    return (await this.client.request("cron_list", input)) as CronListResult;
+  }
+
+  async cronDelete(input: CronDeleteInput): Promise<CronDeleteResult> {
+    return (await this.client.request("cron_delete", input)) as CronDeleteResult;
+  }
+
+  async cronStop(input: CronStopInput): Promise<CronStopResult> {
+    return (await this.client.request("cron_stop", input)) as CronStopResult;
   }
 }
 

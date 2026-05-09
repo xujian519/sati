@@ -1,9 +1,10 @@
 import { resolve } from "node:path";
 import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
-import { createAgentSession, type AgentRuntimeConfig, type CreateAgentSessionOptions } from "../agent/index.js";
+import type { AgentRuntimeConfig, CreateAgentSessionOptions } from "../agent/index.js";
 import {
   createGateway,
   type Gateway,
+  type GatewayCronController,
   type GatewayProjectStorageOptions,
   type GatewaySessionContext,
   type ListSessionsInput,
@@ -14,7 +15,7 @@ import { createDefaultPermissionContext } from "../permission/index.js";
 import { loadPolitConfig, resolvePolitHome } from "../polit/index.js";
 import type { PolitAgentModelSelection } from "../polit/config/types.js";
 import type { RouterConfig } from "../router/config/schema.js";
-import { listProjectSessions } from "../session/index.js";
+import { listProjectSessions, resumeAgentSession } from "../session/index.js";
 import { createBuiltinRegistry } from "../tool/index.js";
 import type { PolitDeckToolDefinition, ToolRegistry } from "../tool/index.js";
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
@@ -28,6 +29,8 @@ export type CreateLocalGatewayOptions = {
   extraTools?: PolitDeckToolDefinition[];
   /** Per-sessionKey config overrides (cwd / permissionMode). */
   sessionOverrides?: SessionConfigOverrides;
+  /** Optional Cron runtime controller exposed through Gateway management methods. */
+  cron?: GatewayCronController;
 };
 
 export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gateway {
@@ -57,6 +60,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gat
     serverInfo: {
       projectKey: projectRoot,
     },
+    cron: options.cron,
   });
 }
 
@@ -117,9 +121,9 @@ class ProjectRuntimeRegistry {
     return runtime;
   }
 
-  createSession(context: GatewaySessionContext) {
+  async createSession(context: GatewaySessionContext) {
     const runtime = this.resolve(context.projectKey);
-    return createAgentSession({
+    const resumed = await resumeAgentSession({
       sessionId: context.sessionKey,
       config: this.createAgentConfig(runtime, context.sessionKey),
       dependencies: {
@@ -129,6 +133,7 @@ class ProjectRuntimeRegistry {
       },
       projectStorage: runtime.projectStorage,
     });
+    return resumed.session;
   }
 
   async listSessions(input: ListSessionsInput): Promise<ListSessionsResult> {

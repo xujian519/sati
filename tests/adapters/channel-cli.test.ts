@@ -57,5 +57,17 @@ function fakeGateway(calls: GatewaySubmitTurnInput[], events: GatewayEvent[]): G
     newSession: async () => ({ sessionKey: "new" }),
     closeSession: async () => undefined,
     describeServer: async () => ({ mode: "in_process" }),
+    cronCreate: async () => {
+      throw new Error("not configured");
+    },
+    cronList: async () => {
+      throw new Error("not configured");
+    },
+    cronDelete: async () => {
+      throw new Error("not configured");
+    },
+    cronStop: async () => {
+      throw new Error("not configured");
+    },
   };
 }

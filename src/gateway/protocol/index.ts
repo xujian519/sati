@@ -1,6 +1,7 @@
 export type {
   ChannelAttachment,
   Gateway,
+  GatewayCronController,
   GatewayChannelKey,
   GatewayError,
   GatewayEvent,

@@ -30,6 +30,9 @@ function classifyPath(path: string): PolitConfigChangeClass {
   if (path.startsWith("router.")) {
     return classifyRouterPath(path);
   }
+  if (path.startsWith("cron.")) {
+    return "restart-required";
+  }
   return "next-runtime";
 }
 

@@ -1,4 +1,5 @@
 import type { AlwaysOnConfig } from "../../always-on/config/parseAlwaysOnConfig.js";
+import type { CronConfig } from "../../cron/config/parseCronConfig.js";
 import type { ModelConfig } from "../../model/protocol/canonical.js";
 import type { RouterConfig } from "../../router/config/schema.js";
 
@@ -42,6 +43,7 @@ export type PolitRawConfig = {
   adapters?: unknown;
   router?: unknown;
   alwaysOn?: unknown;
+  cron?: unknown;
 };
 
 export type PolitExtensionConfig = {
@@ -118,6 +120,7 @@ export type PolitConfig = {
   adapters?: PolitAdaptersConfig;
   router?: RouterConfig;
   alwaysOn?: AlwaysOnConfig;
+  cron?: CronConfig;
 };
 
 export type PolitConfigSnapshot = {

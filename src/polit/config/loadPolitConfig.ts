@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { parseDocument } from "yaml";
 import { parseAlwaysOnConfig } from "../../always-on/config/parseAlwaysOnConfig.js";
+import { parseCronConfig } from "../../cron/config/parseCronConfig.js";
 import { parseModelConfig } from "../../model/config/parseModelConfig.js";
 import { isRecord } from "../../model/config/schema.js";
 import { ModelConfigError } from "../../model/protocol/errors.js";
@@ -99,6 +100,7 @@ export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConf
   const adapters = parseAdaptersConfig(rawConfig.adapters, diagnostics);
   const router = parseRouterSection(rawConfig.router, model, diagnostics);
   const alwaysOn = parseAlwaysOnConfig(rawConfig.alwaysOn, diagnostics);
+  const cron = parseCronConfig(rawConfig.cron, diagnostics);
   throwConfigErrorIfFatal(diagnostics);
 
   const redactedSnapshotConfig = redactConfig({
@@ -110,6 +112,7 @@ export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConf
     adapters,
     router,
     alwaysOn,
+    cron,
   });
   return deepFreeze({
     version: options.version ?? 1,
@@ -127,6 +130,7 @@ export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConf
       ...(adapters ? { adapters } : {}),
       ...(router ? { router } : {}),
       ...(alwaysOn ? { alwaysOn } : {}),
+      ...(cron ? { cron } : {}),
     },
   });
 }
@@ -270,6 +274,7 @@ function validateTopLevel(rawConfig: PolitRawConfig, diagnostics: PolitConfigDia
     "adapters",
     "router",
     "alwaysOn",
+    "cron",
   ]);
   for (const key of Object.keys(rawConfig)) {
     if (!allowedKeys.has(key)) {
