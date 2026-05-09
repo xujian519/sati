@@ -3,6 +3,7 @@ import type { LifecycleRuntime } from "../../src/lifecycle/index.js";
 import {
   ToolRegistry,
   ToolRuntime,
+  type PolitDeckElicitationChannel,
   type PolitDeckToolAuditRecorder,
   type PolitDeckToolDefinition,
   type PolitDeckToolExecutionOutput,
@@ -47,6 +48,7 @@ export function createPolitDeckToolRuntimeFixture(options?: {
   maxResultBytes?: number;
   cwd?: string;
   lifecycle?: LifecycleRuntime;
+  elicitation?: PolitDeckElicitationChannel;
 }): {
   registry: ToolRegistry;
   permissionRuntime: PermissionRuntime;
@@ -74,6 +76,7 @@ export function createPolitDeckToolRuntimeFixture(options?: {
     auditRecorder: options?.auditRecorder,
     maxResultBytes: options?.maxResultBytes,
     now: () => new Date("2026-01-01T00:00:00.000Z"),
+    elicitation: options?.elicitation,
   };
 
   return { registry, permissionRuntime, toolRuntime, context };

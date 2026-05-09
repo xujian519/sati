@@ -14,13 +14,26 @@ test("creates a builtin registry with first implementation tools", () => {
 
   assert.deepEqual(
     registry.list().map((tool) => tool.name),
-    ["agent", "bash", "edit_file", "glob", "grep", "read_file", "web_search", "write_file"],
+    ["agent", "bash", "edit_file", "glob", "grep", "read_file", "web_fetch", "web_search", "write_file"],
   );
   assert.equal(registry.get("Read")?.name, "read_file");
   assert.equal(registry.get("Bash")?.name, "bash");
   assert.equal(registry.get("WebSearch")?.name, "web_search");
+  assert.equal(registry.get("WebFetch")?.name, "web_fetch");
   assert.equal(registry.get("Agent")?.name, "agent");
   assert.equal(registry.get("Task")?.name, "agent");
+});
+
+test("createBuiltinRegistry can opt out of web_fetch", () => {
+  const registry = createBuiltinRegistry({
+    bash: {
+      runner: {
+        run: async () => ({ exitCode: 0, stdout: "", stderr: "", timedOut: false, durationMs: 0 }),
+      },
+    },
+    webFetch: false,
+  });
+  assert.equal(registry.has("web_fetch"), false);
 });
 
 test("createBuiltinRegistry can opt out of web_search", () => {

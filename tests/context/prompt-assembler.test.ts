@@ -68,7 +68,7 @@ test("PromptAssembler renders extension commands and skills", () => {
   assert.match(result.joined, /- code-review — Structured code review playbook/);
 });
 
-test("PromptAssembler renders MCP instructions when ExtensionResolver provides them", () => {
+test("PromptAssembler renders MCP instructions in <mcp-instructions> block when ExtensionResolver provides them", () => {
   const extension: ExtensionResolver = {
     listCommands: () => [],
     listSkills: () => [],
@@ -77,8 +77,43 @@ test("PromptAssembler renders MCP instructions when ExtensionResolver provides t
   const assembler = new PromptAssembler(extension);
   const result = assembler.assemble(baseInput);
   assert.match(result.joined, /Connected MCP server instructions:/);
-  assert.match(result.joined, /- filesystem:/);
+  assert.match(result.joined, /<mcp-instructions>/);
+  assert.match(result.joined, /<server name="filesystem">/);
   assert.match(result.joined, /Use only project paths\./);
+  assert.match(result.joined, /<\/server>/);
+  assert.match(result.joined, /<\/mcp-instructions>/);
+});
+
+test("B3 PromptAssembler sorts MCP servers by name and skips empty instructions", () => {
+  const extension: ExtensionResolver = {
+    listCommands: () => [],
+    listSkills: () => [],
+    listMcpInstructions: () => [
+      { serverName: "zeta", instructions: "z body" },
+      { serverName: "empty" }, // no instructions → dropped
+      { serverName: "alpha", instructions: "a body" },
+    ],
+  };
+  const assembler = new PromptAssembler(extension);
+  const result = assembler.assemble(baseInput);
+  assert.match(result.joined, /<mcp-instructions>/);
+  const alphaIdx = result.joined.indexOf('<server name="alpha">');
+  const zetaIdx = result.joined.indexOf('<server name="zeta">');
+  assert.ok(alphaIdx > 0 && zetaIdx > 0, "both populated entries appear");
+  assert.ok(alphaIdx < zetaIdx, "alpha sorts before zeta");
+  assert.doesNotMatch(result.joined, /<server name="empty">/);
+});
+
+test("B3 PromptAssembler omits the entire MCP block when no server contributes", () => {
+  const extension: ExtensionResolver = {
+    listCommands: () => [],
+    listSkills: () => [],
+    listMcpInstructions: () => [],
+  };
+  const assembler = new PromptAssembler(extension);
+  const result = assembler.assemble(baseInput);
+  assert.doesNotMatch(result.joined, /Connected MCP server instructions:/);
+  assert.doesNotMatch(result.joined, /<mcp-instructions>/);
 });
 
 test("PromptAssembler reflects plan permission mode and additional working directories", () => {

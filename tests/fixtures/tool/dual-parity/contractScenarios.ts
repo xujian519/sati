@@ -88,7 +88,7 @@ export const dualParityContractScenarios: DualParityContractScenario[] = [
     id: "web-fetch-contract",
     status: "compare",
     legacy: { toolName: "WebFetch", input: { url: "https://example.com", prompt: "summarize" } },
-    politdeck: { toolName: "web_fetch", input: { url: "https://example.com" } },
+    politdeck: { toolName: "web_fetch", input: { url: "https://example.com", prompt: "summarize" } },
     compareFields: ["readOnly", "concurrencySafe"],
   },
   {

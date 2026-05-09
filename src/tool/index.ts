@@ -65,8 +65,66 @@ export {
   type PolitDeckCommandResult,
   type PolitDeckCommandRunner,
 } from "./builtin/bash.js";
-export { createAskUserQuestionTool, type AskUserQuestionInput } from "./builtin/askUserQuestion.js";
-export { createWebFetchTool, type WebFetchInput } from "./builtin/webFetch.js";
+export {
+  ASK_USER_QUESTION_HEADER_MAX,
+  ASK_USER_QUESTION_TOOL_NAME,
+  createAskUserQuestionTool,
+  type AskUserQuestionInput,
+  type AskUserQuestionItem,
+  type AskUserQuestionOption,
+  type AskUserQuestionOutput,
+} from "./builtin/askUserQuestion.js";
+export {
+  InMemoryElicitationChannel,
+  type PolitDeckElicitationAnswer,
+  type PolitDeckElicitationChannel,
+  type PolitDeckElicitationOption,
+  type PolitDeckElicitationQuestion,
+  type PolitDeckElicitationRequest,
+} from "./elicitation/PolitDeckElicitationChannel.js";
+export { validateHtmlPreview } from "./elicitation/validateHtmlPreview.js";
+export {
+  createWebFetchTool,
+  type CreateWebFetchToolOptions,
+  type WebFetchInput,
+  type WebFetchOutput,
+} from "./builtin/webFetch.js";
+export {
+  isPreapprovedHost,
+  isPreapprovedUrl,
+  PREAPPROVED_ENTRIES,
+} from "./builtin/web/preapprovedHosts.js";
+export {
+  isPermittedRedirect,
+  MAX_URL_LENGTH,
+  upgradeHttpToHttps,
+  validateURL,
+} from "./builtin/web/urlValidation.js";
+export {
+  __setWebFetchHookForTesting,
+  FETCH_TIMEOUT_MS,
+  getURLMarkdownContent,
+  MAX_HTTP_CONTENT_LENGTH,
+  MAX_MARKDOWN_LENGTH,
+  MAX_REDIRECTS,
+  truncateMarkdown,
+  WEB_FETCH_USER_AGENT,
+  type FetchHook,
+  type RedirectInfo,
+  type WebFetchHttpResult,
+} from "./builtin/web/urlFetcher.js";
+export {
+  clearWebFetchCache,
+  URL_CACHE,
+  WEB_FETCH_CACHE_TTL_MS,
+  WEB_FETCH_MAX_CACHE_BYTES,
+  type FetchedCacheEntry,
+} from "./builtin/web/urlContentCache.js";
+export {
+  makeSecondaryModelPrompt,
+  WEB_FETCH_DESCRIPTION,
+  WEB_FETCH_TOOL_NAME,
+} from "./builtin/web/secondaryPrompt.js";
 export {
   createWebSearchTool,
   type CreateWebSearchToolOptions,

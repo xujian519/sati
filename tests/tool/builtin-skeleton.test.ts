@@ -15,7 +15,11 @@ import {
 import { createPolitDeckTempWorkspace } from "../helpers/filesystem.js";
 import { createPolitDeckToolRuntimeFixture } from "../helpers/tool.js";
 
-test("ask_user_question requires a prompt adapter", async (t) => {
+test("ask_user_question without elicitation channel returns unsupported_tool", async (t) => {
+  // B1 design: askUserQuestion is read-only so default-mode permission lets
+  // it through; the elicitation channel is the actual gate. Without one, the
+  // tool reports `unsupported_tool` (legacy parity: same code path used when
+  // the SDK consumer hasn't wired any prompt UI).
   const workspace = await createPolitDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
   const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
@@ -27,13 +31,24 @@ test("ask_user_question requires a prompt adapter", async (t) => {
     {
       id: "call-1",
       name: "ask_user_question",
-      input: { questions: [{ id: "q", prompt: "Pick", options: [{ id: "a", label: "A" }] }] },
+      input: {
+        questions: [
+          {
+            question: "Which?",
+            header: "Pick",
+            options: [
+              { label: "A", description: "first" },
+              { label: "B", description: "second" },
+            ],
+          },
+        ],
+      },
     },
     context,
   );
 
   assert.equal(result.type, "error");
-  if (result.type === "error") assert.equal(result.error.code, "permission_required");
+  if (result.type === "error") assert.equal(result.error.code, "unsupported_tool");
 });
 
 test("web skeleton tools ask for network permission without provider execution", async (t) => {
@@ -45,7 +60,11 @@ test("web skeleton tools ask for network permission without provider execution",
   });
 
   const fetchResult = await toolRuntime.execute(
-    { id: "call-1", name: "web_fetch", input: { url: "https://example.com" } },
+    {
+      id: "call-1",
+      name: "web_fetch",
+      input: { url: "https://example.com", prompt: "summarize" },
+    },
     context,
   );
   const searchResult = await toolRuntime.execute(

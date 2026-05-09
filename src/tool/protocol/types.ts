@@ -9,6 +9,7 @@ import type {
   PermissionResult,
 } from "../../permission/index.js";
 import type { PolitDeckToolAuditRecorder } from "../audit/ToolAuditRecorder.js";
+import type { PolitDeckElicitationChannel } from "../elicitation/PolitDeckElicitationChannel.js";
 import type { PolitDeckToolInputSchema, PolitDeckToolValidationResult } from "./schema.js";
 
 /**
@@ -89,6 +90,13 @@ export type PolitDeckToolRuntimeContext = {
    * `unsupported_tool` with a clear hint instead of failing silently.
    */
   model?: PolitDeckToolModelClient;
+  /**
+   * Optional user-elicitation channel used by `ask_user_question` and any
+   * tool that requests a synchronous user answer. The host (Gateway / TUI /
+   * CLI / Feishu) wires this in. Absent when no UI is connected; affected
+   * tools must report `unsupported_tool`.
+   */
+  elicitation?: PolitDeckElicitationChannel;
 };
 
 export type PolitDeckToolDefinition<Input = unknown, Output = unknown> = {

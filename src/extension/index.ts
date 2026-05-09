@@ -47,7 +47,17 @@ export { discoverBuiltinPlugins } from "./plugins/discovery/discoverBuiltinPlugi
 export { loadPluginFromPath } from "./plugins/loading/PluginLoader.js";
 export { loadPluginHooks } from "./plugins/loading/PluginHookLoader.js";
 export { getPluginCommandName, loadPluginCommands, type LoadedPluginCommand } from "./plugins/loading/PluginCommandLoader.js";
-export { PluginRuntime, type PluginRuntimeOptions, type PluginRefreshResult } from "./plugins/runtime/PluginRuntime.js";
+export {
+  PluginRuntime,
+  type PluginRuntimeOptions,
+  type PluginRefreshResult,
+  type PolitDeckMcpInstructionEntry,
+  type PolitDeckMcpServerStaticSpec,
+} from "./plugins/runtime/PluginRuntime.js";
+export {
+  MAX_MCP_INSTRUCTION_LENGTH,
+  truncateMcpInstructionString,
+} from "./plugins/runtime/truncateMcpString.js";
 export { PluginRegistry } from "./plugins/runtime/PluginRegistry.js";
 export { defaultPluginReloadPolicy, type PluginReloadPolicy } from "./plugins/runtime/PluginReloadPolicy.js";
 

@@ -4,6 +4,7 @@ import { createEditFileTool } from "../builtin/editFile.js";
 import { createGlobTool } from "../builtin/glob.js";
 import { createGrepTool } from "../builtin/grep.js";
 import { createReadFileTool } from "../builtin/readFile.js";
+import { createWebFetchTool, type CreateWebFetchToolOptions } from "../builtin/webFetch.js";
 import { createWebSearchTool, type CreateWebSearchToolOptions } from "../builtin/webSearch.js";
 import { createWriteFileTool } from "../builtin/writeFile.js";
 import { ToolRegistry } from "./ToolRegistry.js";
@@ -28,6 +29,14 @@ export type CreateBuiltinRegistryOptions = {
    * lock the provider/model.
    */
   agent?: CreateAgentToolOptions | boolean;
+  /**
+   * `web_fetch` builtin tool. **Opt-in** (default: registered) because it
+   * issues HTTP requests and a secondary model call. Pass `false` to skip.
+   * Pass an options object to override the provider / model id used for the
+   * secondary model call. Without a model client the tool returns the raw
+   * markdown without summarization.
+   */
+  webFetch?: CreateWebFetchToolOptions | false;
 };
 
 export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): ToolRegistry {
@@ -40,6 +49,9 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
   registry.register(createBashTool(options?.bash));
   if (options?.webSearch !== false) {
     registry.register(createWebSearchTool(options?.webSearch));
+  }
+  if (options?.webFetch !== false) {
+    registry.register(createWebFetchTool(options?.webFetch));
   }
   if (options?.agent !== false) {
     const agentOpts = options?.agent === true || options?.agent === undefined ? undefined : options.agent;

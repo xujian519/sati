@@ -112,10 +112,11 @@ export class PromptAssembler {
     }
 
     const mcpInstructions = this.extension.listMcpInstructions();
-    if (mcpInstructions.length > 0) {
+    const mcpBlock = formatMcpInstructions(mcpInstructions);
+    if (mcpBlock) {
       lines.push("");
       lines.push("Connected MCP server instructions:");
-      lines.push(formatMcpInstructions(mcpInstructions));
+      lines.push(mcpBlock);
     }
 
     return [lines.join("\n")];
@@ -180,15 +181,30 @@ function formatPermissionMode(mode: string): string {
   }
 }
 
+/**
+ * Render MCP server instructions inside a stable `<mcp-instructions>` block
+ * (B3 §5.3.5.7). Servers are sorted by name to keep prompt caches stable.
+ * Entries lacking instructions are dropped so we never emit dummy `(no
+ * instructions)` lines that thrash provider caches.
+ */
 function formatMcpInstructions(instructions: McpServerInstruction[]): string {
-  return instructions
-    .map((entry) => {
-      if (!entry.instructions) {
-        return `- ${entry.serverName}: (no instructions)`;
-      }
-      return `- ${entry.serverName}:\n  ${entry.instructions.replace(/\n/g, "\n  ")}`;
-    })
-    .join("\n");
+  const populated = instructions
+    .filter((entry) => typeof entry.instructions === "string" && entry.instructions.trim().length > 0)
+    .map((entry) => ({ serverName: entry.serverName, instructions: entry.instructions!.trim() }))
+    .sort((a, b) => a.serverName.localeCompare(b.serverName));
+  if (populated.length === 0) return "";
+  const lines: string[] = ["<mcp-instructions>"];
+  for (const entry of populated) {
+    lines.push(`<server name="${escapeXmlAttr(entry.serverName)}">`);
+    lines.push(entry.instructions);
+    lines.push("</server>");
+  }
+  lines.push("</mcp-instructions>");
+  return lines.join("\n");
+}
+
+function escapeXmlAttr(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
 
 function formatCommands(commands: ContributedCommand[]): string {

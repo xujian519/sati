@@ -3,6 +3,23 @@ import { discoverPluginPaths } from "../discovery/discoverLocalPlugins.js";
 import { loadPluginFromPath } from "../loading/PluginLoader.js";
 import type { PolitDeckLoadedPlugin } from "../protocol/plugin.js";
 import { PluginRegistry } from "./PluginRegistry.js";
+import { truncateMcpInstructionString } from "./truncateMcpString.js";
+
+/**
+ * Static MCP server contribution shape callers can rely on. Manifests load
+ * `mcpServers` as `Record<string, unknown>` to stay forward-compatible, so
+ * this type is *advisory* — the runtime only reads `instructions` and falls
+ * back gracefully when missing.
+ */
+export type PolitDeckMcpServerStaticSpec = {
+  instructions?: string;
+  [key: string]: unknown;
+};
+
+export type PolitDeckMcpInstructionEntry = {
+  serverName: string;
+  instructions: string;
+};
 
 export type PluginRuntimeOptions = {
   projectRoot: string;
@@ -29,6 +46,41 @@ export class PluginRuntime {
 
   mcpServers(): Record<string, unknown> {
     return Object.assign({}, ...this.registry.list().map((plugin) => plugin.mcpServers ?? {})) as Record<string, unknown>;
+  }
+
+  /**
+   * Read-only static instructions aggregator (deferred-feature §5.3 / B3).
+   * - Iterates `mcpServers` from every loaded plugin.
+   * - Filters entries with a non-empty `instructions: string` field.
+   * - Truncates each entry to {@link truncateMcpInstructionString} (2048 chars).
+   * - Returns a stable list sorted by `serverName` (avoids prompt-cache thrash).
+   *
+   * Once C1 (real MCP runtime) lands, the runtime can layer dynamic
+   * instructions on top via the same `getAllMcpInstructions` aggregator
+   * surface used by `PluginRuntimeExtensionResolver`.
+   */
+  getAllMcpInstructions(): PolitDeckMcpInstructionEntry[] {
+    const entries: PolitDeckMcpInstructionEntry[] = [];
+    const seen = new Set<string>();
+    for (const plugin of this.registry.list()) {
+      const servers = plugin.mcpServers;
+      if (!servers || typeof servers !== "object") continue;
+      for (const [serverName, raw] of Object.entries(servers)) {
+        if (seen.has(serverName)) continue;
+        if (!raw || typeof raw !== "object") continue;
+        const candidate = (raw as PolitDeckMcpServerStaticSpec).instructions;
+        if (typeof candidate !== "string") continue;
+        const trimmed = candidate.trim();
+        if (trimmed.length === 0) continue;
+        seen.add(serverName);
+        entries.push({
+          serverName,
+          instructions: truncateMcpInstructionString(trimmed),
+        });
+      }
+    }
+    entries.sort((a, b) => a.serverName.localeCompare(b.serverName));
+    return entries;
   }
 
   lspServers(): Record<string, unknown> {
