@@ -6,7 +6,8 @@
 
 1. `01-old-ui-current-state/`：先理解 `old_ui/` 的功能、架构、数据模型和运行逻辑。
 2. `02-src-adaptation-plan/`：再理解它如何接入当前 `src/`，以及何时应该重写 `old_ui`、何时应该补齐 `src`。
-3. `03-web-ui-testing/`：最后按测试文档建立 contract、parity、端到端和人工验收闭环。
+3. `03-web-ui-testing/`：再按测试文档建立 contract、parity、端到端和人工验收闭环。
+4. `04-implementation-plan/`：最后看复刻到 `/Users/miwi/PolitDeck/ui` 的实施指南、测试维护表与真实环境 runbook。
 
 ## 目录
 
@@ -27,6 +28,10 @@ docs/old-ui-adaptation/
     README.md
     01-test-strategy.md
     02-contract-and-parity-tests.md
+    03-real-environment-runbook.md
+  04-implementation-plan/
+    01-web-ui-replication-development-guide.md
+    02-web-ui-parity-test-guide.md
     03-real-environment-runbook.md
 ```
 
