@@ -2,9 +2,15 @@ import type { CanonicalMessage, CanonicalModelEvent, CanonicalModelRequest } fro
 import type { PolitDeckToolAuditRecorder, PolitDeckToolScheduler, ToolRegistry } from "../../tool/index.js";
 import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
+import type { RouterRuntime } from "../../router/index.js";
 
-export type AgentModelRuntime = {
-  stream(request: CanonicalModelRequest, signal?: AbortSignal): AsyncIterable<CanonicalModelEvent>;
+/**
+ * Narrow view of the router that the agent loop actually consumes. Tests can
+ * inject anything that satisfies this contract; production wiring uses
+ * `createRouterRuntime`.
+ */
+export type AgentRouterRuntime = Pick<RouterRuntime, "stream"> & {
+  observeUsage?: RouterRuntime["observeUsage"];
 };
 
 /**
@@ -56,7 +62,7 @@ export type AgentSubagentTranscriptHooks = {
 };
 
 export type AgentRuntimeDependencies = {
-  model: AgentModelRuntime;
+  router: AgentRouterRuntime;
   tools: {
     scheduler: PolitDeckToolScheduler;
     registry: ToolRegistry;
@@ -68,4 +74,8 @@ export type AgentRuntimeDependencies = {
   lifecycle?: LifecycleRuntime;
   /** C3 sidechain transcript hooks (optional). */
   subagentTranscript?: AgentSubagentTranscriptHooks;
+};
+
+export type AgentLegacyModelRuntime = {
+  stream(request: CanonicalModelRequest, signal?: AbortSignal): AsyncIterable<CanonicalModelEvent>;
 };

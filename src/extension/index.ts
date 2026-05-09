@@ -67,3 +67,4 @@ export type { ToolContribution } from "./contributions/ToolContribution.js";
 export type { PromptContribution } from "./contributions/PromptContribution.js";
 export type { McpContribution } from "./contributions/McpContribution.js";
 export type { PermissionRuleContribution } from "./contributions/PermissionRuleContribution.js";
+export type { RouterContribution } from "./contributions/RouterContribution.js";

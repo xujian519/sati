@@ -206,13 +206,14 @@ export class SubAgentSession {
     );
     const scheduler = new SequentialToolScheduler(toolRuntime);
     return {
-      model: this.options.parentDependencies.model,
+      router: this.options.parentDependencies.router,
       tools: { scheduler, registry },
       context: this.options.parentDependencies.context,
       now: this.options.parentDependencies.now,
       uuid: this.options.parentDependencies.uuid,
       auditRecorder: this.options.parentDependencies.auditRecorder,
       lifecycle: this.options.parentDependencies.lifecycle,
+      subagentTranscript: this.options.parentDependencies.subagentTranscript,
     };
   }
 

@@ -32,7 +32,13 @@ function buildDeps(model: ScriptedModel, registry: ToolRegistry): AgentRuntimeDe
   const permissions = new PermissionRuntime();
   const toolRuntime = new ToolRuntime(registry, permissions);
   const scheduler = new SequentialToolScheduler(toolRuntime);
-  return { model, tools: { scheduler, registry } };
+  // Adapt the ScriptedModel into the router-shaped surface the agent loop now
+  // consumes — tests don't exercise scenario routing / fallback, so the shim
+  // just forwards `stream(request)` and ignores the routing context.
+  const router = {
+    stream: (request: CanonicalModelRequest) => model.stream(request),
+  };
+  return { router, tools: { scheduler, registry } };
 }
 
 function buildConfig(cwd: string): AgentRuntimeConfig {

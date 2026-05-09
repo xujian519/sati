@@ -44,7 +44,10 @@ function buildDeps(model: ScriptedModel, registry: ToolRegistry): AgentRuntimeDe
   const permissions = new PermissionRuntime();
   const toolRuntime = new ToolRuntime(registry, permissions);
   const scheduler = new SequentialToolScheduler(toolRuntime);
-  return { model, tools: { scheduler, registry } };
+  const router = {
+    stream: (request: CanonicalModelRequest) => model.stream(request),
+  };
+  return { router, tools: { scheduler, registry } };
 }
 
 function buildConfig(cwd: string): AgentRuntimeConfig {

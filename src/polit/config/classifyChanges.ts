@@ -11,18 +11,51 @@ export function classifyConfigChanges(changedPaths: string[]): PolitConfigChange
   const classes = new Set<PolitConfigChangeClass>();
 
   for (const path of changedPaths) {
-    if (path.startsWith("agent.") || path.startsWith("model.")) {
-      classes.add("next-request");
-    } else if (path === "extension.includeHookEvents") {
-      classes.add("runtime-live");
-    } else if (path.startsWith("extension.")) {
-      classes.add("next-runtime");
-    } else {
-      classes.add("next-runtime");
-    }
+    classes.add(classifyPath(path));
   }
 
   return [...classes];
+}
+
+function classifyPath(path: string): PolitConfigChangeClass {
+  if (path.startsWith("agent.") || path.startsWith("model.")) {
+    return "next-request";
+  }
+  if (path === "extension.includeHookEvents") {
+    return "runtime-live";
+  }
+  if (path.startsWith("extension.")) {
+    return "next-runtime";
+  }
+  if (path.startsWith("router.")) {
+    return classifyRouterPath(path);
+  }
+  return "next-runtime";
+}
+
+function classifyRouterPath(path: string): PolitConfigChangeClass {
+  if (
+    path.startsWith("router.scenarios.") ||
+    path.startsWith("router.fallback.") ||
+    path.startsWith("router.tokenSaver.tiers.") ||
+    path === "router.zeroUsageRetry.maxAttempts" ||
+    path === "router.zeroUsageRetry.enabled"
+  ) {
+    return "next-request";
+  }
+  if (path.startsWith("router.tokenSaver.judge")) {
+    return "runtime-live";
+  }
+  if (path === "router.autoOrchestrate.skillExtensionId") {
+    return "next-runtime";
+  }
+  if (
+    path === "router.stats.enabled" ||
+    path === "router.customRouter.extensionId"
+  ) {
+    return "restart-required";
+  }
+  return "next-runtime";
 }
 
 function diffValues(left: unknown, right: unknown, prefix = ""): string[] {

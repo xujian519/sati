@@ -6,6 +6,7 @@ import { AgentLoop, type AgentRuntimeConfig, type AgentRuntimeDependencies } fro
 import { createModelRuntime } from "../../../src/model/index.js";
 import { createDefaultPermissionContext, PermissionRuntime } from "../../../src/permission/index.js";
 import { loadPolitConfig } from "../../../src/polit/index.js";
+import { createRouterRuntime } from "../../../src/router/index.js";
 import { SequentialToolScheduler, ToolRegistry, ToolRuntime } from "../../../src/tool/index.js";
 
 const RUN = process.env.POLITDECK_RUN_REAL_TOOL_E2E === "1";
@@ -72,8 +73,14 @@ test("OpenRouter Kimi K2.6 calls add_numbers tool and replies with the sum", { t
     }),
     metadata: { test: "openrouter-kimi-k2.6-tool-use" },
   };
+  const router = createRouterRuntime(
+    snapshot.config.router ?? {
+      scenarios: { default: { id: `${PROVIDER}/${MODEL}`, provider: PROVIDER, model: MODEL } },
+    },
+    { modelRuntime },
+  );
   const dependencies: AgentRuntimeDependencies = {
-    model: modelRuntime,
+    router,
     tools: { registry, scheduler },
   };
 

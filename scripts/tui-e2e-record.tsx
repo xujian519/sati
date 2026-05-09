@@ -7,6 +7,7 @@ import { createGateway } from "../src/gateway/index.js";
 import { createModelRuntime } from "../src/model/index.js";
 import { createDefaultPermissionContext, PermissionRuntime } from "../src/permission/index.js";
 import { loadPolitConfig } from "../src/polit/index.js";
+import { createRouterRuntime } from "../src/router/index.js";
 import {
   SequentialToolScheduler,
   ToolRegistry,
@@ -74,6 +75,17 @@ async function main(): Promise<void> {
     metadata: { test: "tui-e2e-record" },
   };
 
+  const router = createRouterRuntime(
+    snapshot.config.router ?? {
+      scenarios: {
+        default: { id: `${PROVIDER}/${MODEL}`, provider: PROVIDER, model: MODEL },
+        longContextThreshold: 60_000,
+      },
+      zeroUsageRetry: { enabled: true, maxAttempts: 5 },
+    },
+    { modelRuntime },
+  );
+
   const baseGateway = createGateway({
     session: {
       create: async ({ sessionKey }) =>
@@ -81,7 +93,7 @@ async function main(): Promise<void> {
           sessionId: sessionKey,
           config,
           dependencies: {
-            model: modelRuntime,
+            router,
             tools: { registry, scheduler },
           },
         }),
