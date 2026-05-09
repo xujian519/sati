@@ -1,10 +1,12 @@
 import type { BackgroundTaskRuntime } from "../../task/runtime/BackgroundTaskRuntime.js";
 import { createAgentTool, type CreateAgentToolOptions } from "../builtin/agent.js";
+import { createAskUserQuestionTool } from "../builtin/askUserQuestion.js";
 import { createBashTool, type CreateBashToolOptions } from "../builtin/bash.js";
 import { createEditFileTool } from "../builtin/editFile.js";
 import { createGlobTool } from "../builtin/glob.js";
 import { createGrepTool } from "../builtin/grep.js";
 import { createReadFileTool } from "../builtin/readFile.js";
+import { createStructuredOutputTool } from "../builtin/structuredOutput.js";
 import {
   createTaskCreateTool,
   createTaskListTool,
@@ -52,6 +54,20 @@ export type CreateBuiltinRegistryOptions = {
    * fail with `unsupported_tool`.
    */
   backgroundTasks?: { runtime: BackgroundTaskRuntime } | false;
+  /**
+   * `structured_output` builtin (A3). Registered by default — the tool is
+   * inert without a model client requesting it via `tool_choice`, but the
+   * registry must contain it so non-interactive hosts can opt in. Pass
+   * `false` to skip.
+   */
+  structuredOutput?: false;
+  /**
+   * `ask_user_question` builtin (B1). Registered by default; an absent
+   * `PolitDeckElicitationChannel` at execution time causes the tool to
+   * return a runtime error rather than crash the loop. Pass `false` to
+   * skip registration in headless contexts.
+   */
+  askUserQuestion?: false;
 };
 
 export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): ToolRegistry {
@@ -78,6 +94,12 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(createTaskListTool(runtime));
     registry.register(createTaskOutputTool(runtime));
     registry.register(createTaskStopTool(runtime));
+  }
+  if (options?.structuredOutput !== false) {
+    registry.register(createStructuredOutputTool());
+  }
+  if (options?.askUserQuestion !== false) {
+    registry.register(createAskUserQuestionTool());
   }
   return registry;
 }

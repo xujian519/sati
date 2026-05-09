@@ -251,6 +251,7 @@ function createFallbackGateway(): Gateway {
     cronStop: async () => {
       throw new Error("Cron runtime is not configured.");
     },
+    respondElicitation: async () => ({ delivered: false }),
   };
 }
 

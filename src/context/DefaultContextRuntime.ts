@@ -1,11 +1,16 @@
 import type { CanonicalMessage } from "../model/index.js";
 import { ToolResultBudget } from "./budget/ToolResultBudget.js";
+import type { TokenBudgetManager } from "./budget/TokenBudgetManager.js";
+import type { AutoCompactionPolicy } from "./compaction/AutoCompactionPolicy.js";
+import type { CompactionEngine } from "./compaction/CompactionEngine.js";
+import type { CachedMicroCompactionEngine } from "./compaction/CachedMicroCompactionEngine.js";
 import { NullExtensionResolver, type ExtensionResolver } from "./extension/ExtensionResolver.js";
 import { MemoryAttachmentBuilder } from "./memory/MemoryAttachmentBuilder.js";
 import type { MemoryResolver } from "./memory/MemoryResolver.js";
 import { PromptAssembler } from "./prompt/PromptAssembler.js";
 import { MessageProjector } from "./projection/MessageProjector.js";
 import type {
+  ContextCaptureTurnInput,
   ContextDiagnostic,
   ContextPrepareInput,
   ContextRecoveryDecision,
@@ -22,6 +27,27 @@ export type DefaultContextRuntimeOptions = {
   messageProjector?: MessageProjector;
   toolResultBudget?: ToolResultBudget;
   memoryResolver?: MemoryResolver;
+  /**
+   * A2 — token budget manager (provider-aware tokenizer fallback).
+   * Held by the runtime so future compaction decisions can probe usage.
+   */
+  tokenBudget?: TokenBudgetManager;
+  /**
+   * A5 — full-conversation compaction engine. Constructed by the host
+   * (createLocalGateway) and stashed on the runtime so the loop can
+   * eventually call summarize() once we wire reactive compaction.
+   */
+  compactionEngine?: CompactionEngine;
+  /**
+   * A5 — token-budget-driven policy that decides when to summarize.
+   * Same lifecycle as `compactionEngine` — construction-only for now.
+   */
+  autoCompactionPolicy?: AutoCompactionPolicy;
+  /**
+   * A4 — opt-in cached micro-compaction engine. Construction is gated by
+   * `PolitConfig.context.cachedMicrocompactEnabled` upstream.
+   */
+  microcompactEngine?: CachedMicroCompactionEngine;
   /** Project root forwarded to MemoryResolver.retrieve. */
   projectRoot?: string;
   /**
@@ -42,7 +68,13 @@ export class DefaultContextRuntime implements ContextRuntime {
   private readonly promptAssembler: PromptAssembler;
   private readonly messageProjector: MessageProjector;
   private readonly toolResultBudget?: ToolResultBudget;
+  private readonly memoryResolver?: MemoryResolver;
   private readonly memoryAttachmentBuilder?: MemoryAttachmentBuilder;
+  /** A2/A4/A5 — held for downstream wiring (compaction loop, microcompact). */
+  readonly tokenBudget?: TokenBudgetManager;
+  readonly compactionEngine?: CompactionEngine;
+  readonly autoCompactionPolicy?: AutoCompactionPolicy;
+  readonly microcompactEngine?: CachedMicroCompactionEngine;
   private readonly projectRoot?: string;
   private readonly truncateFirstKeepRatio: number;
   private readonly truncateSecondKeepRatio: number;
@@ -53,9 +85,14 @@ export class DefaultContextRuntime implements ContextRuntime {
     this.promptAssembler = options.promptAssembler ?? new PromptAssembler(this.extension);
     this.messageProjector = options.messageProjector ?? new MessageProjector();
     this.toolResultBudget = options.toolResultBudget;
+    this.memoryResolver = options.memoryResolver;
     this.memoryAttachmentBuilder = options.memoryResolver
       ? new MemoryAttachmentBuilder(options.memoryResolver)
       : undefined;
+    this.tokenBudget = options.tokenBudget;
+    this.compactionEngine = options.compactionEngine;
+    this.autoCompactionPolicy = options.autoCompactionPolicy;
+    this.microcompactEngine = options.microcompactEngine;
     this.projectRoot = options.projectRoot;
     this.truncateFirstKeepRatio = options.truncateFirstKeepRatio ?? DEFAULT_TRUNCATE_FIRST_RATIO;
     this.truncateSecondKeepRatio = options.truncateSecondKeepRatio ?? DEFAULT_TRUNCATE_SECOND_RATIO;
@@ -145,6 +182,20 @@ export class DefaultContextRuntime implements ContextRuntime {
       }
     }
     return { messages: [...input.messages, appended], diagnostics };
+  }
+
+  async captureTurn(input: ContextCaptureTurnInput): Promise<void> {
+    if (!this.memoryResolver) return;
+    try {
+      await this.memoryResolver.captureTurn({
+        sessionId: input.sessionId,
+        projectRoot: this.projectRoot ?? "",
+        messages: input.messages,
+      });
+    } catch {
+      // Memory capture must never break the agent turn — provider already
+      // swallows in EdgeClawMemoryProvider, this catch is belt-and-suspenders.
+    }
   }
 
   async recoverFromModelError(input: ContextRecoveryInput): Promise<ContextRecoveryDecision> {

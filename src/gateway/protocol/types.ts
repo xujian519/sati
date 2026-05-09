@@ -11,6 +11,10 @@ import type {
 } from "../../cron/protocol/types.js";
 import type { CanonicalUsage } from "../../model/index.js";
 import type { SessionInfo as ProjectSessionInfo } from "../../session/index.js";
+import type {
+  PolitDeckElicitationAnswer,
+  PolitDeckElicitationQuestion,
+} from "../../tool/elicitation/PolitDeckElicitationChannel.js";
 
 export type GatewayChannelKey = "cli" | "tui" | "feishu" | "web" | "test" | (string & {});
 
@@ -45,10 +49,37 @@ export type GatewayEvent =
   | { type: "tool_call_started"; toolCallId: string; name: string; argsPreview?: string }
   | { type: "tool_call_finished"; toolCallId: string; ok: boolean; resultPreview?: string }
   | { type: "permission_request"; requestId: string; toolName: string; payload: unknown }
+  /**
+   * B1 elicitation request: a tool (`ask_user_question`) wants the host
+   * channel to render a multiple-choice dialog. The host MUST eventually
+   * call `Gateway.respondElicitation({ requestId, answer })` so the
+   * waiting tool can resume.
+   */
+  | {
+      type: "elicitation_request";
+      requestId: string;
+      toolCallId: string;
+      toolName: string;
+      previewFormat?: "html" | "markdown";
+      questions: PolitDeckElicitationQuestion[];
+      metadata?: Record<string, unknown>;
+    }
+  /**
+   * Surfaced when the agent loop is aborted while a question is still
+   * pending. The host should dismiss the dialog without expecting an
+   * answer — `respondElicitation` is no longer required for this id.
+   */
+  | { type: "elicitation_cancelled"; requestId: string; reason?: string }
   | { type: "structured_output"; payload: unknown }
   | { type: "plan_mode_changed"; mode: GatewayMode | (string & {}) }
   | { type: "turn_completed"; usage: TurnUsage; finishReason: AgentTurnResult["stopReason"] | string }
   | { type: "error"; message: string; code?: string; recoverable: boolean };
+
+export type GatewayElicitationResponseInput = {
+  sessionKey: string;
+  requestId: string;
+  answer: PolitDeckElicitationAnswer;
+};
 
 export type GatewayError = {
   code: string;
@@ -103,4 +134,11 @@ export interface Gateway {
   cronList(input: CronListInput): Promise<CronListResult>;
   cronDelete(input: CronDeleteInput): Promise<CronDeleteResult>;
   cronStop(input: CronStopInput): Promise<CronStopResult>;
+  /**
+   * B1 — host responds to an `elicitation_request` event surfaced through
+   * `submitTurn`. Resolves the waiting tool's `askUser()` promise. Returns
+   * `{ delivered: false }` if the requestId is unknown (already cancelled
+   * or the session has ended).
+   */
+  respondElicitation(input: GatewayElicitationResponseInput): Promise<{ delivered: boolean }>;
 }

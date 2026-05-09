@@ -1,5 +1,6 @@
 import type {
   Gateway,
+  GatewayElicitationResponseInput,
   GatewayEvent,
   GatewayServerInfo,
   GatewaySubmitTurnInput,
@@ -64,6 +65,10 @@ export class RemoteGateway implements Gateway {
 
   async cronStop(input: CronStopInput): Promise<CronStopResult> {
     return (await this.client.request("cron_stop", input)) as CronStopResult;
+  }
+
+  async respondElicitation(input: GatewayElicitationResponseInput): Promise<{ delivered: boolean }> {
+    return (await this.client.request("elicitation_respond", input)) as { delivered: boolean };
   }
 }
 

@@ -1,13 +1,41 @@
 import { createAgentSessionStateFromReplay, type AgentSession } from "../../agent/session/AgentSession.js";
 import { createAgentSessionWithStorage, type CreateAgentSessionOptions } from "../../agent/session/createAgentSession.js";
+import type { AgentRuntimeDependencies } from "../../agent/runtime/AgentRuntimeDependencies.js";
 import type { SessionMetadataValue } from "../transcript/TranscriptEntry.js";
 import { SessionMetadataStore } from "../metadata/SessionMetadataStore.js";
-import { createAgentProjectSessionStorage, type AgentProjectSessionStorageOptions } from "../storage/ProjectSessionStorage.js";
+import {
+  createAgentProjectSessionStorage,
+  type AgentProjectSessionStorage,
+  type AgentProjectSessionStorageOptions,
+} from "../storage/ProjectSessionStorage.js";
 import { readTranscript } from "../transcript/TranscriptReader.js";
 import { replayTranscriptEntries } from "../transcript/TranscriptReplay.js";
 
+/**
+ * Optional hook fired once the per-session `storage` has been created. Lets
+ * the caller (e.g. `createLocalGateway`) attach per-session runtime pieces
+ * that depend on session-scoped paths or the JSONL transcript writer
+ * (ToolResultBudget, FileHistoryStore, sidechain hooks, etc.).
+ *
+ * The returned object is shallow-merged into `options.dependencies`, with
+ * the sub-fields of `tools` and `context` handled specially:
+ *   - `context` overrides the runtime entirely (caller passes the upgraded
+ *     `DefaultContextRuntime` with the freshly-created `toolResultBudget`).
+ *   - `fileHistory` / `subagentTranscript` are forwarded as-is.
+ */
+export type ResumeSessionDependencyExtension = (
+  storage: AgentProjectSessionStorage,
+) => Partial<
+  Pick<
+    AgentRuntimeDependencies,
+    "context" | "fileHistory" | "subagentTranscript" | "elicitation"
+  >
+>;
+
 export type ResumeAgentSessionOptions = Omit<CreateAgentSessionOptions, "transcript" | "projectStorage"> & {
   projectStorage: Omit<AgentProjectSessionStorageOptions, "sessionId" | "now">;
+  /** @see `ResumeSessionDependencyExtension`. */
+  extendDependencies?: ResumeSessionDependencyExtension;
 };
 
 export type ResumeAgentSessionResult = {
@@ -25,8 +53,19 @@ export async function resumeAgentSession(options: ResumeAgentSessionOptions): Pr
   });
   const readResult = await readTranscript(storage.transcriptPath);
   const replay = replayTranscriptEntries(readResult.entries);
+
+  const extension = options.extendDependencies?.(storage) ?? {};
+  const dependencies: typeof options.dependencies = {
+    ...options.dependencies,
+    ...(extension.context ? { context: extension.context } : {}),
+    ...(extension.fileHistory ? { fileHistory: extension.fileHistory } : {}),
+    ...(extension.subagentTranscript ? { subagentTranscript: extension.subagentTranscript } : {}),
+    ...(extension.elicitation ? { elicitation: extension.elicitation } : {}),
+  };
+
   const { session } = createAgentSessionWithStorage({
     ...options,
+    dependencies,
     projectStorage: options.projectStorage,
     transcript: storage.transcript,
     initialState: createAgentSessionStateFromReplay(options.sessionId, replay),

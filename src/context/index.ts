@@ -130,3 +130,7 @@ export {
   type EdgeClawMemoryServiceLike,
   type EdgeClawRetrieveContextResult,
 } from "./memory/EdgeClawMemoryProvider.js";
+export {
+  createEdgeClawMemoryProviderFromConfig,
+  type CreateEdgeClawMemoryProviderOptions,
+} from "./memory/createEdgeClawMemoryProviderFromConfig.js";

@@ -59,6 +59,21 @@ export class AgentLoop {
     let permissionDenials: AgentPermissionDenial[] = [];
     let structuredOutput: unknown;
     let finalMessage: CanonicalMessage | undefined;
+    const captureTurn = async (errored: boolean): Promise<void> => {
+      const hook = this.dependencies.context?.captureTurn;
+      if (!hook) return;
+      try {
+        await hook.call(this.dependencies.context, {
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          messages,
+          errored,
+        });
+      } catch {
+        // captureTurn must never break a turn — context impl already
+        // swallows; this catch is defensive.
+      }
+    };
     /**
      * Single-shot reactive truncate-and-retry guard. Set true after the loop
      * already truncated for a `prompt_too_long` once; subsequent PTL errors
@@ -83,6 +98,7 @@ export class AgentLoop {
           startedAt,
           finalMessage,
         });
+        await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
       }
@@ -125,6 +141,7 @@ export class AgentLoop {
           errors: [agentError("agent_model_error", error instanceof Error ? error.message : String(error))],
         });
         yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
+        await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
       }
@@ -205,6 +222,7 @@ export class AgentLoop {
           errors: [classified.error],
         });
         yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
+        await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
       }
@@ -229,6 +247,7 @@ export class AgentLoop {
             errors: [agentError("agent_unsupported_feature", stopBlock.reason)],
           });
           yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
+          await captureTurn(result.type === "error");
           yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
           return { result, messages };
         }
@@ -242,6 +261,7 @@ export class AgentLoop {
           finalMessage,
           structuredOutput,
         });
+        await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
       }
@@ -275,7 +295,26 @@ export class AgentLoop {
       }
 
       const projected = projectToolResults(pairedResults);
-      messages.push(projected);
+      // Route the freshly projected tool_result message through the context
+      // runtime so large payloads land on disk via `ToolResultBudget`. When
+      // the runtime doesn't implement `applyToolResults` (e.g. NullContext),
+      // we simply append the raw projection (legacy behaviour).
+      const ctxApply = this.dependencies.context?.applyToolResults;
+      if (ctxApply) {
+        try {
+          const applied = await ctxApply.call(this.dependencies.context, {
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            toolResultMessage: projected,
+            messages,
+          });
+          messages = applied.messages;
+        } catch {
+          messages.push(projected);
+        }
+      } else {
+        messages.push(projected);
+      }
       yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: projected };
 
       const lifecycleBlock = findToolLifecycleBlock(pairedResults);
@@ -292,6 +331,7 @@ export class AgentLoop {
           errors: [agentError("agent_unsupported_feature", lifecycleBlock.reason)],
         });
         yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
+        await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
       }
@@ -307,6 +347,7 @@ export class AgentLoop {
           finalMessage,
           structuredOutput,
         });
+        await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
       }
@@ -324,6 +365,7 @@ export class AgentLoop {
           structuredOutput,
           errors: [agentError("agent_max_turns_reached", `Reached maximum number of turns (${input.maxTurns}).`)],
         });
+        await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
       }
@@ -398,6 +440,11 @@ export class AgentLoop {
     return {
       sessionId: input.sessionId,
       turnId: input.turnId,
+      // Group key for `FileHistoryStore.trackEdit` (C4). Our canonical
+      // assistant messages don't carry an id, so the turn id is the closest
+      // stable scope: every edit/write produced inside this turn rewinds as
+      // a single batch — semantic match to legacy "rewind by messageId".
+      messageId: input.turnId,
       cwd: this.config.cwd,
       abortSignal: input.abortSignal,
       permissionMode: this.config.permissionMode,
@@ -419,6 +466,8 @@ export class AgentLoop {
             isMainAgent: false,
           }),
       },
+      elicitation: this.dependencies.elicitation,
+      fileHistory: this.dependencies.fileHistory,
       subagentDepth: this.config.subagentDepth ?? 0,
       subagent: this.buildSubagentForkApi(input, messages),
     };

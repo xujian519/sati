@@ -20,6 +20,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/react": "^19.2.14",
     "@types/turndown": "^5.0.6",
+    "edgeclaw-memory-core": "file:edgeclaw-memory-core",
     "ink": "^7.0.2",
     "ink-text-input": "^6.0.0",
     "react": "^19.2.6",

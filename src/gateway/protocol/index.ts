@@ -3,6 +3,7 @@ export type {
   Gateway,
   GatewayCronController,
   GatewayChannelKey,
+  GatewayElicitationResponseInput,
   GatewayError,
   GatewayEvent,
   GatewayMode,

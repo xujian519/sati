@@ -5,6 +5,10 @@ export {
 } from "./client/McpClient.js";
 export { McpRuntime, type McpRuntimeOptions } from "./runtime/McpRuntime.js";
 export {
+  parsePluginMcpServers,
+  type ParsePluginMcpServersResult,
+} from "./runtime/parsePluginMcpServers.js";
+export {
   createMcpToolDefinitionsFromRuntime,
   type CreateToolDefinitionsOptions,
 } from "./runtime/PluginToToolBridge.js";
