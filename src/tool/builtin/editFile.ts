@@ -41,6 +41,13 @@ export function createEditFileTool(): PolitDeckToolDefinition<EditFileInput> {
         throw new PolitDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
       }
 
+      if (context.fileHistory) {
+        await context.fileHistory.trackEdit(
+          resolved.absolutePath,
+          context.messageId ?? context.turnId,
+        );
+      }
+
       const content = await readTextFile(resolved.absolutePath);
       const occurrences = countOccurrences(content, input.oldString);
       if (occurrences === 0) {

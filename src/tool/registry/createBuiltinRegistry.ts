@@ -1,9 +1,16 @@
+import type { BackgroundTaskRuntime } from "../../task/runtime/BackgroundTaskRuntime.js";
 import { createAgentTool, type CreateAgentToolOptions } from "../builtin/agent.js";
 import { createBashTool, type CreateBashToolOptions } from "../builtin/bash.js";
 import { createEditFileTool } from "../builtin/editFile.js";
 import { createGlobTool } from "../builtin/glob.js";
 import { createGrepTool } from "../builtin/grep.js";
 import { createReadFileTool } from "../builtin/readFile.js";
+import {
+  createTaskCreateTool,
+  createTaskListTool,
+  createTaskOutputTool,
+  createTaskStopTool,
+} from "../builtin/taskTools.js";
 import { createWebFetchTool, type CreateWebFetchToolOptions } from "../builtin/webFetch.js";
 import { createWebSearchTool, type CreateWebSearchToolOptions } from "../builtin/webSearch.js";
 import { createWriteFileTool } from "../builtin/writeFile.js";
@@ -37,6 +44,14 @@ export type CreateBuiltinRegistryOptions = {
    * markdown without summarization.
    */
   webFetch?: CreateWebFetchToolOptions | false;
+  /**
+   * Background task tools (`task_create` / `task_list` / `task_output` /
+   * `task_stop`). **Opt-in** — pass `{ runtime }` to register; absent or
+   * `false` keeps them out of the registry. Stand-alone runtimes that do
+   * not provide a `BackgroundTaskRuntime` would otherwise see every call
+   * fail with `unsupported_tool`.
+   */
+  backgroundTasks?: { runtime: BackgroundTaskRuntime } | false;
 };
 
 export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): ToolRegistry {
@@ -56,6 +71,13 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
   if (options?.agent !== false) {
     const agentOpts = options?.agent === true || options?.agent === undefined ? undefined : options.agent;
     registry.register(createAgentTool(agentOpts));
+  }
+  if (options?.backgroundTasks) {
+    const runtime = options.backgroundTasks.runtime;
+    registry.register(createTaskCreateTool(runtime));
+    registry.register(createTaskListTool(runtime));
+    registry.register(createTaskOutputTool(runtime));
+    registry.register(createTaskStopTool(runtime));
   }
   return registry;
 }

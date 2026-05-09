@@ -34,6 +34,13 @@ export function createWriteFileTool(): PolitDeckToolDefinition<WriteFileInput> {
         throw new PolitDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
       }
 
+      if (context.fileHistory) {
+        await context.fileHistory.trackEdit(
+          resolved.absolutePath,
+          context.messageId ?? context.turnId,
+        );
+      }
+
       const action = await writeTextFile(resolved.absolutePath, input.content, {
         allowOverwrite: input.allowOverwrite,
       });

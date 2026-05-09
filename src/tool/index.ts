@@ -32,6 +32,7 @@ export type {
   PolitDeckToolCall,
   PolitDeckToolDefinition,
   PolitDeckToolExecutionOutput,
+  PolitDeckToolFileHistorySink,
   PolitDeckToolKind,
   PolitDeckToolModelClient,
   PolitDeckToolProgressEvent,
@@ -150,3 +151,19 @@ export {
   createExitPlanModeTool,
   type ExitPlanModeInput,
 } from "./builtin/planMode.js";
+export {
+  createTaskCreateTool,
+  createTaskListTool,
+  createTaskOutputTool,
+  createTaskStopTool,
+  createTaskTools,
+  type CreateTaskToolsOptions,
+  type TaskCreateInput,
+  type TaskCreateOutput,
+  type TaskListInput,
+  type TaskListOutput,
+  type TaskOutputInput,
+  type TaskOutputResult,
+  type TaskStopInput,
+  type TaskStopResult,
+} from "./builtin/taskTools.js";

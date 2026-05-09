@@ -7,6 +7,7 @@ import {
   type PolitDeckToolAuditRecorder,
   type PolitDeckToolDefinition,
   type PolitDeckToolExecutionOutput,
+  type PolitDeckToolFileHistorySink,
   type PolitDeckToolInputSchema,
   type PolitDeckToolRuntimeContext,
 } from "../../src/tool/index.js";
@@ -49,6 +50,8 @@ export function createPolitDeckToolRuntimeFixture(options?: {
   cwd?: string;
   lifecycle?: LifecycleRuntime;
   elicitation?: PolitDeckElicitationChannel;
+  fileHistory?: PolitDeckToolFileHistorySink;
+  messageId?: string;
 }): {
   registry: ToolRegistry;
   permissionRuntime: PermissionRuntime;
@@ -77,6 +80,8 @@ export function createPolitDeckToolRuntimeFixture(options?: {
     maxResultBytes: options?.maxResultBytes,
     now: () => new Date("2026-01-01T00:00:00.000Z"),
     elicitation: options?.elicitation,
+    fileHistory: options?.fileHistory,
+    messageId: options?.messageId,
   };
 
   return { registry, permissionRuntime, toolRuntime, context };
