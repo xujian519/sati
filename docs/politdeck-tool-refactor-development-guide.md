@@ -66,7 +66,7 @@ agent
 
 ## 1.6 本轮开发范围
 
-> **Owner 划分**：cron 子系统（`cron_create` / `cron_list` / `cron_delete` + scheduler + Gateway 协议扩展）由**同事认领**实现，不在本轮 owner 范围（§14.1）。本节列出本轮 owner 接手做的 feature。
+> **当前状态**：cron 子系统已经作为独立 `src/cron/` 模块落地，包含 `cron_create` / `cron_list` / `cron_delete` / `cron_stop` 工具、scheduler、持久化和 Gateway 协议扩展；详见 `docs/cron/README.md`。本节保留为 tool 模块后续 owner 选择新 feature 时的入选标准。
 
 ### 1.6.1 入选标准
 
@@ -75,7 +75,7 @@ agent
 1. 依赖已就绪（context / session / extension / lifecycle / model 都稳定）；
 2. 不需要新建子系统（如 background task runtime、LSP manager、git worktree runtime、daemon）；
 3. 落地后能跑通 e2e（unit + 真实模型 / 真实文件路径）；
-4. 不与 cron owner 的 Gateway / SessionRouter 公共 surface 改动冲突。
+4. 不与 Gateway / SessionRouter / Cron 公共 surface 改动冲突。
 
 ### 1.6.2 入选 feature
 
@@ -110,7 +110,7 @@ agent
 | `ask_user_question` 真实 elicitation | 需要 adapter 端 UI 通道；保留骨架 |
 | `structured_output` schema-driven | 需要与 model layer 绑定 schema 强制；保留骨架 |
 | `memory_dream` / `memory_flush` | 重写流程；与 EdgeClaw owner 协调 |
-| `powershell` / `cron_*` / `remote_trigger` / `tool_search` | cron 由同事 owner，其余暂无依赖闭环 |
+| `powershell` / `remote_trigger` / `tool_search` | 暂无依赖闭环 |
 
 ### 1.6.4 范围约束
 
@@ -1675,7 +1675,7 @@ structured_output
 | Worktree | `EnterWorktree` / `ExitWorktree` | `worktree_*` | 暂缓 | 依赖 git/worktree runtime |
 | SendMessage / Team | `SendMessage` / `TeamCreate` / `TeamDelete` | `team_*` | 暂缓 | swarm 专有 |
 | PowerShell | `PowerShell` | `powershell` | 暂缓 | Windows 后续 |
-| Cron | `CronCreate` / `CronDelete` / `CronList` | `cron_create` / `cron_list` / `cron_delete` | 暂缓 | 由同事 owner 单独落地，不在本轮重构范围 |
+| Cron | `CronCreate` / `CronDelete` / `CronList` | `cron_create` / `cron_list` / `cron_delete` / `cron_stop` | 已实现 | 独立 `src/cron/` runtime，工具由 `CronRuntime.getTools()` 注入 registry |
 | RemoteTrigger | `RemoteTrigger` | `remote_trigger` | 暂缓 | 远端会话后续 |
 | ToolSearch | `ToolSearch` | `tool_search` | 暂缓 | deferred tools 多后再实现 |
 | MCP tools | `mcp__<server>__<tool>`，另有通用占位 `mcp` | `mcp__*` | 骨架 | adapter 优先 |
@@ -1690,14 +1690,12 @@ structured_output
 
 ## 14.1 Cron 接入
 
-cron 子系统由**同事认领**，不属于本轮重构范围。设计稿与依赖关系另行单开（owner 自管）。本文档不再保留 cron 设计章节，避免 owner 之间假设漂移。
+Cron 已作为独立 `src/cron/` 子系统落地，不再是 tool 模块内部的延期项。当前接入方式：
 
-约束（其他 owner 在做工具相关改动时务必遵守）：
-
-- cron 落地不会改 `tool/`、`gateway/`、`session/`、`polit/config/` 的公共类型与协议。
-- 如果 cron owner 发现需要扩展 `Gateway` 接口、`PolitConfig`、`SessionRouter` 公共 API，必须先 open issue 与对应 owner 协商，不直接改公共 surface。
-
-后续 cron owner 落地后，§1.5 实施进度表 + §14 迁移矩阵的 cron 行将由 cron owner 同步更新。
+- `CronRuntime.getTools()` 提供 `cron_create`、`cron_list`、`cron_delete`、`cron_stop` 四个工具定义。
+- `src/cli/politdeck.ts` 在 `server` 子命令里创建 `CronRuntime`，并通过 `createLocalGateway({ extraTools, cron })` 注入工具 registry 与 Gateway 管理面。
+- Gateway / WS protocol 已包含 `cron_create`、`cron_list`、`cron_delete`、`cron_stop` 方法。
+- 设计与测试细节见 `docs/cron/README.md` 和 `tests/cron/`。
 
 
 ## 15. Model 集成方式
@@ -2089,7 +2087,7 @@ import type { CanonicalToolCall } from "../../model";
 | 原列项 | 当前状态 | 备注 |
 | --- | --- | --- |
 | hooks plugin runtime | ✅ **已实现** | `src/lifecycle` + `src/extension` 全套 hook（PreToolUse / PostToolUse / PostToolUseFailure / PermissionRequest / PermissionDenied / SessionStart / SessionEnd / Stop / UserPromptSubmit / PreCompact / PostCompact），ToolRuntime 已接入 |
-| cron daemon | 🔄 由同事 owner 单独落地 | 不在本轮重构范围 |
+| cron daemon | ✅ **已实现为 server 内 runtime** | `src/cron/` 提供 scheduler、Gateway 管理面和 `cron_*` 工具；不引入独立 daemon |
 | skill marketplace | 🟡 **部分** | extension 已加载本地 skills；marketplace（discovery / install / publish）仍 defer |
 | OAuth MCP auth | ❌ defer | 与 mcp__* 真实 MCP runtime 一同推进 |
 | background subagent | ❌ defer | 无独立 task runtime；`agent` 工具落地优先用同步路径 |

@@ -61,3 +61,33 @@ test("loads EdgeClaw memory config from PolitDeck config", () => {
     rmSync(politHome, { recursive: true, force: true });
   }
 });
+
+test("defaults memory rootDir to PolitHome memory directory", () => {
+  const politHome = mkdtempSync(join(tmpdir(), "politdeck-memory-config-"));
+  try {
+    writeFileSync(
+      getPolitConfigFilePath(politHome),
+      JSON.stringify({
+        schemaVersion: 1,
+        agent: validAgentConfig(),
+        model: validModelConfig(),
+        memory: {
+          provider: "edgeclaw",
+          enabled: true,
+        },
+      }),
+      "utf8",
+    );
+
+    const snapshot = loadPolitConfig({
+      env: {
+        POLIT_HOME: politHome,
+        ANTHROPIC_API_KEY: "anthropic-key",
+      },
+    });
+
+    assert.equal(snapshot.config.memory?.rootDir, join(politHome, "memory"));
+  } finally {
+    rmSync(politHome, { recursive: true, force: true });
+  }
+});

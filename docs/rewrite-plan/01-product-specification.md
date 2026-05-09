@@ -232,7 +232,7 @@ agent loop 应可用 fake model 和 fake tools 做确定性测试。模型输出
 
 ### 运行时与包管理
 
-`PolitDeck` 重写后项目统一依靠 Bun 管理包和运行时。开发、测试和启动命令应以 `bun install`、`bun run`、`bun test` 为准，项目代码不应假设通过 npm、pnpm、yarn 或 Node CLI 直接运行。
+当前根项目以 `package.json` 为准，使用 npm scripts 驱动 TypeScript build 与 Node test runner：`npm run build`、`npm test`。历史 parity probe 如果需要执行 vendored 旧项目脚本，可以在对应文档中单独声明 `bun run` / `bun test`；新项目源码和 CI 不应假设 Bun 是唯一运行时。
 
 ### 可恢复性
 

@@ -115,7 +115,6 @@ function parseModelDefinition(
     capabilities,
     multimodal,
     aliases: readStringArray(model.aliases, "aliases"),
-    request: isRecord(model.request) ? model.request : undefined,
   };
 }
 

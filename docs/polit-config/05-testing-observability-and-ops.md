@@ -95,22 +95,24 @@ secret changes are not logged
 
 这些测试可以使用 fake transport 和 fake provider adapter，不需要真实外部服务。
 
-当 `agent` 配置段实现后，应新增集成测试：
+当前已覆盖的 `agent` / `router` 配置集成测试应包含：
 
-- `agent`：从 `agent.model` / `agent.fallbackModel` 解析 provider/model，并校验它们存在于 `model.providers`。
+- `agent`：从 `agent.model` 解析 provider/model，并校验它们存在于 `model.providers`。
 - `agent.model` 缺失、格式错误或指向不存在 provider/model 时返回结构化错误。
-- `agent.fallbackModel` 缺失时不启用 fallback；格式错误或目标不存在时报错。
-- `change taxonomy`：`agent.model` 和 `agent.fallbackModel` 有对应 `classifyConfigChanges()` 用例。
+- legacy `agent.fallbackModel` 只产生废弃 warning，并提示迁移到 `router.fallback.default`。
+- `router`：`router.scenarios`、`router.fallback` 等模型引用必须指向 `model.providers` 中存在的 provider/model。
+- `change taxonomy`：`agent.model`、`router.scenarios`、`router.fallback` 有对应 `classifyConfigChanges()` 用例。
 
 ## Conformance Tests
 
-跨入口一致性测试是未来目标。当前源码尚未实现 CLI/SDK/TUI/remote adapter 入口：
+跨入口一致性测试应覆盖当前已有 CLI/TUI/server 装配路径，并为 SDK/remote 入口保留同一组 fixture：
 
 ```text
 CLI config loading
-SDK config loading
 TUI config loading
-remote config loading
+server config loading
+future SDK config loading
+future remote config loading
 ```
 
 未来同一组 source 输入必须产出相同 snapshot。adapter 不能增加新的 source 类型；当前阶段所有入口只能使用 `default`、`project`、`env` 三类来源，并且必须产出相同 snapshot。
@@ -205,7 +207,7 @@ config.secret.reference_missing
 - `model.provider.apiKey` 引用。
 - `model.provider.headers` 中的认证相关变化。
 - `agent.model`。
-- `agent.fallbackModel`。
+- `router.fallback`。
 - `model.providers.<id>.models`。
 - `model.capabilities`。
 - `model.multimodal`。

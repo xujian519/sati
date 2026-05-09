@@ -4,7 +4,7 @@ import type { SessionInfo } from "../session/index.js";
 import { listProjectSessions } from "../session/index.js";
 import { InProcessGateway } from "./client/InProcessGateway.js";
 import { SessionRouter, type GatewaySessionFactory, type SessionRouterOptions } from "./SessionRouter.js";
-import type { Gateway, GatewayServerInfo } from "./protocol/types.js";
+import type { Gateway, GatewayCronController, GatewayServerInfo } from "./protocol/types.js";
 
 export type GatewayProjectStorageOptions = {
   projectRoot: string;
@@ -22,6 +22,7 @@ export type CreateGatewayOptions = {
   now?: () => Date;
   uuid?: () => string;
   serverInfo?: Partial<GatewayServerInfo>;
+  cron?: GatewayCronController;
 };
 
 export function createGateway(options: CreateGatewayOptions): Gateway {
@@ -44,6 +45,7 @@ export function createGateway(options: CreateGatewayOptions): Gateway {
       projectKey: options.projectStorage?.projectRoot,
       ...options.serverInfo,
     },
+    cron: options.cron,
   });
 }
 

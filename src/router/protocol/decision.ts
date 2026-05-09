@@ -22,6 +22,11 @@ export type RouterMutationsLog = {
   subagentTagStripped?: boolean;
 };
 
+export type RouterRequestPatch = Pick<
+  import("../../model/protocol/canonical.js").CanonicalModelRequest,
+  "messages" | "tools" | "systemPrompt"
+>;
+
 export type RouterDecision = {
   provider: string;
   model: string;
@@ -31,6 +36,7 @@ export type RouterDecision = {
   orchestrating: boolean;
   resolvedFrom: RouterDecisionResolution;
   mutations: RouterMutationsLog;
+  requestPatch?: Partial<RouterRequestPatch>;
 };
 
 export type SessionRoutingState = {

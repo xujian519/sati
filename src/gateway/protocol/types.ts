@@ -1,4 +1,14 @@
 import type { AgentTurnResult } from "../../agent/index.js";
+import type {
+  CronCreateInput,
+  CronCreateResult,
+  CronDeleteInput,
+  CronDeleteResult,
+  CronListInput,
+  CronListResult,
+  CronStopInput,
+  CronStopResult,
+} from "../../cron/protocol/types.js";
 import type { CanonicalUsage } from "../../model/index.js";
 import type { SessionInfo as ProjectSessionInfo } from "../../session/index.js";
 
@@ -74,6 +84,13 @@ export type GatewayServerInfo = {
   sessionCount?: number;
 };
 
+export type GatewayCronController = {
+  createTask(input: CronCreateInput): Promise<CronCreateResult>;
+  listTasks(input: CronListInput): Promise<CronListResult>;
+  deleteTask(input: CronDeleteInput): Promise<CronDeleteResult>;
+  stopTask(input: CronStopInput): Promise<CronStopResult>;
+};
+
 export interface Gateway {
   submitTurn(input: GatewaySubmitTurnInput): AsyncIterable<GatewayEvent>;
   abortTurn(input: { sessionKey: string; runId?: string }): Promise<void>;
@@ -82,4 +99,8 @@ export interface Gateway {
   newSession(input: NewSessionInput): Promise<{ sessionKey: string }>;
   closeSession(input: { sessionKey: string; reason?: string }): Promise<void>;
   describeServer(): Promise<GatewayServerInfo>;
+  cronCreate(input: CronCreateInput): Promise<CronCreateResult>;
+  cronList(input: CronListInput): Promise<CronListResult>;
+  cronDelete(input: CronDeleteInput): Promise<CronDeleteResult>;
+  cronStop(input: CronStopInput): Promise<CronStopResult>;
 }

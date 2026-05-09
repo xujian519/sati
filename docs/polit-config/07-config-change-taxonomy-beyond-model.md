@@ -1,6 +1,6 @@
 # 多模块配置变更分类
 
-本文定义 `agent` 和 `model` 配置段的变更分类，以及更多 future 配置段进入 `PolitConfig` 后 `classifyConfigChanges()` 应如何扩展。当前实现对 `agent.*` 和 `model.*` 返回 `next-request`，其它路径粗略归为 `next-runtime`。
+本文定义 `agent`、`model`、`router` 等配置段的变更分类，以及更多 future 配置段进入 `PolitConfig` 后 `classifyConfigChanges()` 应如何扩展。当前实现对 `agent.*`、`model.*` 和 `router.*` 等请求选择相关路径返回后续生效分类，长生命周期 runtime 配置通常归为 `next-runtime`。
 
 ## 分类定义
 
@@ -26,7 +26,11 @@ invalid
 
 ```text
 agent.model                    next-request
-agent.fallbackModel            next-request
+router.scenarios               next-request
+router.fallback                next-request
+gateway.*                      next-runtime
+alwaysOn.*                     next-runtime
+cron.*                         next-runtime
 model.providers                next-request
 model.provider.url             next-request
 model.provider.apiKey          next-request
@@ -44,7 +48,7 @@ model.multimodal               next-request
 仅靠路径前缀不够。以下字段必须有专门规则：
 
 - `agent.model`：改变默认厂商和默认模型，影响后续模型请求，不改变已构造完成的 `CanonicalModelRequest`。
-- `agent.fallbackModel`：改变 fallback recovery policy 的目标，只影响后续 retry/fallback 判断。
+- `router.fallback`：改变 fallback recovery policy 的目标，只影响后续 router retry/fallback 判断。
 - `model.providers`：新增、删除或修改 provider/model 定义，影响后续 runtime 编译和请求校验。
 - `model.provider.apiKey`：secret 变化必须脱敏记录，只影响后续请求。
 - `model.capabilities` / `model.multimodal`：影响后续 request builder 和 context/input 投影，不改写已发送请求。
@@ -55,8 +59,8 @@ model.multimodal               next-request
 
 - `agent.model` 不是 `provider/model` 格式。
 - `agent.model` 指向不存在的 provider 或 model。
-- `agent.fallbackModel` 不是 `provider/model` 格式。
-- `agent.fallbackModel` 指向不存在的 provider 或 model。
+- `router.fallback.*` 不是 `provider/model` 格式。
+- `router.fallback.*` 指向不存在的 provider 或 model。
 - provider protocol、URL、API key 引用或 model capabilities 非法。
 - 任意 secret 引用无法解析。
 
@@ -74,7 +78,7 @@ model.multimodal               next-request
 
 扩展 `classifyConfigChanges()` 时应同步增加测试：
 
-- `agent.model`、`agent.fallbackModel` 至少覆盖 `next-request` 用例。
+- `agent.model`、`router.scenarios`、`router.fallback` 至少覆盖后续生效分类用例。
 - 高风险字段覆盖 `restart-required` 或 `next-runtime` 用例。
 - invalid candidate 不发布 snapshot。
 - 多字段变更返回去重后的 change classes。

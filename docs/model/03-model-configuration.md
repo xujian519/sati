@@ -10,7 +10,7 @@
 ~/.politdeck/politdeck.yaml
 ```
 
-该路径由全局 `polit/config` 模块通过 `resolvePolitHome()` 和 `getPolitConfigFilePath()` 统一解析：`PolitHome` 默认是 `~/.politdeck`，可由 `POLIT_HOME` 覆盖；配置文件名固定为 `politdeck.yaml`。全局 config 模块还会按需读取项目根目录 `.politdeck/politdeck.yaml`，并可叠加受控环境变量覆盖项。`model` 模块只校验和消费合并后的 `model` 段，不直接读取 YAML 文件、临时 CLI 参数、用户目录中的其他配置文件或运行时全局状态；默认 provider/model 由 `agent.model` 管理，API key 的 `${ENV_NAME}` 引用在解析模型配置时解析。
+该路径由全局 `polit/config` 模块通过 `resolvePolitHome()` 和 `getPolitConfigFilePath()` 统一解析：`PolitHome` 默认是 `~/.politdeck`，可由 `POLIT_HOME` 覆盖；配置文件名固定为 `politdeck.yaml`。全局 config 模块还会按需读取项目根目录 `.politdeck/politdeck.yaml`，并可叠加受控环境变量覆盖项。`model` 模块只校验和消费合并后的 `model` 段，不直接读取 YAML 文件、临时 CLI 参数、用户目录中的其他配置文件或运行时全局状态；默认 provider/model 由 `agent.model` 管理，fallback 链由 `router.fallback` 管理，API key 的 `${ENV_NAME}` 引用在解析模型配置时解析。
 
 ## 当前阶段范围
 
@@ -21,8 +21,7 @@
 - 消费协议格式。
 - 消费 URL。
 - 解析 API key 引用。
-- 消费默认模型。
-- 消费可选 fallback model。
+- 校验供 `agent.model` 和 `router.*` 引用的 provider/model 是否存在。
 - 消费 headers、timeout、retry 等连接参数。
 - 消费 provider 下的 model list。
 - 消费 model 级别 capabilities。
@@ -44,7 +43,6 @@
 ```yaml
 agent:
   model: anthropic-main/claude-sonnet-4-5
-  fallbackModel: anthropic-main/claude-haiku-4-5
 
 model:
   providers:
@@ -129,12 +127,11 @@ model:
 
 ```text
 agent.model
-agent.fallbackModel
 model.providers
 ```
 
 - `agent.model`：默认使用的 provider/model，格式为 `provider/model`。
-- `agent.fallbackModel`：可选 fallback provider/model，格式为 `provider/model`。
+- `router.fallback.*`：可选 fallback provider/model 链，格式为 `provider/model`。
 - `model.providers`：provider 配置 map。
 
 ### Provider 配置
@@ -166,14 +163,12 @@ displayName
 capabilities
 multimodal
 aliases
-request
 ```
 
 - `displayName`：用户可见模型名称。
 - `capabilities`：该具体模型的能力声明。
 - `multimodal`：该具体模型的多模态输入能力和结构化限制。
 - `aliases`：可选别名。
-- `request`：可选模型级请求参数覆盖，例如 temperature 默认值、reasoning 参数名或厂商特定开关。
 
 ## API Key 解析
 
@@ -274,8 +269,8 @@ load ~/.politdeck/politdeck.yaml in global config
 - agent.model 缺失。
 - agent.model 不是 `provider/model` 格式。
 - agent.model 指向不存在的 provider 或 model。
-- agent.fallbackModel 不是 `provider/model` 格式。
-- agent.fallbackModel 指向不存在的 provider 或 model。
+- router.fallback 中的模型引用不是 `provider/model` 格式。
+- router.fallback 中的模型引用指向不存在的 provider 或 model。
 - provider.models 为空。
 - capabilities 类型错误。
 - multimodal 类型或取值错误。

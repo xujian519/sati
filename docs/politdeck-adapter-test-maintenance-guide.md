@@ -202,11 +202,12 @@ Feishu 专项：
 - launchd / systemd / schtasks 自启动逻辑。
 - 远程访问、TLS、设备配对。
 - WhatsApp / Slack / iMessage / Discord channel。
-- Cron / scheduled jobs / canvas-host / browser extension bridge。
+- Canvas-host / browser extension bridge。
+- Cron 的 runtime、tool 和 Gateway 管理面已由 `tests/cron/` 覆盖；Adapter 测试只需覆盖 WS method 转发和 CLI `politdeck cron` 命令形状。
 - Model 反向代理（`proxy.ts` 类）。
 - 跨进程 IPC（除 WebSocket 外）。
 
-以上能力在 `docs/politdeck-adapter-refactor-development-guide.md §13 Feature Matrix` 标记为 `deferred` 或 `not_applicable`。
+以上能力在 `docs/politdeck-adapter-refactor-development-guide.md §13 Feature Matrix` 标记为 `deferred` 或 `not_applicable`；Cron 不再属于 deferred 范围。
 
 ## 11. 归一化规则
 

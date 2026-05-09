@@ -189,6 +189,52 @@ test("PluginRuntime exposes merged MCP server contributions", async () => {
   assert.deepEqual(runtime.mcpServers(), { builtinServer: { command: "builtin" } });
 });
 
+test("PluginRuntime exposes a stable contribution snapshot", async () => {
+  const runtime = new PluginRuntime({
+    projectRoot: "/tmp/project",
+    politHome: "/tmp/polit",
+    builtinPlugins: [
+      {
+        name: "builtin",
+        path: "<builtin>",
+        source: "builtin",
+        manifest: { name: "builtin" },
+        commands: [
+          {
+            name: "builtin:deploy",
+            path: "<builtin>/commands/deploy.md",
+            content: "Deploy",
+            frontmatter: { description: "Deploy the app", "argument-hint": "<env>" },
+            isSkill: false,
+          },
+        ],
+        skills: [
+          {
+            name: "builtin:review",
+            path: "<builtin>/skills/review/SKILL.md",
+            content: "Review",
+            frontmatter: { description: "Review code" },
+            isSkill: true,
+          },
+        ],
+        hooksConfig: {
+          SessionStart: [{ hooks: [{ type: "command", command: "echo ok" }] }],
+        },
+        mcpServers: { local: { command: "server", instructions: "Use local tools." } },
+      },
+    ],
+  });
+
+  await runtime.refresh();
+  const snapshot = runtime.snapshotContributions();
+
+  assert.equal(snapshot.commands[0]?.name, "builtin:deploy");
+  assert.equal(snapshot.commands[0]?.argumentHint, "<env>");
+  assert.equal(snapshot.skills[0]?.name, "builtin:review");
+  assert.equal(snapshot.hooks.SessionStart?.[0]?.pluginName, "builtin");
+  assert.deepEqual(snapshot.mcpInstructions, [{ serverName: "local", instructions: "Use local tools." }]);
+});
+
 test("plugin loader includes output style and LSP contributions", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-output-lsp-"));
   try {

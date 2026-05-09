@@ -21,7 +21,6 @@ export type RawModelDefinition = {
   capabilities?: unknown;
   multimodal?: unknown;
   aliases?: unknown;
-  request?: unknown;
 };
 
 export type RawCapabilities = Partial<Record<keyof ModelCapabilities, unknown>>;

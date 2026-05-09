@@ -24,7 +24,11 @@ export type WsGatewayMethod =
   | "resume_session"
   | "new_session"
   | "close_session"
-  | "describe_server";
+  | "describe_server"
+  | "cron_create"
+  | "cron_list"
+  | "cron_delete"
+  | "cron_stop";
 
 export type WsRequestFrame = {
   type: "request";

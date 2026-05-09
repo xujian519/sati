@@ -1,6 +1,6 @@
 # PolitDeck Always-On 重写方案
 
-本文给出 PolitDeck Always-On 模块的完整重写方案。本文是开发设计文档，不实现代码。
+本文给出 PolitDeck Always-On 模块的 gateway-native 方案，并记录当前 `src/always-on/` 实现边界。代码事实以 `src/always-on/index.ts`、`src/cli/politdeck.ts` 和 `tests/always-on/` 为准。
 
 Always-On 在 PolitDeck 中只保留一条主线：在合适的时机，对一个项目自动执行一次主动发现；每次发现最多产出 1 份结构化 plan，并立即在该项目的隔离环境中自动执行该 plan，产出工作报告。
 
@@ -72,7 +72,7 @@ src/always-on/
 
 接入点：
 
-- `src/cli/politdeckServer.ts`：在 server 启动时构造 `AlwaysOnRuntime` 并 start；在 server 停止时 stop。
+- `src/cli/politdeck.ts`：在 `server` 子命令中构造 `AlwaysOnRuntime` 并 start；在 server 停止时 stop。
 - `src/tool/builtin/`：注册 `AlwaysOnDiscoveryPlanTool` 与 `AlwaysOnReportTool`。
 - `src/polit/config/`：解析 `alwaysOn` 配置段。
 - `src/gateway/`：不修改协议；Always-On 仅作为 server-side 服务调用 `Gateway`。

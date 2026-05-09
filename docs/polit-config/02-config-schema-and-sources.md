@@ -2,7 +2,7 @@
 
 本文定义 `polit/config` 需要支持的配置来源、优先级、总 YAML 结构、配置段拆分和校验规则。
 
-当前实现定义通用配置外壳、`agent` 配置段和 `model` 配置段。`agent.model` 和 `agent.fallbackModel` 统一管理默认厂商/模型选择；`model` 段只描述 provider 和 model 定义。
+当前实现定义通用配置外壳，以及 `agent`、`model`、`extension`、`memory`、`gateway`、`adapters`、`router`、`alwaysOn`、`cron` 顶层段。`agent.model` 管理默认厂商/模型选择；fallback 模型链由 `router.fallback` 管理；`model` 段只描述 provider 和 model 定义。
 
 ## 配置文件
 
@@ -42,7 +42,7 @@ default config: ${PolitHome}/politdeck.yaml
 
 - `default config` 是默认 YAML 配置文件，由 `PolitHome` 决定位置。
 - `project config` 只描述工作区相关覆盖，不应保存用户 secret。
-- `env overrides` 当前支持 `POLIT_AGENT_MODEL` 和 `POLIT_AGENT_FALLBACK_MODEL` 覆盖 `agent.model` / `agent.fallbackModel`。API key 通过配置中的 `${ENV_NAME}` 引用解析，不作为独立配置覆盖项。
+- `env overrides` 当前支持 `POLIT_AGENT_MODEL` 覆盖 `agent.model`。API key 通过配置中的 `${ENV_NAME}` 引用解析，不作为独立配置覆盖项。
 
 所有实际参与加载或覆盖的来源都会记录在 `PolitConfigSnapshot.sources` 中；不存在的默认/项目文件不会产生 source 记录。
 
@@ -61,7 +61,7 @@ env
 `env` source 有两类作用：
 
 - bootstrap env：在读取任何 YAML 前解析，例如 `POLIT_HOME`。它决定 `${PolitHome}/politdeck.yaml` 的位置。
-- config env override：在 YAML 读取后参与合并，例如 `agent.model` 或 `agent.fallbackModel`。API key 的 `${ENV_NAME}` 是 secret 引用解析，不作为独立 override 字段合并。
+- config env override：在 YAML 读取后参与合并，例如 `agent.model`。API key 的 `${ENV_NAME}` 是 secret 引用解析，不作为独立 override 字段合并。
 
 这两类都归入 `kind: env`，但诊断中应区分 `phase: bootstrap | merge`，避免用户误以为 `POLIT_HOME` 可以写在 YAML 中。
 
@@ -87,7 +87,6 @@ schemaVersion: 1
 
 agent:
   model: anthropic-main/claude-sonnet-4-5
-  fallbackModel: anthropic-main/claude-haiku-4-5
 
 model:
   providers:
@@ -131,6 +130,11 @@ YAML 中不允许出现 `polit` 段来配置 `PolitHome`、缓存目录、聊天
 - 环境变量，例如 `POLIT_HOME`。
 - `polit/paths` 基于 `PolitHome` 派生出的固定规则。
 
+当前固定派生路径包括：
+
+- Gateway 本地鉴权 token：`${PolitHome}/server-token`，不接受 `gateway.tokenPath` 覆盖。
+- Memory 默认根目录：`${PolitHome}/memory`；`memory.rootDir` 仍可作为 memory 模块自身的数据目录覆盖项。
+
 原因：
 
 - config loader 必须先知道 `PolitHome`，才能找到默认 YAML。
@@ -144,13 +148,12 @@ YAML 中不允许出现 `polit` 段来配置 `PolitHome`、缓存目录、聊天
 ```yaml
 agent:
   model: anthropic-main/claude-sonnet-4-5
-  fallbackModel: anthropic-main/claude-haiku-4-5
 ```
 
 - `agent.model`：默认 provider/model，格式为 `provider/model`。
-- `agent.fallbackModel`：可选 fallback provider/model，格式为 `provider/model`。
+- `agent.fallbackModel`：已废弃；当前 loader 只产生 warning，并提示迁移到 `router.fallback.default`。
 
-解析时按斜杆拆分；斜杆前是 provider id，斜杆后是 model id。二者必须能在 `model.providers` 中找到。
+`agent.model` 解析时按斜杆拆分；斜杆前是 provider id，斜杆后是 model id。二者必须能在 `model.providers` 中找到。
 
 ### model
 
@@ -158,13 +161,21 @@ agent:
 
 具体字段见 `[../model/03-model-configuration.md](../model/03-model-configuration.md)`。
 
-### 其他未来业务配置段
+### 已接入的其他业务配置段
 
-tool、permission、context、session、extension 等模块对应源码中已经存在或预留的运行时边界，但当前不在本目录继续展开字段级 schema。它们真正进入配置系统时，再加入 `PolitRawConfig`、结构校验、默认值和变更分类。
+当前 `PolitRawConfig` 已允许以下业务段：
 
-这些模块后续进入配置系统前，应先明确字段所有权、默认值、热重载分类和与 session state 的边界。
+```text
+extension
+memory
+gateway
+adapters
+router
+alwaysOn
+cron
+```
 
-这些段进入正式 schema 前，不应把示例 YAML 写成可运行配置，避免用户误以为当前 loader 会接受并消费这些字段。
+其中 `gateway` / `adapters` / `router` / `alwaysOn` / `cron` 已有对应解析器或模块内 schema；`tool`、`permission`、`context`、`session` 仍主要由 runtime wiring、session state 或 `polit/paths` 管理，进入 YAML 前需要先明确字段所有权、默认值、热重载分类和与 session state 的边界。
 
 ## Secret 引用
 
@@ -231,7 +242,7 @@ syntax validation
 - `agent.model` 必须是 `provider/model` 格式。
 - `agent.model` 中的 provider 必须存在于 `model.providers`。
 - `agent.model` 中的 model 必须存在于对应 provider 的 `models`。
-- `agent.fallbackModel` 如果存在，也必须是 `provider/model` 格式，并指向可用 provider/model。
+- `router.fallback.*` 中的模型引用必须是 `provider/model` 格式，并指向可用 provider/model。
 - `model.providers.<id>.protocol` 必须是当前支持的协议。
 - `model.providers.<id>.url` 必须是合法 URL。
 - `model.providers.<id>.apiKey` 的环境变量引用必须可解析。
@@ -242,7 +253,7 @@ syntax validation
 未来新增业务段时还需要增加跨模块语义校验，例如：
 
 - `agent.model` 是默认 provider/model 的唯一配置入口，不能再与旧的 model 默认字段并存。
-- `agent.fallbackModel` 必须满足 fallback recovery policy 规则。
+- `agent.fallbackModel` 不再参与 fallback recovery policy；迁移目标是 `router.fallback.default` 或对应 scenario fallback 链。
 - 如果未来新增 tool、permission、context 或 session 配置段，应分别补充与 `agent.model`、`model.providers` 和 session state 的跨字段校验。
 
 ## 错误模型

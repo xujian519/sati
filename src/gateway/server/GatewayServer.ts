@@ -12,7 +12,6 @@ export type GatewayServerOptions = {
   gateway: Gateway;
   port?: number;
   host?: string;
-  tokenPath?: string;
   token?: string;
   staticAssetsPath?: string;
   serverVersion?: string;
@@ -33,8 +32,8 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
     throw new Error("GatewayServer only supports localhost binding in the first phase.");
   }
   const auth = options.token
-    ? { token: options.token, tokenPath: options.tokenPath }
-    : await ensureGatewayAuthToken({ tokenPath: options.tokenPath });
+    ? { token: options.token, tokenPath: undefined }
+    : await ensureGatewayAuthToken();
 
   const server = createServer((request, response) => {
     void handleHttpRequest(request, response, options, auth.token);

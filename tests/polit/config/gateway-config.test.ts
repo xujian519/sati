@@ -18,6 +18,7 @@ test("loads gateway and adapters config", async () => {
         gateway: {
           port: 18888,
           bindAddress: "127.0.0.1",
+          tokenPath: "/tmp/legacy-token",
         },
         adapters: {
           cli: { autoConnectServer: true },
@@ -30,6 +31,11 @@ test("loads gateway and adapters config", async () => {
 
     assert.equal(snapshot.config.gateway?.port, 18888);
     assert.equal(snapshot.config.gateway?.bindAddress, "127.0.0.1");
+    assert.equal("tokenPath" in snapshot.config.gateway!, false);
+    assert.equal(
+      snapshot.diagnostics.some((diagnostic) => diagnostic.code === "GATEWAY_TOKEN_PATH_REMOVED"),
+      true,
+    );
     assert.equal(snapshot.config.adapters?.cli?.autoConnectServer, true);
     assert.equal(snapshot.config.adapters?.feishu?.enabled, true);
   } finally {

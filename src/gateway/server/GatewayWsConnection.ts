@@ -114,6 +114,14 @@ export class GatewayWsConnection {
         return this.options.gateway.closeSession(frame.params as never).then(() => ({ ok: true }));
       case "describe_server":
         return this.options.gateway.describeServer();
+      case "cron_create":
+        return this.options.gateway.cronCreate(frame.params as never);
+      case "cron_list":
+        return this.options.gateway.cronList(frame.params as never);
+      case "cron_delete":
+        return this.options.gateway.cronDelete(frame.params as never);
+      case "cron_stop":
+        return this.options.gateway.cronStop(frame.params as never);
       default:
         throw new Error(`Unknown gateway method ${(frame as { method?: string }).method}.`);
     }

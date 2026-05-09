@@ -6,7 +6,6 @@ export type StartPolitDeckServerOptions = {
   gateway: Gateway;
   port?: number;
   host?: string;
-  tokenPath?: string;
   staticAssetsPath?: string;
   feishu?: FeishuChannel;
 };
@@ -17,7 +16,6 @@ export async function startPolitDeckServer(options: StartPolitDeckServerOptions)
     gateway: options.gateway,
     port: options.port,
     host: options.host,
-    tokenPath: options.tokenPath,
     staticAssetsPath: options.staticAssetsPath,
     feishuWebhook: options.feishu
       ? (request, response, body) => options.feishu!.handleWebhook(request, response, body)

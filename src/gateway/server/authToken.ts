@@ -5,15 +5,11 @@ import { dirname, resolve } from "node:path";
 import { DEFAULT_POLIT_HOME, resolvePolitHome } from "../../polit/index.js";
 
 export type GatewayAuthTokenOptions = {
-  tokenPath?: string;
   politHome?: string;
   env?: Record<string, string | undefined>;
 };
 
 export function resolveGatewayTokenPath(options: GatewayAuthTokenOptions = {}): string {
-  if (options.tokenPath) {
-    return resolve(options.tokenPath);
-  }
   const politHome = options.politHome ?? resolvePolitHome(options.env ?? process.env);
   return resolve(politHome || DEFAULT_POLIT_HOME, "server-token");
 }
@@ -32,7 +28,7 @@ export async function ensureGatewayAuthToken(options: GatewayAuthTokenOptions = 
   tokenPath: string;
 }> {
   const tokenPath = resolveGatewayTokenPath(options);
-  const existing = await readGatewayAuthToken({ ...options, tokenPath });
+  const existing = await readGatewayAuthToken(options);
   if (existing) {
     return { token: existing, tokenPath };
   }

@@ -274,10 +274,8 @@ RouterDecision:
   tokenSaverTier?: string
   isSubagent: boolean
   orchestrating: boolean
-  systemMutations?: 'slimmed' | 'subagent_tag_stripped' | 'orchestrator_user_message'
-  toolMutations?: { stripped: number, before: number, after: number }
-  fallbackUsed?: boolean
-  fallbackModel?: string
+  resolvedFrom: 'explicit' | 'scenario' | 'tokenSaver' | 'custom' | 'fallback'
+  mutations: RouterMutationsLog
 ```
 
 ### RoutingPipelineExecution

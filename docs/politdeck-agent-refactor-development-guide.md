@@ -19,29 +19,30 @@ adapters
     -> extension
 ```
 
-当前仓库已经有第一版 `model`、`tool`、`permission` 实现：
+当前仓库已经有第一版 `agent` 以及其依赖模块实现：
 
 - `src/model/` 提供 canonical message、tool call、tool result、stream event、provider request/response 归一化。
 - `src/tool/` 提供 tool definition、registry、runtime、sequential scheduler、result 到 canonical `tool_result` 的转换。
 - `src/permission/` 提供 permission mode、rule、decision runtime。
+- `src/context/` 提供 prompt assembly、message projection、tool result budget、compaction、overflow recovery 与 EdgeClaw memory adapter。
+- `src/session/` 提供 transcript、metadata、list 和 resume。
+- `src/agent/` 提供 `AgentSession`、`TurnRunner`、`AgentLoop`、turn input processing、tool result pairing、reactive recovery 和 event protocol。
 
-当前仓库还没有 `src/agent/`。本次文档定义下一阶段 agent 模块如何把现有模块编排起来，并为后续实现和 parity 测试提供稳定边界。
+本文保留为 agent 模块的设计和维护文档。当前实现事实以 `src/agent/index.ts`、`src/agent/runtime/AgentRuntimeConfig.ts`、`tests/agent/` 和 `docs/politdeck-agent-test-maintenance-guide.md` 为准。
 
-第一阶段目标：
+当前已落地目标：
 
 - 建立 PolitDeck 自有 `AgentSession`、`TurnRunner`、`AgentLoop` 和 agent event protocol。
 - 用 canonical model/tool 类型驱动模型流、工具调用、工具结果回填和继续条件。
-- 保留 legacy 多 turn、流式输出、工具循环、权限决策、max turns、abort、usage 汇总、transcript 写入时机等核心行为。
-- 将 legacy 中耦合在 `query.ts` 的 context compaction、hooks、plugins、skills、remote、subagent、worktree 等能力拆成明确接口、骨架或延期项。
+- 保留 legacy 多 turn、流式输出、工具循环、权限决策、max turns、abort、usage 汇总、transcript 写入等核心行为。
+- 将 legacy 中耦合在 `query.ts` 的 context compaction、hooks、plugins、skills、remote、subagent、worktree 等能力拆成明确模块接口；其中 context、lifecycle、extension、subagent tool 的基础路径已经接入，完整 worktree/fork 行为仍按测试维护文档分 gate 推进。
 - 让 CLI / SDK / UI 只消费 agent 事件，不直接依赖 model provider、tool runtime、session storage 或 UI 状态。
 
 非目标：
 
-- 第一阶段不实现完整 UI 渲染层。
-- 第一阶段不实现完整 hooks plugin system。
-- 第一阶段不实现完整 subagent / swarm / worktree 生命周期。
-- 第一阶段不迁移旧项目 telemetry、feature flag、CCR、bridge、remote session 的全部分支。
-- 第一阶段不把 legacy Anthropic SDK message shape 暴露为 PolitDeck agent 公共协议。
+- 不在 `agent` 模块内实现完整 UI 渲染层。
+- 不把 legacy Anthropic SDK message shape 暴露为 PolitDeck agent 公共协议。
+- 不把 router、hooks plugin、subagent/worktree、telemetry 或 remote session 的产品分支重新耦合回 agent loop。
 
 ## 2. 命名和边界规则
 
@@ -141,9 +142,9 @@ agent_unsupported_feature
 | max turns | `maxTurns` + `max_turns_reached` attachment | `agent_max_turns_reached` result | `compare` | 计数规则需要 scenario 固化 |
 | prompt too long preempt | blocking token limit | `ContextRuntime.checkBlockingLimit()` | `deferred` | 第一阶段定义接口；具体 token policy 后续实现 |
 | proactive compaction | autocompact/microcompact/snip/collapse | `ContextRuntime.prepareForModel()` | `deferred` | 已有基础 context runtime 和 message retention；高级 compact 策略后续 |
-| reactive compact | prompt-too-long recovery | `AgentRecoveryPolicy` | `deferred` | 已分类 prompt-too-long；自动 reactive compact 后续 |
-| max output tokens recovery | retry with override / meta prompt | `AgentRecoveryPolicy` | `deferred` | 需要 model/runtime 支持后实现 |
-| fallback model | `fallbackModel` | `AgentRecoveryPolicy` | `compare` | retryable model error 可切换 fallback model 一次 |
+| reactive compact | prompt-too-long recovery | `ContextOverflowRecovery` / `AgentLoop.tryReactiveRecover()` | `compare` | prompt-too-long 可触发单次上下文恢复与重试 |
+| max output tokens recovery | retry with override / meta prompt | `AgentLoop` output-token recovery | `compare` | `max_output_reached` 可 bump `maxOutputTokens` 后单次重试 |
+| fallback model | `fallbackModel` | `RouterRuntime` fallback chain | `compare` | fallback 已迁移到 `router.fallback`；agent 不持有 fallback config |
 | streaming fallback tombstone | `tombstone` events | `agent_message_tombstoned` | `deferred` | 仅在实现 provider fallback 后需要 |
 | assistant/user/system event projection | `normalizeMessage()` to SDK messages | `AgentEventProjector` | `compare` | 不暴露 legacy SDK shape，但要保留流式语义 |
 | progress messages | `createProgressMessage()` | `agent_progress` event | `deferred` | tool runtime 当前无 progress channel |

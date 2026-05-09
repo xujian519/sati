@@ -73,6 +73,7 @@ adapters/web (browser) ──┘  (over-WS)
 | Feishu channel | `src/adapters/channel/feishu/` | available skeleton |
 | Web static mount + UI skeleton | `src/adapters/web/` / `ui/` | available skeleton |
 | Gateway config parsing | `src/polit/config/parseGatewayConfig.ts` | available |
+| Cron management surface | `src/cron/` + `Gateway.cron*` | available |
 
 当前还没有：
 
@@ -189,6 +190,10 @@ export interface Gateway {
   newSession(input: NewSessionInput): Promise<{ sessionKey: string }>;
   closeSession(input: { sessionKey: string; reason?: string }): Promise<void>;
   describeServer(): Promise<GatewayServerInfo>;
+  cronCreate(input: CronCreateInput): Promise<CronCreateResult>;
+  cronList(input: CronListInput): Promise<CronListResult>;
+  cronDelete(input: CronDeleteInput): Promise<CronDeleteResult>;
+  cronStop(input: CronStopInput): Promise<CronStopResult>;
 }
 
 export interface GatewaySubmitTurnInput {
@@ -223,7 +228,7 @@ export type GatewayEvent =
 
 ## 7. WebSocket 帧协议
 
-OpenClaw 的协议复杂度（agents、cron、devices、talk-config 等）是其多设备、远程访问场景的产物。PolitDeck 第一阶段只需以下 6 类 method，与 `Gateway` 接口一一对应：`submitTurn`、`abortTurn`、`listSessions`、`resumeSession`、`newSession`、`closeSession`，外加 `describeServer` / 握手。
+OpenClaw 的协议复杂度（agents、devices、talk-config 等）是其多设备、远程访问场景的产物。PolitDeck 当前 WS protocol 保留 Gateway 所需的对话/session 方法，并加入 server 内 Cron 管理面：`submitTurn`、`abortTurn`、`listSessions`、`resumeSession`、`newSession`、`closeSession`、`describeServer`、`cronCreate`、`cronList`、`cronDelete`、`cronStop`，外加握手。
 
 ```ts
 export const POLITDECK_GATEWAY_PROTOCOL_VERSION = "1.0";
@@ -253,7 +258,11 @@ export type WsRequestFrame = {
     | "resume_session"
     | "new_session"
     | "close_session"
-    | "describe_server";
+    | "describe_server"
+    | "cron_create"
+    | "cron_list"
+    | "cron_delete"
+    | "cron_stop";
   params: unknown;
 };
 
@@ -397,7 +406,6 @@ politdeck resume <id>     等价 `politdeck` + 自动 sessionKey 解析
 gateway:
   port: 18789
   bindAddress: 127.0.0.1
-  tokenPath: ~/.politdeck/server-token
   idleSessionTimeoutMinutes: 30
   staticAssetsPath: ./ui/dist
 
@@ -413,6 +421,11 @@ adapters:
     encryptKey:
     verifyToken:
     defaultSessionLabel: general
+
+cron:
+  enabled: true
+  timezone: UTC
+  maxConcurrentRuns: 1
 ```
 
 `gateway.bindAddress` 强制 `127.0.0.1`；写其他值时 `polit/config` 校验阶段直接报错（防止误开公网监听）。
@@ -424,7 +437,7 @@ adapters:
 | 能力 | OpenClaw 行为 | PolitDeck 第一阶段 | Status | Notes |
 | --- | --- | --- | --- | --- |
 | 本地 WS gateway server | http+ws on 18789 | http+ws on 18789，localhost 绑定 | `compare` | 协议子集 |
-| 协议帧（hello/request/response/event） | 复杂 schema + ajv 校验 | 简化 6 method 子集，ajv 可选 | `intentional_difference` | 防止协议过早膨胀 |
+| 协议帧（hello/request/response/event） | 复杂 schema + ajv 校验 | Gateway 对话/session method + Cron 管理 method，ajv 可选 | `intentional_difference` | 防止协议过早膨胀 |
 | 浏览器 UI | lit + WebSocket | vite UI + WebSocket | `compare` | 框架由 PolitDeck 自选 |
 | TUI 作为 WS 客户端 | gateway-chat.ts | 与 OpenClaw 同形态 | `compare` | API 接口对齐 |
 | CLI 作为 WS 客户端 | acp-cli + gateway client | 同上 | `compare` | |
@@ -436,7 +449,7 @@ adapters:
 | 多账户 / RBAC / scope | role-policy / scopes | 单 token | `deferred` | |
 | Rate limit | auth-rate-limit | 第一阶段不做 | `deferred` | |
 | Model 反向代理（Anthropic 协议入口） | proxy.ts (claude-code) | 不做 | `not_applicable` | 模型差异由 `src/model/providers/` 内部消化 |
-| Cron / scheduled jobs | server-cron | 不做 | `deferred` | |
+| Cron / scheduled jobs | server-cron | `src/cron` server 内 runtime + Gateway 管理面 | `compare` | 不引入独立 daemon |
 | Tools-invoke HTTP / hooks-mapping HTTP | tools-invoke-http | 不做 | `deferred` | |
 | Canvas-host | canvas-host | 不做 | `deferred` | |
 | 浏览器扩展 / native bridge | extensions | 不做 | `deferred` | |
@@ -486,7 +499,7 @@ adapters:
 5. `src/gateway/client/GatewayWsClient.ts`：Node 端 WS 客户端；
 6. `src/gateway/client/RemoteGateway.ts`：实现 `Gateway` 接口，`submitTurn` 把 server 推回的事件还原成 iterable。
 7. `src/gateway/client/probeServer.ts`：探测可达性（HTTP `/health` ping，超时 200ms）。
-8. `bin/politdeck-server.ts`：`politdeck server` 入口。
+8. `src/cli/politdeck.ts`：`politdeck server` 入口。
 9. 集成测：起 server → CliChannel 用 RemoteGateway 跑通完整 turn → server 退出 client 收到 error。
 
 ### 阶段 D：CLI/TUI 自动连接

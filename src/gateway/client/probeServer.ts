@@ -4,7 +4,6 @@ import { createRemoteGateway, RemoteGateway } from "./RemoteGateway.js";
 export type ProbeGatewayServerOptions = {
   url?: string;
   token?: string;
-  tokenPath?: string;
   timeoutMs?: number;
 };
 
@@ -22,7 +21,7 @@ export async function probeGatewayServer(options: ProbeGatewayServerOptions = {}
     if (!response.ok) {
       return { ok: false, url, wsUrl: toWsUrl(url) };
     }
-    const token = options.token ?? (await readGatewayAuthToken({ tokenPath: options.tokenPath }));
+    const token = options.token ?? (await readGatewayAuthToken());
     return { ok: Boolean(token), url, wsUrl: toWsUrl(url), token };
   } catch {
     return { ok: false, url, wsUrl: toWsUrl(url) };
