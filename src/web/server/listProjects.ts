@@ -1,0 +1,131 @@
+/**
+ * Enumerate PilotDeck projects.
+ *
+ * Source of truth (Phase 3): the `projects/` directory under `pilotHome`.
+ * Each subdirectory is a project ID; we surface its derived name + the
+ * encoded `fullPath` we can recover from the ID. Where possible we also
+ * include the session count via `listProjectSessions`.
+ *
+ * The default project (the cwd that started the gateway) is always
+ * appended even if it has no chats yet.
+ */
+
+import { readdir, stat } from "node:fs/promises";
+import { resolve, basename } from "node:path";
+import { listProjectSessions } from "../../session/index.js";
+import { createProjectId } from "../../pilot/index.js";
+import type { WebListProjectsResult, WebProjectSummary } from "../client/protocol.js";
+
+export type ListWebProjectsOptions = {
+  pilotHome: string;
+  defaultProjectRoot: string;
+};
+
+export async function listWebProjects(
+  options: ListWebProjectsOptions,
+): Promise<WebListProjectsResult> {
+  const seen = new Set<string>();
+  const projects: WebProjectSummary[] = [];
+
+  const projectsDir = resolve(options.pilotHome, "projects");
+  let projectIds: string[] = [];
+  try {
+    projectIds = await readdir(projectsDir);
+  } catch {
+    projectIds = [];
+  }
+
+  for (const id of projectIds) {
+    const dir = resolve(projectsDir, id);
+    let isDir = false;
+    try {
+      const s = await stat(dir);
+      isDir = s.isDirectory();
+    } catch {
+      isDir = false;
+    }
+    if (!isDir) continue;
+    const fullPath = await tryDecodeProjectId(id);
+    if (!fullPath) {
+      // Encoded id no longer maps to an existing absolute path on disk
+      // (typical for stale dirs created by older runs that resolve()'d a
+      // relative projectKey under the wrong cwd). Skipping keeps the UI
+      // project list trustworthy.
+      continue;
+    }
+    const summary = await summarizeProject(fullPath, options);
+    seen.add(summary.projectKey);
+    projects.push(summary);
+  }
+
+  // Always include the default project root, even if no chats exist yet.
+  const defaultSummary = await summarizeProject(options.defaultProjectRoot, options);
+  if (!seen.has(defaultSummary.projectKey)) {
+    projects.unshift(defaultSummary);
+  }
+
+  projects.sort((left, right) => (right.lastActivity ?? 0) - (left.lastActivity ?? 0));
+  return { projects };
+}
+
+export async function describeWebProject(
+  projectKey: string,
+  options: ListWebProjectsOptions,
+): Promise<WebProjectSummary> {
+  return summarizeProject(projectKey, options);
+}
+
+async function summarizeProject(
+  projectRoot: string,
+  options: ListWebProjectsOptions,
+): Promise<WebProjectSummary> {
+  let sessionCount = 0;
+  let lastActivity: number | undefined;
+  try {
+    const sessions = await listProjectSessions({
+      projectRoot,
+      pilotHome: options.pilotHome,
+    });
+    sessionCount = sessions.length;
+    lastActivity = sessions[0]?.lastModified;
+  } catch {
+    sessionCount = 0;
+  }
+  return {
+    projectKey: projectRoot,
+    name: basename(projectRoot) || projectRoot,
+    fullPath: projectRoot,
+    sessionCount,
+    lastActivity,
+  };
+}
+
+/**
+ * `createProjectId` strips leading dashes after replacing path separators
+ * with `-`, so the recovered absolute path is ambiguous in general. We
+ * try the most common shape (treat `-` as `/`, prepend `/`) and verify
+ * the result against the filesystem + `createProjectId` round-trip. Any
+ * id that does not survive the round-trip is returned as `null` so the
+ * caller can drop it from the project list.
+ */
+async function tryDecodeProjectId(id: string): Promise<string | null> {
+  // Walk every `-` and treat it as a `/` boundary. Validate by checking
+  // that the path exists AND `createProjectId(decoded)` round-trips back
+  // to the original id (this catches names that happen to share an
+  // encoded form but live on different paths).
+  const segments = id.split("-");
+  for (let firstSlash = 0; firstSlash < segments.length; firstSlash += 1) {
+    const candidate = "/" + segments.slice(firstSlash).join("/");
+    const reEncoded = createProjectId(candidate);
+    if (reEncoded !== id) continue;
+    try {
+      const stats = await stat(candidate);
+      if (stats.isDirectory()) {
+        return candidate;
+      }
+    } catch {
+      // ignore — try next candidate
+    }
+  }
+  return null;
+}
