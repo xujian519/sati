@@ -4,17 +4,21 @@
 
 新项目中 router 是**纯内置模块**，与 `model` / `tool` / `permission` 同级。它不暴露 HTTP 端口，不监听 socket，不打包成独立可执行文件，不再实现 Anthropic Messages 兼容 server。所有调用都来自同进程内的 `agent` / `gateway` / `cli`，旧项目 CCR 的 Fastify server、`server.cjs` 打包产物、`installFetchInterceptor()` 方案都不迁移。
 
-## 1. 现状对照
+## 1. 当前状态与迁移前对照
 
-新项目 `src/` 中和 router 相关或会被 router 复用的模块如下：
+当前 `src/router/` 已落地为内置控制平面：`createRouterRuntime()` 持有 scenario、fallback、zero-usage retry、TokenSaver、AutoOrchestrate、stats 和 custom router 接口；`AgentLoop` 通过 `dependencies.router.stream()` 调用模型流，`AgentRuntimeConfig` 不再持有 `fallbackProvider` / `fallbackModel`，旧 `AgentRecoveryPolicy` 也已删除。`polit/config` 已接入 `router` 段，`createLocalGateway()` 会为每个 project runtime 创建 `ModelRuntime` 和 `RouterRuntime`。
+
+下面的“迁移前”对照保留用于解释为什么 router 要从 agent fallback 中拆出，不再代表当前源码：
+
+迁移前 `src/` 中和 router 相关或会被 router 复用的模块如下：
 
 ```text
 src/
   agent/
-    runtime/AgentRuntimeConfig.ts        # provider/model + fallbackProvider/fallbackModel
-    runtime/AgentRuntimeDependencies.ts  # AgentModelRuntime 只暴露 stream(request, signal?)
-    loop/AgentLoop.ts                    # 直接读 config.provider/model + dependencies.model.stream()
-    loop/AgentRecoveryPolicy.ts          # 当前 fallback 实现（仅依据 retryable + prompt_too_long）
+    runtime/AgentRuntimeConfig.ts        # 迁移前：provider/model + fallbackProvider/fallbackModel
+    runtime/AgentRuntimeDependencies.ts  # 迁移前：AgentModelRuntime 只暴露 stream(request, signal?)
+    loop/AgentLoop.ts                    # 迁移前：直接读 config.provider/model + dependencies.model.stream()
+    loop/AgentRecoveryPolicy.ts          # 迁移前 fallback 实现（仅依据 retryable + prompt_too_long）
     session/AgentSession.ts
   model/
     ModelRuntime.ts                      # createModelRuntime(config) -> stream/complete/getCapabilities
@@ -23,8 +27,8 @@ src/
     protocol/canonical.ts                # CanonicalModelRequest/Event/Response/...
     providers/registry.ts                # protocol -> adapter
   polit/
-    config/types.ts                      # PolitConfig / PolitRawConfig / PolitAgentConfig.fallbackModel
-    config/loadPolitConfig.ts            # 读 YAML + ENV (POLIT_AGENT_MODEL / POLIT_AGENT_FALLBACK_MODEL)
+    config/types.ts                      # 迁移前：PolitConfig / PolitRawConfig / PolitAgentConfig.fallbackModel
+    config/loadPolitConfig.ts            # 迁移前：读 YAML + ENV (POLIT_AGENT_MODEL / POLIT_AGENT_FALLBACK_MODEL)
     config/parseGatewayConfig.ts         # parseGatewayConfig + parseAdaptersConfig（router 配置应同款）
     config/parseMemoryConfig.ts
     config/classifyChanges.ts            # 路径前缀 -> change class（目前只识别 agent./model./extension.*）
@@ -41,8 +45,7 @@ src/
   lifecycle/                             # LifecycleRuntime / Observer，router 事件应在此挂接
   cli/
     politdeck.ts                         # 子命令 server / tui / cli
-    politdeckServer.ts
-    createLocalGateway.ts                # 注入 dependencies.model；fallbackProvider/fallbackModel 在 L133-134 桥接
+    createLocalGateway.ts                # 迁移前：注入 dependencies.model；fallbackProvider/fallbackModel 桥接
 ```
 
 值得注意的几点：

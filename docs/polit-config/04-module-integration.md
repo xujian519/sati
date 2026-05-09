@@ -1,6 +1,6 @@
 # Config 与 Model 模块集成
 
-本文定义当前阶段 `agent` 和 `model` 模块如何消费 `polit/config`，并说明 `agent.model` 如何管理默认厂商/模型。adapter 接入仍是未来扩展。
+本文定义当前 `agent`、`model`、`router`、`gateway`、`alwaysOn`、`cron` 等模块如何消费 `polit/config`，并说明 `agent.model` 如何管理默认厂商/模型。fallback、场景路由和自动编排由 `router` 段管理。
 
 ## 集成原则
 
@@ -19,6 +19,8 @@
 config runtime creates snapshot
   -> model receives snapshot.config.model
   -> agent receives snapshot.config.agent model selection
+  -> router receives snapshot.config.router or a gateway default derived from agent.model
+  -> server receives snapshot.config.gateway / alwaysOn / cron
   -> createModelRuntime(snapshot.config.model)
   -> request metadata may include snapshot version
 ```
@@ -77,7 +79,7 @@ ModelProviderRegistry
   list() -> ModelProviderAdapter[]
 ```
 
-provider 和 model list 保存在 `ModelConfig` 中，由 `createModelRuntime(config)` 绑定。默认 provider/model 和 fallback model 的选择属于目标 `agent` 段，由 `agent.model` / `agent.fallbackModel` 解析后传给 `AgentRuntimeConfig`。
+provider 和 model list 保存在 `ModelConfig` 中，由 `createModelRuntime(config)` 绑定。默认 provider/model 的选择属于 `agent` 段，由 `agent.model` 解析后传给 `AgentRuntimeConfig`；fallback 链属于 `router.fallback`，由 `RouterRuntime` 决策后选择模型。
 
 ## Model 二次校验
 
@@ -87,7 +89,7 @@ provider 和 model list 保存在 `ModelConfig` 中，由 `createModelRuntime(co
 - provider URL 是否能被 adapter 接受。
 - API key 是否已解析为可用 secret 或 secret handle。
 - `agent.model` 指向的 model 是否可被当前 provider 使用。
-- `agent.fallbackModel` 是否指向可用 provider/model。
+- `router.fallback.*` 是否指向可用 provider/model。
 - capabilities 是否满足 request builder 需要。
 - multimodal constraints 是否能约束 canonical content block。
 - provider headers 是否包含不支持或冲突的字段。
@@ -146,7 +148,7 @@ PolitConfigSnapshot
 映射原则：
 
 - `agent.model` 是 agent provider/model 默认值的单一事实来源，格式为 `provider/model`。
-- `agent.fallbackModel` 是 fallback provider/model 的单一事实来源，格式为 `provider/model`。
+- fallback provider/model 不写入 `AgentRuntimeConfig`，而是通过 `router.fallback` 和 `RouterRuntime` 决策。
 - `model` 段只提供 provider/model 定义，不再提供默认模型选择字段。
 - `AgentRuntimeConfig.permissionMode` 与 `permissionContext.mode` 必须保持一致；如果配置系统提供默认权限模式，编译时要同时写入两处。
 - `maxContextMessages` 应优先来自 `context` 段；`agent` 段只保存 loop 行为，不重复定义 token budget。
@@ -154,7 +156,7 @@ PolitConfigSnapshot
 
 ## 其他运行时模块
 
-tool、permission、context、session/transcript 当前仍由调用方 runtime wiring、session state 或 `polit/paths` 派生路径管理。本轮 `polit/config` 只把默认模型选择收敛到 `agent.model` / `agent.fallbackModel`，不在本文定义这些模块的 YAML 字段。
+tool、permission、context、session/transcript 当前仍由调用方 runtime wiring、session state 或 `polit/paths` 派生路径管理。`polit/config` 已接入 `gateway`、`adapters`、`router`、`alwaysOn`、`cron` 等 server/runtime 配置段；尚未进入 schema 的模块不在本文定义 YAML 字段。
 
 ## Config Facade
 
@@ -176,7 +178,11 @@ PolitConfigStore
 ```text
 配置项                         默认生效范围
 agent.model                    next-request
-agent.fallbackModel            next-request
+router.fallback                next-request
+router.scenarios               next-request
+gateway.*                      next-runtime
+alwaysOn.*                     next-runtime
+cron.*                         next-runtime
 model.provider.url             next-request
 model.provider.apiKey          next-request
 model.provider.timeoutMs       next-request
@@ -188,7 +194,7 @@ model.multimodal               next-request
 POLIT_HOME                     当前不进入 snapshot diff；运行中变化需重启
 ```
 
-当前实现采用保守策略：`agent` 和 `model` 业务变更只对使用新 snapshot 创建或选择的后续 runtime/request 生效。默认模型选择由 `agent.model` / `agent.fallbackModel` 管理。`POLIT_HOME` 由环境变量控制，不属于 YAML 配置；运行中变化需要重启，当前不会通过 `classifyConfigChanges()` 自动报告 `restart-required`。
+当前实现采用保守策略：`agent`、`model` 和 `router` 业务变更只对使用新 snapshot 创建或选择的后续 runtime/request 生效。默认模型选择由 `agent.model` 管理，fallback 由 `router.fallback` 管理。`POLIT_HOME` 由环境变量控制，不属于 YAML 配置；运行中变化需要重启，当前不会通过 `classifyConfigChanges()` 自动报告 `restart-required`。
 
 ## 分册关系
 

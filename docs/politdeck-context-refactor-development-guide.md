@@ -150,7 +150,7 @@ src/context/
 | IDE / MCP attachments | deferred 直到 IDE adapter / MCP client 就位 | §3.1 #10 |
 | **PromptAssembler 文案** | PolitDeck **自写精简版**，但保留 legacy `getSystemPrompt` / `getUserContext` / `getSystemContext` 的全部"信息槽"（tool descriptions / cwd / git status / env / model / additionalWorkingDirectories / mcp instructions） | review 决策 2026-05 |
 | **ContextRuntime 是否拿 model 依赖** | 否（**选 B**）。`CompactionEngine` 由 `AgentLoop` 持有；context 提供决策、loop 帮忙调 model 后回灌结果。`ContextRuntime` 接口零 model 依赖 | review 决策 2026-05 |
-| **ContextRecoveryDecision shape** | `{ type: "truncate_head_and_retry"; keepRatio: number; reason: string }` 唯一一种回退动作；其它情况 (`unknown` 错误等) 由 loop 通过 `AgentRecoveryPolicy` 处理或直接 turn_failed | review 决策 2026-05 |
+| **ContextRecoveryDecision shape** | `{ type: "truncate_head_and_retry"; keepRatio: number; reason: string }` 唯一一种回退动作；其它情况 (`unknown` 错误等) 由 loop 分类为失败，跨 provider fallback 交给 `RouterRuntime` | review 决策 2026-05 |
 | **ExtensionResolver 范围** | 三类 plugin 派生信息：(a) `listCommands()`（消费 `PluginRuntime.getAllCommands()` 聚合 getter，由 extension owner 提供，**不在 context 里 flatMap snapshot()**），(b) `listSkills()`（消费 `getAllSkills()`），(c) `listMcpInstructions()` **deferred**——extension 只 aggregate plugin manifest 的 mcpServers contribution，不做实际 connection；真实 connect / handshake / read instructions 归 MCP runtime（待 MCP service 落地后接）。**不做 prompt fragment 注册表 / 独立 singleton registry**：未来共用 extension owner 计划的 `ExtensionSnapshot`（turn-stable contribution view，含 commands/skills/prompt fragments/mcpServers），Phase 6 只读 `ExtensionSnapshot` 不落地新 registry。`PromptContribution` / `CommandContribution` type alias 保留为协议占位，Phase 6 不消费 | review 决策 2026-05 + extension owner 反馈 2026-05 |
 | **Compact lifecycle 事件** | 复用现有 `PreCompact` / `PostCompact`（已在 `src/extension/hooks/protocol/events.ts` 枚举里），**不**新增 `CompactStart` / `CompactComplete` / `CompactFailed`。compact 的二次 model 调用**不**触发 `UserPromptSubmit` / `Stop` / `StopFailure`，避免与 user turn 语义递归。失败信息进 `PostCompact` payload 的 `status` / `error` 字段；只有 parity / 产品需要独立 hook 时再考虑加 `CompactFailed` | extension owner 反馈 2026-05 |
 | **Slash command 解析归属** | 拆三层：**(a)** `adapters/cli\|tui` 负责 input 字符层的解析（识别 `/foo` 前缀，token split），**(b)** `extension.commands`（含 plugin commands/skills）作为命令来源，**(c)** `context/input` `InputProcessor` 负责执行 / 投影到 user message 或 short-circuit 返回。TUI 内置命令（`/new` / `/sessions` / `/mode`）保留为 UI/session 层命令，TUI 直接处理；其它通用 slash command 一律走 dispatcher，TUI 不再硬编码命令 | extension owner 反馈 2026-05 |
@@ -574,7 +574,7 @@ const prepared = await contextRuntime.prepareForModel({
 
 - `AgentLoop` 调用 `prepareForModel()` 获取 `messages/systemPrompt/tools`。
 - 工具执行后调用 `applyToolResults()`，而不是直接 `projectToolResults()`。
-- 模型错误时调用 `recoverFromModelError()`，而不是只靠 `AgentRecoveryPolicy`。
+- 模型错误时调用 `recoverFromModelError()`；跨 provider fallback 由 `RouterRuntime` 处理，context 只负责可恢复的上下文裁剪。
 - `TurnRunner` 调用 `context.processInput()`，逐步替代 `TurnInputProcessor`。
 
 ### 7.2 Model
@@ -845,7 +845,7 @@ AgentLoop 自己执行：
     | { type: "give_up"; reason: string };
   ```
 
-  唯一动作只有 `truncate_head_and_retry`；其它错误（auth / quota / unknown）由 loop 通过 `AgentRecoveryPolicy` 处理或直接 turn_failed。
+  唯一动作只有 `truncate_head_and_retry`；其它错误（auth / quota / unknown）由 loop 分类为失败，跨 provider fallback 由 `RouterRuntime` 在模型流层处理。
 
 - `ContextRuntime.recoverFromModelError(input)`：
 
@@ -956,7 +956,7 @@ AgentLoop 自己执行：
 | `context-pdf-page-estimate` | `pdfinfo` (poppler) 子进程获取页数 | Phase 4 按 100KB/页估算 | 不引 poppler 依赖；§3.1 #10 | 估算偏差 |
 | `context-reactive-compact-single-shot` | legacy `tryReactiveCompact` 内部 retry 计数（vendor 缺失） | 严格 single-shot 布尔 guard | vendor 缺源码无法对照；§3.1 #8 | 复杂场景下 PTL 提前 turn_failed |
 | `context-prompt-self-authored` | legacy `getSystemPrompt()` 文案是 Claude 产品工程的 prompt | PolitDeck 自写精简版 system prompt，保留全部信息槽（tool catalog / cwd / git / env / mcp instructions / commands / skills），文案不抄 | 避免 prompt 工程归属问题，且 PolitDeck 是不同产品身份；review 决策 2026-05 | 模型行为可能与 Claude Code 不同，需要在 dual parity 中验证（信息槽完整即视为 parity ok，文案差异不计） |
-| `context-recovery-truncate-only` | legacy reactive compact 包含 collapse drain + reactive compact + max output recovery 多种动作 | PolitDeck `ContextRecoveryDecision` 唯一动作 `truncate_head_and_retry`，其它情况由 loop 通过 `AgentRecoveryPolicy` 处理或 turn_failed | 简化 recovery state machine，避免引入 collapse store；review 决策 2026-05 | 部分场景（如 single message 超长）可能直接失败而 legacy 会再尝试 |
+| `context-recovery-truncate-only` | legacy reactive compact 包含 collapse drain + reactive compact + max output recovery 多种动作 | PolitDeck `ContextRecoveryDecision` 唯一动作 `truncate_head_and_retry`，其它情况由 loop 分类为失败或由 `RouterRuntime` fallback | 简化 recovery state machine，避免引入 collapse store；review 决策 2026-05 | 部分场景（如 single message 超长）可能直接失败而 legacy 会再尝试 |
 | `context-no-model-dependency` | legacy compact 直接在 query 路径里调 model | PolitDeck `ContextRuntime` 接口零 model 依赖；`CompactionEngine` 由 `AgentLoop` 持有；context 通过 `recoverFromModelError` 返回决策，loop 帮调 model | 保持 context 模块边界纯，不污染 ContextRuntime；review 决策 2026-05 | loop 多承担一点编排逻辑 |
 | `context-extension-resolver-readonly` | legacy 没有 ExtensionResolver 概念，直接在 query 里用 `mcpClients` / `commands` / 多个 helper | PolitDeck context 通过 `ExtensionResolver` 三个只读方法消费 plugin 派生信息；不做独立 registry，未来读 extension owner 的 `ExtensionSnapshot` | 保持 context 单向依赖 extension；extension owner 反馈 2026-05 | 等 `ExtensionSnapshot` 落地前用 `PluginRuntime.getAllCommands()/getAllSkills()` 顶替 |
 

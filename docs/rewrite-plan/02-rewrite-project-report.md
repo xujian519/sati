@@ -386,9 +386,10 @@ PolitExtensionDir = ~/.politdeck/extensions
 
 ### 语言和运行环境
 
-如果继续使用 TypeScript，建议选择：
+当前根项目已经使用 TypeScript + 标准 ESM，并通过 npm scripts 调用 `tsc` 与 Node test runner。后续建议：
 
-- Bun 作为唯一包管理器和默认运行时，使用 `bun install`、`bun run`、`bun test` 管理依赖、脚本和测试。
+- 以根 `package.json` 为准使用 `npm run build` 和 `npm test`。
+- 旧项目 parity probe 如依赖 vendored Bun 脚本，应限制在对应 legacy harness 内，不作为新项目运行时假设。
 - 使用标准 ESM。
 - 使用 `zod` 或类似 schema 库定义工具输入。
 - 使用 async iterable 作为统一流式协议。
@@ -460,7 +461,7 @@ Model 模块的详细设计见 `[../model/](../model/)`。
 
 配置应至少包括：
 
-- `ModelConfig`：provider、model、fallbackModel、thinking、temperature、effort、fastMode、taskBudget、model list、model capabilities、multimodal input constraints。
+- `ModelConfig`：provider、model、thinking、temperature、effort、fastMode、taskBudget、model list、model capabilities、multimodal input constraints；fallback 链由 `router.fallback` 管理。
 - `LoopConfig`：maxTurns、streamingToolExecution、toolConcurrencyLimit、continueOnToolError、abortTimeoutMs。
 - `ContextConfig`：maxContextTokens、autoCompact、compactThreshold、toolResultBudget、memoryEnabled、contextOverflowRecovery。
 - `ToolConfig`：enabledTools、disabledTools、toolPresets、mcpServers、shellTimeout、fileReadLimit、globResultLimit。

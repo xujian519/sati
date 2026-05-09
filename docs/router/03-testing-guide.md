@@ -91,7 +91,7 @@ tests/
         orchestrate-skills/
 ```
 
-测试统一用 Bun（`bun test`）。
+当前根项目测试以 `package.json` 为准：`npm test` 会先 build，再用 Node test runner 执行 `dist/tests/**/*.test.js`。旧 CCR / legacy harness 如需要 Bun，只能在对应 parity probe 内局部使用。
 
 ## 3. 测试命名
 
@@ -704,9 +704,9 @@ router 测试不应跨模块断言：
 
 ## 10. CI 集成
 
-- `bun test tests/router/` 默认必跑。
-- `bun test tests/router/parity/` 在 PR 中必跑；如果有 must_match 用例失败必须阻断合并。
-- `bun test tests/router/e2e/` 仅在显式开启 `POLITDECK_RUN_REAL_ROUTER_E2E=1` 的 nightly 任务跑。
+- `npm test` 默认覆盖 `tests/router/` 编译后的 Node 测试。
+- router parity 用例在 PR 中必跑；如果有 must_match 用例失败必须阻断合并。
+- router e2e 仅在显式开启 `POLITDECK_RUN_REAL_ROUTER_E2E=1` 的 nightly 任务跑。
 - parity manifest 变化必须在 PR 描述中给出：
 
 ```text

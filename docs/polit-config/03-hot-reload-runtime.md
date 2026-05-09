@@ -153,7 +153,7 @@ other changed path                   -> next-runtime
 示例：
 
 - `agent.model` 默认模型。
-- `agent.fallbackModel` fallback 模型。
+- `router.fallback` fallback 模型链。
 - provider URL。
 - provider timeout。
 - provider headers。
@@ -279,12 +279,12 @@ listener 要求：
 `agent` 配置进入 schema 后，多数字段只应影响新 turn 或新 session：
 
 - `agent.model` 对后续模型请求生效。
-- `agent.fallbackModel` 对后续 recovery policy 生效；已经发生过 fallback 的 loop 不应被 reload 重置。
+- `router.fallback` 对后续 router fallback 判断生效；已经开始执行的 turn 不应被 reload 重置。
 - `permissionMode` 若作为 session 初始值，应只影响新 session；运行中由工具结果触发的 mode change 属于 session state，不应被配置 reload 覆盖。
 
 ### 其他模块
 
-tool、permission、context、session/transcript 等模块当前仍由 runtime wiring 或 session state 管理，不在本轮 `polit/config` schema 中展开字段。未来如果把这些模块纳入 YAML，应先新增独立 schema 文档并补充字段级变更分类；在此之前，`classifyConfigChanges()` 不应假设这些段已经可用。
+tool、permission、context、session/transcript 等模块当前仍由 runtime wiring 或 session state 管理，不在当前 `polit/config` schema 中展开字段。`gateway`、`router`、`alwaysOn`、`cron` 等已接入段如果发生变化，默认按后续请求或后续 runtime 重建生效；未来如果把更多模块纳入 YAML，应先新增独立 schema 文档并补充字段级变更分类。
 
 ## 并发与竞态
 
