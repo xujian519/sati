@@ -10,7 +10,7 @@ export { registryScenarios } from "./registry.scenarios.js";
 export { resultMappingScenarios } from "./result-mapping.scenarios.js";
 export type {
   LegacyBehaviorSource,
-  PolitDeckIntentionalDifference,
-  PolitDeckToolBehaviorScenario,
-  PolitDeckToolParityStatus,
+  PilotDeckIntentionalDifference,
+  PilotDeckToolBehaviorScenario,
+  PilotDeckToolParityStatus,
 } from "./types.js";

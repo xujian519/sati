@@ -13,7 +13,7 @@ import {
   createWebFetchTool,
   createWebSearchTool,
   createWriteFileTool,
-  type PolitDeckToolDefinition,
+  type PilotDeckToolDefinition,
 } from "../../src/tool/index.js";
 import {
   dualParityContractScenarios,
@@ -21,8 +21,8 @@ import {
   type DualParityContractScenario,
 } from "../fixtures/tool/dual-parity/contractScenarios.js";
 
-export function createPolitDeckContractReport(): DualParityContractReport[] {
-  const tools = new Map<string, PolitDeckToolDefinition>(
+export function createPilotDeckContractReport(): DualParityContractReport[] {
+  const tools = new Map<string, PilotDeckToolDefinition>(
     [
       createReadFileTool(),
       createGlobTool(),
@@ -51,28 +51,28 @@ export function createPolitDeckContractReport(): DualParityContractReport[] {
         id: scenario.id,
         status: scenario.status,
         legacyToolName: scenario.legacy.toolName,
-        politdeckToolName: scenario.politdeck.toolName,
+        pilotdeckToolName: scenario.pilotdeck.toolName,
         reason: scenario.reason,
       };
     }
 
-    const tool = tools.get(scenario.politdeck.toolName);
+    const tool = tools.get(scenario.pilotdeck.toolName);
     if (!tool) {
-      throw new Error(`Missing PolitDeck tool ${scenario.politdeck.toolName} for ${scenario.id}.`);
+      throw new Error(`Missing PilotDeck tool ${scenario.pilotdeck.toolName} for ${scenario.id}.`);
     }
 
     return {
       id: scenario.id,
       status: scenario.status,
       legacyToolName: scenario.legacy.toolName,
-      politdeckToolName: scenario.politdeck.toolName,
-      values: collectValues(tool, scenario.politdeck.input, scenario.compareFields),
+      pilotdeckToolName: scenario.pilotdeck.toolName,
+      values: collectValues(tool, scenario.pilotdeck.input, scenario.compareFields),
     };
   });
 }
 
 function collectValues(
-  tool: PolitDeckToolDefinition,
+  tool: PilotDeckToolDefinition,
   input: Record<string, unknown>,
   fields: DualParityContractScenario["compareFields"],
 ): NonNullable<DualParityContractReport["values"]> {

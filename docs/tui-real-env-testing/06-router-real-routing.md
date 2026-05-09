@@ -44,7 +44,7 @@ model:
 
 ```bash
 npm run build
-node dist/src/cli/politdeck.js tui
+node dist/src/cli/pilotdeck.js tui
 ```
 
 在 TUI 中输入：
@@ -57,7 +57,7 @@ node dist/src/cli/politdeck.js tui
 
 - TUI transcript 出现 `You` 和输入文本。
 - 运行中出现 `thinking`。
-- 完成后出现 `PolitDeck` 回复，且 `thinking` 消失。
+- 完成后出现 `PilotDeck` 回复，且 `thinking` 消失。
 - provider 日志中出现一次发往 `moonshotai/kimi-k2.6` 的请求。
 
 ### 预期输出
@@ -92,7 +92,7 @@ router:
 
 ### 预期现象
 
-- TUI 仍表现为一次普通 turn：`You`、`thinking`、`PolitDeck`。
+- TUI 仍表现为一次普通 turn：`You`、`thinking`、`PilotDeck`。
 - provider 侧日志显示主请求模型为 `openai/gpt-4o-mini`。
 - default 模型 `moonshotai/kimi-k2.6` 不应处理这次主请求。
 
@@ -258,7 +258,7 @@ hello
 
 - local gateway 创建失败时 TUI 使用 fallback gateway。
 - 提交消息后 transcript 显示配置或 gateway 错误。
-- 不显示虚假的 `PolitDeck` 成功回复。
+- 不显示虚假的 `PilotDeck` 成功回复。
 
 ### 预期输出
 
@@ -271,5 +271,5 @@ ROUTER_REF_MODEL_NOT_FOUND
 或：
 
 ```text
-No PolitDeck server is available and local config could not start session ...
+No PilotDeck server is available and local config could not start session ...
 ```

@@ -1,4 +1,4 @@
-export type PolitDeckPermissionHookDecision =
+export type PilotDeckPermissionHookDecision =
   | {
       behavior: "allow";
       updatedInput?: Record<string, unknown>;
@@ -10,7 +10,7 @@ export type PolitDeckPermissionHookDecision =
       interrupt?: boolean;
     };
 
-export type PolitDeckHookSpecificOutput = {
+export type PilotDeckHookSpecificOutput = {
   hookEventName: string;
   additionalContext?: string;
   initialUserMessage?: string;
@@ -19,12 +19,12 @@ export type PolitDeckHookSpecificOutput = {
   permissionDecisionReason?: string;
   updatedInput?: Record<string, unknown>;
   updatedMCPToolOutput?: unknown;
-  decision?: PolitDeckPermissionHookDecision;
+  decision?: PilotDeckPermissionHookDecision;
   retry?: boolean;
   worktreePath?: string;
 };
 
-export type PolitDeckHookSyncOutput = {
+export type PilotDeckHookSyncOutput = {
   type: "sync";
   continue?: boolean;
   suppressOutput?: boolean;
@@ -32,13 +32,13 @@ export type PolitDeckHookSyncOutput = {
   decision?: "approve" | "block";
   reason?: string;
   systemMessage?: string;
-  specific?: PolitDeckHookSpecificOutput;
+  specific?: PilotDeckHookSpecificOutput;
   raw?: unknown;
 };
 
-export type PolitDeckHookAsyncOutput = {
+export type PilotDeckHookAsyncOutput = {
   type: "async";
   raw?: unknown;
 };
 
-export type PolitDeckHookOutput = PolitDeckHookSyncOutput | PolitDeckHookAsyncOutput;
+export type PilotDeckHookOutput = PilotDeckHookSyncOutput | PilotDeckHookAsyncOutput;

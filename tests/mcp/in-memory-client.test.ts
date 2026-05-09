@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { z } from "zod";
 import { McpClient, type McpClientOptions } from "../../src/mcp/index.js";
-import type { PolitDeckMcpServerSpec } from "../../src/mcp/index.js";
+import type { PilotDeckMcpServerSpec } from "../../src/mcp/index.js";
 
 async function buildLinked(serverFactory: () => McpServer): Promise<{
   serverPair: ReturnType<typeof InMemoryTransport.createLinkedPair>;
@@ -16,8 +16,8 @@ async function buildLinked(serverFactory: () => McpServer): Promise<{
   return { serverPair: pair, server };
 }
 
-function makeSpec(id: string): PolitDeckMcpServerSpec {
-  return { id, transport: "stdio", command: "echo", args: [] } as PolitDeckMcpServerSpec;
+function makeSpec(id: string): PilotDeckMcpServerSpec {
+  return { id, transport: "stdio", command: "echo", args: [] } as PilotDeckMcpServerSpec;
 }
 
 test("C1.M1+M6 listTools cached on second call", async () => {

@@ -6,11 +6,11 @@ import test from "node:test";
 import { CronTaskStore, resolveCronPaths, type CronTask } from "../../src/cron/index.js";
 
 function makeStore(): { store: CronTaskStore; cleanup: () => void } {
-  const politHome = mkdtempSync(join(tmpdir(), "politdeck-cron-store-"));
-  const paths = resolveCronPaths({ politHome, projectKey: "/tmp/projects/sample" });
+  const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-cron-store-"));
+  const paths = resolveCronPaths({ pilotHome, projectKey: "/tmp/projects/sample" });
   return {
     store: new CronTaskStore(paths),
-    cleanup: () => rmSync(politHome, { recursive: true, force: true }),
+    cleanup: () => rmSync(pilotHome, { recursive: true, force: true }),
   };
 }
 

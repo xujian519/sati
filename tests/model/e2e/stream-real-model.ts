@@ -1,9 +1,9 @@
 import { createModelRuntime, type CanonicalModelEvent } from "../../../src/model/index.js";
-import { loadPolitConfig } from "../../../src/polit/index.js";
+import { loadPilotConfig } from "../../../src/pilot/index.js";
 
-const prompt = process.argv.slice(2).join(" ") || "Reply with exactly: PolitDeck streaming OK";
+const prompt = process.argv.slice(2).join(" ") || "Reply with exactly: PilotDeck streaming OK";
 
-const snapshot = loadPolitConfig();
+const snapshot = loadPilotConfig();
 const { provider, model } = snapshot.config.agent.model;
 const runtime = createModelRuntime(snapshot.config.model);
 

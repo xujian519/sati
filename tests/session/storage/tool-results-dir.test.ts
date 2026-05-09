@@ -6,7 +6,7 @@ import { createAgentProjectSessionStorage } from "../../../src/session/storage/P
 test("createAgentProjectSessionStorage exposes toolResultsDir under chat dir", () => {
   const storage = createAgentProjectSessionStorage({
     projectRoot: "/tmp/proj",
-    politHome: "/tmp/politHome",
+    pilotHome: "/tmp/pilotHome",
     sessionId: "session-1",
   });
   assert.equal(storage.toolResultsDir, resolve(storage.chatDir, "session-1", "tool-results"));

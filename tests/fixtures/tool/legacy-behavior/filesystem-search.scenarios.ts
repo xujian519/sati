@@ -1,4 +1,4 @@
-import type { PolitDeckToolBehaviorScenario } from "./types.js";
+import type { PilotDeckToolBehaviorScenario } from "./types.js";
 
 const searchSource = [
   {
@@ -11,11 +11,11 @@ const searchSource = [
   },
 ];
 
-export const filesystemSearchScenarios: PolitDeckToolBehaviorScenario[] = [
+export const filesystemSearchScenarios: PilotDeckToolBehaviorScenario[] = [
   {
     name: "glob matches TypeScript files",
     legacyToolName: "Glob",
-    politdeckToolName: "glob",
+    pilotdeckToolName: "glob",
     input: { pattern: "**/*.ts" },
     permissionMode: "default",
     parity: "must_match",
@@ -26,7 +26,7 @@ export const filesystemSearchScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "grep files_with_matches mode succeeds",
     legacyToolName: "Grep",
-    politdeckToolName: "grep",
+    pilotdeckToolName: "grep",
     input: { pattern: "needle" },
     permissionMode: "default",
     parity: "must_match",
@@ -37,7 +37,7 @@ export const filesystemSearchScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "grep content mode includes matching line",
     legacyToolName: "Grep",
-    politdeckToolName: "grep",
+    pilotdeckToolName: "grep",
     input: { pattern: "needle", outputMode: "content", context: 0 },
     permissionMode: "default",
     parity: "must_match",
@@ -48,7 +48,7 @@ export const filesystemSearchScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "grep count mode reports match count",
     legacyToolName: "Grep",
-    politdeckToolName: "grep",
+    pilotdeckToolName: "grep",
     input: { pattern: "needle", outputMode: "count" },
     permissionMode: "default",
     parity: "must_match",

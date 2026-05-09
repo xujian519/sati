@@ -1,9 +1,9 @@
-import type { PolitDeckToolDefinition } from "../../tool/index.js";
+import type { PilotDeckToolDefinition } from "../../tool/index.js";
 import type { CronCreateInput, CronCreateResult } from "../protocol/types.js";
 import { CRON_SCHEDULE_SCHEMA } from "./CronSchemas.js";
 import type { CronToolRuntime } from "./CronToolRuntime.js";
 
-export function createCronCreateTool(runtime: CronToolRuntime): PolitDeckToolDefinition<CronCreateInput, CronCreateResult> {
+export function createCronCreateTool(runtime: CronToolRuntime): PilotDeckToolDefinition<CronCreateInput, CronCreateResult> {
   return {
     name: "cron_create",
     title: "Create Cron Task",

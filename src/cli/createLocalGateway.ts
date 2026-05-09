@@ -33,23 +33,23 @@ import {
 } from "../mcp/index.js";
 import { createModelRuntime, type ModelRuntime } from "../model/index.js";
 import { createDefaultPermissionContext } from "../permission/index.js";
-import { loadPolitConfig, resolvePolitHome } from "../polit/index.js";
-import type { PolitAgentModelSelection, PolitConfigSnapshot } from "../polit/config/types.js";
+import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
+import type { PilotAgentModelSelection, PilotConfigSnapshot } from "../pilot/config/types.js";
 import type { RouterConfig } from "../router/config/schema.js";
 import { listProjectSessions, resumeAgentSession } from "../session/index.js";
 import { BackgroundTaskRuntime } from "../task/runtime/BackgroundTaskRuntime.js";
 import { createBuiltinRegistry } from "../tool/index.js";
-import type { PolitDeckToolDefinition, ToolRegistry } from "../tool/index.js";
+import type { PilotDeckToolDefinition, ToolRegistry } from "../tool/index.js";
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
 import type { EdgeClawMemoryProvider } from "../context/index.js";
 
 export type CreateLocalGatewayOptions = {
   projectRoot?: string;
-  politHome?: string;
+  pilotHome?: string;
   env?: Record<string, string | undefined>;
   permissionMode?: AgentRuntimeConfig["permissionMode"];
   /** Tools merged into every per-project ToolRegistry. */
-  extraTools?: PolitDeckToolDefinition[];
+  extraTools?: PilotDeckToolDefinition[];
   /** Per-sessionKey config overrides (cwd / permissionMode). */
   sessionOverrides?: SessionConfigOverrides;
   /** Optional Cron runtime controller exposed through Gateway management methods. */
@@ -60,18 +60,18 @@ export type CreateLocalGatewayOptions = {
    * stream) so the rest of the wiring (Router, Tools, Context, AgentLoop) runs
    * end-to-end against a deterministic transport. NOT part of the public API.
    */
-  __testModelFactory?: (snapshot: PolitConfigSnapshot) => ModelRuntime;
+  __testModelFactory?: (snapshot: PilotConfigSnapshot) => ModelRuntime;
 };
 
 export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gateway {
   const baseEnv = options.env ?? process.env;
   const projectRoot = resolve(options.projectRoot ?? process.cwd());
-  const politHome = options.politHome ?? resolvePolitHome(baseEnv);
-  const env = options.politHome ? { ...baseEnv, POLIT_HOME: politHome } : baseEnv;
+  const pilotHome = options.pilotHome ?? resolvePilotHome(baseEnv);
+  const env = options.pilotHome ? { ...baseEnv, PILOT_HOME: pilotHome } : baseEnv;
   const now = () => new Date();
   const registry = new ProjectRuntimeRegistry({
     defaultProjectRoot: projectRoot,
-    politHome,
+    pilotHome,
     env,
     permissionMode: options.permissionMode ?? "default",
     now,
@@ -101,19 +101,19 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gat
 
 type ProjectRuntimeRegistryOptions = {
   defaultProjectRoot: string;
-  politHome: string;
+  pilotHome: string;
   env: Record<string, string | undefined>;
   permissionMode: AgentRuntimeConfig["permissionMode"];
   now: () => Date;
-  extraTools?: PolitDeckToolDefinition[];
+  extraTools?: PilotDeckToolDefinition[];
   sessionOverrides?: SessionConfigOverrides;
   /** @internal Test hook from `CreateLocalGatewayOptions.__testModelFactory`. */
-  modelFactory?: (snapshot: PolitConfigSnapshot) => ModelRuntime;
+  modelFactory?: (snapshot: PilotConfigSnapshot) => ModelRuntime;
 };
 
 type ProjectRuntime = {
   projectRoot: string;
-  snapshot: ReturnType<typeof loadPolitConfig>;
+  snapshot: ReturnType<typeof loadPilotConfig>;
   model: ModelRuntime;
   router: RouterRuntime;
   pluginRuntime: PluginRuntime;
@@ -121,7 +121,7 @@ type ProjectRuntime = {
   projectStorage: GatewayProjectStorageOptions;
   /** Per-project background task runtime (shared across sessions). C5. */
   backgroundTasks: BackgroundTaskRuntime;
-  /** Memory provider, undefined when memory is disabled in PolitConfig. */
+  /** Memory provider, undefined when memory is disabled in PilotConfig. */
   memory?: EdgeClawMemoryProvider;
   /**
    * Lazily-started MCP runtime (C1). Built on first session creation by
@@ -149,13 +149,13 @@ class ProjectRuntimeRegistry {
       return cached;
     }
 
-    const snapshot = loadPolitConfig({ projectRoot, env: this.options.env });
+    const snapshot = loadPilotConfig({ projectRoot, env: this.options.env });
     const model = this.options.modelFactory
       ? this.options.modelFactory(snapshot)
       : createModelRuntime(snapshot.config.model);
     const pluginRuntime = new PluginRuntime({
       projectRoot,
-      politHome: this.options.politHome,
+      pilotHome: this.options.pilotHome,
       builtinPluginsEnabled: snapshot.config.extension.builtinPluginsEnabled,
     });
     const routerConfig = ensureRouterConfig(snapshot.config.router, snapshot.config.agent.model);
@@ -188,7 +188,7 @@ class ProjectRuntimeRegistry {
       memory: memory?.provider,
       projectStorage: {
         projectRoot,
-        politHome: this.options.politHome,
+        pilotHome: this.options.pilotHome,
       },
     };
     this.runtimes.set(projectRoot, runtime);
@@ -217,7 +217,7 @@ class ProjectRuntimeRegistry {
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn(
-          `[politdeck] MCP runtime startup partial-failed for project ${runtime.projectRoot}:`,
+          `[pilotdeck] MCP runtime startup partial-failed for project ${runtime.projectRoot}:`,
           (err as Error).message,
         );
       }
@@ -274,7 +274,7 @@ class ProjectRuntimeRegistry {
         });
         const autoCompactionPolicy = new AutoCompactionPolicy({ tokenBudget });
         // A4 — cached microcompact (Anthropic-only). Default disabled —
-        // upstream PolitConfig flag flips this on once the schema lands.
+        // upstream PilotConfig flag flips this on once the schema lands.
         const microcompactEngine = new CachedMicroCompactionEngine({ enabled: false });
         const contextRuntime = new DefaultContextRuntime({
           extension,
@@ -381,7 +381,7 @@ class ProjectRuntimeRegistry {
 
 function ensureRouterConfig(
   router: RouterConfig | undefined,
-  defaultSelection: PolitAgentModelSelection,
+  defaultSelection: PilotAgentModelSelection,
 ): RouterConfig {
   if (router) {
     return router;

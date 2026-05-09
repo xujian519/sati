@@ -1,6 +1,6 @@
-import type { PolitDeckToolResult } from "../protocol/result.js";
-import type { PolitDeckToolCall, PolitDeckToolRuntimeContext } from "../protocol/types.js";
+import type { PilotDeckToolResult } from "../protocol/result.js";
+import type { PilotDeckToolCall, PilotDeckToolRuntimeContext } from "../protocol/types.js";
 
-export type PolitDeckToolScheduler = {
-  executeAll(calls: PolitDeckToolCall[], context: PolitDeckToolRuntimeContext): Promise<PolitDeckToolResult[]>;
+export type PilotDeckToolScheduler = {
+  executeAll(calls: PilotDeckToolCall[], context: PilotDeckToolRuntimeContext): Promise<PilotDeckToolResult[]>;
 };

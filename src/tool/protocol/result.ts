@@ -1,32 +1,32 @@
 import type { CanonicalToolResultBlock } from "../../model/index.js";
-import type { PolitDeckToolError } from "./errors.js";
-import type { PolitDeckToolResultContent } from "./types.js";
+import type { PilotDeckToolError } from "./errors.js";
+import type { PilotDeckToolResultContent } from "./types.js";
 
-export type PolitDeckToolSuccessResult = {
+export type PilotDeckToolSuccessResult = {
   type: "success";
   toolCallId: string;
   toolName: string;
-  content: PolitDeckToolResultContent[];
+  content: PilotDeckToolResultContent[];
   data?: unknown;
   metadata?: Record<string, unknown>;
   startedAt: string;
   completedAt: string;
 };
 
-export type PolitDeckToolErrorResult = {
+export type PilotDeckToolErrorResult = {
   type: "error";
   toolCallId: string;
   toolName: string;
-  error: PolitDeckToolError;
-  content: PolitDeckToolResultContent[];
+  error: PilotDeckToolError;
+  content: PilotDeckToolResultContent[];
   metadata?: Record<string, unknown>;
   startedAt: string;
   completedAt: string;
 };
 
-export type PolitDeckToolResult = PolitDeckToolSuccessResult | PolitDeckToolErrorResult;
+export type PilotDeckToolResult = PilotDeckToolSuccessResult | PilotDeckToolErrorResult;
 
-export type PolitDeckToolResultSizeMetadata = {
+export type PilotDeckToolResultSizeMetadata = {
   truncated?: boolean;
   originalBytes?: number;
   returnedBytes?: number;
@@ -35,7 +35,7 @@ export type PolitDeckToolResultSizeMetadata = {
 
 const EMPTY_TOOL_OUTPUT = "Tool completed with no output.";
 
-export function contentToText(content: PolitDeckToolResultContent): string {
+export function contentToText(content: PilotDeckToolResultContent): string {
   switch (content.type) {
     case "text":
       return content.text;
@@ -50,7 +50,7 @@ export function contentToText(content: PolitDeckToolResultContent): string {
   }
 }
 
-export function toCanonicalToolResultBlock(result: PolitDeckToolResult): CanonicalToolResultBlock {
+export function toCanonicalToolResultBlock(result: PilotDeckToolResult): CanonicalToolResultBlock {
   const textBlocks = result.content.map((item) => ({
     type: "text" as const,
     text: contentToText(item),
@@ -65,14 +65,14 @@ export function toCanonicalToolResultBlock(result: PolitDeckToolResult): Canonic
   };
 }
 
-export function estimateResultContentBytes(content: PolitDeckToolResultContent[]): number {
+export function estimateResultContentBytes(content: PilotDeckToolResultContent[]): number {
   return Buffer.byteLength(content.map(contentToText).join("\n"), "utf8");
 }
 
 export function applyResultSizeLimit(
-  content: PolitDeckToolResultContent[],
+  content: PilotDeckToolResultContent[],
   maxBytes: number | undefined,
-): { content: PolitDeckToolResultContent[]; metadata?: PolitDeckToolResultSizeMetadata } {
+): { content: PilotDeckToolResultContent[]; metadata?: PilotDeckToolResultSizeMetadata } {
   if (maxBytes === undefined || maxBytes < 0) {
     return { content };
   }

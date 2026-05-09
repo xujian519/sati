@@ -25,7 +25,7 @@ function App() {
 
   return (
     <main>
-      <h1>PolitDeck</h1>
+      <h1>PilotDeck</h1>
       <section className="conversation">
         {events.map((event, index) => (
           <pre key={index}>{renderEvent(event)}</pre>
@@ -37,7 +37,7 @@ function App() {
           void submit();
         }}
       >
-        <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Ask PolitDeck..." />
+        <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Ask PilotDeck..." />
         <button type="submit">Send</button>
       </form>
     </main>

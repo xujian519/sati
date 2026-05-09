@@ -91,7 +91,7 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
       this.options.service.captureTurn(canonicalMessagesToMemoryMessages(input.messages), {
         sessionKey: input.sessionId,
         timestamp: this.now().toISOString(),
-        source: this.options.source ?? "politdeck",
+        source: this.options.source ?? "pilotdeck",
       });
     } catch {
       // Memory capture should not break the agent turn.

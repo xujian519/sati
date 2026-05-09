@@ -2,14 +2,14 @@ import type { CanonicalModelError } from "../../model/index.js";
 import type { RouterDecision, RouterScenarioType } from "./decision.js";
 
 export type RouterDecisionEvent = {
-  type: "politdeck_router_decision";
+  type: "pilotdeck_router_decision";
   sessionId: string;
   turnId?: string;
   decision: RouterDecision;
 };
 
 export type RouterFallbackEvent = {
-  type: "politdeck_router_fallback";
+  type: "pilotdeck_router_fallback";
   sessionId: string;
   turnId?: string;
   scenarioType: RouterScenarioType;
@@ -22,7 +22,7 @@ export type RouterFallbackEvent = {
 };
 
 export type RouterZeroUsageRetryEvent = {
-  type: "politdeck_router_zero_usage_retry";
+  type: "pilotdeck_router_zero_usage_retry";
   sessionId: string;
   turnId?: string;
   attempt: number;
@@ -31,7 +31,7 @@ export type RouterZeroUsageRetryEvent = {
 };
 
 export type RouterTokenSaverFailedEvent = {
-  type: "politdeck_router_token_saver_failed";
+  type: "pilotdeck_router_token_saver_failed";
   sessionId: string;
   turnId?: string;
   reason: "timeout" | "model_error" | "parse_error";
@@ -39,7 +39,7 @@ export type RouterTokenSaverFailedEvent = {
 };
 
 export type RouterCustomFailedEvent = {
-  type: "politdeck_router_custom_failed";
+  type: "pilotdeck_router_custom_failed";
   sessionId: string;
   turnId?: string;
   extensionId: string;
@@ -47,7 +47,7 @@ export type RouterCustomFailedEvent = {
 };
 
 export type RouterExecuteFailedEvent = {
-  type: "politdeck_router_execute_failed";
+  type: "pilotdeck_router_execute_failed";
   sessionId: string;
   turnId?: string;
   scenarioType: RouterScenarioType;

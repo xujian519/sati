@@ -1,5 +1,5 @@
 import type { ChannelAttachment, Gateway, GatewayChannelKey } from "../../../gateway/index.js";
-import type { PolitConfig } from "../../../polit/index.js";
+import type { PilotConfig } from "../../../pilot/index.js";
 
 export type ChannelLogger = {
   info?(message: string, metadata?: Record<string, unknown>): void;
@@ -9,7 +9,7 @@ export type ChannelLogger = {
 
 export type ChannelStartDeps = {
   gateway: Gateway;
-  config?: PolitConfig;
+  config?: PilotConfig;
   logger?: ChannelLogger;
 };
 

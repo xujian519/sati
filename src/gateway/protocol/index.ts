@@ -25,4 +25,4 @@ export type {
   WsRequestFrame,
   WsResponseFrame,
 } from "./frames.js";
-export { POLITDECK_GATEWAY_PROTOCOL_VERSION } from "./version.js";
+export { PILOTDECK_GATEWAY_PROTOCOL_VERSION } from "./version.js";

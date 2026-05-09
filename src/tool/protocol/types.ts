@@ -9,9 +9,9 @@ import type {
   PermissionMode,
   PermissionResult,
 } from "../../permission/index.js";
-import type { PolitDeckToolAuditRecorder } from "../audit/ToolAuditRecorder.js";
-import type { PolitDeckElicitationChannel } from "../elicitation/PolitDeckElicitationChannel.js";
-import type { PolitDeckToolInputSchema, PolitDeckToolValidationResult } from "./schema.js";
+import type { PilotDeckToolAuditRecorder } from "../audit/ToolAuditRecorder.js";
+import type { PilotDeckElicitationChannel } from "../elicitation/PilotDeckElicitationChannel.js";
+import type { PilotDeckToolInputSchema, PilotDeckToolValidationResult } from "./schema.js";
 
 /**
  * File-history sink used by `edit_file` / `write_file` to backup files
@@ -20,7 +20,7 @@ import type { PolitDeckToolInputSchema, PolitDeckToolValidationResult } from "./
  * runtimes (tests, scripted invocations) — affected tools tolerate the
  * missing sink and proceed without backups.
  */
-export type PolitDeckToolFileHistorySink = {
+export type PilotDeckToolFileHistorySink = {
   trackEdit(filePath: string, messageId: string): Promise<void>;
 };
 
@@ -30,7 +30,7 @@ export type PolitDeckToolFileHistorySink = {
  * `AgentModelRuntime` but lives in the tool protocol to avoid a tool→agent
  * dependency cycle.
  */
-export type PolitDeckToolModelClient = {
+export type PilotDeckToolModelClient = {
   stream(request: CanonicalModelRequest, signal?: AbortSignal): AsyncIterable<CanonicalModelEvent>;
 };
 
@@ -44,7 +44,7 @@ export type PolitDeckToolModelClient = {
  * `maxSubagentDepth` is the cap (default 1) — the `agent` tool raises
  * `subagent_depth_exceeded` when `depth >= maxSubagentDepth`.
  */
-export type PolitDeckSubagentForkApi = {
+export type PilotDeckSubagentForkApi = {
   depth: number;
   maxSubagentDepth: number;
   listDefinitions(): { id: string; description: string }[];
@@ -63,7 +63,7 @@ export type PolitDeckSubagentForkApi = {
   }>;
 };
 
-export type PolitDeckToolKind =
+export type PilotDeckToolKind =
   | "filesystem"
   | "shell"
   | "network"
@@ -73,25 +73,25 @@ export type PolitDeckToolKind =
   | "structured_output"
   | "custom";
 
-export type PolitDeckToolResultContent =
+export type PilotDeckToolResultContent =
   | { type: "text"; text: string }
   | { type: "json"; value: unknown }
   | { type: "image"; mimeType: string; data: string }
   | { type: "file"; path: string; mimeType?: string; description?: string };
 
-export type PolitDeckToolExecutionOutput<Output = unknown> = {
-  content: PolitDeckToolResultContent[];
+export type PilotDeckToolExecutionOutput<Output = unknown> = {
+  content: PilotDeckToolResultContent[];
   data?: Output;
   metadata?: Record<string, unknown>;
 };
 
 /**
- * Tool progress event emitted via `PolitDeckToolRuntimeContext.progress`.
+ * Tool progress event emitted via `PilotDeckToolRuntimeContext.progress`.
  * The sink is fire-and-forget — progress events MUST NOT replace the final
  * `tool_result`, MUST NOT enter the durable transcript, and MAY be dropped
  * by the caller without affecting tool correctness.
  */
-export type PolitDeckToolProgressEvent = {
+export type PilotDeckToolProgressEvent = {
   type: "tool_progress";
   sessionId: string;
   turnId: string;
@@ -104,16 +104,16 @@ export type PolitDeckToolProgressEvent = {
   createdAt: string;
 };
 
-export type PolitDeckToolProgressSink = (event: PolitDeckToolProgressEvent) => void;
+export type PilotDeckToolProgressSink = (event: PilotDeckToolProgressEvent) => void;
 
-export type PolitDeckToolRuntimeContext = {
+export type PilotDeckToolRuntimeContext = {
   sessionId: string;
   turnId: string;
   cwd: string;
   abortSignal?: AbortSignal;
   permissionMode: PermissionMode;
   permissionContext: PermissionContext;
-  auditRecorder?: PolitDeckToolAuditRecorder;
+  auditRecorder?: PilotDeckToolAuditRecorder;
   now?: () => Date;
   env?: NodeJS.ProcessEnv;
   maxResultBytes?: number;
@@ -123,30 +123,30 @@ export type PolitDeckToolRuntimeContext = {
    * before the final result lands. Absent by default; callers opt in by
    * supplying a sink.
    */
-  progress?: PolitDeckToolProgressSink;
+  progress?: PilotDeckToolProgressSink;
   /**
    * Optional model client for tools that need to issue secondary model calls
    * (e.g. `agent` subagent prompts, `web_fetch` content extraction). Absent
    * when the caller didn't provide one — affected tools must report
    * `unsupported_tool` with a clear hint instead of failing silently.
    */
-  model?: PolitDeckToolModelClient;
+  model?: PilotDeckToolModelClient;
   /**
    * Optional user-elicitation channel used by `ask_user_question` and any
    * tool that requests a synchronous user answer. The host (Gateway / TUI /
    * CLI / Feishu) wires this in. Absent when no UI is connected; affected
    * tools must report `unsupported_tool`.
    */
-  elicitation?: PolitDeckElicitationChannel;
+  elicitation?: PilotDeckElicitationChannel;
   /**
    * Optional file-history sink (C4). When provided, `edit_file` /
    * `write_file` call `trackEdit(filePath, messageId)` *before* mutating,
-   * so a later `politdeck rewind` can restore the prior content. Absent
+   * so a later `pilotdeck rewind` can restore the prior content. Absent
    * for stand-alone runtimes; tools tolerate the absence by simply
    * skipping backup capture (intentional — never block the edit on
    * snapshot infrastructure).
    */
-  fileHistory?: PolitDeckToolFileHistorySink;
+  fileHistory?: PilotDeckToolFileHistorySink;
   /**
    * Optional opaque "message id" the file-history sink uses to group
    * snapshots. Set by the agent loop per user turn (typically the user
@@ -167,16 +167,16 @@ export type PolitDeckToolRuntimeContext = {
    * absent, the `agent` tool falls back to the legacy single-shot model
    * call so unit tests still work.
    */
-  subagent?: PolitDeckSubagentForkApi;
+  subagent?: PilotDeckSubagentForkApi;
 };
 
-export type PolitDeckToolDefinition<Input = unknown, Output = unknown> = {
+export type PilotDeckToolDefinition<Input = unknown, Output = unknown> = {
   name: string;
   aliases?: string[];
   title?: string;
   description: string;
-  kind: PolitDeckToolKind;
-  inputSchema: PolitDeckToolInputSchema;
+  kind: PilotDeckToolKind;
+  inputSchema: PilotDeckToolInputSchema;
   outputSchema?: Record<string, unknown>;
   maxResultBytes?: number;
   shouldDefer?: boolean;
@@ -187,9 +187,9 @@ export type PolitDeckToolDefinition<Input = unknown, Output = unknown> = {
   isDestructive?(input: Input): boolean;
   requiresUserInteraction?(input: Input): boolean;
   isOpenWorld?(input: Input): boolean;
-  validateInput?(input: Input, context: PolitDeckToolRuntimeContext): Promise<PolitDeckToolValidationResult>;
-  checkPermissions?(input: Input, context: PolitDeckToolRuntimeContext): Promise<PermissionResult>;
-  execute(input: Input, context: PolitDeckToolRuntimeContext): Promise<PolitDeckToolExecutionOutput<Output>>;
+  validateInput?(input: Input, context: PilotDeckToolRuntimeContext): Promise<PilotDeckToolValidationResult>;
+  checkPermissions?(input: Input, context: PilotDeckToolRuntimeContext): Promise<PermissionResult>;
+  execute(input: Input, context: PilotDeckToolRuntimeContext): Promise<PilotDeckToolExecutionOutput<Output>>;
 };
 
-export type PolitDeckToolCall = CanonicalToolCall;
+export type PilotDeckToolCall = CanonicalToolCall;

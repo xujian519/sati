@@ -1,28 +1,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { collectAsyncGenerator } from "../../helpers/agent.js";
-import { createPolitDeckTestTool } from "../../helpers/tool.js";
+import { createPilotDeckTestTool } from "../../helpers/tool.js";
 import { AgentLoop, type AgentRuntimeConfig, type AgentRuntimeDependencies } from "../../../src/agent/index.js";
 import { createModelRuntime } from "../../../src/model/index.js";
 import { createDefaultPermissionContext, PermissionRuntime } from "../../../src/permission/index.js";
-import { loadPolitConfig } from "../../../src/polit/index.js";
+import { loadPilotConfig } from "../../../src/pilot/index.js";
 import { createRouterRuntime } from "../../../src/router/index.js";
 import { SequentialToolScheduler, ToolRegistry, ToolRuntime } from "../../../src/tool/index.js";
 
-const RUN = process.env.POLITDECK_RUN_REAL_TOOL_E2E === "1";
-const PROVIDER = process.env.POLITDECK_E2E_PROVIDER ?? "edgeclaw";
-const MODEL = process.env.POLITDECK_E2E_MODEL ?? "moonshotai/kimi-k2.6";
+const RUN = process.env.PILOTDECK_RUN_REAL_TOOL_E2E === "1";
+const PROVIDER = process.env.PILOTDECK_E2E_PROVIDER ?? "edgeclaw";
+const MODEL = process.env.PILOTDECK_E2E_MODEL ?? "moonshotai/kimi-k2.6";
 
 test("OpenRouter Kimi K2.6 calls add_numbers tool and replies with the sum", { timeout: 120_000 }, async (t) => {
   if (!RUN) {
-    t.skip("Set POLITDECK_RUN_REAL_TOOL_E2E=1 to run the OpenRouter tool-use E2E test.");
+    t.skip("Set PILOTDECK_RUN_REAL_TOOL_E2E=1 to run the OpenRouter tool-use E2E test.");
     return;
   }
 
-  const snapshot = loadPolitConfig();
+  const snapshot = loadPilotConfig();
   const provider = snapshot.config.model.providers[PROVIDER];
   if (!provider) {
-    throw new Error(`Provider ${PROVIDER} is not configured in PolitHome.`);
+    throw new Error(`Provider ${PROVIDER} is not configured in PilotHome.`);
   }
   if (!provider.models[MODEL]) {
     throw new Error(`Model ${MODEL} is not configured under provider ${PROVIDER}.`);
@@ -32,7 +32,7 @@ test("OpenRouter Kimi K2.6 calls add_numbers tool and replies with the sum", { t
   const registry = new ToolRegistry();
   const calls: Array<{ a: number; b: number }> = [];
   registry.register(
-    createPolitDeckTestTool({
+    createPilotDeckTestTool({
       name: "add_numbers",
       inputSchema: {
         type: "object",
@@ -61,7 +61,7 @@ test("OpenRouter Kimi K2.6 calls add_numbers tool and replies with the sum", { t
     model: MODEL,
     cwd,
     systemPrompt:
-      "You are PolitDeck running an end-to-end test. When asked for arithmetic, you MUST call the provided add_numbers tool exactly once instead of computing it yourself, then report the answer.",
+      "You are PilotDeck running an end-to-end test. When asked for arithmetic, you MUST call the provided add_numbers tool exactly once instead of computing it yourself, then report the answer.",
     maxOutputTokens: 1024,
     temperature: 0,
     permissionMode: "default",

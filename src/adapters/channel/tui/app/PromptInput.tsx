@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import TextInput from "ink-text-input";
-import { politDeckDarkBlueTheme } from "./theme.js";
+import { pilotDeckDarkBlueTheme } from "./theme.js";
 
 export function PromptInput({
   value,
@@ -19,17 +19,17 @@ export function PromptInput({
   return (
     <Box
       borderStyle="round"
-      borderColor={isRunning || focus ? politDeckDarkBlueTheme.brandAccent : politDeckDarkBlueTheme.border}
+      borderColor={isRunning || focus ? pilotDeckDarkBlueTheme.brandAccent : pilotDeckDarkBlueTheme.border}
       paddingX={1}
       flexDirection="row"
     >
-      <Text color={politDeckDarkBlueTheme.brandAccent}>{"> "}</Text>
+      <Text color={pilotDeckDarkBlueTheme.brandAccent}>{"> "}</Text>
       <Box flexGrow={1}>
         <TextInput
           value={value}
           onChange={onChange}
           onSubmit={onSubmit}
-          placeholder="Ask PolitDeck... (/help)"
+          placeholder="Ask PilotDeck... (/help)"
           showCursor
           focus={focus}
         />

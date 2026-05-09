@@ -5,13 +5,13 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { listAllSessions, searchSessionsByTitle } from "../../../src/session/storage/SessionList.js";
 
-function createPolitHome() {
-  const politHome = mkdtempSync(join(tmpdir(), "politdeck-list-"));
-  return politHome;
+function createPilotHome() {
+  const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-list-"));
+  return pilotHome;
 }
 
-function writeSession(politHome: string, projectId: string, sessionId: string, lines: string[]): void {
-  const chatDir = join(politHome, "projects", projectId, "chats");
+function writeSession(pilotHome: string, projectId: string, sessionId: string, lines: string[]): void {
+  const chatDir = join(pilotHome, "projects", projectId, "chats");
   mkdirSync(chatDir, { recursive: true });
   writeFileSync(join(chatDir, `${sessionId}.jsonl`), lines.join("\n") + "\n");
 }
@@ -39,86 +39,86 @@ function metadataLine(title: string): string {
 }
 
 test("listAllSessions scans all projects and returns sorted results", async () => {
-  const politHome = createPolitHome();
+  const pilotHome = createPilotHome();
   try {
-    writeSession(politHome, "proj-a", "s1", [acceptedInputLine("hello from A")]);
-    writeSession(politHome, "proj-b", "s2", [acceptedInputLine("hello from B")]);
+    writeSession(pilotHome, "proj-a", "s1", [acceptedInputLine("hello from A")]);
+    writeSession(pilotHome, "proj-b", "s2", [acceptedInputLine("hello from B")]);
 
-    const results = await listAllSessions({ politHome });
+    const results = await listAllSessions({ pilotHome });
     assert.equal(results.length, 2);
     // Both sessions should be present, most recent first.
     const ids = results.map((r) => r.sessionId);
     assert.ok(ids.includes("s1"));
     assert.ok(ids.includes("s2"));
   } finally {
-    rmSync(politHome, { recursive: true, force: true });
+    rmSync(pilotHome, { recursive: true, force: true });
   }
 });
 
 test("listAllSessions respects limit and offset", async () => {
-  const politHome = createPolitHome();
+  const pilotHome = createPilotHome();
   try {
-    writeSession(politHome, "proj", "s1", [acceptedInputLine("first")]);
-    writeSession(politHome, "proj", "s2", [acceptedInputLine("second")]);
-    writeSession(politHome, "proj", "s3", [acceptedInputLine("third")]);
+    writeSession(pilotHome, "proj", "s1", [acceptedInputLine("first")]);
+    writeSession(pilotHome, "proj", "s2", [acceptedInputLine("second")]);
+    writeSession(pilotHome, "proj", "s3", [acceptedInputLine("third")]);
 
-    const page = await listAllSessions({ politHome, limit: 1, offset: 1 });
+    const page = await listAllSessions({ pilotHome, limit: 1, offset: 1 });
     assert.equal(page.length, 1);
   } finally {
-    rmSync(politHome, { recursive: true, force: true });
+    rmSync(pilotHome, { recursive: true, force: true });
   }
 });
 
 test("listAllSessions returns empty for missing projects dir", async () => {
-  const results = await listAllSessions({ politHome: "/tmp/__never_exists__" });
+  const results = await listAllSessions({ pilotHome: "/tmp/__never_exists__" });
   assert.deepEqual(results, []);
 });
 
 test("searchSessionsByTitle matches customTitle", async () => {
-  const politHome = createPolitHome();
+  const pilotHome = createPilotHome();
   const projectRoot = "/tmp/search-proj";
   try {
-    writeSession(politHome, "tmp-search-proj", "s1", [
+    writeSession(pilotHome, "tmp-search-proj", "s1", [
       acceptedInputLine("irrelevant"),
       metadataLine("Refactor auth module"),
     ]);
-    writeSession(politHome, "tmp-search-proj", "s2", [acceptedInputLine("Setup CI")]);
+    writeSession(pilotHome, "tmp-search-proj", "s2", [acceptedInputLine("Setup CI")]);
 
-    const results = await searchSessionsByTitle({ projectRoot, politHome, query: "auth" });
+    const results = await searchSessionsByTitle({ projectRoot, pilotHome, query: "auth" });
     assert.equal(results.length, 1);
     assert.equal(results[0]?.customTitle, "Refactor auth module");
   } finally {
-    rmSync(politHome, { recursive: true, force: true });
+    rmSync(pilotHome, { recursive: true, force: true });
   }
 });
 
 test("searchSessionsByTitle matches firstPrompt when no title", async () => {
-  const politHome = createPolitHome();
+  const pilotHome = createPilotHome();
   const projectRoot = "/tmp/search-fp";
   try {
-    writeSession(politHome, "tmp-search-fp", "s1", [acceptedInputLine("deploy to staging")]);
-    writeSession(politHome, "tmp-search-fp", "s2", [acceptedInputLine("fix login bug")]);
+    writeSession(pilotHome, "tmp-search-fp", "s1", [acceptedInputLine("deploy to staging")]);
+    writeSession(pilotHome, "tmp-search-fp", "s2", [acceptedInputLine("fix login bug")]);
 
-    const results = await searchSessionsByTitle({ projectRoot, politHome, query: "deploy" });
+    const results = await searchSessionsByTitle({ projectRoot, pilotHome, query: "deploy" });
     assert.equal(results.length, 1);
     assert.equal(results[0]?.firstPrompt, "deploy to staging");
   } finally {
-    rmSync(politHome, { recursive: true, force: true });
+    rmSync(pilotHome, { recursive: true, force: true });
   }
 });
 
 test("searchSessionsByTitle is case insensitive", async () => {
-  const politHome = createPolitHome();
+  const pilotHome = createPilotHome();
   const projectRoot = "/tmp/search-ci";
   try {
-    writeSession(politHome, "tmp-search-ci", "s1", [
+    writeSession(pilotHome, "tmp-search-ci", "s1", [
       acceptedInputLine("x"),
       metadataLine("API Gateway Design"),
     ]);
 
-    const results = await searchSessionsByTitle({ projectRoot, politHome, query: "api gateway" });
+    const results = await searchSessionsByTitle({ projectRoot, pilotHome, query: "api gateway" });
     assert.equal(results.length, 1);
   } finally {
-    rmSync(politHome, { recursive: true, force: true });
+    rmSync(pilotHome, { recursive: true, force: true });
   }
 });

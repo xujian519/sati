@@ -16,7 +16,7 @@ import {
 
 test("findCanonicalProjectRoot maps a regular repo to itself", async () => {
   __clearWorktreeCachesForTesting();
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-worktree-regular-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-worktree-regular-"));
   try {
     const repo = await initRepo(path.join(root, "repo"));
     await createInitialCommit(repo);
@@ -33,7 +33,7 @@ test("findCanonicalProjectRoot maps a regular repo to itself", async () => {
 
 test("findCanonicalProjectRoot maps a worktree back to the main repo root", async () => {
   __clearWorktreeCachesForTesting();
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-worktree-shared-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-worktree-shared-"));
   try {
     const main = await initRepo(path.join(root, "main"));
     await createInitialCommit(main);
@@ -51,11 +51,11 @@ test("findCanonicalProjectRoot maps a worktree back to the main repo root", asyn
 
 test("findCanonicalProjectRoot falls back to cwd for non-git directories", async () => {
   __clearWorktreeCachesForTesting();
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-worktree-nongit-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-worktree-nongit-"));
   try {
     const target = path.join(root, "not-a-repo");
     // intentional_difference vs legacy: legacy returns null when no git root
-    // is found; PolitDeck always returns *some* canonical form (so callers
+    // is found; PilotDeck always returns *some* canonical form (so callers
     // can always derive a project ID). We expect path.resolve, not realpath,
     // because the fallback path is taken before any filesystem realpath call.
     const canonical = await findCanonicalProjectRoot(root);
@@ -71,7 +71,7 @@ test("findCanonicalProjectRoot falls back to cwd for non-git directories", async
 
 test("findGitRoot caches results: second call avoids re-walking", async () => {
   __clearWorktreeCachesForTesting();
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-worktree-cache-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-worktree-cache-"));
   try {
     const repo = await initRepo(path.join(root, "repo"));
     await createInitialCommit(repo);
@@ -87,7 +87,7 @@ test("findGitRoot caches results: second call avoids re-walking", async () => {
 
 test("findGitRoot resolves an arbitrary nested directory inside the repo", async () => {
   __clearWorktreeCachesForTesting();
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-worktree-nested-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-worktree-nested-"));
   try {
     const repo = await initRepo(path.join(root, "repo"));
     await createInitialCommit(repo);

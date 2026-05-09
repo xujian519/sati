@@ -1,17 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createGlobTool } from "../../src/tool/index.js";
-import { createPolitDeckTempWorkspace } from "../helpers/filesystem.js";
-import { createPolitDeckToolRuntimeFixture } from "../helpers/tool.js";
+import { createPilotDeckTempWorkspace } from "../helpers/filesystem.js";
+import { createPilotDeckToolRuntimeFixture } from "../helpers/tool.js";
 
 test("glob matches files with stable sorted results and limit", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({
+  const workspace = await createPilotDeckTempWorkspace({
     "src/b.ts": "b",
     "src/a.ts": "a",
     "src/c.js": "c",
   });
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createGlobTool()],
     cwd: workspace.cwd,
   });
@@ -26,9 +26,9 @@ test("glob matches files with stable sorted results and limit", async (t) => {
 });
 
 test("glob denies path outside workspace", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createGlobTool()],
     cwd: workspace.cwd,
   });

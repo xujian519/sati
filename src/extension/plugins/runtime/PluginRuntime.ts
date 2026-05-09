@@ -3,11 +3,11 @@ import { discoverPluginPaths } from "../discovery/discoverLocalPlugins.js";
 import { loadPluginFromPath } from "../loading/PluginLoader.js";
 import { loadPluginHooks } from "../loading/PluginHookLoader.js";
 import type { LoadedPluginCommand } from "../loading/PluginCommandLoader.js";
-import type { PolitDeckLoadedPlugin } from "../protocol/plugin.js";
+import type { PilotDeckLoadedPlugin } from "../protocol/plugin.js";
 import { PluginRegistry } from "./PluginRegistry.js";
 import { truncateMcpInstructionString } from "./truncateMcpString.js";
-import type { PolitDeckHooksSettings } from "../../hooks/protocol/settings.js";
-import type { PolitDeckCustomRouter } from "../../../router/customRouter/customRouter.js";
+import type { PilotDeckHooksSettings } from "../../hooks/protocol/settings.js";
+import type { PilotDeckCustomRouter } from "../../../router/customRouter/customRouter.js";
 
 /**
  * Static MCP server contribution shape callers can rely on. Manifests load
@@ -15,7 +15,7 @@ import type { PolitDeckCustomRouter } from "../../../router/customRouter/customR
  * this type is *advisory* — the runtime only reads `instructions` and falls
  * back gracefully when missing.
  */
-export type PolitDeckMcpServerStaticSpec = {
+export type PilotDeckMcpServerStaticSpec = {
   instructions?: string;
   [key: string]: unknown;
 };
@@ -25,23 +25,23 @@ export type PolitDeckMcpServerStaticSpec = {
  * as a stricter alias of {@link PluginMcpInstruction} so callers that only
  * care about *populated* entries keep a non-optional `instructions` field.
  */
-export type PolitDeckMcpInstructionEntry = {
+export type PilotDeckMcpInstructionEntry = {
   serverName: string;
   instructions: string;
 };
 
 export type PluginRuntimeOptions = {
   projectRoot: string;
-  politHome: string;
-  builtinPlugins?: PolitDeckLoadedPlugin[];
+  pilotHome: string;
+  builtinPlugins?: PilotDeckLoadedPlugin[];
   builtinPluginsEnabled?: Record<string, boolean>;
 };
 
 export type PluginRefreshResult = {
-  previous: PolitDeckLoadedPlugin[];
-  next: PolitDeckLoadedPlugin[];
-  added: PolitDeckLoadedPlugin[];
-  removed: PolitDeckLoadedPlugin[];
+  previous: PilotDeckLoadedPlugin[];
+  next: PilotDeckLoadedPlugin[];
+  added: PilotDeckLoadedPlugin[];
+  removed: PilotDeckLoadedPlugin[];
 };
 
 export type PluginCommandContribution = {
@@ -63,11 +63,11 @@ export type PluginMcpInstruction = {
 };
 
 export type PluginContributionSnapshot = {
-  plugins: PolitDeckLoadedPlugin[];
+  plugins: PilotDeckLoadedPlugin[];
   commands: PluginCommandContribution[];
   skills: PluginSkillContribution[];
   outputStyles: LoadedPluginCommand[];
-  hooks: PolitDeckHooksSettings;
+  hooks: PilotDeckHooksSettings;
   mcpServers: Record<string, unknown>;
   lspServers: Record<string, unknown>;
   mcpInstructions: PluginMcpInstruction[];
@@ -78,7 +78,7 @@ export class PluginRuntime {
 
   constructor(private readonly options: PluginRuntimeOptions) {}
 
-  snapshot(): PolitDeckLoadedPlugin[] {
+  snapshot(): PilotDeckLoadedPlugin[] {
     return this.registry.list();
   }
 
@@ -97,8 +97,8 @@ export class PluginRuntime {
    * instructions on top via the same `getAllMcpInstructions` aggregator
    * surface used by `PluginRuntimeExtensionResolver`.
    */
-  getAllMcpInstructions(): PolitDeckMcpInstructionEntry[] {
-    const entries: PolitDeckMcpInstructionEntry[] = [];
+  getAllMcpInstructions(): PilotDeckMcpInstructionEntry[] {
+    const entries: PilotDeckMcpInstructionEntry[] = [];
     const seen = new Set<string>();
     for (const plugin of this.registry.list()) {
       const servers = plugin.mcpServers;
@@ -106,7 +106,7 @@ export class PluginRuntime {
       for (const [serverName, raw] of Object.entries(servers)) {
         if (seen.has(serverName)) continue;
         if (!raw || typeof raw !== "object") continue;
-        const candidate = (raw as PolitDeckMcpServerStaticSpec).instructions;
+        const candidate = (raw as PilotDeckMcpServerStaticSpec).instructions;
         if (typeof candidate !== "string") continue;
         const trimmed = candidate.trim();
         if (trimmed.length === 0) continue;
@@ -147,7 +147,7 @@ export class PluginRuntime {
     return this.snapshotContributions().skills;
   }
 
-  lookupRouter(extensionId: string): PolitDeckCustomRouter | undefined {
+  lookupRouter(extensionId: string): PilotDeckCustomRouter | undefined {
     for (const plugin of this.registry.list()) {
       for (const contribution of plugin.routerContributions ?? []) {
         if (contribution.id !== extensionId) {
@@ -177,7 +177,7 @@ export class PluginRuntime {
     return undefined;
   }
 
-  async refresh(): Promise<PolitDeckLoadedPlugin[]> {
+  async refresh(): Promise<PilotDeckLoadedPlugin[]> {
     return (await this.refreshWithReport()).next;
   }
 
@@ -185,7 +185,7 @@ export class PluginRuntime {
     const previous = this.registry.list();
     const paths = resolvePluginDirectories({
       projectRoot: this.options.projectRoot,
-      politHome: this.options.politHome,
+      pilotHome: this.options.pilotHome,
     });
     const discovered = await discoverPluginPaths([
       { path: paths.globalPluginsDir, source: "global" },
@@ -208,23 +208,23 @@ export class PluginRuntime {
   }
 }
 
-function isLoadedPlugin(value: PolitDeckLoadedPlugin | undefined): value is PolitDeckLoadedPlugin {
+function isLoadedPlugin(value: PilotDeckLoadedPlugin | undefined): value is PilotDeckLoadedPlugin {
   return value !== undefined;
 }
 
 function enabledBuiltinPlugins(
-  plugins: PolitDeckLoadedPlugin[],
+  plugins: PilotDeckLoadedPlugin[],
   enabled: Record<string, boolean>,
-): PolitDeckLoadedPlugin[] {
+): PilotDeckLoadedPlugin[] {
   return plugins.filter((plugin) => plugin.source !== "builtin" || enabled[plugin.name] !== false);
 }
 
-function hasPlugin(plugins: PolitDeckLoadedPlugin[], plugin: PolitDeckLoadedPlugin): boolean {
+function hasPlugin(plugins: PilotDeckLoadedPlugin[], plugin: PilotDeckLoadedPlugin): boolean {
   return plugins.some((candidate) => candidate.name === plugin.name && candidate.source === plugin.source);
 }
 
 function toCommandContribution(
-  plugin: PolitDeckLoadedPlugin,
+  plugin: PilotDeckLoadedPlugin,
   command: LoadedPluginCommand,
 ): PluginCommandContribution {
   return {
@@ -239,7 +239,7 @@ function toCommandContribution(
 }
 
 function toSkillContribution(
-  plugin: PolitDeckLoadedPlugin,
+  plugin: PilotDeckLoadedPlugin,
   skill: LoadedPluginCommand,
 ): PluginSkillContribution {
   return {

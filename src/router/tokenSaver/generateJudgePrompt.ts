@@ -16,5 +16,5 @@ export function generateJudgePrompt({ userMessage, config }: JudgePromptInput): 
   const ruleLines = (config.rules ?? []).map((rule) => `- ${rule}`).join("\n");
   const rulesSection = ruleLines.length > 0 ? `\nRouting rules:\n${ruleLines}\n` : "";
 
-  return `You are a model-tier classifier for the PolitDeck router. Given the following user message, return exactly one tier wrapped in <tier>...</tier>.\n\nAvailable tiers:\n${tierLines}\n${rulesSection}\nUser message:\n"""\n${userMessage}\n"""\n\nDefault tier when uncertain: ${config.defaultTier}.\nRespond with only <tier>NAME</tier>.`;
+  return `You are a model-tier classifier for the PilotDeck router. Given the following user message, return exactly one tier wrapped in <tier>...</tier>.\n\nAvailable tiers:\n${tierLines}\n${rulesSection}\nUser message:\n"""\n${userMessage}\n"""\n\nDefault tier when uncertain: ${config.defaultTier}.\nRespond with only <tier>NAME</tier>.`;
 }

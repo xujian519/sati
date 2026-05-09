@@ -25,10 +25,10 @@
 
 import { randomUUID } from "node:crypto";
 import type {
-  PolitDeckElicitationAnswer,
-  PolitDeckElicitationChannel,
-  PolitDeckElicitationRequest,
-} from "../../tool/elicitation/PolitDeckElicitationChannel.js";
+  PilotDeckElicitationAnswer,
+  PilotDeckElicitationChannel,
+  PilotDeckElicitationRequest,
+} from "../../tool/elicitation/PilotDeckElicitationChannel.js";
 import type { GatewayElicitationBus } from "./GatewayElicitationBus.js";
 import type { GatewayEvent } from "../protocol/types.js";
 
@@ -45,25 +45,25 @@ export type GatewayElicitationChannelOptions = {
   uuid?: () => string;
 };
 
-export class GatewayElicitationChannel implements PolitDeckElicitationChannel {
+export class GatewayElicitationChannel implements PilotDeckElicitationChannel {
   private readonly uuid: () => string;
 
   constructor(private readonly options: GatewayElicitationChannelOptions) {
     this.uuid = options.uuid ?? randomUUID;
   }
 
-  askUser(request: PolitDeckElicitationRequest): Promise<PolitDeckElicitationAnswer> {
+  askUser(request: PilotDeckElicitationRequest): Promise<PilotDeckElicitationAnswer> {
     const requestId = this.uuid();
     const { bus, emit, sessionKey } = this.options;
 
-    return new Promise<PolitDeckElicitationAnswer>((resolve, reject) => {
+    return new Promise<PilotDeckElicitationAnswer>((resolve, reject) => {
       let abortHandler: (() => void) | undefined;
 
       const pending = {
         requestId,
         toolCallId: request.toolCallId,
         toolName: request.toolName,
-        resolve: (answer: PolitDeckElicitationAnswer) => {
+        resolve: (answer: PilotDeckElicitationAnswer) => {
           if (abortHandler && request.signal) {
             request.signal.removeEventListener("abort", abortHandler);
           }

@@ -14,6 +14,6 @@ test("registry parity scenarios preserve legacy aliases", () => {
 
   for (const scenario of registryScenarios) {
     const alias = (scenario.input as { alias: string }).alias;
-    assert.equal(registry.get(alias)?.name, scenario.politdeckToolName, scenario.name);
+    assert.equal(registry.get(alias)?.name, scenario.pilotdeckToolName, scenario.name);
   }
 });

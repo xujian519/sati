@@ -12,17 +12,17 @@ import {
   createWebFetchTool,
   createWebSearchTool,
 } from "../../src/tool/index.js";
-import { createPolitDeckTempWorkspace } from "../helpers/filesystem.js";
-import { createPolitDeckToolRuntimeFixture } from "../helpers/tool.js";
+import { createPilotDeckTempWorkspace } from "../helpers/filesystem.js";
+import { createPilotDeckToolRuntimeFixture } from "../helpers/tool.js";
 
 test("ask_user_question without elicitation channel returns unsupported_tool", async (t) => {
   // B1 design: askUserQuestion is read-only so default-mode permission lets
   // it through; the elicitation channel is the actual gate. Without one, the
   // tool reports `unsupported_tool` (legacy parity: same code path used when
   // the SDK consumer hasn't wired any prompt UI).
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createAskUserQuestionTool()],
     cwd: workspace.cwd,
   });
@@ -52,9 +52,9 @@ test("ask_user_question without elicitation channel returns unsupported_tool", a
 });
 
 test("web skeleton tools ask for network permission without provider execution", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createWebFetchTool(), createWebSearchTool()],
     cwd: workspace.cwd,
   });
@@ -68,7 +68,7 @@ test("web skeleton tools ask for network permission without provider execution",
     context,
   );
   const searchResult = await toolRuntime.execute(
-    { id: "call-2", name: "web_search", input: { query: "politdeck" } },
+    { id: "call-2", name: "web_search", input: { query: "pilotdeck" } },
     context,
   );
 
@@ -79,10 +79,10 @@ test("web skeleton tools ask for network permission without provider execution",
 });
 
 test("mcp tool uses stable wire names and standard unsupported behavior", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
   const tool = createMcpTool({ serverId: "my-server", toolName: "read thing" });
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [tool],
     cwd: workspace.cwd,
   });
@@ -99,7 +99,7 @@ test("mcp tool uses stable wire names and standard unsupported behavior", async 
 });
 
 test("mcp tool delegates to an adapter when configured", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
   const tool = createMcpTool({
     serverId: "server",
@@ -108,7 +108,7 @@ test("mcp tool delegates to an adapter when configured", async (t) => {
       callTool: async (serverId, toolName, input) => ({ serverId, toolName, input, ok: true }),
     },
   });
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [tool],
     cwd: workspace.cwd,
   });
@@ -124,9 +124,9 @@ test("mcp tool delegates to an adapter when configured", async (t) => {
 });
 
 test("mcp resource skeleton tools return unsupported without adapter", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createListMcpResourcesTool(), createReadMcpResourceTool()],
     cwd: workspace.cwd,
   });
@@ -147,13 +147,13 @@ test("mcp resource skeleton tools return unsupported without adapter", async (t)
 });
 
 test("mcp resource tools delegate to adapters when configured", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
   const adapter = {
     listResources: async (serverId?: string) => ({ serverId, resources: ["resource://x"] }),
     readResource: async (serverId: string, uri: string) => ({ serverId, uri, text: "value" }),
   };
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createListMcpResourcesTool(adapter), createReadMcpResourceTool(adapter)],
     cwd: workspace.cwd,
   });
@@ -181,9 +181,9 @@ test("mcp resource tools delegate to adapters when configured", async (t) => {
 });
 
 test("structured_output and plan skeleton tools produce stable results", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createStructuredOutputTool(), createEnterPlanModeTool(), createExitPlanModeTool()],
     cwd: workspace.cwd,
     canPrompt: true,

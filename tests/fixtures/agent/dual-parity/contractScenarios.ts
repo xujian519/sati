@@ -40,7 +40,7 @@ export const agentContractScenarios: AgentContractScenario[] = [
     status: "deferred",
     feature: "snip, microcompact, autocompact and context collapse",
     compareFields: ["eventTypes"],
-    reason: "PolitDeck currently has a bounded NullContextRuntime; advanced compaction remains a context phase.",
+    reason: "PilotDeck currently has a bounded NullContextRuntime; advanced compaction remains a context phase.",
   },
   {
     id: "agent-subagent-fork",
@@ -54,6 +54,6 @@ export const agentContractScenarios: AgentContractScenario[] = [
     status: "not_applicable",
     feature: "legacy bridge/CCR transport integration inside query runtime",
     compareFields: ["eventTypes"],
-    reason: "PolitDeck keeps remote transport as an adapter layer rather than main agent core behavior.",
+    reason: "PilotDeck keeps remote transport as an adapter layer rather than main agent core behavior.",
   },
 ];

@@ -3,31 +3,31 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, symlinkSync } from "node:fs";
 import path from "node:path";
-import { createPolitDeckExecutionReport } from "../helpers/dualParityExecutionReport.js";
+import { createPilotDeckExecutionReport } from "../helpers/dualParityExecutionReport.js";
 import {
   dualParityExecutionScenarios,
   type DualParityExecutionReport,
 } from "../fixtures/tool/dual-parity/executionScenarios.js";
 
-test("legacy and PolitDeck execution reports match for shared compare scenarios", async () => {
+test("legacy and PilotDeck execution reports match for shared compare scenarios", async () => {
   const root = process.cwd();
   ensureLegacySiblingLink(root);
 
-  const legacyJson = execFileSync("bun", ["run", "src/politdeck-tool-legacy-execution-report.ts"], {
+  const legacyJson = execFileSync("bun", ["run", "src/pilotdeck-tool-legacy-execution-report.ts"], {
     cwd: path.join(root, "third-party/claude-code-main"),
     encoding: "utf8",
   });
   const legacyReport = JSON.parse(legacyJson) as DualParityExecutionReport[];
-  const politdeckReport = await createPolitDeckExecutionReport();
+  const pilotdeckReport = await createPilotDeckExecutionReport();
 
-  assert.deepEqual(reportStatuses(politdeckReport), reportStatuses(legacyReport));
+  assert.deepEqual(reportStatuses(pilotdeckReport), reportStatuses(legacyReport));
 
   const legacyById = new Map(legacyReport.map((item) => [item.id, item]));
-  for (const politdeckItem of politdeckReport) {
-    const legacyItem = legacyById.get(politdeckItem.id);
-    assert.ok(legacyItem, `Missing legacy execution report item ${politdeckItem.id}.`);
-    if (politdeckItem.status === "compare") {
-      assert.deepEqual(politdeckItem.result, legacyItem.result, politdeckItem.id);
+  for (const pilotdeckItem of pilotdeckReport) {
+    const legacyItem = legacyById.get(pilotdeckItem.id);
+    assert.ok(legacyItem, `Missing legacy execution report item ${pilotdeckItem.id}.`);
+    if (pilotdeckItem.status === "compare") {
+      assert.deepEqual(pilotdeckItem.result, legacyItem.result, pilotdeckItem.id);
     }
   }
 });

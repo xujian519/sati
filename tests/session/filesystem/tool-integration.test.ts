@@ -9,10 +9,10 @@ import {
 } from "../../../src/tool/index.js";
 import { PermissionRuntime } from "../../../src/permission/index.js";
 import { createDefaultPermissionContext } from "../../../src/permission/index.js";
-import { createPolitDeckTempWorkspace } from "../../helpers/filesystem.js";
+import { createPilotDeckTempWorkspace } from "../../helpers/filesystem.js";
 
 test("C4 edit_file calls fileHistory.trackEdit before mutating, allowing rewind", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({ "src/notes.md": "before" });
+  const ws = await createPilotDeckTempWorkspace({ "src/notes.md": "before" });
   t.after(() => ws.cleanup());
 
   const backupDir = path.join(ws.cwd, ".file-history");
@@ -59,7 +59,7 @@ test("C4 edit_file calls fileHistory.trackEdit before mutating, allowing rewind"
 });
 
 test("C4 write_file (create new file) records null backup; rewind unlinks it", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({});
+  const ws = await createPilotDeckTempWorkspace({});
   t.after(() => ws.cleanup());
 
   const backupDir = path.join(ws.cwd, ".file-history");

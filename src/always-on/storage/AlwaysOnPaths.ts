@@ -1,10 +1,10 @@
 import { resolve } from "node:path";
-import { createProjectId } from "../../polit/paths.js";
+import { createProjectId } from "../../pilot/paths.js";
 
 const ROOT_DIR_NAME = "always-on";
 
 export type AlwaysOnPaths = {
-  politHome: string;
+  pilotHome: string;
   projectKey: string;
   projectId: string;
   rootDir: string;
@@ -22,21 +22,21 @@ export type AlwaysOnPaths = {
 };
 
 export function resolveAlwaysOnPaths(input: {
-  politHome: string;
+  pilotHome: string;
   projectKey: string;
   worktreesBaseDir?: string;
   snapshotsBaseDir?: string;
 }): AlwaysOnPaths {
-  const politHome = resolve(input.politHome);
+  const pilotHome = resolve(input.pilotHome);
   const projectKey = resolve(input.projectKey);
   const projectId = createProjectId(projectKey);
-  const rootDir = resolve(politHome, ROOT_DIR_NAME);
+  const rootDir = resolve(pilotHome, ROOT_DIR_NAME);
   const projectDir = resolve(rootDir, "projects", projectId);
   const worktreesDir = resolve(input.worktreesBaseDir ?? resolve(rootDir, "worktrees"), projectId);
   const snapshotsDir = resolve(input.snapshotsBaseDir ?? resolve(rootDir, "snapshots"), projectId);
 
   return {
-    politHome,
+    pilotHome,
     projectKey,
     projectId,
     rootDir,

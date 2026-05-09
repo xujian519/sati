@@ -22,7 +22,7 @@ export type SubagentDefinition = {
   /** Short, single-line summary used in tool descriptions. */
   description: string;
   /**
-   * Allowed tool names (canonical PolitDeck tool names). Use `["*"]` for
+   * Allowed tool names (canonical PilotDeck tool names). Use `["*"]` for
    * full access. Empty array means *no* tools (degenerate).
    */
   allowedTools: readonly string[];
@@ -41,7 +41,7 @@ export type SubagentDefinition = {
   effort?: "low" | "medium" | "high";
 };
 
-const SHARED_PREFIX = `You are a subagent of PolitDeck — a focused agent dispatched by the parent agent to handle a bounded research, planning, or verification task.
+const SHARED_PREFIX = `You are a subagent of PilotDeck — a focused agent dispatched by the parent agent to handle a bounded research, planning, or verification task.
 
 Strengths:
 - You always have the full context of the parent task and can inspect the parent's tool history.

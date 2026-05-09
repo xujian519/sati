@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { getPolitProjectChatDir } from "../../polit/index.js";
+import { getPilotProjectChatDir } from "../../pilot/index.js";
 import { readSessionLite, type SessionLiteFile } from "./SessionLiteReader.js";
 
 export type SessionInfo = {
@@ -18,13 +18,13 @@ export type SessionInfo = {
 
 export type ListProjectSessionsOptions = {
   projectRoot: string;
-  politHome: string;
+  pilotHome: string;
   limit?: number;
   offset?: number;
 };
 
 export async function listProjectSessions(options: ListProjectSessionsOptions): Promise<SessionInfo[]> {
-  const chatDir = getPolitProjectChatDir(options.projectRoot, options.politHome);
+  const chatDir = getPilotProjectChatDir(options.projectRoot, options.pilotHome);
   let names: string[];
   try {
     names = await readdir(chatDir);
@@ -129,19 +129,19 @@ function escapeRegExp(value: string): string {
 
 /** Options for listing sessions across all known projects. */
 export type ListAllSessionsOptions = {
-  politHome: string;
+  pilotHome: string;
   limit?: number;
   offset?: number;
 };
 
 /**
- * List sessions across **all** projects under `{politHome}/projects/`. Each
+ * List sessions across **all** projects under `{pilotHome}/projects/`. Each
  * project directory is scanned for `.jsonl` files in its `chats/` subfolder.
  * Results are sorted by lastModified descending (most-recent first), then
  * paginated via `limit` / `offset`.
  */
 export async function listAllSessions(options: ListAllSessionsOptions): Promise<SessionInfo[]> {
-  const projectsDir = resolve(options.politHome, "projects");
+  const projectsDir = resolve(options.pilotHome, "projects");
   let projectIds: string[];
   try {
     projectIds = await readdir(projectsDir);
@@ -180,7 +180,7 @@ export async function listAllSessions(options: ListAllSessionsOptions): Promise<
 /** Options for title-based session search. */
 export type SearchSessionsByTitleOptions = {
   projectRoot: string;
-  politHome: string;
+  pilotHome: string;
   query: string;
   limit?: number;
 };
@@ -191,7 +191,7 @@ export type SearchSessionsByTitleOptions = {
  * results sorted by lastModified descending.
  */
 export async function searchSessionsByTitle(options: SearchSessionsByTitleOptions): Promise<SessionInfo[]> {
-  const chatDir = getPolitProjectChatDir(options.projectRoot, options.politHome);
+  const chatDir = getPilotProjectChatDir(options.projectRoot, options.pilotHome);
   let names: string[];
   try {
     names = await readdir(chatDir);

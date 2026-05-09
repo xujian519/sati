@@ -21,10 +21,10 @@ import type {
  * and parity tests assert the literal value.
  */
 export const FORK_PLACEHOLDER_RESULT =
-  "<politdeck-fork-placeholder>Subtask handled by forked subagent — see child transcript.</politdeck-fork-placeholder>";
+  "<pilotdeck-fork-placeholder>Subtask handled by forked subagent — see child transcript.</pilotdeck-fork-placeholder>";
 
 /** Tag used in the boilerplate that wraps the directive. */
-export const FORK_BOILERPLATE_TAG = "politdeck-fork";
+export const FORK_BOILERPLATE_TAG = "pilotdeck-fork";
 
 /**
  * S1 — Build the canonical message sequence handed to the subagent's
@@ -33,7 +33,7 @@ export const FORK_BOILERPLATE_TAG = "politdeck-fork";
  *   1. Parent's assistant message verbatim (thinking + every tool_use + text).
  *   2. A user message containing one synthetic `tool_result` (with
  *      `FORK_PLACEHOLDER_RESULT`) per `tool_use`, followed by the directive
- *      wrapped in `<politdeck-fork>` boilerplate.
+ *      wrapped in `<pilotdeck-fork>` boilerplate.
  *
  * Returns a fresh array (never mutates `assistantMessage`).
  */

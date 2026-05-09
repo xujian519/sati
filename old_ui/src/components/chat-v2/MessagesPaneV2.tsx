@@ -285,7 +285,7 @@ function WorkingIndicator({ label }: { label: string }) {
   return (
     <div
       role="status"
-      aria-live="polite"
+      aria-live="pilote"
       className="flex items-center gap-2 pl-1 text-[12px] text-neutral-500 dark:text-neutral-400"
     >
       <span

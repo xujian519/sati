@@ -1,16 +1,16 @@
 # Router 测试方案
 
-本文定义 PolitDeck `router` 模块的测试目标、测试目录、测试分层、单测命名规则、fake 依赖用法和**双边 parity 测试**写法。它结合 `[01-product-specification.md](./01-product-specification.md)` 中沉淀的产品行为基线和 `[02-rewrite-plan.md](./02-rewrite-plan.md)` 中给出的目录结构与接口，确保新项目 `src/router/` 与旧项目 `third-party/claude-code-main/src/router/` 在相同输入下产生相同的可观察行为。
+本文定义 PilotDeck `router` 模块的测试目标、测试目录、测试分层、单测命名规则、fake 依赖用法和**双边 parity 测试**写法。它结合 `[01-product-specification.md](./01-product-specification.md)` 中沉淀的产品行为基线和 `[02-rewrite-plan.md](./02-rewrite-plan.md)` 中给出的目录结构与接口，确保新项目 `src/router/` 与旧项目 `third-party/claude-code-main/src/router/` 在相同输入下产生相同的可观察行为。
 
 ## 1. 测试目标
 
 router 测试必须保证以下五件事：
 
-- **配置稳定**：`PolitConfig.router` 段在合法/非法输入下产生稳定的解析结果与 diagnostics。
+- **配置稳定**：`PilotConfig.router` 段在合法/非法输入下产生稳定的解析结果与 diagnostics。
 - **决策稳定**：相同输入下 `RouterRuntime.decide()` 返回的 `RouterDecision` 字段稳定（provider、model、scenarioType、tokenSaverTier、isSubagent、orchestrating、mutations）。
 - **执行稳定**：`RouterRuntime.execute()` 在 fake provider / fake judge 下产出可断言的 CanonicalModelEvent 序列、fallback 顺序、retry 次数和 stats 记录。
 - **行为一致**：与旧 CCR 在 `must_match` 场景上产出相同的可观察行为（决策、改写、事件顺序、错误归一化）。
-- **隔离干净**：所有测试默认不读真实 `~/.politdeck`、`~/.claude/projects/`、`~/.edgeclaw`、不调用真实 LLM、不监听端口。
+- **隔离干净**：所有测试默认不读真实 `~/.pilotdeck`、`~/.claude/projects/`、`~/.edgeclaw`、不调用真实 LLM、不监听端口。
 
 “行为一致”不要求逐字节复制旧 UI 文案或日志，只要求外部可观察行为相同：
 
@@ -24,7 +24,7 @@ router 测试必须保证以下五件事：
 
 ## 2. 测试目录
 
-测试维护在 `/Users/gucc1/Codes/work/modelbest/PolitDeck/tests/router/`：
+测试维护在 `/Users/gucc1/Codes/work/modelbest/PilotDeck/tests/router/`：
 
 ```text
 tests/
@@ -73,7 +73,7 @@ tests/
       parity-fallback.test.ts
       parity-zero-usage.test.ts
     e2e/
-      real-judge.test.ts             # default skipped, opt-in via POLITDECK_RUN_REAL_ROUTER_E2E=1
+      real-judge.test.ts             # default skipped, opt-in via PILOTDECK_RUN_REAL_ROUTER_E2E=1
     helpers/
       createRouterRuntime.ts
       createFakeModelTransport.ts
@@ -83,9 +83,9 @@ tests/
       legacyHarness.ts               # 启动旧 CCR runtime 的薄壳
     fixtures/
       router/
-        configs/                     # PolitConfig fixture
+        configs/                     # PilotConfig fixture
         requests/                    # CanonicalModelRequest 输入
-        legacy-config/               # 把 PolitConfig 翻译成 ~/.claude-code-router/config.json
+        legacy-config/               # 把 PilotConfig 翻译成 ~/.claude-code-router/config.json
         sse-replays/                 # 抓包的流式响应
         decisions/                   # parity scenarios
         orchestrate-skills/
@@ -95,7 +95,7 @@ tests/
 
 ## 3. 测试命名
 
-所有新 helper、fixture、事件、错误码必须使用 PolitDeck 命名。允许出现旧项目名称的位置：
+所有新 helper、fixture、事件、错误码必须使用 PilotDeck 命名。允许出现旧项目名称的位置：
 
 - 源码路径引用，例如 `third-party/claude-code-main/src/router/src/utils/router.ts`。
 - 旧行为基线说明。
@@ -109,12 +109,12 @@ tests/
 推荐 helper 命名：
 
 ```ts
-createPolitDeckRouterRuntime()
-createPolitDeckFakeModelTransport()
-createPolitDeckFakeJudgeTransport()
-createPolitDeckRouterFixtureRequest()
-assertPolitDeckRouterDecision()
-runPolitDeckRouterParityScenario()
+createPilotDeckRouterRuntime()
+createPilotDeckFakeModelTransport()
+createPilotDeckFakeJudgeTransport()
+createPilotDeckRouterFixtureRequest()
+assertPilotDeckRouterDecision()
+runPilotDeckRouterParityScenario()
 ```
 
 ## 4. 测试分层
@@ -138,7 +138,7 @@ config tests
 
 ### 4.1 Config tests
 
-验证 `parseRouterConfig()` 与 `polit/config` 的集成：
+验证 `parseRouterConfig()` 与 `pilot/config` 的集成：
 
 - scenarios.default 缺失报错。
 - scenarios.default 引用不存在 provider 报错。
@@ -166,7 +166,7 @@ config tests
 - 显式 `provider/model` 命中 default。
 - `tokenCount > longContextThreshold` 命中 longContext。
 - `lastUsage.input_tokens > longContextThreshold && tokenCount > 20000` 命中 longContext。
-- `<CCR-SUBAGENT-MODEL>` tag 命中（注意：parity 用 `<politdeck-subagent-model>`，但需要保留对旧 tag 的兼容直到迁移完成）。
+- `<CCR-SUBAGENT-MODEL>` tag 命中（注意：parity 用 `<pilotdeck-subagent-model>`，但需要保留对旧 tag 的兼容直到迁移完成）。
 - `claude` + `haiku` 关键字命中 background。
 - `tools[].type` 以 `web_search` 开头命中 webSearch。
 - `req.body.thinking` 存在命中 think。
@@ -193,7 +193,7 @@ config tests
   - 注入 fake `judgeRuntime`，断言入参是预期 prompt。
   - judge 返回正常 tier → 命中。
   - judge 超时 → fallback defaultTier。
-  - judge 抛错 → fallback defaultTier，发射 `politdeck_router_token_saver_failed`。
+  - judge 抛错 → fallback defaultTier，发射 `pilotdeck_router_token_saver_failed`。
 - subagent policy（skip / judge / inherit / fixed）四种行为：
   - skip：使用 default model，scenarioType=tokenSaver，但不调 judge。
   - judge：在 `${sessionId}:sub` 里独立 sticky。
@@ -212,7 +212,7 @@ config tests
   - 不注入 prompt、不裁剪工具、不 slim system。
   - tokenSaver 决定的 tier model 直接生效。
 - 非 Claude orchestrator：
-  - 把 `tool_result` 里的 `Async agent launched` 文案替换为 PolitDeck 等价指令。
+  - 把 `tool_result` 里的 `Async agent launched` 文案替换为 PilotDeck 等价指令。
 
 ### 4.7 Session State tests
 
@@ -256,7 +256,7 @@ config tests
 - 单事件聚合到 session / hourly / global。
 - pricing 应用后 cost 字段计算正确。
 - reset 后所有桶清零。
-- 写盘路径在 `${PolitCacheDir}/router/stats/`。
+- 写盘路径在 `${PilotCacheDir}/router/stats/`。
 
 ## 5. Fake 依赖
 
@@ -267,7 +267,7 @@ router 测试所有外部依赖都通过 fake 替换。
 `src/model/streaming/streamModel.ts` 已经支持 `options.fetch` 注入。helper：
 
 ```ts
-export function createPolitDeckFakeModelTransport(
+export function createPilotDeckFakeModelTransport(
   fixtures: Map<string, FakeProviderResponse>
 ): typeof fetch {
   return async (input, init) => {
@@ -290,7 +290,7 @@ export function createPolitDeckFakeModelTransport(
 ### 5.2 Fake judge runtime
 
 ```ts
-export function createPolitDeckFakeJudgeTransport(
+export function createPilotDeckFakeJudgeTransport(
   responses: Array<{ tier: string; raw?: string }>
 ): typeof fetch {
   let cursor = 0;
@@ -309,15 +309,15 @@ export function createPolitDeckFakeJudgeTransport(
 ### 5.3 Fake clock & uuid
 
 ```ts
-const clock = new PolitDeckFakeClock("2026-01-01T00:00:00Z");
-const runtime = createPolitDeckRouterRuntime({ now: clock.now, uuid: clock.uuid });
+const clock = new PilotDeckFakeClock("2026-01-01T00:00:00Z");
+const runtime = createPilotDeckRouterRuntime({ now: clock.now, uuid: clock.uuid });
 clock.advance(3_700_000); // 让 sticky TTL 过期
 ```
 
 ### 5.4 Fake extension runtime
 
 ```ts
-const extension = createPolitDeckFakeExtensionRuntime({
+const extension = createPilotDeckFakeExtensionRuntime({
   customRouter: async (input) => ({ provider: "deepseek", model: "deepseek-chat" }),
   loadSkill: async (id) => "Custom orchestrator skill body",
 });
@@ -330,16 +330,16 @@ const extension = createPolitDeckFakeExtensionRuntime({
 ### 6.1 总体架构
 
 ```text
-parity scenario fixture (PolitConfig + Request + Expected events)
-  -> PolitDeck side:
-       parsePolitConfig() -> RouterRuntime.decide() / execute()
+parity scenario fixture (PilotConfig + Request + Expected events)
+  -> PilotDeck side:
+       parsePilotConfig() -> RouterRuntime.decide() / execute()
        --> normalize result to ParityObservation
   -> Legacy side (only when scenario.parity === 'must_match' or 'compare'):
-       translatePolitConfigToLegacyConfig()
+       translatePilotConfigToLegacyConfig()
          -> 旧 router(req, _, ctx)            (decide 等价)
          -> 旧 pipeline.processRequest(...)   (execute 等价)
        --> normalize result to ParityObservation
-  -> assertEqualParityObservation(politdeck, legacy)
+  -> assertEqualParityObservation(pilotdeck, legacy)
 ```
 
 旧实现以**测试用 harness** 形式存在，仅在 parity 测试中被加载，不进入 production bundle。harness 路径：
@@ -351,17 +351,17 @@ import { createLegacyCcrRuntime } from "../helpers/legacyHarness.js";
 `legacyHarness.ts` 内部：
 
 - 通过 dynamic import 直接加载旧项目的两个纯函数，**不**实例化旧 Fastify `Server`、**不**调用 `Server.app.inject()`、**不**监听端口：
-  - `import("../../../third-party/claude-code-main/src/router/src/utils/router")` → 旧 `router(req, _, ctx)`，对应 PolitDeck 的 `decide()`。
-  - `import("../../../third-party/claude-code-main/src/router/src/pipeline")` → 旧 `processRequest(url, init, services, realFetch)`，对应 PolitDeck 的 `execute()`。
+  - `import("../../../third-party/claude-code-main/src/router/src/utils/router")` → 旧 `router(req, _, ctx)`，对应 PilotDeck 的 `decide()`。
+  - `import("../../../third-party/claude-code-main/src/router/src/pipeline")` → 旧 `processRequest(url, init, services, realFetch)`，对应 PilotDeck 的 `execute()`。
 - 用 fixture 中的 `legacy-config` 直接构造旧 `ConfigService` / `ProviderService` / `TransformerService` / `TokenizerService` 实例（不经过 `Server.init()` 的 fastify 注入）。
-- 把 PolitDeck 端使用的同一份 `FakeProviderResponse` map 通过 `processRequest()` 的 `realFetch` 参数显式传入旧 pipeline；不再调用 `installFetchInterceptor()`，不修改 `globalThis.fetch`。
+- 把 PilotDeck 端使用的同一份 `FakeProviderResponse` map 通过 `processRequest()` 的 `realFetch` 参数显式传入旧 pipeline；不再调用 `installFetchInterceptor()`，不修改 `globalThis.fetch`。
 - 提供 `runLegacyDecision(request)` 与 `runLegacyExecution(request)` 两个入口，分别用于 decide 与 execute 双边对比。
 - 这意味着旧实现中的 fastify `Server` 类、`registerNamespace`、`addHook`、HTTP 路由 / API routes / middleware 在 parity 测试中**完全不被加载**，与 02-rewrite-plan.md §3「不迁移」清单保持一致。
 
 ### 6.2 ParityObservation 协议
 
 ```ts
-export type PolitDeckRouterParityObservation = {
+export type PilotDeckRouterParityObservation = {
   decision: {
     provider: string;
     model: string;
@@ -406,24 +406,24 @@ export type PolitDeckRouterParityObservation = {
 
 ```ts
 // tests/fixtures/router/decisions/parityScenarios.ts
-export type PolitDeckRouterParityStatus =
+export type PilotDeckRouterParityStatus =
   | "must_match"
   | "intentional_difference"
   | "deferred"
   | "not_applicable";
 
-export type PolitDeckRouterParityScenario = {
+export type PilotDeckRouterParityScenario = {
   id: string;
-  status: PolitDeckRouterParityStatus;
+  status: PilotDeckRouterParityStatus;
   feature: string;
   configFixture: string;
   requestFixture: string;
-  expected?: Partial<PolitDeckRouterParityObservation>;
+  expected?: Partial<PilotDeckRouterParityObservation>;
   intentionalDifferenceReason?: string;
   deferredUntil?: string;
 };
 
-export const routerParityScenarios: PolitDeckRouterParityScenario[] = [
+export const routerParityScenarios: PilotDeckRouterParityScenario[] = [
   // ── decide() ──
   { id: "router-decide-default-model", status: "must_match", feature: "explicit provider/model bypasses scenario", configFixture: "configs/basic.yaml", requestFixture: "requests/explicit-provider.json" },
   { id: "router-decide-long-context-by-token-count", status: "must_match", feature: "tokenCount > longContextThreshold routes to longContext", configFixture: "configs/long-context.yaml", requestFixture: "requests/long-context-prompt.json" },
@@ -457,8 +457,8 @@ export const routerParityScenarios: PolitDeckRouterParityScenario[] = [
   { id: "router-execute-zero-usage-retry-nonstream", status: "must_match", feature: "zero-usage non-stream retried", configFixture: "configs/basic.yaml", requestFixture: "requests/short-question-non-stream.json" },
 
   // ── intentional differences ──
-  { id: "router-mutation-naming", status: "intentional_difference", feature: "mutation event names use politdeck_ prefix", configFixture: "configs/basic.yaml", requestFixture: "requests/short-question.json", intentionalDifferenceReason: "PolitDeck rebrands events; only cardinality / order is compared." },
-  { id: "router-config-source", status: "intentional_difference", feature: "config sourced from politdeck.yaml not ~/.claude-code-router/config.json", configFixture: "configs/basic.yaml", requestFixture: "requests/short-question.json", intentionalDifferenceReason: "PolitDeck redirects config to PolitHome; legacy bridge converts in fixture." },
+  { id: "router-mutation-naming", status: "intentional_difference", feature: "mutation event names use pilotdeck_ prefix", configFixture: "configs/basic.yaml", requestFixture: "requests/short-question.json", intentionalDifferenceReason: "PilotDeck rebrands events; only cardinality / order is compared." },
+  { id: "router-config-source", status: "intentional_difference", feature: "config sourced from pilotdeck.yaml not ~/.claude-code-router/config.json", configFixture: "configs/basic.yaml", requestFixture: "requests/short-question.json", intentionalDifferenceReason: "PilotDeck redirects config to PilotHome; legacy bridge converts in fixture." },
 
   // ── deferred ──
   { id: "router-preset-marketplace", status: "deferred", feature: "remote preset marketplace install/export", configFixture: "configs/preset-noop.yaml", requestFixture: "requests/short-question.json", deferredUntil: "After preset subsystem migration." },
@@ -482,22 +482,22 @@ export const routerParityScenarios: PolitDeckRouterParityScenario[] = [
 import test from "node:test";
 import assert from "node:assert/strict";
 import { routerParityScenarios } from "../../fixtures/router/decisions/parityScenarios.js";
-import { runPolitDeckParityDecision } from "../helpers/createRouterRuntime.js";
+import { runPilotDeckParityDecision } from "../helpers/createRouterRuntime.js";
 import { runLegacyParityDecision } from "../helpers/legacyHarness.js";
 
 for (const scenario of routerParityScenarios.filter((s) => s.status === "must_match")) {
   test(`router parity decide ${scenario.id}`, async () => {
-    const polit = await runPolitDeckParityDecision(scenario);
+    const pilot = await runPilotDeckParityDecision(scenario);
     const legacy = await runLegacyParityDecision(scenario);
-    assertEqualParityObservation(polit, legacy);
+    assertEqualParityObservation(pilot, legacy);
     if (scenario.expected) {
-      assertObservationContains(polit, scenario.expected);
+      assertObservationContains(pilot, scenario.expected);
     }
   });
 }
 ```
 
-`assertEqualParityObservation()` 比较 `ParityObservation.decision` 与 `mutations` 字段，忽略事件命名差异（旧 `tengu_*` ↔ 新 `politdeck_router_*`）。
+`assertEqualParityObservation()` 比较 `ParityObservation.decision` 与 `mutations` 字段，忽略事件命名差异（旧 `tengu_*` ↔ 新 `pilotdeck_router_*`）。
 
 `tests/router/parity/parity-execute.test.ts` 比较 `ParityObservation.execution`：targetUrl、fallbackChain 顺序、zeroUsageRetries、eventTypes 序列。
 
@@ -505,24 +505,24 @@ for (const scenario of routerParityScenarios.filter((s) => s.status === "must_ma
 
 ### 6.5 共享 fixture
 
-为避免新旧实现读两套 fixture，`tests/fixtures/router/configs/*.yaml` 是 PolitDeck 形态（`provider/model`、`router.scenarios.*`）；通过 helper 转译给旧实现：
+为避免新旧实现读两套 fixture，`tests/fixtures/router/configs/*.yaml` 是 PilotDeck 形态（`provider/model`、`router.scenarios.*`）；通过 helper 转译给旧实现：
 
 ```ts
 // tests/router/helpers/legacyHarness.ts
-function translatePolitConfigToLegacyConfig(politConfig: PolitConfig): LegacyCcrConfig {
+function translatePilotConfigToLegacyConfig(pilotConfig: PilotConfig): LegacyCcrConfig {
   return {
-    Providers: politConfig.model.providers ...,
+    Providers: pilotConfig.model.providers ...,
     Router: {
-      default: legacyJoin(politConfig.router.scenarios.default),
-      background: legacyJoin(politConfig.router.scenarios.background),
-      think: legacyJoin(politConfig.router.scenarios.think),
-      longContext: legacyJoin(politConfig.router.scenarios.longContext),
-      longContextThreshold: politConfig.router.scenarios.longContextThreshold,
-      webSearch: legacyJoin(politConfig.router.scenarios.webSearch),
-      tokenSaver: politConfig.router.tokenSaver ? translateTokenSaver(...) : undefined,
-      autoOrchestrate: politConfig.router.autoOrchestrate ? translateAutoOrchestrate(...) : undefined,
+      default: legacyJoin(pilotConfig.router.scenarios.default),
+      background: legacyJoin(pilotConfig.router.scenarios.background),
+      think: legacyJoin(pilotConfig.router.scenarios.think),
+      longContext: legacyJoin(pilotConfig.router.scenarios.longContext),
+      longContextThreshold: pilotConfig.router.scenarios.longContextThreshold,
+      webSearch: legacyJoin(pilotConfig.router.scenarios.webSearch),
+      tokenSaver: pilotConfig.router.tokenSaver ? translateTokenSaver(...) : undefined,
+      autoOrchestrate: pilotConfig.router.autoOrchestrate ? translateAutoOrchestrate(...) : undefined,
     },
-    fallback: politConfig.router.fallback ?? undefined,
+    fallback: pilotConfig.router.fallback ?? undefined,
   };
 }
 ```
@@ -531,14 +531,14 @@ function translatePolitConfigToLegacyConfig(politConfig: PolitConfig): LegacyCcr
 
 ### 6.6 双边 fake provider
 
-PolitDeck 端通过 `RouterRuntimeDeps.modelRuntime` 内部的 `options.fetch` 注入 fake provider；旧端通过 `pipeline.processRequest()` 的 `realFetch` 形参直接传入同一个 fake fetch。两边读取**同一份** `FakeProviderResponse` map（按 URL 匹配），全程不修改 `globalThis.fetch`：
+PilotDeck 端通过 `RouterRuntimeDeps.modelRuntime` 内部的 `options.fetch` 注入 fake provider；旧端通过 `pipeline.processRequest()` 的 `realFetch` 形参直接传入同一个 fake fetch。两边读取**同一份** `FakeProviderResponse` map（按 URL 匹配），全程不修改 `globalThis.fetch`：
 
 ```ts
 const provider = new InMemoryFakeProviderRegistry();
 provider.set("https://openrouter.ai/api/v1/chat/completions", { ...fixture-1 });
 provider.set("https://api.deepseek.com/v1/chat/completions",   { ...fixture-2 });
 
-const politdeckRuntime = createPolitDeckRouterRuntime({ ..., fetch: provider.toFetch() });
+const pilotdeckRuntime = createPilotDeckRouterRuntime({ ..., fetch: provider.toFetch() });
 const legacyHarness  = await createLegacyCcrRuntime({ ..., fetch: provider.toFetch() });
 ```
 
@@ -555,10 +555,10 @@ const legacyHarness  = await createLegacyCcrRuntime({ ..., fetch: provider.toFet
 | 旧 | 新 | 处理 |
 | --- | --- | --- |
 | `req.body.model = "openrouter,anthropic/claude-sonnet-4-5"` | `decision.provider = "openrouter"` + `decision.model = "anthropic/claude-sonnet-4-5"` | parity normalizer 会把旧 body.model 拆开比较。 |
-| `politdeck.yaml` 路径 | `~/.claude-code-router/config.json` | fixture 一份，translator 双向转。 |
-| `<CCR-SUBAGENT-MODEL>` | `<politdeck-subagent-model>` | parity 要求两种 tag 都被识别，但默认 fixture 用旧 tag，避免改动旧实现。 |
-| `tengu_*` / `_zRetry` 内部变量 | `politdeck_router_*` 事件、`zeroUsageRetries` 计数 | parity normalizer 把旧内部行为映射成新事件序列（基于事件计数 / 顺序判定）。 |
-| `CCR_DEBUG_DUMP` | `POLITDECK_ROUTER_DEBUG_DUMP` | parity 测试不开任何 debug dump。 |
+| `pilotdeck.yaml` 路径 | `~/.claude-code-router/config.json` | fixture 一份，translator 双向转。 |
+| `<CCR-SUBAGENT-MODEL>` | `<pilotdeck-subagent-model>` | parity 要求两种 tag 都被识别，但默认 fixture 用旧 tag，避免改动旧实现。 |
+| `tengu_*` / `_zRetry` 内部变量 | `pilotdeck_router_*` 事件、`zeroUsageRetries` 计数 | parity normalizer 把旧内部行为映射成新事件序列（基于事件计数 / 顺序判定）。 |
+| `CCR_DEBUG_DUMP` | `PILOTDECK_ROUTER_DEBUG_DUMP` | parity 测试不开任何 debug dump。 |
 
 ## 7. 核心用例
 
@@ -568,7 +568,7 @@ const legacyHarness  = await createLegacyCcrRuntime({ ..., fetch: provider.toFet
 
 输入：
 
-- PolitConfig 中 `router.scenarios.longContextThreshold = 60000`，`router.scenarios.longContext = openrouter/google-gemini-2-5-pro`。
+- PilotConfig 中 `router.scenarios.longContextThreshold = 60000`，`router.scenarios.longContext = openrouter/google-gemini-2-5-pro`。
 - 请求 messages 经 tokenizer 计算 tokenCount=70000。
 - 无 lastUsage。
 
@@ -622,7 +622,7 @@ const legacyHarness  = await createLegacyCcrRuntime({ ..., fetch: provider.toFet
 - `mutations.toolsStripped.before === 3`、`toolsStripped.after === 1`（只剩 Agent）。
 - `mutations.systemPromptSlimmed.fromBlocks === 8`、`toBlocks === 3`（slim block + 2 个保留）。
 - `mutations.orchestrationPromptInjected.tier === 'COMPLEX'`、`messages[0].role === 'user'`。
-- 旧实现 mutation 计数与 PolitDeck 一致（即使日志文案不同）。
+- 旧实现 mutation 计数与 PilotDeck 一致（即使日志文案不同）。
 
 ### 7.5 用例 E：Fallback 链
 
@@ -665,7 +665,7 @@ const legacyHarness  = await createLegacyCcrRuntime({ ..., fetch: provider.toFet
 
 - `decision.tokenSaverTier === 'SIMPLE'`。
 - `decision.model === 'deepseek-chat'`。
-- 发射 `politdeck_router_token_saver_failed` 事件，原因 = `judge_timeout`。
+- 发射 `pilotdeck_router_token_saver_failed` 事件，原因 = `judge_timeout`。
 - 不影响后续请求送出。
 
 ## 8. 真实 Provider e2e（可选）
@@ -675,13 +675,13 @@ const legacyHarness  = await createLegacyCcrRuntime({ ..., fetch: provider.toFet
 ```ts
 import test from "node:test";
 
-test.skip(process.env.POLITDECK_RUN_REAL_ROUTER_E2E !== "1", "real router e2e disabled");
+test.skip(process.env.PILOTDECK_RUN_REAL_ROUTER_E2E !== "1", "real router e2e disabled");
 ```
 
 启用条件：
 
-- `POLITDECK_RUN_REAL_ROUTER_E2E=1`
-- `${PolitHome}/politdeck.yaml` 中存在合法 provider + judge 配置。
+- `PILOTDECK_RUN_REAL_ROUTER_E2E=1`
+- `${PilotHome}/pilotdeck.yaml` 中存在合法 provider + judge 配置。
 
 只验证 judge 能返回合法 tier，不验证主路由稳定性（避免 flakiness）。
 
@@ -690,7 +690,7 @@ test.skip(process.env.POLITDECK_RUN_REAL_ROUTER_E2E !== "1", "real router e2e di
 router 测试不应：
 
 - 依赖真实 OAuth、Gemini API、OpenAI API 默认 quota。
-- 依赖真实用户主目录下的 `~/.politdeck`、`~/.claude`、`~/.edgeclaw`、`~/.claude-code-router`。
+- 依赖真实用户主目录下的 `~/.pilotdeck`、`~/.claude`、`~/.edgeclaw`、`~/.claude-code-router`。
 - 在测试中监听任何 TCP 端口；新项目 router 没有 HTTP 形态，旧实现也通过 `router()` / `pipeline.processRequest()` 直接调用，不需要起 fastify 实例。
 - 修改 `globalThis.fetch`；fake provider 必须通过显式参数注入。
 - 引入旧项目源码作为 production runtime 依赖（`legacyHarness` 仅在 parity 测试 import 一次）。
@@ -706,7 +706,7 @@ router 测试不应跨模块断言：
 
 - `npm test` 默认覆盖 `tests/router/` 编译后的 Node 测试。
 - router parity 用例在 PR 中必跑；如果有 must_match 用例失败必须阻断合并。
-- router e2e 仅在显式开启 `POLITDECK_RUN_REAL_ROUTER_E2E=1` 的 nightly 任务跑。
+- router e2e 仅在显式开启 `PILOTDECK_RUN_REAL_ROUTER_E2E=1` 的 nightly 任务跑。
 - parity manifest 变化必须在 PR 描述中给出：
 
 ```text
@@ -722,8 +722,8 @@ Must-match scenarios:
 - passing: 22
 
 Intentional differences:
-- mutation/event naming (politdeck_router_*)
-- config source (PolitConfig vs ~/.claude-code-router/config.json)
+- mutation/event naming (pilotdeck_router_*)
+- config source (PilotConfig vs ~/.claude-code-router/config.json)
 
 Deferred:
 - preset marketplace
@@ -736,13 +736,13 @@ router 模块的 parity 框架与 `tests/agent/parity-dual-*.test.ts`、`tests/t
 
 - manifest 文件名以 `parityScenarios.ts` 结尾。
 - scenario `status` 取值统一：`must_match` / `intentional_difference` / `deferred` / `not_applicable`。
-- helper 命名以 `runPolitDeck...` 开头。
+- helper 命名以 `runPilotDeck...` 开头。
 - 旧源码只能在 `tests/.../helpers/legacyHarness.ts` 中通过 dynamic import 加载，且不出现在 `src/` 任何文件的 import 链上。
 
 router 自身额外增加：
 
 - `ParityRequestBodyShape`：因为 router 会改写请求体，本层需要细粒度对比 mutations 而不是逐字节比较。
-- `runPolitDeckParityDecision` 与 `runLegacyParityDecision`：分别封装 `decide()` 的双边执行。
-- `runPolitDeckParityExecution` 与 `runLegacyParityExecution`：分别封装 `execute()` 的双边执行（含 fallback / zero-usage retry）。
+- `runPilotDeckParityDecision` 与 `runLegacyParityDecision`：分别封装 `decide()` 的双边执行。
+- `runPilotDeckParityExecution` 与 `runLegacyParityExecution`：分别封装 `execute()` 的双边执行（含 fallback / zero-usage retry）。
 
 通过这些约定，router 测试既能独立维护，也能在 agent 模块 parity 中作为子集被调用。

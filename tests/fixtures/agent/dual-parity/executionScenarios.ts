@@ -32,7 +32,7 @@ export const agentExecutionScenarios: AgentExecutionScenario[] = [
     id: "agent-exec-streaming-tools",
     status: "deferred",
     feature: "tool execution while model stream is still open",
-    reason: "PolitDeck main agent currently uses the sequential tool scheduler after assistant message assembly.",
+    reason: "PilotDeck main agent currently uses the sequential tool scheduler after assistant message assembly.",
   },
   {
     id: "agent-exec-hooks",

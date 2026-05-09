@@ -79,7 +79,7 @@ test("C2.S3 buildChildMessage wraps directive in fork boilerplate with 10 rules"
 
 test("C2.S3 directive trailing whitespace trimmed but text otherwise preserved", () => {
   const text = buildChildMessage("  do thing\n  ");
-  assert.match(text, /Directive:\ndo thing\n<\/politdeck-fork>$/);
+  assert.match(text, /Directive:\ndo thing\n<\/pilotdeck-fork>$/);
 });
 
 test("C2 throws on non-assistant input", () => {

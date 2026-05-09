@@ -14,9 +14,9 @@ import {
 } from "../../src/extension/index.js";
 
 test("plugin loader reads manifest and hook config from a project plugin", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-plugin-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-plugin-"));
   try {
-    const pluginPath = path.join(root, ".politdeck", "plugins", "demo");
+    const pluginPath = path.join(root, ".pilotdeck", "plugins", "demo");
     await mkdir(path.join(pluginPath, "hooks"), { recursive: true });
     await writeFile(
       path.join(pluginPath, "plugin.json"),
@@ -41,18 +41,18 @@ test("plugin loader reads manifest and hook config from a project plugin", async
 });
 
 test("PluginRuntime discovers only fixed global and project plugin directories", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-runtime-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-runtime-"));
   try {
-    const politHome = path.join(root, "home");
+    const pilotHome = path.join(root, "home");
     const projectRoot = path.join(root, "project");
-    const globalPlugin = path.join(politHome, "plugins", "global-demo");
-    const projectPlugin = path.join(projectRoot, ".politdeck", "plugins", "project-demo");
+    const globalPlugin = path.join(pilotHome, "plugins", "global-demo");
+    const projectPlugin = path.join(projectRoot, ".pilotdeck", "plugins", "project-demo");
     await mkdir(globalPlugin, { recursive: true });
     await mkdir(projectPlugin, { recursive: true });
     await writeFile(path.join(globalPlugin, "plugin.json"), JSON.stringify({ name: "global-demo" }), "utf8");
     await writeFile(path.join(projectPlugin, "plugin.json"), JSON.stringify({ name: "project-demo" }), "utf8");
 
-    const runtime = new PluginRuntime({ projectRoot, politHome });
+    const runtime = new PluginRuntime({ projectRoot, pilotHome });
     const plugins = await runtime.refresh();
 
     assert.deepEqual(plugins.map((plugin) => `${plugin.name}:${plugin.source}`).sort(), [
@@ -65,15 +65,15 @@ test("PluginRuntime discovers only fixed global and project plugin directories",
 });
 
 test("PluginRuntime refresh report atomically removes deleted plugins", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-prune-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-prune-"));
   try {
-    const politHome = path.join(root, "home");
+    const pilotHome = path.join(root, "home");
     const projectRoot = path.join(root, "project");
-    const pluginPath = path.join(projectRoot, ".politdeck", "plugins", "project-demo");
+    const pluginPath = path.join(projectRoot, ".pilotdeck", "plugins", "project-demo");
     await mkdir(pluginPath, { recursive: true });
     await writeFile(path.join(pluginPath, "plugin.json"), JSON.stringify({ name: "project-demo" }), "utf8");
 
-    const runtime = new PluginRuntime({ projectRoot, politHome });
+    const runtime = new PluginRuntime({ projectRoot, pilotHome });
     assert.equal((await runtime.refreshWithReport()).next.length, 1);
 
     await rm(pluginPath, { recursive: true, force: true });
@@ -88,11 +88,11 @@ test("PluginRuntime refresh report atomically removes deleted plugins", async ()
 });
 
 test("PluginRuntime filters disabled builtin plugins", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-builtin-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-builtin-"));
   try {
     const runtime = new PluginRuntime({
       projectRoot: path.join(root, "project"),
-      politHome: path.join(root, "home"),
+      pilotHome: path.join(root, "home"),
       builtinPlugins: [
         {
           name: "enabled",
@@ -125,7 +125,7 @@ test("plugin command names match markdown and SKILL.md naming rules", () => {
 });
 
 test("plugin command loader reads markdown content and frontmatter", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-commands-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-commands-"));
   try {
     const commandsDir = path.join(root, "commands");
     await mkdir(path.join(commandsDir, "db"), { recursive: true });
@@ -146,7 +146,7 @@ test("plugin command loader reads markdown content and frontmatter", async () =>
 });
 
 test("plugin loader includes command, skill and MCP contributions", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-contrib-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-contrib-"));
   try {
     const pluginPath = path.join(root, "demo");
     await mkdir(path.join(pluginPath, "commands"), { recursive: true });
@@ -172,7 +172,7 @@ test("plugin loader includes command, skill and MCP contributions", async () => 
 test("PluginRuntime exposes merged MCP server contributions", async () => {
   const runtime = new PluginRuntime({
     projectRoot: "/tmp/project",
-    politHome: "/tmp/polit",
+    pilotHome: "/tmp/pilot",
     builtinPlugins: [
       {
         name: "builtin",
@@ -192,7 +192,7 @@ test("PluginRuntime exposes merged MCP server contributions", async () => {
 test("PluginRuntime exposes a stable contribution snapshot", async () => {
   const runtime = new PluginRuntime({
     projectRoot: "/tmp/project",
-    politHome: "/tmp/polit",
+    pilotHome: "/tmp/pilot",
     builtinPlugins: [
       {
         name: "builtin",
@@ -236,7 +236,7 @@ test("PluginRuntime exposes a stable contribution snapshot", async () => {
 });
 
 test("plugin loader includes output style and LSP contributions", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-output-lsp-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-output-lsp-"));
   try {
     const pluginPath = path.join(root, "demo");
     await mkdir(path.join(pluginPath, "output-styles"), { recursive: true });
@@ -259,7 +259,7 @@ test("plugin loader includes output style and LSP contributions", async () => {
 test("PluginRuntime exposes merged LSP server contributions", async () => {
   const runtime = new PluginRuntime({
     projectRoot: "/tmp/project",
-    politHome: "/tmp/polit",
+    pilotHome: "/tmp/pilot",
     builtinPlugins: [
       {
         name: "builtin",
@@ -286,9 +286,9 @@ test("marketplace references resolve only local marketplace metadata and defer i
   assert.equal(resolveMarketplaceReference({ name: "community", plugin: "demo", source: "mcpb", url: "https://example.test/plugin.mcpb" }).status, "deferred");
 });
 
-test("marketplace validation blocks PolitDeck impersonation and unsafe names", () => {
+test("marketplace validation blocks PilotDeck impersonation and unsafe names", () => {
   assert.equal(validateMarketplaceName("community"), undefined);
-  assert.ok(validateMarketplaceName("politdeck-marketplace-new"));
+  assert.ok(validateMarketplaceName("pilotdeck-marketplace-new"));
   assert.ok(validateMarketplaceName("inline"));
   assert.ok(validateMarketplaceName("../bad"));
 });

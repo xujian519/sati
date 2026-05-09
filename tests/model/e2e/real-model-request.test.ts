@@ -1,17 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createModelRuntime } from "../../../src/model/index.js";
-import { loadPolitConfig } from "../../../src/polit/index.js";
+import { loadPilotConfig } from "../../../src/pilot/index.js";
 
-const RUN_REAL_MODEL_E2E = process.env.POLITDECK_RUN_REAL_MODEL_E2E === "1";
+const RUN_REAL_MODEL_E2E = process.env.PILOTDECK_RUN_REAL_MODEL_E2E === "1";
 
-test("reads PolitHome config and completes a real model request", async (t) => {
+test("reads PilotHome config and completes a real model request", async (t) => {
   if (!RUN_REAL_MODEL_E2E) {
-    t.skip("Set POLITDECK_RUN_REAL_MODEL_E2E=1 to run the real model E2E test.");
+    t.skip("Set PILOTDECK_RUN_REAL_MODEL_E2E=1 to run the real model E2E test.");
     return;
   }
 
-  const snapshot = loadPolitConfig();
+  const snapshot = loadPilotConfig();
   const { provider, model } = snapshot.config.agent.model;
   const runtime = createModelRuntime(snapshot.config.model);
 
@@ -24,7 +24,7 @@ test("reads PolitHome config and completes a real model request", async (t) => {
         content: [
           {
             type: "text",
-            text: "Reply with exactly: PolitDeck E2E OK",
+            text: "Reply with exactly: PilotDeck E2E OK",
           },
         ],
       },
@@ -46,6 +46,6 @@ test("reads PolitHome config and completes a real model request", async (t) => {
     .join("");
 
   assert.equal(response.role, "assistant");
-  assert.ok(text.includes("PolitDeck E2E OK"), `Unexpected model response: ${text}`);
+  assert.ok(text.includes("PilotDeck E2E OK"), `Unexpected model response: ${text}`);
   assert.ok(response.finishReason);
 });

@@ -1,5 +1,5 @@
-import type { PolitDeckHookInput } from "../protocol/input.js";
-import type { PolitDeckHookCommand } from "../protocol/settings.js";
+import type { PilotDeckHookInput } from "../protocol/input.js";
+import type { PilotDeckHookCommand } from "../protocol/settings.js";
 import { parseHookOutput } from "./parseHookOutput.js";
 import type { CommandHookExecutionResult } from "./CommandHookExecutor.js";
 
@@ -9,8 +9,8 @@ export class HttpHookExecutor {
   constructor(private readonly fetchImpl: HttpHookFetch = fetch) {}
 
   async execute(options: {
-    hook: Extract<PolitDeckHookCommand, { type: "http" }>;
-    hookInput: PolitDeckHookInput;
+    hook: Extract<PilotDeckHookCommand, { type: "http" }>;
+    hookInput: PilotDeckHookInput;
     env?: NodeJS.ProcessEnv;
     signal?: AbortSignal;
   }): Promise<CommandHookExecutionResult> {

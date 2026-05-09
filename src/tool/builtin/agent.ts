@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { CanonicalModelRequest, CanonicalUsage } from "../../model/index.js";
 import type { PermissionResult } from "../../permission/index.js";
-import { PolitDeckToolRuntimeError } from "../protocol/errors.js";
+import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
 import type {
-  PolitDeckSubagentForkApi,
-  PolitDeckToolDefinition,
-  PolitDeckToolExecutionOutput,
-  PolitDeckToolModelClient,
-  PolitDeckToolRuntimeContext,
+  PilotDeckSubagentForkApi,
+  PilotDeckToolDefinition,
+  PilotDeckToolExecutionOutput,
+  PilotDeckToolModelClient,
+  PilotDeckToolRuntimeContext,
 } from "../protocol/types.js";
 
 /**
@@ -49,28 +49,28 @@ export const BUILTIN_SUBAGENTS: Record<string, AgentSubagentDefinition> = {
     description:
       "General-purpose subagent for delegating bounded research / synthesis tasks. Returns a single text answer.",
     systemPrompt:
-      "You are a general-purpose subagent inside PolitDeck. Read the user's instructions, reason carefully, and produce a single concise text answer. Do not ask follow-up questions; do your best with the information given.",
+      "You are a general-purpose subagent inside PilotDeck. Read the user's instructions, reason carefully, and produce a single concise text answer. Do not ask follow-up questions; do your best with the information given.",
   },
   plan: {
     type: "plan",
     description:
       "Planning subagent. Given a task description, produce an actionable step-by-step plan without executing it.",
     systemPrompt:
-      "You are a planning subagent inside PolitDeck. Given a task, return a numbered plan of concrete steps a developer or operator could follow. Be specific. Do not perform the steps yourself; return the plan only.",
+      "You are a planning subagent inside PilotDeck. Given a task, return a numbered plan of concrete steps a developer or operator could follow. Be specific. Do not perform the steps yourself; return the plan only.",
   },
   verify: {
     type: "verify",
     description:
       "Verification subagent. Given a claim or proposed change, return a critique with specific concerns and recommended checks.",
     systemPrompt:
-      "You are a verification subagent inside PolitDeck. Given a proposal, change, or claim, return a structured critique with: (1) specific concerns, (2) recommended checks, (3) overall verdict. Be rigorous; flag risks even if minor.",
+      "You are a verification subagent inside PilotDeck. Given a proposal, change, or claim, return a structured critique with: (1) specific concerns, (2) recommended checks, (3) overall verdict. Be rigorous; flag risks even if minor.",
   },
   explore: {
     type: "explore",
     description:
       "Exploration subagent. Given a topic or question, return an overview of approaches, trade-offs, and pointers.",
     systemPrompt:
-      "You are an exploration subagent inside PolitDeck. Given a topic, return a structured overview: (a) common approaches, (b) trade-offs between them, (c) recommended next steps for someone unfamiliar with the area.",
+      "You are an exploration subagent inside PilotDeck. Given a topic, return a structured overview: (a) common approaches, (b) trade-offs between them, (c) recommended next steps for someone unfamiliar with the area.",
   },
 };
 
@@ -97,7 +97,7 @@ export type CreateAgentToolOptions = {
    * Override the model client for the *fallback* single-shot path. The full
    * fork path uses `context.subagent.fork(...)` and ignores this option.
    */
-  model?: PolitDeckToolModelClient;
+  model?: PilotDeckToolModelClient;
   /** Override which fallback subagent presets are available. */
   subagents?: Record<string, AgentSubagentDefinition>;
   provider?: string;
@@ -112,7 +112,7 @@ const DEFAULT_MODEL_FALLBACK = "moonshotai/kimi-k2.6";
 
 export function createAgentTool(
   options: CreateAgentToolOptions = {},
-): PolitDeckToolDefinition<AgentToolInput, AgentToolOutput> {
+): PilotDeckToolDefinition<AgentToolInput, AgentToolOutput> {
   const fallbackPresets = options.subagents ?? BUILTIN_SUBAGENTS;
 
   return {
@@ -207,23 +207,23 @@ export function createAgentTool(
 
 async function runFullFork(args: {
   input: AgentToolInput;
-  context: PolitDeckToolRuntimeContext;
+  context: PilotDeckToolRuntimeContext;
   requestedType: string;
   directive: string;
-  fork: PolitDeckSubagentForkApi;
-}): Promise<PolitDeckToolExecutionOutput<AgentToolOutput>> {
+  fork: PilotDeckSubagentForkApi;
+}): Promise<PilotDeckToolExecutionOutput<AgentToolOutput>> {
   const { input, context, requestedType, directive, fork } = args;
 
   if (!fork.isAllowedDefinition(requestedType)) {
     const allowed = fork.listDefinitions().map((d) => d.id).join(", ");
-    throw new PolitDeckToolRuntimeError(
+    throw new PilotDeckToolRuntimeError(
       "invalid_tool_input",
       `Unknown subagent_type "${requestedType}". Available: ${allowed}.`,
     );
   }
   const currentDepth = context.subagentDepth ?? fork.depth ?? 0;
   if (currentDepth >= fork.maxSubagentDepth) {
-    throw new PolitDeckToolRuntimeError(
+    throw new PilotDeckToolRuntimeError(
       "tool_execution_failed",
       `subagent_depth_exceeded (depth=${currentDepth}, max=${fork.maxSubagentDepth}); nested fork rejected.`,
       { errorCode: "subagent_depth_exceeded" },
@@ -237,7 +237,7 @@ async function runFullFork(args: {
     abortSignal: context.abortSignal,
   });
   if (context.abortSignal?.aborted) {
-    throw new PolitDeckToolRuntimeError(
+    throw new PilotDeckToolRuntimeError(
       "tool_aborted",
       "agent subagent aborted before completion.",
     );
@@ -272,16 +272,16 @@ async function runFullFork(args: {
 
 async function runFallback(args: {
   input: AgentToolInput;
-  context: PolitDeckToolRuntimeContext;
+  context: PilotDeckToolRuntimeContext;
   requestedType: string;
   directive: string;
   presets: Record<string, AgentSubagentDefinition>;
-  model?: PolitDeckToolModelClient;
+  model?: PilotDeckToolModelClient;
   provider: string;
   modelId: string;
   maxOutputTokens: number;
   temperature: number;
-}): Promise<PolitDeckToolExecutionOutput<AgentToolOutput>> {
+}): Promise<PilotDeckToolExecutionOutput<AgentToolOutput>> {
   const {
     input,
     context,
@@ -297,7 +297,7 @@ async function runFallback(args: {
 
   const preset = presets[requestedType];
   if (!preset) {
-    throw new PolitDeckToolRuntimeError(
+    throw new PilotDeckToolRuntimeError(
       "invalid_tool_input",
       `Unknown subagent_type "${requestedType}". Available: ${Object.keys(
         presets,
@@ -306,7 +306,7 @@ async function runFallback(args: {
   }
   const model = explicitModel ?? context.model;
   if (!model) {
-    throw new PolitDeckToolRuntimeError(
+    throw new PilotDeckToolRuntimeError(
       "unsupported_tool",
       "agent tool requires a model client. Configure dependencies.model on AgentRuntimeDependencies, pass createAgentTool({ model }), or wire context.subagent for full-fork mode.",
     );
@@ -325,7 +325,7 @@ async function runFallback(args: {
   let usage: CanonicalUsage | undefined;
   for await (const event of model.stream(request, context.abortSignal)) {
     if (context.abortSignal?.aborted) {
-      throw new PolitDeckToolRuntimeError(
+      throw new PilotDeckToolRuntimeError(
         "tool_aborted",
         "agent subagent aborted before completion.",
       );
@@ -338,7 +338,7 @@ async function runFallback(args: {
         usage = event.usage;
         break;
       case "error":
-        throw new PolitDeckToolRuntimeError(
+        throw new PilotDeckToolRuntimeError(
           "tool_execution_failed",
           `agent subagent model error: ${event.error.message}`,
           { errorCode: event.error.code },

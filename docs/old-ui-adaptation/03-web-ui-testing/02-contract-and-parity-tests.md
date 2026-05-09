@@ -42,7 +42,7 @@ Parity 测试同时运行 legacy runner 和 new runner：
 shared scenario
   -> legacy old_ui runner
   -> normalized legacy report
-  -> new PolitDeck runner
+  -> new PilotDeck runner
   -> normalized new report
   -> deep compare
 ```

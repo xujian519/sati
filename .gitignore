@@ -148,5 +148,5 @@ artifacts/
 # third-party
 third-party/
 
-# Project-local PolitDeck overrides (per-project .politdeck/politdeck.yaml etc)
-.politdeck/
+# Project-local PilotDeck overrides (per-project .pilotdeck/pilotdeck.yaml etc)
+.pilotdeck/

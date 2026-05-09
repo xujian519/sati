@@ -3,33 +3,33 @@
  * Mirrors `third-party/claude-code-main/src/tasks/LocalShellTask` (T1-T11).
  */
 
-export type PolitDeckBackgroundTaskStatus =
+export type PilotDeckBackgroundTaskStatus =
   | "pending"
   | "running"
   | "completed"
   | "failed"
   | "cancelled";
 
-export type PolitDeckBackgroundTaskKind = "bash" | "monitor";
+export type PilotDeckBackgroundTaskKind = "bash" | "monitor";
 
 /**
  * State envelope for a single background bash task. The shape is a strict
- * superset of legacy `LocalShellTaskState` for the fields PolitDeck actually
+ * superset of legacy `LocalShellTaskState` for the fields PilotDeck actually
  * uses; legacy-only "task" classes (`local_agent`, `remote`) are not part of
  * this PR (D-tier).
  */
-export type PolitDeckBackgroundBashTask = {
+export type PilotDeckBackgroundBashTask = {
   taskId: string;
   type: "local_bash";
   /** T4 — owning agent; agent exit triggers `killForAgent(agentId)`. */
   agentId?: string;
   /** T5 — UI badge variant (`bash` plain task vs. long-running `monitor`). */
-  kind: PolitDeckBackgroundTaskKind;
+  kind: PilotDeckBackgroundTaskKind;
   command: string;
   cwd: string;
   /** Set once the child process has been spawned. */
   pid?: number;
-  status: PolitDeckBackgroundTaskStatus;
+  status: PilotDeckBackgroundTaskStatus;
   exitCode?: number | null;
   /** T6 — flipped to `true` once the runtime has dispatched a completion attachment. */
   completionStatusSentInAttachment: boolean;
@@ -45,7 +45,7 @@ export type PolitDeckBackgroundBashTask = {
   outputBytes: number;
 };
 
-export type PolitDeckTaskOutputSlice = {
+export type PilotDeckTaskOutputSlice = {
   content: string;
   /** Offset into the combined byte stream from which the next read may resume. */
   nextOffset: number;
@@ -55,8 +55,8 @@ export type PolitDeckTaskOutputSlice = {
   truncated: boolean;
 };
 
-export type PolitDeckBackgroundTaskListFilter = {
+export type PilotDeckBackgroundTaskListFilter = {
   agentId?: string;
-  status?: PolitDeckBackgroundTaskStatus | PolitDeckBackgroundTaskStatus[];
-  kind?: PolitDeckBackgroundTaskKind;
+  status?: PilotDeckBackgroundTaskStatus | PilotDeckBackgroundTaskStatus[];
+  kind?: PilotDeckBackgroundTaskKind;
 };

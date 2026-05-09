@@ -20,15 +20,15 @@ TuiApp
 
 ### 输入
 
-准备独立 `POLIT_HOME` 和 memory 根目录：
+准备独立 `PILOT_HOME` 和 memory 根目录：
 
 ```bash
-export POLIT_HOME=/tmp/politdeck-tui-memory
-export POLITDECK_MEMORY_ROOT=/tmp/politdeck-tui-memory-store
-mkdir -p "$POLIT_HOME" "$POLITDECK_MEMORY_ROOT"
+export PILOT_HOME=/tmp/pilotdeck-tui-memory
+export PILOTDECK_MEMORY_ROOT=/tmp/pilotdeck-tui-memory-store
+mkdir -p "$PILOT_HOME" "$PILOTDECK_MEMORY_ROOT"
 ```
 
-在 `$POLIT_HOME/politdeck.yaml` 中启用 memory：
+在 `$PILOT_HOME/pilotdeck.yaml` 中启用 memory：
 
 ```yaml
 agent:
@@ -37,7 +37,7 @@ agent:
 memory:
   enabled: true
   provider: edgeclaw
-  rootDir: /tmp/politdeck-tui-memory-store
+  rootDir: /tmp/pilotdeck-tui-memory-store
   captureStrategy: full_session
   includeAssistant: true
   maxMessageChars: 4000
@@ -69,13 +69,13 @@ model:
 
 ```bash
 npm run build
-node dist/src/cli/politdeck.js tui
+node dist/src/cli/pilotdeck.js tui
 ```
 
 第一轮输入：
 
 ```text
-请记住一个测试事实：PolitDeck TUI memory 验收代号是 BLUE-HERON-742。只回复 OK。
+请记住一个测试事实：PilotDeck TUI memory 验收代号是 BLUE-HERON-742。只回复 OK。
 ```
 
 等待完成后输入：
@@ -87,7 +87,7 @@ node dist/src/cli/politdeck.js tui
 在新会话里输入：
 
 ```text
-只根据你能检索到的记忆回答：PolitDeck TUI memory 验收代号是什么？如果没有相关记忆，只回答 UNKNOWN。
+只根据你能检索到的记忆回答：PilotDeck TUI memory 验收代号是什么？如果没有相关记忆，只回答 UNKNOWN。
 ```
 
 ### 预期现象
@@ -111,13 +111,13 @@ BLUE-HERON-742
 
 ### 输入
 
-复用相同 `POLIT_HOME`，但关闭 memory，并使用新的 memory root 避免历史数据干扰：
+复用相同 `PILOT_HOME`，但关闭 memory，并使用新的 memory root 避免历史数据干扰：
 
 ```yaml
 memory:
   enabled: false
   provider: edgeclaw
-  rootDir: /tmp/politdeck-tui-memory-disabled-store
+  rootDir: /tmp/pilotdeck-tui-memory-disabled-store
 ```
 
 启动 TUI，输入：
@@ -152,7 +152,7 @@ memory:
 UNKNOWN
 ```
 
-如果模型输出 `DISABLED-MEMORY-991`，需要检查是否仍在同一会话、是否复用了启用 memory 的 rootDir，或者模型是否从 prompt 外部信息中猜测。该用例应使用全新 `POLIT_HOME` 和 rootDir 复测。
+如果模型输出 `DISABLED-MEMORY-991`，需要检查是否仍在同一会话、是否复用了启用 memory 的 rootDir，或者模型是否从 prompt 外部信息中猜测。该用例应使用全新 `PILOT_HOME` 和 rootDir 复测。
 
 ## 用例 3：memory 检索失败不阻断 turn
 
@@ -161,9 +161,9 @@ UNKNOWN
 把 `memory.rootDir` 指向一个当前进程无权写入或无法创建的路径。macOS 本地可使用只读挂载路径；如果没有稳定的只读路径，可临时把目录创建为不可写：
 
 ```bash
-export POLIT_HOME=/tmp/politdeck-tui-memory-error
-mkdir -p "$POLIT_HOME" /tmp/politdeck-tui-memory-readonly
-chmod 500 /tmp/politdeck-tui-memory-readonly
+export PILOT_HOME=/tmp/pilotdeck-tui-memory-error
+mkdir -p "$PILOT_HOME" /tmp/pilotdeck-tui-memory-readonly
+chmod 500 /tmp/pilotdeck-tui-memory-readonly
 ```
 
 配置：
@@ -172,7 +172,7 @@ chmod 500 /tmp/politdeck-tui-memory-readonly
 memory:
   enabled: true
   provider: edgeclaw
-  rootDir: /tmp/politdeck-tui-memory-readonly
+  rootDir: /tmp/pilotdeck-tui-memory-readonly
   captureStrategy: full_session
 ```
 
@@ -185,7 +185,7 @@ memory:
 ### 预期现象
 
 - TUI turn 不应因为 memory 失败而崩溃。
-- transcript 中仍出现 `PolitDeck` 回复。
+- transcript 中仍出现 `PilotDeck` 回复。
 - 允许 stderr 或日志中出现 memory provider 相关 warning。
 - turn 完成后 `thinking` 消失。
 
@@ -200,7 +200,7 @@ MEMORY-NON-FATAL-OK
 测试完成后恢复权限：
 
 ```bash
-chmod 700 /tmp/politdeck-tui-memory-readonly
+chmod 700 /tmp/pilotdeck-tui-memory-readonly
 ```
 
 ## 用例 4：captureStrategy 影响召回范围
@@ -213,7 +213,7 @@ chmod 700 /tmp/politdeck-tui-memory-readonly
 memory:
   enabled: true
   provider: edgeclaw
-  rootDir: /tmp/politdeck-tui-memory-last-turn
+  rootDir: /tmp/pilotdeck-tui-memory-last-turn
   captureStrategy: last_turn
   includeAssistant: false
 ```

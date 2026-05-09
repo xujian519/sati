@@ -13,7 +13,7 @@ test("intentional differences are registered with release risk metadata", () => 
   for (const difference of intentionalDifferences) {
     assert.ok(difference.id);
     assert.ok(difference.legacyBehavior);
-    assert.ok(difference.politdeckBehavior);
+    assert.ok(difference.pilotdeckBehavior);
     assert.ok(difference.reason);
     if (difference.risk === "higher") {
       assert.equal(difference.reviewRequiredBeforeRelease, true);

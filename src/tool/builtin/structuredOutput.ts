@@ -1,10 +1,10 @@
-import type { PolitDeckToolDefinition } from "../protocol/types.js";
+import type { PilotDeckToolDefinition } from "../protocol/types.js";
 
 export type StructuredOutputInput = {
   value: unknown;
 };
 
-export function createStructuredOutputTool(): PolitDeckToolDefinition<StructuredOutputInput> {
+export function createStructuredOutputTool(): PilotDeckToolDefinition<StructuredOutputInput> {
   return {
     name: "structured_output",
     aliases: ["StructuredOutput"],

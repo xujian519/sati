@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Gateway, GatewayChannelKey, GatewayEvent } from "../../gateway/index.js";
-import { getPolitProjectChatDir } from "../../polit/paths.js";
+import { getPilotProjectChatDir } from "../../pilot/paths.js";
 import type { AlwaysOnConfig } from "../config/parseAlwaysOnConfig.js";
 import { buildFallbackReport, type ReportMetadata } from "../contracts/ReportContract.js";
 import { AlwaysOnError } from "../protocol/errors.js";
@@ -189,7 +189,7 @@ export class DiscoveryFire {
           createdAt: startedAt.toISOString(),
           workspaceCwd: workspace.cwd,
           workspaceStrategy: workspace.strategy,
-          chatDir: getPolitProjectChatDir(this.deps.projectKey, this.deps.paths.politHome),
+          chatDir: getPilotProjectChatDir(this.deps.projectKey, this.deps.paths.pilotHome),
         }),
         mode: "default",
       });

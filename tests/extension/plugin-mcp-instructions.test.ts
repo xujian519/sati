@@ -5,9 +5,9 @@ import {
   PluginRuntime,
   truncateMcpInstructionString,
 } from "../../src/extension/index.js";
-import type { PolitDeckLoadedPlugin } from "../../src/extension/index.js";
+import type { PilotDeckLoadedPlugin } from "../../src/extension/index.js";
 
-function makePlugin(name: string, mcpServers?: Record<string, unknown>): PolitDeckLoadedPlugin {
+function makePlugin(name: string, mcpServers?: Record<string, unknown>): PilotDeckLoadedPlugin {
   return {
     name,
     path: `/plugins/${name}`,
@@ -17,10 +17,10 @@ function makePlugin(name: string, mcpServers?: Record<string, unknown>): PolitDe
   };
 }
 
-function newRuntime(plugins: PolitDeckLoadedPlugin[]): PluginRuntime {
+function newRuntime(plugins: PilotDeckLoadedPlugin[]): PluginRuntime {
   const runtime = new PluginRuntime({
     projectRoot: "/tmp/project",
-    politHome: "/tmp/polit",
+    pilotHome: "/tmp/pilot",
     builtinPlugins: plugins,
     builtinPluginsEnabled: Object.fromEntries(plugins.map((p) => [p.name, true])),
   });

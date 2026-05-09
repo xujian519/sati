@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createEditFileTool, createWriteFileTool } from "../../src/tool/index.js";
-import { createPolitDeckTempWorkspace } from "../helpers/filesystem.js";
-import { createPolitDeckToolRuntimeFixture } from "../helpers/tool.js";
+import { createPilotDeckTempWorkspace } from "../helpers/filesystem.js";
+import { createPilotDeckToolRuntimeFixture } from "../helpers/tool.js";
 
 test("edit_file replaces one exact occurrence and replaceAll replaces all", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({ "a.txt": "one two one" });
+  const workspace = await createPilotDeckTempWorkspace({ "a.txt": "one two one" });
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createEditFileTool()],
     cwd: workspace.cwd,
     permissionMode: "acceptEdits",
@@ -33,9 +33,9 @@ test("edit_file replaces one exact occurrence and replaceAll replaces all", asyn
 });
 
 test("write_file creates files and denies overwrite without explicit flag", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({ "existing.txt": "old" });
+  const workspace = await createPilotDeckTempWorkspace({ "existing.txt": "old" });
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createWriteFileTool()],
     cwd: workspace.cwd,
     permissionMode: "acceptEdits",
@@ -66,9 +66,9 @@ test("write_file creates files and denies overwrite without explicit flag", asyn
 });
 
 test("write tools are denied in plan mode before execution", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createWriteFileTool()],
     cwd: workspace.cwd,
     permissionMode: "plan",

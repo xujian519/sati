@@ -6,8 +6,8 @@ import {
   createAskUserQuestionTool,
   validateHtmlPreview,
 } from "../../src/tool/index.js";
-import { createPolitDeckTempWorkspace } from "../helpers/filesystem.js";
-import { createPolitDeckToolRuntimeFixture } from "../helpers/tool.js";
+import { createPilotDeckTempWorkspace } from "../helpers/filesystem.js";
+import { createPilotDeckToolRuntimeFixture } from "../helpers/tool.js";
 
 test("B1.E5 ask_user_question advertises shouldDefer:true", () => {
   const def = createAskUserQuestionTool();
@@ -45,9 +45,9 @@ test("B1.E_HTML validateHtmlPreview rejects full document, script, style; accept
 });
 
 test("B1.E1 schema enforces 1-4 questions and 2-4 options", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createAskUserQuestionTool()],
     cwd: workspace.cwd,
     elicitation: new InMemoryElicitationChannel(),
@@ -80,9 +80,9 @@ test("B1.E1 schema enforces 1-4 questions and 2-4 options", async (t) => {
 });
 
 test("B1.E3 uniqueness — duplicate question texts rejected", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createAskUserQuestionTool()],
     cwd: workspace.cwd,
     elicitation: new InMemoryElicitationChannel({ "Same?": "A" }),
@@ -118,9 +118,9 @@ test("B1.E3 uniqueness — duplicate question texts rejected", async (t) => {
 });
 
 test("B1.E4 header length limit enforced via validateInput", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createAskUserQuestionTool()],
     cwd: workspace.cwd,
     elicitation: new InMemoryElicitationChannel({ "What?": "A" }),
@@ -149,9 +149,9 @@ test("B1.E4 header length limit enforced via validateInput", async (t) => {
 });
 
 test("B1.E10 missing elicitation channel → unsupported_tool", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createAskUserQuestionTool()],
     cwd: workspace.cwd,
     // no elicitation channel
@@ -182,9 +182,9 @@ test("B1.E10 missing elicitation channel → unsupported_tool", async (t) => {
 });
 
 test("B1 happy path: in-memory channel returns answer; output uses legacy format", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createAskUserQuestionTool()],
     cwd: workspace.cwd,
     elicitation: new InMemoryElicitationChannel({ "Which?": "Option B" }),

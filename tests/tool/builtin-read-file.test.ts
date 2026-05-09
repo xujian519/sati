@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createReadFileTool } from "../../src/tool/index.js";
-import { createPolitDeckTempWorkspace } from "../helpers/filesystem.js";
-import { createPolitDeckToolRuntimeFixture } from "../helpers/tool.js";
+import { createPilotDeckTempWorkspace } from "../helpers/filesystem.js";
+import { createPilotDeckToolRuntimeFixture } from "../helpers/tool.js";
 
 test("read_file reads text files with offset and limit", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({ "src/a.txt": "one\ntwo\nthree\nfour" });
+  const workspace = await createPilotDeckTempWorkspace({ "src/a.txt": "one\ntwo\nthree\nfour" });
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createReadFileTool()],
     cwd: workspace.cwd,
   });
@@ -24,9 +24,9 @@ test("read_file reads text files with offset and limit", async (t) => {
 });
 
 test("read_file returns controlled errors for missing and outside paths", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createReadFileTool()],
     cwd: workspace.cwd,
   });

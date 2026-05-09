@@ -1,8 +1,8 @@
 import path from "node:path";
-import type { PolitDeckToolDefinition } from "../protocol/types.js";
-import { PolitDeckToolRuntimeError } from "../protocol/errors.js";
+import type { PilotDeckToolDefinition } from "../protocol/types.js";
+import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
 import { globPatternToRegExp } from "./filesystem/globPattern.js";
-import { resolvePolitDeckWorkspacePath } from "./filesystem/pathSafety.js";
+import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
 import { walkFiles } from "./filesystem/walk.js";
 
 export type GlobInput = {
@@ -11,7 +11,7 @@ export type GlobInput = {
   limit?: number;
 };
 
-export function createGlobTool(): PolitDeckToolDefinition<GlobInput> {
+export function createGlobTool(): PilotDeckToolDefinition<GlobInput> {
   return {
     name: "glob",
     aliases: ["Glob"],
@@ -31,9 +31,9 @@ export function createGlobTool(): PolitDeckToolDefinition<GlobInput> {
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     execute: async (input, context) => {
-      const resolved = resolvePolitDeckWorkspacePath(input.path ?? ".", context, { mustExist: true });
+      const resolved = resolvePilotDeckWorkspacePath(input.path ?? ".", context, { mustExist: true });
       if (!resolved.ok) {
-        throw new PolitDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
+        throw new PilotDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
       }
 
       const matcher = globPatternToRegExp(input.pattern);

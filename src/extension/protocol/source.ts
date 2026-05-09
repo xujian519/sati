@@ -1,1 +1,1 @@
-export type PolitDeckExtensionSource = "builtin" | "global" | "project";
+export type PilotDeckExtensionSource = "builtin" | "global" | "project";

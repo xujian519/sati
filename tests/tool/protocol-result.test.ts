@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { toCanonicalToolResultBlock, type PolitDeckToolResult } from "../../src/tool/index.js";
+import { toCanonicalToolResultBlock, type PilotDeckToolResult } from "../../src/tool/index.js";
 
 test("maps success and error results to canonical tool_result blocks", () => {
-  const success: PolitDeckToolResult = {
+  const success: PilotDeckToolResult = {
     type: "success",
     toolCallId: "call-1",
     toolName: "read_file",
@@ -11,7 +11,7 @@ test("maps success and error results to canonical tool_result blocks", () => {
     startedAt: "2026-01-01T00:00:00.000Z",
     completedAt: "2026-01-01T00:00:00.000Z",
   };
-  const error: PolitDeckToolResult = {
+  const error: PilotDeckToolResult = {
     type: "error",
     toolCallId: "call-2",
     toolName: "write_file",
@@ -26,7 +26,7 @@ test("maps success and error results to canonical tool_result blocks", () => {
 });
 
 test("injects stable text for empty content", () => {
-  const result: PolitDeckToolResult = {
+  const result: PilotDeckToolResult = {
     type: "success",
     toolCallId: "call-1",
     toolName: "empty",

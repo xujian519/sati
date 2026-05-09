@@ -3,26 +3,26 @@ import type { LifecycleRuntime } from "../../src/lifecycle/index.js";
 import {
   ToolRegistry,
   ToolRuntime,
-  type PolitDeckElicitationChannel,
-  type PolitDeckToolAuditRecorder,
-  type PolitDeckToolDefinition,
-  type PolitDeckToolExecutionOutput,
-  type PolitDeckToolFileHistorySink,
-  type PolitDeckToolInputSchema,
-  type PolitDeckToolRuntimeContext,
+  type PilotDeckElicitationChannel,
+  type PilotDeckToolAuditRecorder,
+  type PilotDeckToolDefinition,
+  type PilotDeckToolExecutionOutput,
+  type PilotDeckToolFileHistorySink,
+  type PilotDeckToolInputSchema,
+  type PilotDeckToolRuntimeContext,
 } from "../../src/tool/index.js";
 
-export function createPolitDeckTestTool(options: {
+export function createPilotDeckTestTool(options: {
   name: string;
   aliases?: string[];
-  inputSchema?: PolitDeckToolInputSchema;
+  inputSchema?: PilotDeckToolInputSchema;
   readOnly?: boolean;
   concurrencySafe?: boolean;
-  kind?: PolitDeckToolDefinition["kind"];
+  kind?: PilotDeckToolDefinition["kind"];
   permissionResult?: PermissionResult;
   maxResultBytes?: number;
-  execute?: (input: unknown, context: PolitDeckToolRuntimeContext) => Promise<PolitDeckToolExecutionOutput>;
-}): PolitDeckToolDefinition {
+  execute?: (input: unknown, context: PilotDeckToolRuntimeContext) => Promise<PilotDeckToolExecutionOutput>;
+}): PilotDeckToolDefinition {
   return {
     name: options.name,
     aliases: options.aliases,
@@ -41,22 +41,22 @@ export function createPolitDeckTestTool(options: {
   };
 }
 
-export function createPolitDeckToolRuntimeFixture(options?: {
-  tools?: PolitDeckToolDefinition[];
+export function createPilotDeckToolRuntimeFixture(options?: {
+  tools?: PilotDeckToolDefinition[];
   permissionMode?: PermissionMode;
   canPrompt?: boolean;
-  auditRecorder?: PolitDeckToolAuditRecorder;
+  auditRecorder?: PilotDeckToolAuditRecorder;
   maxResultBytes?: number;
   cwd?: string;
   lifecycle?: LifecycleRuntime;
-  elicitation?: PolitDeckElicitationChannel;
-  fileHistory?: PolitDeckToolFileHistorySink;
+  elicitation?: PilotDeckElicitationChannel;
+  fileHistory?: PilotDeckToolFileHistorySink;
   messageId?: string;
 }): {
   registry: ToolRegistry;
   permissionRuntime: PermissionRuntime;
   toolRuntime: ToolRuntime;
-  context: PolitDeckToolRuntimeContext;
+  context: PilotDeckToolRuntimeContext;
 } {
   const registry = new ToolRegistry();
   for (const tool of options?.tools ?? []) {
@@ -66,7 +66,7 @@ export function createPolitDeckToolRuntimeFixture(options?: {
   const permissionRuntime = new PermissionRuntime();
   const toolRuntime = new ToolRuntime(registry, permissionRuntime, options?.lifecycle);
   const cwd = options?.cwd ?? process.cwd();
-  const context: PolitDeckToolRuntimeContext = {
+  const context: PilotDeckToolRuntimeContext = {
     sessionId: "test-session",
     turnId: "test-turn",
     cwd,

@@ -1,4 +1,4 @@
-import type { PolitDeckToolBehaviorScenario } from "./types.js";
+import type { PilotDeckToolBehaviorScenario } from "./types.js";
 
 const mcpSource = [
   {
@@ -11,11 +11,11 @@ const mcpSource = [
   },
 ];
 
-export const mcpScenarios: PolitDeckToolBehaviorScenario[] = [
+export const mcpScenarios: PilotDeckToolBehaviorScenario[] = [
   {
     name: "mcp wire name is normalized",
     legacyToolName: "mcp",
-    politdeckToolName: "mcp__my_server__read_thing",
+    pilotdeckToolName: "mcp__my_server__read_thing",
     input: {},
     permissionMode: "default",
     parity: "must_match",
@@ -26,7 +26,7 @@ export const mcpScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "mcp oauth auth tool is deferred",
     legacyToolName: "mcp__server__authenticate",
-    politdeckToolName: "mcp__server__authenticate",
+    pilotdeckToolName: "mcp__server__authenticate",
     input: {},
     permissionMode: "default",
     parity: "deferred",

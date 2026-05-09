@@ -1,15 +1,15 @@
 import { spawn } from "node:child_process";
-import type { PolitDeckHookInput } from "../protocol/input.js";
-import type { PolitDeckHookCommand } from "../protocol/settings.js";
+import type { PilotDeckHookInput } from "../protocol/input.js";
+import type { PilotDeckHookCommand } from "../protocol/settings.js";
 import { parseHookOutput } from "./parseHookOutput.js";
-import type { PolitDeckHookOutput } from "../protocol/output.js";
+import type { PilotDeckHookOutput } from "../protocol/output.js";
 
-export const POLITDECK_HOOK_TIMEOUT_MS = 10 * 60 * 1000;
-export const POLITDECK_SESSION_END_HOOK_TIMEOUT_MS = 1500;
+export const PILOTDECK_HOOK_TIMEOUT_MS = 10 * 60 * 1000;
+export const PILOTDECK_SESSION_END_HOOK_TIMEOUT_MS = 1500;
 
 export type CommandHookExecutionOptions = {
-  hook: Extract<PolitDeckHookCommand, { type: "command" }>;
-  hookInput: PolitDeckHookInput;
+  hook: Extract<PilotDeckHookCommand, { type: "command" }>;
+  hookInput: PilotDeckHookInput;
   cwd: string;
   env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
@@ -21,12 +21,12 @@ export type CommandHookExecutionResult = {
   stderr: string;
   exitCode?: number;
   outcome: "success" | "blocking" | "non_blocking_error" | "cancelled" | "timeout";
-  output: PolitDeckHookOutput;
+  output: PilotDeckHookOutput;
 };
 
 export class CommandHookExecutor {
   execute(options: CommandHookExecutionOptions): Promise<CommandHookExecutionResult> {
-    const timeoutMs = options.timeoutMs ?? POLITDECK_HOOK_TIMEOUT_MS;
+    const timeoutMs = options.timeoutMs ?? PILOTDECK_HOOK_TIMEOUT_MS;
     const child = spawn(options.hook.command, {
       cwd: options.cwd,
       env: options.env,

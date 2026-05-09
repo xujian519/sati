@@ -1,4 +1,4 @@
-import type { PolitDeckToolBehaviorScenario } from "./types.js";
+import type { PilotDeckToolBehaviorScenario } from "./types.js";
 
 const bashSource = [
   {
@@ -11,11 +11,11 @@ const bashSource = [
   },
 ];
 
-export const bashExecutionScenarios: PolitDeckToolBehaviorScenario[] = [
+export const bashExecutionScenarios: PilotDeckToolBehaviorScenario[] = [
   {
     name: "safe shell command succeeds",
     legacyToolName: "Bash",
-    politdeckToolName: "bash",
+    pilotdeckToolName: "bash",
     input: { command: "pwd" },
     permissionMode: "default",
     parity: "must_match",
@@ -25,7 +25,7 @@ export const bashExecutionScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "non-zero exit is returned as tool output",
     legacyToolName: "Bash",
-    politdeckToolName: "bash",
+    pilotdeckToolName: "bash",
     input: { command: "sh -c 'exit 2'" },
     permissionMode: "default",
     parity: "must_match",
@@ -36,7 +36,7 @@ export const bashExecutionScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "dangerous shell command is denied in bypass",
     legacyToolName: "Bash",
-    politdeckToolName: "bash",
+    pilotdeckToolName: "bash",
     input: { command: "sudo whoami" },
     permissionMode: "bypassPermissions",
     parity: "must_match",
@@ -47,12 +47,12 @@ export const bashExecutionScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "background bash is deferred",
     legacyToolName: "Bash",
-    politdeckToolName: "bash",
+    pilotdeckToolName: "bash",
     input: { command: "sleep 60", runInBackground: true },
     permissionMode: "default",
     parity: "deferred",
     source: bashSource,
     deferredUntil: "task-runtime-phase",
-    notes: "PolitDeck Phase 1 does not implement background task handles.",
+    notes: "PilotDeck Phase 1 does not implement background task handles.",
   },
 ];

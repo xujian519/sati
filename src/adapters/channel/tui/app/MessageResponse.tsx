@@ -1,13 +1,13 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { TuiMessage } from "./types.js";
-import { politDeckDarkBlueTheme } from "./theme.js";
+import { pilotDeckDarkBlueTheme } from "./theme.js";
 
 export function MessageResponse({ message }: { message: TuiMessage }): React.ReactNode {
   if (message.role === "user") {
     return (
       <Box flexDirection="column" marginTop={1}>
-        <Text color={politDeckDarkBlueTheme.brandAccent} bold>
+        <Text color={pilotDeckDarkBlueTheme.brandAccent} bold>
           You
         </Text>
         <Text>{message.text.trimEnd()}</Text>
@@ -18,10 +18,10 @@ export function MessageResponse({ message }: { message: TuiMessage }): React.Rea
   if (message.role === "assistant") {
     return (
       <Box flexDirection="column" marginTop={1}>
-        <Text color={politDeckDarkBlueTheme.brand} bold>
-          PolitDeck
+        <Text color={pilotDeckDarkBlueTheme.brand} bold>
+          PilotDeck
         </Text>
-        <Text color={politDeckDarkBlueTheme.text}>{message.text.trim()}</Text>
+        <Text color={pilotDeckDarkBlueTheme.text}>{message.text.trim()}</Text>
       </Box>
     );
   }
@@ -29,21 +29,21 @@ export function MessageResponse({ message }: { message: TuiMessage }): React.Rea
   if (message.role === "system") {
     return (
       <Box flexDirection="row">
-        <Text color={politDeckDarkBlueTheme.subtle}>{message.text}</Text>
+        <Text color={pilotDeckDarkBlueTheme.subtle}>{message.text}</Text>
       </Box>
     );
   }
 
   const color =
     message.role === "error"
-      ? politDeckDarkBlueTheme.error
+      ? pilotDeckDarkBlueTheme.error
       : message.ok === false
-        ? politDeckDarkBlueTheme.error
-        : politDeckDarkBlueTheme.success;
+        ? pilotDeckDarkBlueTheme.error
+        : pilotDeckDarkBlueTheme.success;
 
   return (
     <Box flexDirection="row" flexShrink={0}>
-      <Text color={politDeckDarkBlueTheme.subtle}>  ⎿  </Text>
+      <Text color={pilotDeckDarkBlueTheme.subtle}>  ⎿  </Text>
       <Box flexGrow={1}>
         <Text color={color}>{message.text.trim()}</Text>
       </Box>

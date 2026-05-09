@@ -8,7 +8,7 @@ import type {
   RouterModelRef,
 } from "./config/schema.js";
 import type {
-  PolitDeckCustomRouter,
+  PilotDeckCustomRouter,
   CustomRouterRegistry,
 } from "./customRouter/customRouter.js";
 import { noopCustomRouterRegistry } from "./customRouter/customRouter.js";
@@ -80,7 +80,7 @@ export function createRouterRuntime(
     if (!config.customRouter) {
       return undefined;
     }
-    const router: PolitDeckCustomRouter | undefined = customRouters.lookupRouter(
+    const router: PilotDeckCustomRouter | undefined = customRouters.lookupRouter(
       config.customRouter.extensionId,
     );
     if (!router) {
@@ -97,7 +97,7 @@ export function createRouterRuntime(
       });
     } catch (error) {
       events.emit({
-        type: "politdeck_router_custom_failed",
+        type: "pilotdeck_router_custom_failed",
         sessionId: input.sessionId,
         extensionId: config.customRouter.extensionId,
         reason: error instanceof Error ? error.message : String(error),
@@ -151,7 +151,7 @@ export function createRouterRuntime(
       if (tokenSaver) {
         if (tokenSaver.failureReason) {
           events.emit({
-            type: "politdeck_router_token_saver_failed",
+            type: "pilotdeck_router_token_saver_failed",
             sessionId: input.sessionId,
             reason: tokenSaver.failureReason,
             fallbackTier: tokenSaver.tier,
@@ -245,7 +245,7 @@ export function createRouterRuntime(
     });
 
     events.emit({
-      type: "politdeck_router_decision",
+      type: "pilotdeck_router_decision",
       sessionId: input.sessionId,
       decision,
     });
@@ -356,7 +356,7 @@ export function createRouterRuntime(
             if (attemptIndex < attempts.length - 1) {
               const next = attempts[attemptIndex + 1];
               events.emit({
-                type: "politdeck_router_fallback",
+                type: "pilotdeck_router_fallback",
                 sessionId: ctx.sessionId,
                 turnId: ctx.turnId,
                 scenarioType: attemptDecision.scenarioType,
@@ -386,7 +386,7 @@ export function createRouterRuntime(
           zeroUsageAttempt < zeroUsageMax
         ) {
           events.emit({
-            type: "politdeck_router_zero_usage_retry",
+            type: "pilotdeck_router_zero_usage_retry",
             sessionId: ctx.sessionId,
             turnId: ctx.turnId,
             attempt: zeroUsageAttempt,
@@ -424,7 +424,7 @@ export function createRouterRuntime(
 
     if (lastError && lastAttempt) {
       events.emit({
-        type: "politdeck_router_execute_failed",
+        type: "pilotdeck_router_execute_failed",
         sessionId: ctx.sessionId,
         turnId: ctx.turnId,
         scenarioType: lastDecision.scenarioType,

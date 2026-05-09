@@ -9,31 +9,31 @@ import {
   HookRuntime,
   HttpHookExecutor,
   PromptHookExecutor,
-  type PolitDeckHookInput,
-  type PolitDeckHooksSettings,
+  type PilotDeckHookInput,
+  type PilotDeckHooksSettings,
 } from "../../../src/extension/index.js";
 import type { AgentRouterRuntime } from "../../../src/agent/index.js";
 import { LifecycleRuntime } from "../../../src/lifecycle/index.js";
 import { createModelRuntime, type CanonicalModelEvent, type CanonicalModelRequest } from "../../../src/model/index.js";
 import { createDefaultPermissionContext } from "../../../src/permission/index.js";
-import { loadPolitConfig } from "../../../src/polit/index.js";
+import { loadPilotConfig } from "../../../src/pilot/index.js";
 import { createRouterRuntime } from "../../../src/router/index.js";
-import { ToolRegistry, type PolitDeckToolDefinition } from "../../../src/tool/index.js";
+import { ToolRegistry, type PilotDeckToolDefinition } from "../../../src/tool/index.js";
 
-const RUN_REAL_E2E = process.env.POLITDECK_RUN_REAL_AGENT_LIFECYCLE_E2E === "1";
-const TOOL_NAME = "politdeck_lifecycle_smoke_tool";
+const RUN_REAL_E2E = process.env.PILOTDECK_RUN_REAL_AGENT_LIFECYCLE_E2E === "1";
+const TOOL_NAME = "pilotdeck_lifecycle_smoke_tool";
 const USER_PROMPT_MARKER = "USER_PROMPT_HOOK_MARKER_2026_05_08";
 const PRE_TOOL_MARKER = "PRE_TOOL_HOOK_UPDATED_INPUT_2026_05_08";
 const TOOL_RESULT_MARKER = "TOOL_RESULT_AFTER_HOOKS_2026_05_08";
 const FINAL_MARKER = "REAL_AGENT_LIFECYCLE_HOOKS_OK";
 
 if (!RUN_REAL_E2E) {
-  console.error("Set POLITDECK_RUN_REAL_AGENT_LIFECYCLE_E2E=1 to run this real model smoke script.");
+  console.error("Set PILOTDECK_RUN_REAL_AGENT_LIFECYCLE_E2E=1 to run this real model smoke script.");
   process.exit(1);
 }
 
 const cwd = process.cwd();
-const snapshot = loadPolitConfig();
+const snapshot = loadPilotConfig();
 const selectedModel = snapshot.config.agent.model;
 const baseModelRuntime = createModelRuntime(snapshot.config.model);
 const capabilities = baseModelRuntime.getCapabilities(selectedModel.provider, selectedModel.model);
@@ -49,7 +49,7 @@ assert.equal(
   `Selected model ${selectedModel.provider}/${selectedModel.model} must support streaming for this smoke script.`,
 );
 
-const hookInputs: PolitDeckHookInput[] = [];
+const hookInputs: PilotDeckHookInput[] = [];
 const toolExecutions: unknown[] = [];
 const modelRequests: Array<{ index: number; toolChoice: CanonicalModelRequest["toolChoice"]; hasToolResult: boolean }> = [];
 let nextId = 0;
@@ -119,7 +119,7 @@ callbackExecutor.register("record-session-end", ({ hookInput }) => {
   recordHook(hookInput);
 });
 
-const hookSettings: PolitDeckHooksSettings = {
+const hookSettings: PilotDeckHooksSettings = {
   SessionStart: [{ hooks: [{ type: "callback", name: "record-session-start" }] }],
   UserPromptSubmit: [{ hooks: [{ type: "callback", name: "add-user-prompt-context" }] }],
   PreToolUse: [{ matcher: TOOL_NAME, hooks: [{ type: "callback", name: "update-tool-input" }] }],
@@ -156,7 +156,7 @@ const config: AgentRuntimeConfig = {
   cwd,
   permissionMode: permissionContext.mode,
   permissionContext,
-  systemPrompt: "You are executing a PolitDeck smoke test. Follow tool instructions exactly and copy requested markers verbatim.",
+  systemPrompt: "You are executing a PilotDeck smoke test. Follow tool instructions exactly and copy requested markers verbatim.",
   toolChoice: { type: "tool", name: TOOL_NAME },
   // Reasoning-heavy models like Kimi K2.6 spend most tokens on hidden reasoning;
   // 384 was the old limit and starved the final-answer phase. Use the model
@@ -262,11 +262,11 @@ console.log(
   )}`,
 );
 
-function createSmokeTool(): PolitDeckToolDefinition {
+function createSmokeTool(): PilotDeckToolDefinition {
   return {
     name: TOOL_NAME,
     description: [
-      "Smoke-test tool for PolitDeck lifecycle hooks.",
+      "Smoke-test tool for PilotDeck lifecycle hooks.",
       "When asked to run the lifecycle smoke test, call this tool exactly once with any JSON object.",
     ].join(" "),
     kind: "custom",
@@ -332,7 +332,7 @@ function readSmokeInput(value: unknown): string | undefined {
   return typeof smokeInput === "string" ? smokeInput : undefined;
 }
 
-function recordHook(hookInput: PolitDeckHookInput): void {
+function recordHook(hookInput: PilotDeckHookInput): void {
   hookInputs.push(hookInput);
   console.error(`[hook] ${hookInput.hookEventName}`);
 }

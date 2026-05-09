@@ -117,7 +117,7 @@
 - 返回 output/auth_url/status。
 - 后端维护 PTY 和断线重连。
 
-迁移到 PolitDeck 时，聊天 `/ws` 应映射到 `src/gateway/protocol/frames.ts` 中的 hello/request/event/response 帧；Shell `/shell` 可以暂时作为独立能力保留，直到 `src` 有明确 terminal adapter。
+迁移到 PilotDeck 时，聊天 `/ws` 应映射到 `src/gateway/protocol/frames.ts` 中的 hello/request/event/response 帧；Shell `/shell` 可以暂时作为独立能力保留，直到 `src` 有明确 terminal adapter。
 
 ## Provider Adapter
 
@@ -133,7 +133,7 @@
 - `fetchHistory(sessionId, opts)`
 - `normalizeMessage(raw, sessionId)`
 
-PolitDeck 新项目已经有 canonical model protocol 和 Gateway event，因此不应继续让 Web UI 绑定这些旧 provider adapter。迁移期可以增加一个 `politdeck` adapter，把 Gateway event 转成旧 `NormalizedMessage`，让现有聊天组件先运行起来。
+PilotDeck 新项目已经有 canonical model protocol 和 Gateway event，因此不应继续让 Web UI 绑定这些旧 provider adapter。迁移期可以增加一个 `pilotdeck` adapter，把 Gateway event 转成旧 `NormalizedMessage`，让现有聊天组件先运行起来。
 
 ## 原生依赖和环境风险
 

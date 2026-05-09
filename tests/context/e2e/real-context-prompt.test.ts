@@ -1,27 +1,27 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DefaultContextRuntime } from "../../../src/context/DefaultContextRuntime.js";
-import { loadPolitConfig } from "../../../src/polit/index.js";
+import { loadPilotConfig } from "../../../src/pilot/index.js";
 import { createModelRuntime } from "../../../src/model/index.js";
 import type { CanonicalMessage } from "../../../src/model/index.js";
 
-const RUN = process.env.POLITDECK_RUN_REAL_CONTEXT_E2E === "1";
-const PROVIDER = process.env.POLITDECK_E2E_PROVIDER ?? "edgeclaw";
-const MODEL = process.env.POLITDECK_E2E_MODEL ?? "moonshotai/kimi-k2.6";
+const RUN = process.env.PILOTDECK_RUN_REAL_CONTEXT_E2E === "1";
+const PROVIDER = process.env.PILOTDECK_E2E_PROVIDER ?? "edgeclaw";
+const MODEL = process.env.PILOTDECK_E2E_MODEL ?? "moonshotai/kimi-k2.6";
 
 test(
   "DefaultContextRuntime + real OpenRouter Kimi K2.6 returns a coherent reply when PromptAssembler builds the system prompt",
   { timeout: 120_000 },
   async (t) => {
     if (!RUN) {
-      t.skip("Set POLITDECK_RUN_REAL_CONTEXT_E2E=1 to run the OpenRouter context E2E test.");
+      t.skip("Set PILOTDECK_RUN_REAL_CONTEXT_E2E=1 to run the OpenRouter context E2E test.");
       return;
     }
 
-    const snapshot = loadPolitConfig();
+    const snapshot = loadPilotConfig();
     const provider = snapshot.config.model.providers[PROVIDER];
     if (!provider) {
-      throw new Error(`Provider ${PROVIDER} is not configured in PolitHome.`);
+      throw new Error(`Provider ${PROVIDER} is not configured in PilotHome.`);
     }
     if (!provider.models[MODEL]) {
       throw new Error(`Model ${MODEL} is not configured under provider ${PROVIDER}.`);
@@ -34,7 +34,7 @@ test(
         content: [
           {
             type: "text",
-            text: "You're PolitDeck talking to a CI test. Reply with exactly 'PolitDeck-OK' and nothing else.",
+            text: "You're PilotDeck talking to a CI test. Reply with exactly 'PilotDeck-OK' and nothing else.",
           },
         ],
       },
@@ -54,7 +54,7 @@ test(
       ],
     });
 
-    assert.match(context.systemPrompt!, /You are PolitDeck/);
+    assert.match(context.systemPrompt!, /You are PilotDeck/);
     assert.match(context.systemPrompt!, /add_numbers/);
     assert.match(context.systemPrompt!, /<user-context>/);
     assert.equal(context.tools.length, 1);
@@ -73,6 +73,6 @@ test(
       if (event.type === "text_delta") text += event.text;
       if (event.type === "error") throw new Error(event.error.message);
     }
-    assert.match(text, /PolitDeck-OK/);
+    assert.match(text, /PilotDeck-OK/);
   },
 );

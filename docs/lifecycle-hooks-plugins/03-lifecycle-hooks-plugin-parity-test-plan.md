@@ -2,7 +2,7 @@
 
 ## 1. 目标
 
-本文定义 PolitDeck 生命周期、hooks 与插件系统的测试策略。目标是保证新项目与 `third-party/claude-code-main` 的外部可观察行为一致：
+本文定义 PilotDeck 生命周期、hooks 与插件系统的测试策略。目标是保证新项目与 `third-party/claude-code-main` 的外部可观察行为一致：
 
 - 相同 lifecycle/hook/plugin 输入得到相同归一化输出。
 - 相同配置、插件目录和 hook stdout 产生相同 effects。
@@ -11,7 +11,7 @@
 遵循 `refactor-with-parity` 规则：
 
 - `Contract parity passed` 只表示 schema、flags、字段、状态分类等契约一致。
-- `Execution parity passed` 只在同一 shared scenario 同时运行 legacy 与 PolitDeck，并比较 normalized output 后才能声明。
+- `Execution parity passed` 只在同一 shared scenario 同时运行 legacy 与 PilotDeck，并比较 normalized output 后才能声明。
 - `Deferred` 必须有原因。
 - `Intentional difference` 必须有原因和风险说明。
 
@@ -31,8 +31,8 @@ tests/lifecycle-hooks-plugins/
 后续实现双端 runner 时，建议再补充：
 
 ```text
-third-party/claude-code-main/src/politdeck-lifecycle-hooks-plugin-legacy-contract-report.ts
-third-party/claude-code-main/src/politdeck-lifecycle-hooks-plugin-legacy-execution-report.ts
+third-party/claude-code-main/src/pilotdeck-lifecycle-hooks-plugin-legacy-contract-report.ts
+third-party/claude-code-main/src/pilotdeck-lifecycle-hooks-plugin-legacy-execution-report.ts
 
 tests/helpers/lifecycleHooksPluginContractReport.ts
 tests/helpers/lifecycleHooksPluginExecutionReport.ts
@@ -41,7 +41,7 @@ tests/lifecycle-hooks-plugins/parity-dual-contract.test.ts
 tests/lifecycle-hooks-plugins/parity-dual-execution.test.ts
 ```
 
-当前测试只覆盖 PolitDeck 新实现的协议、runtime 和本地插件加载骨架，不代表 contract parity passed 或 execution parity passed。
+当前测试只覆盖 PilotDeck 新实现的协议、runtime 和本地插件加载骨架，不代表 contract parity passed 或 execution parity passed。
 
 ## 3. 测试分层
 
@@ -64,7 +64,7 @@ manifest tests
 - scenario id 唯一。
 - status 必须是 `compare`、`intentional_difference`、`deferred` 或 `not_applicable`。
 - 所有非 compare scenario 必须写 `reason`。
-- compare scenario 必须声明 legacy 与 PolitDeck 观察字段。
+- compare scenario 必须声明 legacy 与 PilotDeck 观察字段。
 - 核心事件、hook 输出、插件加载和热加载场景必须覆盖。
 
 ### 3.2 Protocol Tests
@@ -91,7 +91,7 @@ tests/lifecycle-hooks-plugins/protocol.test.ts
 - matcher。
 - `if` 条件。
 - `statusMessage`、`once`、`async`、`asyncRewake` 等 legacy 字段识别。
-- `timeout` 仅作为 legacy-compatible 字段识别，不改变 PolitDeck 代码常量 timeout。
+- `timeout` 仅作为 legacy-compatible 字段识别，不改变 PilotDeck 代码常量 timeout。
 - http headers 的 env interpolation 白名单。
 - 非法 marketplace 名称、路径穿越、非 ASCII 冒充。
 
@@ -167,7 +167,7 @@ export type LifecycleHookPluginContractScenario = {
   status: "compare" | "intentional_difference" | "deferred" | "not_applicable";
   feature: string;
   legacy: { eventName?: string; pluginShape?: string; input?: Record<string, unknown> };
-  politdeck: { eventName?: string; pluginShape?: string; input?: Record<string, unknown> };
+  pilotdeck: { eventName?: string; pluginShape?: string; input?: Record<string, unknown> };
   compareFields: string[];
   reason?: string;
 };
@@ -184,9 +184,9 @@ Legacy runner 位于 `third-party/claude-code-main/src/`，读取同一套 scena
 - 对绝对路径、session id、transcript path、时间、pid 做归一化。
 - 不把 debug/telemetry 私有字段作为比较目标。
 
-### 4.3 PolitDeck Runner
+### 4.3 PilotDeck Runner
 
-后续 PolitDeck runner 建议位于 `tests/helpers/`，调用新实现输出同样 schema。
+后续 PilotDeck runner 建议位于 `tests/helpers/`，调用新实现输出同样 schema。
 
 第一阶段新实现还不存在时，不应伪造 runner 或一致性结果；只在文档中维护场景清单和通过标准。
 
@@ -195,7 +195,7 @@ Legacy runner 位于 `third-party/claude-code-main/src/`，读取同一套 scena
 root parity test 必须：
 
 - 确保 scenario id 唯一。
-- 确保 legacy 与 PolitDeck report statuses 完全一致。
+- 确保 legacy 与 PilotDeck report statuses 完全一致。
 - 对 `status: "compare"` 的场景 deepEqual normalized values。
 - 对非 compare 场景要求 reason。
 - 输出失败 id，便于逐项修复。
@@ -267,8 +267,8 @@ root parity test 必须：
 ```bash
 cd third-party/claude-code-main
 bun test <focused-probe.test.ts>
-bun run src/politdeck-lifecycle-hooks-plugin-legacy-contract-report.ts
-bun run src/politdeck-lifecycle-hooks-plugin-legacy-execution-report.ts
+bun run src/pilotdeck-lifecycle-hooks-plugin-legacy-contract-report.ts
+bun run src/pilotdeck-lifecycle-hooks-plugin-legacy-execution-report.ts
 ```
 
 不要依赖整个 vendored project build，因为 third-party 子树可能不完整。探针应尽量只 import：
@@ -288,12 +288,12 @@ bun run src/politdeck-lifecycle-hooks-plugin-legacy-execution-report.ts
 
 - 文档列出测试分层、场景清单、归一化规则和通过标准。
 - 文档列出所有 deferred 与 intentional difference。
-- PolitDeck 新实现的基础协议、command/prompt/http/agent/callback hook runtime、async response registry 和 rewake marker、agent lifecycle integration、tool integration、本地插件加载、commands/skills/output-style 读取、MCP/LSP contribution 汇总、SubagentStop/WorktreeCreate dispatch、marketplace reference 解析和 refresh/prune 报告测试通过。
+- PilotDeck 新实现的基础协议、command/prompt/http/agent/callback hook runtime、async response registry 和 rewake marker、agent lifecycle integration、tool integration、本地插件加载、commands/skills/output-style 读取、MCP/LSP contribution 汇总、SubagentStop/WorktreeCreate dispatch、marketplace reference 解析和 refresh/prune 报告测试通过。
 
 结论只能写：
 
 ```text
-PolitDeck basic lifecycle/hooks/plugin tests passed.
+PilotDeck basic lifecycle/hooks/plugin tests passed.
 Contract/execution parity is not claimed yet.
 ```
 
@@ -302,7 +302,7 @@ Contract/execution parity is not claimed yet.
 满足：
 
 - legacy contract runner 生成 report。
-- PolitDeck contract runner 生成 report。
+- PilotDeck contract runner 生成 report。
 - root contract test 对 compare scenario deepEqual。
 - 非 compare 均有 reason。
 
@@ -311,7 +311,7 @@ Contract/execution parity is not claimed yet.
 满足：
 
 - legacy execution runner 真实执行 scenario。
-- PolitDeck execution runner 真实执行 scenario。
+- PilotDeck execution runner 真实执行 scenario。
 - root execution test 对 compare scenario deepEqual normalized output。
 - 对所有差异要么修复，要么更新为 intentional_difference/deferred 并写原因。
 

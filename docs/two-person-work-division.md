@@ -24,12 +24,12 @@ agent
 
 ## 人员 A：Model 负责人
 
-人员 A 继续负责已经开始推进的 `model` 部分，同时承担与模型配置直接相关的 `polit/paths`、`polit/config` 最小能力。
+人员 A 继续负责已经开始推进的 `model` 部分，同时承担与模型配置直接相关的 `pilot/paths`、`pilot/config` 最小能力。
 
 ### 负责范围
 
 ```text
-src/polit/
+src/pilot/
   paths/
   config/
 
@@ -47,8 +47,8 @@ tests/model/
 
 ### 当前阶段任务
 
-- 定义 `PolitHome`、`PolitConfigPath` 等全局路径常量。
-- 读取 `~/.politdeck/politdeck.yaml`，并把其中的 `model` 配置段交给 `model` 模块校验和消费。
+- 定义 `PilotHome`、`PilotConfigPath` 等全局路径常量。
+- 读取 `~/.pilotdeck/pilotdeck.yaml`，并把其中的 `model` 配置段交给 `model` 模块校验和消费。
 - 定义 `CanonicalModelRequest`、`CanonicalMessage`、`CanonicalContentBlock`。
 - 定义 `CanonicalToolSchema`、`CanonicalToolCall`、`CanonicalToolResult`。
 - 定义 `CanonicalModelEvent`、`CanonicalModelResponse`、`CanonicalUsage`、`CanonicalModelError`。

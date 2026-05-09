@@ -1,5 +1,5 @@
-import type { PolitDeckHooksSettings } from "../hooks/protocol/settings.js";
+import type { PilotDeckHooksSettings } from "../hooks/protocol/settings.js";
 
 export type HookContribution = {
-  hooks: PolitDeckHooksSettings;
+  hooks: PilotDeckHooksSettings;
 };

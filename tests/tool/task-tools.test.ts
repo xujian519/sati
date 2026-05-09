@@ -9,11 +9,11 @@ import {
   createTaskOutputTool,
   createTaskStopTool,
 } from "../../src/tool/index.js";
-import { createPolitDeckToolRuntimeFixture } from "../helpers/tool.js";
+import { createPilotDeckToolRuntimeFixture } from "../helpers/tool.js";
 
 test("C5.TOOLS unsupported_tool when no runtime is wired", async () => {
   const tool = createTaskCreateTool();
-  const { context } = createPolitDeckToolRuntimeFixture({ tools: [tool] });
+  const { context } = createPilotDeckToolRuntimeFixture({ tools: [tool] });
   await assert.rejects(
     () => tool.execute({ command: "echo x" }, context),
     /BackgroundTaskRuntime/,
@@ -27,7 +27,7 @@ test("C5.TOOLS task_create + task_list + task_output + task_stop happy path", as
   const output = createTaskOutputTool(runtime);
   const stop = createTaskStopTool(runtime);
 
-  const { context } = createPolitDeckToolRuntimeFixture({ tools: [create, list, output, stop] });
+  const { context } = createPilotDeckToolRuntimeFixture({ tools: [create, list, output, stop] });
 
   const created = await create.execute(
     { command: "echo abc && echo def", agentId: "agent-x" },
@@ -53,7 +53,7 @@ test("C5.TOOLS task_create + task_list + task_output + task_stop happy path", as
 test("C5.TOOLS task_output rejects unknown taskId", async () => {
   const runtime = new BackgroundTaskRuntime();
   const output = createTaskOutputTool(runtime);
-  const { context } = createPolitDeckToolRuntimeFixture({ tools: [output] });
+  const { context } = createPilotDeckToolRuntimeFixture({ tools: [output] });
   await assert.rejects(
     () => output.execute({ taskId: "nope" }, context),
     /Unknown taskId/,

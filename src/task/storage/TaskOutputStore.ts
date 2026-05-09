@@ -19,7 +19,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { PolitDeckTaskOutputSlice } from "../protocol/types.js";
+import type { PilotDeckTaskOutputSlice } from "../protocol/types.js";
 
 export type TaskOutputStoreOptions = {
   taskId: string;
@@ -77,7 +77,7 @@ export class TaskOutputStore {
    * been dropped from memory are reflected via `truncated=true`. Pass
    * `maxBytes` to bound the return size.
    */
-  readSlice(offset: number, maxBytes?: number): PolitDeckTaskOutputSlice {
+  readSlice(offset: number, maxBytes?: number): PilotDeckTaskOutputSlice {
     const head = this.totalSeenBytes;
     let cursor = Math.max(offset, this.droppedBytes);
     const cap = maxBytes ?? Infinity;

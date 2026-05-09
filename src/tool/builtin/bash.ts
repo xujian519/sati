@@ -1,6 +1,6 @@
-import type { PolitDeckToolDefinition } from "../protocol/types.js";
-import { PolitDeckToolRuntimeError } from "../protocol/errors.js";
-import { NodeShellCommandRunner, type PolitDeckCommandRunner } from "./bash/commandRunner.js";
+import type { PilotDeckToolDefinition } from "../protocol/types.js";
+import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
+import { NodeShellCommandRunner, type PilotDeckCommandRunner } from "./bash/commandRunner.js";
 import { classifyBashPermission, isReadOnlyShellCommand } from "./bash/permissions.js";
 
 export type BashInput = {
@@ -10,12 +10,12 @@ export type BashInput = {
 };
 
 export type CreateBashToolOptions = {
-  runner?: PolitDeckCommandRunner;
+  runner?: PilotDeckCommandRunner;
   defaultTimeoutMs?: number;
   maxTimeoutMs?: number;
 };
 
-export function createBashTool(options?: CreateBashToolOptions): PolitDeckToolDefinition<BashInput> {
+export function createBashTool(options?: CreateBashToolOptions): PilotDeckToolDefinition<BashInput> {
   const runner = options?.runner ?? new NodeShellCommandRunner();
   const defaultTimeoutMs = options?.defaultTimeoutMs ?? 30_000;
   const maxTimeoutMs = options?.maxTimeoutMs ?? 600_000;
@@ -23,7 +23,7 @@ export function createBashTool(options?: CreateBashToolOptions): PolitDeckToolDe
   return {
     name: "bash",
     aliases: ["Bash"],
-    description: "Run a shell command in the PolitDeck workspace.",
+    description: "Run a shell command in the PilotDeck workspace.",
     kind: "shell",
     inputSchema: {
       type: "object",
@@ -72,11 +72,11 @@ export function createBashTool(options?: CreateBashToolOptions): PolitDeckToolDe
       });
 
       if (result.timedOut) {
-        throw new PolitDeckToolRuntimeError("tool_timeout", `Command timed out after ${timeoutMs}ms.`);
+        throw new PilotDeckToolRuntimeError("tool_timeout", `Command timed out after ${timeoutMs}ms.`);
       }
 
       if (result.exitCode !== 0) {
-        throw new PolitDeckToolRuntimeError("tool_execution_failed", "Shell command failed", {
+        throw new PilotDeckToolRuntimeError("tool_execution_failed", "Shell command failed", {
           command: input.command,
           exitCode: result.exitCode,
           stdout: result.stdout,
@@ -117,4 +117,4 @@ function formatShellResult(stdout: string, stderr: string, exitCode: number | nu
   return parts.length > 0 ? parts.join("\n") : `exitCode: ${exitCode ?? "null"}`;
 }
 
-export type { PolitDeckCommandOptions, PolitDeckCommandResult, PolitDeckCommandRunner } from "./bash/commandRunner.js";
+export type { PilotDeckCommandOptions, PilotDeckCommandResult, PilotDeckCommandRunner } from "./bash/commandRunner.js";

@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateToolInput, type PolitDeckToolInputSchema } from "../../src/tool/index.js";
+import { validateToolInput, type PilotDeckToolInputSchema } from "../../src/tool/index.js";
 
-const schema: PolitDeckToolInputSchema = {
+const schema: PilotDeckToolInputSchema = {
   type: "object",
   required: ["query", "limit"],
   additionalProperties: false,

@@ -1,1 +1,1 @@
-export type PolitDeckHookExecutorKind = "command" | "prompt" | "http" | "agent";
+export type PilotDeckHookExecutorKind = "command" | "prompt" | "http" | "agent";

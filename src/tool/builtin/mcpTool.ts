@@ -1,9 +1,9 @@
 import type { PermissionResult } from "../../permission/index.js";
-import { PolitDeckToolRuntimeError } from "../protocol/errors.js";
-import type { PolitDeckToolDefinition, PolitDeckToolExecutionOutput } from "../protocol/types.js";
-import type { PolitDeckToolInputSchema } from "../protocol/schema.js";
+import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
+import type { PilotDeckToolDefinition, PilotDeckToolExecutionOutput } from "../protocol/types.js";
+import type { PilotDeckToolInputSchema } from "../protocol/schema.js";
 
-export type PolitDeckMcpToolAdapter = {
+export type PilotDeckMcpToolAdapter = {
   callTool(serverId: string, toolName: string, input: unknown): Promise<unknown>;
 };
 
@@ -11,11 +11,11 @@ export type CreateMcpToolOptions = {
   serverId: string;
   toolName: string;
   description?: string;
-  inputSchema?: PolitDeckToolInputSchema;
-  adapter?: PolitDeckMcpToolAdapter;
+  inputSchema?: PilotDeckToolInputSchema;
+  adapter?: PilotDeckMcpToolAdapter;
 };
 
-export function createMcpTool(options: CreateMcpToolOptions): PolitDeckToolDefinition {
+export function createMcpTool(options: CreateMcpToolOptions): PilotDeckToolDefinition {
   const wireName = buildMcpToolWireName(options.serverId, options.toolName);
   return {
     name: wireName,
@@ -27,9 +27,9 @@ export function createMcpTool(options: CreateMcpToolOptions): PolitDeckToolDefin
     isConcurrencySafe: () => false,
     isOpenWorld: () => true,
     checkPermissions: async (): Promise<PermissionResult> => ({ type: "passthrough" }),
-    execute: async (input): Promise<PolitDeckToolExecutionOutput> => {
+    execute: async (input): Promise<PilotDeckToolExecutionOutput> => {
       if (!options.adapter) {
-        throw new PolitDeckToolRuntimeError("unsupported_tool", "MCP adapter is not configured.");
+        throw new PilotDeckToolRuntimeError("unsupported_tool", "MCP adapter is not configured.");
       }
       const value = await options.adapter.callTool(options.serverId, options.toolName, input);
       return {
@@ -54,7 +54,7 @@ export function buildMcpToolWireName(serverId: string, toolName: string): string
 function normalizeMcpName(value: string): string {
   const normalized = value.replace(/[^A-Za-z0-9_]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
   if (!normalized) {
-    throw new PolitDeckToolRuntimeError("invalid_tool_input", "MCP server and tool names must normalize to a name.");
+    throw new PilotDeckToolRuntimeError("invalid_tool_input", "MCP server and tool names must normalize to a name.");
   }
   return normalized;
 }

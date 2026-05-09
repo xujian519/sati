@@ -1,14 +1,14 @@
 import { PermissionRuntime } from "../../permission/index.js";
-import type { LifecycleRuntime, PolitDeckHookEffect } from "../../lifecycle/index.js";
+import type { LifecycleRuntime, PilotDeckHookEffect } from "../../lifecycle/index.js";
 import { toolError } from "../protocol/errors.js";
-import type { PolitDeckToolErrorCode } from "../protocol/errors.js";
+import type { PilotDeckToolErrorCode } from "../protocol/errors.js";
 import {
   applyResultSizeLimit,
-  type PolitDeckToolErrorResult,
-  type PolitDeckToolResult,
-  type PolitDeckToolSuccessResult,
+  type PilotDeckToolErrorResult,
+  type PilotDeckToolResult,
+  type PilotDeckToolSuccessResult,
 } from "../protocol/result.js";
-import type { PolitDeckToolCall, PolitDeckToolRuntimeContext } from "../protocol/types.js";
+import type { PilotDeckToolCall, PilotDeckToolRuntimeContext } from "../protocol/types.js";
 import type { ToolRegistry } from "../registry/ToolRegistry.js";
 import { validateToolInput } from "./validateToolInput.js";
 import { normalizeToolError } from "../protocol/errors.js";
@@ -20,7 +20,7 @@ export class ToolRuntime {
     private readonly lifecycle?: LifecycleRuntime,
   ) {}
 
-  async execute(call: PolitDeckToolCall, context: PolitDeckToolRuntimeContext): Promise<PolitDeckToolResult> {
+  async execute(call: PilotDeckToolCall, context: PilotDeckToolRuntimeContext): Promise<PilotDeckToolResult> {
     const startedAtDate = now(context);
     const startedAt = startedAtDate.toISOString();
     const tool = this.registry.get(call.name);
@@ -135,7 +135,7 @@ export class ToolRuntime {
       await this.dispatchLifecycle("PermissionDenied", tool.name, call.id, executeInput, context, {
         reason: decision.message,
       });
-      const code: PolitDeckToolErrorCode =
+      const code: PilotDeckToolErrorCode =
         decision.reason.type === "runtime" && decision.reason.message.includes("prompt") ?
           "permission_required" :
           "permission_denied";
@@ -159,7 +159,7 @@ export class ToolRuntime {
     }
 
     executeInput = decision.updatedInput ?? executeInput;
-    const executeContext: PolitDeckToolRuntimeContext = context.progress
+    const executeContext: PilotDeckToolRuntimeContext = context.progress
       ? {
           ...context,
           progress: (event) =>
@@ -175,7 +175,7 @@ export class ToolRuntime {
       const maxResultBytes = tool.maxResultBytes ?? context.maxResultBytes;
       const limited = applyResultSizeLimit(output.content, maxResultBytes);
       const completedAt = now(context).toISOString();
-      const result: PolitDeckToolSuccessResult = {
+      const result: PilotDeckToolSuccessResult = {
         type: "success",
         toolCallId: call.id,
         toolName: tool.name,
@@ -214,12 +214,12 @@ export class ToolRuntime {
   private async errorResult(
     toolCallId: string,
     toolName: string,
-    code: PolitDeckToolErrorCode,
+    code: PilotDeckToolErrorCode,
     message: string,
     startedAt: string,
-    context: PolitDeckToolRuntimeContext,
+    context: PilotDeckToolRuntimeContext,
     details?: Record<string, unknown>,
-  ): Promise<PolitDeckToolErrorResult> {
+  ): Promise<PilotDeckToolErrorResult> {
     const startedAtDate = new Date(startedAt);
     const result = this.createErrorResult(toolCallId, toolName, code, message, startedAt, context, details);
     await this.recordToolAudit(result, context, startedAtDate);
@@ -229,12 +229,12 @@ export class ToolRuntime {
   private createErrorResult(
     toolCallId: string,
     toolName: string,
-    code: PolitDeckToolErrorCode,
+    code: PilotDeckToolErrorCode,
     message: string,
     startedAt: string,
-    context: PolitDeckToolRuntimeContext,
+    context: PilotDeckToolRuntimeContext,
     details?: Record<string, unknown>,
-  ): PolitDeckToolErrorResult {
+  ): PilotDeckToolErrorResult {
     const completedAt = now(context).toISOString();
     return {
       type: "error",
@@ -248,8 +248,8 @@ export class ToolRuntime {
   }
 
   private async recordToolAudit(
-    result: PolitDeckToolResult,
-    context: PolitDeckToolRuntimeContext,
+    result: PilotDeckToolResult,
+    context: PilotDeckToolRuntimeContext,
     startedAt: Date,
   ): Promise<void> {
     await context.auditRecorder?.recordTool({
@@ -271,7 +271,7 @@ export class ToolRuntime {
     toolName: string,
     toolCallId: string,
     toolInput: unknown,
-    context: PolitDeckToolRuntimeContext,
+    context: PilotDeckToolRuntimeContext,
     extraPayload: Record<string, unknown> = {},
   ) {
     return this.lifecycle?.dispatch({
@@ -301,14 +301,14 @@ export class ToolRuntime {
   }
 }
 
-function findEffect<Type extends PolitDeckHookEffect["type"]>(
-  effects: PolitDeckHookEffect[],
+function findEffect<Type extends PilotDeckHookEffect["type"]>(
+  effects: PilotDeckHookEffect[],
   type: Type,
-): Extract<PolitDeckHookEffect, { type: Type }> | undefined {
-  return effects.find((effect): effect is Extract<PolitDeckHookEffect, { type: Type }> => effect.type === type);
+): Extract<PilotDeckHookEffect, { type: Type }> | undefined {
+  return effects.find((effect): effect is Extract<PilotDeckHookEffect, { type: Type }> => effect.type === type);
 }
 
-function lifecycleMetadata(result: { effects: PolitDeckHookEffect[] }): Record<string, unknown> | undefined {
+function lifecycleMetadata(result: { effects: PilotDeckHookEffect[] }): Record<string, unknown> | undefined {
   const blocking = result.effects.find((effect) => effect.type === "block");
   const additionalContext = result.effects.filter((effect) => effect.type === "additional_context");
   const updatedMcpOutput = result.effects.find((effect) => effect.type === "updated_mcp_tool_output");
@@ -324,7 +324,7 @@ function lifecycleMetadata(result: { effects: PolitDeckHookEffect[] }): Record<s
   };
 }
 
-function now(context: PolitDeckToolRuntimeContext): Date {
+function now(context: PilotDeckToolRuntimeContext): Date {
   return context.now?.() ?? new Date();
 }
 

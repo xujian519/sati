@@ -1,7 +1,7 @@
 import type { PermissionDecision, PermissionDecisionReason, PermissionMode } from "../../permission/index.js";
-import type { PolitDeckToolErrorCode } from "../protocol/errors.js";
+import type { PilotDeckToolErrorCode } from "../protocol/errors.js";
 
-export type PolitDeckPermissionAuditRecord = {
+export type PilotDeckPermissionAuditRecord = {
   type: "permission";
   sessionId: string;
   turnId: string;
@@ -13,20 +13,20 @@ export type PolitDeckPermissionAuditRecord = {
   createdAt: string;
 };
 
-export type PolitDeckToolAuditRecord = {
+export type PilotDeckToolAuditRecord = {
   type: "tool";
   sessionId: string;
   turnId: string;
   toolCallId: string;
   toolName: string;
   status: "success" | "error";
-  errorCode?: PolitDeckToolErrorCode;
+  errorCode?: PilotDeckToolErrorCode;
   startedAt: string;
   completedAt: string;
   durationMs: number;
 };
 
-export type PolitDeckToolAuditRecorder = {
-  recordPermission(record: PolitDeckPermissionAuditRecord): void | Promise<void>;
-  recordTool(record: PolitDeckToolAuditRecord): void | Promise<void>;
+export type PilotDeckToolAuditRecorder = {
+  recordPermission(record: PilotDeckPermissionAuditRecord): void | Promise<void>;
+  recordTool(record: PilotDeckToolAuditRecord): void | Promise<void>;
 };

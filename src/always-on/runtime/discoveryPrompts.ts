@@ -11,7 +11,7 @@ export type BuildDiscoveryPromptInput = {
   workspaceCwd: string;
   /** Strategy id of the isolated workspace (git-worktree | snapshot-copy). */
   workspaceStrategy: string;
-  /** Absolute path of the project's PolitDeck chat transcript directory. */
+  /** Absolute path of the project's PilotDeck chat transcript directory. */
   chatDir: string;
 };
 
@@ -27,7 +27,7 @@ export function buildDiscoveryPrompt(input: BuildDiscoveryPromptInput): string {
     "Treat the workspace contents as the current snapshot of the project — read / glob / bash freely.",
     "The user's project root is untouched; do not cd outside the workspace.",
     "",
-    `Project chat history (PolitDeck transcripts) lives at: ${input.chatDir}`,
+    `Project chat history (PilotDeck transcripts) lives at: ${input.chatDir}`,
     "Use read_file / glob / bash on that directory to skim recent user-agent conversations",
     "when looking for valuable, automatically-verifiable improvements.",
     "",

@@ -1,6 +1,6 @@
-import type { PolitDeckToolDefinition } from "../protocol/types.js";
-import { PolitDeckToolRuntimeError } from "../protocol/errors.js";
-import { resolvePolitDeckWorkspacePath } from "./filesystem/pathSafety.js";
+import type { PilotDeckToolDefinition } from "../protocol/types.js";
+import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
+import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
 import { writeTextFile } from "./filesystem/writeTextFile.js";
 
 export type WriteFileInput = {
@@ -9,11 +9,11 @@ export type WriteFileInput = {
   allowOverwrite?: boolean;
 };
 
-export function createWriteFileTool(): PolitDeckToolDefinition<WriteFileInput> {
+export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput> {
   return {
     name: "write_file",
     aliases: ["Write"],
-    description: "Create or overwrite a UTF-8 text file in the PolitDeck workspace.",
+    description: "Create or overwrite a UTF-8 text file in the PilotDeck workspace.",
     kind: "filesystem",
     inputSchema: {
       type: "object",
@@ -29,9 +29,9 @@ export function createWriteFileTool(): PolitDeckToolDefinition<WriteFileInput> {
     isConcurrencySafe: () => false,
     isDestructive: (input) => input.allowOverwrite === true,
     execute: async (input, context) => {
-      const resolved = resolvePolitDeckWorkspacePath(input.filePath, context, { forWrite: true });
+      const resolved = resolvePilotDeckWorkspacePath(input.filePath, context, { forWrite: true });
       if (!resolved.ok) {
-        throw new PolitDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
+        throw new PilotDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
       }
 
       if (context.fileHistory) {

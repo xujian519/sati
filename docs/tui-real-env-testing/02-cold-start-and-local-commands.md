@@ -1,6 +1,6 @@
 # 冷启动与本地 TUI 命令测试
 
-本文验证 `politdeck tui` 的基础交互，不要求模型返回成功。重点是 TUI 空态、输入框、帮助弹窗和本地命令行为。
+本文验证 `pilotdeck tui` 的基础交互，不要求模型返回成功。重点是 TUI 空态、输入框、帮助弹窗和本地命令行为。
 
 ## 用例 1：冷启动空态
 
@@ -8,16 +8,16 @@
 
 ```bash
 npm run build
-node dist/src/cli/politdeck.js tui
+node dist/src/cli/pilotdeck.js tui
 ```
 
 ### 预期现象
 
-- 顶部显示 `PolitDeck ↗` 和 `v0.1.0`。
-- 第二行显示 `model · default · <cwd> · local in-process`，其中 model 当前 CLI 传入为 `PolitDeck`。
-- 中间显示 welcome card，内容包含 `PolitDeck ↗`、model、cwd 和 `local in-process`。
-- 底部显示圆角输入框，左侧为 `> `，placeholder 为 `Ask PolitDeck... (/help)`。
-- 冷启动时不显示假的 `You`、`PolitDeck` 对话。
+- 顶部显示 `PilotDeck ↗` 和 `v0.1.0`。
+- 第二行显示 `model · default · <cwd> · local in-process`，其中 model 当前 CLI 传入为 `PilotDeck`。
+- 中间显示 welcome card，内容包含 `PilotDeck ↗`、model、cwd 和 `local in-process`。
+- 底部显示圆角输入框，左侧为 `> `，placeholder 为 `Ask PilotDeck... (/help)`。
+- 冷启动时不显示假的 `You`、`PilotDeck` 对话。
 - 冷启动时不显示假的 `tool read_file done`、`memory on`、`server healthy`。
 - 没有输入和运行中的 turn 时，不显示 `thinking` 或常驻 idle 状态。
 
@@ -45,7 +45,7 @@ TUI 保持交互式运行，命令不应自动退出。按 `Ctrl+C` 后退出，
 
 ### 预期现象
 
-- 出现圆角 help 面板，标题为 `PolitDeck commands`。
+- 出现圆角 help 面板，标题为 `PilotDeck commands`。
 - 面板包含 `/new`、`/sessions`、`/mode plan`、`/mode default`、`/clear`、`/help`、`/exit`。
 - help 打开时输入框失焦。
 - 按 `Esc` 后 help 面板关闭，输入框重新获得焦点。

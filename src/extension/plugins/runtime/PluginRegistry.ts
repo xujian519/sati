@@ -1,16 +1,16 @@
-import type { PolitDeckLoadedPlugin } from "../protocol/plugin.js";
+import type { PilotDeckLoadedPlugin } from "../protocol/plugin.js";
 
 export class PluginRegistry {
-  private readonly plugins = new Map<string, PolitDeckLoadedPlugin>();
+  private readonly plugins = new Map<string, PilotDeckLoadedPlugin>();
 
-  replaceAll(plugins: PolitDeckLoadedPlugin[]): void {
+  replaceAll(plugins: PilotDeckLoadedPlugin[]): void {
     this.plugins.clear();
     for (const plugin of plugins) {
       this.plugins.set(`${plugin.name}@${plugin.source}`, plugin);
     }
   }
 
-  list(): PolitDeckLoadedPlugin[] {
+  list(): PilotDeckLoadedPlugin[] {
     return [...this.plugins.values()];
   }
 }

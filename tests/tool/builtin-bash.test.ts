@@ -2,26 +2,26 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createBashTool,
-  type PolitDeckCommandOptions,
-  type PolitDeckCommandResult,
-  type PolitDeckCommandRunner,
+  type PilotDeckCommandOptions,
+  type PilotDeckCommandResult,
+  type PilotDeckCommandRunner,
 } from "../../src/tool/index.js";
-import { createPolitDeckTempWorkspace } from "../helpers/filesystem.js";
-import { createPolitDeckToolRuntimeFixture } from "../helpers/tool.js";
+import { createPilotDeckTempWorkspace } from "../helpers/filesystem.js";
+import { createPilotDeckToolRuntimeFixture } from "../helpers/tool.js";
 
-class FakeRunner implements PolitDeckCommandRunner {
-  constructor(private readonly result: PolitDeckCommandResult) {}
+class FakeRunner implements PilotDeckCommandRunner {
+  constructor(private readonly result: PilotDeckCommandResult) {}
 
-  async run(_command: string, _options: PolitDeckCommandOptions): Promise<PolitDeckCommandResult> {
+  async run(_command: string, _options: PilotDeckCommandOptions): Promise<PilotDeckCommandResult> {
     return this.result;
   }
 }
 
 test("bash runs safe commands and converts non-zero exit to tool error", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
   const runner = new FakeRunner({ exitCode: 2, stdout: "", stderr: "failed", timedOut: false, durationMs: 5 });
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createBashTool({ runner })],
     cwd: workspace.cwd,
   });
@@ -33,9 +33,9 @@ test("bash runs safe commands and converts non-zero exit to tool error", async (
 });
 
 test("bash denies dangerous commands even in bypassPermissions", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createBashTool({ runner: new FakeRunner({ exitCode: 0, stdout: "", stderr: "", timedOut: false, durationMs: 1 }) })],
     cwd: workspace.cwd,
     permissionMode: "bypassPermissions",
@@ -48,9 +48,9 @@ test("bash denies dangerous commands even in bypassPermissions", async (t) => {
 });
 
 test("bash converts runner timeout to tool_timeout", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [
       createBashTool({
         runner: new FakeRunner({ exitCode: null, stdout: "", stderr: "", timedOut: true, durationMs: 10 }),

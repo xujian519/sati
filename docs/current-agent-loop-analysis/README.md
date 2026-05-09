@@ -1,6 +1,6 @@
 # 当前项目 Agent Loop 功能分析
 
-本目录只分析原项目 `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src` 中与 agent loop 紧密相关的功能、模块职责和运行机制。
+本目录只分析原项目 `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src` 中与 agent loop 紧密相关的功能、模块职责和运行机制。
 
 ## 文档结构
 

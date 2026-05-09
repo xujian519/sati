@@ -40,9 +40,9 @@ export type ParseRouterConfigResult = {
 };
 
 /**
- * Validate the `router` section of PolitConfig and return a structured
+ * Validate the `router` section of PilotConfig and return a structured
  * RouterConfig. Returns diagnostics rather than throwing so the caller
- * (loadPolitConfig) can integrate with its existing fatal-aware flow.
+ * (loadPilotConfig) can integrate with its existing fatal-aware flow.
  */
 export function parseRouterConfig(
   raw: unknown,

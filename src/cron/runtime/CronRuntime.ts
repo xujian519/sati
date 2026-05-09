@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import type { Gateway } from "../../gateway/index.js";
-import type { PolitDeckToolDefinition } from "../../tool/index.js";
+import type { PilotDeckToolDefinition } from "../../tool/index.js";
 import type { CronConfig } from "../config/parseCronConfig.js";
 import type {
   CronCreateInput,
@@ -31,7 +31,7 @@ export type CronRuntimeLogger = {
 
 export type CreateCronRuntimeOptions = {
   config: CronConfig;
-  politHome: string;
+  pilotHome: string;
   projectKey: string;
   now?: () => Date;
   uuid?: () => string;
@@ -53,7 +53,7 @@ export class CronRuntime {
   private readonly now: () => Date;
   private readonly uuid: () => string;
   private readonly logger: CronRuntimeLogger;
-  private readonly tools: PolitDeckToolDefinition[];
+  private readonly tools: PilotDeckToolDefinition[];
   private readonly activeRuns = new Map<string, CronActiveRun>();
   private gateway?: Gateway;
   private fire?: CronFire;
@@ -62,7 +62,7 @@ export class CronRuntime {
   constructor(options: CreateCronRuntimeOptions) {
     this.config = options.config;
     this.projectKey = resolve(options.projectKey);
-    this.paths = resolveCronPaths({ politHome: options.politHome, projectKey: this.projectKey });
+    this.paths = resolveCronPaths({ pilotHome: options.pilotHome, projectKey: this.projectKey });
     this.store = options.store ?? new CronTaskStore(this.paths);
     this.now = options.now ?? (() => new Date());
     this.uuid = options.uuid ?? randomUUID;
@@ -75,7 +75,7 @@ export class CronRuntime {
     ];
   }
 
-  getTools(): PolitDeckToolDefinition[] {
+  getTools(): PilotDeckToolDefinition[] {
     return [...this.tools];
   }
 

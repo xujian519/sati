@@ -1,6 +1,6 @@
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { PolitDeckToolRuntimeError } from "../../protocol/errors.js";
+import { PilotDeckToolRuntimeError } from "../../protocol/errors.js";
 
 export async function writeTextFile(
   filePath: string,
@@ -15,11 +15,11 @@ export async function writeTextFile(
   });
 
   if (existing && !existing.isFile()) {
-    throw new PolitDeckToolRuntimeError("file_conflict", `${filePath} exists and is not a regular file.`);
+    throw new PilotDeckToolRuntimeError("file_conflict", `${filePath} exists and is not a regular file.`);
   }
 
   if (existing && !options?.allowOverwrite) {
-    throw new PolitDeckToolRuntimeError(
+    throw new PilotDeckToolRuntimeError(
       "file_conflict",
       `${filePath} already exists. Set allowOverwrite to true to overwrite it.`,
     );

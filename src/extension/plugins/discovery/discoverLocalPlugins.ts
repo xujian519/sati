@@ -1,14 +1,14 @@
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { PolitDeckPluginSourceKind } from "../protocol/plugin.js";
+import type { PilotDeckPluginSourceKind } from "../protocol/plugin.js";
 
 export type DiscoveredPluginPath = {
   path: string;
-  source: PolitDeckPluginSourceKind;
+  source: PilotDeckPluginSourceKind;
 };
 
 export async function discoverPluginPaths(
-  directories: Array<{ path: string; source: PolitDeckPluginSourceKind }>,
+  directories: Array<{ path: string; source: PilotDeckPluginSourceKind }>,
 ): Promise<DiscoveredPluginPath[]> {
   const discovered: DiscoveredPluginPath[] = [];
   for (const directory of directories) {

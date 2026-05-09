@@ -86,7 +86,7 @@ export type ResolveProviderRefIssue = {
 /**
  * Parse "provider/model" string into a structured ref and verify it exists in
  * the supplied ModelConfig. Returns either a valid ref or a list of issues
- * (caller is responsible for emitting them as PolitConfigDiagnostic).
+ * (caller is responsible for emitting them as PilotConfigDiagnostic).
  */
 export function resolveProviderRef(
   raw: unknown,

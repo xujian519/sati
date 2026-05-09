@@ -1,4 +1,4 @@
-import type { PolitDeckToolBehaviorScenario } from "./types.js";
+import type { PilotDeckToolBehaviorScenario } from "./types.js";
 
 const resultSource = [
   {
@@ -11,11 +11,11 @@ const resultSource = [
   },
 ];
 
-export const resultMappingScenarios: PolitDeckToolBehaviorScenario[] = [
+export const resultMappingScenarios: PilotDeckToolBehaviorScenario[] = [
   {
     name: "success result maps to canonical tool_result",
     legacyToolName: "Read",
-    politdeckToolName: "read_file",
+    pilotdeckToolName: "read_file",
     input: { filePath: "src/a.txt" },
     permissionMode: "default",
     parity: "must_match",
@@ -25,7 +25,7 @@ export const resultMappingScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "error result maps to canonical error tool_result",
     legacyToolName: "Write",
-    politdeckToolName: "write_file",
+    pilotdeckToolName: "write_file",
     input: { filePath: "../outside.txt", content: "x" },
     permissionMode: "acceptEdits",
     parity: "must_match",

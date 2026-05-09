@@ -1,5 +1,5 @@
-export class PolitDeckLifecycleRuntimeError extends Error {
-  readonly name = "PolitDeckLifecycleRuntimeError";
+export class PilotDeckLifecycleRuntimeError extends Error {
+  readonly name = "PilotDeckLifecycleRuntimeError";
 
   constructor(
     readonly code: "hook_blocked" | "hook_failed",

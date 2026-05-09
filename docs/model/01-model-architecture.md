@@ -101,7 +101,7 @@ validateModelRequest(request, config) -> ResolvedModelRequest
 ModelProviderRegistry.get(protocol) -> ModelProviderAdapter
 ```
 
-全局 `polit/config` 模块负责读取 `${PolitHome}/politdeck.yaml`、项目级 `.politdeck/politdeck.yaml` 和受控环境变量覆盖。`model` 模块接收合并后的 `model` 段，校验模型配置结构、解析 API key 环境变量引用并产出 `ModelConfig`。上层模块依赖 `createModelRuntime(config)` 返回的 `stream()`、`complete()` 和选定 model 的 capabilities / multimodal constraints，不直接依赖 Anthropic/OpenAI 的 SDK 类型。
+全局 `pilot/config` 模块负责读取 `${PilotHome}/pilotdeck.yaml`、项目级 `.pilotdeck/pilotdeck.yaml` 和受控环境变量覆盖。`model` 模块接收合并后的 `model` 段，校验模型配置结构、解析 API key 环境变量引用并产出 `ModelConfig`。上层模块依赖 `createModelRuntime(config)` 返回的 `stream()`、`complete()` 和选定 model 的 capabilities / multimodal constraints，不直接依赖 Anthropic/OpenAI 的 SDK 类型。
 
 ## Canonical Protocol
 

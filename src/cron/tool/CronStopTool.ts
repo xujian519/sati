@@ -1,8 +1,8 @@
-import type { PolitDeckToolDefinition } from "../../tool/index.js";
+import type { PilotDeckToolDefinition } from "../../tool/index.js";
 import type { CronStopInput, CronStopResult } from "../protocol/types.js";
 import type { CronToolRuntime } from "./CronToolRuntime.js";
 
-export function createCronStopTool(runtime: CronToolRuntime): PolitDeckToolDefinition<CronStopInput, CronStopResult> {
+export function createCronStopTool(runtime: CronToolRuntime): PilotDeckToolDefinition<CronStopInput, CronStopResult> {
   return {
     name: "cron_stop",
     title: "Stop Cron Run",

@@ -1,10 +1,10 @@
 import { resolve } from "node:path";
-import { createProjectId } from "../../polit/paths.js";
+import { createProjectId } from "../../pilot/paths.js";
 
 const ROOT_DIR_NAME = "cron";
 
 export type CronPaths = {
-  politHome: string;
+  pilotHome: string;
   projectKey: string;
   projectId: string;
   rootDir: string;
@@ -14,15 +14,15 @@ export type CronPaths = {
   runHistoryFile: string;
 };
 
-export function resolveCronPaths(input: { politHome: string; projectKey: string }): CronPaths {
-  const politHome = resolve(input.politHome);
+export function resolveCronPaths(input: { pilotHome: string; projectKey: string }): CronPaths {
+  const pilotHome = resolve(input.pilotHome);
   const projectKey = resolve(input.projectKey);
   const projectId = createProjectId(projectKey);
-  const rootDir = resolve(politHome, ROOT_DIR_NAME);
+  const rootDir = resolve(pilotHome, ROOT_DIR_NAME);
   const projectDir = resolve(rootDir, "projects", projectId);
 
   return {
-    politHome,
+    pilotHome,
     projectKey,
     projectId,
     rootDir,

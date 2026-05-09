@@ -1,11 +1,11 @@
 import type { CanonicalToolSchema } from "../../model/index.js";
-import type { PolitDeckToolDefinition } from "../protocol/types.js";
+import type { PilotDeckToolDefinition } from "../protocol/types.js";
 
 export class ToolRegistry {
-  private readonly toolsByName = new Map<string, PolitDeckToolDefinition>();
+  private readonly toolsByName = new Map<string, PilotDeckToolDefinition>();
   private readonly aliases = new Map<string, string>();
 
-  register(tool: PolitDeckToolDefinition): void {
+  register(tool: PilotDeckToolDefinition): void {
     if (this.toolsByName.has(tool.name)) {
       throw new Error(`Tool ${tool.name} is already registered.`);
     }
@@ -29,7 +29,7 @@ export class ToolRegistry {
     }
   }
 
-  get(name: string): PolitDeckToolDefinition | undefined {
+  get(name: string): PilotDeckToolDefinition | undefined {
     const realName = this.aliases.get(name) ?? name;
     return this.toolsByName.get(realName);
   }
@@ -38,7 +38,7 @@ export class ToolRegistry {
     return this.get(name) !== undefined;
   }
 
-  list(): PolitDeckToolDefinition[] {
+  list(): PilotDeckToolDefinition[] {
     return [...this.toolsByName.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
 

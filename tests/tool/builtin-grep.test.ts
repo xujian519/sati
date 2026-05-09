@@ -1,16 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createGrepTool } from "../../src/tool/index.js";
-import { createPolitDeckTempWorkspace } from "../helpers/filesystem.js";
-import { createPolitDeckToolRuntimeFixture } from "../helpers/tool.js";
+import { createPilotDeckTempWorkspace } from "../helpers/filesystem.js";
+import { createPilotDeckToolRuntimeFixture } from "../helpers/tool.js";
 
 test("grep returns files with matches by default", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({
+  const workspace = await createPilotDeckTempWorkspace({
     "src/a.txt": "Hello\nworld",
     "src/b.txt": "nope",
   });
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createGrepTool()],
     cwd: workspace.cwd,
   });
@@ -25,11 +25,11 @@ test("grep returns files with matches by default", async (t) => {
 });
 
 test("grep supports content and count modes", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({
+  const workspace = await createPilotDeckTempWorkspace({
     "a.txt": "alpha\nbeta\nalpha",
   });
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createGrepTool()],
     cwd: workspace.cwd,
   });

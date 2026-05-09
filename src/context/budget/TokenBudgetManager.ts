@@ -76,18 +76,18 @@ export function bytesPerTokenForExt(ext: string | undefined | null): number {
  *   image / pdf / audio blocks    → fixed multimediaTokens (= 2000)
  *   tool_call                     → round((name + JSON.stringify(input)) / 4)
  *   tool_result                   → sum of inner text estimates
- *   tool_result_reference         → round(preview / 4)  (PolitDeck-only block)
+ *   tool_result_reference         → round(preview / 4)  (PilotDeck-only block)
  *   thinking                      → round(text / 4)
  *
  * Behaviour alignment:
  *   T1 round (not ceil) at the leaf; matches legacy.
  *   T2 ext-aware bytesPerTokenForExt for file-type-specific budgets.
  *   T3 estimateForFileType clamps and routes through the ext map.
- *   T4 estimateForBlock branches on canonical block.type (8 PolitDeck blocks).
+ *   T4 estimateForBlock branches on canonical block.type (8 PilotDeck blocks).
  *   T5 thinking blocks count text only (not signature; signature is opaque
  *      provider data, billed by provider not estimator).
  *   T6 image and T7 pdf use a fixed IMAGE_MAX_TOKEN_SIZE = 2000.
- *   T8 audio mirrors image: fixed multimediaTokens (PolitDeck-specific block;
+ *   T8 audio mirrors image: fixed multimediaTokens (PilotDeck-specific block;
  *      legacy lacks audio so this is intentional_difference).
  *   T9 tool_call concatenates name + serialized input as one string before
  *      round (legacy: `roughTokenCountEstimationForBlock` for tool_use).
@@ -151,7 +151,7 @@ export class TokenBudgetManager {
         // T7.
         return this.multimediaTokens;
       case "audio":
-        // T8: PolitDeck-specific. Legacy lacks audio blocks
+        // T8: PilotDeck-specific. Legacy lacks audio blocks
         // (intentional_difference, see §4.2 footnote).
         return this.multimediaTokens;
       case "tool_call": {
@@ -166,7 +166,7 @@ export class TokenBudgetManager {
           0,
         );
       case "tool_result_reference":
-        // T13: PolitDeck-only block; preview only.
+        // T13: PilotDeck-only block; preview only.
         return this.estimateTextTokens(block.preview);
     }
   }

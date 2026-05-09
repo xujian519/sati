@@ -9,7 +9,7 @@ import {
 } from "../../src/tool/index.js";
 import { createDefaultPermissionContext } from "../../src/permission/index.js";
 
-test("PolitDeck tool lookup preserves legacy alias behavior", () => {
+test("PilotDeck tool lookup preserves legacy alias behavior", () => {
   const registry = new ToolRegistry();
   registry.register(createReadFileTool());
 
@@ -18,7 +18,7 @@ test("PolitDeck tool lookup preserves legacy alias behavior", () => {
   assert.equal(registry.get("Write"), undefined);
 });
 
-test("PolitDeck permission mode context preserves fallback defaults", () => {
+test("PilotDeck permission mode context preserves fallback defaults", () => {
   const context = createDefaultPermissionContext({ cwd: "/tmp", mode: "plan" });
   const fallback = createDefaultPermissionContext({ cwd: "/tmp" });
 
@@ -26,7 +26,7 @@ test("PolitDeck permission mode context preserves fallback defaults", () => {
   assert.equal(fallback.mode, "default");
 });
 
-test("PolitDeck filesystem read and search tools are read-only and concurrency safe", () => {
+test("PilotDeck filesystem read and search tools are read-only and concurrency safe", () => {
   const read = createReadFileTool();
   const glob = createGlobTool();
   const grep = createGrepTool();
@@ -43,7 +43,7 @@ test("PolitDeck filesystem read and search tools are read-only and concurrency s
   assert.equal(grep.isConcurrencySafe({ pattern: "needle" }), true);
 });
 
-test("PolitDeck bash read-only classification drives concurrency safety", () => {
+test("PilotDeck bash read-only classification drives concurrency safety", () => {
   const bash = createBashTool({
     runner: {
       run: async () => ({ exitCode: 0, stdout: "", stderr: "", timedOut: false, durationMs: 0 }),

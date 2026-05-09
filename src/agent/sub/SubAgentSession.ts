@@ -23,7 +23,7 @@ import type {
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
 import { ToolRegistry } from "../../tool/registry/ToolRegistry.js";
-import type { PolitDeckToolDefinition } from "../../tool/index.js";
+import type { PilotDeckToolDefinition } from "../../tool/index.js";
 import { SequentialToolScheduler } from "../../tool/scheduler/SequentialToolScheduler.js";
 import { ToolRuntime } from "../../tool/execution/ToolRuntime.js";
 import { PermissionRuntime } from "../../permission/index.js";
@@ -192,7 +192,7 @@ export class SubAgentSession {
         continue; // S9 — read-only subagents reject destructive tools outright
       }
       if (!wildcard && !allowedSet.has(tool.name)) continue;
-      scoped.register(tool as PolitDeckToolDefinition);
+      scoped.register(tool as PilotDeckToolDefinition);
     }
     return scoped;
   }

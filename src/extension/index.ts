@@ -1,28 +1,28 @@
 export {
-  POLITDECK_HOOK_EVENTS,
-  POLITDECK_NOT_APPLICABLE_LEGACY_HOOK_EVENTS,
-  isPolitDeckHookEvent,
-  type PolitDeckHookEvent,
-  type PolitDeckNotApplicableLegacyHookEvent,
+  PILOTDECK_HOOK_EVENTS,
+  PILOTDECK_NOT_APPLICABLE_LEGACY_HOOK_EVENTS,
+  isPilotDeckHookEvent,
+  type PilotDeckHookEvent,
+  type PilotDeckNotApplicableLegacyHookEvent,
 } from "./hooks/protocol/events.js";
-export type { PolitDeckHookBaseInput, PolitDeckHookInput } from "./hooks/protocol/input.js";
+export type { PilotDeckHookBaseInput, PilotDeckHookInput } from "./hooks/protocol/input.js";
 export { createHookInput, toLegacyHookInput } from "./hooks/protocol/input.js";
 export type {
-  PolitDeckHookAsyncOutput,
-  PolitDeckHookOutput,
-  PolitDeckHookSpecificOutput,
-  PolitDeckHookSyncOutput,
-  PolitDeckPermissionHookDecision,
+  PilotDeckHookAsyncOutput,
+  PilotDeckHookOutput,
+  PilotDeckHookSpecificOutput,
+  PilotDeckHookSyncOutput,
+  PilotDeckPermissionHookDecision,
 } from "./hooks/protocol/output.js";
-export type { PolitDeckHookCommand, PolitDeckHookMatcher, PolitDeckHooksSettings } from "./hooks/protocol/settings.js";
+export type { PilotDeckHookCommand, PilotDeckHookMatcher, PilotDeckHooksSettings } from "./hooks/protocol/settings.js";
 export { parseHooksConfig, type ParseHooksConfigResult } from "./hooks/config/parseHooksConfig.js";
 export { matchHookMatcher } from "./hooks/config/matchHook.js";
 export { matchHookCondition } from "./hooks/config/matchHookCondition.js";
 export { parseHookOutput } from "./hooks/execution/parseHookOutput.js";
 export {
   CommandHookExecutor,
-  POLITDECK_HOOK_TIMEOUT_MS,
-  POLITDECK_SESSION_END_HOOK_TIMEOUT_MS,
+  PILOTDECK_HOOK_TIMEOUT_MS,
+  PILOTDECK_SESSION_END_HOOK_TIMEOUT_MS,
   type CommandHookExecutionOptions,
   type CommandHookExecutionResult,
 } from "./hooks/execution/CommandHookExecutor.js";
@@ -32,12 +32,12 @@ export { AgentHookExecutor, type AgentHookRunner } from "./hooks/execution/Agent
 export { CallbackHookExecutor, type CallbackHookHandler } from "./hooks/execution/CallbackHookExecutor.js";
 export { HookRuntime, type HookRuntimeRunInput, type HookRuntimeRunResult } from "./hooks/execution/HookRuntime.js";
 export { AsyncHookRegistry, type AsyncHookResponse, type PendingAsyncHook } from "./hooks/execution/AsyncHookRegistry.js";
-export { HookExecutionEventBus, type PolitDeckHookExecutionEvent } from "./hooks/events/HookExecutionEventBus.js";
+export { HookExecutionEventBus, type PilotDeckHookExecutionEvent } from "./hooks/events/HookExecutionEventBus.js";
 
-export type { PolitDeckPluginManifest } from "./plugins/protocol/manifest.js";
-export type { PolitDeckMarketplaceReference } from "./plugins/protocol/manifest.js";
-export type { PolitDeckLoadedPlugin, PolitDeckPluginSourceKind } from "./plugins/protocol/plugin.js";
-export { resolveMarketplaceReference, type PolitDeckMarketplaceResolution, type PolitDeckPluginMarketplaceStatus } from "./plugins/protocol/marketplace.js";
+export type { PilotDeckPluginManifest } from "./plugins/protocol/manifest.js";
+export type { PilotDeckMarketplaceReference } from "./plugins/protocol/manifest.js";
+export type { PilotDeckLoadedPlugin, PilotDeckPluginSourceKind } from "./plugins/protocol/plugin.js";
+export { resolveMarketplaceReference, type PilotDeckMarketplaceResolution, type PilotDeckPluginMarketplaceStatus } from "./plugins/protocol/marketplace.js";
 export { parsePluginManifest } from "./plugins/config/parsePluginManifest.js";
 export { validateMarketplaceName } from "./plugins/config/validateMarketplaceName.js";
 export { validatePluginSourcePath } from "./plugins/config/validatePluginSource.js";
@@ -51,8 +51,8 @@ export {
   PluginRuntime,
   type PluginRuntimeOptions,
   type PluginRefreshResult,
-  type PolitDeckMcpInstructionEntry,
-  type PolitDeckMcpServerStaticSpec,
+  type PilotDeckMcpInstructionEntry,
+  type PilotDeckMcpServerStaticSpec,
 } from "./plugins/runtime/PluginRuntime.js";
 export {
   MAX_MCP_INSTRUCTION_LENGTH,

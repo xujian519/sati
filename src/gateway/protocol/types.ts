@@ -12,9 +12,9 @@ import type {
 import type { CanonicalUsage } from "../../model/index.js";
 import type { SessionInfo as ProjectSessionInfo } from "../../session/index.js";
 import type {
-  PolitDeckElicitationAnswer,
-  PolitDeckElicitationQuestion,
-} from "../../tool/elicitation/PolitDeckElicitationChannel.js";
+  PilotDeckElicitationAnswer,
+  PilotDeckElicitationQuestion,
+} from "../../tool/elicitation/PilotDeckElicitationChannel.js";
 
 export type GatewayChannelKey = "cli" | "tui" | "feishu" | "web" | "test" | (string & {});
 
@@ -61,7 +61,7 @@ export type GatewayEvent =
       toolCallId: string;
       toolName: string;
       previewFormat?: "html" | "markdown";
-      questions: PolitDeckElicitationQuestion[];
+      questions: PilotDeckElicitationQuestion[];
       metadata?: Record<string, unknown>;
     }
   /**
@@ -78,7 +78,7 @@ export type GatewayEvent =
 export type GatewayElicitationResponseInput = {
   sessionKey: string;
   requestId: string;
-  answer: PolitDeckElicitationAnswer;
+  answer: PilotDeckElicitationAnswer;
 };
 
 export type GatewayError = {

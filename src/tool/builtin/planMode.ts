@@ -1,14 +1,14 @@
-import type { PolitDeckToolDefinition } from "../protocol/types.js";
+import type { PilotDeckToolDefinition } from "../protocol/types.js";
 
 export type ExitPlanModeInput = {
   plan: string;
 };
 
-export function createEnterPlanModeTool(): PolitDeckToolDefinition<Record<string, never>> {
+export function createEnterPlanModeTool(): PilotDeckToolDefinition<Record<string, never>> {
   return {
     name: "enter_plan_mode",
     aliases: ["EnterPlanMode"],
-    description: "Request entry into PolitDeck plan mode.",
+    description: "Request entry into PilotDeck plan mode.",
     kind: "session",
     inputSchema: {
       type: "object",
@@ -24,11 +24,11 @@ export function createEnterPlanModeTool(): PolitDeckToolDefinition<Record<string
   };
 }
 
-export function createExitPlanModeTool(): PolitDeckToolDefinition<ExitPlanModeInput> {
+export function createExitPlanModeTool(): PilotDeckToolDefinition<ExitPlanModeInput> {
   return {
     name: "exit_plan_mode",
     aliases: ["ExitPlanMode"],
-    description: "Submit a plan and request exit from PolitDeck plan mode.",
+    description: "Submit a plan and request exit from PilotDeck plan mode.",
     kind: "session",
     inputSchema: {
       type: "object",

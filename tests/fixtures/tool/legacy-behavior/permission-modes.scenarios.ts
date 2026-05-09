@@ -1,4 +1,4 @@
-import type { PolitDeckToolBehaviorScenario } from "./types.js";
+import type { PilotDeckToolBehaviorScenario } from "./types.js";
 
 const permissionSource = [
   {
@@ -8,11 +8,11 @@ const permissionSource = [
   },
 ];
 
-export const permissionModeScenarios: PolitDeckToolBehaviorScenario[] = [
+export const permissionModeScenarios: PilotDeckToolBehaviorScenario[] = [
   {
     name: "default mode allows read-only tools",
     legacyToolName: "Read",
-    politdeckToolName: "read_file",
+    pilotdeckToolName: "read_file",
     input: { filePath: "a.txt" },
     permissionMode: "default",
     parity: "must_match",
@@ -22,7 +22,7 @@ export const permissionModeScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "default mode asks for writes",
     legacyToolName: "Write",
-    politdeckToolName: "write_file",
+    pilotdeckToolName: "write_file",
     input: { filePath: "a.txt", content: "x" },
     permissionMode: "default",
     parity: "must_match",
@@ -32,7 +32,7 @@ export const permissionModeScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "plan mode denies write tools",
     legacyToolName: "Write",
-    politdeckToolName: "write_file",
+    pilotdeckToolName: "write_file",
     input: { filePath: "a.txt", content: "x" },
     permissionMode: "plan",
     parity: "must_match",
@@ -42,7 +42,7 @@ export const permissionModeScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "acceptEdits mode allows filesystem edits",
     legacyToolName: "Edit",
-    politdeckToolName: "edit_file",
+    pilotdeckToolName: "edit_file",
     input: { filePath: "a.txt", oldString: "a", newString: "b" },
     permissionMode: "acceptEdits",
     parity: "must_match",
@@ -52,7 +52,7 @@ export const permissionModeScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "dontAsk converts asks to deny",
     legacyToolName: "Bash",
-    politdeckToolName: "bash",
+    pilotdeckToolName: "bash",
     input: { command: "npm install" },
     permissionMode: "dontAsk",
     parity: "must_match",

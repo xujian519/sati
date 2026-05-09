@@ -1,13 +1,13 @@
-import type { PolitDeckHookInput } from "../protocol/input.js";
-import type { PolitDeckHookCommand } from "../protocol/settings.js";
-import type { PolitDeckHookOutput } from "../protocol/output.js";
+import type { PilotDeckHookInput } from "../protocol/input.js";
+import type { PilotDeckHookCommand } from "../protocol/settings.js";
+import type { PilotDeckHookOutput } from "../protocol/output.js";
 import { parseHookOutput } from "./parseHookOutput.js";
 import type { CommandHookExecutionResult } from "./CommandHookExecutor.js";
 
 export type CallbackHookHandler = (input: {
-  hookInput: PolitDeckHookInput;
+  hookInput: PilotDeckHookInput;
   signal?: AbortSignal;
-}) => Promise<PolitDeckHookOutput | string | void> | PolitDeckHookOutput | string | void;
+}) => Promise<PilotDeckHookOutput | string | void> | PilotDeckHookOutput | string | void;
 
 export class CallbackHookExecutor {
   private readonly callbacks = new Map<string, CallbackHookHandler>();
@@ -21,8 +21,8 @@ export class CallbackHookExecutor {
   }
 
   async execute(options: {
-    hook: Extract<PolitDeckHookCommand, { type: "callback" }>;
-    hookInput: PolitDeckHookInput;
+    hook: Extract<PilotDeckHookCommand, { type: "callback" }>;
+    hookInput: PilotDeckHookInput;
     signal?: AbortSignal;
   }): Promise<CommandHookExecutionResult> {
     const callback = this.callbacks.get(options.hook.name);

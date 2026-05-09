@@ -4,11 +4,11 @@
 
 主要参考：
 
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/QueryEngine.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/query.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/query/config.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/query/deps.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/services/api/claude.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/QueryEngine.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/query.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/query/config.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/query/deps.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/services/api/claude.ts`
 
 ## 核心流程
 

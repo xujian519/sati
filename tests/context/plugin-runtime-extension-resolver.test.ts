@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { PluginRuntimeExtensionResolver } from "../../src/context/extension/PluginRuntimeExtensionResolver.js";
-import type { PolitDeckLoadedPlugin } from "../../src/extension/index.js";
+import type { PilotDeckLoadedPlugin } from "../../src/extension/index.js";
 
-const loadedPlugin: PolitDeckLoadedPlugin = {
+const loadedPlugin: PilotDeckLoadedPlugin = {
   name: "review",
   path: "/plugins/review",
   source: "global",

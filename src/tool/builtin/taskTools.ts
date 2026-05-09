@@ -13,39 +13,39 @@
 
 import type { BackgroundTaskRuntime } from "../../task/runtime/BackgroundTaskRuntime.js";
 import type {
-  PolitDeckBackgroundBashTask,
-  PolitDeckBackgroundTaskKind,
-  PolitDeckBackgroundTaskListFilter,
-  PolitDeckBackgroundTaskStatus,
+  PilotDeckBackgroundBashTask,
+  PilotDeckBackgroundTaskKind,
+  PilotDeckBackgroundTaskListFilter,
+  PilotDeckBackgroundTaskStatus,
 } from "../../task/protocol/types.js";
-import { PolitDeckToolRuntimeError } from "../protocol/errors.js";
+import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
 import type {
-  PolitDeckToolDefinition,
-  PolitDeckToolExecutionOutput,
+  PilotDeckToolDefinition,
+  PilotDeckToolExecutionOutput,
 } from "../protocol/types.js";
 
 export type TaskCreateInput = {
   command: string;
   agentId?: string;
-  kind?: PolitDeckBackgroundTaskKind;
+  kind?: PilotDeckBackgroundTaskKind;
 };
 
 export type TaskCreateOutput = {
   taskId: string;
-  status: PolitDeckBackgroundTaskStatus;
+  status: PilotDeckBackgroundTaskStatus;
   pid?: number;
 };
 
 export type TaskListInput = {
   agentId?: string;
-  status?: PolitDeckBackgroundTaskStatus | PolitDeckBackgroundTaskStatus[];
-  kind?: PolitDeckBackgroundTaskKind;
+  status?: PilotDeckBackgroundTaskStatus | PilotDeckBackgroundTaskStatus[];
+  kind?: PilotDeckBackgroundTaskKind;
 };
 
 export type TaskListOutput = {
   tasks: Array<
     Pick<
-      PolitDeckBackgroundBashTask,
+      PilotDeckBackgroundBashTask,
       | "taskId"
       | "agentId"
       | "kind"
@@ -71,7 +71,7 @@ export type TaskOutputResult = {
   nextOffset: number;
   totalBytes: number;
   truncated: boolean;
-  status: PolitDeckBackgroundTaskStatus;
+  status: PilotDeckBackgroundTaskStatus;
   exitCode?: number | null;
 };
 
@@ -82,12 +82,12 @@ export type TaskStopInput = {
 
 export type TaskStopResult = {
   taskId: string;
-  status: PolitDeckBackgroundTaskStatus;
+  status: PilotDeckBackgroundTaskStatus;
 };
 
 function ensureRuntime(runtime: BackgroundTaskRuntime | undefined): BackgroundTaskRuntime {
   if (!runtime) {
-    throw new PolitDeckToolRuntimeError(
+    throw new PilotDeckToolRuntimeError(
       "unsupported_tool",
       "task_* tools require a BackgroundTaskRuntime. Configure one via createBuiltinRegistry({ backgroundTasks: { runtime } }).",
     );
@@ -97,7 +97,7 @@ function ensureRuntime(runtime: BackgroundTaskRuntime | undefined): BackgroundTa
 
 export function createTaskCreateTool(
   runtime?: BackgroundTaskRuntime,
-): PolitDeckToolDefinition<TaskCreateInput, TaskCreateOutput> {
+): PilotDeckToolDefinition<TaskCreateInput, TaskCreateOutput> {
   return {
     name: "task_create",
     aliases: ["TaskCreate"],
@@ -117,7 +117,7 @@ export function createTaskCreateTool(
     isReadOnly: () => false,
     isConcurrencySafe: () => true,
     isDestructive: () => true,
-    execute: async (input, context): Promise<PolitDeckToolExecutionOutput<TaskCreateOutput>> => {
+    execute: async (input, context): Promise<PilotDeckToolExecutionOutput<TaskCreateOutput>> => {
       const rt = ensureRuntime(runtime);
       const task = await rt.start({
         command: input.command,
@@ -138,7 +138,7 @@ export function createTaskCreateTool(
 
 export function createTaskListTool(
   runtime?: BackgroundTaskRuntime,
-): PolitDeckToolDefinition<TaskListInput, TaskListOutput> {
+): PilotDeckToolDefinition<TaskListInput, TaskListOutput> {
   return {
     name: "task_list",
     aliases: ["TaskList"],
@@ -155,9 +155,9 @@ export function createTaskListTool(
     },
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
-    execute: async (input): Promise<PolitDeckToolExecutionOutput<TaskListOutput>> => {
+    execute: async (input): Promise<PilotDeckToolExecutionOutput<TaskListOutput>> => {
       const rt = ensureRuntime(runtime);
-      const filter: PolitDeckBackgroundTaskListFilter = {
+      const filter: PilotDeckBackgroundTaskListFilter = {
         agentId: input.agentId,
         status: input.status,
         kind: input.kind,
@@ -185,7 +185,7 @@ export function createTaskListTool(
 
 export function createTaskOutputTool(
   runtime?: BackgroundTaskRuntime,
-): PolitDeckToolDefinition<TaskOutputInput, TaskOutputResult> {
+): PilotDeckToolDefinition<TaskOutputInput, TaskOutputResult> {
   return {
     name: "task_output",
     aliases: ["TaskOutput"],
@@ -204,11 +204,11 @@ export function createTaskOutputTool(
     maxResultBytes: 200_000,
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
-    execute: async (input): Promise<PolitDeckToolExecutionOutput<TaskOutputResult>> => {
+    execute: async (input): Promise<PilotDeckToolExecutionOutput<TaskOutputResult>> => {
       const rt = ensureRuntime(runtime);
       const task = rt.get(input.taskId);
       if (!task) {
-        throw new PolitDeckToolRuntimeError(
+        throw new PilotDeckToolRuntimeError(
           "invalid_tool_input",
           `Unknown taskId: ${input.taskId}`,
         );
@@ -230,7 +230,7 @@ export function createTaskOutputTool(
 
 export function createTaskStopTool(
   runtime?: BackgroundTaskRuntime,
-): PolitDeckToolDefinition<TaskStopInput, TaskStopResult> {
+): PilotDeckToolDefinition<TaskStopInput, TaskStopResult> {
   return {
     name: "task_stop",
     aliases: ["TaskStop"],
@@ -248,11 +248,11 @@ export function createTaskStopTool(
     isReadOnly: () => false,
     isConcurrencySafe: () => true,
     isDestructive: () => true,
-    execute: async (input): Promise<PolitDeckToolExecutionOutput<TaskStopResult>> => {
+    execute: async (input): Promise<PilotDeckToolExecutionOutput<TaskStopResult>> => {
       const rt = ensureRuntime(runtime);
       const task = rt.get(input.taskId);
       if (!task) {
-        throw new PolitDeckToolRuntimeError(
+        throw new PilotDeckToolRuntimeError(
           "invalid_tool_input",
           `Unknown taskId: ${input.taskId}`,
         );

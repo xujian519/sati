@@ -24,7 +24,7 @@ function bigToolResult(toolCallId: string, size: number): CanonicalMessage {
 }
 
 test("ToolResultBudget passes through small tool results untouched", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "politdeck-trb-"));
+  const dir = mkdtempSync(join(tmpdir(), "pilotdeck-trb-"));
   try {
     const budget = new ToolResultBudget({ toolResultsDir: dir, maxResultSizeChars: 100 });
     const message = bigToolResult("tool-1", 50);
@@ -36,7 +36,7 @@ test("ToolResultBudget passes through small tool results untouched", async () =>
 });
 
 test("ToolResultBudget replaces oversized tool_result with reference block and persists original", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "politdeck-trb-"));
+  const dir = mkdtempSync(join(tmpdir(), "pilotdeck-trb-"));
   try {
     const budget = new ToolResultBudget({ toolResultsDir: dir, maxResultSizeChars: 100, previewBytes: 20 });
     const message = bigToolResult("tool-2", 500);
@@ -56,7 +56,7 @@ test("ToolResultBudget replaces oversized tool_result with reference block and p
 });
 
 test("ToolResultBudget reuses existing replacement record without rewriting the file", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "politdeck-trb-"));
+  const dir = mkdtempSync(join(tmpdir(), "pilotdeck-trb-"));
   try {
     const budget = new ToolResultBudget({ toolResultsDir: dir, maxResultSizeChars: 100 });
     const first = await budget.applyToMessage(bigToolResult("tool-3", 200));
@@ -71,7 +71,7 @@ test("ToolResultBudget reuses existing replacement record without rewriting the 
 });
 
 test("ToolResultBudget detects JSON content and uses .json extension", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "politdeck-trb-"));
+  const dir = mkdtempSync(join(tmpdir(), "pilotdeck-trb-"));
   try {
     const json = JSON.stringify({ value: "y".repeat(500) });
     const message: CanonicalMessage = {

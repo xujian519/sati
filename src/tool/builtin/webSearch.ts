@@ -1,9 +1,9 @@
 import type { PermissionResult } from "../../permission/index.js";
-import { PolitDeckToolRuntimeError } from "../protocol/errors.js";
+import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
 import type {
-  PolitDeckToolDefinition,
-  PolitDeckToolExecutionOutput,
-  PolitDeckToolRuntimeContext,
+  PilotDeckToolDefinition,
+  PilotDeckToolExecutionOutput,
+  PilotDeckToolRuntimeContext,
 } from "../protocol/types.js";
 
 /**
@@ -72,7 +72,7 @@ const DEFAULT_TOP_STORIES_LIMIT = 5;
 
 export function createWebSearchTool(
   options: CreateWebSearchToolOptions = {},
-): PolitDeckToolDefinition<WebSearchInput, WebSearchOutput> {
+): PilotDeckToolDefinition<WebSearchInput, WebSearchOutput> {
   const region: WebSearchRegion = options.region ?? "cn";
   const endpoint =
     options.endpoint ?? (region === "global" ? SERP_GLOBAL_ENDPOINT : SERP_HK_ENDPOINT);
@@ -128,7 +128,7 @@ export function createWebSearchTool(
     execute: async (input, context) => {
       const apiKey = resolveApiKey(options.apiKey, context);
       if (!apiKey) {
-        throw new PolitDeckToolRuntimeError(
+        throw new PilotDeckToolRuntimeError(
           "unsupported_tool",
           "web_search is not configured. Set SERP_API_KEY env var or pass apiKey via createWebSearchTool({ apiKey }).",
         );
@@ -149,7 +149,7 @@ export function createWebSearchTool(
 
 function resolveApiKey(
   optionApiKey: string | undefined,
-  context: PolitDeckToolRuntimeContext,
+  context: PilotDeckToolRuntimeContext,
 ): string | undefined {
   const fromOption = optionApiKey?.trim();
   if (fromOption) {
@@ -161,7 +161,7 @@ function resolveApiKey(
 
 type PerformSearchInput = {
   input: WebSearchInput;
-  context: PolitDeckToolRuntimeContext;
+  context: PilotDeckToolRuntimeContext;
   apiKey: string;
   endpoint: string;
   fetchImpl: typeof fetch;
@@ -172,12 +172,12 @@ type PerformSearchInput = {
 
 async function performSearch(
   args: PerformSearchInput,
-): Promise<PolitDeckToolExecutionOutput<WebSearchOutput>> {
+): Promise<PilotDeckToolExecutionOutput<WebSearchOutput>> {
   const { input, context, apiKey, endpoint, fetchImpl, timeoutMs, organicLimit, topStoriesLimit } =
     args;
   const query = input.query.trim();
   if (!query) {
-    throw new PolitDeckToolRuntimeError(
+    throw new PilotDeckToolRuntimeError(
       "invalid_tool_input",
       "web_search requires a non-empty `query`.",
     );
@@ -205,12 +205,12 @@ async function performSearch(
     });
   } catch (error) {
     if (controller.signal.aborted && context.abortSignal?.aborted !== true) {
-      throw new PolitDeckToolRuntimeError(
+      throw new PilotDeckToolRuntimeError(
         "tool_timeout",
         `web_search timed out after ${timeoutMs}ms.`,
       );
     }
-    throw new PolitDeckToolRuntimeError(
+    throw new PilotDeckToolRuntimeError(
       "tool_execution_failed",
       `web_search request failed: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -221,7 +221,7 @@ async function performSearch(
 
   if (!response.ok) {
     const detail = await response.text().catch(() => response.statusText);
-    throw new PolitDeckToolRuntimeError(
+    throw new PilotDeckToolRuntimeError(
       "tool_execution_failed",
       `serp.hk API error (${response.status}): ${detail}`,
     );
@@ -230,7 +230,7 @@ async function performSearch(
   const raw = (await response.json()) as Record<string, unknown>;
   if (typeof raw.code === "number" && raw.code !== 0) {
     const message = typeof raw.msg === "string" ? raw.msg : "serp.hk error";
-    throw new PolitDeckToolRuntimeError(
+    throw new PilotDeckToolRuntimeError(
       "tool_execution_failed",
       `serp.hk error code=${raw.code}: ${message}`,
     );

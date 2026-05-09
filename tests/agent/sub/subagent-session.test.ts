@@ -113,7 +113,7 @@ test("C2.E2E SubAgentSession.run drives one assistant message and returns a pars
   const sysPrompt = model.requests[0].systemPrompt ?? "";
   assert.ok(!sysPrompt.includes("secrets"));
   // Subagent prefix injected.
-  assert.match(sysPrompt, /You are a subagent of PolitDeck/);
+  assert.match(sysPrompt, /You are a subagent of PilotDeck/);
 });
 
 test("C2.E2E SubAgentSession scopes the tool registry per definition.allowedTools", async () => {

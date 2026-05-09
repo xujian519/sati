@@ -1,27 +1,27 @@
-export type PolitDeckToolInputSchema = {
+export type PilotDeckToolInputSchema = {
   type: "object";
-  properties?: Record<string, PolitDeckJsonSchema>;
+  properties?: Record<string, PilotDeckJsonSchema>;
   required?: string[];
   additionalProperties?: boolean;
   [key: string]: unknown;
 };
 
-export type PolitDeckJsonSchema = {
+export type PilotDeckJsonSchema = {
   type?: string | string[];
-  properties?: Record<string, PolitDeckJsonSchema>;
+  properties?: Record<string, PilotDeckJsonSchema>;
   required?: string[];
   additionalProperties?: boolean;
-  items?: PolitDeckJsonSchema;
+  items?: PilotDeckJsonSchema;
   enum?: unknown[];
   [key: string]: unknown;
 };
 
-export type PolitDeckToolValidationIssue = {
+export type PilotDeckToolValidationIssue = {
   path: string;
   code: "required" | "unknown_property" | "invalid_type" | "invalid_enum" | "invalid_schema";
   message: string;
 };
 
-export type PolitDeckToolValidationResult =
+export type PilotDeckToolValidationResult =
   | { ok: true; input: unknown }
-  | { ok: false; issues: PolitDeckToolValidationIssue[] };
+  | { ok: false; issues: PilotDeckToolValidationIssue[] };

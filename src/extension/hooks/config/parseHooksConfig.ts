@@ -1,18 +1,18 @@
-import { isPolitDeckHookEvent } from "../protocol/events.js";
+import { isPilotDeckHookEvent } from "../protocol/events.js";
 import type {
-  PolitDeckHookCommand,
-  PolitDeckHookMatcher,
-  PolitDeckHooksSettings,
+  PilotDeckHookCommand,
+  PilotDeckHookMatcher,
+  PilotDeckHooksSettings,
 } from "../protocol/settings.js";
 
 export type ParseHooksConfigResult = {
-  settings: PolitDeckHooksSettings;
+  settings: PilotDeckHooksSettings;
   diagnostics: string[];
 };
 
 export function parseHooksConfig(raw: unknown): ParseHooksConfigResult {
   const diagnostics: string[] = [];
-  const settings: PolitDeckHooksSettings = {};
+  const settings: PilotDeckHooksSettings = {};
 
   if (raw === undefined || raw === null) {
     return { settings, diagnostics };
@@ -22,7 +22,7 @@ export function parseHooksConfig(raw: unknown): ParseHooksConfigResult {
   }
 
   for (const [eventName, rawMatchers] of Object.entries(raw)) {
-    if (!isPolitDeckHookEvent(eventName)) {
+    if (!isPilotDeckHookEvent(eventName)) {
       diagnostics.push(`Unsupported hook event ${eventName}.`);
       continue;
     }
@@ -31,7 +31,7 @@ export function parseHooksConfig(raw: unknown): ParseHooksConfigResult {
       continue;
     }
 
-    const matchers: PolitDeckHookMatcher[] = [];
+    const matchers: PilotDeckHookMatcher[] = [];
     for (const rawMatcher of rawMatchers) {
       const matcher = parseMatcher(eventName, rawMatcher, diagnostics);
       if (matcher) {
@@ -46,7 +46,7 @@ export function parseHooksConfig(raw: unknown): ParseHooksConfigResult {
   return { settings, diagnostics };
 }
 
-function parseMatcher(eventName: string, rawMatcher: unknown, diagnostics: string[]): PolitDeckHookMatcher | undefined {
+function parseMatcher(eventName: string, rawMatcher: unknown, diagnostics: string[]): PilotDeckHookMatcher | undefined {
   if (!isRecord(rawMatcher)) {
     diagnostics.push(`Hook matcher for ${eventName} must be an object.`);
     return undefined;
@@ -56,7 +56,7 @@ function parseMatcher(eventName: string, rawMatcher: unknown, diagnostics: strin
     return undefined;
   }
 
-  const hooks: PolitDeckHookCommand[] = [];
+  const hooks: PilotDeckHookCommand[] = [];
   for (const rawHook of rawMatcher.hooks) {
     const hook = parseHookCommand(eventName, rawHook, diagnostics);
     if (hook) {
@@ -73,7 +73,7 @@ function parseMatcher(eventName: string, rawMatcher: unknown, diagnostics: strin
   };
 }
 
-function parseHookCommand(eventName: string, rawHook: unknown, diagnostics: string[]): PolitDeckHookCommand | undefined {
+function parseHookCommand(eventName: string, rawHook: unknown, diagnostics: string[]): PilotDeckHookCommand | undefined {
   if (!isRecord(rawHook) || typeof rawHook.type !== "string") {
     diagnostics.push(`Hook for ${eventName} must contain a type.`);
     return undefined;

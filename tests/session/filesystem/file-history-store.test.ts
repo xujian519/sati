@@ -6,7 +6,7 @@ import {
   FileHistoryStore,
   type FileHistorySnapshotRecordedEntry,
 } from "../../../src/session/index.js";
-import { createPolitDeckTempWorkspace } from "../../helpers/filesystem.js";
+import { createPilotDeckTempWorkspace } from "../../helpers/filesystem.js";
 
 function newStore(
   backupDir: string,
@@ -21,7 +21,7 @@ function newStore(
 }
 
 test("C4.F1+F2 trackEdit captures file once per messageId (idempotent)", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({ "src/x.ts": "v1" });
+  const ws = await createPilotDeckTempWorkspace({ "src/x.ts": "v1" });
   t.after(() => ws.cleanup());
   const file = path.join(ws.cwd, "src/x.ts");
   const recorded: FileHistorySnapshotRecordedEntry[] = [];
@@ -45,7 +45,7 @@ test("C4.F1+F2 trackEdit captures file once per messageId (idempotent)", async (
 });
 
 test("C4.F8+F9 rewind: restore tracked files from snapshot", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({ "src/x.ts": "before" });
+  const ws = await createPilotDeckTempWorkspace({ "src/x.ts": "before" });
   t.after(() => ws.cleanup());
   const file = path.join(ws.cwd, "src/x.ts");
   const store = newStore(path.join(ws.cwd, ".bk"));
@@ -58,7 +58,7 @@ test("C4.F8+F9 rewind: restore tracked files from snapshot", async (t) => {
 });
 
 test("C4.F11 rewind: null backup unlinks created file", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({});
+  const ws = await createPilotDeckTempWorkspace({});
   t.after(() => ws.cleanup());
   const file = path.join(ws.cwd, "src/created.ts");
   const store = newStore(path.join(ws.cwd, ".bk"));
@@ -71,14 +71,14 @@ test("C4.F11 rewind: null backup unlinks created file", async (t) => {
 });
 
 test("C4.F8 rewind: unknown messageId throws", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({});
+  const ws = await createPilotDeckTempWorkspace({});
   t.after(() => ws.cleanup());
   const store = newStore(path.join(ws.cwd, ".bk"));
   await assert.rejects(() => store.rewind("nonexistent"), /No snapshot/);
 });
 
 test("C4.F12 onSnapshotRecorded fires for trackEdit and makeSnapshot", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({ "x.ts": "1" });
+  const ws = await createPilotDeckTempWorkspace({ "x.ts": "1" });
   t.after(() => ws.cleanup());
   const recorded: FileHistorySnapshotRecordedEntry[] = [];
   const store = newStore(path.join(ws.cwd, ".bk"), recorded);
@@ -94,7 +94,7 @@ test("C4.F12 onSnapshotRecorded fires for trackEdit and makeSnapshot", async (t)
 });
 
 test("C4.replayFromTranscript reconstructs state from previously-recorded entries", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({ "x.ts": "src" });
+  const ws = await createPilotDeckTempWorkspace({ "x.ts": "src" });
   t.after(() => ws.cleanup());
   const recorded: FileHistorySnapshotRecordedEntry[] = [];
   const original = newStore(path.join(ws.cwd, ".bk"), recorded);
@@ -114,7 +114,7 @@ test("C4.replayFromTranscript reconstructs state from previously-recorded entrie
 });
 
 test("C4.F13 maxSnapshots eviction drops oldest snapshots and unreferenced backup files", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({ "a.ts": "1" });
+  const ws = await createPilotDeckTempWorkspace({ "a.ts": "1" });
   t.after(() => ws.cleanup());
   const backupDir = path.join(ws.cwd, ".bk");
   const store = new FileHistoryStore({ backupDir, maxSnapshots: 2 });
@@ -132,7 +132,7 @@ test("C4.F13 maxSnapshots eviction drops oldest snapshots and unreferenced backu
 });
 
 test("C4.F6 makeSnapshot bumps version when file mtime changes between snapshots", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({ "x.ts": "v1" });
+  const ws = await createPilotDeckTempWorkspace({ "x.ts": "v1" });
   t.after(() => ws.cleanup());
   const file = path.join(ws.cwd, "x.ts");
   const store = newStore(path.join(ws.cwd, ".bk"));
@@ -148,7 +148,7 @@ test("C4.F6 makeSnapshot bumps version when file mtime changes between snapshots
 });
 
 test("C4.F14 getDiffStats reports rough insertions/deletions", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({ "x.ts": "line1\nline2\nline3\n" });
+  const ws = await createPilotDeckTempWorkspace({ "x.ts": "line1\nline2\nline3\n" });
   t.after(() => ws.cleanup());
   const file = path.join(ws.cwd, "x.ts");
   const store = newStore(path.join(ws.cwd, ".bk"));
@@ -161,7 +161,7 @@ test("C4.F14 getDiffStats reports rough insertions/deletions", async (t) => {
 });
 
 test("C4 oversize file is skipped with warn", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({ "big.bin": Buffer.alloc(2048, 0xff) });
+  const ws = await createPilotDeckTempWorkspace({ "big.bin": Buffer.alloc(2048, 0xff) });
   t.after(() => ws.cleanup());
   const warns: string[] = [];
   const store = new FileHistoryStore({

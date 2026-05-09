@@ -1,5 +1,5 @@
-import type { PolitDeckToolDefinition } from "../../tool/index.js";
+import type { PilotDeckToolDefinition } from "../../tool/index.js";
 
 export type ToolContribution = {
-  tools: PolitDeckToolDefinition[];
+  tools: PilotDeckToolDefinition[];
 };

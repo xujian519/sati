@@ -4,13 +4,13 @@
 
 主要参考：
 
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/Tool.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/tools.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/services/tools/toolOrchestration.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/services/tools/StreamingToolExecutor.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/services/tools/toolExecution.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/hooks/useCanUseTool.tsx`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/utils/permissions/permissions.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/Tool.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/tools.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/services/tools/toolOrchestration.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/services/tools/StreamingToolExecutor.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/services/tools/toolExecution.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/hooks/useCanUseTool.tsx`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/utils/permissions/permissions.ts`
 
 ## 工具系统在 loop 中的位置
 

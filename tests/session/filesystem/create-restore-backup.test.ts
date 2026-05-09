@@ -7,10 +7,10 @@ import {
   getBackupFileName,
   restoreBackup,
 } from "../../../src/session/index.js";
-import { createPolitDeckTempWorkspace } from "../../helpers/filesystem.js";
+import { createPilotDeckTempWorkspace } from "../../helpers/filesystem.js";
 
 test("C4.F3 createBackup: ENOENT → null backup marker", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({});
+  const ws = await createPilotDeckTempWorkspace({});
   t.after(() => ws.cleanup());
   const backupDir = path.join(ws.cwd, "backups");
   const result = await createBackup({
@@ -23,7 +23,7 @@ test("C4.F3 createBackup: ENOENT → null backup marker", async (t) => {
 });
 
 test("C4.F3 createBackup: lazy mkdir + copy + preserve mode", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({ "src/foo.ts": "hello" });
+  const ws = await createPilotDeckTempWorkspace({ "src/foo.ts": "hello" });
   t.after(() => ws.cleanup());
   const file = path.join(ws.cwd, "src/foo.ts");
   await fs.chmod(file, 0o640);
@@ -37,7 +37,7 @@ test("C4.F3 createBackup: lazy mkdir + copy + preserve mode", async (t) => {
 });
 
 test("C4.F3 createBackup: oversize → null backup with oversize flag", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({ "big.bin": Buffer.alloc(2048, 0xab) });
+  const ws = await createPilotDeckTempWorkspace({ "big.bin": Buffer.alloc(2048, 0xab) });
   t.after(() => ws.cleanup());
   const result = await createBackup({
     filePath: path.join(ws.cwd, "big.bin"),
@@ -50,7 +50,7 @@ test("C4.F3 createBackup: oversize → null backup with oversize flag", async (t
 });
 
 test("C4.F11 restoreBackup: null backup → unlink target", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({ "x.txt": "delete me" });
+  const ws = await createPilotDeckTempWorkspace({ "x.txt": "delete me" });
   t.after(() => ws.cleanup());
   const file = path.join(ws.cwd, "x.txt");
   const result = await restoreBackup({
@@ -63,7 +63,7 @@ test("C4.F11 restoreBackup: null backup → unlink target", async (t) => {
 });
 
 test("C4.F11 restoreBackup: null backup with already-absent target is idempotent", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({});
+  const ws = await createPilotDeckTempWorkspace({});
   t.after(() => ws.cleanup());
   const result = await restoreBackup({
     filePath: path.join(ws.cwd, "missing.txt"),
@@ -74,7 +74,7 @@ test("C4.F11 restoreBackup: null backup with already-absent target is idempotent
 });
 
 test("C4.F9+F10 restoreBackup: copy backup back, restore mode", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({ "src/foo.ts": "v1-content" });
+  const ws = await createPilotDeckTempWorkspace({ "src/foo.ts": "v1-content" });
   t.after(() => ws.cleanup());
   const file = path.join(ws.cwd, "src/foo.ts");
   const backupDir = path.join(ws.cwd, "backups");
@@ -93,7 +93,7 @@ test("C4.F9+F10 restoreBackup: copy backup back, restore mode", async (t) => {
 });
 
 test("C4.F13 restoreBackup: missing backup file is gracefully reported", async (t) => {
-  const ws = await createPolitDeckTempWorkspace({ "x.txt": "" });
+  const ws = await createPilotDeckTempWorkspace({ "x.txt": "" });
   t.after(() => ws.cleanup());
   const fakeName = getBackupFileName("/never/created", 1);
   const result = await restoreBackup({

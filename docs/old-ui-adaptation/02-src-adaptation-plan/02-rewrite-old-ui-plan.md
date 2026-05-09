@@ -1,6 +1,6 @@
 # 重写或改写 old_ui 的方案
 
-本文描述如何改写 `old_ui/`，使它逐步适配 PolitDeck `src/`。目标不是一次性大爆炸重写，而是用 adapter 分层把旧 UI 从旧 Express/provider 后端迁到 Gateway。
+本文描述如何改写 `old_ui/`，使它逐步适配 PilotDeck `src/`。目标不是一次性大爆炸重写，而是用 adapter 分层把旧 UI 从旧 Express/provider 后端迁到 Gateway。
 
 ## 目标形态
 
@@ -10,7 +10,7 @@
 Web React UI
   -> web data hooks
   -> GatewayBrowserClient / WebApiClient
-  -> PolitDeck Gateway / Web Adapter
+  -> PilotDeck Gateway / Web Adapter
   -> src/agent + src/session + src/tool + src/model + src/cron
 ```
 
@@ -36,9 +36,9 @@ Web React UI
 - old-to-new event mapping 表。
 - 迁移状态矩阵，每个能力明确状态。
 
-## Phase 1：新增 PolitDeck Gateway Client
+## Phase 1：新增 PilotDeck Gateway Client
 
-在 Web UI 内新增 PolitDeck client，不替换所有页面：
+在 Web UI 内新增 PilotDeck client，不替换所有页面：
 
 - 复用或扩展 `ui/src/gateway-browser-client.ts` 的协议实现。
 - 支持 `hello_ok`、`response`、`event` 三类帧。
@@ -64,9 +64,9 @@ GatewayEvent -> NormalizedMessage[]
 
 ## Phase 2：迁移 Chat 主流程
 
-把 Chat 页面从 provider command 切到 PolitDeck Gateway：
+把 Chat 页面从 provider command 切到 PilotDeck Gateway：
 
-- 新增 `politdeck` provider 或把 provider selection 抽象成 `runtime`.
+- 新增 `pilotdeck` provider 或把 provider selection 抽象成 `runtime`.
 - 发送消息时调用 `submit_turn`，传入 `sessionKey`、`channelKey: "web"`、`projectKey`、`message`、`mode`、`attachments`。
 - 中断调用 `abort_turn`。
 - 历史消息从新的 session messages API 读取，而不是 provider adapter。
@@ -84,13 +84,13 @@ GatewayEvent -> NormalizedMessage[]
 把项目和会话数据从旧 `/api/projects` 逐步迁到 Web adapter/Gateway：
 
 - `projectKey` 应稳定表示项目根目录或项目 id。
-- `sessionKey` 应稳定表示 PolitDeck session。
+- `sessionKey` 应稳定表示 PilotDeck session。
 - 列表中保留 `title/summary/lastActivity/messageCount`。
 - 背景任务 session 独立展示。
 
 兼容方式：
 
-- 短期：旧 `/api/projects` 返回 `politdeck` provider 的 sessions。
+- 短期：旧 `/api/projects` 返回 `pilotdeck` provider 的 sessions。
 - 中期：新增 `/api/web/projects` 或 Gateway 方法。
 - 长期：删除 provider-specific session lists。
 
@@ -100,7 +100,7 @@ Files：
 
 - 先把旧 file tree/read/write API 包成 workspace-safe service。
 - 再将 UI hooks 从 `api.readFile/saveFile/getFiles` 切到新 client。
-- 文件修改要与 PolitDeck tool/runtime 的工作区边界一致。
+- 文件修改要与 PilotDeck tool/runtime 的工作区边界一致。
 
 Git：
 
@@ -111,7 +111,7 @@ Shell：
 
 - 初期可保留旧 `/shell` WebSocket。
 - 新终端协议准备好后迁移为 Gateway terminal extension。
-- provider CLI shell resume 逻辑不应成为 PolitDeck Chat 的主路径。
+- provider CLI shell resume 逻辑不应成为 PilotDeck Chat 的主路径。
 
 ## Phase 5：迁移 Cron、Always-On、Settings
 
@@ -130,9 +130,9 @@ Always-On：
 
 Settings：
 
-- provider/model 设置迁移到 PolitDeck config。
+- provider/model 设置迁移到 PilotDeck config。
 - 权限 allow/deny/ask 迁移到 `PermissionConfig`。
-- UI 偏好继续 localStorage，但使用 `politdeck.*` key。
+- UI 偏好继续 localStorage，但使用 `pilotdeck.*` key。
 
 ## 删除旧后端的条件
 

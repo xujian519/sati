@@ -1,10 +1,10 @@
-import type { PolitDeckToolBehaviorScenario } from "./types.js";
+import type { PilotDeckToolBehaviorScenario } from "./types.js";
 
-export const registryScenarios: PolitDeckToolBehaviorScenario[] = [
+export const registryScenarios: PilotDeckToolBehaviorScenario[] = [
   {
-    name: "legacy alias resolves to PolitDeck tool",
+    name: "legacy alias resolves to PilotDeck tool",
     legacyToolName: "Read",
-    politdeckToolName: "read_file",
+    pilotdeckToolName: "read_file",
     input: { alias: "Read" },
     permissionMode: "default",
     parity: "must_match",

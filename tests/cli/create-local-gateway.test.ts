@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createLocalGateway } from "../../src/cli/createLocalGateway.js";
-import { getPolitConfigFilePath, getPolitProjectConfigFilePath } from "../../src/polit/index.js";
+import { getPilotConfigFilePath, getPilotProjectConfigFilePath } from "../../src/pilot/index.js";
 import {
   createAgentProjectSessionStorage,
   JsonlTranscriptWriter,
@@ -12,44 +12,44 @@ import {
 import { validAgentConfig, validModelConfig } from "../model/helpers.js";
 
 test("createLocalGateway lists sessions from the requested project only", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-local-gateway-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-local-gateway-"));
   try {
-    const politHome = path.join(root, "home");
+    const pilotHome = path.join(root, "home");
     const defaultProject = path.join(root, "default-project");
     const firstProject = path.join(root, "first-project");
     const secondProject = path.join(root, "second-project");
 
-    await writeJson(getPolitConfigFilePath(politHome), {
+    await writeJson(getPilotConfigFilePath(pilotHome), {
       schemaVersion: 1,
       agent: validAgentConfig(),
       model: validModelConfig(),
     });
-    await writeJson(getPolitProjectConfigFilePath(firstProject), {
+    await writeJson(getPilotProjectConfigFilePath(firstProject), {
       agent: {
         model: "anthropic-main/claude-sonnet-4-5",
       },
     });
-    await writeJson(getPolitProjectConfigFilePath(secondProject), {
+    await writeJson(getPilotProjectConfigFilePath(secondProject), {
       agent: {
         model: "openai-main/gpt-5.1",
       },
     });
     await writeSession({
       projectRoot: firstProject,
-      politHome,
+      pilotHome,
       sessionId: "first-session",
       prompt: "First project prompt",
     });
     await writeSession({
       projectRoot: secondProject,
-      politHome,
+      pilotHome,
       sessionId: "second-session",
       prompt: "Second project prompt",
     });
 
     const gateway = createLocalGateway({
       projectRoot: defaultProject,
-      politHome,
+      pilotHome,
       env: { ANTHROPIC_API_KEY: "anthropic-key" },
     });
 
@@ -66,13 +66,13 @@ test("createLocalGateway lists sessions from the requested project only", async 
 });
 
 test("createLocalGateway loads project plugin hooks into submitted sessions", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-local-gateway-plugin-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-local-gateway-plugin-"));
   try {
-    const politHome = path.join(root, "home");
+    const pilotHome = path.join(root, "home");
     const projectRoot = path.join(root, "project");
-    const pluginRoot = path.join(projectRoot, ".politdeck", "plugins", "blocker");
+    const pluginRoot = path.join(projectRoot, ".pilotdeck", "plugins", "blocker");
 
-    await writeJson(getPolitConfigFilePath(politHome), {
+    await writeJson(getPilotConfigFilePath(pilotHome), {
       schemaVersion: 1,
       agent: validAgentConfig(),
       model: validModelConfig(),
@@ -95,7 +95,7 @@ test("createLocalGateway loads project plugin hooks into submitted sessions", as
 
     const gateway = createLocalGateway({
       projectRoot,
-      politHome,
+      pilotHome,
       env: { ANTHROPIC_API_KEY: "anthropic-key" },
     });
 
@@ -117,7 +117,7 @@ test("createLocalGateway loads project plugin hooks into submitted sessions", as
 
 async function writeSession(options: {
   projectRoot: string;
-  politHome: string;
+  pilotHome: string;
   sessionId: string;
   prompt: string;
 }): Promise<void> {

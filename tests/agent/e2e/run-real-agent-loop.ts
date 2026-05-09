@@ -1,13 +1,13 @@
 import { createAgentSession, type AgentEvent, type AgentRuntimeConfig } from "../../../src/agent/index.js";
 import { createModelRuntime } from "../../../src/model/index.js";
 import { createDefaultPermissionContext } from "../../../src/permission/index.js";
-import { loadPolitConfig } from "../../../src/polit/index.js";
+import { loadPilotConfig } from "../../../src/pilot/index.js";
 import { createBuiltinRegistry } from "../../../src/tool/index.js";
 import { createRouterRuntime } from "../../../src/router/index.js";
 
-const prompt = process.argv.slice(2).join(" ") || "Reply with exactly: PolitDeck agent loop OK";
+const prompt = process.argv.slice(2).join(" ") || "Reply with exactly: PilotDeck agent loop OK";
 const cwd = process.cwd();
-const snapshot = loadPolitConfig();
+const snapshot = loadPilotConfig();
 const selectedModel = snapshot.config.agent.model;
 const registry = createBuiltinRegistry();
 const permissionContext = createDefaultPermissionContext({

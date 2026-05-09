@@ -5,18 +5,18 @@ import {
   createAgentTool,
   type AgentToolOutput,
 } from "../../src/tool/builtin/agent.js";
-import { PolitDeckToolRuntimeError } from "../../src/tool/index.js";
+import { PilotDeckToolRuntimeError } from "../../src/tool/index.js";
 import { createDefaultPermissionContext } from "../../src/permission/index.js";
 import type {
   CanonicalModelEvent,
   CanonicalModelRequest,
 } from "../../src/model/index.js";
 import type {
-  PolitDeckToolModelClient,
-  PolitDeckToolRuntimeContext,
+  PilotDeckToolModelClient,
+  PilotDeckToolRuntimeContext,
 } from "../../src/tool/index.js";
 
-class ScriptedModel implements PolitDeckToolModelClient {
+class ScriptedModel implements PilotDeckToolModelClient {
   readonly requests: CanonicalModelRequest[] = [];
   constructor(private readonly events: CanonicalModelEvent[]) {}
   async *stream(request: CanonicalModelRequest): AsyncIterable<CanonicalModelEvent> {
@@ -29,7 +29,7 @@ class ScriptedModel implements PolitDeckToolModelClient {
 
 const cwd = "/tmp/proj";
 
-function makeContext(model?: PolitDeckToolModelClient, signal?: AbortSignal): PolitDeckToolRuntimeContext {
+function makeContext(model?: PilotDeckToolModelClient, signal?: AbortSignal): PilotDeckToolRuntimeContext {
   return {
     sessionId: "session-1",
     turnId: "turn-1",
@@ -99,7 +99,7 @@ test("agent tool throws unsupported_tool when no model client available", async 
   await assert.rejects(
     () => tool.execute({ description: "x", prompt: "do it" }, makeContext(undefined)),
     (error: unknown) =>
-      error instanceof PolitDeckToolRuntimeError &&
+      error instanceof PilotDeckToolRuntimeError &&
       error.code === "unsupported_tool" &&
       /requires a model client/.test(error.message),
   );
@@ -116,7 +116,7 @@ test("agent tool rejects unknown subagent type as invalid_tool_input", async () 
         makeContext(),
       ),
     (error: unknown) =>
-      error instanceof PolitDeckToolRuntimeError && error.code === "invalid_tool_input",
+      error instanceof PilotDeckToolRuntimeError && error.code === "invalid_tool_input",
   );
 });
 
@@ -137,7 +137,7 @@ test("agent tool propagates model error as tool_execution_failed", async () => {
   await assert.rejects(
     () => tool.execute({ description: "x", prompt: "go" }, makeContext()),
     (error: unknown) =>
-      error instanceof PolitDeckToolRuntimeError &&
+      error instanceof PilotDeckToolRuntimeError &&
       error.code === "tool_execution_failed" &&
       /rate limit/.test(error.message),
   );
@@ -154,7 +154,7 @@ test("agent tool aborts when context.abortSignal already aborted", async () => {
   await assert.rejects(
     () => tool.execute({ description: "x", prompt: "go" }, makeContext(undefined, controller.signal)),
     (error: unknown) =>
-      error instanceof PolitDeckToolRuntimeError && error.code === "tool_aborted",
+      error instanceof PilotDeckToolRuntimeError && error.code === "tool_aborted",
   );
 });
 

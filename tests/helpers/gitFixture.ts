@@ -13,8 +13,8 @@ const exec = promisify(execFile);
 export async function initRepo(dir: string): Promise<string> {
   await mkdir(dir, { recursive: true });
   await exec("git", ["init", "-q", "-b", "main"], { cwd: dir });
-  await exec("git", ["config", "user.email", "test@politdeck.local"], { cwd: dir });
-  await exec("git", ["config", "user.name", "PolitDeck Test"], { cwd: dir });
+  await exec("git", ["config", "user.email", "test@pilotdeck.local"], { cwd: dir });
+  await exec("git", ["config", "user.name", "PilotDeck Test"], { cwd: dir });
   await exec("git", ["config", "commit.gpgsign", "false"], { cwd: dir });
   return dir;
 }

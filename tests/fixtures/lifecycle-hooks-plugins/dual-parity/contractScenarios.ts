@@ -37,6 +37,6 @@ export const lifecycleHookPluginContractScenarios: LifecycleHookPluginContractSc
     id: "team-task-hooks",
     status: "not_applicable",
     feature: "TeammateIdle, TaskCreated and TaskCompleted",
-    reason: "PolitDeck does not migrate legacy team/task daemon capabilities.",
+    reason: "PilotDeck does not migrate legacy team/task daemon capabilities.",
   },
 ];

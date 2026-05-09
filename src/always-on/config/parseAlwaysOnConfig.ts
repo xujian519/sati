@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { isRecord } from "../../model/config/schema.js";
-import type { PolitConfigDiagnostic } from "../../polit/config/types.js";
+import type { PilotConfigDiagnostic } from "../../pilot/config/types.js";
 
 export type AlwaysOnTriggerConfig = {
   enabled: boolean;
@@ -47,8 +47,8 @@ export type AlwaysOnConfig = {
 export const DEFAULT_IGNORE_GLOBS: string[] = [
   "**/.git/**",
   "**/node_modules/**",
-  "**/.politdeck/**",
-  "**/.politdeck-always-on/**",
+  "**/.pilotdeck/**",
+  "**/.pilotdeck-always-on/**",
   "**/dist/**",
   "**/.DS_Store",
 ];
@@ -126,7 +126,7 @@ const REMOVED_PROJECT_KEYS: Record<string, string> = {
 
 export function parseAlwaysOnConfig(
   raw: unknown,
-  diagnostics: PolitConfigDiagnostic[],
+  diagnostics: PilotConfigDiagnostic[],
 ): AlwaysOnConfig | undefined {
   if (raw === undefined) {
     return undefined;
@@ -190,7 +190,7 @@ export function parseAlwaysOnConfig(
 function parseTrigger(
   raw: unknown,
   target: AlwaysOnTriggerConfig,
-  diagnostics: PolitConfigDiagnostic[],
+  diagnostics: PilotConfigDiagnostic[],
 ): void {
   if (!isRecord(raw)) {
     diagnostics.push({
@@ -249,7 +249,7 @@ function parseTrigger(
 function parseDormancy(
   raw: unknown,
   target: AlwaysOnDormancyConfig,
-  diagnostics: PolitConfigDiagnostic[],
+  diagnostics: PilotConfigDiagnostic[],
 ): void {
   if (!isRecord(raw)) {
     diagnostics.push({
@@ -289,7 +289,7 @@ function parseDormancy(
 function parseWorkspace(
   raw: unknown,
   target: AlwaysOnWorkspaceConfig,
-  diagnostics: PolitConfigDiagnostic[],
+  diagnostics: PilotConfigDiagnostic[],
 ): void {
   if (!isRecord(raw)) {
     diagnostics.push({
@@ -327,7 +327,7 @@ function parseWorkspace(
 function parseExecution(
   raw: unknown,
   target: AlwaysOnExecutionConfig,
-  diagnostics: PolitConfigDiagnostic[],
+  diagnostics: PilotConfigDiagnostic[],
 ): void {
   if (!isRecord(raw)) {
     diagnostics.push({
@@ -373,7 +373,7 @@ function parseExecution(
 
 function parseProjects(
   raw: unknown,
-  diagnostics: PolitConfigDiagnostic[],
+  diagnostics: PilotConfigDiagnostic[],
 ): Record<string, AlwaysOnProjectConfig> {
   if (!isRecord(raw)) {
     diagnostics.push({
@@ -447,7 +447,7 @@ function positiveNumber(
   value: unknown,
   fallback: number,
   path: string,
-  diagnostics: PolitConfigDiagnostic[],
+  diagnostics: PilotConfigDiagnostic[],
 ): number {
   if (value === undefined) return fallback;
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
@@ -467,7 +467,7 @@ function nonNegativeNumber(
   value: unknown,
   fallback: number,
   path: string,
-  diagnostics: PolitConfigDiagnostic[],
+  diagnostics: PilotConfigDiagnostic[],
 ): number {
   if (value === undefined) return fallback;
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
@@ -487,7 +487,7 @@ function positiveInteger(
   value: unknown,
   fallback: number,
   path: string,
-  diagnostics: PolitConfigDiagnostic[],
+  diagnostics: PilotConfigDiagnostic[],
 ): number {
   if (value === undefined) return fallback;
   if (
@@ -512,7 +512,7 @@ function nonNegativeInteger(
   value: unknown,
   fallback: number,
   path: string,
-  diagnostics: PolitConfigDiagnostic[],
+  diagnostics: PilotConfigDiagnostic[],
 ): number {
   if (value === undefined) return fallback;
   if (

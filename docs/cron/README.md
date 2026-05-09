@@ -1,6 +1,6 @@
 # Cron 模块当前实现
 
-`src/cron/` 是 PolitDeck 当前的定时任务子系统。它运行在 `politdeck server` 进程内，通过 Gateway 管理面创建、列出、删除和停止任务；任务触发时仍通过 `Gateway.submitTurn()` 进入普通 `AgentSession`，不绕过权限、上下文、工具或 transcript。
+`src/cron/` 是 PilotDeck 当前的定时任务子系统。它运行在 `pilotdeck server` 进程内，通过 Gateway 管理面创建、列出、删除和停止任务；任务触发时仍通过 `Gateway.submitTurn()` 进入普通 `AgentSession`，不绕过权限、上下文、工具或 transcript。
 
 ## 模块结构
 
@@ -12,14 +12,14 @@ src/cron/
   runtime/CronScheduler.ts        tick 循环、并发限制、due task 触发
   runtime/CronFire.ts             单次任务执行，调用 Gateway.submitTurn/abortTurn
   runtime/CronSchedule.ts         once 与 cron expression 的下一次运行时间计算
-  storage/CronPaths.ts            PolitHome 下的 cron 路径解析
+  storage/CronPaths.ts            PilotHome 下的 cron 路径解析
   storage/CronTaskStore.ts        task JSON 与 run history JSONL 持久化
   tool/                          cron_create / cron_list / cron_delete / cron_stop 工具
 ```
 
 ## 配置
 
-`polit/config` 已接入顶层 `cron` 段：
+`pilot/config` 已接入顶层 `cron` 段：
 
 ```yaml
 cron:
@@ -28,18 +28,18 @@ cron:
   maxConcurrentRuns: 1
 ```
 
-不配置 `cron` 时不会创建 Cron runtime；配置后 `src/cli/politdeck.ts` 的 `server` 子命令会创建 `CronRuntime`、把 `cron_*` 工具合入每个项目的 `ToolRegistry`，并把 Gateway 的 `cronCreate` / `cronList` / `cronDelete` / `cronStop` 方法接到该 runtime。
+不配置 `cron` 时不会创建 Cron runtime；配置后 `src/cli/pilotdeck.ts` 的 `server` 子命令会创建 `CronRuntime`、把 `cron_*` 工具合入每个项目的 `ToolRegistry`，并把 Gateway 的 `cronCreate` / `cronList` / `cronDelete` / `cronStop` 方法接到该 runtime。
 
 ## CLI 与 Gateway
 
-`politdeck cron` 命令需要已有 `politdeck server`：
+`pilotdeck cron` 命令需要已有 `pilotdeck server`：
 
 ```text
-politdeck cron list [--history] [--limit <n>]
-politdeck cron create --session <sessionKey> --message <text> (--once <iso> | --cron <expr>) [--channel <key>] [--project <path>] [--timezone <tz>]
-politdeck cron delete <taskId> [--stop-running]
-politdeck cron stop <taskId>
-politdeck cron stop --run <runId>
+pilotdeck cron list [--history] [--limit <n>]
+pilotdeck cron create --session <sessionKey> --message <text> (--once <iso> | --cron <expr>) [--channel <key>] [--project <path>] [--timezone <tz>]
+pilotdeck cron delete <taskId> [--stop-running]
+pilotdeck cron stop <taskId>
+pilotdeck cron stop --run <runId>
 ```
 
 Gateway 和 WS 协议包含对应方法：
@@ -62,7 +62,7 @@ cron_stop
 - `cron-scheduler.test.ts`
 - `cron-runtime.test.ts`
 - `cron-tools.test.ts`
-- `load-polit-config-cron.test.ts`
+- `load-pilot-config-cron.test.ts`
 
 根项目验证命令：
 

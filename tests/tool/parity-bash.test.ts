@@ -1,12 +1,12 @@
 import test from "node:test";
-import { createBashTool, type PolitDeckCommandOptions, type PolitDeckCommandResult, type PolitDeckCommandRunner } from "../../src/tool/index.js";
+import { createBashTool, type PilotDeckCommandOptions, type PilotDeckCommandResult, type PilotDeckCommandRunner } from "../../src/tool/index.js";
 import { bashExecutionScenarios } from "../fixtures/tool/legacy-behavior/index.js";
-import { createPolitDeckTempWorkspace } from "../helpers/filesystem.js";
+import { createPilotDeckTempWorkspace } from "../helpers/filesystem.js";
 import { assertDeferredScenarios, assertScenarioResult } from "../helpers/parity.js";
-import { createPolitDeckToolRuntimeFixture } from "../helpers/tool.js";
+import { createPilotDeckToolRuntimeFixture } from "../helpers/tool.js";
 
-class ScenarioRunner implements PolitDeckCommandRunner {
-  async run(command: string, _options: PolitDeckCommandOptions): Promise<PolitDeckCommandResult> {
+class ScenarioRunner implements PilotDeckCommandRunner {
+  async run(command: string, _options: PilotDeckCommandOptions): Promise<PilotDeckCommandResult> {
     if (command.includes("exit 2")) {
       return { exitCode: 2, stdout: "", stderr: "", timedOut: false, durationMs: 1 };
     }
@@ -15,10 +15,10 @@ class ScenarioRunner implements PolitDeckCommandRunner {
 }
 
 test("bash parity scenarios match legacy gates", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({});
+  const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
   assertDeferredScenarios(bashExecutionScenarios);
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createBashTool({ runner: new ScenarioRunner() })],
     cwd: workspace.cwd,
   });
@@ -26,7 +26,7 @@ test("bash parity scenarios match legacy gates", async (t) => {
   for (const scenario of bashExecutionScenarios.filter((item) => item.parity !== "deferred")) {
     context.permissionContext.mode = scenario.permissionMode;
     const result = await toolRuntime.execute(
-      { id: scenario.name, name: scenario.politdeckToolName, input: scenario.input },
+      { id: scenario.name, name: scenario.pilotdeckToolName, input: scenario.input },
       context,
     );
     assertScenarioResult(scenario, result);

@@ -6,22 +6,22 @@ import { TuiApp } from "../src/adapters/channel/tui/app/TuiApp.js";
 import { createGateway } from "../src/gateway/index.js";
 import { createModelRuntime } from "../src/model/index.js";
 import { createDefaultPermissionContext, PermissionRuntime } from "../src/permission/index.js";
-import { loadPolitConfig } from "../src/polit/index.js";
+import { loadPilotConfig } from "../src/pilot/index.js";
 import { createRouterRuntime } from "../src/router/index.js";
 import {
   SequentialToolScheduler,
   ToolRegistry,
   ToolRuntime,
-  type PolitDeckToolDefinition,
+  type PilotDeckToolDefinition,
 } from "../src/tool/index.js";
 import type { AgentRuntimeConfig } from "../src/agent/index.js";
 import { createAgentSession } from "../src/agent/index.js";
 
-const PROVIDER = process.env.POLITDECK_E2E_PROVIDER ?? "edgeclaw";
-const MODEL = process.env.POLITDECK_E2E_MODEL ?? "moonshotai/kimi-k2.6";
-const PROMPT = process.env.POLITDECK_E2E_PROMPT ?? "Use add_numbers to compute 17 + 25, then tell me the result.";
+const PROVIDER = process.env.PILOTDECK_E2E_PROVIDER ?? "edgeclaw";
+const MODEL = process.env.PILOTDECK_E2E_MODEL ?? "moonshotai/kimi-k2.6";
+const PROMPT = process.env.PILOTDECK_E2E_PROMPT ?? "Use add_numbers to compute 17 + 25, then tell me the result.";
 
-const addNumbersTool: PolitDeckToolDefinition = {
+const addNumbersTool: PilotDeckToolDefinition = {
   name: "add_numbers",
   description: "Add two numbers and return the result.",
   kind: "custom",
@@ -43,7 +43,7 @@ const addNumbersTool: PolitDeckToolDefinition = {
 };
 
 async function main(): Promise<void> {
-  const snapshot = loadPolitConfig();
+  const snapshot = loadPilotConfig();
   const provider = snapshot.config.model.providers[PROVIDER];
   if (!provider?.models[MODEL]) {
     throw new Error(`Provider ${PROVIDER} or model ${MODEL} is not configured.`);
@@ -62,7 +62,7 @@ async function main(): Promise<void> {
     model: MODEL,
     cwd,
     systemPrompt:
-      "You are PolitDeck running an end-to-end TUI test. When asked for arithmetic, you MUST call the provided add_numbers tool exactly once instead of computing it yourself, then report the answer in plain text.",
+      "You are PilotDeck running an end-to-end TUI test. When asked for arithmetic, you MUST call the provided add_numbers tool exactly once instead of computing it yourself, then report the answer in plain text.",
     maxOutputTokens: 1024,
     temperature: 0,
     permissionMode: "default",
@@ -101,7 +101,7 @@ async function main(): Promise<void> {
     serverInfo: { mode: "in_process", projectKey: cwd },
   });
 
-  const gateway = process.env.POLITDECK_E2E_TRACE === "1" ? wrapWithTrace(baseGateway) : baseGateway;
+  const gateway = process.env.PILOTDECK_E2E_TRACE === "1" ? wrapWithTrace(baseGateway) : baseGateway;
 
   const tree = (
     <TuiApp

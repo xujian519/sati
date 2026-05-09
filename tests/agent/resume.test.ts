@@ -5,13 +5,13 @@ import os from "node:os";
 import path from "node:path";
 import { createAgentSessionWithStorage } from "../../src/agent/index.js";
 import { resumeAgentSession } from "../../src/session/index.js";
-import { createPolitDeckTestTool } from "../helpers/tool.js";
+import { createPilotDeckTestTool } from "../helpers/tool.js";
 import { collectAsyncGenerator, createAgentLoopFixture } from "../helpers/agent.js";
 
 test("resumeAgentSession rebuilds messages and replay events from project transcript", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-agent-resume-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-agent-resume-"));
   try {
-    const tool = createPolitDeckTestTool({ name: "lookup" });
+    const tool = createPilotDeckTestTool({ name: "lookup" });
     const fixture = createAgentLoopFixture({
       tools: [tool],
       scripts: [
@@ -28,7 +28,7 @@ test("resumeAgentSession rebuilds messages and replay events from project transc
       dependencies: fixture.dependencies,
       projectStorage: {
         projectRoot: path.join(root, "repo"),
-        politHome: path.join(root, "home"),
+        pilotHome: path.join(root, "home"),
       },
     });
 
@@ -41,7 +41,7 @@ test("resumeAgentSession rebuilds messages and replay events from project transc
       dependencies: fixture.dependencies,
       projectStorage: {
         projectRoot: path.join(root, "repo"),
-        politHome: path.join(root, "home"),
+        pilotHome: path.join(root, "home"),
       },
     });
     const replay = await collectAsyncGenerator(resumed.session.replay());

@@ -21,13 +21,13 @@ TuiApp
 
 ```bash
 npm run build
-node dist/src/cli/politdeck.js tui
+node dist/src/cli/pilotdeck.js tui
 ```
 
 在 TUI 中输入：
 
 ```text
-请用一句话回答：PolitDeck 是什么？
+请用一句话回答：PilotDeck 是什么？
 ```
 
 按 `Enter`。
@@ -38,7 +38,7 @@ node dist/src/cli/politdeck.js tui
 
 ```text
 You
-请用一句话回答：PolitDeck 是什么？
+请用一句话回答：PilotDeck 是什么？
 ```
 
 - 底部出现 spinner，形态类似：
@@ -47,7 +47,7 @@ You
 thinking · 0.1s
 ```
 
-- 模型开始流式返回后，transcript 中出现 `PolitDeck` label。
+- 模型开始流式返回后，transcript 中出现 `PilotDeck` label。
 - 回复完成后 `thinking` 消失，输入框恢复可输入状态。
 - 如果 provider 返回错误，transcript 中出现红色错误消息，不应卡在 running 状态。
 
@@ -56,8 +56,8 @@ thinking · 0.1s
 成功时，最终 transcript 至少包含一段 assistant 文本，例如：
 
 ```text
-PolitDeck
-PolitDeck 是一个面向 AI agent runtime 的终端交互与网关编排工具。
+PilotDeck
+PilotDeck 是一个面向 AI agent runtime 的终端交互与网关编排工具。
 ```
 
 不要求逐字一致，但必须满足：
@@ -91,7 +91,7 @@ TUI 无新增 transcript 输出，进程继续运行。
 启动 TUI 后输入一个较长请求：
 
 ```text
-请详细解释 PolitDeck 的 agent、gateway、router、model、tool 模块如何协作，至少写 800 字。
+请详细解释 PilotDeck 的 agent、gateway、router、model、tool 模块如何协作，至少写 800 字。
 ```
 
 按 `Enter`。看到 `thinking` 或开始流式输出后，按：
@@ -119,12 +119,12 @@ Ctrl+C
 
 ### 输入
 
-临时设置一个缺少 API key 的 `POLIT_HOME`：
+临时设置一个缺少 API key 的 `PILOT_HOME`：
 
 ```bash
-export POLIT_HOME=/tmp/politdeck-tui-missing-key
-mkdir -p "$POLIT_HOME"
-cat > "$POLIT_HOME/politdeck.yaml" <<'YAML'
+export PILOT_HOME=/tmp/pilotdeck-tui-missing-key
+mkdir -p "$PILOT_HOME"
+cat > "$PILOT_HOME/pilotdeck.yaml" <<'YAML'
 agent:
   model: bad-provider/bad-model
 model:
@@ -132,7 +132,7 @@ model:
     bad-provider:
       protocol: openai
       url: https://example.invalid/v1
-      apiKey: ${MISSING_POLITDECK_KEY}
+      apiKey: ${MISSING_PILOTDECK_KEY}
       models:
         bad-model:
           capabilities:
@@ -148,9 +148,9 @@ model:
           multimodal:
             input: [text]
 YAML
-unset MISSING_POLITDECK_KEY
+unset MISSING_PILOTDECK_KEY
 npm run build
-node dist/src/cli/politdeck.js tui
+node dist/src/cli/pilotdeck.js tui
 ```
 
 在 TUI 中输入：
@@ -170,7 +170,7 @@ hello
 错误文案应能指向本地配置或 gateway 不可用问题，例如：
 
 ```text
-No PolitDeck server is available and local config could not start session ...
+No PilotDeck server is available and local config could not start session ...
 ```
 
 或模型配置解析错误。退出码不作为该用例的主要断言，主要断言是 TUI 不假装成功且不挂死。

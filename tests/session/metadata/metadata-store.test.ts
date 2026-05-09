@@ -9,7 +9,7 @@ import { JsonlTranscriptWriter } from "../../../src/session/transcript/JsonlTran
 const sessionId = "session-meta-test";
 
 function createFixture() {
-  const dir = mkdtempSync(join(tmpdir(), "politdeck-meta-"));
+  const dir = mkdtempSync(join(tmpdir(), "pilotdeck-meta-"));
   const path = join(dir, `${sessionId}.jsonl`);
   const writer = new JsonlTranscriptWriter({ path });
   const store = new SessionMetadataStore({ transcript: writer, sessionId });

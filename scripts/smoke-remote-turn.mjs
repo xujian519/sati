@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Smoke test: connect to the running PolitDeck Gateway server via the same
+ * Smoke test: connect to the running PilotDeck Gateway server via the same
  * `RemoteGateway` path the TUI uses, run one turn, dump every event we see.
  * If this prints a `turn_completed`, the entire wire (WS frames →
  * SessionRouter → AgentSession → AgentLoop → ModelRuntime → yeysai) is healthy.
@@ -9,13 +9,13 @@ import { connectRemoteGatewayIfAvailable } from "../dist/src/gateway/index.js";
 
 const gateway = await connectRemoteGatewayIfAvailable({ timeoutMs: 1000 });
 if (!gateway) {
-  console.error("No gateway available — start `politdeck server` first.");
+  console.error("No gateway available — start `pilotdeck server` first.");
   process.exit(1);
 }
 
 const sessionKey = `cli:project=${process.cwd()}:smoke-${Date.now()}`;
 console.log(`session: ${sessionKey}`);
-console.log(`message: "Reply with exactly: PolitDeck E2E OK"`);
+console.log(`message: "Reply with exactly: PilotDeck E2E OK"`);
 console.log("---");
 
 let turnCompleted = false;

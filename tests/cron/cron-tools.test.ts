@@ -6,11 +6,11 @@ import test from "node:test";
 import { createCronRuntime, defaultCronConfig } from "../../src/cron/index.js";
 
 test("CronRuntime exposes the cron tool set with expected safety flags", () => {
-  const politHome = mkdtempSync(join(tmpdir(), "politdeck-cron-tools-"));
+  const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-cron-tools-"));
   try {
     const runtime = createCronRuntime({
       config: defaultCronConfig(),
-      politHome,
+      pilotHome,
       projectKey: "/tmp/projects/sample",
     });
     const tools = runtime.getTools();
@@ -27,6 +27,6 @@ test("CronRuntime exposes the cron tool set with expected safety flags", () => {
     assert.equal(create?.isReadOnly({}), false);
     assert.equal(create?.isConcurrencySafe({}), false);
   } finally {
-    rmSync(politHome, { recursive: true, force: true });
+    rmSync(pilotHome, { recursive: true, force: true });
   }
 });

@@ -11,7 +11,7 @@
 - `src/session`：transcript、metadata、list、resume。
 - `src/model`：canonical model protocol、provider adapter、streaming。
 - `src/tool`：registry、runtime、builtin tools、scheduler。
-- `src/polit/config`：PolitDeck config 加载与诊断。
+- `src/pilot/config`：PilotDeck config 加载与诊断。
 - `src/cron`：cron runtime 和 Gateway 管理方法。
 - `src/always-on`：gateway-native discovery runtime 方向。
 
@@ -141,13 +141,13 @@ terminal_close
 terminal_event
 ```
 
-新 terminal 不应绑定某个 provider CLI。它应该是 workspace terminal，provider 相关操作通过 PolitDeck Chat/Gateway 完成。
+新 terminal 不应绑定某个 provider CLI。它应该是 workspace terminal，provider 相关操作通过 PilotDeck Chat/Gateway 完成。
 
 ## Web Static 与启动
 
 `GatewayServer` 已支持 `staticAssetsPath`，可承载 Web bundle。建议：
 
-- `politdeck server --web` 启动 Gateway 和静态 UI。
+- `pilotdeck server --web` 启动 Gateway 和静态 UI。
 - `GET /auth/local-token` 仅限 localhost。
 - 非 localhost 绑定需要重新设计 auth，不复用本地 token。
 - Web UI 构建产物与根 `npm run build` 的关系要明确，避免根 build 隐式失败或跳过。

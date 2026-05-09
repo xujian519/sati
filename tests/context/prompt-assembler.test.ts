@@ -20,7 +20,7 @@ test("PromptAssembler default flow contains identity, tools, permission mode, an
   const assembler = new PromptAssembler(new NullExtensionResolver());
   const result = assembler.assemble(baseInput);
   const joined = result.joined;
-  assert.match(joined, /You are PolitDeck/);
+  assert.match(joined, /You are PilotDeck/);
   assert.match(joined, /Available tools:/);
   assert.match(joined, /- read_file: Read a file/);
   assert.match(joined, /- bash: Run a shell command/);
@@ -40,7 +40,7 @@ test("PromptAssembler custom system prompt replaces default and system context b
     appendSystemPrompt: "Always reply in English.",
   });
   // No default identity nor system context (env / commands)
-  assert.doesNotMatch(result.joined, /You are PolitDeck/);
+  assert.doesNotMatch(result.joined, /You are PilotDeck/);
   assert.doesNotMatch(result.joined, /<environment>/);
   // Custom prompt is at top
   assert.match(result.parts[0]!, /strict reviewer/);

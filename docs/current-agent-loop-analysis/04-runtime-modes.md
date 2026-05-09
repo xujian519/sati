@@ -4,14 +4,14 @@
 
 主要参考：
 
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/QueryEngine.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/query.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/utils/permissions/PermissionMode.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/utils/permissions/permissionSetup.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/commands/plan/index.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/utils/ultraplan/ccrSession.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/tools/AgentTool/*`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/utils/worktreeModeEnabled.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/QueryEngine.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/query.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/utils/permissions/PermissionMode.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/utils/permissions/permissionSetup.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/commands/plan/index.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/utils/ultraplan/ccrSession.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/tools/AgentTool/*`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/utils/worktreeModeEnabled.ts`
 
 ## 模式分类
 

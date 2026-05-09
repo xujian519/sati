@@ -2,16 +2,16 @@ import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { DEFAULT_POLIT_HOME, resolvePolitHome } from "../../polit/index.js";
+import { DEFAULT_PILOT_HOME, resolvePilotHome } from "../../pilot/index.js";
 
 export type GatewayAuthTokenOptions = {
-  politHome?: string;
+  pilotHome?: string;
   env?: Record<string, string | undefined>;
 };
 
 export function resolveGatewayTokenPath(options: GatewayAuthTokenOptions = {}): string {
-  const politHome = options.politHome ?? resolvePolitHome(options.env ?? process.env);
-  return resolve(politHome || DEFAULT_POLIT_HOME, "server-token");
+  const pilotHome = options.pilotHome ?? resolvePilotHome(options.env ?? process.env);
+  return resolve(pilotHome || DEFAULT_PILOT_HOME, "server-token");
 }
 
 export async function readGatewayAuthToken(options: GatewayAuthTokenOptions = {}): Promise<string | undefined> {

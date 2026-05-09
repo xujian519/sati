@@ -1,15 +1,15 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseHooksConfig } from "../../hooks/config/parseHooksConfig.js";
-import type { PolitDeckPluginManifest } from "../protocol/manifest.js";
-import type { PolitDeckLoadedPlugin, PolitDeckPluginSourceKind } from "../protocol/plugin.js";
+import type { PilotDeckPluginManifest } from "../protocol/manifest.js";
+import type { PilotDeckLoadedPlugin, PilotDeckPluginSourceKind } from "../protocol/plugin.js";
 import { parsePluginManifest } from "../config/parsePluginManifest.js";
 import { loadPluginCommands } from "./PluginCommandLoader.js";
 
 export async function loadPluginFromPath(
   pluginPath: string,
-  source: PolitDeckPluginSourceKind,
-): Promise<PolitDeckLoadedPlugin> {
+  source: PilotDeckPluginSourceKind,
+): Promise<PilotDeckLoadedPlugin> {
   const manifestPath = join(pluginPath, "plugin.json");
   const manifest = parsePluginManifest(JSON.parse(await readFile(manifestPath, "utf8")) as unknown);
   const hooksConfig = await loadHooksConfig(pluginPath, manifest);
@@ -31,7 +31,7 @@ export async function loadPluginFromPath(
   };
 }
 
-async function loadHooksConfig(pluginPath: string, manifest: PolitDeckPluginManifest) {
+async function loadHooksConfig(pluginPath: string, manifest: PilotDeckPluginManifest) {
   if (typeof manifest.hooks === "object" && manifest.hooks !== null) {
     return parseHooksConfig(manifest.hooks).settings;
   }

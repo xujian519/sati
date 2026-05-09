@@ -1,13 +1,13 @@
 /**
  * `PluginToToolBridge` — converts the runtime view of MCP tools (advertised
- * by an `McpRuntime`) into PolitDeck `ToolDefinition`s suitable for
+ * by an `McpRuntime`) into PilotDeck `ToolDefinition`s suitable for
  * registration in `ToolRegistry`. Implements M10-M12 of §6.1:
  *
  *   - M10  wire name `mcp__<serverId>__<toolName>` (already produced by
  *          `McpClient.listTools`).
  *   - M11  description ≤ 2048 chars (already truncated).
  *   - M12  annotations.readOnlyHint / destructiveHint / openWorldHint
- *          reflected onto the PolitDeck tool flags so the permission
+ *          reflected onto the PilotDeck tool flags so the permission
  *          engine can decide whether to ask.
  *
  * Result transformation (M14): we currently emit a single `json` result
@@ -16,17 +16,17 @@
  * (recorded as `intentional_difference` in the parity table).
  */
 
-import { PolitDeckToolRuntimeError } from "../../tool/protocol/errors.js";
+import { PilotDeckToolRuntimeError } from "../../tool/protocol/errors.js";
 import type {
-  PolitDeckToolDefinition,
-  PolitDeckToolExecutionOutput,
-  PolitDeckToolInputSchema,
+  PilotDeckToolDefinition,
+  PilotDeckToolExecutionOutput,
+  PilotDeckToolInputSchema,
 } from "../../tool/index.js";
 import type { McpClient } from "../client/McpClient.js";
 import type { McpRuntime } from "./McpRuntime.js";
 import type {
-  PolitDeckMcpToolAnnotations,
-  PolitDeckMcpToolSpec,
+  PilotDeckMcpToolAnnotations,
+  PilotDeckMcpToolSpec,
 } from "../protocol/types.js";
 
 export type CreateToolDefinitionsOptions = {
@@ -37,17 +37,17 @@ export type CreateToolDefinitionsOptions = {
 export async function createMcpToolDefinitionsFromRuntime(
   runtime: McpRuntime,
   options: CreateToolDefinitionsOptions = {},
-): Promise<PolitDeckToolDefinition[]> {
+): Promise<PilotDeckToolDefinition[]> {
   const tools = await runtime.listAllTools();
   return tools.map((spec) => buildToolDefinition(spec, runtime, options));
 }
 
 function buildToolDefinition(
-  spec: PolitDeckMcpToolSpec,
+  spec: PilotDeckMcpToolSpec,
   runtime: McpRuntime,
   options: CreateToolDefinitionsOptions,
-): PolitDeckToolDefinition {
-  const annotations: PolitDeckMcpToolAnnotations = spec.annotations ?? {};
+): PilotDeckToolDefinition {
+  const annotations: PilotDeckMcpToolAnnotations = spec.annotations ?? {};
   const isReadOnly = annotations.readOnlyHint === true;
   const isDestructive = annotations.destructiveHint === true;
   const isOpenWorld = annotations.openWorldHint !== false;
@@ -64,10 +64,10 @@ function buildToolDefinition(
     isConcurrencySafe: () => isReadOnly,
     isDestructive: () => isDestructive,
     isOpenWorld: () => isOpenWorld,
-    execute: async (input, context): Promise<PolitDeckToolExecutionOutput> => {
+    execute: async (input, context): Promise<PilotDeckToolExecutionOutput> => {
       const client: McpClient | undefined = runtime.getClient(spec.serverId);
       if (!client) {
-        throw new PolitDeckToolRuntimeError(
+        throw new PilotDeckToolRuntimeError(
           "unsupported_tool",
           `MCP server ${spec.serverId} is not registered`,
         );
@@ -78,7 +78,7 @@ function buildToolDefinition(
           timeoutMs: options.callTimeoutMs,
         });
         if (isError === true) {
-          throw new PolitDeckToolRuntimeError(
+          throw new PilotDeckToolRuntimeError(
             "tool_execution_failed",
             `MCP server ${spec.serverId}/${spec.toolName} returned isError`,
             { content },
@@ -92,23 +92,23 @@ function buildToolDefinition(
           },
         };
       } catch (err) {
-        if (err instanceof PolitDeckToolRuntimeError) throw err;
+        if (err instanceof PilotDeckToolRuntimeError) throw err;
         const e = err as { code?: string; message?: string };
         if (e.code === "mcp_call_timeout") {
-          throw new PolitDeckToolRuntimeError(
+          throw new PilotDeckToolRuntimeError(
             "tool_execution_failed",
             e.message ?? `MCP call timed out (${spec.serverId}/${spec.toolName})`,
             { errorCode: "mcp_call_timeout" },
           );
         }
         if (e.code === "mcp_session_expired") {
-          throw new PolitDeckToolRuntimeError(
+          throw new PilotDeckToolRuntimeError(
             "tool_execution_failed",
             e.message ?? `MCP session expired (${spec.serverId}/${spec.toolName})`,
             { errorCode: "mcp_session_expired" },
           );
         }
-        throw new PolitDeckToolRuntimeError(
+        throw new PilotDeckToolRuntimeError(
           "tool_execution_failed",
           e.message ?? `MCP call failed (${spec.serverId}/${spec.toolName})`,
           { errorCode: e.code ?? "mcp_call_failed" },
@@ -118,9 +118,9 @@ function buildToolDefinition(
   };
 }
 
-function normalizeSchema(raw: unknown): PolitDeckToolInputSchema {
+function normalizeSchema(raw: unknown): PilotDeckToolInputSchema {
   if (raw && typeof raw === "object") {
-    const obj = raw as PolitDeckToolInputSchema;
+    const obj = raw as PilotDeckToolInputSchema;
     if (obj.type === "object") return obj;
   }
   return { type: "object", additionalProperties: true, properties: {} };

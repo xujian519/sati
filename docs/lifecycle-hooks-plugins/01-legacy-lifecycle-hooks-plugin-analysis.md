@@ -2,7 +2,7 @@
 
 ## 1. 背景
 
-本文件调研 `third-party/claude-code-main` 中与生命周期、hooks 系统和插件模块相关的实现。目标不是复刻旧目录，而是提炼可迁移的产品行为、运行时协议和测试观察点，为 PolitDeck 的 `extension`、`lifecycle`、`hooks`、`plugins` 重写提供输入。
+本文件调研 `third-party/claude-code-main` 中与生命周期、hooks 系统和插件模块相关的实现。目标不是复刻旧目录，而是提炼可迁移的产品行为、运行时协议和测试观察点，为 PilotDeck 的 `extension`、`lifecycle`、`hooks`、`plugins` 重写提供输入。
 
 主要参考源：
 
@@ -30,7 +30,7 @@
 - Hook 运行时：根据 event + matcher + `if` 条件找到 hook，执行 command/prompt/http/agent/callback，解析 JSON 输出并聚合为可观察结果。
 - 插件贡献：插件通过 manifest、`commands/`、`agents/`、`skills/`、`hooks/hooks.json`、MCP/LSP/output style 等目录和配置贡献能力。
 
-这三层互相依赖，但边界并不完全分离：`utils/hooks.ts` 既处理配置 hook、插件 hook、SDK callback hook，也负责执行、输出解析、错误转换和部分产品语义。PolitDeck 重写时应拆成更明确的模块。
+这三层互相依赖，但边界并不完全分离：`utils/hooks.ts` 既处理配置 hook、插件 hook、SDK callback hook，也负责执行、输出解析、错误转换和部分产品语义。PilotDeck 重写时应拆成更明确的模块。
 
 ## 3. 生命周期事件模型
 
@@ -122,7 +122,7 @@ agent_type?
 - 生命周期对 runtime 有效：hook 会运行并影响流程。
 - 生命周期对外部观察者可见：hook started/progress/response 是否投影给 SDK/UI。
 
-PolitDeck 需要保留这个区别，不能把 hook 是否执行与是否广播混为一谈。
+PilotDeck 需要保留这个区别，不能把 hook 是否执行与是否广播混为一谈。
 
 ## 4. Hook 配置模型
 
@@ -329,7 +329,7 @@ settings
 - 阻止空格、路径分隔符、`..`、`.`。
 - `inline` 和 `builtin` 为保留名称。
 
-PolitDeck 需要替换品牌命名，但保留同类防护：官方 marketplace 名称、路径穿越、非 ASCII 冒充、保留 source 名称都必须进入 schema 测试。
+PilotDeck 需要替换品牌命名，但保留同类防护：官方 marketplace 名称、路径穿越、非 ASCII 冒充、保留 source 名称都必须进入 schema 测试。
 
 ### 9.4 插件 hooks 热加载
 
@@ -352,11 +352,11 @@ PolitDeck 需要替换品牌命名，但保留同类防护：官方 marketplace 
 - frontmatter 可提供 description、tools、shell、model、argument 等能力。
 - content 支持插件变量与用户配置变量替换。
 
-PolitDeck 不应把 commands/skills 当作 hook 特例，而应作为 plugin contributions。
+PilotDeck 不应把 commands/skills 当作 hook 特例，而应作为 plugin contributions。
 
 ## 10. Legacy 行为分类
 
-| Legacy feature | PolitDeck 归属 | Status | 说明 |
+| Legacy feature | PilotDeck 归属 | Status | 说明 |
 | --- | --- | --- | --- |
 | Hook event enum 与 input schema | `src/extension/hooks/protocol` | `compare` | 必须共享场景验证 event 名、基础字段、事件字段 |
 | Hooks settings schema | `src/extension/hooks/config` | `compare` | command/prompt/http/agent、matcher、if、timeout、once、async |
@@ -371,8 +371,8 @@ PolitDeck 不应把 commands/skills 当作 hook 特例，而应作为 plugin con
 | Plugin marketplace/Git/zip/MCPB install | `src/extension/plugins/marketplace` | `deferred` | 第一阶段可先本地目录和 builtin |
 | Plugin hook hot reload | `src/extension/plugins/runtime` | `compare` | enabled/disabled/reload 语义需要固化 |
 | Plugin commands/skills discovery | `src/extension/contributions` | `compare` | 目录命名与 markdown frontmatter |
-| Legacy telemetry event names | audit/event adapter | `intentional_difference` | 统一改为 PolitDeck 命名 |
-| Legacy brand paths `~/.claude` | `src/polit/paths` | `intentional_difference` | 改为 `~/.politdeck` |
+| Legacy telemetry event names | audit/event adapter | `intentional_difference` | 统一改为 PilotDeck 命名 |
+| Legacy brand paths `~/.claude` | `src/pilot/paths` | `intentional_difference` | 改为 `~/.pilotdeck` |
 
 ## 11. Parity 观察点
 
@@ -386,4 +386,4 @@ PolitDeck 不应把 commands/skills 当作 hook 特例，而应作为 plugin con
 - 同一 plugin hooks 变更是否保持旧 hook 到 reload 前仍有效，禁用/卸载后立即移除。
 - 同一 plugin command 文件结构是否得到相同 command name、description、allowed tools 和 content。
 
-只有共享场景同时跑 legacy 与 PolitDeck，并比较归一化输出，才能声明 execution parity passed。本文只提出 parity 场景清单和落地约束，不表示当前已经创建测试 fixture 或通过 execution parity。
+只有共享场景同时跑 legacy 与 PilotDeck，并比较归一化输出，才能声明 execution parity passed。本文只提出 parity 场景清单和落地约束，不表示当前已经创建测试 fixture 或通过 execution parity。

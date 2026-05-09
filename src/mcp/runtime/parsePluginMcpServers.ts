@@ -1,7 +1,7 @@
 /**
  * Convert the loosely-typed `mcpServers: Record<string, unknown>` blob produced
  * by `PluginRuntime.mcpServers()` (each plugin's manifest) into the strict
- * `PolitDeckMcpServerSpec[]` consumed by `McpRuntime`.
+ * `PilotDeckMcpServerSpec[]` consumed by `McpRuntime`.
  *
  * Behaviour parity with `third-party/claude-code-main` plugin manifest schema:
  *   - `command` ⇒ stdio transport (`args`/`env`/`cwd` optional).
@@ -10,17 +10,17 @@
  *     a single misconfigured plugin entry can't take down the gateway.
  */
 
-import type { PolitDeckMcpServerSpec } from "../protocol/types.js";
+import type { PilotDeckMcpServerSpec } from "../protocol/types.js";
 
 export type ParsePluginMcpServersResult = {
-  servers: PolitDeckMcpServerSpec[];
+  servers: PilotDeckMcpServerSpec[];
   diagnostics: { id: string; message: string }[];
 };
 
 export function parsePluginMcpServers(
   raw: Record<string, unknown> | undefined,
 ): ParsePluginMcpServersResult {
-  const servers: PolitDeckMcpServerSpec[] = [];
+  const servers: PilotDeckMcpServerSpec[] = [];
   const diagnostics: { id: string; message: string }[] = [];
   if (!raw || typeof raw !== "object") {
     return { servers, diagnostics };

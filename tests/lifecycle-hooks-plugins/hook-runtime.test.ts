@@ -11,10 +11,10 @@ import {
   HttpHookExecutor,
   PromptHookExecutor,
 } from "../../src/extension/index.js";
-import type { PolitDeckHooksSettings } from "../../src/extension/index.js";
+import type { PilotDeckHooksSettings } from "../../src/extension/index.js";
 
 test("command hook success can produce additional context effects", async () => {
-  const settings: PolitDeckHooksSettings = {
+  const settings: PilotDeckHooksSettings = {
     SessionStart: [
       {
         hooks: [
@@ -40,7 +40,7 @@ test("command hook success can produce additional context effects", async () => 
 });
 
 test("command hook exit code 2 produces blocking effect", async () => {
-  const settings: PolitDeckHooksSettings = {
+  const settings: PilotDeckHooksSettings = {
     PreToolUse: [
       {
         matcher: "bash",
@@ -62,7 +62,7 @@ test("command hook exit code 2 produces blocking effect", async () => {
 });
 
 test("command hook non-2 failure is non-blocking", async () => {
-  const settings: PolitDeckHooksSettings = {
+  const settings: PilotDeckHooksSettings = {
     PostToolUse: [
       {
         matcher: "read_file",
@@ -84,7 +84,7 @@ test("command hook non-2 failure is non-blocking", async () => {
 });
 
 test("prompt hook can use an injected evaluator", async () => {
-  const settings: PolitDeckHooksSettings = {
+  const settings: PilotDeckHooksSettings = {
     UserPromptSubmit: [
       {
         hooks: [{ type: "prompt", prompt: "check $ARGUMENTS" }],
@@ -114,7 +114,7 @@ test("prompt hook can use an injected evaluator", async () => {
 
 test("http hook posts hook input and resolves allowed environment headers", async () => {
   const requests: Array<{ url: string; headers: Headers; body: string }> = [];
-  const settings: PolitDeckHooksSettings = {
+  const settings: PilotDeckHooksSettings = {
     Notification: [
       {
         hooks: [
@@ -160,7 +160,7 @@ test("http hook posts hook input and resolves allowed environment headers", asyn
 });
 
 test("agent hook can use an injected runner", async () => {
-  const settings: PolitDeckHooksSettings = {
+  const settings: PilotDeckHooksSettings = {
     PostToolUse: [
       {
         matcher: "read_file",

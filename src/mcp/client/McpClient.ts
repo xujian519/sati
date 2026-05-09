@@ -15,8 +15,8 @@
  *   Cache is invalidated on reconnect.
  *
  * Errors raised by `callTool` / `listTools` always carry one of the
- * PolitDeck-style `mcp_*` error codes via the `code` field on the thrown
- * error, so the caller can map them back to `PolitDeckToolErrorCode`.
+ * PilotDeck-style `mcp_*` error codes via the `code` field on the thrown
+ * error, so the caller can map them back to `PilotDeckToolErrorCode`.
  */
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -27,13 +27,13 @@ import { recursivelySanitizeUnicode } from "../runtime/sanitize.js";
 import { truncateMcpToolDescription } from "../runtime/truncate.js";
 import { buildMcpToolWireName } from "../runtime/wireName.js";
 import type {
-  PolitDeckMcpServerSpec,
-  PolitDeckMcpStatus,
-  PolitDeckMcpToolSpec,
+  PilotDeckMcpServerSpec,
+  PilotDeckMcpStatus,
+  PilotDeckMcpToolSpec,
 } from "../protocol/types.js";
 
 const DEFAULT_CALL_TIMEOUT_MS = parseInt(
-  process.env.POLITDECK_MCP_TOOL_TIMEOUT_MS ?? "60000",
+  process.env.PILOTDECK_MCP_TOOL_TIMEOUT_MS ?? "60000",
   10,
 );
 const LIST_TOOLS_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -43,7 +43,7 @@ export type McpClientOptions = {
   /** Connect handshake timeout. Default 10s. */
   handshakeTimeoutMs?: number;
   /** Optional override for testing — supply a pre-built Transport instance. */
-  transportFactory?: (spec: PolitDeckMcpServerSpec) => Transport;
+  transportFactory?: (spec: PilotDeckMcpServerSpec) => Transport;
 };
 
 export class McpClientError extends Error {
@@ -64,24 +64,24 @@ export class McpClientError extends Error {
 
 type ListToolsCache = {
   expiresAt: number;
-  tools: PolitDeckMcpToolSpec[];
+  tools: PilotDeckMcpToolSpec[];
 };
 
 export class McpClient {
   private client: Client | null = null;
   private transport: Transport | null = null;
-  private status: PolitDeckMcpStatus = "idle";
+  private status: PilotDeckMcpStatus = "idle";
   private listToolsCache: ListToolsCache | null = null;
   private serverInstructions = "";
   private connectPromise: Promise<void> | null = null;
   private reconnectInFlight = false;
 
   constructor(
-    public readonly spec: PolitDeckMcpServerSpec,
+    public readonly spec: PilotDeckMcpServerSpec,
     private readonly options: McpClientOptions = {},
   ) {}
 
-  getStatus(): PolitDeckMcpStatus {
+  getStatus(): PilotDeckMcpStatus {
     return this.status;
   }
 
@@ -105,7 +105,7 @@ export class McpClient {
     this.status = "connecting";
     const transport = this.buildTransport();
     const client = new Client(
-      { name: "politdeck", version: "0.1.0" },
+      { name: "pilotdeck", version: "0.1.0" },
       { capabilities: { elicitation: {} } },
     );
     const handshakeMs = this.options.handshakeTimeoutMs ?? 10_000;
@@ -165,7 +165,7 @@ export class McpClient {
         requestInit: { headers: this.spec.headers ?? {} },
       });
     }
-    const fallback = this.spec as PolitDeckMcpServerSpec;
+    const fallback = this.spec as PilotDeckMcpServerSpec;
     throw new McpClientError(
       `Unsupported transport: ${(fallback as { transport: string }).transport}`,
       "mcp_unsupported_transport",
@@ -174,7 +174,7 @@ export class McpClient {
   }
 
   /** M6 — LRU-cached tools/list. */
-  async listTools(): Promise<PolitDeckMcpToolSpec[]> {
+  async listTools(): Promise<PilotDeckMcpToolSpec[]> {
     const cached = this.listToolsCache;
     if (cached && cached.expiresAt > Date.now()) return cached.tools;
 
@@ -287,12 +287,12 @@ export class McpClient {
     this.listToolsCache = null;
   }
 
-  private toToolSpec(raw: unknown): PolitDeckMcpToolSpec {
+  private toToolSpec(raw: unknown): PilotDeckMcpToolSpec {
     const sanitized = recursivelySanitizeUnicode(raw) as {
       name: string;
       description?: string;
       inputSchema?: unknown;
-      annotations?: PolitDeckMcpToolSpec["annotations"];
+      annotations?: PilotDeckMcpToolSpec["annotations"];
       _meta?: Record<string, unknown>;
     };
     const wireName = buildMcpToolWireName(this.spec.id, sanitized.name);

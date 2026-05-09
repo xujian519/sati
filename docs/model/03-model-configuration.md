@@ -1,16 +1,16 @@
 # Model 配置
 
-本文定义当前 `model` 模块读取和校验的配置项。`PolitDeck` 的模型配置来自全局 YAML、项目级 YAML 和受控环境变量覆盖合并后的 `model` 配置段，不独立维护属于 `model` 模块的 YAML 文件。
+本文定义当前 `model` 模块读取和校验的配置项。`PilotDeck` 的模型配置来自全局 YAML、项目级 YAML 和受控环境变量覆盖合并后的 `model` 配置段，不独立维护属于 `model` 模块的 YAML 文件。
 
 ## 总配置文件位置
 
 全局 config 模块当前默认读取：
 
 ```text
-~/.politdeck/politdeck.yaml
+~/.pilotdeck/pilotdeck.yaml
 ```
 
-该路径由全局 `polit/config` 模块通过 `resolvePolitHome()` 和 `getPolitConfigFilePath()` 统一解析：`PolitHome` 默认是 `~/.politdeck`，可由 `POLIT_HOME` 覆盖；配置文件名固定为 `politdeck.yaml`。全局 config 模块还会按需读取项目根目录 `.politdeck/politdeck.yaml`，并可叠加受控环境变量覆盖项。`model` 模块只校验和消费合并后的 `model` 段，不直接读取 YAML 文件、临时 CLI 参数、用户目录中的其他配置文件或运行时全局状态；默认 provider/model 由 `agent.model` 管理，fallback 链由 `router.fallback` 管理，API key 的 `${ENV_NAME}` 引用在解析模型配置时解析。
+该路径由全局 `pilot/config` 模块通过 `resolvePilotHome()` 和 `getPilotConfigFilePath()` 统一解析：`PilotHome` 默认是 `~/.pilotdeck`，可由 `PILOT_HOME` 覆盖；配置文件名固定为 `pilotdeck.yaml`。全局 config 模块还会按需读取项目根目录 `.pilotdeck/pilotdeck.yaml`，并可叠加受控环境变量覆盖项。`model` 模块只校验和消费合并后的 `model` 段，不直接读取 YAML 文件、临时 CLI 参数、用户目录中的其他配置文件或运行时全局状态；默认 provider/model 由 `agent.model` 管理，fallback 链由 `router.fallback` 管理，API key 的 `${ENV_NAME}` 引用在解析模型配置时解析。
 
 ## 当前阶段范围
 
@@ -240,8 +240,8 @@ multimodal.imageDetail
 ## 配置加载流程
 
 ```text
-load ~/.politdeck/politdeck.yaml in global config
-  -> optionally load <project>/.politdeck/politdeck.yaml
+load ~/.pilotdeck/pilotdeck.yaml in global config
+  -> optionally load <project>/.pilotdeck/pilotdeck.yaml
   -> apply supported env overrides
   -> merge sources
   -> extract agent section

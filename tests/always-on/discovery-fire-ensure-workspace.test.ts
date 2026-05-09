@@ -52,21 +52,21 @@ class FakeWorktreeProvider implements WorkspaceProvider {
 }
 
 function makeFixture() {
-  const politHome = mkdtempSync(join(tmpdir(), "politdeck-aon-fire-"));
+  const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-aon-fire-"));
   const projectKey = "/tmp/projects/sample";
-  const paths = resolveAlwaysOnPaths({ politHome, projectKey });
+  const paths = resolveAlwaysOnPaths({ pilotHome, projectKey });
   const provider = new FakeWorktreeProvider(paths.worktreesDir, paths.projectId);
   const registry = new WorkspaceProviderRegistry();
   registry.add(provider);
   const stateStore = new DiscoveryStateStore(paths);
   return {
-    politHome,
+    pilotHome,
     projectKey,
     paths,
     provider,
     registry,
     stateStore,
-    cleanup: () => rmSync(politHome, { recursive: true, force: true }),
+    cleanup: () => rmSync(pilotHome, { recursive: true, force: true }),
   };
 }
 

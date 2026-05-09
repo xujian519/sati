@@ -33,7 +33,7 @@ Project
 
 - `projectName` 与 `fullPath/projectKey` 的对应关系必须稳定。
 - 会话分页必须保留 `total/hasMore/offset` 或等价 cursor。
-- 旧 UI 允许一个项目同时有多 provider 会话；PolitDeck 可先收敛为单 provider，但响应中仍应保留来源字段，便于兼容旧渲染。
+- 旧 UI 允许一个项目同时有多 provider 会话；PilotDeck 可先收敛为单 provider，但响应中仍应保留来源字段，便于兼容旧渲染。
 
 ## 会话数据
 
@@ -159,7 +159,7 @@ event(id, seq, final, event)
 
 迁移重点是建立适配表：
 
-| 旧 UI 语义 | PolitDeck Gateway 语义 |
+| 旧 UI 语义 | PilotDeck Gateway 语义 |
 | --- | --- |
 | `*-command` | `submit_turn` |
 | `abort-session` | `abort_turn` |
@@ -192,5 +192,5 @@ event(id, seq, final, event)
 
 - 与会话事实相关的数据不要继续只存在 localStorage。
 - UI 偏好可以保留 localStorage。
-- 模型、权限、provider 选择应尽量进入 PolitDeck config 或 Gateway session input。
-- 历史兼容期可以读取旧 key，但新写入应使用 `politdeck.*` 命名空间。
+- 模型、权限、provider 选择应尽量进入 PilotDeck config 或 Gateway session input。
+- 历史兼容期可以读取旧 key，但新写入应使用 `pilotdeck.*` 命名空间。

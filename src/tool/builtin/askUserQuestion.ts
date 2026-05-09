@@ -1,15 +1,15 @@
-import { PolitDeckToolRuntimeError } from "../protocol/errors.js";
+import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
 import type {
-  PolitDeckToolDefinition,
-  PolitDeckToolExecutionOutput,
-  PolitDeckToolRuntimeContext,
+  PilotDeckToolDefinition,
+  PilotDeckToolExecutionOutput,
+  PilotDeckToolRuntimeContext,
 } from "../protocol/types.js";
-import type { PolitDeckToolValidationResult } from "../protocol/schema.js";
+import type { PilotDeckToolValidationResult } from "../protocol/schema.js";
 import { validateHtmlPreview } from "../elicitation/validateHtmlPreview.js";
 import type {
-  PolitDeckElicitationChannel,
-  PolitDeckElicitationRequest,
-} from "../elicitation/PolitDeckElicitationChannel.js";
+  PilotDeckElicitationChannel,
+  PilotDeckElicitationRequest,
+} from "../elicitation/PilotDeckElicitationChannel.js";
 
 export const ASK_USER_QUESTION_TOOL_NAME = "ask_user_question";
 /**
@@ -66,7 +66,7 @@ export type AskUserQuestionOutput = {
  *   E10 cancellation surfaces as `unsupported_tool` so the agent recovery
  *       loop can route back to the user via a fresh elicitation.
  */
-export function createAskUserQuestionTool(): PolitDeckToolDefinition<
+export function createAskUserQuestionTool(): PilotDeckToolDefinition<
   AskUserQuestionInput,
   AskUserQuestionOutput
 > {
@@ -131,7 +131,7 @@ export function createAskUserQuestionTool(): PolitDeckToolDefinition<
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     requiresUserInteraction: () => true,
-    validateInput: async (input): Promise<PolitDeckToolValidationResult> => {
+    validateInput: async (input): Promise<PilotDeckToolValidationResult> => {
       // E1: 1 ≤ questions ≤ 4. The JSON-Schema validator currently does not
       // enforce minItems/maxItems, so we double-check here.
       if (!Array.isArray(input.questions) || input.questions.length < 1) {
@@ -233,15 +233,15 @@ export function createAskUserQuestionTool(): PolitDeckToolDefinition<
     // No `checkPermissions` override: the elicitation channel itself IS the
     // user-consent gate (legacy behaviour — ask_user_question's `checkPermissions`
     // returns `behavior: "ask"` and the host renders the question UI directly).
-    // PolitDeck would otherwise add a redundant "approve to ask" step in front
+    // PilotDeck would otherwise add a redundant "approve to ask" step in front
     // of the actual question dialog. The tool is read-only, so the runtime's
     // default mode allows it through.
-    execute: async (input, context): Promise<PolitDeckToolExecutionOutput<AskUserQuestionOutput>> => {
-      const channel = (context as PolitDeckToolRuntimeContext & {
-        elicitation?: PolitDeckElicitationChannel;
+    execute: async (input, context): Promise<PilotDeckToolExecutionOutput<AskUserQuestionOutput>> => {
+      const channel = (context as PilotDeckToolRuntimeContext & {
+        elicitation?: PilotDeckElicitationChannel;
       }).elicitation;
       if (!channel) {
-        throw new PolitDeckToolRuntimeError(
+        throw new PilotDeckToolRuntimeError(
           "unsupported_tool",
           "ask_user_question requires a host elicitation channel (none registered).",
         );
@@ -263,7 +263,7 @@ export function createAskUserQuestionTool(): PolitDeckToolDefinition<
         };
       }
 
-      const request: PolitDeckElicitationRequest = {
+      const request: PilotDeckElicitationRequest = {
         toolCallId: context.turnId,
         toolName: ASK_USER_QUESTION_TOOL_NAME,
         questions: input.questions,
@@ -273,7 +273,7 @@ export function createAskUserQuestionTool(): PolitDeckToolDefinition<
       const answer = await channel.askUser(request);
 
       if (answer.type === "cancelled") {
-        throw new PolitDeckToolRuntimeError(
+        throw new PilotDeckToolRuntimeError(
           "unsupported_tool",
           `User declined to answer questions${answer.reason ? ` (${answer.reason})` : ""}`,
         );

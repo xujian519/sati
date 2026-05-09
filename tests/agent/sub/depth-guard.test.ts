@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createAgentTool } from "../../../src/tool/builtin/agent.js";
 import {
-  PolitDeckToolRuntimeError,
-  type PolitDeckSubagentForkApi,
-  type PolitDeckToolRuntimeContext,
+  PilotDeckToolRuntimeError,
+  type PilotDeckSubagentForkApi,
+  type PilotDeckToolRuntimeContext,
 } from "../../../src/tool/index.js";
 import { createDefaultPermissionContext } from "../../../src/permission/index.js";
 
@@ -13,8 +13,8 @@ const cwd = "/tmp/proj";
 function buildFork(opts: {
   depth: number;
   maxSubagentDepth: number;
-  forkImpl?: PolitDeckSubagentForkApi["fork"];
-}): PolitDeckSubagentForkApi {
+  forkImpl?: PilotDeckSubagentForkApi["fork"];
+}): PilotDeckSubagentForkApi {
   return {
     depth: opts.depth,
     maxSubagentDepth: opts.maxSubagentDepth,
@@ -36,7 +36,7 @@ function buildFork(opts: {
   };
 }
 
-function makeContext(fork: PolitDeckSubagentForkApi, depth: number): PolitDeckToolRuntimeContext {
+function makeContext(fork: PilotDeckSubagentForkApi, depth: number): PilotDeckToolRuntimeContext {
   return {
     sessionId: "s",
     turnId: "t",
@@ -68,7 +68,7 @@ test("C2.depth subagent_depth_exceeded at depth 1 >= max 1", async () => {
         makeContext(fork, 1),
       ),
     (err: unknown) =>
-      err instanceof PolitDeckToolRuntimeError &&
+      err instanceof PilotDeckToolRuntimeError &&
       err.code === "tool_execution_failed" &&
       /subagent_depth_exceeded/.test(err.message),
   );
@@ -84,7 +84,7 @@ test("C2.depth invalid subagent_type → invalid_tool_input", async () => {
         makeContext(fork, 0),
       ),
     (err: unknown) =>
-      err instanceof PolitDeckToolRuntimeError && err.code === "invalid_tool_input",
+      err instanceof PilotDeckToolRuntimeError && err.code === "invalid_tool_input",
   );
 });
 

@@ -1,6 +1,6 @@
 # TUI 真实环境测试文档
 
-本目录用于管理 PolitDeck TUI 在真实运行环境中的验收文档。这里的“真实环境”指通过 `src/cli/politdeck.ts`、`src/adapters/channel/tui/`、`src/gateway/`、`src/agent/`、`src/router/`、`src/model/`、`src/tool/`、`src/context/` 和 `src/always-on/` 组成的真实链路运行，而不是只验证 reducer 或纯渲染函数。
+本目录用于管理 PilotDeck TUI 在真实运行环境中的验收文档。这里的“真实环境”指通过 `src/cli/pilotdeck.ts`、`src/adapters/channel/tui/`、`src/gateway/`、`src/agent/`、`src/router/`、`src/model/`、`src/tool/`、`src/context/` 和 `src/always-on/` 组成的真实链路运行，而不是只验证 reducer 或纯渲染函数。
 
 ## 范围
 
@@ -24,14 +24,14 @@ src/adapters/channel/tui/
 
 真实验收覆盖：
 
-- 交互式启动：`politdeck tui`。
+- 交互式启动：`pilotdeck tui`。
 - 本地 in-process Gateway：TUI 直接创建 `createLocalGateway()`。
-- 远端 Gateway：先启动 `politdeck server`，TUI 自动探测并连接。
+- 远端 Gateway：先启动 `pilotdeck server`，TUI 自动探测并连接。
 - 真实模型 turn：从 TUI 输入消息，经 Gateway、AgentSession、Router、ModelRuntime 流式返回。
 - 真实工具 turn：使用 `scripts/tui-e2e-record.tsx` 注册 `add_numbers` 工具，并记录 TUI 帧日志。
 - Router 真实路由：通过 TUI turn 和 provider 侧日志验证 default、longContext、fallback、tokenSaver。
 - Memory / Context：通过 TUI 跨会话 turn 验证 memory capture、retrieve 和 `<memory-context>` 注入。
-- Always-On：通过 `politdeck server` + TUI 连接、server 日志和 `${POLIT_HOME}/always-on` 产物验证 discovery / execution。
+- Always-On：通过 `pilotdeck server` + TUI 连接、server 日志和 `${PILOT_HOME}/always-on` 产物验证 discovery / execution。
 - TUI 命令：`/help`、`/new`、`/sessions`、`/mode`、`/clear`、`/exit`。
 
 ## 文档索引

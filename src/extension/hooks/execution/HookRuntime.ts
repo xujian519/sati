@@ -1,21 +1,21 @@
-import type { PolitDeckHookEffect, PolitDeckLifecycleError } from "../../../lifecycle/protocol/effects.js";
+import type { PilotDeckHookEffect, PilotDeckLifecycleError } from "../../../lifecycle/protocol/effects.js";
 import { matchHookMatcher } from "../config/matchHook.js";
 import { matchHookCondition } from "../config/matchHookCondition.js";
-import type { PolitDeckHookEvent } from "../protocol/events.js";
-import type { PolitDeckHookInput } from "../protocol/input.js";
-import type { PolitDeckHookOutput, PolitDeckHookSyncOutput } from "../protocol/output.js";
-import type { PolitDeckHookCommand, PolitDeckHooksSettings } from "../protocol/settings.js";
-import { CommandHookExecutor, POLITDECK_SESSION_END_HOOK_TIMEOUT_MS } from "./CommandHookExecutor.js";
+import type { PilotDeckHookEvent } from "../protocol/events.js";
+import type { PilotDeckHookInput } from "../protocol/input.js";
+import type { PilotDeckHookOutput, PilotDeckHookSyncOutput } from "../protocol/output.js";
+import type { PilotDeckHookCommand, PilotDeckHooksSettings } from "../protocol/settings.js";
+import { CommandHookExecutor, PILOTDECK_SESSION_END_HOOK_TIMEOUT_MS } from "./CommandHookExecutor.js";
 import { PromptHookExecutor } from "./PromptHookExecutor.js";
 import { HttpHookExecutor } from "./HttpHookExecutor.js";
 import { AgentHookExecutor } from "./AgentHookExecutor.js";
 import { AsyncHookRegistry } from "./AsyncHookRegistry.js";
 import { CallbackHookExecutor } from "./CallbackHookExecutor.js";
-import { HookExecutionEventBus, type PolitDeckHookExecutionEvent } from "../events/HookExecutionEventBus.js";
+import { HookExecutionEventBus, type PilotDeckHookExecutionEvent } from "../events/HookExecutionEventBus.js";
 
 export type HookRuntimeRunInput = {
-  event: PolitDeckHookEvent;
-  hookInput: PolitDeckHookInput;
+  event: PilotDeckHookEvent;
+  hookInput: PilotDeckHookInput;
   matchQuery?: string;
   cwd: string;
   env?: NodeJS.ProcessEnv;
@@ -23,15 +23,15 @@ export type HookRuntimeRunInput = {
 };
 
 export type HookRuntimeRunResult = {
-  effects: PolitDeckHookEffect[];
-  events: PolitDeckHookExecutionEvent[];
-  blockingErrors: PolitDeckLifecycleError[];
-  nonBlockingErrors: PolitDeckLifecycleError[];
+  effects: PilotDeckHookEffect[];
+  events: PilotDeckHookExecutionEvent[];
+  blockingErrors: PilotDeckLifecycleError[];
+  nonBlockingErrors: PilotDeckLifecycleError[];
 };
 
 export class HookRuntime {
   constructor(
-    private readonly settings: PolitDeckHooksSettings = {},
+    private readonly settings: PilotDeckHooksSettings = {},
     private readonly commandExecutor = new CommandHookExecutor(),
     private readonly eventBus = new HookExecutionEventBus(),
     private readonly asyncRegistry = new AsyncHookRegistry(),
@@ -42,14 +42,14 @@ export class HookRuntime {
   ) {}
 
   async run(input: HookRuntimeRunInput): Promise<HookRuntimeRunResult> {
-    const effects: PolitDeckHookEffect[] = [];
-    const events: PolitDeckHookExecutionEvent[] = [];
-    const blockingErrors: PolitDeckLifecycleError[] = [];
-    const nonBlockingErrors: PolitDeckLifecycleError[] = [];
+    const effects: PilotDeckHookEffect[] = [];
+    const events: PilotDeckHookExecutionEvent[] = [];
+    const blockingErrors: PilotDeckLifecycleError[] = [];
+    const nonBlockingErrors: PilotDeckLifecycleError[] = [];
 
     for (const { matcher, hook } of this.matchHooks(input)) {
       const hookName = matcher.pluginName ? `${matcher.pluginName}:${hook.type}` : hook.type;
-      const started: PolitDeckHookExecutionEvent = {
+      const started: PilotDeckHookExecutionEvent = {
         type: "started",
         hookName,
         hookEvent: input.event,
@@ -58,7 +58,7 @@ export class HookRuntime {
       this.eventBus.emit(started);
 
       const result = await this.executeHook(hook, input, matcher.pluginRoot);
-      const response: PolitDeckHookExecutionEvent = {
+      const response: PilotDeckHookExecutionEvent = {
         type: "response",
         hookName,
         hookEvent: input.event,
@@ -111,8 +111,8 @@ export class HookRuntime {
   }
 
   private *matchHooks(input: HookRuntimeRunInput): Generator<{
-    matcher: NonNullable<PolitDeckHooksSettings[PolitDeckHookEvent]>[number];
-    hook: PolitDeckHookCommand;
+    matcher: NonNullable<PilotDeckHooksSettings[PilotDeckHookEvent]>[number];
+    hook: PilotDeckHookCommand;
   }> {
     for (const matcher of this.settings[input.event] ?? []) {
       if (!matchHookMatcher(matcher.matcher, input.matchQuery)) {
@@ -132,7 +132,7 @@ export class HookRuntime {
   }
 
   private executeHook(
-    hook: PolitDeckHookCommand,
+    hook: PilotDeckHookCommand,
     input: HookRuntimeRunInput,
     pluginRoot: string | undefined,
   ) {
@@ -144,7 +144,7 @@ export class HookRuntime {
           cwd: pluginRoot ?? input.cwd,
           env: input.env,
           signal: input.signal,
-          timeoutMs: input.event === "SessionEnd" ? POLITDECK_SESSION_END_HOOK_TIMEOUT_MS : undefined,
+          timeoutMs: input.event === "SessionEnd" ? PILOTDECK_SESSION_END_HOOK_TIMEOUT_MS : undefined,
         });
       case "prompt":
         return this.promptExecutor.execute({ hook, hookInput: input.hookInput, signal: input.signal });
@@ -158,12 +158,12 @@ export class HookRuntime {
   }
 }
 
-function effectsFromHookOutput(output: PolitDeckHookOutput, hookName: string): PolitDeckHookEffect[] {
+function effectsFromHookOutput(output: PilotDeckHookOutput, hookName: string): PilotDeckHookEffect[] {
   if (output.type === "async") {
     return [];
   }
 
-  const effects: PolitDeckHookEffect[] = [];
+  const effects: PilotDeckHookEffect[] = [];
   if (output.systemMessage) {
     effects.push({ type: "system_message", content: output.systemMessage });
   }
@@ -212,6 +212,6 @@ function effectsFromHookOutput(output: PolitDeckHookOutput, hookName: string): P
   return effects;
 }
 
-function isBlockingOutput(output: PolitDeckHookSyncOutput): boolean {
+function isBlockingOutput(output: PilotDeckHookSyncOutput): boolean {
   return output.continue === false || output.decision === "block";
 }

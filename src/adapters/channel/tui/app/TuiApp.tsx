@@ -8,7 +8,7 @@ import { HelpDialog } from "./HelpDialog.js";
 import { MessageList } from "./MessageList.js";
 import { PromptInput } from "./PromptInput.js";
 import { applyGatewayEventToTuiState, type TuiAppState } from "./types.js";
-import { politDeckDarkBlueTheme } from "./theme.js";
+import { pilotDeckDarkBlueTheme } from "./theme.js";
 
 export type TuiAppProps = {
   gateway: Gateway;
@@ -189,7 +189,7 @@ function SessionHint({ sessions }: { sessions: GatewaySessionInfo[] }): React.Re
     return null;
   }
   return (
-    <Text color={politDeckDarkBlueTheme.subtle}>
+    <Text color={pilotDeckDarkBlueTheme.subtle}>
       sessions: {sessions.map((session) => session.summary || session.sessionId).slice(0, 4).join(" · ")}
     </Text>
   );

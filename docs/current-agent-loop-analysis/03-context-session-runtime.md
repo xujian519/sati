@@ -4,17 +4,17 @@
 
 主要参考：
 
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/QueryEngine.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/query.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/utils/processUserInput/processUserInput.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/utils/queryContext.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/utils/messages.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/services/compact/*`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/utils/sessionStorage.ts`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/memdir/*`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/services/mcp/*`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/skills/*`
-- `~/Codes/work/modelbest/PolitDeck/third-party/claude-code-main/src/plugins/*`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/QueryEngine.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/query.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/utils/processUserInput/processUserInput.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/utils/queryContext.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/utils/messages.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/services/compact/*`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/utils/sessionStorage.ts`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/memdir/*`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/services/mcp/*`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/skills/*`
+- `~/Codes/work/modelbest/PilotDeck/third-party/claude-code-main/src/plugins/*`
 
 ## 上下文窗口构造
 

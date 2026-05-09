@@ -3,7 +3,7 @@ import { cp, mkdir, rm, stat } from "node:fs/promises";
 import { platform } from "node:os";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
-import { createProjectId } from "../../polit/paths.js";
+import { createProjectId } from "../../pilot/paths.js";
 import { AlwaysOnError } from "../protocol/errors.js";
 import type { WorkspaceHandle } from "../protocol/types.js";
 import type { WorkspaceProvider, WorkspacePrepareInput, WorkspacePublishOutput } from "./WorkspaceProvider.js";
@@ -12,7 +12,7 @@ export type SnapshotCopyProviderOptions = {
   baseDir: string;
   /** Hard cap on source size in bytes. Default 1 GiB. */
   maxBytes: number;
-  /** Defaults: `.git/`, `node_modules/`, `dist/`, `.politdeck/`, `.politdeck-always-on/`. */
+  /** Defaults: `.git/`, `node_modules/`, `dist/`, `.pilotdeck/`, `.pilotdeck-always-on/`. */
   ignorePaths?: string[];
 };
 
@@ -20,8 +20,8 @@ const DEFAULT_IGNORES = [
   ".git",
   "node_modules",
   "dist",
-  ".politdeck",
-  ".politdeck-always-on",
+  ".pilotdeck",
+  ".pilotdeck-always-on",
 ];
 
 export class SnapshotCopyProvider implements WorkspaceProvider {

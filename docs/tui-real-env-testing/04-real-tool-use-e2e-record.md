@@ -7,9 +7,9 @@
 脚本默认参数：
 
 ```text
-POLITDECK_E2E_PROVIDER=edgeclaw
-POLITDECK_E2E_MODEL=moonshotai/kimi-k2.6
-POLITDECK_E2E_PROMPT=Use add_numbers to compute 17 + 25, then tell me the result.
+PILOTDECK_E2E_PROVIDER=edgeclaw
+PILOTDECK_E2E_MODEL=moonshotai/kimi-k2.6
+PILOTDECK_E2E_PROMPT=Use add_numbers to compute 17 + 25, then tell me the result.
 ```
 
 脚本注入的 system prompt 要求模型必须调用 `add_numbers`，而不是自己心算。工具返回：
@@ -27,8 +27,8 @@ POLITDECK_E2E_PROMPT=Use add_numbers to compute 17 + 25, then tell me the result
 ```bash
 npm run build
 mkdir -p artifacts
-POLITDECK_E2E_PROVIDER=edgeclaw \
-POLITDECK_E2E_MODEL=moonshotai/kimi-k2.6 \
+PILOTDECK_E2E_PROVIDER=edgeclaw \
+PILOTDECK_E2E_MODEL=moonshotai/kimi-k2.6 \
 node dist/scripts/tui-e2e-record.js
 ```
 
@@ -49,7 +49,7 @@ node dist/scripts/tui-e2e-record.js
 - after typing prompt 帧中输入框展示完整 prompt。
 - submit 后 transcript 出现 `You` 和用户输入。
 - 运行中出现 `thinking` 或工具 activity。
-- final 帧中出现工具结果和 `PolitDeck` 回复。
+- final 帧中出现工具结果和 `PilotDeck` 回复。
 - final 帧中不再残留 `thinking`。
 
 ### 预期输出
@@ -75,9 +75,9 @@ artifacts/tui-e2e-frames.log
 ```bash
 npm run build
 mkdir -p artifacts
-POLITDECK_E2E_TRACE=1 \
-POLITDECK_E2E_PROVIDER=edgeclaw \
-POLITDECK_E2E_MODEL=moonshotai/kimi-k2.6 \
+PILOTDECK_E2E_TRACE=1 \
+PILOTDECK_E2E_PROVIDER=edgeclaw \
+PILOTDECK_E2E_MODEL=moonshotai/kimi-k2.6 \
 node dist/scripts/tui-e2e-record.js
 ```
 
@@ -111,9 +111,9 @@ trace 中必须包含：
 ```bash
 npm run build
 mkdir -p artifacts
-POLITDECK_E2E_PROVIDER=edgeclaw \
-POLITDECK_E2E_MODEL=moonshotai/kimi-k2.6 \
-POLITDECK_E2E_PROMPT="Use add_numbers to compute 100 + 23, then answer only with the number." \
+PILOTDECK_E2E_PROVIDER=edgeclaw \
+PILOTDECK_E2E_MODEL=moonshotai/kimi-k2.6 \
+PILOTDECK_E2E_PROMPT="Use add_numbers to compute 100 + 23, then answer only with the number." \
 node dist/scripts/tui-e2e-record.js
 ```
 
@@ -133,7 +133,7 @@ node dist/scripts/tui-e2e-record.js
 Timed out waiting for the assistant final frame.
 ```
 
-如果需要让自定义 prompt 成为常规可通过用例，应先把脚本完成条件改为读取预期答案环境变量，例如 `POLITDECK_E2E_EXPECTED_TEXT`。
+如果需要让自定义 prompt 成为常规可通过用例，应先把脚本完成条件改为读取预期答案环境变量，例如 `PILOTDECK_E2E_EXPECTED_TEXT`。
 
 ## 用例 4：模型未调用工具时的失败判定
 

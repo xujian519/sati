@@ -1,6 +1,6 @@
-import type { PolitDeckToolDefinition } from "../protocol/types.js";
-import { PolitDeckToolRuntimeError } from "../protocol/errors.js";
-import { resolvePolitDeckWorkspacePath } from "./filesystem/pathSafety.js";
+import type { PilotDeckToolDefinition } from "../protocol/types.js";
+import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
+import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
 import { readTextFile } from "./filesystem/readTextFile.js";
 import { writeTextFile } from "./filesystem/writeTextFile.js";
 
@@ -11,7 +11,7 @@ export type EditFileInput = {
   replaceAll?: boolean;
 };
 
-export function createEditFileTool(): PolitDeckToolDefinition<EditFileInput> {
+export function createEditFileTool(): PilotDeckToolDefinition<EditFileInput> {
   return {
     name: "edit_file",
     aliases: ["Edit"],
@@ -33,12 +33,12 @@ export function createEditFileTool(): PolitDeckToolDefinition<EditFileInput> {
     isDestructive: () => false,
     execute: async (input, context) => {
       if (input.oldString.length === 0) {
-        throw new PolitDeckToolRuntimeError("invalid_tool_input", "oldString must not be empty.");
+        throw new PilotDeckToolRuntimeError("invalid_tool_input", "oldString must not be empty.");
       }
 
-      const resolved = resolvePolitDeckWorkspacePath(input.filePath, context, { mustExist: true, forWrite: true });
+      const resolved = resolvePilotDeckWorkspacePath(input.filePath, context, { mustExist: true, forWrite: true });
       if (!resolved.ok) {
-        throw new PolitDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
+        throw new PilotDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
       }
 
       if (context.fileHistory) {
@@ -51,10 +51,10 @@ export function createEditFileTool(): PolitDeckToolDefinition<EditFileInput> {
       const content = await readTextFile(resolved.absolutePath);
       const occurrences = countOccurrences(content, input.oldString);
       if (occurrences === 0) {
-        throw new PolitDeckToolRuntimeError("invalid_tool_input", "oldString was not found.");
+        throw new PilotDeckToolRuntimeError("invalid_tool_input", "oldString was not found.");
       }
       if (occurrences > 1 && !input.replaceAll) {
-        throw new PolitDeckToolRuntimeError(
+        throw new PilotDeckToolRuntimeError(
           "invalid_tool_input",
           "oldString occurs more than once. Set replaceAll to true to replace all occurrences.",
         );

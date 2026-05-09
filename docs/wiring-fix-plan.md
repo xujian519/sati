@@ -22,17 +22,17 @@
 // src/agent/runtime/AgentRuntimeDependencies.ts
 export type AgentRuntimeDependencies = {
   router: AgentRouterRuntime;
-  tools: { scheduler: PolitDeckToolScheduler; registry: ToolRegistry };
+  tools: { scheduler: PilotDeckToolScheduler; registry: ToolRegistry };
   context?: AgentContextRuntime;
   now?: () => Date;
   uuid?: () => string;
-  auditRecorder?: PolitDeckToolAuditRecorder;
+  auditRecorder?: PilotDeckToolAuditRecorder;
   lifecycle?: LifecycleRuntime;
   subagentTranscript?: AgentSubagentTranscriptHooks;
 
   // ADD ↓
-  elicitation?: PolitDeckElicitationChannel;
-  fileHistory?: PolitDeckToolFileHistorySink;
+  elicitation?: PilotDeckElicitationChannel;
+  fileHistory?: PilotDeckToolFileHistorySink;
   // mcpRuntime / backgroundTasks 不进 deps —— 它们的产出已经走 tools.registry 了
 };
 ```
@@ -49,15 +49,15 @@ export type AgentContextRuntime = {
 ```
 
 ```ts
-// src/polit/config/types.ts — 新增可选 context section
-export type PolitContextConfig = {
+// src/pilot/config/types.ts — 新增可选 context section
+export type PilotContextConfig = {
   cachedMicrocompactEnabled?: boolean;        // A4 gate
   autoCompactionEnabled?: boolean;             // A5 gate
   toolResultBudgetMaxChars?: number;          // budget threshold
 };
-export type PolitConfig = {
+export type PilotConfig = {
   // ...
-  context?: PolitContextConfig;
+  context?: PilotContextConfig;
 };
 ```
 
@@ -119,7 +119,7 @@ tests/wiring/feature-wiring.test.ts → A3 / B1.tool 自动转绿
 ```ts
 // src/cli/createLocalGateway.ts ProjectRuntimeRegistry.resolve()
 const backgroundTasks = new BackgroundTaskRuntime({
-  diskSpillDir: path.join(this.options.politHome, "tasks", projectKey),
+  diskSpillDir: path.join(this.options.pilotHome, "tasks", projectKey),
   now: this.options.now,
 });
 const tools = createBuiltinRegistry({
@@ -140,17 +140,17 @@ const memCfg = snapshot.config.memory;
 if (memCfg?.enabled && memCfg.provider === "edgeclaw") {
   const memoryService = new EdgeClawMemoryService({
     workspaceDir: projectRoot,
-    rootDir: memCfg.rootDir ?? path.join(this.options.politHome, "memory"),
+    rootDir: memCfg.rootDir ?? path.join(this.options.pilotHome, "memory"),
     captureStrategy: memCfg.captureStrategy,
     includeAssistant: memCfg.includeAssistant,
     maxMessageChars: memCfg.maxMessageChars,
     llm: memCfg.llm,
-    source: "politdeck",
+    source: "pilotdeck",
   });
   memoryResolver = new EdgeClawMemoryProvider({
     service: memoryService,
     retrievalMode: "auto",
-    source: "politdeck",
+    source: "pilotdeck",
     now: this.options.now,
   });
   // 缓存到 ProjectRuntime, dispose() 时调 memoryService.close()
@@ -199,7 +199,7 @@ type ProjectRuntime = {
 
 ```ts
 const toolResultBudget = new ToolResultBudget({
-  toolResultsDir: path.join(this.options.politHome, "tool-results", context.sessionKey),
+  toolResultsDir: path.join(this.options.pilotHome, "tool-results", context.sessionKey),
   maxResultSizeChars: snapshot.config.context?.toolResultBudgetMaxChars ?? 100_000,
 });
 ```
@@ -227,7 +227,7 @@ const compactionEngine = autoCompaction
 
 ```ts
 const fileHistoryStore = new FileHistoryStore({
-  backupDir: path.join(this.options.politHome, "file-history", context.sessionKey),
+  backupDir: path.join(this.options.pilotHome, "file-history", context.sessionKey),
   maxSnapshots: 32,
 });
 ```
@@ -366,11 +366,11 @@ action：
 test.skip("WIRING A2 real tokenizer fallback ...", () => { ... });
 ```
 
-附 comment：`A2 deferred per docs/politdeck-deferred-feature-implementation-guide.md (line 495). Re-enable when provider tokenizer service lands.`
+附 comment：`A2 deferred per docs/pilotdeck-deferred-feature-implementation-guide.md (line 495). Re-enable when provider tokenizer service lands.`
 
 ### R5.2 B1.channel
 
-`PolitDeckElicitationChannel.ts` 注释里说 Gateway 协议要加 `elicitation_request` / `elicitation_answer`，但目前 Gateway protocol 没这两个事件。
+`PilotDeckElicitationChannel.ts` 注释里说 Gateway 协议要加 `elicitation_request` / `elicitation_answer`，但目前 Gateway protocol 没这两个事件。
 
 action（两个选项，二选一）：
 
@@ -424,7 +424,7 @@ test("memory wired end-to-end", async () => {
   });
   const gateway = createLocalGateway({
     projectRoot: tmpProj,
-    politHome: tmpHome,
+    pilotHome: tmpHome,
     __testModelFactory: () => fakeModel,
   });
   for await (const _ of gateway.submitTurn({ ... })) {}

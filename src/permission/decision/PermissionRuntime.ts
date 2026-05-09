@@ -1,4 +1,4 @@
-import type { PolitDeckToolDefinition, PolitDeckToolRuntimeContext } from "../../tool/index.js";
+import type { PilotDeckToolDefinition, PilotDeckToolRuntimeContext } from "../../tool/index.js";
 import { matchPermissionRule } from "../policy/matchPermissionRule.js";
 import type {
   PermissionContext,
@@ -11,9 +11,9 @@ import type {
 
 export class PermissionRuntime {
   async decide(
-    tool: PolitDeckToolDefinition,
+    tool: PilotDeckToolDefinition,
     input: unknown,
-    context: PolitDeckToolRuntimeContext,
+    context: PilotDeckToolRuntimeContext,
     toolCallId: string,
   ): Promise<PermissionDecision> {
     const permissionContext = context.permissionContext;
@@ -65,7 +65,7 @@ export class PermissionRuntime {
 
 function normalizeToolPermission(
   result: PermissionResult | undefined,
-  tool: PolitDeckToolDefinition,
+  tool: PilotDeckToolDefinition,
   input: unknown,
   toolCallId: string,
   context: PermissionContext,
@@ -96,7 +96,7 @@ function normalizeToolPermission(
 }
 
 function decideByMode(
-  tool: PolitDeckToolDefinition,
+  tool: PilotDeckToolDefinition,
   input: unknown,
   toolCallId: string,
   context: PermissionContext,
@@ -162,7 +162,7 @@ function denyFromRule(rule: PermissionRule): PermissionDecision {
 }
 
 function askFromRule(
-  tool: PolitDeckToolDefinition,
+  tool: PilotDeckToolDefinition,
   input: unknown,
   toolCallId: string,
   rule: PermissionRule,
@@ -176,7 +176,7 @@ function askFromRule(
 }
 
 function ask(
-  tool: PolitDeckToolDefinition,
+  tool: PilotDeckToolDefinition,
   input: unknown,
   toolCallId: string,
   reason: PermissionDecisionReason,
@@ -189,7 +189,7 @@ function ask(
 }
 
 function createPermissionRequest(
-  tool: PolitDeckToolDefinition,
+  tool: PilotDeckToolDefinition,
   input: unknown,
   toolCallId: string,
   reason: PermissionDecisionReason,

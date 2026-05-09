@@ -1,5 +1,5 @@
-import { PolitDeckToolRuntimeError } from "../../tool/protocol/errors.js";
-import type { PolitDeckToolDefinition } from "../../tool/protocol/types.js";
+import { PilotDeckToolRuntimeError } from "../../tool/protocol/errors.js";
+import type { PilotDeckToolDefinition } from "../../tool/protocol/types.js";
 import { parseReportMarkdown, type ReportMetadata } from "../contracts/ReportContract.js";
 import type { AlwaysOnRunContextRegistry } from "../runtime/AlwaysOnRunContextRegistry.js";
 
@@ -22,7 +22,7 @@ export const ALWAYS_ON_REPORT_TOOL_NAME = "always_on_report";
 
 export function createAlwaysOnReportTool(
   options: CreateAlwaysOnReportToolOptions,
-): PolitDeckToolDefinition<AlwaysOnReportInput, AlwaysOnReportOutput> {
+): PilotDeckToolDefinition<AlwaysOnReportInput, AlwaysOnReportOutput> {
   const now = options.now ?? (() => new Date());
 
   return {
@@ -44,7 +44,7 @@ export function createAlwaysOnReportTool(
     execute: async (input, context) => {
       const ctx = options.runContexts.getExecution(context.sessionId);
       if (!ctx) {
-        throw new PolitDeckToolRuntimeError(
+        throw new PilotDeckToolRuntimeError(
           "tool_execution_failed",
           `${ALWAYS_ON_REPORT_TOOL_NAME} called outside of an Always-On execution turn.`,
         );

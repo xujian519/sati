@@ -1,50 +1,50 @@
 export type {
-  PolitDeckPermissionAuditRecord,
-  PolitDeckToolAuditRecord,
-  PolitDeckToolAuditRecorder,
+  PilotDeckPermissionAuditRecord,
+  PilotDeckToolAuditRecord,
+  PilotDeckToolAuditRecorder,
 } from "./audit/ToolAuditRecorder.js";
 export { ToolRuntime } from "./execution/ToolRuntime.js";
 export { validateToolInput } from "./execution/validateToolInput.js";
 export {
   normalizeToolError,
-  PolitDeckToolRuntimeError,
+  PilotDeckToolRuntimeError,
   toolError,
-  type PolitDeckToolError,
-  type PolitDeckToolErrorCode,
+  type PilotDeckToolError,
+  type PilotDeckToolErrorCode,
 } from "./protocol/errors.js";
 export {
   applyResultSizeLimit,
   contentToText,
   estimateResultContentBytes,
   toCanonicalToolResultBlock,
-  type PolitDeckToolErrorResult,
-  type PolitDeckToolResult,
-  type PolitDeckToolResultSizeMetadata,
-  type PolitDeckToolSuccessResult,
+  type PilotDeckToolErrorResult,
+  type PilotDeckToolResult,
+  type PilotDeckToolResultSizeMetadata,
+  type PilotDeckToolSuccessResult,
 } from "./protocol/result.js";
 export type {
-  PolitDeckJsonSchema,
-  PolitDeckToolInputSchema,
-  PolitDeckToolValidationIssue,
-  PolitDeckToolValidationResult,
+  PilotDeckJsonSchema,
+  PilotDeckToolInputSchema,
+  PilotDeckToolValidationIssue,
+  PilotDeckToolValidationResult,
 } from "./protocol/schema.js";
 export type {
-  PolitDeckToolCall,
-  PolitDeckToolDefinition,
-  PolitDeckToolExecutionOutput,
-  PolitDeckToolFileHistorySink,
-  PolitDeckToolKind,
-  PolitDeckToolModelClient,
-  PolitDeckToolProgressEvent,
-  PolitDeckToolProgressSink,
-  PolitDeckToolResultContent,
-  PolitDeckToolRuntimeContext,
-  PolitDeckSubagentForkApi,
+  PilotDeckToolCall,
+  PilotDeckToolDefinition,
+  PilotDeckToolExecutionOutput,
+  PilotDeckToolFileHistorySink,
+  PilotDeckToolKind,
+  PilotDeckToolModelClient,
+  PilotDeckToolProgressEvent,
+  PilotDeckToolProgressSink,
+  PilotDeckToolResultContent,
+  PilotDeckToolRuntimeContext,
+  PilotDeckSubagentForkApi,
 } from "./protocol/types.js";
 export { ToolRegistry } from "./registry/ToolRegistry.js";
 export { createBuiltinRegistry, type CreateBuiltinRegistryOptions } from "./registry/createBuiltinRegistry.js";
 export { SequentialToolScheduler } from "./scheduler/SequentialToolScheduler.js";
-export type { PolitDeckToolScheduler } from "./scheduler/ToolScheduler.js";
+export type { PilotDeckToolScheduler } from "./scheduler/ToolScheduler.js";
 export {
   BUILTIN_SUBAGENTS,
   createAgentTool,
@@ -63,9 +63,9 @@ export {
   createBashTool,
   type BashInput,
   type CreateBashToolOptions,
-  type PolitDeckCommandOptions,
-  type PolitDeckCommandResult,
-  type PolitDeckCommandRunner,
+  type PilotDeckCommandOptions,
+  type PilotDeckCommandResult,
+  type PilotDeckCommandRunner,
 } from "./builtin/bash.js";
 export {
   ASK_USER_QUESTION_HEADER_MAX,
@@ -78,12 +78,12 @@ export {
 } from "./builtin/askUserQuestion.js";
 export {
   InMemoryElicitationChannel,
-  type PolitDeckElicitationAnswer,
-  type PolitDeckElicitationChannel,
-  type PolitDeckElicitationOption,
-  type PolitDeckElicitationQuestion,
-  type PolitDeckElicitationRequest,
-} from "./elicitation/PolitDeckElicitationChannel.js";
+  type PilotDeckElicitationAnswer,
+  type PilotDeckElicitationChannel,
+  type PilotDeckElicitationOption,
+  type PilotDeckElicitationQuestion,
+  type PilotDeckElicitationRequest,
+} from "./elicitation/PilotDeckElicitationChannel.js";
 export { validateHtmlPreview } from "./elicitation/validateHtmlPreview.js";
 export {
   createWebFetchTool,
@@ -139,12 +139,12 @@ export {
   buildMcpToolWireName,
   createMcpTool,
   type CreateMcpToolOptions,
-  type PolitDeckMcpToolAdapter,
+  type PilotDeckMcpToolAdapter,
 } from "./builtin/mcpTool.js";
 export {
   createListMcpResourcesTool,
   createReadMcpResourceTool,
-  type PolitDeckMcpResourceAdapter,
+  type PilotDeckMcpResourceAdapter,
 } from "./builtin/mcpResources.js";
 export { createStructuredOutputTool, type StructuredOutputInput } from "./builtin/structuredOutput.js";
 export {

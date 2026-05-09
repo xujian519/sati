@@ -73,5 +73,5 @@ export {
   type CustomRouterContext,
   type CustomRouterDecideInput,
   type CustomRouterRegistry,
-  type PolitDeckCustomRouter,
+  type PilotDeckCustomRouter,
 } from "./customRouter/customRouter.js";

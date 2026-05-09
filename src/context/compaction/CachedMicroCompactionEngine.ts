@@ -8,7 +8,7 @@ import type { CanonicalMessage, CanonicalUsage } from "../../model/index.js";
  * sensitive tools and ask_user_question are intentionally absent so user
  * decisions are never silently dropped.
  *
- * Behaviour M1 in §4.4: must match legacy set verbatim (in PolitDeck tool
+ * Behaviour M1 in §4.4: must match legacy set verbatim (in PilotDeck tool
  * naming). Adding a tool here is a runtime contract change; remove from
  * here only if the parent tool's output is small enough that caching does
  * not help.
@@ -77,7 +77,7 @@ export type CachedMicroCompactionOptions = {
  *   M3 Subagent skip: forked agents share state with main loop, so we never
  *      run the engine inside a subagent (cache_control is a per-turn signal).
  *   M4 Returns eligible tool_call_ids for telemetry / debugging.
- *   M5 Disabled by default; gated on `politdeck.context.cachedMicrocompactEnabled`.
+ *   M5 Disabled by default; gated on `pilotdeck.context.cachedMicrocompactEnabled`.
  *   M6 Cache breakpoint goes on the message *immediately preceding* the
  *      eligible tool_result message, not on the eligible message itself.
  *   M7 `validateCacheHit(usage)` returns true when `cacheReadTokens > 0`,

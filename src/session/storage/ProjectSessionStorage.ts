@@ -1,10 +1,10 @@
 import { resolve } from "node:path";
-import { getPolitProjectChatDir } from "../../polit/index.js";
+import { getPilotProjectChatDir } from "../../pilot/index.js";
 import { JsonlTranscriptWriter } from "../transcript/JsonlTranscriptWriter.js";
 
 export type AgentProjectSessionStorageOptions = {
   projectRoot: string;
-  politHome: string;
+  pilotHome: string;
   sessionId: string;
   now?: () => Date;
 };
@@ -32,7 +32,7 @@ export type AgentProjectSessionStorage = {
 export function createAgentProjectSessionStorage(
   options: AgentProjectSessionStorageOptions,
 ): AgentProjectSessionStorage {
-  const chatDir = getPolitProjectChatDir(options.projectRoot, options.politHome);
+  const chatDir = getPilotProjectChatDir(options.projectRoot, options.pilotHome);
   const transcriptPath = resolve(chatDir, `${options.sessionId}.jsonl`);
   const toolResultsDir = resolve(chatDir, options.sessionId, "tool-results");
   const fileHistoryDir = resolve(chatDir, options.sessionId, "file-history");

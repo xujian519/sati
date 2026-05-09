@@ -9,10 +9,10 @@ import {
   readTranscript,
   replayTranscriptEntries,
 } from "../../src/session/index.js";
-import { getPolitProjectChatDir } from "../../src/polit/index.js";
+import { getPilotProjectChatDir } from "../../src/pilot/index.js";
 
 test("JsonlTranscriptWriter writes ordered transcript entries", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-agent-jsonl-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-agent-jsonl-"));
   try {
     const transcriptPath = path.join(root, "session.jsonl");
     const writer = new JsonlTranscriptWriter({
@@ -49,7 +49,7 @@ test("JsonlTranscriptWriter writes ordered transcript entries", async () => {
 });
 
 test("readTranscript refuses oversized transcripts", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-agent-large-jsonl-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-agent-large-jsonl-"));
   try {
     const transcriptPath = path.join(root, "session.jsonl");
     await writeFile(transcriptPath, "x".repeat(32), "utf8");
@@ -63,16 +63,16 @@ test("readTranscript refuses oversized transcripts", async () => {
   }
 });
 
-test("project session storage uses PolitDeck project chat directory", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-agent-project-"));
+test("project session storage uses PilotDeck project chat directory", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-agent-project-"));
   try {
     const storage = createAgentProjectSessionStorage({
       projectRoot: path.join(root, "repo"),
-      politHome: path.join(root, "home"),
+      pilotHome: path.join(root, "home"),
       sessionId: "session-1",
     });
 
-    assert.equal(storage.chatDir, getPolitProjectChatDir(path.join(root, "repo"), path.join(root, "home")));
+    assert.equal(storage.chatDir, getPilotProjectChatDir(path.join(root, "repo"), path.join(root, "home")));
     assert.equal(storage.transcriptPath, path.join(storage.chatDir, "session-1.jsonl"));
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -80,7 +80,7 @@ test("project session storage uses PolitDeck project chat directory", async () =
 });
 
 test("readTranscript reports malformed lines and replay skips incomplete durable messages", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-agent-bad-jsonl-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-agent-bad-jsonl-"));
   try {
     const transcriptPath = path.join(root, "session.jsonl");
     await writeFile(

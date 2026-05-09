@@ -11,9 +11,9 @@ import {
   type CanonicalUsage,
 } from "../../model/index.js";
 import type {
-  PolitDeckSubagentForkApi,
-  PolitDeckToolResult,
-  PolitDeckToolRuntimeContext,
+  PilotDeckSubagentForkApi,
+  PilotDeckToolResult,
+  PilotDeckToolRuntimeContext,
 } from "../../tool/index.js";
 import {
   SUBAGENT_DEFINITIONS,
@@ -267,7 +267,7 @@ export class AgentLoop {
       }
 
       yield { type: "tool_calls_detected", sessionId: input.sessionId, turnId: input.turnId, calls: toolCalls };
-      let results: PolitDeckToolResult[];
+      let results: PilotDeckToolResult[];
       try {
         results = await this.dependencies.tools.scheduler.executeAll(
           toolCalls,
@@ -436,7 +436,7 @@ export class AgentLoop {
   private createToolContext(
     input: AgentLoopInput,
     messages: CanonicalMessage[],
-  ): PolitDeckToolRuntimeContext {
+  ): PilotDeckToolRuntimeContext {
     return {
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -476,7 +476,7 @@ export class AgentLoop {
   private buildSubagentForkApi(
     input: AgentLoopInput,
     messages: CanonicalMessage[],
-  ): PolitDeckSubagentForkApi {
+  ): PilotDeckSubagentForkApi {
     const depth = this.config.subagentDepth ?? 0;
     const maxDepth = this.config.maxSubagentDepth ?? 1;
     return {
@@ -619,7 +619,7 @@ function findLifecycleBlock(result: LifecycleDispatchResult): { reason: string; 
   );
 }
 
-function findToolLifecycleBlock(results: PolitDeckToolResult[]): { reason: string; stopReason?: string } | undefined {
+function findToolLifecycleBlock(results: PilotDeckToolResult[]): { reason: string; stopReason?: string } | undefined {
   for (const result of results) {
     const lifecycle = result.metadata?.lifecycle;
     if (isRecord(lifecycle) && isRecord(lifecycle.blocked) && typeof lifecycle.blocked.reason === "string") {
@@ -683,7 +683,7 @@ function stripTrailingErrorPair(messages: CanonicalMessage[]): CanonicalMessage[
   return out;
 }
 
-function collectPermissionDenials(results: PolitDeckToolResult[]): AgentPermissionDenial[] {
+function collectPermissionDenials(results: PilotDeckToolResult[]): AgentPermissionDenial[] {
   return results.flatMap((result) => {
     if (
       result.type === "error" &&

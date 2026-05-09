@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { AttachmentResolver } from "../../src/context/attachments/AttachmentResolver.js";
 
 test("AttachmentResolver reads small text files", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "politdeck-att-"));
+  const dir = mkdtempSync(join(tmpdir(), "pilotdeck-att-"));
   try {
     const path = join(dir, "doc.md");
     writeFileSync(path, "# Hello", "utf8");
@@ -28,7 +28,7 @@ test("AttachmentResolver flags missing attachments", async () => {
 });
 
 test("AttachmentResolver rejects files larger than maxFileBytes", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "politdeck-att-"));
+  const dir = mkdtempSync(join(tmpdir(), "pilotdeck-att-"));
   try {
     const path = join(dir, "big.txt");
     writeFileSync(path, "x".repeat(2_000), "utf8");
@@ -41,7 +41,7 @@ test("AttachmentResolver rejects files larger than maxFileBytes", async () => {
 });
 
 test("AttachmentResolver returns base64 image with intentional_difference diagnostic", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "politdeck-att-"));
+  const dir = mkdtempSync(join(tmpdir(), "pilotdeck-att-"));
   try {
     const path = join(dir, "tiny.png");
     writeFileSync(path, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
@@ -56,7 +56,7 @@ test("AttachmentResolver returns base64 image with intentional_difference diagno
 });
 
 test("AttachmentResolver estimates PDF pages by file size", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "politdeck-att-"));
+  const dir = mkdtempSync(join(tmpdir(), "pilotdeck-att-"));
   try {
     const path = join(dir, "doc.pdf");
     writeFileSync(path, Buffer.alloc(250_000, 0));

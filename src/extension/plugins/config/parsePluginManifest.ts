@@ -1,6 +1,6 @@
-import type { PolitDeckPluginManifest } from "../protocol/manifest.js";
+import type { PilotDeckPluginManifest } from "../protocol/manifest.js";
 
-export function parsePluginManifest(raw: unknown): PolitDeckPluginManifest {
+export function parsePluginManifest(raw: unknown): PilotDeckPluginManifest {
   if (!isRecord(raw)) {
     throw new Error("Plugin manifest must be an object.");
   }

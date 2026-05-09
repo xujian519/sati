@@ -1,4 +1,4 @@
-# old_ui 到 PolitDeck 的适配矩阵
+# old_ui 到 PilotDeck 的适配矩阵
 
 本文把旧 UI 能力映射到新项目目标边界。状态含义：
 
@@ -26,12 +26,12 @@
 | Cron list/create/delete/stop | project cron routes | Gateway `cron_*` | `compare` | 当前 Gateway 已有基础方法。 |
 | Cron run now/history/log | project always-on routes | `src/cron`/`src/always-on` Web API | `deferred` | 需要 `src` 补接口。 |
 | Always-On discovery | discovery routes/services | `src/always-on` | `deferred` | 保留产品目标，分阶段迁。 |
-| Memory dashboard | `/api/memory` + `/memory-dashboard` | PolitDeck memory/context API | `deferred` | 不作为第一阶段阻断项。 |
+| Memory dashboard | `/api/memory` + `/memory-dashboard` | PilotDeck memory/context API | `deferred` | 不作为第一阶段阻断项。 |
 | Skills | `/api/skills` | `src/extension` skills contributions | `deferred` | 先保证只读展示，再做管理。 |
 | Plugins | `/api/plugins` + plugin proxy | `src/extension` plugins | `deferred` | 插件安装/运行涉及较大安全面。 |
 | MCP 管理 | `/api/mcp` | `src/mcp` + extension contributions | `deferred` | 需要与 config 和 permission 一起设计。 |
 | TaskMaster | `/api/taskmaster` | 未定 | `not_applicable` | 除非产品重新确认保留。 |
-| 旧 provider 多会话 | Claude/Cursor/Codex/Gemini adapters | PolitDeck session/provider-neutral runtime | `intentional_difference` | 新项目不以旧 provider 存储为主事实来源。 |
+| 旧 provider 多会话 | Claude/Cursor/Codex/Gemini adapters | PilotDeck session/provider-neutral runtime | `intentional_difference` | 新项目不以旧 provider 存储为主事实来源。 |
 | 本地免登录 | `CLOUDCLI_DISABLE_LOCAL_AUTH` | localhost token | `intentional_difference` | 新 Gateway 使用 `/auth/local-token`，非 localhost 需要新 auth。 |
 
 ## 第一阶段必须 compare 的能力
@@ -50,7 +50,7 @@
 
 这些差异可以接受，但必须写入变更说明：
 
-- provider 选择从 `claude/cursor/codex/gemini` 收敛为 PolitDeck config/router。
+- provider 选择从 `claude/cursor/codex/gemini` 收敛为 PilotDeck config/router。
 - 认证从旧 JWT/local auth 改为 localhost Gateway token。
 - session id 从 provider 原生 id 改为 `sessionKey`。
 - 历史消息可以从 delta replay 合并为更适合阅读的 Web message，但 tool/result pairing 不能丢。

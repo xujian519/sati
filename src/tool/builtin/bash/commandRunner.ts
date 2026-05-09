@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 
-export type PolitDeckCommandOptions = {
+export type PilotDeckCommandOptions = {
   cwd: string;
   env?: NodeJS.ProcessEnv;
   timeoutMs: number;
@@ -11,7 +11,7 @@ export type PolitDeckCommandOptions = {
   onStderr?: (chunk: string) => void;
 };
 
-export type PolitDeckCommandResult = {
+export type PilotDeckCommandResult = {
   exitCode: number | null;
   stdout: string;
   stderr: string;
@@ -19,12 +19,12 @@ export type PolitDeckCommandResult = {
   durationMs: number;
 };
 
-export type PolitDeckCommandRunner = {
-  run(command: string, options: PolitDeckCommandOptions): Promise<PolitDeckCommandResult>;
+export type PilotDeckCommandRunner = {
+  run(command: string, options: PilotDeckCommandOptions): Promise<PilotDeckCommandResult>;
 };
 
-export class NodeShellCommandRunner implements PolitDeckCommandRunner {
-  run(command: string, options: PolitDeckCommandOptions): Promise<PolitDeckCommandResult> {
+export class NodeShellCommandRunner implements PilotDeckCommandRunner {
+  run(command: string, options: PilotDeckCommandOptions): Promise<PilotDeckCommandResult> {
     const startedAt = Date.now();
     return new Promise((resolve, reject) => {
       const child = spawn(command, {

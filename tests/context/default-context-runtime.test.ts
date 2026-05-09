@@ -22,7 +22,7 @@ test("DefaultContextRuntime.prepareForModel returns ModelContext with assembled 
   const context = await runtime.prepareForModel(baseInput);
   assert.equal(context.messages.length, 1);
   assert.ok(context.systemPrompt && context.systemPrompt.length > 0);
-  assert.match(context.systemPrompt!, /You are PolitDeck/);
+  assert.match(context.systemPrompt!, /You are PilotDeck/);
   assert.equal(context.tools.length, 1);
   assert.equal(context.diagnostics.length, 0);
 });
@@ -40,7 +40,7 @@ test("DefaultContextRuntime.prepareForModel surfaces tool-pairing warning as dia
 test("DefaultContextRuntime includes PluginRuntime commands and skills in the system prompt", async () => {
   const pluginRuntime = new PluginRuntime({
     projectRoot: "/tmp/project",
-    politHome: "/tmp/polit",
+    pilotHome: "/tmp/pilot",
     builtinPlugins: [
       {
         name: "review",

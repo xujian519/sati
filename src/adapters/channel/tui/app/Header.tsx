@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { TuiAppState } from "./types.js";
-import { politDeckDarkBlueTheme } from "./theme.js";
+import { pilotDeckDarkBlueTheme } from "./theme.js";
 
 export function Header({
   state,
@@ -20,13 +20,13 @@ export function Header({
   return (
     <Box flexDirection="column" paddingX={1}>
       <Text>
-        <Text color={politDeckDarkBlueTheme.brand} bold>
-          PolitDeck
+        <Text color={pilotDeckDarkBlueTheme.brand} bold>
+          PilotDeck
         </Text>
-        <Text color={politDeckDarkBlueTheme.brandAccent}> ↗</Text>
-        <Text color={politDeckDarkBlueTheme.subtle}>{"  "}v0.1.0</Text>
+        <Text color={pilotDeckDarkBlueTheme.brandAccent}> ↗</Text>
+        <Text color={pilotDeckDarkBlueTheme.subtle}>{"  "}v0.1.0</Text>
       </Text>
-      <Text color={politDeckDarkBlueTheme.subtle}>
+      <Text color={pilotDeckDarkBlueTheme.subtle}>
         {model ?? "model"} · {state.mode} · {shortenPath(cwd)} · {connection}
       </Text>
     </Box>

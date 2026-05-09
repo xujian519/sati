@@ -8,7 +8,7 @@ import {
   projectToolResults,
 } from "../../src/agent/index.js";
 import { createEnterPlanModeTool, createStructuredOutputTool } from "../../src/tool/index.js";
-import { createPolitDeckTestTool } from "../helpers/tool.js";
+import { createPilotDeckTestTool } from "../helpers/tool.js";
 import { collectAsyncGenerator, createAgentLoopFixture } from "../helpers/agent.js";
 
 test("loop helpers collect tool calls and project paired tool results", () => {
@@ -60,7 +60,7 @@ test("AgentLoop completes a no-tool turn", async () => {
 });
 
 test("AgentLoop executes tools and continues with canonical tool_result", async () => {
-  const tool = createPolitDeckTestTool({
+  const tool = createPilotDeckTestTool({
     name: "lookup",
     inputSchema: {
       type: "object",
@@ -104,7 +104,7 @@ test("AgentLoop executes tools and continues with canonical tool_result", async 
 });
 
 test("AgentLoop records permission denials and returns max_turns after tool results", async () => {
-  const tool = createPolitDeckTestTool({ name: "write_file", readOnly: false, kind: "filesystem" });
+  const tool = createPilotDeckTestTool({ name: "write_file", readOnly: false, kind: "filesystem" });
   const { loop } = createAgentLoopFixture({
     tools: [tool],
     permissionMode: "default",

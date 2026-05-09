@@ -1,6 +1,6 @@
 /**
  * `web_fetch` builtin tool — full-fat parity port. See
- * `docs/politdeck-deferred-feature-implementation-guide.md` §5.2 (B2) for
+ * `docs/pilotdeck-deferred-feature-implementation-guide.md` §5.2 (B2) for
  * the 13-behaviour alignment checklist this implementation tracks.
  */
 
@@ -9,12 +9,12 @@ import type {
   CanonicalUsage,
 } from "../../model/index.js";
 import type { PermissionResult } from "../../permission/index.js";
-import { PolitDeckToolRuntimeError } from "../protocol/errors.js";
+import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
 import type {
-  PolitDeckToolDefinition,
-  PolitDeckToolExecutionOutput,
-  PolitDeckToolModelClient,
-  PolitDeckToolRuntimeContext,
+  PilotDeckToolDefinition,
+  PilotDeckToolExecutionOutput,
+  PilotDeckToolModelClient,
+  PilotDeckToolRuntimeContext,
 } from "../protocol/types.js";
 import { isPreapprovedUrl } from "./web/preapprovedHosts.js";
 import {
@@ -56,7 +56,7 @@ export type CreateWebFetchToolOptions = {
    * `context.model` (provided by AgentLoop). When neither is available
    * the tool returns the raw markdown without summarization.
    */
-  model?: PolitDeckToolModelClient;
+  model?: PilotDeckToolModelClient;
   /** Provider id used for the secondary model call. Default: openrouter. */
   provider?: string;
   /** Model id used for the secondary model call. Default: kimi/k2.6. */
@@ -73,7 +73,7 @@ const DEFAULT_MAX_OUTPUT_TOKENS = 1024;
 
 export function createWebFetchTool(
   options: CreateWebFetchToolOptions = {},
-): PolitDeckToolDefinition<WebFetchInput, WebFetchOutput> {
+): PilotDeckToolDefinition<WebFetchInput, WebFetchOutput> {
   return {
     name: "web_fetch",
     aliases: ["WebFetch"],
@@ -154,7 +154,7 @@ export function createWebFetchTool(
       }
       return { ok: true, input };
     },
-    execute: async (input, context): Promise<PolitDeckToolExecutionOutput<WebFetchOutput>> => {
+    execute: async (input, context): Promise<PilotDeckToolExecutionOutput<WebFetchOutput>> => {
       const { url, prompt } = input;
       const signal = context.abortSignal ?? new AbortController().signal;
 
@@ -163,7 +163,7 @@ export function createWebFetchTool(
         httpResult = await getURLMarkdownContent(url, signal);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        throw new PolitDeckToolRuntimeError(
+        throw new PilotDeckToolRuntimeError(
           "tool_execution_failed",
           `web_fetch failed: ${message}`,
         );
@@ -231,7 +231,7 @@ export function createWebFetchTool(
       try {
         for await (const event of model.stream(request, signal)) {
           if (signal.aborted) {
-            throw new PolitDeckToolRuntimeError(
+            throw new PilotDeckToolRuntimeError(
               "tool_aborted",
               "web_fetch aborted before completion.",
             );
@@ -244,7 +244,7 @@ export function createWebFetchTool(
               _usage = event.usage;
               break;
             case "error":
-              throw new PolitDeckToolRuntimeError(
+              throw new PilotDeckToolRuntimeError(
                 "tool_execution_failed",
                 `web_fetch secondary model error: ${event.error.message}`,
                 { errorCode: event.error.code },
@@ -254,9 +254,9 @@ export function createWebFetchTool(
           }
         }
       } catch (err) {
-        if (err instanceof PolitDeckToolRuntimeError) throw err;
+        if (err instanceof PilotDeckToolRuntimeError) throw err;
         const message = err instanceof Error ? err.message : String(err);
-        throw new PolitDeckToolRuntimeError(
+        throw new PilotDeckToolRuntimeError(
           "tool_execution_failed",
           `web_fetch secondary model failed: ${message}`,
         );

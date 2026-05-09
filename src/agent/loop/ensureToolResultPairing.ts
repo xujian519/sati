@@ -1,14 +1,14 @@
 import type { CanonicalToolCall } from "../../model/index.js";
-import type { PolitDeckToolErrorResult, PolitDeckToolResult } from "../../tool/index.js";
+import type { PilotDeckToolErrorResult, PilotDeckToolResult } from "../../tool/index.js";
 
 export function ensureToolResultPairing(
   calls: CanonicalToolCall[],
-  results: PolitDeckToolResult[],
+  results: PilotDeckToolResult[],
   now: () => Date = () => new Date(),
   message = "Tool execution did not produce a result.",
-): PolitDeckToolResult[] {
+): PilotDeckToolResult[] {
   const resultsByCallId = new Map(results.map((result) => [result.toolCallId, result]));
-  const paired: PolitDeckToolResult[] = [];
+  const paired: PilotDeckToolResult[] = [];
 
   for (const call of calls) {
     paired.push(resultsByCallId.get(call.id) ?? createMissingToolResult(call, now, message));
@@ -21,7 +21,7 @@ export function createMissingToolResult(
   call: CanonicalToolCall,
   now: () => Date = () => new Date(),
   message = "Tool execution did not produce a result.",
-): PolitDeckToolErrorResult {
+): PilotDeckToolErrorResult {
   const timestamp = now().toISOString();
   return {
     type: "error",

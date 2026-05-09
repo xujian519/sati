@@ -1,4 +1,4 @@
-export const POLITDECK_HOOK_EVENTS = [
+export const PILOTDECK_HOOK_EVENTS = [
   "PreToolUse",
   "PostToolUse",
   "PostToolUseFailure",
@@ -25,16 +25,16 @@ export const POLITDECK_HOOK_EVENTS = [
   "ElicitationResult",
 ] as const;
 
-export const POLITDECK_NOT_APPLICABLE_LEGACY_HOOK_EVENTS = [
+export const PILOTDECK_NOT_APPLICABLE_LEGACY_HOOK_EVENTS = [
   "TeammateIdle",
   "TaskCreated",
   "TaskCompleted",
 ] as const;
 
-export type PolitDeckHookEvent = (typeof POLITDECK_HOOK_EVENTS)[number];
-export type PolitDeckNotApplicableLegacyHookEvent =
-  (typeof POLITDECK_NOT_APPLICABLE_LEGACY_HOOK_EVENTS)[number];
+export type PilotDeckHookEvent = (typeof PILOTDECK_HOOK_EVENTS)[number];
+export type PilotDeckNotApplicableLegacyHookEvent =
+  (typeof PILOTDECK_NOT_APPLICABLE_LEGACY_HOOK_EVENTS)[number];
 
-export function isPolitDeckHookEvent(value: string): value is PolitDeckHookEvent {
-  return (POLITDECK_HOOK_EVENTS as readonly string[]).includes(value);
+export function isPilotDeckHookEvent(value: string): value is PilotDeckHookEvent {
+  return (PILOTDECK_HOOK_EVENTS as readonly string[]).includes(value);
 }

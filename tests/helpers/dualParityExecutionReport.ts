@@ -7,7 +7,7 @@ import {
   createReadFileTool,
   ToolRuntime,
   ToolRegistry,
-  type PolitDeckToolResult,
+  type PilotDeckToolResult,
 } from "../../src/tool/index.js";
 import { createDefaultPermissionContext, PermissionRuntime } from "../../src/permission/index.js";
 import {
@@ -17,7 +17,7 @@ import {
 } from "../fixtures/tool/dual-parity/executionScenarios.js";
 import { contentToText } from "../../src/tool/index.js";
 
-export async function createPolitDeckExecutionReport(): Promise<DualParityExecutionReport[]> {
+export async function createPilotDeckExecutionReport(): Promise<DualParityExecutionReport[]> {
   const reports: DualParityExecutionReport[] = [];
   for (const scenario of dualParityExecutionScenarios) {
     if (scenario.status !== "compare") {
@@ -25,7 +25,7 @@ export async function createPolitDeckExecutionReport(): Promise<DualParityExecut
         id: scenario.id,
         status: scenario.status,
         legacyToolName: scenario.legacy.toolName,
-        politdeckToolName: scenario.politdeck.toolName,
+        pilotdeckToolName: scenario.pilotdeck.toolName,
         reason: scenario.reason,
       });
       continue;
@@ -51,7 +51,7 @@ async function runScenario(
   registry.register(createBashTool());
   const runtime = new ToolRuntime(registry, new PermissionRuntime());
   const result = await runtime.execute(
-    { id: scenario.id, name: scenario.politdeck.toolName, input: scenario.politdeck.input },
+    { id: scenario.id, name: scenario.pilotdeck.toolName, input: scenario.pilotdeck.input },
     {
       sessionId: "dual-parity",
       turnId: "dual-parity",
@@ -69,12 +69,12 @@ async function runScenario(
     id: scenario.id,
     status: scenario.status,
     legacyToolName: scenario.legacy.toolName,
-    politdeckToolName: scenario.politdeck.toolName,
-    result: normalizePolitDeckResult(result),
+    pilotdeckToolName: scenario.pilotdeck.toolName,
+    result: normalizePilotDeckResult(result),
   };
 }
 
-function normalizePolitDeckResult(result: PolitDeckToolResult): NonNullable<DualParityExecutionReport["result"]> {
+function normalizePilotDeckResult(result: PilotDeckToolResult): NonNullable<DualParityExecutionReport["result"]> {
   if (result.type === "error") {
     return {
       status: "error",
@@ -105,7 +105,7 @@ function normalizeData(data: unknown): Record<string, unknown> | undefined {
 }
 
 async function createWorkspace(files: Record<string, string>): Promise<string> {
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-exec-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-exec-"));
   for (const [filePath, content] of Object.entries(files)) {
     const absolutePath = path.join(root, filePath);
     await mkdir(path.dirname(absolutePath), { recursive: true });

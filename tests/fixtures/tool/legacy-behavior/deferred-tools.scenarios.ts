@@ -1,4 +1,4 @@
-import type { PolitDeckToolBehaviorScenario } from "./types.js";
+import type { PilotDeckToolBehaviorScenario } from "./types.js";
 
 const deferredSource = [
   {
@@ -7,11 +7,11 @@ const deferredSource = [
   },
 ];
 
-export const deferredToolScenarios: PolitDeckToolBehaviorScenario[] = [
+export const deferredToolScenarios: PilotDeckToolBehaviorScenario[] = [
   {
     name: "tool_search deferred registry is deferred",
     legacyToolName: "ToolSearch",
-    politdeckToolName: "tool_search",
+    pilotdeckToolName: "tool_search",
     input: { query: "mcp" },
     permissionMode: "default",
     parity: "deferred",

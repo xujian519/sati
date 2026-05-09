@@ -9,7 +9,7 @@
 - Node 版本满足根项目和 `old_ui` 要求。
 - 根项目依赖已安装。
 - 至少一个可用模型 provider 配置。
-- `~/.politdeck/politdeck.yaml` 或等价环境变量配置正确。
+- `~/.pilotdeck/pilotdeck.yaml` 或等价环境变量配置正确。
 - 如果仍测试旧 UI 兼容层，`old_ui` 依赖已安装，原生依赖 `node-pty`、`better-sqlite3` 可加载。
 
 建议先运行：
@@ -33,7 +33,7 @@ npm run build
 
 步骤：
 
-1. 启动 PolitDeck Gateway/Web server。
+1. 启动 PilotDeck Gateway/Web server。
 2. 打开 Web UI。
 3. 访问或间接调用 `/health`，确认 `{ ok: true }`。
 4. 调用 `/auth/local-token`，确认返回 token。

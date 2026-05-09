@@ -1,5 +1,5 @@
 /**
- * Build an `EdgeClawMemoryProvider` from `PolitMemoryConfig` + project root.
+ * Build an `EdgeClawMemoryProvider` from `PilotMemoryConfig` + project root.
  * The factory is intentionally small — it just constructs the underlying
  * `EdgeClawMemoryService` with a sensible default rootDir and forwards the
  * relevant config fields.
@@ -12,16 +12,16 @@
  *     we anchor it under the project root so memory data lives next to the
  *     code it was captured from (matches legacy default).
  *   - `apiKey` for the LLM extractor is **lazily forwarded** — the user is
- *     expected to set it through env or politdeck.yaml; we never default
+ *     expected to set it through env or pilotdeck.yaml; we never default
  *     credentials to anything other than what the user supplied.
  */
 
 import { EdgeClawMemoryService } from "edgeclaw-memory-core";
 import { EdgeClawMemoryProvider } from "./EdgeClawMemoryProvider.js";
-import type { PolitMemoryConfig } from "../../polit/config/types.js";
+import type { PilotMemoryConfig } from "../../pilot/config/types.js";
 
 export type CreateEdgeClawMemoryProviderOptions = {
-  config: PolitMemoryConfig | undefined;
+  config: PilotMemoryConfig | undefined;
   projectRoot: string;
   /** Optional logger forwarded to the underlying service. */
   logger?: {
@@ -49,7 +49,7 @@ export function createEdgeClawMemoryProviderFromConfig(
     captureStrategy: cfg.captureStrategy,
     includeAssistant: cfg.includeAssistant,
     maxMessageChars: cfg.maxMessageChars,
-    source: "politdeck",
+    source: "pilotdeck",
     logger: options.logger,
     llm: cfg.llm
       ? {
@@ -64,7 +64,7 @@ export function createEdgeClawMemoryProviderFromConfig(
 
   const provider = new EdgeClawMemoryProvider({
     service,
-    source: "politdeck",
+    source: "pilotdeck",
     now: options.now,
   });
 

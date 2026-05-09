@@ -1,4 +1,4 @@
-export type PolitDeckTuiTheme = {
+export type PilotDeckTuiTheme = {
   brand: string;
   brandAccent: string;
   background: string;
@@ -12,7 +12,7 @@ export type PolitDeckTuiTheme = {
   permission: string;
 };
 
-export const politDeckDarkBlueTheme: PolitDeckTuiTheme = {
+export const pilotDeckDarkBlueTheme: PilotDeckTuiTheme = {
   brand: "rgb(238,234,218)",
   brandAccent: "rgb(125,180,255)",
   background: "rgb(7,15,28)",

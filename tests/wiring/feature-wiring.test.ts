@@ -17,7 +17,7 @@
 // touching the assertion text.
 //
 // References:
-//   - docs/politdeck-deferred-feature-implementation-guide.md (wave A/B/C
+//   - docs/pilotdeck-deferred-feature-implementation-guide.md (wave A/B/C
 //     feature catalog).
 //   - src/cli/createLocalGateway.ts (the single production wire point).
 //   - src/agent/loop/AgentLoop.ts (`createToolContext`).
@@ -59,16 +59,16 @@ const agentLoopSrc = readFileSync(
 // Wave A — context / tokens
 // ---------------------------------------------------------------------------
 
-test("WIRING A1 worktree lookup is wired (findCanonicalProjectRoot used by polit/paths)", () => {
-  // A1 is wired through `src/polit/paths.ts` which calls findCanonicalProjectRoot.
-  // No assertion about createLocalGateway needed — the entry uses politHome /
-  // paths via loadPolitConfig already; the canonical-root resolution is the
+test("WIRING A1 worktree lookup is wired (findCanonicalProjectRoot used by pilot/paths)", () => {
+  // A1 is wired through `src/pilot/paths.ts` which calls findCanonicalProjectRoot.
+  // No assertion about createLocalGateway needed — the entry uses pilotHome /
+  // paths via loadPilotConfig already; the canonical-root resolution is the
   // wired path.
-  const paths = readFileSync(path.join(ROOT, "src/polit/paths.ts"), "utf8");
+  const paths = readFileSync(path.join(ROOT, "src/pilot/paths.ts"), "utf8");
   assert.match(
     paths,
     /findCanonicalProjectRoot\(/,
-    "polit/paths must call findCanonicalProjectRoot to honour worktree lookup",
+    "pilot/paths must call findCanonicalProjectRoot to honour worktree lookup",
   );
 });
 

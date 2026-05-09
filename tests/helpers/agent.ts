@@ -7,8 +7,8 @@ import {
   ToolRegistry,
   ToolRuntime,
   SequentialToolScheduler,
-  type PolitDeckToolAuditRecorder,
-  type PolitDeckToolDefinition,
+  type PilotDeckToolAuditRecorder,
+  type PilotDeckToolDefinition,
 } from "../../src/tool/index.js";
 import { PermissionRuntime } from "../../src/permission/index.js";
 import { AgentLoop, TurnRunner } from "../../src/agent/index.js";
@@ -118,10 +118,10 @@ export class ScriptedAgentRouter implements AgentRouterRuntime {
 
 export function createAgentLoopFixture(options: {
   scripts: CanonicalModelEvent[][];
-  tools?: PolitDeckToolDefinition[];
+  tools?: PilotDeckToolDefinition[];
   permissionMode?: PermissionMode;
   canPrompt?: boolean;
-  auditRecorder?: PolitDeckToolAuditRecorder;
+  auditRecorder?: PilotDeckToolAuditRecorder;
   lifecycle?: LifecycleRuntime;
   config?: Partial<AgentRuntimeConfig> & { fallbackProvider?: string; fallbackModel?: string };
 }): {

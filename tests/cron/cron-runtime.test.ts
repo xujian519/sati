@@ -71,12 +71,12 @@ function makeGateway(): Gateway & {
 }
 
 test("CronRuntime creates recurring task that fires into the original session", async () => {
-  const politHome = mkdtempSync(join(tmpdir(), "politdeck-cron-runtime-"));
+  const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-cron-runtime-"));
   let now = new Date("2026-05-09T12:00:00.000Z");
   try {
     const runtime = createCronRuntime({
       config: defaultCronConfig(),
-      politHome,
+      pilotHome,
       projectKey: "/tmp/projects/sample",
       now: () => now,
       uuid: () => "run_or_task",
@@ -97,17 +97,17 @@ test("CronRuntime creates recurring task that fires into the original session", 
     assert.equal(gateway.submitted[0].message, "Run status check");
     await runtime.stopTask({ taskId: created.task.taskId });
   } finally {
-    rmSync(politHome, { recursive: true, force: true });
+    rmSync(pilotHome, { recursive: true, force: true });
   }
 });
 
 test("CronRuntime stop removes a running one-time task", async () => {
-  const politHome = mkdtempSync(join(tmpdir(), "politdeck-cron-stop-"));
+  const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-cron-stop-"));
   let now = new Date("2026-05-09T12:00:00.000Z");
   try {
     const runtime = createCronRuntime({
       config: defaultCronConfig(),
-      politHome,
+      pilotHome,
       projectKey: "/tmp/projects/sample",
       now: () => now,
       uuid: () => (now.getTime() === Date.parse("2026-05-09T12:00:00.000Z") ? "task_once" : "run_once"),
@@ -130,6 +130,6 @@ test("CronRuntime stop removes a running one-time task", async () => {
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual((await runtime.listTasks({})).tasks, []);
   } finally {
-    rmSync(politHome, { recursive: true, force: true });
+    rmSync(pilotHome, { recursive: true, force: true });
   }
 });

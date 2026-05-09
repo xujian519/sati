@@ -1,34 +1,34 @@
-import type { PolitDeckHookEvent } from "../protocol/events.js";
+import type { PilotDeckHookEvent } from "../protocol/events.js";
 
-export type PolitDeckHookExecutionEvent =
+export type PilotDeckHookExecutionEvent =
   | {
       type: "started";
       hookName: string;
-      hookEvent: PolitDeckHookEvent;
+      hookEvent: PilotDeckHookEvent;
     }
   | {
       type: "response";
       hookName: string;
-      hookEvent: PolitDeckHookEvent;
+      hookEvent: PilotDeckHookEvent;
       stdout: string;
       stderr: string;
       exitCode?: number;
       outcome: "success" | "blocking" | "non_blocking_error" | "cancelled" | "timeout";
     };
 
-export type PolitDeckHookExecutionEventHandler = (event: PolitDeckHookExecutionEvent) => void;
+export type PilotDeckHookExecutionEventHandler = (event: PilotDeckHookExecutionEvent) => void;
 
 export class HookExecutionEventBus {
-  private handlers = new Set<PolitDeckHookExecutionEventHandler>();
+  private handlers = new Set<PilotDeckHookExecutionEventHandler>();
 
-  subscribe(handler: PolitDeckHookExecutionEventHandler): () => void {
+  subscribe(handler: PilotDeckHookExecutionEventHandler): () => void {
     this.handlers.add(handler);
     return () => {
       this.handlers.delete(handler);
     };
   }
 
-  emit(event: PolitDeckHookExecutionEvent): void {
+  emit(event: PilotDeckHookExecutionEvent): void {
     for (const handler of this.handlers) {
       handler(event);
     }

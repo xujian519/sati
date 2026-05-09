@@ -8,7 +8,7 @@ export type DualParityExecutionScenario = {
     toolName: string;
     input: Record<string, unknown>;
   };
-  politdeck: {
+  pilotdeck: {
     toolName: string;
     input: Record<string, unknown>;
   };
@@ -19,7 +19,7 @@ export type DualParityExecutionReport = {
   id: string;
   status: DualParityExecutionStatus;
   legacyToolName: string;
-  politdeckToolName: string;
+  pilotdeckToolName: string;
   result?: {
     status: "success" | "error";
     text?: string;
@@ -37,7 +37,7 @@ export const dualParityExecutionScenarios: DualParityExecutionScenario[] = [
       "a.txt": "one\ntwo\n",
     },
     legacy: { toolName: "Read", input: { file_path: "__WORKSPACE__/a.txt", offset: 1 } },
-    politdeck: { toolName: "read_file", input: { filePath: "a.txt" } },
+    pilotdeck: { toolName: "read_file", input: { filePath: "a.txt" } },
   },
   {
     id: "glob-ts-files",
@@ -47,21 +47,21 @@ export const dualParityExecutionScenarios: DualParityExecutionScenario[] = [
       "src/b.js": "console.log('b');\n",
     },
     legacy: { toolName: "Glob", input: { pattern: "**/*.ts", path: "__WORKSPACE__" } },
-    politdeck: { toolName: "glob", input: { pattern: "**/*.ts", path: "." } },
+    pilotdeck: { toolName: "glob", input: { pattern: "**/*.ts", path: "." } },
   },
   {
     id: "bash-printf",
     status: "compare",
     workspace: {},
     legacy: { toolName: "Bash", input: { command: "printf hello" } },
-    politdeck: { toolName: "bash", input: { command: "printf hello" } },
+    pilotdeck: { toolName: "bash", input: { command: "printf hello" } },
   },
   {
     id: "bash-non-zero",
     status: "compare",
     workspace: {},
     legacy: { toolName: "Bash", input: { command: "sh -c 'exit 2'" } },
-    politdeck: { toolName: "bash", input: { command: "sh -c 'exit 2'" } },
+    pilotdeck: { toolName: "bash", input: { command: "sh -c 'exit 2'" } },
   },
   {
     id: "grep-content-mode",
@@ -70,7 +70,7 @@ export const dualParityExecutionScenarios: DualParityExecutionScenario[] = [
       "src/a.txt": "needle\n",
     },
     legacy: { toolName: "Grep", input: { pattern: "needle", output_mode: "content" } },
-    politdeck: { toolName: "grep", input: { pattern: "needle", outputMode: "content" } },
+    pilotdeck: { toolName: "grep", input: { pattern: "needle", outputMode: "content" } },
     reason: "Legacy Grep execution import currently hits a vendored circular UI import in direct harness mode.",
   },
 ];

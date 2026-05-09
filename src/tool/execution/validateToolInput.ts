@@ -1,21 +1,21 @@
 import type {
-  PolitDeckJsonSchema,
-  PolitDeckToolInputSchema,
-  PolitDeckToolValidationIssue,
-  PolitDeckToolValidationResult,
+  PilotDeckJsonSchema,
+  PilotDeckToolInputSchema,
+  PilotDeckToolValidationIssue,
+  PilotDeckToolValidationResult,
 } from "../protocol/schema.js";
 
-export function validateToolInput(input: unknown, schema: PolitDeckToolInputSchema): PolitDeckToolValidationResult {
-  const issues: PolitDeckToolValidationIssue[] = [];
+export function validateToolInput(input: unknown, schema: PilotDeckToolInputSchema): PilotDeckToolValidationResult {
+  const issues: PilotDeckToolValidationIssue[] = [];
   validateValue(input, schema, "$", issues);
   return issues.length === 0 ? { ok: true, input } : { ok: false, issues };
 }
 
 function validateValue(
   value: unknown,
-  schema: PolitDeckJsonSchema,
+  schema: PilotDeckJsonSchema,
   path: string,
-  issues: PolitDeckToolValidationIssue[],
+  issues: PilotDeckToolValidationIssue[],
 ): void {
   if (schema.enum && !schema.enum.some((item) => Object.is(item, value))) {
     issues.push({
@@ -47,9 +47,9 @@ function validateValue(
 
 function validateObject(
   value: unknown,
-  schema: PolitDeckJsonSchema,
+  schema: PilotDeckJsonSchema,
   path: string,
-  issues: PolitDeckToolValidationIssue[],
+  issues: PilotDeckToolValidationIssue[],
 ): void {
   if (!isPlainObject(value)) {
     return;

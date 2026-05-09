@@ -11,7 +11,7 @@ import {
 } from "../../../src/session/index.js";
 
 function makeTempPath(): string {
-  const dir = mkdtempSync(join(tmpdir(), "politdeck-c3-"));
+  const dir = mkdtempSync(join(tmpdir(), "pilotdeck-c3-"));
   return join(dir, "session.jsonl");
 }
 

@@ -1,18 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getPolitExtensionPaths } from "../../src/polit/index.js";
+import { getPilotExtensionPaths } from "../../src/pilot/index.js";
 import {
-  POLITDECK_HOOK_EVENTS,
-  POLITDECK_NOT_APPLICABLE_LEGACY_HOOK_EVENTS,
+  PILOTDECK_HOOK_EVENTS,
+  PILOTDECK_NOT_APPLICABLE_LEGACY_HOOK_EVENTS,
   parseHookOutput,
   toLegacyHookInput,
   createHookInput,
 } from "../../src/extension/index.js";
 
 test("hook event list excludes non-migrated teammate and task events", () => {
-  assert.equal(POLITDECK_HOOK_EVENTS.includes("PreToolUse"), true);
-  assert.equal((POLITDECK_HOOK_EVENTS as readonly string[]).includes("TeammateIdle"), false);
-  assert.deepEqual(POLITDECK_NOT_APPLICABLE_LEGACY_HOOK_EVENTS, [
+  assert.equal(PILOTDECK_HOOK_EVENTS.includes("PreToolUse"), true);
+  assert.equal((PILOTDECK_HOOK_EVENTS as readonly string[]).includes("TeammateIdle"), false);
+  assert.deepEqual(PILOTDECK_NOT_APPLICABLE_LEGACY_HOOK_EVENTS, [
     "TeammateIdle",
     "TaskCreated",
     "TaskCompleted",
@@ -75,11 +75,11 @@ test("hook output parser maps sync hook-specific output", () => {
   }
 });
 
-test("extension paths are fixed under PolitHome and project .politdeck", () => {
-  assert.deepEqual(getPolitExtensionPaths("/repo/app", "/home/user/.politdeck"), {
-    globalPluginsDir: "/home/user/.politdeck/plugins",
-    globalSkillsDir: "/home/user/.politdeck/skills",
-    projectPluginsDir: "/repo/app/.politdeck/plugins",
-    projectSkillsDir: "/repo/app/.politdeck/skills",
+test("extension paths are fixed under PilotHome and project .pilotdeck", () => {
+  assert.deepEqual(getPilotExtensionPaths("/repo/app", "/home/user/.pilotdeck"), {
+    globalPluginsDir: "/home/user/.pilotdeck/plugins",
+    globalSkillsDir: "/home/user/.pilotdeck/skills",
+    projectPluginsDir: "/repo/app/.pilotdeck/plugins",
+    projectSkillsDir: "/repo/app/.pilotdeck/skills",
   });
 });

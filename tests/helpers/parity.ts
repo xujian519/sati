@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import type { PermissionDecision } from "../../src/permission/index.js";
-import type { PolitDeckToolResult } from "../../src/tool/index.js";
+import type { PilotDeckToolResult } from "../../src/tool/index.js";
 import { contentToText } from "../../src/tool/index.js";
-import type { PolitDeckToolBehaviorScenario } from "../fixtures/tool/legacy-behavior/index.js";
+import type { PilotDeckToolBehaviorScenario } from "../fixtures/tool/legacy-behavior/index.js";
 
-export function assertScenarioResult(scenario: PolitDeckToolBehaviorScenario, result: PolitDeckToolResult): void {
+export function assertScenarioResult(scenario: PilotDeckToolBehaviorScenario, result: PilotDeckToolResult): void {
   assert.notEqual(scenario.parity, "deferred", `${scenario.name} is deferred and should not be executed.`);
   assert.notEqual(scenario.parity, "not_applicable", `${scenario.name} is not applicable and should not be executed.`);
 
@@ -31,13 +31,13 @@ export function assertScenarioResult(scenario: PolitDeckToolBehaviorScenario, re
   }
 }
 
-export function assertScenarioDecision(scenario: PolitDeckToolBehaviorScenario, decision: PermissionDecision): void {
+export function assertScenarioDecision(scenario: PilotDeckToolBehaviorScenario, decision: PermissionDecision): void {
   if (scenario.expectedDecision) {
     assert.equal(decision.type, scenario.expectedDecision, scenario.name);
   }
 }
 
-export function assertDeferredScenarios(scenarios: PolitDeckToolBehaviorScenario[]): void {
+export function assertDeferredScenarios(scenarios: PilotDeckToolBehaviorScenario[]): void {
   for (const scenario of scenarios) {
     if (scenario.parity === "deferred") {
       assert.ok(scenario.deferredUntil, `${scenario.name} must declare deferredUntil.`);

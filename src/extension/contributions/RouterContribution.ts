@@ -1,7 +1,7 @@
-import type { PolitDeckCustomRouter } from "../../router/customRouter/customRouter.js";
+import type { PilotDeckCustomRouter } from "../../router/customRouter/customRouter.js";
 
 export type RouterContribution = {
   id: string;
   description?: string;
-  createCustomRouter(): PolitDeckCustomRouter;
+  createCustomRouter(): PilotDeckCustomRouter;
 };

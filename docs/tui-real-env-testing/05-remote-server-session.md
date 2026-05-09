@@ -1,6 +1,6 @@
 # TUI 远端 Server 连接与会话测试
 
-本文验证 TUI 在已有 PolitDeck server 运行时能够连接远端 Gateway，而不是只走本地 in-process gateway。
+本文验证 TUI 在已有 PilotDeck server 运行时能够连接远端 Gateway，而不是只走本地 in-process gateway。
 
 ## 用例 1：启动 server 后连接 TUI
 
@@ -10,13 +10,13 @@
 
 ```bash
 npm run build
-node dist/src/cli/politdeck.js server --port 18789
+node dist/src/cli/pilotdeck.js server --port 18789
 ```
 
 终端 B：
 
 ```bash
-node dist/src/cli/politdeck.js tui
+node dist/src/cli/pilotdeck.js tui
 ```
 
 ### 预期现象
@@ -24,7 +24,7 @@ node dist/src/cli/politdeck.js tui
 终端 A 输出：
 
 ```text
-PolitDeck server listening: http://...
+PilotDeck server listening: http://...
 WebSocket: ws://...
 ```
 
@@ -67,7 +67,7 @@ local in-process
 - TUI transcript 出现 `You` 和用户输入。
 - TUI 显示 `thinking`。
 - server 端不应崩溃。
-- 完成后 TUI 出现 `PolitDeck` 回复。
+- 完成后 TUI 出现 `PilotDeck` 回复。
 
 ### 预期输出
 
@@ -114,7 +114,7 @@ local in-process
 先启动 server 和 TUI，确认 TUI 显示 `server connected`。然后停止终端 A 的 server，再重新打开一个新的 TUI：
 
 ```bash
-node dist/src/cli/politdeck.js tui
+node dist/src/cli/pilotdeck.js tui
 ```
 
 ### 预期现象
@@ -141,7 +141,7 @@ node dist/src/cli/politdeck.js tui
 
 - TUI 进程退出。
 - server 仍继续监听。
-- 再次执行 `node dist/src/cli/politdeck.js tui` 可以重新连接同一个 server。
+- 再次执行 `node dist/src/cli/pilotdeck.js tui` 可以重新连接同一个 server。
 
 ### 预期输出
 

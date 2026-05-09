@@ -32,7 +32,7 @@ export type CreateBuiltinRegistryOptions = {
   /**
    * `agent` subagent tool. **Opt-in** because it requires a model client at
    * execution time — the AgentLoop forwards the loop's model client through
-   * `PolitDeckToolRuntimeContext.model`, but stand-alone tool runtimes (e.g.
+   * `PilotDeckToolRuntimeContext.model`, but stand-alone tool runtimes (e.g.
    * tests) may not have one. Pass `true` (default) to register; pass `false`
    * to skip; pass an options object to customize the subagent presets or
    * lock the provider/model.
@@ -63,7 +63,7 @@ export type CreateBuiltinRegistryOptions = {
   structuredOutput?: false;
   /**
    * `ask_user_question` builtin (B1). Registered by default; an absent
-   * `PolitDeckElicitationChannel` at execution time causes the tool to
+   * `PilotDeckElicitationChannel` at execution time causes the tool to
    * return a runtime error rather than crash the loop. Pass `false` to
    * skip registration in headless contexts.
    */

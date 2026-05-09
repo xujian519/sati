@@ -45,7 +45,7 @@ export type DefaultContextRuntimeOptions = {
   autoCompactionPolicy?: AutoCompactionPolicy;
   /**
    * A4 — opt-in cached micro-compaction engine. Construction is gated by
-   * `PolitConfig.context.cachedMicrocompactEnabled` upstream.
+   * `PilotConfig.context.cachedMicrocompactEnabled` upstream.
    */
   microcompactEngine?: CachedMicroCompactionEngine;
   /** Project root forwarded to MemoryResolver.retrieve. */

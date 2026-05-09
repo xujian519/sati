@@ -108,7 +108,7 @@ test("deferred tool features are not exposed by the first-phase builtin registry
   });
   const deferredToolNames = dualParityContractScenarios
     .filter((scenario) => scenario.status === "deferred")
-    .map((scenario) => scenario.politdeck.toolName);
+    .map((scenario) => scenario.pilotdeck.toolName);
 
   assert.ok(deferredToolNames.length > 0);
   for (const toolName of deferredToolNames) {

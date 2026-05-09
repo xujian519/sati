@@ -205,7 +205,7 @@ export const TRUNCATE_HEAD_SCENARIOS: TruncateHeadScenario[] = [
     id: "truncate_head_floor_at_one",
     kind: "truncate_head",
     parityStatus: "compare",
-    source: "third-party/claude-code-main/src/services/compact/compact.ts (PolitDeck floor=1)",
+    source: "third-party/claude-code-main/src/services/compact/compact.ts (PilotDeck floor=1)",
     count: 3,
     keepRatio: 0.1,
     expectedKeptTags: ["m2"],

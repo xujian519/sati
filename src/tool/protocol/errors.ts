@@ -1,4 +1,4 @@
-export type PolitDeckToolErrorCode =
+export type PilotDeckToolErrorCode =
   | "tool_not_found"
   | "invalid_tool_input"
   | "permission_denied"
@@ -13,35 +13,35 @@ export type PolitDeckToolErrorCode =
   | "file_conflict"
   | "unsupported_tool";
 
-export type PolitDeckToolError = {
-  code: PolitDeckToolErrorCode;
+export type PilotDeckToolError = {
+  code: PilotDeckToolErrorCode;
   message: string;
   cause?: unknown;
   details?: Record<string, unknown>;
 };
 
-export class PolitDeckToolRuntimeError extends Error {
-  readonly code: PolitDeckToolErrorCode;
+export class PilotDeckToolRuntimeError extends Error {
+  readonly code: PilotDeckToolErrorCode;
   readonly details?: Record<string, unknown>;
 
-  constructor(code: PolitDeckToolErrorCode, message: string, details?: Record<string, unknown>) {
+  constructor(code: PilotDeckToolErrorCode, message: string, details?: Record<string, unknown>) {
     super(message);
-    this.name = "PolitDeckToolRuntimeError";
+    this.name = "PilotDeckToolRuntimeError";
     this.code = code;
     this.details = details;
   }
 }
 
 export function toolError(
-  code: PolitDeckToolErrorCode,
+  code: PilotDeckToolErrorCode,
   message: string,
   details?: Record<string, unknown>,
-): PolitDeckToolError {
+): PilotDeckToolError {
   return { code, message, details };
 }
 
-export function normalizeToolError(error: unknown): PolitDeckToolError {
-  if (error instanceof PolitDeckToolRuntimeError) {
+export function normalizeToolError(error: unknown): PilotDeckToolError {
+  if (error instanceof PilotDeckToolRuntimeError) {
     return toolError(error.code, error.message, error.details);
   }
 

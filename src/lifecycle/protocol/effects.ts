@@ -1,6 +1,6 @@
-export type PolitDeckHookPermissionBehavior = "allow" | "deny" | "ask" | "passthrough";
+export type PilotDeckHookPermissionBehavior = "allow" | "deny" | "ask" | "passthrough";
 
-export type PolitDeckPermissionRequestResult =
+export type PilotDeckPermissionRequestResult =
   | {
       behavior: "allow";
       updatedInput?: Record<string, unknown>;
@@ -12,20 +12,20 @@ export type PolitDeckPermissionRequestResult =
       interrupt?: boolean;
     };
 
-export type PolitDeckHookEffect =
+export type PilotDeckHookEffect =
   | { type: "additional_context"; content: string; source: string }
   | { type: "system_message"; content: string }
   | { type: "block"; reason: string; stopReason?: string }
-  | { type: "permission_decision"; behavior: PolitDeckHookPermissionBehavior; reason?: string }
+  | { type: "permission_decision"; behavior: PilotDeckHookPermissionBehavior; reason?: string }
   | { type: "updated_tool_input"; input: Record<string, unknown> }
   | { type: "updated_mcp_tool_output"; output: unknown }
-  | { type: "permission_request_result"; result: PolitDeckPermissionRequestResult }
+  | { type: "permission_request_result"; result: PilotDeckPermissionRequestResult }
   | { type: "initial_user_message"; message: string }
   | { type: "watch_paths"; paths: string[] }
   | { type: "worktree_path"; path: string }
   | { type: "retry_permission_denied" };
 
-export type PolitDeckLifecycleError = {
+export type PilotDeckLifecycleError = {
   code: "hook_blocking_error" | "hook_non_blocking_error" | "hook_execution_failed" | "hook_cancelled";
   message: string;
   hookName?: string;

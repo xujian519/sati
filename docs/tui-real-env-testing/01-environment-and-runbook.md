@@ -13,17 +13,17 @@ npm install
 npm run build
 ```
 
-准备 PolitDeck 配置。默认配置路径为：
+准备 PilotDeck 配置。默认配置路径为：
 
 ```text
-~/.politdeck/politdeck.yaml
+~/.pilotdeck/pilotdeck.yaml
 ```
 
-也可以用 `POLIT_HOME` 指向临时目录：
+也可以用 `PILOT_HOME` 指向临时目录：
 
 ```bash
-export POLIT_HOME=/tmp/politdeck-real-tui
-mkdir -p "$POLIT_HOME"
+export PILOT_HOME=/tmp/pilotdeck-real-tui
+mkdir -p "$PILOT_HOME"
 ```
 
 配置中至少需要包含 `agent.model` 和对应 `model.providers`。示例：
@@ -76,34 +76,34 @@ export OPENROUTER_API_KEY=<真实 key>
 ### 输入
 
 ```bash
-node dist/src/cli/politdeck.js tui
+node dist/src/cli/pilotdeck.js tui
 ```
 
 也可以先启动 server，再启动 TUI：
 
 ```bash
-node dist/src/cli/politdeck.js server --port 18789
+node dist/src/cli/pilotdeck.js server --port 18789
 ```
 
 另开一个交互式终端：
 
 ```bash
-node dist/src/cli/politdeck.js tui
+node dist/src/cli/pilotdeck.js tui
 ```
 
 ### 预期现象
 
-- 交互式终端中出现 `PolitDeck ↗` header。
+- 交互式终端中出现 `PilotDeck ↗` header。
 - 冷启动时显示 welcome card、模型、cwd、连接状态和输入框。
-- 输入框中能看到 `Ask PolitDeck... (/help)` placeholder。
-- 非交互式 stdin 下执行 `politdeck tui` 会报错。
+- 输入框中能看到 `Ask PilotDeck... (/help)` placeholder。
+- 非交互式 stdin 下执行 `pilotdeck tui` 会报错。
 
 ### 预期输出
 
 交互式模式不会立即退出。非交互式执行时预期 stderr：
 
 ```text
-politdeck tui requires an interactive terminal.
+pilotdeck tui requires an interactive terminal.
 ```
 
 ## 3. 通用记录方式
@@ -115,7 +115,7 @@ politdeck tui requires an interactive terminal.
 ```text
 测试时间：
 Git commit：
-POLIT_HOME：
+PILOT_HOME：
 provider/model：
 命令：
 TUI 输入：
@@ -128,8 +128,8 @@ TUI 输入：
 
 ```bash
 mkdir -p artifacts
-POLITDECK_E2E_PROVIDER=edgeclaw \
-POLITDECK_E2E_MODEL=moonshotai/kimi-k2.6 \
+PILOTDECK_E2E_PROVIDER=edgeclaw \
+PILOTDECK_E2E_MODEL=moonshotai/kimi-k2.6 \
 node dist/scripts/tui-e2e-record.js
 ```
 

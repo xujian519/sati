@@ -1,25 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { SequentialToolScheduler } from "../../src/tool/index.js";
-import { createPolitDeckTestTool, createPolitDeckToolRuntimeFixture } from "../helpers/tool.js";
+import { createPilotDeckTestTool, createPilotDeckToolRuntimeFixture } from "../helpers/tool.js";
 
 test("executes tool calls sequentially and preserves result order", async () => {
   const seen: string[] = [];
-  const first = createPolitDeckTestTool({
+  const first = createPilotDeckTestTool({
     name: "first",
     execute: async () => {
       seen.push("first");
       return { content: [{ type: "text", text: "first" }] };
     },
   });
-  const second = createPolitDeckTestTool({
+  const second = createPilotDeckTestTool({
     name: "second",
     execute: async () => {
       seen.push("second");
       return { content: [{ type: "text", text: "second" }] };
     },
   });
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({ tools: [first, second] });
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({ tools: [first, second] });
   const scheduler = new SequentialToolScheduler(toolRuntime);
 
   const results = await scheduler.executeAll(
@@ -38,8 +38,8 @@ test("executes tool calls sequentially and preserves result order", async () => 
 });
 
 test("continues after an earlier tool returns an error", async () => {
-  const ok = createPolitDeckTestTool({ name: "ok" });
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({ tools: [ok] });
+  const ok = createPilotDeckTestTool({ name: "ok" });
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({ tools: [ok] });
   const scheduler = new SequentialToolScheduler(toolRuntime);
 
   const results = await scheduler.executeAll(

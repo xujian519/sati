@@ -6,7 +6,7 @@
  * Process model:
  *   - `start(spec)` spawns a *detached* child via `spawn(command, { shell:
  *     true, detached: true })` and immediately calls `child.unref()` so the
- *     PolitDeck process can exit without waiting for the child. (T11)
+ *     PilotDeck process can exit without waiting for the child. (T11)
  *   - stdout / stderr are piped into a `TaskOutputStore` (1 MB ring buffer
  *     + optional disk spill). The runtime never blocks on the stream — the
  *     child runs free until either it exits or `stop` is called.
@@ -25,10 +25,10 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { TaskOutputStore } from "../storage/TaskOutputStore.js";
 import type {
-  PolitDeckBackgroundBashTask,
-  PolitDeckBackgroundTaskKind,
-  PolitDeckBackgroundTaskListFilter,
-  PolitDeckTaskOutputSlice,
+  PilotDeckBackgroundBashTask,
+  PilotDeckBackgroundTaskKind,
+  PilotDeckBackgroundTaskListFilter,
+  PilotDeckTaskOutputSlice,
 } from "../protocol/types.js";
 
 export type BackgroundTaskRuntimeOptions = {
@@ -47,7 +47,7 @@ export type StartTaskSpec = {
   cwd: string;
   env?: NodeJS.ProcessEnv;
   agentId?: string;
-  kind?: PolitDeckBackgroundTaskKind;
+  kind?: PilotDeckBackgroundTaskKind;
 };
 
 export type StopTaskOptions = {
@@ -55,7 +55,7 @@ export type StopTaskOptions = {
 };
 
 type RuntimeEntry = {
-  task: PolitDeckBackgroundBashTask;
+  task: PilotDeckBackgroundBashTask;
   child?: ChildProcess;
   output: TaskOutputStore;
   /** Resolved when the child has fully exited (success, failure, or kill). */
@@ -81,8 +81,8 @@ export class BackgroundTaskRuntime {
     };
   }
 
-  list(filter: PolitDeckBackgroundTaskListFilter = {}): PolitDeckBackgroundBashTask[] {
-    const result: PolitDeckBackgroundBashTask[] = [];
+  list(filter: PilotDeckBackgroundTaskListFilter = {}): PilotDeckBackgroundBashTask[] {
+    const result: PilotDeckBackgroundBashTask[] = [];
     for (const entry of this.entries.values()) {
       if (filter.agentId && entry.task.agentId !== filter.agentId) continue;
       if (filter.kind && entry.task.kind !== filter.kind) continue;
@@ -95,7 +95,7 @@ export class BackgroundTaskRuntime {
     return result;
   }
 
-  get(taskId: string): PolitDeckBackgroundBashTask | undefined {
+  get(taskId: string): PilotDeckBackgroundBashTask | undefined {
     return this.entries.get(taskId)?.task;
   }
 
@@ -104,7 +104,7 @@ export class BackgroundTaskRuntime {
    * forked (typically <10 ms). `task.status` flips to `running` on spawn
    * and `completed` / `failed` / `cancelled` later via the `exit` listener.
    */
-  async start(spec: StartTaskSpec): Promise<PolitDeckBackgroundBashTask> {
+  async start(spec: StartTaskSpec): Promise<PilotDeckBackgroundBashTask> {
     if (this.entries.size >= this.options.maxTasks) {
       throw new Error(
         `BackgroundTaskRuntime: max tasks (${this.options.maxTasks}) exceeded.`,
@@ -113,7 +113,7 @@ export class BackgroundTaskRuntime {
 
     if (process.platform === "win32") {
       const taskId = randomUUID();
-      const failed: PolitDeckBackgroundBashTask = {
+      const failed: PilotDeckBackgroundBashTask = {
         taskId,
         type: "local_bash",
         agentId: spec.agentId,
@@ -144,7 +144,7 @@ export class BackgroundTaskRuntime {
 
     const taskId = randomUUID();
     const startedAt = this.options.now();
-    const task: PolitDeckBackgroundBashTask = {
+    const task: PilotDeckBackgroundBashTask = {
       taskId,
       type: "local_bash",
       agentId: spec.agentId,
@@ -273,14 +273,14 @@ export class BackgroundTaskRuntime {
     await Promise.all(targets.map((e) => this.stop(e.task.taskId)));
   }
 
-  getOutput(taskId: string, offset: number, maxBytes?: number): PolitDeckTaskOutputSlice {
+  getOutput(taskId: string, offset: number, maxBytes?: number): PilotDeckTaskOutputSlice {
     const entry = this.entries.get(taskId);
     if (!entry) throw new Error(`Unknown taskId: ${taskId}`);
     return entry.output.readSlice(offset, maxBytes);
   }
 
   /** Convenience used in tests: `await runtime.waitFor(taskId)`. */
-  async waitFor(taskId: string): Promise<PolitDeckBackgroundBashTask> {
+  async waitFor(taskId: string): Promise<PilotDeckBackgroundBashTask> {
     const entry = this.entries.get(taskId);
     if (!entry) throw new Error(`Unknown taskId: ${taskId}`);
     await entry.done;

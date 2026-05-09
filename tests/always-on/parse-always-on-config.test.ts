@@ -5,17 +5,17 @@ import {
   defaultAlwaysOnConfig,
   parseAlwaysOnConfig,
 } from "../../src/always-on/config/parseAlwaysOnConfig.js";
-import type { PolitConfigDiagnostic } from "../../src/polit/config/types.js";
+import type { PilotConfigDiagnostic } from "../../src/pilot/config/types.js";
 
 test("parseAlwaysOnConfig returns undefined when section is absent", () => {
-  const diagnostics: PolitConfigDiagnostic[] = [];
+  const diagnostics: PilotConfigDiagnostic[] = [];
   const result = parseAlwaysOnConfig(undefined, diagnostics);
   assert.equal(result, undefined);
   assert.deepEqual(diagnostics, []);
 });
 
 test("parseAlwaysOnConfig fills defaults for empty section", () => {
-  const diagnostics: PolitConfigDiagnostic[] = [];
+  const diagnostics: PilotConfigDiagnostic[] = [];
   const result = parseAlwaysOnConfig({}, diagnostics);
   assert.ok(result);
   assert.deepEqual(result, defaultAlwaysOnConfig());
@@ -23,7 +23,7 @@ test("parseAlwaysOnConfig fills defaults for empty section", () => {
 });
 
 test("parseAlwaysOnConfig accepts the flat documented schema", () => {
-  const diagnostics: PolitConfigDiagnostic[] = [];
+  const diagnostics: PilotConfigDiagnostic[] = [];
   const result = parseAlwaysOnConfig(
     {
       enabled: true,
@@ -73,7 +73,7 @@ test("parseAlwaysOnConfig accepts the flat documented schema", () => {
 });
 
 test("parseAlwaysOnConfig flags removed fields with fatal diagnostics", () => {
-  const diagnostics: PolitConfigDiagnostic[] = [];
+  const diagnostics: PilotConfigDiagnostic[] = [];
   const result = parseAlwaysOnConfig(
     {
       enabled: true,
@@ -117,7 +117,7 @@ test("parseAlwaysOnConfig flags removed fields with fatal diagnostics", () => {
 });
 
 test("parseAlwaysOnConfig warns on unknown project field but only keeps enabled", () => {
-  const diagnostics: PolitConfigDiagnostic[] = [];
+  const diagnostics: PilotConfigDiagnostic[] = [];
   const result = parseAlwaysOnConfig(
     {
       enabled: true,
@@ -135,7 +135,7 @@ test("parseAlwaysOnConfig warns on unknown project field but only keeps enabled"
 });
 
 test("parseAlwaysOnConfig falls back on invalid numbers with warning diagnostics", () => {
-  const diagnostics: PolitConfigDiagnostic[] = [];
+  const diagnostics: PilotConfigDiagnostic[] = [];
   const result = parseAlwaysOnConfig(
     {
       trigger: {

@@ -1,6 +1,6 @@
-# old_ui 适配 PolitDeck 文档集
+# old_ui 适配 PilotDeck 文档集
 
-本文档集用于管理 `old_ui/` 迁移、改写或重写为 PolitDeck Web UI 的工作。它不直接要求保留旧目录结构，而是把旧 UI 的用户能力、协议、状态和测试边界拆出来，再对齐当前 `src/` 中已经形成的 Gateway、Agent、Session、Config、Cron 与 Always-On 运行时。
+本文档集用于管理 `old_ui/` 迁移、改写或重写为 PilotDeck Web UI 的工作。它不直接要求保留旧目录结构，而是把旧 UI 的用户能力、协议、状态和测试边界拆出来，再对齐当前 `src/` 中已经形成的 Gateway、Agent、Session、Config、Cron 与 Always-On 运行时。
 
 阅读顺序：
 

@@ -11,24 +11,24 @@ import {
   filesystemReadScenarios,
   filesystemSearchScenarios,
 } from "../fixtures/tool/legacy-behavior/index.js";
-import { createPolitDeckTempWorkspace } from "../helpers/filesystem.js";
+import { createPilotDeckTempWorkspace } from "../helpers/filesystem.js";
 import { assertScenarioResult } from "../helpers/parity.js";
-import { createPolitDeckToolRuntimeFixture } from "../helpers/tool.js";
+import { createPilotDeckToolRuntimeFixture } from "../helpers/tool.js";
 
 test("filesystem read parity scenarios match legacy gates", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({
+  const workspace = await createPilotDeckTempWorkspace({
     "src/a.txt": "one\ntwo",
     "bin.dat": Buffer.from([0, 1, 2]),
   });
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createReadFileTool()],
     cwd: workspace.cwd,
   });
 
   for (const scenario of filesystemReadScenarios.filter((item) => item.parity !== "deferred")) {
     const result = await toolRuntime.execute(
-      { id: scenario.name, name: scenario.politdeckToolName, input: scenario.input },
+      { id: scenario.name, name: scenario.pilotdeckToolName, input: scenario.input },
       context,
     );
     assertScenarioResult(scenario, result);
@@ -36,19 +36,19 @@ test("filesystem read parity scenarios match legacy gates", async (t) => {
 });
 
 test("filesystem search parity scenarios match legacy gates", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({
+  const workspace = await createPilotDeckTempWorkspace({
     "src/a.ts": "const value = 'needle';",
     "src/b.ts": "const value = 'hay';",
   });
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createGlobTool(), createGrepTool()],
     cwd: workspace.cwd,
   });
 
   for (const scenario of filesystemSearchScenarios.filter((item) => item.parity !== "deferred")) {
     const result = await toolRuntime.execute(
-      { id: scenario.name, name: scenario.politdeckToolName, input: scenario.input },
+      { id: scenario.name, name: scenario.pilotdeckToolName, input: scenario.input },
       context,
     );
     assertScenarioResult(scenario, result);
@@ -56,12 +56,12 @@ test("filesystem search parity scenarios match legacy gates", async (t) => {
 });
 
 test("filesystem edit and write parity scenarios match legacy gates", async (t) => {
-  const workspace = await createPolitDeckTempWorkspace({
+  const workspace = await createPilotDeckTempWorkspace({
     "edit.txt": "alpha",
     "existing.txt": "old",
   });
   t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createEditFileTool(), createWriteFileTool()],
     cwd: workspace.cwd,
     permissionMode: "acceptEdits",
@@ -69,7 +69,7 @@ test("filesystem edit and write parity scenarios match legacy gates", async (t) 
 
   for (const scenario of filesystemEditWriteScenarios.filter((item) => item.parity !== "deferred")) {
     const result = await toolRuntime.execute(
-      { id: scenario.name, name: scenario.politdeckToolName, input: scenario.input },
+      { id: scenario.name, name: scenario.pilotdeckToolName, input: scenario.input },
       context,
     );
     assertScenarioResult(scenario, result);

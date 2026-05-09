@@ -141,7 +141,7 @@ test("RouterRuntime falls back to next provider on retryable error and suppresse
   assert.equal(modelRuntime.received[1]?.model, "m2");
   assert.equal(collected.filter((event) => event.type === "error").length, 0);
   assert.ok(collected.some((event) => event.type === "text_delta" && event.text === "fb"));
-  assert.ok(eventLog.some((event) => event.type === "politdeck_router_fallback"));
+  assert.ok(eventLog.some((event) => event.type === "pilotdeck_router_fallback"));
 });
 
 test("RouterRuntime retries zero-usage and yields events from the successful attempt only", async () => {
@@ -173,7 +173,7 @@ test("RouterRuntime retries zero-usage and yields events from the successful att
   }
   assert.equal(modelRuntime.received.length, 2);
   assert.equal(collected.filter((event) => event.type === "text_delta").length, 1);
-  assert.ok(eventLog.some((event) => event.type === "politdeck_router_zero_usage_retry"));
+  assert.ok(eventLog.some((event) => event.type === "pilotdeck_router_zero_usage_retry"));
 });
 
 test("RouterRuntime stats observe successful attempts when stats enabled", async () => {
@@ -207,7 +207,7 @@ test("RouterRuntime resolves custom router contributions from PluginRuntime", as
   const modelRuntime = new ScriptedModelRuntime([]);
   const plugins = new PluginRuntime({
     projectRoot: "/tmp/project",
-    politHome: "/tmp/polit",
+    pilotHome: "/tmp/pilot",
     builtinPlugins: [
       {
         name: "router-plugin",
@@ -252,7 +252,7 @@ test("RouterRuntime loads auto-orchestrate skill prompts from PluginRuntime", as
   ]);
   const plugins = new PluginRuntime({
     projectRoot: "/tmp/project",
-    politHome: "/tmp/polit",
+    pilotHome: "/tmp/pilot",
     builtinPlugins: [
       {
         name: "orchestrator",

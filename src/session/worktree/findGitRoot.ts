@@ -15,8 +15,8 @@ const NOT_FOUND = Symbol("findGitRoot.NOT_FOUND");
  *
  * Differences from legacy:
  *   - async (uses `node:fs/promises`); legacy is sync `statSync` for hot path
- *     speed. PolitDeck callers are already async, so async fits naturally.
- *   - logging is intentionally omitted (no diagnostics infra in PolitDeck).
+ *     speed. PilotDeck callers are already async, so async fits naturally.
+ *   - logging is intentionally omitted (no diagnostics infra in PilotDeck).
  */
 const cache = new LRUMap<string, string | typeof NOT_FOUND>(50);
 

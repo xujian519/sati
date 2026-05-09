@@ -97,7 +97,7 @@ Web UI 不应直接解析 transcript 文件路径。它应通过 Gateway 或 Web
 
 ## Config Boundary
 
-Web UI 不应拼接或读取 `~/.politdeck/politdeck.yaml`。它应通过 `src/polit/config` 的服务接口获得：
+Web UI 不应拼接或读取 `~/.pilotdeck/pilotdeck.yaml`。它应通过 `src/pilot/config` 的服务接口获得：
 
 - 当前生效 model/router/tool/permission/session/extension 配置摘要。
 - 可编辑配置段和只读诊断结果。
@@ -105,10 +105,10 @@ Web UI 不应拼接或读取 `~/.politdeck/politdeck.yaml`。它应通过 `src/p
 
 涉及文件：
 
-- `src/polit/config/loadPolitConfig.ts`
-- `docs/polit-config/`
+- `src/pilot/config/loadPilotConfig.ts`
+- `docs/pilot-config/`
 
-旧 UI 的 EdgeClaw YAML/env 派生配置应被收敛到 PolitDeck config 文档和 schema 中，避免继续由 Web server 私有解析。
+旧 UI 的 EdgeClaw YAML/env 派生配置应被收敛到 PilotDeck config 文档和 schema 中，避免继续由 Web server 私有解析。
 
 ## Cron 与 Always-On Boundary
 

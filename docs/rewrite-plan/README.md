@@ -13,6 +13,6 @@
 
 本目录中的方案以 `[../current-agent-loop-analysis/](../current-agent-loop-analysis/)` 的现状分析为依据，但不复述当前项目源码细节。
 
-与 `polit/config` 模块相关的细化设计见 `[../polit-config/](../polit-config/)`。
+与 `pilot/config` 模块相关的细化设计见 `[../pilot-config/](../pilot-config/)`。
 
 与 `model` 模块相关的细化设计见 `[../model/](../model/)`。

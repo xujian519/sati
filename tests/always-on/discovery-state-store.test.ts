@@ -10,16 +10,16 @@ import {
   getDayKey,
 } from "../../src/always-on/storage/DiscoveryStateStore.js";
 
-function makeStore(): { store: DiscoveryStateStore; cleanup: () => void; politHome: string } {
-  const politHome = mkdtempSync(join(tmpdir(), "politdeck-aon-state-"));
+function makeStore(): { store: DiscoveryStateStore; cleanup: () => void; pilotHome: string } {
+  const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-aon-state-"));
   const paths = resolveAlwaysOnPaths({
-    politHome,
+    pilotHome,
     projectKey: "/tmp/projects/sample",
   });
   return {
     store: new DiscoveryStateStore(paths),
-    cleanup: () => rmSync(politHome, { recursive: true, force: true }),
-    politHome,
+    cleanup: () => rmSync(pilotHome, { recursive: true, force: true }),
+    pilotHome,
   };
 }
 
@@ -100,7 +100,7 @@ test("DiscoveryStateStore.setCurrentWorkspace persists workspace handle round-tr
         runId: "run_001",
         projectKey: "/tmp/projects/sample",
         strategy: "git-worktree",
-        cwd: "/tmp/polit/always-on/worktrees/sample/run_001",
+        cwd: "/tmp/pilot/always-on/worktrees/sample/run_001",
         metadata: { repoRoot: "/tmp/projects/sample", baseBranch: "main", baseCommit: "abc123" },
       },
       now,
@@ -126,7 +126,7 @@ test("DiscoveryStateStore.clearCurrentWorkspace removes the workspace field", as
         runId: "run_001",
         projectKey: "/tmp/projects/sample",
         strategy: "snapshot-copy",
-        cwd: "/tmp/polit/always-on/snapshots/sample/run_001",
+        cwd: "/tmp/pilot/always-on/snapshots/sample/run_001",
         metadata: {},
       },
       now,
@@ -141,7 +141,7 @@ test("DiscoveryStateStore.clearCurrentWorkspace removes the workspace field", as
 });
 
 test("DiscoveryStateStore drops malformed currentWorkspace on read", async () => {
-  const { store, cleanup, politHome } = makeStore();
+  const { store, cleanup, pilotHome } = makeStore();
   try {
     const now = new Date("2026-05-08T12:00:00Z");
     await store.write({
@@ -150,7 +150,7 @@ test("DiscoveryStateStore drops malformed currentWorkspace on read", async () =>
       todayRunCount: 0,
       consecutiveFailures: 0,
     });
-    void politHome;
+    void pilotHome;
     const reread = await store.read(now);
     assert.equal(reread.currentWorkspace, undefined);
   } finally {

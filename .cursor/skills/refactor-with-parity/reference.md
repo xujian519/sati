@@ -256,8 +256,8 @@ Rules:
 
 The tool refactor used two separate documents:
 
-- `docs/politdeck-tool-refactor-development-guide.md`
-- `docs/politdeck-tool-test-maintenance-guide.md`
+- `docs/pilotdeck-tool-refactor-development-guide.md`
+- `docs/pilotdeck-tool-test-maintenance-guide.md`
 
 The refactor document was revised after repeated checks against:
 

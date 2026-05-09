@@ -5,23 +5,23 @@ import { ToolRegistry } from "../../src/tool/registry/ToolRegistry.js";
 import { ToolRuntime } from "../../src/tool/execution/ToolRuntime.js";
 import { PermissionRuntime, createDefaultPermissionContext } from "../../src/permission/index.js";
 import type {
-  PolitDeckCommandRunner,
-  PolitDeckCommandResult,
-  PolitDeckCommandOptions,
+  PilotDeckCommandRunner,
+  PilotDeckCommandResult,
+  PilotDeckCommandOptions,
 } from "../../src/tool/builtin/bash/commandRunner.js";
 import type {
-  PolitDeckToolProgressEvent,
-  PolitDeckToolRuntimeContext,
+  PilotDeckToolProgressEvent,
+  PilotDeckToolRuntimeContext,
 } from "../../src/tool/index.js";
 
-class StreamingFakeRunner implements PolitDeckCommandRunner {
+class StreamingFakeRunner implements PilotDeckCommandRunner {
   constructor(
     private readonly stdoutChunks: string[],
     private readonly stderrChunks: string[] = [],
     private readonly exitCode: number = 0,
   ) {}
 
-  async run(_command: string, options: PolitDeckCommandOptions): Promise<PolitDeckCommandResult> {
+  async run(_command: string, options: PilotDeckCommandOptions): Promise<PilotDeckCommandResult> {
     for (const chunk of this.stdoutChunks) {
       options.onStdout?.(chunk);
     }
@@ -40,7 +40,7 @@ class StreamingFakeRunner implements PolitDeckCommandRunner {
 
 const cwd = "/tmp/proj";
 
-function makeContext(progress?: (event: PolitDeckToolProgressEvent) => void): PolitDeckToolRuntimeContext {
+function makeContext(progress?: (event: PilotDeckToolProgressEvent) => void): PilotDeckToolRuntimeContext {
   return {
     sessionId: "session-1",
     turnId: "turn-1",
@@ -53,7 +53,7 @@ function makeContext(progress?: (event: PolitDeckToolProgressEvent) => void): Po
 
 test("bash forwards each stdout/stderr chunk through progress sink as it arrives", async () => {
   const runner = new StreamingFakeRunner(["hello\n", "world\n"], ["warn\n"]);
-  const events: PolitDeckToolProgressEvent[] = [];
+  const events: PilotDeckToolProgressEvent[] = [];
   const tool = createBashTool({ runner });
   const result = await tool.execute({ command: "echo hi" }, makeContext((event) => events.push(event)));
 
@@ -86,7 +86,7 @@ test("ToolRuntime injects toolCallId / toolName into progress events", async () 
   const permissionRuntime = new PermissionRuntime();
   const toolRuntime = new ToolRuntime(registry, permissionRuntime);
 
-  const events: PolitDeckToolProgressEvent[] = [];
+  const events: PilotDeckToolProgressEvent[] = [];
   const result = await toolRuntime.execute(
     { id: "call-42", name: "bash", input: { command: "echo chunk" } },
     {

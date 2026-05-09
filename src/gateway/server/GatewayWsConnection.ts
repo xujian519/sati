@@ -1,6 +1,6 @@
 import type { Gateway } from "../protocol/types.js";
 import type { WsHelloFrame, WsRequestFrame } from "../protocol/frames.js";
-import { POLITDECK_GATEWAY_PROTOCOL_VERSION } from "../protocol/version.js";
+import { PILOTDECK_GATEWAY_PROTOCOL_VERSION } from "../protocol/version.js";
 import { TextWebSocketConnection } from "./websocket.js";
 
 export type GatewayWsConnectionOptions = {
@@ -45,7 +45,7 @@ export class GatewayWsConnection {
       this.ws.close(4001, "hello_required");
       return;
     }
-    if (frame.protocolVersion !== POLITDECK_GATEWAY_PROTOCOL_VERSION) {
+    if (frame.protocolVersion !== PILOTDECK_GATEWAY_PROTOCOL_VERSION) {
       this.ws.close(4001, "protocol_mismatch");
       return;
     }
@@ -57,7 +57,7 @@ export class GatewayWsConnection {
     this.ws.sendText(
       JSON.stringify({
         type: "hello_ok",
-        protocolVersion: POLITDECK_GATEWAY_PROTOCOL_VERSION,
+        protocolVersion: PILOTDECK_GATEWAY_PROTOCOL_VERSION,
         serverVersion: this.options.serverVersion,
         serverInfo: await this.options.gateway.describeServer(),
       }),

@@ -95,7 +95,7 @@ test("decideScenario detects subagent tag and extracts model hint", () => {
             content: [
               {
                 type: "text",
-                text: "<politdeck-subagent-model>vendor/sub-x</politdeck-subagent-model>",
+                text: "<pilotdeck-subagent-model>vendor/sub-x</pilotdeck-subagent-model>",
               },
             ],
           },

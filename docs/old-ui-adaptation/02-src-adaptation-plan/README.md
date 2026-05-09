@@ -1,8 +1,8 @@
 # old_ui 与 src 适配方案
 
-本目录描述 `old_ui/` 如何适配当前 PolitDeck `src/`。方案分为两条线：
+本目录描述 `old_ui/` 如何适配当前 PilotDeck `src/`。方案分为两条线：
 
-- 改写或重写 `old_ui`：把旧 UI 的页面和交互迁到 PolitDeck Gateway。
+- 改写或重写 `old_ui`：把旧 UI 的页面和交互迁到 PilotDeck Gateway。
 - 补齐或调整 `src`：为 Web UI 暴露稳定协议，而不是让 UI 读取 runtime 内部实现。
 
 ## 文档列表
@@ -20,7 +20,7 @@
 
 ```text
 Phase 0: 固化旧 UI 行为清单与 contract 测试
-Phase 1: 建立 PolitDeck Web Gateway client 和消息适配层
+Phase 1: 建立 PilotDeck Web Gateway client 和消息适配层
 Phase 2: 迁移 Chat / Sessions / Projects 主流程
 Phase 3: 迁移 Files / Git / Shell / Settings
 Phase 4: 迁移 Always-On / Cron / Memory / Plugins

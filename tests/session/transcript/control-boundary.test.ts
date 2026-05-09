@@ -19,7 +19,7 @@ function userMessage(text: string): CanonicalMessage {
 }
 
 test("JsonlTranscriptWriter persists compact_boundary entries", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "politdeck-tx-"));
+  const dir = mkdtempSync(join(tmpdir(), "pilotdeck-tx-"));
   try {
     const writer = new JsonlTranscriptWriter({ path: join(dir, "session.jsonl") });
     await writer.recordAcceptedInput(sessionId, turnId, [userMessage("first")]);
@@ -54,7 +54,7 @@ test("JsonlTranscriptWriter persists compact_boundary entries", async () => {
 });
 
 test("replayTranscriptEntries skips messages before the last compact boundary", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "politdeck-tx-"));
+  const dir = mkdtempSync(join(tmpdir(), "pilotdeck-tx-"));
   try {
     const writer = new JsonlTranscriptWriter({ path: join(dir, "session.jsonl") });
     await writer.recordAcceptedInput(sessionId, "turn-1", [userMessage("before-1")]);

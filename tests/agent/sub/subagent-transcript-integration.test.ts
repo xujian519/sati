@@ -63,7 +63,7 @@ function buildConfig(cwd: string): AgentRuntimeConfig {
 }
 
 test("C2+C3 SubAgentSession writes turn-by-turn entries to the sidechain writer", async () => {
-  const tmp = mkdtempSync(join(tmpdir(), "politdeck-c3-"));
+  const tmp = mkdtempSync(join(tmpdir(), "pilotdeck-c3-"));
   const sidechainPath = join(tmp, "sub.jsonl");
   const sidechain = new JsonlTranscriptWriter({ path: sidechainPath });
 

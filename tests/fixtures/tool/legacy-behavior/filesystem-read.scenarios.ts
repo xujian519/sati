@@ -1,4 +1,4 @@
-import type { PolitDeckToolBehaviorScenario } from "./types.js";
+import type { PilotDeckToolBehaviorScenario } from "./types.js";
 
 const readSource = [
   {
@@ -11,11 +11,11 @@ const readSource = [
   },
 ];
 
-export const filesystemReadScenarios: PolitDeckToolBehaviorScenario[] = [
+export const filesystemReadScenarios: PilotDeckToolBehaviorScenario[] = [
   {
     name: "read text file succeeds",
     legacyToolName: "Read",
-    politdeckToolName: "read_file",
+    pilotdeckToolName: "read_file",
     input: { filePath: "src/a.txt" },
     permissionMode: "default",
     parity: "must_match",
@@ -26,7 +26,7 @@ export const filesystemReadScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "read missing file returns controlled error",
     legacyToolName: "Read",
-    politdeckToolName: "read_file",
+    pilotdeckToolName: "read_file",
     input: { filePath: "missing.txt" },
     permissionMode: "default",
     parity: "must_match",
@@ -37,7 +37,7 @@ export const filesystemReadScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "read outside workspace is denied",
     legacyToolName: "Read",
-    politdeckToolName: "read_file",
+    pilotdeckToolName: "read_file",
     input: { filePath: "../outside.txt" },
     permissionMode: "default",
     parity: "must_match",
@@ -48,13 +48,13 @@ export const filesystemReadScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "read binary-like file is a controlled difference",
     legacyToolName: "Read",
-    politdeckToolName: "read_file",
+    pilotdeckToolName: "read_file",
     input: { filePath: "bin.dat" },
     permissionMode: "default",
     parity: "intentional_difference",
     source: readSource,
     expectedResultType: "error",
     expectedErrorCode: "invalid_tool_input",
-    intentionalDifferenceReason: "PolitDeck Phase 1 supports UTF-8 text reads only.",
+    intentionalDifferenceReason: "PilotDeck Phase 1 supports UTF-8 text reads only.",
   },
 ];

@@ -11,17 +11,17 @@ import {
 } from "../../src/session/index.js";
 
 test("listProjectSessions reads lite metadata and paginates by modification time", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-session-list-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-session-list-"));
   try {
     const projectRoot = path.join(root, "repo");
-    const politHome = path.join(root, "home");
+    const pilotHome = path.join(root, "home");
 
-    await writeSession({ projectRoot, politHome, sessionId: "older", prompt: "First prompt", title: "Older title" });
+    await writeSession({ projectRoot, pilotHome, sessionId: "older", prompt: "First prompt", title: "Older title" });
     await new Promise((resolve) => setTimeout(resolve, 5));
-    await writeSession({ projectRoot, politHome, sessionId: "newer", prompt: "Second prompt", aiTitle: "Newer AI title", tag: "tag" });
+    await writeSession({ projectRoot, pilotHome, sessionId: "newer", prompt: "Second prompt", aiTitle: "Newer AI title", tag: "tag" });
 
-    const all = await listProjectSessions({ projectRoot, politHome });
-    const paged = await listProjectSessions({ projectRoot, politHome, limit: 1, offset: 1 });
+    const all = await listProjectSessions({ projectRoot, pilotHome });
+    const paged = await listProjectSessions({ projectRoot, pilotHome, limit: 1, offset: 1 });
 
     assert.deepEqual(all.map((session) => session.sessionId), ["newer", "older"]);
     assert.equal(all[0]?.summary, "Newer AI title");
@@ -35,7 +35,7 @@ test("listProjectSessions reads lite metadata and paginates by modification time
 
 async function writeSession(options: {
   projectRoot: string;
-  politHome: string;
+  pilotHome: string;
   sessionId: string;
   prompt: string;
   title?: string;

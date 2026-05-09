@@ -1,12 +1,12 @@
-import type { PolitDeckHookEvent } from "../protocol/events.js";
+import type { PilotDeckHookEvent } from "../protocol/events.js";
 import { parseHookOutput } from "./parseHookOutput.js";
-import type { PolitDeckHookOutput } from "../protocol/output.js";
+import type { PilotDeckHookOutput } from "../protocol/output.js";
 
 export type PendingAsyncHook = {
   id: string;
   startedAt: Date;
   hookName: string;
-  hookEvent: PolitDeckHookEvent;
+  hookEvent: PilotDeckHookEvent;
   stdout: string;
   stderr: string;
   responseDelivered: boolean;
@@ -16,10 +16,10 @@ export type PendingAsyncHook = {
 export type AsyncHookResponse = {
   id: string;
   hookName: string;
-  hookEvent: PolitDeckHookEvent;
+  hookEvent: PilotDeckHookEvent;
   stdout: string;
   stderr: string;
-  output: PolitDeckHookOutput;
+  output: PilotDeckHookOutput;
   rewake: boolean;
 };
 
@@ -71,6 +71,6 @@ export class AsyncHookRegistry {
   }
 }
 
-function isBlockingOutput(output: PolitDeckHookOutput): boolean {
+function isBlockingOutput(output: PilotDeckHookOutput): boolean {
   return output.type === "sync" && (output.continue === false || output.decision === "block");
 }

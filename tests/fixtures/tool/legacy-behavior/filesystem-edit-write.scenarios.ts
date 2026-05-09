@@ -1,4 +1,4 @@
-import type { PolitDeckToolBehaviorScenario } from "./types.js";
+import type { PilotDeckToolBehaviorScenario } from "./types.js";
 
 const editSource = [
   {
@@ -11,11 +11,11 @@ const editSource = [
   },
 ];
 
-export const filesystemEditWriteScenarios: PolitDeckToolBehaviorScenario[] = [
+export const filesystemEditWriteScenarios: PilotDeckToolBehaviorScenario[] = [
   {
     name: "edit exact occurrence succeeds in acceptEdits",
     legacyToolName: "Edit",
-    politdeckToolName: "edit_file",
+    pilotdeckToolName: "edit_file",
     input: { filePath: "edit.txt", oldString: "alpha", newString: "beta" },
     permissionMode: "acceptEdits",
     parity: "must_match",
@@ -25,7 +25,7 @@ export const filesystemEditWriteScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "edit missing old string returns invalid input",
     legacyToolName: "Edit",
-    politdeckToolName: "edit_file",
+    pilotdeckToolName: "edit_file",
     input: { filePath: "edit.txt", oldString: "missing", newString: "beta" },
     permissionMode: "acceptEdits",
     parity: "must_match",
@@ -36,7 +36,7 @@ export const filesystemEditWriteScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "write creates file in acceptEdits",
     legacyToolName: "Write",
-    politdeckToolName: "write_file",
+    pilotdeckToolName: "write_file",
     input: { filePath: "created.txt", content: "created" },
     permissionMode: "acceptEdits",
     parity: "must_match",
@@ -46,7 +46,7 @@ export const filesystemEditWriteScenarios: PolitDeckToolBehaviorScenario[] = [
   {
     name: "write overwrite without flag returns conflict",
     legacyToolName: "Write",
-    politdeckToolName: "write_file",
+    pilotdeckToolName: "write_file",
     input: { filePath: "existing.txt", content: "new" },
     permissionMode: "acceptEdits",
     parity: "must_match",

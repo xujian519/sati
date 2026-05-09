@@ -1,4 +1,4 @@
-export type PolitDeckExtensionContributionKind =
+export type PilotDeckExtensionContributionKind =
   | "command"
   | "hook"
   | "tool"

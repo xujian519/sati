@@ -6,10 +6,10 @@ import { z } from "zod";
 import {
   McpRuntime,
   createMcpToolDefinitionsFromRuntime,
-  type PolitDeckMcpServerSpec,
+  type PilotDeckMcpServerSpec,
 } from "../../src/mcp/index.js";
 import { ToolRegistry } from "../../src/tool/registry/ToolRegistry.js";
-import { createPolitDeckToolRuntimeFixture } from "../helpers/tool.js";
+import { createPilotDeckToolRuntimeFixture } from "../helpers/tool.js";
 
 async function spawnLinkedServer(serverFactory: () => McpServer) {
   const pair = InMemoryTransport.createLinkedPair();
@@ -38,11 +38,11 @@ test("C1.M10+M12 runtime exposes MCP tools through ToolRegistry", async () => {
     return s;
   });
 
-  const spec: PolitDeckMcpServerSpec = {
+  const spec: PilotDeckMcpServerSpec = {
     id: "design",
     transport: "stdio",
     command: "echo",
-  } as PolitDeckMcpServerSpec;
+  } as PilotDeckMcpServerSpec;
 
   const runtime = new McpRuntime([spec], {
     clientOptions: { transportFactory: () => clientTransport },
@@ -70,7 +70,7 @@ test("C1.M10+M12 runtime exposes MCP tools through ToolRegistry", async () => {
     for (const def of definitions) registry.register(def);
     assert.equal(registry.list().length, 2);
 
-    const fixture = createPolitDeckToolRuntimeFixture({});
+    const fixture = createPilotDeckToolRuntimeFixture({});
     const abort = new AbortController();
     const result = await search.execute(
       { q: "button" },
@@ -97,11 +97,11 @@ test("C1 PluginToToolBridge surfaces isError → tool_execution_failed", async (
     );
     return s;
   });
-  const spec: PolitDeckMcpServerSpec = {
+  const spec: PilotDeckMcpServerSpec = {
     id: "broken",
     transport: "stdio",
     command: "echo",
-  } as PolitDeckMcpServerSpec;
+  } as PilotDeckMcpServerSpec;
 
   const runtime = new McpRuntime([spec], {
     clientOptions: { transportFactory: () => clientTransport },
@@ -110,12 +110,12 @@ test("C1 PluginToToolBridge surfaces isError → tool_execution_failed", async (
     await runtime.start();
     const defs = await createMcpToolDefinitionsFromRuntime(runtime);
     const boom = defs[0];
-    const fixture = createPolitDeckToolRuntimeFixture({});
+    const fixture = createPilotDeckToolRuntimeFixture({});
     const abort = new AbortController();
     await assert.rejects(
       () => boom.execute({}, { ...fixture.context, abortSignal: abort.signal }),
       (err: Error & { code?: string }) => {
-        assert.equal(err.name, "PolitDeckToolRuntimeError");
+        assert.equal(err.name, "PilotDeckToolRuntimeError");
         assert.equal(err.code, "tool_execution_failed");
         return true;
       },

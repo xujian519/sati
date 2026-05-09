@@ -8,7 +8,7 @@ import type { Gateway, GatewayCronController, GatewayServerInfo } from "./protoc
 
 export type GatewayProjectStorageOptions = {
   projectRoot: string;
-  politHome: string;
+  pilotHome: string;
 };
 
 export type CreateGatewayOptions = {

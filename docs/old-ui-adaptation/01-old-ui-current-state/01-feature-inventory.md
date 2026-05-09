@@ -49,7 +49,7 @@
 适配要求：
 
 - 新 Web UI 应继续支持“项目 -> 会话 -> 消息”的导航模型。
-- 多 provider 列表可以在 PolitDeck 第一阶段收敛为 `politdeck` provider，但 UI 层必须保留 provider 字段或等价来源，避免破坏历史数据渲染。
+- 多 provider 列表可以在 PilotDeck 第一阶段收敛为 `pilotdeck` provider，但 UI 层必须保留 provider 字段或等价来源，避免破坏历史数据渲染。
 - 背景任务会话不能仅当作普通聊天会话处理，必须保留父 session 和相对 transcript 路径。
 
 ## 聊天与工具渲染

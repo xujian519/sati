@@ -1,20 +1,20 @@
 import path from "node:path";
 import { realpathSync } from "node:fs";
-import type { PolitDeckToolRuntimeContext } from "../../protocol/types.js";
-import type { PolitDeckToolError } from "../../protocol/errors.js";
+import type { PilotDeckToolRuntimeContext } from "../../protocol/types.js";
+import type { PilotDeckToolError } from "../../protocol/errors.js";
 import { toolError } from "../../protocol/errors.js";
 
-export type PolitDeckPathSafetyResult =
+export type PilotDeckPathSafetyResult =
   | { ok: true; absolutePath: string; relativePath: string; root: string }
-  | { ok: false; error: PolitDeckToolError };
+  | { ok: false; error: PilotDeckToolError };
 
 const DEFAULT_WRITE_DENY_DIRECTORIES = new Set([".git", "node_modules", "dist"]);
 
-export function resolvePolitDeckWorkspacePath(
+export function resolvePilotDeckWorkspacePath(
   inputPath: string,
-  context: PolitDeckToolRuntimeContext,
+  context: PilotDeckToolRuntimeContext,
   options?: { forWrite?: boolean; mustExist?: boolean },
-): PolitDeckPathSafetyResult {
+): PilotDeckPathSafetyResult {
   if (!inputPath || inputPath.includes("\0")) {
     return {
       ok: false,
@@ -31,7 +31,7 @@ export function resolvePolitDeckWorkspacePath(
   if (!root) {
     return {
       ok: false,
-      error: toolError("path_not_allowed", `Path ${inputPath} is outside the PolitDeck workspace.`),
+      error: toolError("path_not_allowed", `Path ${inputPath} is outside the PilotDeck workspace.`),
     };
   }
 
@@ -56,7 +56,7 @@ export function resolvePolitDeckWorkspacePath(
     if (!isPathWithinRoot(real, realRoot)) {
       return {
         ok: false,
-        error: toolError("path_not_allowed", `Path ${inputPath} resolves outside the PolitDeck workspace.`),
+        error: toolError("path_not_allowed", `Path ${inputPath} resolves outside the PilotDeck workspace.`),
       };
     }
   }

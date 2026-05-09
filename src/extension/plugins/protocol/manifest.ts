@@ -1,22 +1,22 @@
-import type { PolitDeckHooksSettings } from "../../hooks/protocol/settings.js";
+import type { PilotDeckHooksSettings } from "../../hooks/protocol/settings.js";
 
-export type PolitDeckPluginManifest = {
+export type PilotDeckPluginManifest = {
   name: string;
   version?: string;
   description?: string;
   commands?: string | string[];
   agents?: string | string[];
   skills?: string | string[];
-  hooks?: string | PolitDeckHooksSettings;
+  hooks?: string | PilotDeckHooksSettings;
   mcpServers?: Record<string, unknown>;
   lspServers?: Record<string, unknown>;
   outputStyles?: string | string[];
-  marketplace?: PolitDeckMarketplaceReference;
+  marketplace?: PilotDeckMarketplaceReference;
   mcpb?: string;
   settings?: Record<string, unknown>;
 };
 
-export type PolitDeckMarketplaceReference = {
+export type PilotDeckMarketplaceReference = {
   name: string;
   plugin: string;
   version?: string;

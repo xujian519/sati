@@ -16,7 +16,7 @@ import {
  * (`findCanonicalGitRoot`).
  *
  * Behaviour difference from legacy: when the cwd has no git root at all,
- * legacy returns `null` and the caller decides what to do. PolitDeck always
+ * legacy returns `null` and the caller decides what to do. PilotDeck always
  * needs *some* project identity (every session must belong to a project), so
  * we fall back to `path.resolve(cwd)`. Tagged `intentional_difference` in the
  * dual-parity table.

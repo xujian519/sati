@@ -1,8 +1,8 @@
 import path from "node:path";
-import type { PolitDeckToolDefinition } from "../protocol/types.js";
-import { PolitDeckToolRuntimeError } from "../protocol/errors.js";
+import type { PilotDeckToolDefinition } from "../protocol/types.js";
+import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
 import { globPatternToRegExp } from "./filesystem/globPattern.js";
-import { resolvePolitDeckWorkspacePath } from "./filesystem/pathSafety.js";
+import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
 import { readTextFile } from "./filesystem/readTextFile.js";
 import { walkFiles } from "./filesystem/walk.js";
 
@@ -19,7 +19,7 @@ export type GrepInput = {
   offset?: number;
 };
 
-export function createGrepTool(): PolitDeckToolDefinition<GrepInput> {
+export function createGrepTool(): PilotDeckToolDefinition<GrepInput> {
   return {
     name: "grep",
     aliases: ["Grep"],
@@ -46,9 +46,9 @@ export function createGrepTool(): PolitDeckToolDefinition<GrepInput> {
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     execute: async (input, context) => {
-      const resolved = resolvePolitDeckWorkspacePath(input.path ?? ".", context, { mustExist: true });
+      const resolved = resolvePilotDeckWorkspacePath(input.path ?? ".", context, { mustExist: true });
       if (!resolved.ok) {
-        throw new PolitDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
+        throw new PilotDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
       }
 
       const regex = new RegExp(input.pattern, input.caseInsensitive ? "i" : undefined);

@@ -2,11 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { HookRuntime } from "../../src/extension/index.js";
 import { LifecycleRuntime } from "../../src/lifecycle/index.js";
-import { createPolitDeckTestTool, createPolitDeckToolRuntimeFixture } from "../helpers/tool.js";
-import type { PolitDeckHooksSettings } from "../../src/extension/index.js";
+import { createPilotDeckTestTool, createPilotDeckToolRuntimeFixture } from "../helpers/tool.js";
+import type { PilotDeckHooksSettings } from "../../src/extension/index.js";
 
 test("PreToolUse hook can update tool input before execution", async () => {
-  const settings: PolitDeckHooksSettings = {
+  const settings: PilotDeckHooksSettings = {
     PreToolUse: [
       {
         matcher: "echo",
@@ -21,7 +21,7 @@ test("PreToolUse hook can update tool input before execution", async () => {
   };
   const lifecycle = new LifecycleRuntime(new HookRuntime(settings));
   const seenInputs: unknown[] = [];
-  const tool = createPolitDeckTestTool({
+  const tool = createPilotDeckTestTool({
     name: "echo",
     inputSchema: {
       type: "object",
@@ -34,7 +34,7 @@ test("PreToolUse hook can update tool input before execution", async () => {
       return { content: [{ type: "text", text: "ok" }] };
     },
   });
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({ tools: [tool], lifecycle });
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({ tools: [tool], lifecycle });
 
   const result = await toolRuntime.execute({ id: "call-1", name: "echo", input: { value: "old" } }, context);
 
@@ -43,7 +43,7 @@ test("PreToolUse hook can update tool input before execution", async () => {
 });
 
 test("PermissionRequest hook can allow a side-effecting tool without UI prompt", async () => {
-  const settings: PolitDeckHooksSettings = {
+  const settings: PilotDeckHooksSettings = {
     PermissionRequest: [
       {
         matcher: "write_file",
@@ -57,8 +57,8 @@ test("PermissionRequest hook can allow a side-effecting tool without UI prompt",
     ],
   };
   const lifecycle = new LifecycleRuntime(new HookRuntime(settings));
-  const tool = createPolitDeckTestTool({ name: "write_file", readOnly: false, kind: "filesystem" });
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({ tools: [tool], canPrompt: false, lifecycle });
+  const tool = createPilotDeckTestTool({ name: "write_file", readOnly: false, kind: "filesystem" });
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({ tools: [tool], canPrompt: false, lifecycle });
 
   const result = await toolRuntime.execute({ id: "call-1", name: "write_file", input: {} }, context);
 
@@ -66,7 +66,7 @@ test("PermissionRequest hook can allow a side-effecting tool without UI prompt",
 });
 
 test("PostToolUse hook blocking output is preserved as lifecycle metadata", async () => {
-  const settings: PolitDeckHooksSettings = {
+  const settings: PilotDeckHooksSettings = {
     PostToolUse: [
       {
         matcher: "read_file",
@@ -75,8 +75,8 @@ test("PostToolUse hook blocking output is preserved as lifecycle metadata", asyn
     ],
   };
   const lifecycle = new LifecycleRuntime(new HookRuntime(settings));
-  const tool = createPolitDeckTestTool({ name: "read_file" });
-  const { toolRuntime, context } = createPolitDeckToolRuntimeFixture({ tools: [tool], lifecycle });
+  const tool = createPilotDeckTestTool({ name: "read_file" });
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({ tools: [tool], lifecycle });
 
   const result = await toolRuntime.execute({ id: "call-1", name: "read_file", input: {} }, context);
 

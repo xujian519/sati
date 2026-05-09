@@ -1,22 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { defaultCronConfig, parseCronConfig } from "../../src/cron/index.js";
-import type { PolitConfigDiagnostic } from "../../src/polit/config/types.js";
+import type { PilotConfigDiagnostic } from "../../src/pilot/config/types.js";
 
 test("parseCronConfig returns undefined when section is absent", () => {
-  const diagnostics: PolitConfigDiagnostic[] = [];
+  const diagnostics: PilotConfigDiagnostic[] = [];
   assert.equal(parseCronConfig(undefined, diagnostics), undefined);
   assert.deepEqual(diagnostics, []);
 });
 
 test("parseCronConfig fills defaults for empty section", () => {
-  const diagnostics: PolitConfigDiagnostic[] = [];
+  const diagnostics: PilotConfigDiagnostic[] = [];
   assert.deepEqual(parseCronConfig({}, diagnostics), defaultCronConfig());
   assert.deepEqual(diagnostics, []);
 });
 
 test("parseCronConfig accepts documented fields", () => {
-  const diagnostics: PolitConfigDiagnostic[] = [];
+  const diagnostics: PilotConfigDiagnostic[] = [];
   const config = parseCronConfig(
     { enabled: false, timezone: "Asia/Shanghai", maxConcurrentRuns: 3 },
     diagnostics,
@@ -30,7 +30,7 @@ test("parseCronConfig accepts documented fields", () => {
 });
 
 test("parseCronConfig warns and falls back on invalid values", () => {
-  const diagnostics: PolitConfigDiagnostic[] = [];
+  const diagnostics: PilotConfigDiagnostic[] = [];
   const config = parseCronConfig({ timezone: "", maxConcurrentRuns: 0, extra: true }, diagnostics);
   assert.deepEqual(config, defaultCronConfig());
   assert.deepEqual(

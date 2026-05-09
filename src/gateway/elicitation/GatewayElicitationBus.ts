@@ -11,13 +11,13 @@
  *     bridge promise-resolution.
  */
 
-import type { PolitDeckElicitationAnswer } from "../../tool/elicitation/PolitDeckElicitationChannel.js";
+import type { PilotDeckElicitationAnswer } from "../../tool/elicitation/PilotDeckElicitationChannel.js";
 
 export type GatewayElicitationPending = {
   requestId: string;
   toolCallId: string;
   toolName: string;
-  resolve(answer: PolitDeckElicitationAnswer): void;
+  resolve(answer: PilotDeckElicitationAnswer): void;
   reject(error: Error): void;
 };
 

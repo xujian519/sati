@@ -1,17 +1,17 @@
-import type { PolitDeckHooksSettings } from "../../hooks/protocol/settings.js";
+import type { PilotDeckHooksSettings } from "../../hooks/protocol/settings.js";
 import type { PromptContribution } from "../../contributions/PromptContribution.js";
 import type { RouterContribution } from "../../contributions/RouterContribution.js";
 import type { LoadedPluginCommand } from "../loading/PluginCommandLoader.js";
-import type { PolitDeckPluginManifest } from "./manifest.js";
+import type { PilotDeckPluginManifest } from "./manifest.js";
 
-export type PolitDeckPluginSourceKind = "builtin" | "global" | "project";
+export type PilotDeckPluginSourceKind = "builtin" | "global" | "project";
 
-export type PolitDeckLoadedPlugin = {
+export type PilotDeckLoadedPlugin = {
   name: string;
   path: string;
-  source: PolitDeckPluginSourceKind;
-  manifest: PolitDeckPluginManifest;
-  hooksConfig?: PolitDeckHooksSettings;
+  source: PilotDeckPluginSourceKind;
+  manifest: PilotDeckPluginManifest;
+  hooksConfig?: PilotDeckHooksSettings;
   commands?: LoadedPluginCommand[];
   skills?: LoadedPluginCommand[];
   outputStyles?: LoadedPluginCommand[];

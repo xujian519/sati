@@ -6,12 +6,12 @@ import {
   type WebSearchOutput,
 } from "../../src/tool/builtin/webSearch.js";
 import { createDefaultPermissionContext } from "../../src/permission/index.js";
-import type { PolitDeckToolRuntimeContext } from "../../src/tool/index.js";
-import { PolitDeckToolRuntimeError } from "../../src/tool/index.js";
+import type { PilotDeckToolRuntimeContext } from "../../src/tool/index.js";
+import { PilotDeckToolRuntimeError } from "../../src/tool/index.js";
 
 const cwd = "/tmp/proj";
 
-function makeContext(env?: NodeJS.ProcessEnv, signal?: AbortSignal): PolitDeckToolRuntimeContext {
+function makeContext(env?: NodeJS.ProcessEnv, signal?: AbortSignal): PilotDeckToolRuntimeContext {
   return {
     sessionId: "session-1",
     turnId: "turn-1",
@@ -46,7 +46,7 @@ test("web_search throws unsupported_tool when no API key configured", async () =
   await assert.rejects(
     () => tool.execute({ query: "hello" }, makeContext({})),
     (error: unknown) =>
-      error instanceof PolitDeckToolRuntimeError &&
+      error instanceof PilotDeckToolRuntimeError &&
       error.code === "unsupported_tool" &&
       /SERP_API_KEY/.test(error.message),
   );
@@ -137,7 +137,7 @@ test("web_search reports HTTP non-2xx as tool_execution_failed", async () => {
   await assert.rejects(
     () => tool.execute({ query: "x" }, makeContext({})),
     (error: unknown) =>
-      error instanceof PolitDeckToolRuntimeError &&
+      error instanceof PilotDeckToolRuntimeError &&
       error.code === "tool_execution_failed" &&
       /serp\.hk API error \(500\)/.test(error.message),
   );
@@ -151,7 +151,7 @@ test("web_search reports JSON code != 0 as tool_execution_failed", async () => {
   await assert.rejects(
     () => tool.execute({ query: "x" }, makeContext({})),
     (error: unknown) =>
-      error instanceof PolitDeckToolRuntimeError &&
+      error instanceof PilotDeckToolRuntimeError &&
       error.code === "tool_execution_failed" &&
       /code=1/.test(error.message),
   );
@@ -162,7 +162,7 @@ test("web_search rejects empty query as invalid_tool_input", async () => {
   await assert.rejects(
     () => tool.execute({ query: "   " }, makeContext({})),
     (error: unknown) =>
-      error instanceof PolitDeckToolRuntimeError && error.code === "invalid_tool_input",
+      error instanceof PilotDeckToolRuntimeError && error.code === "invalid_tool_input",
   );
 });
 
@@ -180,7 +180,7 @@ test("web_search times out after configured timeoutMs", async () => {
   await assert.rejects(
     () => tool.execute({ query: "slow" }, makeContext({})),
     (error: unknown) =>
-      error instanceof PolitDeckToolRuntimeError && error.code === "tool_timeout",
+      error instanceof PilotDeckToolRuntimeError && error.code === "tool_timeout",
   );
 });
 

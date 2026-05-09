@@ -1,6 +1,6 @@
 # 适配后 Web UI 测试文档
 
-本目录描述 old_ui 适配 PolitDeck `src/` 后应如何测试。测试目标不是只证明页面能打开，而是证明 Web UI 与 Gateway、Session、Tool、Permission、Cron 等边界的协议稳定。
+本目录描述 old_ui 适配 PilotDeck `src/` 后应如何测试。测试目标不是只证明页面能打开，而是证明 Web UI 与 Gateway、Session、Tool、Permission、Cron 等边界的协议稳定。
 
 ## 文档列表
 

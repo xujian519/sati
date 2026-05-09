@@ -1,6 +1,6 @@
-import type { PolitDeckHookEvent } from "./events.js";
+import type { PilotDeckHookEvent } from "./events.js";
 
-export type PolitDeckHookCommand =
+export type PilotDeckHookCommand =
   | {
       type: "command";
       command: string;
@@ -47,12 +47,12 @@ export type PolitDeckHookCommand =
       statusMessage?: string;
     };
 
-export type PolitDeckHookMatcher = {
+export type PilotDeckHookMatcher = {
   matcher?: string;
-  hooks: PolitDeckHookCommand[];
+  hooks: PilotDeckHookCommand[];
   pluginName?: string;
   pluginId?: string;
   pluginRoot?: string;
 };
 
-export type PolitDeckHooksSettings = Partial<Record<PolitDeckHookEvent, PolitDeckHookMatcher[]>>;
+export type PilotDeckHooksSettings = Partial<Record<PilotDeckHookEvent, PilotDeckHookMatcher[]>>;

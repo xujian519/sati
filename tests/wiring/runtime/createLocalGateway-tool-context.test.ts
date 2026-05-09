@@ -26,26 +26,26 @@ import type {
 } from "../../../src/model/index.js";
 
 /**
- * Strip env-based config overrides (e.g. `POLIT_AGENT_MODEL`) from
+ * Strip env-based config overrides (e.g. `PILOT_AGENT_MODEL`) from
  * `process.env` so the synthetic project YAML written by `makeProjectRoot`
  * isn't shadowed by the developer's outer-shell exports. Without this, an
- * outer `POLIT_AGENT_MODEL=other/model` wins over `agent.model` in the test
- * fixture and `loadPolitConfig` rejects with `unknown provider …`.
+ * outer `PILOT_AGENT_MODEL=other/model` wins over `agent.model` in the test
+ * fixture and `loadPilotConfig` rejects with `unknown provider …`.
  */
 function scrubProcessEnv(): Record<string, string | undefined> {
   const env = { ...process.env };
-  delete env.POLIT_AGENT_MODEL;
+  delete env.PILOT_AGENT_MODEL;
   return env;
 }
 
-function makeProjectRoot(): { projectRoot: string; politHome: string; cleanup: () => void } {
-  const projectRoot = mkdtempSync(path.join(tmpdir(), "politdeck-wiring-runtime-"));
-  const politHome = mkdtempSync(path.join(tmpdir(), "politdeck-wiring-home-"));
-  // Minimal politdeck.yaml so loadPolitConfig doesn't barf. Lives at
-  // `<projectRoot>/.politdeck/politdeck.yaml` per `getPolitProjectConfigFilePath`.
-  mkdirSync(path.join(projectRoot, ".politdeck"), { recursive: true });
+function makeProjectRoot(): { projectRoot: string; pilotHome: string; cleanup: () => void } {
+  const projectRoot = mkdtempSync(path.join(tmpdir(), "pilotdeck-wiring-runtime-"));
+  const pilotHome = mkdtempSync(path.join(tmpdir(), "pilotdeck-wiring-home-"));
+  // Minimal pilotdeck.yaml so loadPilotConfig doesn't barf. Lives at
+  // `<projectRoot>/.pilotdeck/pilotdeck.yaml` per `getPilotProjectConfigFilePath`.
+  mkdirSync(path.join(projectRoot, ".pilotdeck"), { recursive: true });
   writeFileSync(
-    path.join(projectRoot, ".politdeck", "politdeck.yaml"),
+    path.join(projectRoot, ".pilotdeck", "pilotdeck.yaml"),
     [
       "schemaVersion: 1",
       "agent:",
@@ -74,10 +74,10 @@ function makeProjectRoot(): { projectRoot: string; politHome: string; cleanup: (
   );
   return {
     projectRoot,
-    politHome,
+    pilotHome,
     cleanup: () => {
       rmSync(projectRoot, { recursive: true, force: true });
-      rmSync(politHome, { recursive: true, force: true });
+      rmSync(pilotHome, { recursive: true, force: true });
     },
   };
 }
@@ -133,7 +133,7 @@ test("WIRING runtime: createLocalGateway can run a turn end-to-end with __testMo
     const { model, lastRequest } = makeRecordingModel();
     const gateway = createLocalGateway({
       projectRoot: env.projectRoot,
-      politHome: env.politHome,
+      pilotHome: env.pilotHome,
       env: scrubProcessEnv(),
       __testModelFactory: () => model,
     });
@@ -179,7 +179,7 @@ test("WIRING runtime: respondElicitation returns delivered=false for an unknown 
     const { model } = makeRecordingModel();
     const gateway = createLocalGateway({
       projectRoot: env.projectRoot,
-      politHome: env.politHome,
+      pilotHome: env.pilotHome,
       env: scrubProcessEnv(),
       __testModelFactory: () => model,
     });

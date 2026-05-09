@@ -1,7 +1,7 @@
 import type { PermissionMode } from "../../../../src/permission/index.js";
-import type { PolitDeckToolErrorCode } from "../../../../src/tool/index.js";
+import type { PilotDeckToolErrorCode } from "../../../../src/tool/index.js";
 
-export type PolitDeckToolParityStatus =
+export type PilotDeckToolParityStatus =
   | "must_match"
   | "intentional_difference"
   | "deferred"
@@ -13,17 +13,17 @@ export type LegacyBehaviorSource = {
   summary: string;
 };
 
-export type PolitDeckToolBehaviorScenario = {
+export type PilotDeckToolBehaviorScenario = {
   name: string;
   legacyToolName: string;
-  politdeckToolName: string;
+  pilotdeckToolName: string;
   input: unknown;
   permissionMode: PermissionMode;
-  parity: PolitDeckToolParityStatus;
+  parity: PilotDeckToolParityStatus;
   source: LegacyBehaviorSource[];
   expectedDecision?: "allow" | "deny" | "ask" | "cancel";
   expectedResultType?: "success" | "error";
-  expectedErrorCode?: PolitDeckToolErrorCode;
+  expectedErrorCode?: PilotDeckToolErrorCode;
   expectedContentIncludes?: string[];
   expectedData?: unknown;
   intentionalDifferenceReason?: string;
@@ -31,10 +31,10 @@ export type PolitDeckToolBehaviorScenario = {
   notes?: string;
 };
 
-export type PolitDeckIntentionalDifference = {
+export type PilotDeckIntentionalDifference = {
   id: string;
   legacyBehavior: string;
-  politdeckBehavior: string;
+  pilotdeckBehavior: string;
   reason: string;
   risk: "lower" | "same" | "higher";
   reviewRequiredBeforeRelease: boolean;

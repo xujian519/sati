@@ -7,7 +7,7 @@
 测试文件统一维护在项目根目录下：
 
 ```text
-/Users/gucc1/Codes/work/modelbest/PolitDeck/tests/
+/Users/gucc1/Codes/work/modelbest/PilotDeck/tests/
 ```
 
 当前组织：
@@ -42,7 +42,7 @@ tests/
 
 覆盖：
 
-- 能从 `politdeck.yaml` fixture 中抽取并解析 `model` 配置段。
+- 能从 `pilotdeck.yaml` fixture 中抽取并解析 `model` 配置段。
 - 支持 `${ENV_NAME}` API key 引用。
 - 环境变量缺失时报错。
 - provider 缺失时报错。
@@ -94,14 +94,14 @@ tests/
 - usage 事件。
 - stream error。
 
-真实 API 测试集中在 `tests/model/e2e/`。`real-model-request.test.ts` 只有在 `POLITDECK_RUN_REAL_MODEL_E2E=1` 时运行，并从当前 PolitHome 配置读取 `url`、API key 和 model id，避免普通单元测试依赖外部网络和费用。
+真实 API 测试集中在 `tests/model/e2e/`。`real-model-request.test.ts` 只有在 `PILOTDECK_RUN_REAL_MODEL_E2E=1` 时运行，并从当前 PilotHome 配置读取 `url`、API key 和 model id，避免普通单元测试依赖外部网络和费用。
 
 ### Capabilities 测试
 
 覆盖：
 
 - adapter 默认 capabilities 正确。
-- `politdeck.yaml` 中 model 级别 capabilities 可覆盖默认值。
+- `pilotdeck.yaml` 中 model 级别 capabilities 可覆盖默认值。
 - 同一 provider 下不同 model 可以有不同 capabilities。
 - agent loop 只依赖选定 model 的 capabilities，不依赖 provider 名称。
 - multimodal input list 和限制项会影响请求构造和不支持输入的拒绝逻辑。
@@ -221,8 +221,8 @@ model:
 模型模块单元测试不应：
 
 - 依赖真实 OAuth。
-- 依赖真实用户主目录下的 `~/.politdeck` 配置。
-- 读取 `~/.politdeck/politdeck.yaml` 之外的散落配置。
+- 依赖真实用户主目录下的 `~/.pilotdeck` 配置。
+- 读取 `~/.pilotdeck/pilotdeck.yaml` 之外的散落配置。
 - 把 Anthropic/OpenAI SDK 类型暴露给 agent loop 测试。
 
 除响应解析、流式解析和 provider 错误归一化之外，模型模块单元测试不应调用真实模型 API。真实网络集成测试作为单独测试套件维护，不应成为默认单元测试的一部分。

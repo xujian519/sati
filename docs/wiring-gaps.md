@@ -1,4 +1,4 @@
-# PolitDeck Wiring Gaps（截止 2026-05-09）
+# PilotDeck Wiring Gaps（截止 2026-05-09）
 
 每条 feature 都有完整 implementation + 单元测试，但 **生产入口
 `createLocalGateway()` / `AgentLoop.createToolContext()` 没把它们焊接起来**，
@@ -13,7 +13,7 @@ fail 数 = wiring gap 数。
 
 | Feature | 焊接位置 | 验证手段 |
 |---|---|---|
-| A1 worktree lookup | `src/polit/paths.ts` 调 `findCanonicalProjectRoot` | grep |
+| A1 worktree lookup | `src/pilot/paths.ts` 调 `findCanonicalProjectRoot` | grep |
 | B2 `web_fetch` 工具 | `createBuiltinRegistry()` 默认注册 | dynamic |
 | B3 MCP 静态 instructions | `PromptAssembler.assemble` 调 `extension.listMcpInstructions()` | grep |
 | C2 subagent fork API | `AgentLoop.createToolContext` 设 `subagent: this.buildSubagentForkApi(...)` | grep |
@@ -44,9 +44,9 @@ fail 数 = wiring gap 数。
 
 | ID | 缺什么 | 实际症状 | 修法 |
 |---|---|---|---|
-| **C1** MCP runtime | `McpRuntime` / `createMcpToolDefinitionsFromRuntime` 从未在生产路径调用 | `politdeck.yaml` 配的 mcp servers 完全没起 | `createLocalGateway` 按 config 启动 `McpRuntime`、`await createMcpToolDefinitionsFromRuntime` 后 register 进 ToolRegistry |
+| **C1** MCP runtime | `McpRuntime` / `createMcpToolDefinitionsFromRuntime` 从未在生产路径调用 | `pilotdeck.yaml` 配的 mcp servers 完全没起 | `createLocalGateway` 按 config 启动 `McpRuntime`、`await createMcpToolDefinitionsFromRuntime` 后 register 进 ToolRegistry |
 | **C3** sidechain transcript hooks | `createLocalGateway` 没传 `subagentTranscript:` 进 deps | 子 agent fork 跑得了但 sidechain `<sub>.jsonl` 不会写、parent transcript 也没 `subagent_started/_completed` 标记 | 用 `JsonlTranscriptWriter.recordSubagentStarted/_Completed` + `forSubagent` 织 hooks，传到 `dependencies.subagentTranscript` |
-| **C4.sink** file history sink | `AgentLoop.createToolContext` 没设 `fileHistory:` | `edit_file` / `write_file` 写文件**不**生成 backup，rewind 失效 | 在 deps 加 `fileHistory: PolitDeckToolFileHistorySink`，loop 透传 |
+| **C4.sink** file history sink | `AgentLoop.createToolContext` 没设 `fileHistory:` | `edit_file` / `write_file` 写文件**不**生成 backup，rewind 失效 | 在 deps 加 `fileHistory: PilotDeckToolFileHistorySink`，loop 透传 |
 | **C4.id** `messageId` | 同上没设 | 即便接了 sink，trackEdit 没法分组 | loop 传 turnId fallback |
 | **C5** background task runtime | `BackgroundTaskRuntime` 从未实例化、`task_*` tools 没注册 | bash run_in_background → unsupported tool | `new BackgroundTaskRuntime()` + `createBuiltinRegistry({ backgroundTasks: { runtime } })` |
 
