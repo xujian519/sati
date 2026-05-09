@@ -25,6 +25,19 @@ import type {
   ModelRuntime,
 } from "../../../src/model/index.js";
 
+/**
+ * Strip env-based config overrides (e.g. `POLIT_AGENT_MODEL`) from
+ * `process.env` so the synthetic project YAML written by `makeProjectRoot`
+ * isn't shadowed by the developer's outer-shell exports. Without this, an
+ * outer `POLIT_AGENT_MODEL=other/model` wins over `agent.model` in the test
+ * fixture and `loadPolitConfig` rejects with `unknown provider …`.
+ */
+function scrubProcessEnv(): Record<string, string | undefined> {
+  const env = { ...process.env };
+  delete env.POLIT_AGENT_MODEL;
+  return env;
+}
+
 function makeProjectRoot(): { projectRoot: string; politHome: string; cleanup: () => void } {
   const projectRoot = mkdtempSync(path.join(tmpdir(), "politdeck-wiring-runtime-"));
   const politHome = mkdtempSync(path.join(tmpdir(), "politdeck-wiring-home-"));
@@ -121,6 +134,7 @@ test("WIRING runtime: createLocalGateway can run a turn end-to-end with __testMo
     const gateway = createLocalGateway({
       projectRoot: env.projectRoot,
       politHome: env.politHome,
+      env: scrubProcessEnv(),
       __testModelFactory: () => model,
     });
 
@@ -166,6 +180,7 @@ test("WIRING runtime: respondElicitation returns delivered=false for an unknown 
     const gateway = createLocalGateway({
       projectRoot: env.projectRoot,
       politHome: env.politHome,
+      env: scrubProcessEnv(),
       __testModelFactory: () => model,
     });
     const result = await gateway.respondElicitation({
