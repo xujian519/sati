@@ -1,5 +1,5 @@
 import { readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { getPolitProjectChatDir } from "../../polit/index.js";
 import { readSessionLite, type SessionLiteFile } from "./SessionLiteReader.js";
 
@@ -125,4 +125,97 @@ function unescapeJsonString(value: string): string {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[\\^$*+?.()|[\]{}]/g, "\\$&");
+}
+
+/** Options for listing sessions across all known projects. */
+export type ListAllSessionsOptions = {
+  politHome: string;
+  limit?: number;
+  offset?: number;
+};
+
+/**
+ * List sessions across **all** projects under `{politHome}/projects/`. Each
+ * project directory is scanned for `.jsonl` files in its `chats/` subfolder.
+ * Results are sorted by lastModified descending (most-recent first), then
+ * paginated via `limit` / `offset`.
+ */
+export async function listAllSessions(options: ListAllSessionsOptions): Promise<SessionInfo[]> {
+  const projectsDir = resolve(options.politHome, "projects");
+  let projectIds: string[];
+  try {
+    projectIds = await readdir(projectsDir);
+  } catch {
+    return [];
+  }
+
+  const all: SessionInfo[] = [];
+  for (const projectId of projectIds) {
+    const chatDir = join(projectsDir, projectId, "chats");
+    let names: string[];
+    try {
+      names = await readdir(chatDir);
+    } catch {
+      continue;
+    }
+
+    for (const name of names) {
+      if (!name.endsWith(".jsonl")) continue;
+      const lite = await readSessionLite(join(chatDir, name));
+      if (!lite) continue;
+      const info = parseSessionInfoFromLite(name.slice(0, -".jsonl".length), lite);
+      if (info) {
+        info.cwd = projectId;
+        all.push(info);
+      }
+    }
+  }
+
+  all.sort((left, right) => right.lastModified - left.lastModified);
+  const offset = Math.max(0, options.offset ?? 0);
+  const limit = options.limit ?? all.length;
+  return all.slice(offset, limit === 0 ? undefined : offset + limit);
+}
+
+/** Options for title-based session search. */
+export type SearchSessionsByTitleOptions = {
+  projectRoot: string;
+  politHome: string;
+  query: string;
+  limit?: number;
+};
+
+/**
+ * Search sessions within a project by matching `query` (case-insensitive
+ * substring) against `customTitle`, `aiTitle`, and `firstPrompt`. Returns
+ * results sorted by lastModified descending.
+ */
+export async function searchSessionsByTitle(options: SearchSessionsByTitleOptions): Promise<SessionInfo[]> {
+  const chatDir = getPolitProjectChatDir(options.projectRoot, options.politHome);
+  let names: string[];
+  try {
+    names = await readdir(chatDir);
+  } catch {
+    return [];
+  }
+
+  const needle = options.query.toLowerCase();
+  const results: SessionInfo[] = [];
+  for (const name of names) {
+    if (!name.endsWith(".jsonl")) continue;
+    const lite = await readSessionLite(join(chatDir, name));
+    if (!lite) continue;
+    const info = parseSessionInfoFromLite(name.slice(0, -".jsonl".length), lite, options.projectRoot);
+    if (!info) continue;
+    const haystack = [info.customTitle, info.aiTitle, info.firstPrompt]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (haystack.includes(needle)) {
+      results.push(info);
+    }
+  }
+
+  results.sort((left, right) => right.lastModified - left.lastModified);
+  return options.limit ? results.slice(0, options.limit) : results;
 }

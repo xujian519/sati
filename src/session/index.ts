@@ -4,11 +4,20 @@ export {
   type AgentProjectSessionStorageOptions,
 } from "./storage/ProjectSessionStorage.js";
 export {
+  listAllSessions,
   listProjectSessions,
   parseSessionInfoFromLite,
+  searchSessionsByTitle,
+  type ListAllSessionsOptions,
   type ListProjectSessionsOptions,
+  type SearchSessionsByTitleOptions,
   type SessionInfo,
 } from "./storage/SessionList.js";
+export {
+  buildConversationChain,
+  type TranscriptChainNode,
+  type TranscriptChainResult,
+} from "./transcript/TranscriptChain.js";
 export { readSessionLite, type SessionLiteFile } from "./storage/SessionLiteReader.js";
 export { SessionMetadataStore, mergeMetadata, type SessionMetadataStoreOptions } from "./metadata/SessionMetadataStore.js";
 export { resumeAgentSession, type ResumeAgentSessionOptions, type ResumeAgentSessionResult } from "./resume/resumeAgentSession.js";

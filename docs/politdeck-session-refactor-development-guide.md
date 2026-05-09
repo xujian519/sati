@@ -99,13 +99,20 @@ src/context/
 | project session listing | `src/session/storage/SessionList.ts` | `compare` skeleton | 支持 project scope、mtime sort、limit/offset |
 | project path foundation | `src/polit/paths.ts` | `compare` partial | `~/.politdeck/projects/<projectId>/chats` |
 
+### 实施进度（2026-05-09）
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| parentUuid chain | ✅ resolved | `src/session/transcript/TranscriptChain.ts` — `buildConversationChain()` builds DAG, picks longest root→leaf path, appends orphans. Writer 已写 `entryId` / `parentEntryId` |
+| compact boundary aware resume | ✅ resolved | `TranscriptReplay` `findLastCompactBoundaryIndex()` + replay 切片；Phase 1.5 `control_boundary` schema |
+| metadata tail re-append | ✅ resolved | `SessionMetadataStore.reappendTail()` — 在 transcript tail 追加完整 metadata snapshot 供 lite reader 读 |
+| resume restore metadata | ✅ resolved | `resumeAgentSession()` 返回 `metadata` + `SessionMetadataStore.restoreFromReplay()` 从 replay 种入内存 |
+| listAllSessions | ✅ resolved | `listAllSessions({ politHome })` — 扫 `{politHome}/projects/*/chats/*.jsonl` |
+| searchSessionsByTitle | ✅ resolved | `searchSessionsByTitle({ projectRoot, politHome, query })` — case-insensitive substring match on customTitle / aiTitle / firstPrompt |
+
 当前还没有：
 
-- parentUuid chain。
-- compact boundary aware resume。
 - sidechain / subagent transcript。
-- session metadata tail re-append。
-- full session search。
 - file history / attribution / content replacement restore。
 - remote hydration。
 - worktree-aware lookup。
@@ -538,11 +545,11 @@ listSessions({ projectRoot, limit, offset })
 | resume main messages | yes | replay state | `compare` skeleton |
 | malformed line diagnostics | yes | rich diagnostics | `compare` partial |
 | incomplete turn handling | yes | recoverable diagnostics | `compare` partial |
-| parentUuid chain | no | chain reader/writer | `deferred` |
-| parallel tool result recovery | no | chain recovery | `deferred` |
-| compact boundary | skeleton only | context-aware resume | `deferred` |
-| metadata title/tag | partial | metadata store | `compare` skeleton |
-| session list/search | partial | lite reader/listing | `compare` skeleton for project listing; search deferred |
+| parentUuid chain | yes | chain reader (`buildConversationChain`) | `compare` |
+| parallel tool result recovery | partial (orphan append) | chain recovery | `compare` partial — orphans appended at chain tail |
+| compact boundary | yes | `findLastCompactBoundaryIndex` + replay slicing | `compare` |
+| metadata title/tag | yes | metadata store + tail re-append + resume restore | `compare` |
+| session list/search | yes | `listProjectSessions` + `listAllSessions` + `searchSessionsByTitle` | `compare` |
 | sidechain/subagent transcript | no | sidechain store | `deferred` |
 | remote hydration | no | remote adapter | `not_applicable` first phase |
 | activity keepalive | no | remote activity | `deferred` |
@@ -561,12 +568,12 @@ listSessions({ projectRoot, limit, offset })
 
 | ID | Behavior | Phase | Release gate |
 | --- | --- | --- | --- |
-| `session-parent-chain` | UUID parent chain and leaf selection | Phase 2 | reliable resume |
-| `session-parallel-tool-recovery` | Recover orphaned parallel tool results | Phase 2 | parallel tool calls |
-| `session-compact-boundary` | Compact boundary aware replay | Phase 2 | long session release |
-| `session-metadata-store` | title/tag/PR/mode/worktree metadata | Phase 3 | session list/resume UI |
-| `session-listing` | list/search sessions with pagination | Phase 4 | CLI/SDK session browser |
-| `session-lite-reader` | head/tail bounded reader | Phase 4 | large transcript support |
+| `session-parent-chain` | UUID parent chain and leaf selection | Phase 2 | ✅ resolved — `TranscriptChain.ts` `buildConversationChain()` |
+| `session-parallel-tool-recovery` | Recover orphaned parallel tool results | Phase 2 | ✅ resolved (partial) — orphans appended to chain tail |
+| `session-compact-boundary` | Compact boundary aware replay | Phase 2 | ✅ resolved — Phase 1.5 `control_boundary` + `findLastCompactBoundaryIndex` |
+| `session-metadata-store` | title/tag/PR/mode/worktree metadata | Phase 3 | ✅ resolved — `SessionMetadataStore` + `restoreFromReplay` + `reappendTail` |
+| `session-listing` | list/search sessions with pagination | Phase 4 | ✅ resolved — `listProjectSessions` + `listAllSessions` + `searchSessionsByTitle` |
+| `session-lite-reader` | head/tail bounded reader | Phase 4 | ✅ resolved (existed) — `readSessionLite()` 64KB head/tail |
 | `session-worktree-lookup` | same repo/worktree session lookup | Phase 4 | worktree release |
 | `session-file-history-restore` | file history snapshots | Phase 5 | edit history UI |
 | `session-attribution-restore` | attribution snapshots | Phase 5 | attribution feature |
