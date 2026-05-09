@@ -39,6 +39,7 @@ export type {
   PolitDeckToolProgressSink,
   PolitDeckToolResultContent,
   PolitDeckToolRuntimeContext,
+  PolitDeckSubagentForkApi,
 } from "./protocol/types.js";
 export { ToolRegistry } from "./registry/ToolRegistry.js";
 export { createBuiltinRegistry, type CreateBuiltinRegistryOptions } from "./registry/createBuiltinRegistry.js";

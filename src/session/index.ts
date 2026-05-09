@@ -22,18 +22,30 @@ export { readSessionLite, type SessionLiteFile } from "./storage/SessionLiteRead
 export { SessionMetadataStore, mergeMetadata, type SessionMetadataStoreOptions } from "./metadata/SessionMetadataStore.js";
 export { resumeAgentSession, type ResumeAgentSessionOptions, type ResumeAgentSessionResult } from "./resume/resumeAgentSession.js";
 export { InMemoryTranscriptWriter, type InMemoryTranscriptEntry } from "./transcript/InMemoryTranscriptWriter.js";
-export { JsonlTranscriptWriter, type JsonlTranscriptWriterOptions } from "./transcript/JsonlTranscriptWriter.js";
+export {
+  JsonlTranscriptWriter,
+  type JsonlTranscriptWriterOptions,
+  type SubagentTranscriptHandle,
+} from "./transcript/JsonlTranscriptWriter.js";
 export { readTranscript, type AgentTranscriptReadResult } from "./transcript/TranscriptReader.js";
 export { replayTranscriptEntries, type AgentTranscriptReplayResult } from "./transcript/TranscriptReplay.js";
+export { replaySubagentTranscript } from "./transcript/replaySubagentTranscript.js";
 export type {
   AgentAcceptedInputTranscriptEntry,
   AgentControlBoundaryTranscriptEntry,
   AgentMessageTranscriptEntry,
+  AgentSubagentCompletedTranscriptEntry,
+  AgentSubagentStartedTranscriptEntry,
   AgentTranscriptDiagnostic,
   AgentTranscriptEntry,
   AgentTranscriptEntryType,
   AgentTurnResultTranscriptEntry,
   SessionMetadataValue,
+} from "./transcript/TranscriptEntry.js";
+export {
+  SUBAGENT_PROMPT_PREVIEW_BYTES,
+  SUBAGENT_SUMMARY_PREVIEW_BYTES,
+  truncatePreview,
 } from "./transcript/TranscriptEntry.js";
 export type { AgentTranscriptWriter } from "./transcript/TranscriptWriter.js";
 export {

@@ -20,6 +20,12 @@ export type AgentProjectSessionStorage = {
    * `trackEdit`.
    */
   fileHistoryDir: string;
+  /**
+   * Per-session directory for subagent sidechain transcripts (C3 §6.3).
+   * Each forked subagent gets its own `<subagentId>.jsonl` here.
+   */
+  subagentsDir: string;
+  subagentTranscriptPath(subagentId: string): string;
   transcript: JsonlTranscriptWriter;
 };
 
@@ -30,14 +36,20 @@ export function createAgentProjectSessionStorage(
   const transcriptPath = resolve(chatDir, `${options.sessionId}.jsonl`);
   const toolResultsDir = resolve(chatDir, options.sessionId, "tool-results");
   const fileHistoryDir = resolve(chatDir, options.sessionId, "file-history");
+  const subagentsDir = resolve(chatDir, options.sessionId, "subagents");
+  const subagentTranscriptPath = (subagentId: string): string =>
+    resolve(subagentsDir, `${subagentId}.jsonl`);
   return {
     chatDir,
     transcriptPath,
     toolResultsDir,
     fileHistoryDir,
+    subagentsDir,
+    subagentTranscriptPath,
     transcript: new JsonlTranscriptWriter({
       path: transcriptPath,
       now: options.now,
+      subagentTranscriptPath,
     }),
   };
 }

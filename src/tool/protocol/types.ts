@@ -2,6 +2,7 @@ import type {
   CanonicalModelEvent,
   CanonicalModelRequest,
   CanonicalToolCall,
+  CanonicalUsage,
 } from "../../model/index.js";
 import type {
   PermissionContext,
@@ -31,6 +32,35 @@ export type PolitDeckToolFileHistorySink = {
  */
 export type PolitDeckToolModelClient = {
   stream(request: CanonicalModelRequest, signal?: AbortSignal): AsyncIterable<CanonicalModelEvent>;
+};
+
+/**
+ * Subagent fork API exposed to the `agent` tool by the AgentLoop. Lives in
+ * the tool protocol layer so the tool implementation doesn't reach into
+ * `agent/sub/*` directly (which would invert the dependency).
+ *
+ * `depth` reports the *current* subagent fork depth (0 = top-level agent;
+ * each `agent` invocation hands the next-level loop `depth + 1`).
+ * `maxSubagentDepth` is the cap (default 1) — the `agent` tool raises
+ * `subagent_depth_exceeded` when `depth >= maxSubagentDepth`.
+ */
+export type PolitDeckSubagentForkApi = {
+  depth: number;
+  maxSubagentDepth: number;
+  listDefinitions(): { id: string; description: string }[];
+  isAllowedDefinition(id: string): boolean;
+  fork(args: {
+    definitionId: string;
+    directive: string;
+    subagentId: string;
+    abortSignal?: AbortSignal;
+  }): Promise<{
+    markdown: string;
+    usage: CanonicalUsage;
+    turns: number;
+    durationMs: number;
+    parsed?: Record<string, string>;
+  }>;
 };
 
 export type PolitDeckToolKind =
@@ -124,6 +154,20 @@ export type PolitDeckToolRuntimeContext = {
    * tools fall back to `turnId` so trackEdit still runs.
    */
   messageId?: string;
+  /**
+   * Subagent fork depth (C2 §6.2 / S?). Top-level agent runs at depth 0;
+   * subagent forks pass `depth + 1`. The `agent` tool throws
+   * `subagent_depth_exceeded` when invoked at `depth >= maxSubagentDepth`
+   * (default 1, blocking nested forks). Absent → treated as 0.
+   */
+  subagentDepth?: number;
+  /**
+   * Subagent fork API (C2 §6.2). Wired in by the AgentLoop when the parent
+   * supports forking; absent for stand-alone tool runtimes (tests). When
+   * absent, the `agent` tool falls back to the legacy single-shot model
+   * call so unit tests still work.
+   */
+  subagent?: PolitDeckSubagentForkApi;
 };
 
 export type PolitDeckToolDefinition<Input = unknown, Output = unknown> = {

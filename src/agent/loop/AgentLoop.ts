@@ -7,7 +7,15 @@ import {
   type CanonicalModelRequest,
   type CanonicalUsage,
 } from "../../model/index.js";
-import type { PolitDeckToolResult, PolitDeckToolRuntimeContext } from "../../tool/index.js";
+import type {
+  PolitDeckSubagentForkApi,
+  PolitDeckToolResult,
+  PolitDeckToolRuntimeContext,
+} from "../../tool/index.js";
+import {
+  SUBAGENT_DEFINITIONS,
+  getSubagentDefinition,
+} from "../sub/builtinSubagentTypes.js";
 import { agentError } from "../protocol/errors.js";
 import type { AgentEvent } from "../protocol/events.js";
 import type { AgentPermissionDenial, AgentTurnResult } from "../protocol/result.js";
@@ -244,7 +252,10 @@ export class AgentLoop {
       yield { type: "tool_calls_detected", sessionId: input.sessionId, turnId: input.turnId, calls: toolCalls };
       let results: PolitDeckToolResult[];
       try {
-        results = await this.dependencies.tools.scheduler.executeAll(toolCalls, this.createToolContext(input));
+        results = await this.dependencies.tools.scheduler.executeAll(
+          toolCalls,
+          this.createToolContext(input, messages),
+        );
       } catch (error) {
         results = toolCalls.map((call) =>
           createMissingToolResult(call, this.now, error instanceof Error ? error.message : String(error)),
@@ -372,7 +383,10 @@ export class AgentLoop {
     };
   }
 
-  private createToolContext(input: AgentLoopInput): PolitDeckToolRuntimeContext {
+  private createToolContext(
+    input: AgentLoopInput,
+    messages: CanonicalMessage[],
+  ): PolitDeckToolRuntimeContext {
     return {
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -384,10 +398,104 @@ export class AgentLoop {
       now: this.now,
       env: this.config.env,
       maxResultBytes: this.config.maxResultBytes,
-      // Forwarded so tools that need secondary model calls (e.g. `agent`
-      // subagents, `web_fetch` extraction) can pull a model client without
-      // wiring one through dependency injection.
       model: this.dependencies.model,
+      subagentDepth: this.config.subagentDepth ?? 0,
+      subagent: this.buildSubagentForkApi(input, messages),
+    };
+  }
+
+  private buildSubagentForkApi(
+    input: AgentLoopInput,
+    messages: CanonicalMessage[],
+  ): PolitDeckSubagentForkApi {
+    const depth = this.config.subagentDepth ?? 0;
+    const maxDepth = this.config.maxSubagentDepth ?? 1;
+    return {
+      depth,
+      maxSubagentDepth: maxDepth,
+      listDefinitions: () =>
+        Object.values(SUBAGENT_DEFINITIONS).map((d) => ({
+          id: d.id,
+          description: d.description,
+        })),
+      isAllowedDefinition: (id: string) => getSubagentDefinition(id) !== undefined,
+      fork: async ({ definitionId, directive, subagentId, abortSignal }) => {
+        // Defer SubAgentSession import to avoid the runtime cycle (sub → loop → sub).
+        const { SubAgentSession } = await import("../sub/SubAgentSession.js");
+        const def = getSubagentDefinition(definitionId);
+        if (!def) throw new Error(`Unknown subagent type: ${definitionId}`);
+
+        const subagentSessionId = `${this.config.cwd}::sub::${subagentId}`;
+        const transcriptHooks = this.dependencies.subagentTranscript;
+        const sidechain = transcriptHooks?.subagentTranscriptResolver?.(subagentId);
+        const transcriptRelativePath = sidechain?.transcriptRelativePath ?? "";
+
+        await transcriptHooks?.recordSubagentStarted?.({
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          subagentId,
+          subagentType: def.id,
+          prompt: directive,
+          transcriptRelativePath,
+          subagentSessionId,
+        });
+
+        const subSession = new SubAgentSession({
+          definition: def,
+          directive,
+          parentMessages: messages,
+          parentConfig: { ...this.config, subagentDepth: depth + 1 },
+          parentDependencies: this.dependencies,
+          subagentSessionId,
+          subagentId,
+          abortSignal,
+          sidechainTranscript: sidechain
+            ? {
+                recordAcceptedInput: sidechain.recordAcceptedInput.bind(sidechain),
+                recordDurableMessage: sidechain.recordDurableMessage.bind(sidechain),
+              }
+            : undefined,
+        });
+
+        let report;
+        let errored = false;
+        try {
+          report = await subSession.run();
+        } catch (err) {
+          errored = true;
+          await transcriptHooks?.recordSubagentCompleted?.({
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            subagentId,
+            subagentType: def.id,
+            summary: err instanceof Error ? err.message : String(err),
+            turns: 0,
+            durationMs: 0,
+            errored: true,
+          });
+          throw err;
+        }
+
+        await transcriptHooks?.recordSubagentCompleted?.({
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          subagentId,
+          subagentType: def.id,
+          summary: report.markdown,
+          usage: report.usage,
+          turns: report.turns,
+          durationMs: report.durationMs,
+          errored,
+        });
+
+        return {
+          markdown: report.markdown,
+          usage: report.usage,
+          turns: report.turns,
+          durationMs: report.durationMs,
+          parsed: report.parsed as unknown as Record<string, string> | undefined,
+        };
+      },
     };
   }
 

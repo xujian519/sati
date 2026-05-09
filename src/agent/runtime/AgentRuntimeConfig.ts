@@ -19,4 +19,15 @@ export type AgentRuntimeConfig = {
   env?: NodeJS.ProcessEnv;
   maxResultBytes?: number;
   metadata?: Record<string, unknown>;
+  /**
+   * Subagent fork depth — incremented on each level of `agent` tool fork.
+   * Top-level agent runs at depth 0; `agent` tool refuses to spawn another
+   * subagent once `subagentDepth >= maxSubagentDepth`. Default 0.
+   */
+  subagentDepth?: number;
+  /**
+   * Cap on `subagentDepth`. Defaults to 1 (one level of forking allowed,
+   * but no nested forks). Increase only when intentional.
+   */
+  maxSubagentDepth?: number;
 };

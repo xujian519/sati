@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
 import type { CanonicalModelRequest, CanonicalUsage } from "../../model/index.js";
 import type { PermissionResult } from "../../permission/index.js";
 import { PolitDeckToolRuntimeError } from "../protocol/errors.js";
 import type {
+  PolitDeckSubagentForkApi,
   PolitDeckToolDefinition,
   PolitDeckToolExecutionOutput,
   PolitDeckToolModelClient,
@@ -9,22 +11,30 @@ import type {
 } from "../protocol/types.js";
 
 /**
- * Built-in subagent presets. Each preset locks the system prompt and short
- * description; the caller specifies a higher-level "what to do" via the
- * `prompt` field of the tool input.
+ * `agent` builtin tool — dispatches a subtask to a subagent.
  *
- * P0 design (matches `docs/politdeck-tool-refactor-development-guide.md` §1.6
- * P0): subagent runs a **single synchronous model call**, no nested tool loop.
- * That keeps the architecture hatch (model client in
- * `PolitDeckToolRuntimeContext`) small and avoids dragging the AgentLoop
- * recursion / fork lifecycle into this iteration. A future iteration can wrap
- * this with a real fork loop — see deferred gate `agent-subagent-fork-full`.
+ * **Two execution modes**:
+ *
+ *   1. Full fork (C2 §6.2)  — when `context.subagent` is wired (i.e. the
+ *      caller is the AgentLoop), we run a real subagent with its own
+ *      `AgentLoop`, scoped tool registry, and 5-field structured report.
+ *
+ *   2. Single-shot legacy  — when `context.subagent` is absent (stand-alone
+ *      tool runtime / unit tests), we fall back to one synchronous model
+ *      call against the simple `BUILTIN_SUBAGENTS` presets so existing tests
+ *      stay green.
+ *
+ * Mirrors legacy `third-party/claude-code-main/src/tools/AgentTool/AgentTool.ts`
+ * input schema (description / prompt / subagent_type) and the 5-field
+ * `Scope/Result/Key files/Files changed/Issues` output contract.
  */
+
 export type AgentSubagentType =
   | "general_purpose"
+  | "general-purpose"
   | "plan"
-  | "verify"
-  | "explore";
+  | "explore"
+  | "verify";
 
 export type AgentSubagentDefinition = {
   type: AgentSubagentType;
@@ -32,7 +42,8 @@ export type AgentSubagentDefinition = {
   systemPrompt: string;
 };
 
-export const BUILTIN_SUBAGENTS: Record<AgentSubagentType, AgentSubagentDefinition> = {
+/** Legacy P0 single-shot presets. Used only in the fallback path. */
+export const BUILTIN_SUBAGENTS: Record<string, AgentSubagentDefinition> = {
   general_purpose: {
     type: "general_purpose",
     description:
@@ -66,32 +77,32 @@ export const BUILTIN_SUBAGENTS: Record<AgentSubagentType, AgentSubagentDefinitio
 export type AgentToolInput = {
   description: string;
   prompt: string;
-  subagentType?: AgentSubagentType;
+  subagent_type?: string;
+  /** @deprecated camelCase alias retained for backwards compatibility. */
+  subagentType?: string;
 };
 
 export type AgentToolOutput = {
-  subagentType: AgentSubagentType;
+  subagentType: string;
   description: string;
   text: string;
   usage?: CanonicalUsage;
+  turns?: number;
+  durationMs?: number;
+  parsed?: Record<string, string>;
 };
 
 export type CreateAgentToolOptions = {
   /**
-   * Override the model client used for subagent calls. Falls back to
-   * `context.model` (provided by AgentLoop). When neither is available the
-   * tool returns `unsupported_tool`.
+   * Override the model client for the *fallback* single-shot path. The full
+   * fork path uses `context.subagent.fork(...)` and ignores this option.
    */
   model?: PolitDeckToolModelClient;
-  /** Override which subagent presets are available. */
-  subagents?: Record<AgentSubagentType, AgentSubagentDefinition>;
-  /** Provider id forwarded to `stream()` for the subagent call. */
+  /** Override which fallback subagent presets are available. */
+  subagents?: Record<string, AgentSubagentDefinition>;
   provider?: string;
-  /** Model id forwarded to `stream()` for the subagent call. */
   model_?: string;
-  /** Subagent maxOutputTokens (default 4096). */
   maxOutputTokens?: number;
-  /** Subagent temperature (default 0). */
   temperature?: number;
 };
 
@@ -102,14 +113,13 @@ const DEFAULT_MODEL_FALLBACK = "moonshotai/kimi-k2.6";
 export function createAgentTool(
   options: CreateAgentToolOptions = {},
 ): PolitDeckToolDefinition<AgentToolInput, AgentToolOutput> {
-  const subagents = options.subagents ?? BUILTIN_SUBAGENTS;
-  const subagentTypes = Object.keys(subagents) as AgentSubagentType[];
+  const fallbackPresets = options.subagents ?? BUILTIN_SUBAGENTS;
 
   return {
     name: "agent",
     aliases: ["Agent", "Task"],
     description:
-      "Delegate a bounded research / planning / verification task to a built-in subagent. Returns the subagent's text answer.",
+      "Delegate a bounded subtask to a subagent. When invoked from the AgentLoop, runs a real subagent with its own tool loop; otherwise issues a single model call. Returns the subagent's structured report.",
     kind: "agent",
     inputSchema: {
       type: "object",
@@ -118,31 +128,43 @@ export function createAgentTool(
       properties: {
         description: {
           type: "string",
-          description: "Short label used in audit / progress (e.g. 'plan refactor').",
+          description: "Short label used in audit / progress (3-5 words).",
         },
         prompt: {
           type: "string",
-          description: "Detailed instructions for the subagent.",
+          description: "Detailed directive for the subagent (free-form text).",
+        },
+        subagent_type: {
+          type: "string",
+          description:
+            "Subagent preset id. Full-fork mode: 'general-purpose' | 'explore' | 'plan'. Fallback mode: 'general_purpose' | 'plan' | 'verify' | 'explore'.",
         },
         subagentType: {
           type: "string",
-          enum: subagentTypes,
-          description: `Which built-in subagent to use. Default: general_purpose. Available: ${subagentTypes.join(", ")}.`,
+          description: "Deprecated camelCase alias for subagent_type.",
         },
       },
     },
     maxResultBytes: 200_000,
-    isReadOnly: () => true,
-    isConcurrencySafe: () => true,
+    isReadOnly: () => false,
+    isConcurrencySafe: () => false,
     isOpenWorld: () => true,
     checkPermissions: async (): Promise<PermissionResult> => ({
       type: "ask",
-      reason: { type: "tool", toolName: "agent", message: "Subagent invocation requires permission." },
+      reason: {
+        type: "tool",
+        toolName: "agent",
+        message: "Subagent invocation requires permission.",
+      },
       request: {
         toolCallId: "",
         toolName: "agent",
         inputSummary: "subagent invocation",
-        reason: { type: "tool", toolName: "agent", message: "Subagent invocation requires permission." },
+        reason: {
+          type: "tool",
+          toolName: "agent",
+          message: "Subagent invocation requires permission.",
+        },
         options: [
           { id: "allow_once", label: "Allow subagent" },
           { id: "deny", label: "Deny" },
@@ -150,28 +172,30 @@ export function createAgentTool(
       },
     }),
     execute: async (input, context) => {
-      const subagentType = (input.subagentType ?? "general_purpose") as AgentSubagentType;
-      const subagent = subagents[subagentType];
-      if (!subagent) {
-        throw new PolitDeckToolRuntimeError(
-          "invalid_tool_input",
-          `Unknown subagent type "${subagentType}". Available: ${subagentTypes.join(", ")}.`,
-        );
-      }
+      const explicit = input.subagent_type ?? input.subagentType;
+      const directive = input.prompt;
 
-      const model = options.model ?? context.model;
-      if (!model) {
-        throw new PolitDeckToolRuntimeError(
-          "unsupported_tool",
-          "agent tool requires a model client. Configure dependencies.model on AgentRuntimeDependencies, or pass createAgentTool({ model }).",
-        );
+      // Full fork path (C2): preferred when AgentLoop wired the fork API.
+      if (context.subagent) {
+        const requestedType = explicit ?? "general-purpose";
+        return runFullFork({
+          input,
+          context,
+          requestedType,
+          directive,
+          fork: context.subagent,
+        });
       }
+      // Fallback path keeps the legacy `general_purpose` underscore default.
+      const requestedType = explicit ?? "general_purpose";
 
-      return runSubagent({
-        subagent,
+      return runFallback({
         input,
         context,
-        model,
+        requestedType,
+        directive,
+        presets: fallbackPresets,
+        model: options.model,
         provider: options.provider ?? DEFAULT_PROVIDER_FALLBACK,
         modelId: options.model_ ?? DEFAULT_MODEL_FALLBACK,
         maxOutputTokens: options.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
@@ -181,46 +205,130 @@ export function createAgentTool(
   };
 }
 
-type RunSubagentInput = {
-  subagent: AgentSubagentDefinition;
+async function runFullFork(args: {
   input: AgentToolInput;
   context: PolitDeckToolRuntimeContext;
-  model: PolitDeckToolModelClient;
+  requestedType: string;
+  directive: string;
+  fork: PolitDeckSubagentForkApi;
+}): Promise<PolitDeckToolExecutionOutput<AgentToolOutput>> {
+  const { input, context, requestedType, directive, fork } = args;
+
+  if (!fork.isAllowedDefinition(requestedType)) {
+    const allowed = fork.listDefinitions().map((d) => d.id).join(", ");
+    throw new PolitDeckToolRuntimeError(
+      "invalid_tool_input",
+      `Unknown subagent_type "${requestedType}". Available: ${allowed}.`,
+    );
+  }
+  const currentDepth = context.subagentDepth ?? fork.depth ?? 0;
+  if (currentDepth >= fork.maxSubagentDepth) {
+    throw new PolitDeckToolRuntimeError(
+      "tool_execution_failed",
+      `subagent_depth_exceeded (depth=${currentDepth}, max=${fork.maxSubagentDepth}); nested fork rejected.`,
+      { errorCode: "subagent_depth_exceeded" },
+    );
+  }
+  const subagentId = randomUUID();
+  const report = await fork.fork({
+    definitionId: requestedType,
+    directive,
+    subagentId,
+    abortSignal: context.abortSignal,
+  });
+  if (context.abortSignal?.aborted) {
+    throw new PolitDeckToolRuntimeError(
+      "tool_aborted",
+      "agent subagent aborted before completion.",
+    );
+  }
+  const output: AgentToolOutput = {
+    subagentType: requestedType,
+    description: input.description,
+    text: report.markdown,
+    usage: report.usage,
+    turns: report.turns,
+    durationMs: report.durationMs,
+    parsed: report.parsed,
+  };
+  return {
+    content: [
+      {
+        type: "text",
+        text: `[${requestedType}] ${input.description}\n\n${report.markdown}`,
+      },
+      { type: "json", value: output },
+    ],
+    data: output,
+    metadata: {
+      subagent: requestedType,
+      subagentId,
+      forkMode: "full",
+      turns: report.turns,
+      durationMs: report.durationMs,
+    },
+  };
+}
+
+async function runFallback(args: {
+  input: AgentToolInput;
+  context: PolitDeckToolRuntimeContext;
+  requestedType: string;
+  directive: string;
+  presets: Record<string, AgentSubagentDefinition>;
+  model?: PolitDeckToolModelClient;
   provider: string;
   modelId: string;
   maxOutputTokens: number;
   temperature: number;
-};
+}): Promise<PolitDeckToolExecutionOutput<AgentToolOutput>> {
+  const {
+    input,
+    context,
+    requestedType,
+    directive,
+    presets,
+    model: explicitModel,
+    provider,
+    modelId,
+    maxOutputTokens,
+    temperature,
+  } = args;
 
-async function runSubagent(
-  args: RunSubagentInput,
-): Promise<PolitDeckToolExecutionOutput<AgentToolOutput>> {
-  const { subagent, input, context, model, provider, modelId, maxOutputTokens, temperature } = args;
-
+  const preset = presets[requestedType];
+  if (!preset) {
+    throw new PolitDeckToolRuntimeError(
+      "invalid_tool_input",
+      `Unknown subagent_type "${requestedType}". Available: ${Object.keys(
+        presets,
+      ).join(", ")}.`,
+    );
+  }
+  const model = explicitModel ?? context.model;
+  if (!model) {
+    throw new PolitDeckToolRuntimeError(
+      "unsupported_tool",
+      "agent tool requires a model client. Configure dependencies.model on AgentRuntimeDependencies, pass createAgentTool({ model }), or wire context.subagent for full-fork mode.",
+    );
+  }
   const request: CanonicalModelRequest = {
     provider,
     model: modelId,
-    messages: [
-      {
-        role: "user",
-        content: [{ type: "text", text: input.prompt }],
-      },
-    ],
-    systemPrompt: subagent.systemPrompt,
+    messages: [{ role: "user", content: [{ type: "text", text: directive }] }],
+    systemPrompt: preset.systemPrompt,
     maxOutputTokens,
     temperature,
     stream: true,
-    metadata: {
-      subagent: subagent.type,
-      description: input.description,
-    },
+    metadata: { subagent: preset.type, description: input.description },
   };
-
   let text = "";
   let usage: CanonicalUsage | undefined;
   for await (const event of model.stream(request, context.abortSignal)) {
     if (context.abortSignal?.aborted) {
-      throw new PolitDeckToolRuntimeError("tool_aborted", "agent subagent aborted before completion.");
+      throw new PolitDeckToolRuntimeError(
+        "tool_aborted",
+        "agent subagent aborted before completion.",
+      );
     }
     switch (event.type) {
       case "text_delta":
@@ -239,29 +347,28 @@ async function runSubagent(
         break;
     }
   }
-
   const trimmed = text.trim();
   const output: AgentToolOutput = {
-    subagentType: subagent.type,
+    subagentType: requestedType,
     description: input.description,
     text: trimmed.length > 0 ? trimmed : "(empty subagent response)",
     usage,
   };
-
   return {
     content: [
       {
         type: "text",
-        text: `[${subagent.type}] ${input.description}\n\n${output.text}`,
+        text: `[${requestedType}] ${input.description}\n\n${output.text}`,
       },
       { type: "json", value: output },
     ],
     data: output,
     metadata: {
-      subagent: subagent.type,
+      subagent: requestedType,
+      forkMode: "fallback",
       provider,
       model: modelId,
-      promptBytes: Buffer.byteLength(input.prompt, "utf8"),
+      promptBytes: Buffer.byteLength(directive, "utf8"),
     },
   };
 }

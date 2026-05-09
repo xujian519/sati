@@ -1,20 +1,41 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, appendFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, relative } from "node:path";
 import type { CanonicalMessage } from "../../model/index.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
 import {
   classifyDurableMessageEntry,
+  truncatePreview,
+  SUBAGENT_PROMPT_PREVIEW_BYTES,
+  SUBAGENT_SUMMARY_PREVIEW_BYTES,
   type AgentControlBoundaryTranscriptEntry,
   type AgentMessageTranscriptEntry,
+  type AgentSubagentCompletedTranscriptEntry,
+  type AgentSubagentStartedTranscriptEntry,
   type AgentTranscriptEntry,
   type SessionMetadataValue,
 } from "./TranscriptEntry.js";
 import type { AgentTranscriptWriter } from "./TranscriptWriter.js";
 
+export type SubagentTranscriptHandle = {
+  /** UUID v4 of the subagent (matches sidechain filename). */
+  subagentId: string;
+  /** The sidechain writer (independent JSONL file). */
+  writer: JsonlTranscriptWriter;
+  /** Absolute path of the sidechain transcript. */
+  transcriptPath: string;
+};
+
 export type JsonlTranscriptWriterOptions = {
   path: string;
   now?: () => Date;
+  /**
+   * Optional resolver mapping a subagentId → absolute sidechain path. Wired
+   * by the parent session so {@link JsonlTranscriptWriter#forSubagent} can
+   * derive a sidechain writer without the caller computing paths. Defaults
+   * to `<dirname(path)>/<subagentId>.jsonl`.
+   */
+  subagentTranscriptPath?: (subagentId: string) => string;
 };
 
 export class JsonlTranscriptWriter implements AgentTranscriptWriter {
@@ -82,6 +103,91 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
     return this.writeChain;
   }
 
+  /**
+   * C3.S1 — record the parent-side `subagent_started` reference. The full
+   * directive lives in the sidechain transcript; we keep only a truncated
+   * preview to bound the parent transcript size.
+   */
+  async recordSubagentStarted(
+    sessionId: string,
+    turnId: string,
+    args: {
+      subagentId: string;
+      subagentType: string;
+      prompt: string;
+      transcriptRelativePath: string;
+      subagentSessionId?: string;
+    },
+  ): Promise<void> {
+    const { preview, truncated } = truncatePreview(args.prompt, SUBAGENT_PROMPT_PREVIEW_BYTES);
+    const entry: AgentSubagentStartedTranscriptEntry = {
+      type: "subagent_started",
+      ...this.baseEntry(sessionId, turnId),
+      subagentId: args.subagentId,
+      subagentType: args.subagentType,
+      promptPreview: preview,
+      promptTruncated: truncated,
+      transcriptRelativePath: args.transcriptRelativePath,
+      subagentSessionId: args.subagentSessionId,
+    };
+    return this.recordEntry(entry);
+  }
+
+  /** C3.S1 — record the parent-side `subagent_completed` reference. */
+  async recordSubagentCompleted(
+    sessionId: string,
+    turnId: string,
+    args: {
+      subagentId: string;
+      subagentType: string;
+      summary: string;
+      usage?: AgentSubagentCompletedTranscriptEntry["usage"];
+      turns: number;
+      durationMs: number;
+      errored?: boolean;
+    },
+  ): Promise<void> {
+    const { preview, truncated } = truncatePreview(args.summary, SUBAGENT_SUMMARY_PREVIEW_BYTES);
+    const entry: AgentSubagentCompletedTranscriptEntry = {
+      type: "subagent_completed",
+      ...this.baseEntry(sessionId, turnId),
+      subagentId: args.subagentId,
+      subagentType: args.subagentType,
+      summaryPreview: preview,
+      summaryTruncated: truncated,
+      usage: args.usage,
+      turns: args.turns,
+      durationMs: args.durationMs,
+      errored: args.errored,
+    };
+    return this.recordEntry(entry);
+  }
+
+  /**
+   * C3.S2 — derive a sidechain writer for a forked subagent. The new writer
+   * is independent (its own sequence counter, its own file path) so the
+   * subagent's turn-by-turn entries do not interleave with the parent.
+   */
+  forSubagent(subagentId: string, now?: () => Date): SubagentTranscriptHandle {
+    const path =
+      this.options.subagentTranscriptPath?.(subagentId) ??
+      defaultSubagentPath(this.options.path, subagentId);
+    const writer = new JsonlTranscriptWriter({ path, now: now ?? this.now });
+    return { subagentId, writer, transcriptPath: path };
+  }
+
+  /**
+   * Helper for emitting the relative path to the sidechain that goes into
+   * `subagent_started.transcriptRelativePath`. Computed against the parent
+   * transcript's directory.
+   */
+  relativeSubagentPath(subagentId: string): string {
+    const sidechain =
+      this.options.subagentTranscriptPath?.(subagentId) ??
+      defaultSubagentPath(this.options.path, subagentId);
+    return relative(dirname(this.options.path), sidechain);
+  }
+
   private baseEntry(
     sessionId: string,
     turnId: string,
@@ -95,4 +201,13 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
       parentEntryId: this.lastEntryId,
     };
   }
+}
+
+function defaultSubagentPath(parentPath: string, subagentId: string): string {
+  // Default layout: <parentPath dirname>/<parentBaseStem>/subagents/<subagentId>.jsonl
+  const dir = dirname(parentPath);
+  const stem = parentPath
+    .slice(dir.length + 1)
+    .replace(/\.jsonl$/i, "");
+  return `${dir}/${stem}/subagents/${subagentId}.jsonl`;
 }

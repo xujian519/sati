@@ -111,6 +111,12 @@ export function replayTranscriptEntries(entries: AgentTranscriptEntry[]): AgentT
       case "session_metadata":
         metadata = mergeMetadata(metadata, entry.metadata);
         break;
+      case "subagent_started":
+      case "subagent_completed":
+        // C3: lazy-load. The parent transcript replay does NOT expand
+        // sidechain content; consumers wanting subagent details call
+        // `replaySubagentTranscript(...)` explicitly.
+        break;
     }
   }
 

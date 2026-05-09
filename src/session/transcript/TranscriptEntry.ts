@@ -8,7 +8,9 @@ export type AgentTranscriptEntryType =
   | "durable_message"
   | "turn_result"
   | "control_boundary"
-  | "session_metadata";
+  | "session_metadata"
+  | "subagent_started"
+  | "subagent_completed";
 
 export type AgentTranscriptEntryBase = {
   type: AgentTranscriptEntryType;
@@ -103,12 +105,80 @@ export type AgentSessionMetadataTranscriptEntry = AgentTranscriptEntryBase & {
   metadata: SessionMetadataValue;
 };
 
+/**
+ * Soft caps for sidechain reference fields. The full directive / final report
+ * lives in the sidechain transcript; the parent records only a truncated
+ * preview so the parent transcript stays bounded.
+ */
+export const SUBAGENT_PROMPT_PREVIEW_BYTES = 1024;
+export const SUBAGENT_SUMMARY_PREVIEW_BYTES = 4 * 1024;
+
+export type AgentSubagentStartedTranscriptEntry = AgentTranscriptEntryBase & {
+  type: "subagent_started";
+  /** UUID v4 of the forked subagent (matches sidechain filename). */
+  subagentId: string;
+  /** Definition id (`general-purpose` / `explore` / `plan`). */
+  subagentType: string;
+  /**
+   * Truncated parent directive — capped at {@link SUBAGENT_PROMPT_PREVIEW_BYTES}
+   * to keep main-transcript size bounded. Full directive is the first user
+   * message in the sidechain.
+   */
+  promptPreview: string;
+  /** Whether {@link promptPreview} is truncated. */
+  promptTruncated: boolean;
+  /** Relative path (from session dir) of the sidechain transcript. */
+  transcriptRelativePath: string;
+  /** Optional sub-session id if the SubAgentSession namespaces sessions. */
+  subagentSessionId?: string;
+};
+
+export type AgentSubagentCompletedTranscriptEntry = AgentTranscriptEntryBase & {
+  type: "subagent_completed";
+  subagentId: string;
+  subagentType: string;
+  /** Truncated final assistant report. */
+  summaryPreview: string;
+  /** Whether {@link summaryPreview} is truncated. */
+  summaryTruncated: boolean;
+  /** Aggregate usage from the AgentLoop run. */
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+    totalTokens?: number;
+  };
+  /** Number of internal turns the subagent took. */
+  turns: number;
+  durationMs: number;
+  /** True when the run errored (subagent emitted an error result). */
+  errored?: boolean;
+};
+
 export type AgentTranscriptEntry =
   | AgentAcceptedInputTranscriptEntry
   | AgentMessageTranscriptEntry
   | AgentTurnResultTranscriptEntry
   | AgentControlBoundaryTranscriptEntry
-  | AgentSessionMetadataTranscriptEntry;
+  | AgentSessionMetadataTranscriptEntry
+  | AgentSubagentStartedTranscriptEntry
+  | AgentSubagentCompletedTranscriptEntry;
+
+export function truncatePreview(input: string, byteCap: number): { preview: string; truncated: boolean } {
+  const total = Buffer.byteLength(input, "utf8");
+  if (total <= byteCap) return { preview: input, truncated: false };
+  // Walk codepoint-by-codepoint so we never cut inside a UTF-8 sequence.
+  let bytes = 0;
+  let out = "";
+  for (const ch of input) {
+    const chBytes = Buffer.byteLength(ch, "utf8");
+    if (bytes + chBytes > byteCap) break;
+    bytes += chBytes;
+    out += ch;
+  }
+  return { preview: out, truncated: true };
+}
 
 export type AgentTranscriptDiagnostic = {
   code: "transcript_missing" | "transcript_too_large" | "transcript_line_invalid" | "transcript_entry_invalid";
