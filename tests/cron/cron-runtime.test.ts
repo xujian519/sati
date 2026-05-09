@@ -65,6 +65,17 @@ function makeGateway(): Gateway & {
       throw new Error("not used");
     },
     respondElicitation: async () => ({ delivered: false }),
+    permissionDecide: async () => ({ delivered: false }),
+    readSessionMessages: async () => {
+      throw new Error("not used");
+    },
+    listProjects: async () => ({ projects: [] }),
+    describeProject: async (input: { projectKey: string }) => ({
+      projectKey: input.projectKey,
+      name: input.projectKey,
+      fullPath: input.projectKey,
+      sessionCount: 0,
+    }),
     waitForSubmit: () => submitPromise,
   };
   return gateway;

@@ -4,17 +4,24 @@ import type { CanonicalModelEvent } from "../../model/index.js";
 import { contentToText } from "../../tool/index.js";
 import type { SessionRouter } from "../SessionRouter.js";
 import { GatewayElicitationBus } from "../elicitation/GatewayElicitationBus.js";
+import { GatewayPermissionBus } from "../permission/GatewayPermissionBus.js";
 import { AsyncQueue } from "../util/AsyncQueue.js";
 import type {
   GatewayCronController,
   Gateway,
   GatewayElicitationResponseInput,
   GatewayEvent,
+  GatewayPermissionDecisionInput,
   GatewayServerInfo,
   GatewaySubmitTurnInput,
   ListSessionsInput,
   ListSessionsResult,
   NewSessionInput,
+  WebDescribeProjectInput,
+  WebListProjectsResult,
+  WebProjectSummary,
+  WebReadSessionMessagesInput,
+  WebReadSessionMessagesResult,
 } from "../protocol/types.js";
 import type {
   CronCreateInput,
@@ -32,6 +39,17 @@ export type InProcessGatewayOptions = {
   uuid?: () => string;
   serverInfo?: Partial<GatewayServerInfo>;
   cron?: GatewayCronController;
+  /**
+   * Web Phase 2 — pluggable session-history reader. Wired by
+   * `createLocalGateway` so the in-process gateway can answer
+   * `read_session_messages` without leaking transcript paths.
+   */
+  readSessionMessages?: (input: WebReadSessionMessagesInput) => Promise<WebReadSessionMessagesResult>;
+  /**
+   * Web Phase 3 — pluggable project enumerator + describer.
+   */
+  listProjects?: () => Promise<WebListProjectsResult>;
+  describeProject?: (input: WebDescribeProjectInput) => Promise<WebProjectSummary>;
 };
 
 export class InProcessGateway implements Gateway {
@@ -46,6 +64,11 @@ export class InProcessGateway implements Gateway {
   private readonly emitSinks = new Map<string, (event: GatewayEvent) => void>();
   /** B1 — pending askUser() promises keyed by sessionKey + requestId. */
   private readonly elicitationBus = new GatewayElicitationBus();
+  /**
+   * Web Phase 2 — pending permission-decision promises. Tools that need
+   * Web confirmation register here while the host UI shows the banner.
+   */
+  private readonly permissionBus = new GatewayPermissionBus();
 
   constructor(
     private readonly router: SessionRouter,
@@ -62,6 +85,15 @@ export class InProcessGateway implements Gateway {
    */
   getElicitationBus(): GatewayElicitationBus {
     return this.elicitationBus;
+  }
+
+  /**
+   * Web Phase 2 — exposed so per-session bridge channels (or tests) can
+   * register pending permission decisions and emit `permission_request`
+   * events.
+   */
+  getPermissionBus(): GatewayPermissionBus {
+    return this.permissionBus;
   }
 
   /**
@@ -120,10 +152,12 @@ export class InProcessGateway implements Gateway {
         yield event;
       }
     } finally {
-      // Clean up the emit-sink and any orphaned elicitation entries before
-      // returning so a subsequent turn doesn't see stale state.
+      // Clean up the emit-sink and any orphaned elicitation / permission
+      // entries before returning so a subsequent turn doesn't see stale
+      // state.
       this.emitSinks.delete(input.sessionKey);
       this.elicitationBus.rejectSession(input.sessionKey, "turn_ended");
+      this.permissionBus.rejectSession(input.sessionKey, "turn_ended");
       this.router.endTurn(input.sessionKey, runId);
       // Defensive — make sure the pump promise is settled before we resolve.
       await pump.catch(() => undefined);
@@ -181,6 +215,41 @@ export class InProcessGateway implements Gateway {
     if (!entry) return { delivered: false };
     entry.resolve(input.answer);
     return { delivered: true };
+  }
+
+  async permissionDecide(input: GatewayPermissionDecisionInput): Promise<{ delivered: boolean }> {
+    const entry = this.permissionBus.consume(input.sessionKey, input.requestId);
+    if (!entry) return { delivered: false };
+    entry.resolve({
+      requestId: input.requestId,
+      decision: input.decision,
+      remember: input.remember,
+      reason: input.reason,
+    });
+    return { delivered: true };
+  }
+
+  async readSessionMessages(input: WebReadSessionMessagesInput): Promise<WebReadSessionMessagesResult> {
+    if (!this.options.readSessionMessages) {
+      throw new Error(
+        "read_session_messages is not configured. Wire `readSessionMessages` via createLocalGateway.",
+      );
+    }
+    return this.options.readSessionMessages(input);
+  }
+
+  async listProjects(): Promise<WebListProjectsResult> {
+    if (!this.options.listProjects) {
+      throw new Error("list_projects is not configured.");
+    }
+    return this.options.listProjects();
+  }
+
+  async describeProject(input: WebDescribeProjectInput): Promise<WebProjectSummary> {
+    if (!this.options.describeProject) {
+      throw new Error("describe_project is not configured.");
+    }
+    return this.options.describeProject(input);
   }
 
   private requireCron(): GatewayCronController {

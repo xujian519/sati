@@ -37,6 +37,8 @@ import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
 import type { PilotAgentModelSelection, PilotConfigSnapshot } from "../pilot/config/types.js";
 import type { RouterConfig } from "../router/config/schema.js";
 import { listProjectSessions, resumeAgentSession } from "../session/index.js";
+import { readWebSessionMessages } from "../web/server/readSessionMessages.js";
+import { describeWebProject, listWebProjects } from "../web/server/listProjects.js";
 import { BackgroundTaskRuntime } from "../task/runtime/BackgroundTaskRuntime.js";
 import { createBuiltinRegistry } from "../tool/index.js";
 import type { PilotDeckToolDefinition, ToolRegistry } from "../tool/index.js";
@@ -62,6 +64,54 @@ export type CreateLocalGatewayOptions = {
    */
   __testModelFactory?: (snapshot: PilotConfigSnapshot) => ModelRuntime;
 };
+
+export type LocalGatewayRouterStatsRecord = {
+  sessionId: string;
+  scenarioType: string;
+  resolvedFrom: string;
+  provider: string;
+  model: string;
+  usage: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+    totalTokens?: number;
+  };
+  startedAt: string;
+  endedAt: string;
+};
+
+export type LocalGatewayRouterStatsByProject = Map<
+  string,
+  {
+    aggregate: {
+      totalRequests: number;
+      totalInputTokens: number;
+      totalOutputTokens: number;
+      perScenario: Record<string, number>;
+      perModel: Record<string, number>;
+    };
+    records: LocalGatewayRouterStatsRecord[];
+  }
+>;
+
+const __gatewayRouterStatsAccessors = new WeakMap<
+  Gateway,
+  () => LocalGatewayRouterStatsByProject
+>();
+
+/**
+ * Side-channel accessor for router stats produced by RouterRuntime
+ * instances spun up inside `createLocalGateway`. We deliberately keep
+ * this off the `Gateway` interface so the protocol stays minimal — Web
+ * UI consumers (ui/server/pilotdeck-bridge.js) call this directly.
+ */
+export function getLocalGatewayRouterStats(
+  gateway: Gateway,
+): LocalGatewayRouterStatsByProject | undefined {
+  return __gatewayRouterStatsAccessors.get(gateway)?.();
+}
 
 export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gateway {
   const baseEnv = options.env ?? process.env;
@@ -91,11 +141,24 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gat
     now,
     serverInfo: { mode: "in_process", projectKey: projectRoot },
     cron: options.cron,
+    readSessionMessages: (input) =>
+      readWebSessionMessages(input, {
+        projectRoot: input.projectKey ? input.projectKey : projectRoot,
+        pilotHome,
+        now,
+      }),
+    listProjects: () =>
+      listWebProjects({ pilotHome, defaultProjectRoot: projectRoot }),
+    describeProject: (input) =>
+      describeWebProject(input.projectKey, { pilotHome, defaultProjectRoot: projectRoot }),
   });
   // Hand the gateway back to the registry so per-session creation can
   // build a `GatewayElicitationChannel` against this gateway's bus +
   // emit-sink (B1).
   registry.setGateway(gateway);
+  __gatewayRouterStatsAccessors.set(gateway, () =>
+    registry.snapshotAllRouterStats(),
+  );
   return gateway;
 }
 
@@ -140,6 +203,21 @@ class ProjectRuntimeRegistry {
 
   setGateway(gateway: InProcessGateway): void {
     this.gateway = gateway;
+  }
+
+  /**
+   * Snapshot every per-project RouterRuntime's TokenStatsCollector for
+   * the Web UI Dashboard tab. Keyed by canonical project root.
+   */
+  snapshotAllRouterStats(): LocalGatewayRouterStatsByProject {
+    const out: LocalGatewayRouterStatsByProject = new Map();
+    for (const [projectRoot, runtime] of this.runtimes.entries()) {
+      out.set(projectRoot, {
+        aggregate: runtime.router.stats.snapshot(),
+        records: runtime.router.stats.recent(1000),
+      });
+    }
+    return out;
   }
 
   resolve(projectKey?: string): ProjectRuntime {
@@ -374,6 +452,13 @@ class ProjectRuntimeRegistry {
         mode: permissionMode,
         canPrompt: override?.canPrompt ?? false,
         bypassAvailable: override?.bypassAvailable ?? true,
+        rules: override?.permissionRules
+          ? {
+              allow: override.permissionRules.allow ?? [],
+              deny: override.permissionRules.deny ?? [],
+              ask: override.permissionRules.ask ?? [],
+            }
+          : undefined,
       }),
     };
   }
@@ -384,7 +469,12 @@ function ensureRouterConfig(
   defaultSelection: PilotAgentModelSelection,
 ): RouterConfig {
   if (router) {
-    return router;
+    // Make sure stats collection is on so the Web UI Dashboard tab can
+    // render router activity. Users can opt out via PilotDeck config.
+    return {
+      ...router,
+      stats: router.stats ?? { enabled: true },
+    };
   }
   return {
     scenarios: {
@@ -392,5 +482,6 @@ function ensureRouterConfig(
       longContextThreshold: 60_000,
     },
     zeroUsageRetry: { enabled: true, maxAttempts: 5 },
+    stats: { enabled: true },
   };
 }

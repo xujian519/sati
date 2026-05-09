@@ -29,7 +29,11 @@ export type WsGatewayMethod =
   | "cron_list"
   | "cron_delete"
   | "cron_stop"
-  | "elicitation_respond";
+  | "elicitation_respond"
+  | "permission_decide"
+  | "read_session_messages"
+  | "list_projects"
+  | "describe_project";
 
 export type WsRequestFrame = {
   type: "request";

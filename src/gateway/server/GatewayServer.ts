@@ -7,6 +7,7 @@ import { createWebSocketAcceptValue, TextWebSocketConnection } from "./websocket
 import { GatewayWsConnection } from "./GatewayWsConnection.js";
 import { ensureGatewayAuthToken } from "./authToken.js";
 import { serveStaticAsset } from "./staticAssets.js";
+import { handleWebApiRequest } from "../../adapters/web/httpRouter.js";
 
 export type GatewayServerOptions = {
   gateway: Gateway;
@@ -16,6 +17,11 @@ export type GatewayServerOptions = {
   staticAssetsPath?: string;
   serverVersion?: string;
   feishuWebhook?: (request: IncomingMessage, response: ServerResponse, body: string) => Promise<boolean> | boolean;
+  /**
+   * Resolves a `projectKey` (as supplied by the Web UI) to an absolute
+   * project root. If unset, the projectKey is used verbatim as the root.
+   */
+  resolveProject?: (projectKey: string) => string;
 };
 
 export type GatewayServer = {
@@ -72,6 +78,16 @@ async function handleHttpRequest(
   if (url.pathname === "/feishu/webhook" && options.feishuWebhook) {
     const body = await readBody(request);
     const handled = await options.feishuWebhook(request, response, body);
+    if (handled) {
+      return;
+    }
+  }
+  if (url.pathname.startsWith("/api/web/")) {
+    const handled = await handleWebApiRequest(request, response, {
+      gateway: options.gateway,
+      token,
+      resolveProject: options.resolveProject,
+    });
     if (handled) {
       return;
     }

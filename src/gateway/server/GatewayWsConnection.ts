@@ -124,6 +124,14 @@ export class GatewayWsConnection {
         return this.options.gateway.cronStop(frame.params as never);
       case "elicitation_respond":
         return this.options.gateway.respondElicitation(frame.params as never);
+      case "permission_decide":
+        return this.options.gateway.permissionDecide(frame.params as never);
+      case "read_session_messages":
+        return this.options.gateway.readSessionMessages(frame.params as never);
+      case "list_projects":
+        return this.options.gateway.listProjects();
+      case "describe_project":
+        return this.options.gateway.describeProject(frame.params as never);
       default:
         throw new Error(`Unknown gateway method ${(frame as { method?: string }).method}.`);
     }

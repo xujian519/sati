@@ -15,6 +15,12 @@ import type {
   PilotDeckElicitationAnswer,
   PilotDeckElicitationQuestion,
 } from "../../tool/elicitation/PilotDeckElicitationChannel.js";
+import type {
+  WebListProjectsResult as WebUiListProjectsResult,
+  WebProjectSummary as WebUiProjectSummary,
+  WebReadSessionMessagesInput as WebUiReadSessionMessagesInput,
+  WebReadSessionMessagesResult as WebUiReadSessionMessagesResult,
+} from "../../web/client/protocol.js";
 
 export type GatewayChannelKey = "cli" | "tui" | "feishu" | "web" | "test" | (string & {});
 
@@ -81,6 +87,32 @@ export type GatewayElicitationResponseInput = {
   answer: PilotDeckElicitationAnswer;
 };
 
+/**
+ * Web-facing permission decision input. Mirrors the elicitation
+ * round-trip pattern: the agent (via `GatewayPermissionBus`) emits a
+ * `permission_request` event during a turn; the host UI eventually calls
+ * `Gateway.permissionDecide({ requestId, decision })` to unblock the
+ * waiting tool.
+ *
+ * `delivered: false` is returned when the requestId is unknown (already
+ * cancelled, decided, or session ended).
+ */
+export type GatewayPermissionDecisionInput = {
+  sessionKey: string;
+  requestId: string;
+  decision: "allow" | "deny";
+  /** Persist the decision as an `allow_session` rule when true. */
+  remember?: boolean;
+  /** Optional free-form reason; surfaced in audit/transcript. */
+  reason?: string;
+};
+
+export type WebReadSessionMessagesInput = WebUiReadSessionMessagesInput;
+export type WebReadSessionMessagesResult = WebUiReadSessionMessagesResult;
+export type WebProjectSummary = WebUiProjectSummary;
+export type WebListProjectsResult = WebUiListProjectsResult;
+export type WebDescribeProjectInput = { projectKey: string };
+
 export type GatewayError = {
   code: string;
   message: string;
@@ -141,4 +173,25 @@ export interface Gateway {
    * or the session has ended).
    */
   respondElicitation(input: GatewayElicitationResponseInput): Promise<{ delivered: boolean }>;
+  /**
+   * Web Phase 2 — host responds to a `permission_request` event surfaced
+   * through `submitTurn`. Resolves the agent-side permission promise so the
+   * blocked tool either runs (allow) or returns a denial. Returns
+   * `{ delivered: false }` if the requestId is unknown.
+   */
+  permissionDecide(input: GatewayPermissionDecisionInput): Promise<{ delivered: boolean }>;
+  /**
+   * Web Phase 2 — read transcript history for a session and project it onto
+   * the Web `WebMessage` DTO.
+   */
+  readSessionMessages(input: WebReadSessionMessagesInput): Promise<WebReadSessionMessagesResult>;
+  /**
+   * Web Phase 3 — enumerate projects from PilotDeck home + an optional
+   * registry.
+   */
+  listProjects(): Promise<WebListProjectsResult>;
+  /**
+   * Web Phase 3 — load a single project summary.
+   */
+  describeProject(input: WebDescribeProjectInput): Promise<WebProjectSummary>;
 }

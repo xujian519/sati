@@ -2,11 +2,17 @@ import type {
   Gateway,
   GatewayElicitationResponseInput,
   GatewayEvent,
+  GatewayPermissionDecisionInput,
   GatewayServerInfo,
   GatewaySubmitTurnInput,
   ListSessionsInput,
   ListSessionsResult,
   NewSessionInput,
+  WebDescribeProjectInput,
+  WebListProjectsResult,
+  WebProjectSummary,
+  WebReadSessionMessagesInput,
+  WebReadSessionMessagesResult,
 } from "../protocol/types.js";
 import type {
   CronCreateInput,
@@ -69,6 +75,22 @@ export class RemoteGateway implements Gateway {
 
   async respondElicitation(input: GatewayElicitationResponseInput): Promise<{ delivered: boolean }> {
     return (await this.client.request("elicitation_respond", input)) as { delivered: boolean };
+  }
+
+  async permissionDecide(input: GatewayPermissionDecisionInput): Promise<{ delivered: boolean }> {
+    return (await this.client.request("permission_decide", input)) as { delivered: boolean };
+  }
+
+  async readSessionMessages(input: WebReadSessionMessagesInput): Promise<WebReadSessionMessagesResult> {
+    return (await this.client.request("read_session_messages", input)) as WebReadSessionMessagesResult;
+  }
+
+  async listProjects(): Promise<WebListProjectsResult> {
+    return (await this.client.request("list_projects", {})) as WebListProjectsResult;
+  }
+
+  async describeProject(input: WebDescribeProjectInput): Promise<WebProjectSummary> {
+    return (await this.client.request("describe_project", input)) as WebProjectSummary;
   }
 }
 

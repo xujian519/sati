@@ -252,6 +252,17 @@ function createFallbackGateway(): Gateway {
       throw new Error("Cron runtime is not configured.");
     },
     respondElicitation: async () => ({ delivered: false }),
+    permissionDecide: async () => ({ delivered: false }),
+    readSessionMessages: async () => {
+      throw new Error("read_session_messages is not configured.");
+    },
+    listProjects: async () => ({ projects: [] }),
+    describeProject: async (input) => ({
+      projectKey: input.projectKey,
+      name: input.projectKey,
+      fullPath: input.projectKey,
+      sessionCount: 0,
+    }),
   };
 }
 

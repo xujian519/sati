@@ -70,5 +70,16 @@ function fakeGateway(calls: GatewaySubmitTurnInput[], events: GatewayEvent[]): G
       throw new Error("not configured");
     },
     respondElicitation: async () => ({ delivered: false }),
+    permissionDecide: async () => ({ delivered: false }),
+    readSessionMessages: async () => {
+      throw new Error("not configured");
+    },
+    listProjects: async () => ({ projects: [] }),
+    describeProject: async (input) => ({
+      projectKey: input.projectKey,
+      name: input.projectKey,
+      fullPath: input.projectKey,
+      sessionCount: 0,
+    }),
   };
 }

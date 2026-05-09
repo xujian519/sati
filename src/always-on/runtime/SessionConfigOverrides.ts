@@ -1,10 +1,22 @@
-import type { PermissionMode } from "../../permission/index.js";
+import type { PermissionMode, PermissionRule } from "../../permission/index.js";
 
 export type SessionConfigOverride = {
   cwd?: string;
   permissionMode?: PermissionMode;
   bypassAvailable?: boolean;
   canPrompt?: boolean;
+  /**
+   * Per-session permission rules — merged into the
+   * `PermissionContext.rules` produced by `createDefaultPermissionContext`.
+   * Used by Web UI bridges to translate "Permission added" (the user
+   * approving a tool from a chat banner) into a real allow rule, instead
+   * of flipping the whole session into bypassPermissions.
+   */
+  permissionRules?: {
+    allow?: PermissionRule[];
+    deny?: PermissionRule[];
+    ask?: PermissionRule[];
+  };
 };
 
 /**
