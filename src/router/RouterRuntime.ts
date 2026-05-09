@@ -218,6 +218,11 @@ export function createRouterRuntime(
       });
       if (orchestrated.applied) {
         mutations = { ...mutations, ...orchestrated.mutations };
+        decision.requestPatch = {
+          messages: orchestrated.request.messages,
+          tools: orchestrated.request.tools,
+          systemPrompt: orchestrated.request.systemPrompt,
+        };
         decision.orchestrating = true;
       }
     }
@@ -252,12 +257,13 @@ export function createRouterRuntime(
     decision: RouterDecision,
     request: CanonicalModelRequest,
   ): CanonicalModelRequest {
-    let messages = request.messages;
+    let messages = decision.requestPatch?.messages ?? request.messages;
     if (decision.mutations.subagentTagStripped) {
       messages = stripSubagentTagFromMessages(messages);
     }
     return {
       ...request,
+      ...decision.requestPatch,
       provider: decision.provider,
       model: decision.model,
       messages,

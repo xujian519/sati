@@ -15,6 +15,7 @@ function stubContextRuntime(
   return {
     prepareForModel: async (input) => ({
       messages: input.messages,
+      systemPromptParts: [],
       tools: input.tools,
       boundaries: [],
       diagnostics: [],
@@ -137,6 +138,7 @@ test("AgentLoop reactive recovery: non-PTL errors do not trigger truncate path",
   const ctx: AgentContextRuntime = {
     prepareForModel: async (input) => ({
       messages: input.messages,
+      systemPromptParts: [],
       tools: input.tools,
       boundaries: [],
       diagnostics: [],

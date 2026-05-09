@@ -5,6 +5,13 @@ import { NullContextRuntime } from "../../src/context/NullContextRuntime.js";
 test("NullContextRuntime can retain only the latest messages", async () => {
   const runtime = new NullContextRuntime({ maxMessages: 2 });
   const prepared = await runtime.prepareForModel({
+    sessionId: "session",
+    turnId: "turn",
+    cwd: "/tmp/project",
+    provider: "test",
+    model: "model",
+    permissionMode: "default",
+    additionalWorkingDirectories: [],
     messages: [
       { role: "user", content: [{ type: "text", text: "one" }] },
       { role: "assistant", content: [{ type: "text", text: "two" }] },

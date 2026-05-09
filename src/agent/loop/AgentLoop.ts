@@ -79,7 +79,7 @@ export class AgentLoop {
         return { result, messages };
       }
 
-      const request = await this.createModelRequest(messages);
+      const request = await this.createModelRequest(messages, input);
       yield {
         type: "model_request_started",
         sessionId: input.sessionId,
@@ -346,19 +346,30 @@ export class AgentLoop {
     }
   }
 
-  private async createModelRequest(messages: CanonicalMessage[]): Promise<CanonicalModelRequest> {
+  private async createModelRequest(
+    messages: CanonicalMessage[],
+    input: AgentLoopInput,
+  ): Promise<CanonicalModelRequest> {
     const contextRuntime = this.dependencies.context ?? new NullContextRuntime();
     const prepared = await contextRuntime.prepareForModel({
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      cwd: this.config.cwd,
+      provider: this.config.provider,
+      model: this.config.model,
+      permissionMode: this.config.permissionMode,
+      additionalWorkingDirectories: this.config.permissionContext.additionalWorkingDirectories,
       messages: cloneMessages(messages),
       tools: this.dependencies.tools.registry.toCanonicalSchemas(),
       maxMessages: this.config.maxContextMessages,
+      customSystemPrompt: this.config.systemPrompt,
     });
 
     return {
       provider: this.config.provider,
       model: this.config.model,
       messages: prepared.messages,
-      systemPrompt: this.config.systemPrompt,
+      systemPrompt: prepared.systemPrompt ?? this.config.systemPrompt,
       tools: prepared.tools,
       toolChoice: this.config.toolChoice,
       maxOutputTokens: this.config.maxOutputTokens,

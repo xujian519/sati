@@ -65,6 +65,56 @@ test("createLocalGateway lists sessions from the requested project only", async 
   }
 });
 
+test("createLocalGateway loads project plugin hooks into submitted sessions", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "politdeck-local-gateway-plugin-"));
+  try {
+    const politHome = path.join(root, "home");
+    const projectRoot = path.join(root, "project");
+    const pluginRoot = path.join(projectRoot, ".politdeck", "plugins", "blocker");
+
+    await writeJson(getPolitConfigFilePath(politHome), {
+      schemaVersion: 1,
+      agent: validAgentConfig(),
+      model: validModelConfig(),
+    });
+    await writeJson(path.join(pluginRoot, "plugin.json"), {
+      name: "blocker",
+      hooks: {
+        UserPromptSubmit: [
+          {
+            hooks: [
+              {
+                type: "command",
+                command: "node -e \"console.log('{\\\"decision\\\":\\\"block\\\",\\\"reason\\\":\\\"plugin blocked\\\"}')\"",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const gateway = createLocalGateway({
+      projectRoot,
+      politHome,
+      env: { ANTHROPIC_API_KEY: "anthropic-key" },
+    });
+
+    const events = [];
+    for await (const event of gateway.submitTurn({
+      sessionKey: "cli:project=test:plugin",
+      channelKey: "cli",
+      projectKey: projectRoot,
+      message: "hello",
+    })) {
+      events.push(event);
+    }
+
+    assert.ok(events.some((event) => event.type === "turn_completed" && event.finishReason === "model_error"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 async function writeSession(options: {
   projectRoot: string;
   politHome: string;

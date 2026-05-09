@@ -8,11 +8,13 @@ export class NullContextRuntime implements AgentContextRuntime {
     if (maxMessages !== undefined && input.messages.length > maxMessages) {
       return {
         messages: input.messages.slice(-maxMessages),
+        systemPromptParts: [],
         tools: input.tools,
         boundaries: [{ type: "compact", retainedMessages: maxMessages }],
         diagnostics: [
           {
             code: "context_truncated",
+            severity: "warning",
             message: `Context was truncated to the last ${maxMessages} messages.`,
           },
         ],
@@ -21,11 +23,13 @@ export class NullContextRuntime implements AgentContextRuntime {
 
     return {
       messages: input.messages,
+      systemPromptParts: [],
       tools: input.tools,
       boundaries: [],
       diagnostics: [
         {
           code: "context_budget_not_enforced",
+          severity: "info",
           message: "Token-level context budget is not enforced in the null context runtime.",
         },
       ],

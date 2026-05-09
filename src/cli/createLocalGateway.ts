@@ -1,6 +1,9 @@
 import { resolve } from "node:path";
 import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
 import type { AgentRuntimeConfig, CreateAgentSessionOptions } from "../agent/index.js";
+import { DefaultContextRuntime, PluginRuntimeExtensionResolver } from "../context/index.js";
+import { HookRuntime, PluginRuntime } from "../extension/index.js";
+import { LifecycleRuntime } from "../lifecycle/index.js";
 import {
   createGateway,
   type Gateway,
@@ -79,6 +82,7 @@ type ProjectRuntime = {
   snapshot: ReturnType<typeof loadPolitConfig>;
   model: ModelRuntime;
   router: RouterRuntime;
+  pluginRuntime: PluginRuntime;
   tools: ToolRegistry;
   projectStorage: GatewayProjectStorageOptions;
 };
@@ -97,10 +101,17 @@ class ProjectRuntimeRegistry {
 
     const snapshot = loadPolitConfig({ projectRoot, env: this.options.env });
     const model = createModelRuntime(snapshot.config.model);
+    const pluginRuntime = new PluginRuntime({
+      projectRoot,
+      politHome: this.options.politHome,
+      builtinPluginsEnabled: snapshot.config.extension.builtinPluginsEnabled,
+    });
     const routerConfig = ensureRouterConfig(snapshot.config.router, snapshot.config.agent.model);
     const router = createRouterRuntime(routerConfig, {
       modelRuntime: model,
       now: this.options.now,
+      customRouterRegistry: pluginRuntime,
+      loadSkillPrompt: (extensionId) => pluginRuntime.loadSkillPrompt(extensionId),
     });
     const tools = createBuiltinRegistry();
     for (const tool of this.options.extraTools ?? []) {
@@ -111,6 +122,7 @@ class ProjectRuntimeRegistry {
       snapshot,
       model,
       router,
+      pluginRuntime,
       tools,
       projectStorage: {
         projectRoot,
@@ -123,12 +135,22 @@ class ProjectRuntimeRegistry {
 
   async createSession(context: GatewaySessionContext) {
     const runtime = this.resolve(context.projectKey);
+    await runtime.pluginRuntime.refresh();
+    const contributions = runtime.pluginRuntime.snapshotContributions();
+    const lifecycle = new LifecycleRuntime(new HookRuntime(contributions.hooks));
+    const contextRuntime = new DefaultContextRuntime({
+      extension: new PluginRuntimeExtensionResolver(runtime.pluginRuntime),
+      projectRoot: runtime.projectRoot,
+      now: this.options.now,
+    });
     const resumed = await resumeAgentSession({
       sessionId: context.sessionKey,
       config: this.createAgentConfig(runtime, context.sessionKey),
       dependencies: {
         router: runtime.router,
         tools: { registry: runtime.tools },
+        context: contextRuntime,
+        lifecycle,
         now: this.options.now,
       },
       projectStorage: runtime.projectStorage,

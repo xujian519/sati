@@ -9,6 +9,7 @@ import type {
 } from "../../src/model/index.js";
 import type { RouterConfig } from "../../src/router/config/schema.js";
 import type { RouterEvent } from "../../src/router/protocol/events.js";
+import { PluginRuntime } from "../../src/extension/index.js";
 
 class ScriptedModelRuntime implements ModelRuntime {
   readonly received: CanonicalModelRequest[] = [];
@@ -200,4 +201,106 @@ test("RouterRuntime stats observe successful attempts when stats enabled", async
   assert.equal(snapshot.totalInputTokens, 5);
   assert.equal(snapshot.totalOutputTokens, 7);
   assert.equal(snapshot.perScenario.default, 1);
+});
+
+test("RouterRuntime resolves custom router contributions from PluginRuntime", async () => {
+  const modelRuntime = new ScriptedModelRuntime([]);
+  const plugins = new PluginRuntime({
+    projectRoot: "/tmp/project",
+    politHome: "/tmp/polit",
+    builtinPlugins: [
+      {
+        name: "router-plugin",
+        path: "<builtin>",
+        source: "builtin",
+        manifest: { name: "router-plugin" },
+        routerContributions: [
+          {
+            id: "route-fast",
+            createCustomRouter: () => ({
+              id: "route-fast",
+              decide: async () => ({ provider: "custom", model: "fast" }),
+            }),
+          },
+        ],
+      },
+    ],
+  });
+  await plugins.refresh();
+
+  const router = createRouterRuntime(
+    { ...baseConfig, customRouter: { extensionId: "route-fast" } },
+    { modelRuntime, customRouterRegistry: plugins },
+  );
+  const decision = await router.decide({
+    request: baseRequest,
+    sessionId: "s1",
+    isMainAgent: true,
+  });
+
+  assert.equal(decision.resolvedFrom, "custom");
+  assert.equal(decision.provider, "custom");
+  assert.equal(decision.model, "fast");
+});
+
+test("RouterRuntime loads auto-orchestrate skill prompts from PluginRuntime", async () => {
+  const modelRuntime = new ScriptedModelRuntime([
+    [
+      { type: "message_start", role: "assistant" },
+      { type: "message_end", finishReason: "stop" },
+    ],
+  ]);
+  const plugins = new PluginRuntime({
+    projectRoot: "/tmp/project",
+    politHome: "/tmp/polit",
+    builtinPlugins: [
+      {
+        name: "orchestrator",
+        path: "<builtin>",
+        source: "builtin",
+        manifest: { name: "orchestrator" },
+        skills: [
+          {
+            name: "orchestrate",
+            path: "<builtin>/skills/orchestrate/SKILL.md",
+            content: "Delegate complex work to subagents.",
+            frontmatter: {},
+            isSkill: true,
+          },
+        ],
+      },
+    ],
+  });
+  await plugins.refresh();
+
+  const router = createRouterRuntime(
+    {
+      ...baseConfig,
+      autoOrchestrate: {
+        enabled: true,
+        skillExtensionId: "orchestrate",
+        triggerTiers: [],
+        blockedTools: [],
+        slimSystemPrompt: false,
+      },
+    },
+    {
+      modelRuntime,
+      loadSkillPrompt: (extensionId) => plugins.loadSkillPrompt(extensionId),
+    },
+  );
+  for await (const _event of router.stream(baseRequest, {
+    sessionId: "s1",
+    turnId: "t1",
+    isMainAgent: true,
+  })) {
+    void _event;
+  }
+
+  const firstMessage = modelRuntime.received[0]?.messages[0];
+  assert.equal(firstMessage?.role, "user");
+  assert.equal(firstMessage?.content[0]?.type, "text");
+  if (firstMessage?.content[0]?.type === "text") {
+    assert.match(firstMessage.content[0].text, /Delegate complex work to subagents/);
+  }
 });
