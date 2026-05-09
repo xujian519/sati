@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * CloudCLI CLI
+ * pilotdeck CLI
  *
- * Provides command-line utilities for managing CloudCLI
+ * One-command deploy: auto-installs deps, detects conflicts, validates config,
+ * opens a browser-based setup wizard when needed, then boots the full server.
  *
  * Commands:
  *   (no args)     - Start the server (default)
@@ -73,18 +74,15 @@ function getInstallDir() {
 function showStatus() {
     loadRootEdgeClawEnv();
 
-    console.log(`\n${c.bright('CloudCLI UI - Status')}\n`);
+    console.log(`\n${c.bright('pilotdeck - Status')}\n`);
     console.log(c.dim('═'.repeat(60)));
 
-    // Version info
     console.log(`\n${c.info('[INFO]')} Version: ${c.bright(packageJson.version)}`);
 
-    // Installation location
     const installDir = getInstallDir();
     console.log(`\n${c.info('[INFO]')} Installation Directory:`);
     console.log(`       ${c.dim(installDir)}`);
 
-    // Database location
     const dbPath = getDatabasePath();
     const dbExists = fs.existsSync(dbPath);
     console.log(`\n${c.info('[INFO]')} Database Location:`);
@@ -97,38 +95,26 @@ function showStatus() {
         console.log(`       Modified: ${c.dim(stats.mtime.toLocaleString())}`);
     }
 
-    // Environment variables
     const missingConfig = getMissingEdgeClawEnvKeys();
     console.log(`\n${c.info('[INFO]')} Configuration:`);
     console.log(`       SERVER_PORT: ${c.bright(process.env.SERVER_PORT || process.env.PORT || '3001')} ${c.dim(process.env.SERVER_PORT || process.env.PORT ? '' : '(default)')}`);
     console.log(`       DATABASE_PATH: ${c.dim(process.env.DATABASE_PATH || '(using default location)')}`);
-    console.log(`       CLAUDE_CLI_PATH: ${c.dim(process.env.CLAUDE_CLI_PATH || 'claude (default)')}`);
-    console.log(`       CONTEXT_WINDOW: ${c.dim(process.env.CONTEXT_WINDOW || '160000 (default)')}`);
     console.log(`       EDGECLAW_API_BASE_URL: ${normalizeConfiguredValue(process.env.EDGECLAW_API_BASE_URL)}`);
     console.log(`       EDGECLAW_API_KEY: ${maskConfiguredSecret(process.env.EDGECLAW_API_KEY)}`);
     console.log(`       EDGECLAW_MODEL: ${normalizeConfiguredValue(process.env.EDGECLAW_MODEL)}`);
-    console.log(`       EDGECLAW_MEMORY_ENABLED: ${c.dim(process.env.EDGECLAW_MEMORY_ENABLED || '1 (default)')}`);
-    console.log(`       Required EdgeClaw Config: ${missingConfig.length === 0 ? c.ok('[OK] Complete') : c.warn(`[WARN] Missing ${missingConfig.join(', ')}`)}`);
+    console.log(`       Required Config: ${missingConfig.length === 0 ? c.ok('[OK] Complete') : c.warn(`[WARN] Missing ${missingConfig.join(', ')}`)}`);
 
-    // Claude projects folder
-    const claudeProjectsPath = path.join(os.homedir(), '.claude', 'projects');
-    const projectsExists = fs.existsSync(claudeProjectsPath);
-    console.log(`\n${c.info('[INFO]')} Claude Projects Folder:`);
-    console.log(`       ${c.dim(claudeProjectsPath)}`);
-    console.log(`       Status: ${projectsExists ? c.ok('[OK] Exists') : c.warn('[WARN] Not found')}`);
-
-    // Config file location
     const configFilePath = getEdgeClawConfigFilePath();
     const configExists = hasEdgeClawConfigFile();
     console.log(`\n${c.info('[INFO]')} Configuration File:`);
     console.log(`       ${c.dim(configFilePath)}`);
-    console.log(`       Status: ${configExists ? c.ok('[OK] Exists') : c.warn('[WARN] Not found (create it from Settings -> Config)')}`);
+    console.log(`       Status: ${configExists ? c.ok('[OK] Exists') : c.warn('[WARN] Not found')}`);
 
     console.log('\n' + c.dim('═'.repeat(60)));
     console.log(`\n${c.tip('[TIP]')} Hints:`);
-    console.log(`      ${c.dim('>')} Use ${c.bright('cloudcli --port 8080')} to run on a custom port`);
-    console.log(`      ${c.dim('>')} Use ${c.bright('cloudcli --database-path /path/to/db')} for custom database`);
-    console.log(`      ${c.dim('>')} Run ${c.bright('cloudcli help')} for all options`);
+    console.log(`      ${c.dim('>')} Use ${c.bright('pilotdeck --port 8080')} to run on a custom port`);
+    console.log(`      ${c.dim('>')} Use ${c.bright('pilotdeck --database-path /path/to/db')} for custom database`);
+    console.log(`      ${c.dim('>')} Run ${c.bright('pilotdeck help')} for all options`);
     console.log(`      ${c.dim('>')} Access the UI at http://localhost:${process.env.SERVER_PORT || process.env.PORT || '3001'}\n`);
 }
 
@@ -136,15 +122,14 @@ function showStatus() {
 function showHelp() {
     console.log(`
 ╔═══════════════════════════════════════════════════════════════╗
-║              CloudCLI - Command Line Tool               ║
+║              pilotdeck - Command Line Tool                   ║
 ╚═══════════════════════════════════════════════════════════════╝
 
 Usage:
-  claude-code-ui [command] [options]
-  cloudcli [command] [options]
+  pilotdeck [command] [options]
 
 Commands:
-  start          Start the CloudCLI server (default)
+  start          Start the server (default)
   status         Show configuration and data locations
   update         Update to the latest version
   help           Show this help information
@@ -157,16 +142,15 @@ Options:
   -v, --version               Show version information
 
 Examples:
-  $ cloudcli                        # Start with defaults
-  $ cloudcli --port 8080            # Start on port 8080
-  $ cloudcli -p 3000                # Short form for port
-  $ cloudcli start --port 4000      # Explicit start command
-  $ cloudcli status                 # Show configuration
+  $ pilotdeck                        # Start with defaults
+  $ pilotdeck --port 8080            # Start on port 8080
+  $ pilotdeck -p 3000                # Short form for port
+  $ pilotdeck start --port 4000      # Explicit start command
+  $ pilotdeck status                 # Show configuration
 
 Configuration:
   Edit ~/.edgeclaw/config.yaml directly or from Settings -> Config in the UI.
-  Runtime EDGECLAW_* / OPENAI_* / ANTHROPIC_* variables are derived from YAML
-  internally and are no longer a user-facing configuration source.
+  First run will auto-open a browser setup wizard if no config exists.
 
 Documentation:
   ${packageJson.homepage || 'https://github.com/siteboon/claudecodeui'}
@@ -196,12 +180,12 @@ function isNewerVersion(v1, v2) {
 async function checkForUpdates(silent = false) {
     try {
         const { execSync } = await import('child_process');
-        const latestVersion = execSync('npm show @cloudcli-ai/cloudcli version', { encoding: 'utf8' }).trim();
+        const latestVersion = execSync('npm show pilotdeck version 2>/dev/null || npm show @cloudcli-ai/cloudcli version', { encoding: 'utf8' }).trim();
         const currentVersion = packageJson.version;
 
         if (isNewerVersion(latestVersion, currentVersion)) {
             console.log(`\n${c.warn('[UPDATE]')} New version available: ${c.bright(latestVersion)} (current: ${currentVersion})`);
-            console.log(`         Run ${c.bright('cloudcli update')} to update\n`);
+            console.log(`         Run ${c.bright('pilotdeck update')} to update\n`);
             return { hasUpdate: true, latestVersion, currentVersion };
         } else if (!silent) {
             console.log(`${c.ok('[OK]')} You are on the latest version (${currentVersion})`);
@@ -229,20 +213,31 @@ async function updatePackage() {
         }
 
         console.log(`${c.info('[INFO]')} Updating from ${currentVersion} to ${latestVersion}...`);
-        execSync('npm update -g @cloudcli-ai/cloudcli', { stdio: 'inherit' });
-        console.log(`${c.ok('[OK]')} Update complete! Restart cloudcli to use the new version.`);
+        execSync('npm update -g pilotdeck || npm update -g @cloudcli-ai/cloudcli', { stdio: 'inherit' });
+        console.log(`${c.ok('[OK]')} Update complete! Restart pilotdeck to use the new version.`);
     } catch (e) {
         console.error(`${c.error('[ERROR]')} Update failed: ${e.message}`);
-        console.log(`${c.tip('[TIP]')} Try running manually: npm update -g @cloudcli-ai/cloudcli`);
+        console.log(`${c.tip('[TIP]')} Try running manually: npm update -g pilotdeck`);
     }
 }
 
-// Start the server
+// Start the server with preflight checks
 async function startServer() {
-    // Check for updates silently on startup
-    checkForUpdates(true);
+    console.log(`\n${c.bright('pilotdeck')} starting...\n`);
 
-    // Import and run the server
+    // Phase A+B: Preflight (dependencies + port conflicts)
+    const { runPreflight } = await import('./preflight.js');
+    const pre = await runPreflight({
+        cliRoot: __dirname,
+        serverPort: process.env.SERVER_PORT || '3001',
+    });
+    if (!pre.ok) {
+        console.error(`${c.error('[ERROR]')} ${pre.error}`);
+        process.exit(1);
+    }
+
+    // Boot full server — config setup is handled in-browser via Onboarding
+    checkForUpdates(true);
     await import('./index.js');
 }
 
@@ -311,7 +306,7 @@ async function main() {
             break;
         default:
             console.error(`\n❌ Unknown command: ${command}`);
-            console.log('   Run "cloudcli help" for usage information.\n');
+            console.log('   Run "pilotdeck help" for usage information.\n');
             process.exit(1);
     }
 }

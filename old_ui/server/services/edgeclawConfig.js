@@ -533,8 +533,10 @@ export function buildRuntimeEnv(config) {
     VITE_CONTEXT_WINDOW: String(runtime.contextWindow ?? 160000),
     API_TIMEOUT_MS: String(runtime.apiTimeoutMs ?? 120000),
     EDGECLAW_MEMORY_ENABLED: normalized.memory.enabled ? '1' : '0',
-    CCR_ENABLED: normalized.router.enabled ? '1' : '0',
-    CCR_DISABLED: normalized.router.enabled ? '0' : '1',
+    CCR_ENABLED: process.env.CCR_DISABLED === '1' ? '0'
+      : process.env.CCR_ENABLED || (normalized.router.enabled ? '1' : '0'),
+    CCR_DISABLED: process.env.CCR_DISABLED === '1' ? '1'
+      : (normalized.router.enabled ? '0' : '1'),
     GATEWAY_ENABLED: normalized.gateway.enabled ? '1' : '0',
     GATEWAY_HOME: expandTilde(normalized.gateway.home),
   };
@@ -584,6 +586,11 @@ export function buildRuntimeEnv(config) {
     // Pre-existing env wins over our default (allows ServerManager-injected
     // 16000 fallback to flow through unchanged).
     env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS;
+  }
+
+  const tavilyKey = mainParams.tavilyApiKey ?? mainParams.tavily_api_key ?? process.env.TAVILY_API_KEY;
+  if (tavilyKey) {
+    env.TAVILY_API_KEY = String(tavilyKey);
   }
 
   const memory = resolveModel(normalized, normalized.memory.model, { allowMissing: true });
@@ -642,12 +649,16 @@ export function buildCcrConfig(config) {
       .filter((entry) => entry?.provider === providerId)
       .map((entry) => entry.name)
       .filter(Boolean);
+    let transformer = provider.transformer;
+    if (!transformer && provider.type === 'anthropic') {
+      transformer = { use: [['Anthropic']] };
+    }
     return {
       name: providerId,
       api_base_url: providerEndpointForType(provider),
       api_key: provider.apiKey,
       models,
-      ...(provider.transformer ? { transformer: provider.transformer } : {}),
+      ...(transformer ? { transformer } : {}),
     };
   });
 
