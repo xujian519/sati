@@ -1,4 +1,5 @@
 import type { ModelConfig } from "../../model/protocol/canonical.js";
+import type { RouterConfig } from "../../router/config/schema.js";
 
 export type PolitConfigSourceKind = "default" | "project" | "env";
 export type PolitConfigSourcePhase = "bootstrap" | "merge";
@@ -38,6 +39,7 @@ export type PolitRawConfig = {
   memory?: unknown;
   gateway?: unknown;
   adapters?: unknown;
+  router?: unknown;
 };
 
 export type PolitExtensionConfig = {
@@ -53,8 +55,14 @@ export type PolitAgentModelSelection = {
 
 export type PolitAgentConfig = {
   model: PolitAgentModelSelection;
-  fallbackModel?: PolitAgentModelSelection;
 };
+
+/**
+ * Re-export of the router's structured config so callers that already depend
+ * on `PolitConfig` keep a single import path. The actual definition lives in
+ * `src/router/config/schema.ts`.
+ */
+export type PolitRouterConfig = RouterConfig;
 
 export type PolitMemoryLlmConfig = {
   provider?: string;
@@ -106,6 +114,7 @@ export type PolitConfig = {
   memory?: PolitMemoryConfig;
   gateway?: PolitGatewayConfig;
   adapters?: PolitAdaptersConfig;
+  router?: RouterConfig;
 };
 
 export type PolitConfigSnapshot = {

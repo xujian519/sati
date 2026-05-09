@@ -2,7 +2,11 @@ import {
   applyModelEventToAssembler,
   assembleAssistantMessage,
   createModelMessageAssemblerState,
+  PROMPT_TOO_LONG_ANTHROPIC_PATTERN,
+  PROMPT_TOO_LONG_OPENAI_PATTERN,
+  REQUEST_TOO_LARGE_PATTERN,
   type CanonicalMessage,
+  type CanonicalModelError,
   type CanonicalModelRequest,
   type CanonicalUsage,
 } from "../../model/index.js";
@@ -14,7 +18,6 @@ import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
 import type { LifecycleDispatchResult } from "../../lifecycle/index.js";
 import { NullContextRuntime } from "../../context/NullContextRuntime.js";
-import { AgentRecoveryPolicy } from "./AgentRecoveryPolicy.js";
 import { collectToolCalls } from "./collectToolCalls.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
 import { projectToolResults } from "./projectToolResults.js";
@@ -36,14 +39,7 @@ export class AgentLoop {
   constructor(
     private readonly config: AgentRuntimeConfig,
     private readonly dependencies: AgentRuntimeDependencies,
-  ) {
-    this.recoveryPolicy = new AgentRecoveryPolicy({
-      fallbackProvider: config.fallbackProvider,
-      fallbackModel: config.fallbackModel,
-    });
-  }
-
-  private readonly recoveryPolicy: AgentRecoveryPolicy;
+  ) {}
 
   async *run(input: AgentLoopInput): AsyncGenerator<AgentEvent, AgentLoopRunResult, unknown> {
     const startedAt = this.now().toISOString();
@@ -80,7 +76,12 @@ export class AgentLoop {
 
       const assembler = createModelMessageAssemblerState();
       try {
-        for await (const event of this.dependencies.model.stream(request, input.abortSignal)) {
+        for await (const event of this.dependencies.router.stream(request, {
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          abortSignal: input.abortSignal,
+          isMainAgent: !this.config.isSubagent,
+        })) {
           yield { type: "model_event", sessionId: input.sessionId, turnId: input.turnId, event };
           applyModelEventToAssembler(assembler, event);
           if (event.type === "error") {
@@ -121,26 +122,19 @@ export class AgentLoop {
           messages.push(projected);
           yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: projected };
         }
-        const recovery = this.recoveryPolicy.decideForModelError(assembled.error);
-        if (recovery.type === "retry") {
-          this.config.provider = recovery.provider;
-          this.config.model = recovery.model;
-          yield { type: "turn_continued", sessionId: input.sessionId, turnId: input.turnId, reason: "model_error" };
-          continue;
-        }
-
+        const classified = classifyModelError(assembled.error);
         await this.dispatchLifecycle(input, "StopFailure", {
           error: assembled.error,
         });
         const result = this.createTurnResult(input, {
           type: "error",
-          stopReason: recovery.stopReason,
+          stopReason: classified.stopReason,
           usage,
           permissionDenials,
           turns: turnCount,
           startedAt,
           finalMessage,
-          errors: [recovery.error],
+          errors: [classified.error],
         });
         yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
@@ -440,4 +434,36 @@ function isPermissionMode(value: unknown): value is AgentRuntimeConfig["permissi
     value === "bypassPermissions" ||
     value === "dontAsk"
   );
+}
+
+function classifyModelError(error: CanonicalModelError): {
+  stopReason: AgentTurnResult["stopReason"];
+  error: ReturnType<typeof agentError>;
+} {
+  if (isPromptTooLong(error)) {
+    return {
+      stopReason: "prompt_too_long",
+      error: agentError("agent_prompt_too_long", error.message, error),
+    };
+  }
+  return {
+    stopReason: "model_error",
+    error: agentError("agent_model_error", error.message, error),
+  };
+}
+
+function isPromptTooLong(error: CanonicalModelError): boolean {
+  if (error.code === "prompt_too_long" || error.recoverableViaCompact) {
+    return true;
+  }
+  if (PROMPT_TOO_LONG_ANTHROPIC_PATTERN.test(error.message)) {
+    return true;
+  }
+  if (PROMPT_TOO_LONG_OPENAI_PATTERN.test(error.message)) {
+    return true;
+  }
+  if (REQUEST_TOO_LARGE_PATTERN.test(error.message)) {
+    return true;
+  }
+  return false;
 }

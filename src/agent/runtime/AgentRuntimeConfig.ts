@@ -10,8 +10,6 @@ export type AgentRuntimeConfig = {
   temperature?: number;
   thinking?: CanonicalThinkingConfig;
   toolChoice?: CanonicalToolChoice;
-  fallbackProvider?: string;
-  fallbackModel?: string;
   maxContextMessages?: number;
   stopOnStructuredOutput?: boolean;
   permissionMode: PermissionMode;
@@ -19,4 +17,6 @@ export type AgentRuntimeConfig = {
   env?: NodeJS.ProcessEnv;
   maxResultBytes?: number;
   metadata?: Record<string, unknown>;
+  /** Marks the agent as a subagent. RouterRuntime uses this for sticky/scenario decisions. */
+  isSubagent?: boolean;
 };

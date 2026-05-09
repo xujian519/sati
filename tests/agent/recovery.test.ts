@@ -32,9 +32,9 @@ test("AgentLoop classifies prompt-too-long model errors", async () => {
   assert.equal(result.result.errors?.[0]?.code, "agent_prompt_too_long");
 });
 
-test("AgentLoop retries once with fallback model for retryable model errors", async () => {
+test("AgentLoop succeeds when router transparently swaps to fallback model", async () => {
   const fixture = createAgentLoopFixture({
-    config: { fallbackModel: "fallback-model" },
+    config: { fallbackProvider: "test-provider", fallbackModel: "fallback-model" },
     scripts: [
       [
         {

@@ -10,6 +10,8 @@ export { redactConfig } from "./redact.js";
 export { parseAdaptersConfig, parseGatewayConfig } from "./parseGatewayConfig.js";
 export {
   PolitConfigError,
+  type PolitAgentConfig,
+  type PolitAgentModelSelection,
   type PolitConfig,
   type PolitConfigChangeClass,
   type PolitConfigDiagnostic,
@@ -24,4 +26,5 @@ export {
   type PolitRawConfig,
   type PolitAdaptersConfig,
   type PolitGatewayConfig,
+  type PolitRouterConfig,
 } from "./types.js";

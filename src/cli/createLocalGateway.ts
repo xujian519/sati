@@ -11,9 +11,12 @@ import {
 import { createModelRuntime, type ModelRuntime } from "../model/index.js";
 import { createDefaultPermissionContext } from "../permission/index.js";
 import { loadPolitConfig, resolvePolitHome } from "../polit/index.js";
+import type { PolitAgentModelSelection } from "../polit/config/types.js";
+import type { RouterConfig } from "../router/config/schema.js";
 import { listProjectSessions } from "../session/index.js";
 import { createBuiltinRegistry } from "../tool/index.js";
 import type { ToolRegistry } from "../tool/index.js";
+import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
 
 export type CreateLocalGatewayOptions = {
   projectRoot?: string;
@@ -62,6 +65,7 @@ type ProjectRuntime = {
   projectRoot: string;
   snapshot: ReturnType<typeof loadPolitConfig>;
   model: ModelRuntime;
+  router: RouterRuntime;
   tools: ToolRegistry;
   projectStorage: GatewayProjectStorageOptions;
 };
@@ -79,10 +83,17 @@ class ProjectRuntimeRegistry {
     }
 
     const snapshot = loadPolitConfig({ projectRoot, env: this.options.env });
+    const model = createModelRuntime(snapshot.config.model);
+    const routerConfig = ensureRouterConfig(snapshot.config.router, snapshot.config.agent.model);
+    const router = createRouterRuntime(routerConfig, {
+      modelRuntime: model,
+      now: this.options.now,
+    });
     const runtime: ProjectRuntime = {
       projectRoot,
       snapshot,
-      model: createModelRuntime(snapshot.config.model),
+      model,
+      router,
       tools: createBuiltinRegistry(),
       projectStorage: {
         projectRoot,
@@ -99,7 +110,7 @@ class ProjectRuntimeRegistry {
       sessionId: context.sessionKey,
       config: this.createAgentConfig(runtime),
       dependencies: {
-        model: runtime.model,
+        router: runtime.router,
         tools: { registry: runtime.tools },
         now: this.options.now,
       },
@@ -130,8 +141,6 @@ class ProjectRuntimeRegistry {
       provider: agent.model.provider,
       model: agent.model.model,
       cwd: runtime.projectRoot,
-      fallbackProvider: agent.fallbackModel?.provider,
-      fallbackModel: agent.fallbackModel?.model,
       permissionMode,
       permissionContext: createDefaultPermissionContext({
         cwd: runtime.projectRoot,
@@ -141,4 +150,20 @@ class ProjectRuntimeRegistry {
       }),
     };
   }
+}
+
+function ensureRouterConfig(
+  router: RouterConfig | undefined,
+  defaultSelection: PolitAgentModelSelection,
+): RouterConfig {
+  if (router) {
+    return router;
+  }
+  return {
+    scenarios: {
+      default: { id: defaultSelection.id, provider: defaultSelection.provider, model: defaultSelection.model },
+      longContextThreshold: 60_000,
+    },
+    zeroUsageRetry: { enabled: true, maxAttempts: 5 },
+  };
 }
