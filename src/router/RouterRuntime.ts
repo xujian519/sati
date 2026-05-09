@@ -308,35 +308,79 @@ export function createRouterRuntime(
       let zeroUsageAttempt = 0;
       while (true) {
         zeroUsageAttempt += 1;
-        const outcome = await runSingleAttempt(attemptRequest, deps.modelRuntime);
+        // Live-stream events. We track whether we've already surfaced any
+        // content event (text/thinking/tool) to the consumer; once we have,
+        // fallback / retry is no longer safe (would duplicate text).
+        let hasYieldedContent = false;
+        const pending: CanonicalModelEvent[] = [];
+        let outcome: AttemptOutcome | undefined;
+
+        for await (const item of streamAttempt(attemptRequest, deps.modelRuntime)) {
+          if (item.kind === "outcome") {
+            outcome = item.outcome;
+            break;
+          }
+          const event = item.event;
+          if (!hasYieldedContent && isContentEvent(event)) {
+            // Flush any framing events queued before the first content delta
+            // (request_started / message_start) and the content event itself.
+            for (const queued of pending) {
+              yield queued;
+            }
+            pending.length = 0;
+            yield event;
+            hasYieldedContent = true;
+            continue;
+          }
+          if (hasYieldedContent) {
+            yield event;
+            continue;
+          }
+          // Pre-content phase: defer framing events; we may need to swallow
+          // them and replay from a fallback attempt.
+          pending.push(event);
+        }
+
+        if (!outcome) {
+          break outer;
+        }
+
         lastBuffered = outcome.buffered;
         lastUsage = outcome.usage;
 
         if (outcome.error) {
           lastError = outcome.error;
-          if (!isFallbackEligible(outcome.error)) {
-            break outer;
+          // Only retry/fallback if we haven't surfaced content yet — otherwise
+          // we'd produce duplicate text on the consumer side.
+          if (!hasYieldedContent && isFallbackEligible(outcome.error)) {
+            if (attemptIndex < attempts.length - 1) {
+              const next = attempts[attemptIndex + 1];
+              events.emit({
+                type: "politdeck_router_fallback",
+                sessionId: ctx.sessionId,
+                turnId: ctx.turnId,
+                scenarioType: attemptDecision.scenarioType,
+                attempt: attemptIndex + 1,
+                fromProvider: attempt.provider,
+                fromModel: attempt.model,
+                toProvider: next.provider,
+                toModel: next.model,
+                error: outcome.error,
+              });
+              continue outer;
+            }
           }
-          if (attemptIndex < attempts.length - 1) {
-            const next = attempts[attemptIndex + 1];
-            events.emit({
-              type: "politdeck_router_fallback",
-              sessionId: ctx.sessionId,
-              turnId: ctx.turnId,
-              scenarioType: attemptDecision.scenarioType,
-              attempt: attemptIndex + 1,
-              fromProvider: attempt.provider,
-              fromModel: attempt.model,
-              toProvider: next.provider,
-              toModel: next.model,
-              error: outcome.error,
-            });
-            continue outer;
+          // Either we've already surfaced content, the error isn't eligible
+          // for fallback, or we've exhausted the attempt list. Replay any
+          // queued framing events then surface the error.
+          for (const queued of pending) {
+            yield queued;
           }
           break outer;
         }
 
         if (
+          !hasYieldedContent &&
           zeroUsageEnabled &&
           outcome.shouldRetryZeroUsage &&
           zeroUsageAttempt < zeroUsageMax
@@ -352,9 +396,14 @@ export function createRouterRuntime(
           continue;
         }
 
-        for (const event of outcome.buffered) {
-          yield event;
+        // Success path: flush any pending framing events that didn't reach
+        // a content event (e.g. zero-content responses, tool-only turns).
+        if (!hasYieldedContent) {
+          for (const queued of pending) {
+            yield queued;
+          }
         }
+
         const endedAt = (deps.now?.() ?? new Date()).toISOString();
         if (outcome.usage) {
           usageCache.observe(ctx.sessionId, outcome.usage);
@@ -437,13 +486,45 @@ type AttemptOutcome = {
   shouldRetryZeroUsage: boolean;
 };
 
-async function runSingleAttempt(
+/**
+ * "Content" events are the ones that are visible to the end-user / agent
+ * loop in a way that can't be retracted: text, thinking, and tool-call
+ * material. Once we've yielded any of these to the consumer, fallback /
+ * retry would produce duplicates, so we lock in the current attempt.
+ */
+function isContentEvent(event: CanonicalModelEvent): boolean {
+  return (
+    event.type === "text_delta" ||
+    event.type === "thinking_delta" ||
+    event.type === "tool_call_start" ||
+    event.type === "tool_call_delta" ||
+    event.type === "tool_call_end"
+  );
+}
+
+/**
+ * Live attempt — yields each model event the moment it arrives, then yields
+ * a final `{ outcome }` sentinel with retry/usage metadata. The previous
+ * implementation `await`-ed the entire stream into `buffered[]` before
+ * returning, which silently broke streaming UX (TUI/CLI saw the assistant
+ * text appear in one burst at the end of the turn).
+ *
+ * Trade-off: zero-usage retry and provider fallback can only fire BEFORE we
+ * yield any content. If a provider crashes mid-stream after we've already
+ * surfaced text, we can't transparently fall back without leaking duplicate
+ * text. This matches OpenAI's / Anthropic's own clients.
+ */
+async function* streamAttempt(
   request: CanonicalModelRequest,
   modelRuntime: ModelRuntime,
-): Promise<AttemptOutcome> {
+): AsyncGenerator<
+  | { kind: "event"; event: CanonicalModelEvent }
+  | { kind: "outcome"; outcome: AttemptOutcome }
+> {
   const buffered: CanonicalModelEvent[] = [];
   const state = createZeroUsageState();
   let providerError: import("../model/index.js").CanonicalModelError | undefined;
+
   try {
     for await (const event of modelRuntime.stream(request)) {
       observeEventForZeroUsage(state, event);
@@ -451,6 +532,7 @@ async function runSingleAttempt(
       if (event.type === "error") {
         providerError = event.error;
       }
+      yield { kind: "event", event };
     }
   } catch (error) {
     const fromError = (error as { error?: import("../model/index.js").CanonicalModelError })?.error;
@@ -463,10 +545,13 @@ async function runSingleAttempt(
     };
   }
 
-  return {
-    buffered,
-    error: providerError,
-    usage: state.observedUsage,
-    shouldRetryZeroUsage: shouldRetryZeroUsage(state),
+  yield {
+    kind: "outcome",
+    outcome: {
+      buffered,
+      error: providerError,
+      usage: state.observedUsage,
+      shouldRetryZeroUsage: shouldRetryZeroUsage(state),
+    },
   };
 }
