@@ -1,4 +1,4 @@
-import type { CanonicalModelEvent, CanonicalModelRequest } from "../../src/model/index.js";
+import type { CanonicalModelEvent, CanonicalModelRequest, CanonicalUsage } from "../../src/model/index.js";
 import {
   createDefaultPermissionContext,
   type PermissionMode,
@@ -13,7 +13,11 @@ import {
 import { PermissionRuntime } from "../../src/permission/index.js";
 import { AgentLoop, TurnRunner } from "../../src/agent/index.js";
 import { InMemoryTranscriptWriter } from "../../src/session/index.js";
-import type { AgentRuntimeConfig, AgentRuntimeDependencies } from "../../src/agent/index.js";
+import type {
+  AgentRouterRuntime,
+  AgentRuntimeConfig,
+  AgentRuntimeDependencies,
+} from "../../src/agent/index.js";
 import type { LifecycleRuntime } from "../../src/lifecycle/index.js";
 
 export class ScriptedAgentModel {
@@ -38,6 +42,80 @@ export class ScriptedAgentModel {
   }
 }
 
+/**
+ * Minimal router-like object the agent loop accepts. Tests use this to script
+ * model events and optionally swap models on subsequent turns (mimicking the
+ * router's fallback chain semantics).
+ */
+export class ScriptedAgentRouter implements AgentRouterRuntime {
+  readonly model: ScriptedAgentModel;
+  readonly fallbackProvider?: string;
+  readonly fallbackModel?: string;
+  private fallbackArmed = false;
+  readonly observedUsage: Array<{ sessionId: string; usage: CanonicalUsage | undefined }> = [];
+
+  constructor(
+    scripts: CanonicalModelEvent[][],
+    options: { fallbackProvider?: string; fallbackModel?: string } = {},
+  ) {
+    this.model = new ScriptedAgentModel(scripts);
+    this.fallbackProvider = options.fallbackProvider;
+    this.fallbackModel = options.fallbackModel;
+  }
+
+  async *stream(
+    request: CanonicalModelRequest,
+    ctx: { sessionId: string; turnId: string; abortSignal?: AbortSignal; isMainAgent: boolean },
+  ): AsyncIterable<CanonicalModelEvent> {
+    const attempts: CanonicalModelRequest[] = [request];
+    if (this.fallbackModel) {
+      attempts.push({
+        ...request,
+        provider: this.fallbackProvider ?? request.provider,
+        model: this.fallbackModel,
+      });
+    }
+    let lastBuffered: CanonicalModelEvent[] = [];
+    let lastError: { provider: string; protocol: string; code: string; message: string; retryable: boolean } | undefined;
+    for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex += 1) {
+      if (ctx.abortSignal?.aborted) {
+        return;
+      }
+      const buffered: CanonicalModelEvent[] = [];
+      let attemptError: typeof lastError;
+      for await (const event of this.model.stream(attempts[attemptIndex], ctx.abortSignal)) {
+        buffered.push(event);
+        if (event.type === "error") {
+          attemptError = event.error;
+        }
+      }
+      lastBuffered = buffered;
+      if (!attemptError) {
+        for (const event of buffered) {
+          yield event;
+        }
+        return;
+      }
+      lastError = attemptError;
+      this.fallbackArmed = attemptIndex >= 0;
+      if (!attemptError.retryable) {
+        for (const event of buffered) {
+          yield event;
+        }
+        return;
+      }
+    }
+    for (const event of lastBuffered) {
+      yield event;
+    }
+    void lastError;
+  }
+
+  observeUsage(sessionId: string, usage: CanonicalUsage | undefined): void {
+    this.observedUsage.push({ sessionId, usage });
+  }
+}
+
 export function createAgentLoopFixture(options: {
   scripts: CanonicalModelEvent[][];
   tools?: PolitDeckToolDefinition[];
@@ -45,9 +123,10 @@ export function createAgentLoopFixture(options: {
   canPrompt?: boolean;
   auditRecorder?: PolitDeckToolAuditRecorder;
   lifecycle?: LifecycleRuntime;
-  config?: Partial<AgentRuntimeConfig>;
+  config?: Partial<AgentRuntimeConfig> & { fallbackProvider?: string; fallbackModel?: string };
 }): {
   model: ScriptedAgentModel;
+  router: ScriptedAgentRouter;
   registry: ToolRegistry;
   loop: AgentLoop;
   transcript: InMemoryTranscriptWriter;
@@ -55,7 +134,9 @@ export function createAgentLoopFixture(options: {
   config: AgentRuntimeConfig;
   dependencies: AgentRuntimeDependencies;
 } {
-  const model = new ScriptedAgentModel(options.scripts);
+  const fallbackProvider = options.config?.fallbackProvider;
+  const fallbackModel = options.config?.fallbackModel;
+  const router = new ScriptedAgentRouter(options.scripts, { fallbackProvider, fallbackModel });
   const registry = new ToolRegistry();
   for (const tool of options.tools ?? []) {
     registry.register(tool);
@@ -65,6 +146,9 @@ export function createAgentLoopFixture(options: {
   const scheduler = new SequentialToolScheduler(toolRuntime);
   const permissionMode = options.permissionMode ?? "default";
   const cwd = process.cwd();
+  const baseConfig: Partial<AgentRuntimeConfig> = { ...options.config };
+  delete (baseConfig as Record<string, unknown>).fallbackProvider;
+  delete (baseConfig as Record<string, unknown>).fallbackModel;
   const config: AgentRuntimeConfig = {
     provider: "test-provider",
     model: "test-model",
@@ -75,10 +159,10 @@ export function createAgentLoopFixture(options: {
       mode: permissionMode,
       canPrompt: options.canPrompt ?? false,
     }),
-    ...options.config,
+    ...baseConfig,
   };
   const dependencies: AgentRuntimeDependencies = {
-    model,
+    router,
     tools: { registry, scheduler },
     auditRecorder: options.auditRecorder,
     lifecycle: options.lifecycle,
@@ -95,7 +179,7 @@ export function createAgentLoopFixture(options: {
     dependencies.lifecycle,
     { cwd: config.cwd, transcriptPath: "" },
   );
-  return { model, registry, loop, transcript, turnRunner, config, dependencies };
+  return { model: router.model, router, registry, loop, transcript, turnRunner, config, dependencies };
 }
 
 export async function collectAsyncGenerator<T, R>(generator: AsyncGenerator<T, R, unknown>): Promise<{

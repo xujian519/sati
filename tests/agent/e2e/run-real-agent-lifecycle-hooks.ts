@@ -12,10 +12,12 @@ import {
   type PolitDeckHookInput,
   type PolitDeckHooksSettings,
 } from "../../../src/extension/index.js";
+import type { AgentRouterRuntime } from "../../../src/agent/index.js";
 import { LifecycleRuntime } from "../../../src/lifecycle/index.js";
-import { createModelRuntime, type CanonicalModelRequest } from "../../../src/model/index.js";
+import { createModelRuntime, type CanonicalModelEvent, type CanonicalModelRequest } from "../../../src/model/index.js";
 import { createDefaultPermissionContext } from "../../../src/permission/index.js";
 import { loadPolitConfig } from "../../../src/polit/index.js";
+import { createRouterRuntime } from "../../../src/router/index.js";
 import { ToolRegistry, type PolitDeckToolDefinition } from "../../../src/tool/index.js";
 
 const RUN_REAL_E2E = process.env.POLITDECK_RUN_REAL_AGENT_LIFECYCLE_E2E === "1";
@@ -33,7 +35,6 @@ if (!RUN_REAL_E2E) {
 const cwd = process.cwd();
 const snapshot = loadPolitConfig();
 const selectedModel = snapshot.config.agent.model;
-const fallbackModel = snapshot.config.agent.fallbackModel;
 const baseModelRuntime = createModelRuntime(snapshot.config.model);
 const capabilities = baseModelRuntime.getCapabilities(selectedModel.provider, selectedModel.model);
 
@@ -152,8 +153,6 @@ const permissionContext = createDefaultPermissionContext({
 const config: AgentRuntimeConfig = {
   provider: selectedModel.provider,
   model: selectedModel.model,
-  fallbackProvider: fallbackModel?.provider,
-  fallbackModel: fallbackModel?.model,
   cwd,
   permissionMode: permissionContext.mode,
   permissionContext,
@@ -171,21 +170,31 @@ const config: AgentRuntimeConfig = {
   },
 };
 
+const realRouter = createRouterRuntime(
+  snapshot.config.router ?? { scenarios: { default: selectedModel } },
+  { modelRuntime: baseModelRuntime },
+);
+
+const router: AgentRouterRuntime = {
+  async *stream(request, ctx) {
+    const adjustedRequest = adjustToolChoice(request);
+    modelRequests.push({
+      index: modelRequests.length + 1,
+      toolChoice: adjustedRequest.toolChoice,
+      hasToolResult: hasToolResult(request),
+    });
+    for await (const event of realRouter.stream(adjustedRequest, ctx) as AsyncIterable<CanonicalModelEvent>) {
+      yield event;
+    }
+  },
+  observeUsage: realRouter.observeUsage,
+};
+
 const session = createAgentSession({
   sessionId: "real-agent-lifecycle-hooks",
   config,
   dependencies: {
-    model: {
-      stream: (request, signal) => {
-        const adjustedRequest = adjustToolChoice(request);
-        modelRequests.push({
-          index: modelRequests.length + 1,
-          toolChoice: adjustedRequest.toolChoice,
-          hasToolResult: hasToolResult(request),
-        });
-        return createModelRuntime(snapshot.config.model, { signal }).stream(adjustedRequest);
-      },
-    },
+    router,
     tools: {
       registry,
     },
@@ -209,8 +218,6 @@ console.log(
       configSnapshotVersion: snapshot.version,
       provider: selectedModel.provider,
       model: selectedModel.model,
-      fallbackProvider: fallbackModel?.provider,
-      fallbackModel: fallbackModel?.model,
       toolName: TOOL_NAME,
       prompt,
     },

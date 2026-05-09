@@ -9,6 +9,7 @@ import { sha256, stableStringify } from "./hash.js";
 import { mergeConfigSources } from "./merge.js";
 import { parseMemoryConfig } from "./parseMemoryConfig.js";
 import { parseAdaptersConfig, parseGatewayConfig } from "./parseGatewayConfig.js";
+import { parseRouterConfig } from "../../router/config/parseRouterConfig.js";
 import { redactConfig } from "./redact.js";
 import {
   PolitConfigError,
@@ -25,7 +26,6 @@ import {
 const SUPPORTED_SCHEMA_VERSION = 1;
 const ENV_CONFIG_OVERRIDES = [
   ["POLIT_AGENT_MODEL", ["agent", "model"]],
-  ["POLIT_AGENT_FALLBACK_MODEL", ["agent", "fallbackModel"]],
 ] as const;
 
 export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConfigSnapshot {
@@ -97,10 +97,20 @@ export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConf
   const memory = parseMemoryConfig(rawConfig.memory, diagnostics);
   const gateway = parseGatewayConfig(rawConfig.gateway, diagnostics);
   const adapters = parseAdaptersConfig(rawConfig.adapters, diagnostics);
+  const router = parseRouterSection(rawConfig.router, model, diagnostics);
   const alwaysOn = parseAlwaysOnConfig(rawConfig.alwaysOn, diagnostics);
   throwConfigErrorIfFatal(diagnostics);
 
-  const redactedSnapshotConfig = redactConfig({ agent, model, extension, memory, gateway, adapters, alwaysOn });
+  const redactedSnapshotConfig = redactConfig({
+    agent,
+    model,
+    extension,
+    memory,
+    gateway,
+    adapters,
+    router,
+    alwaysOn,
+  });
   return deepFreeze({
     version: options.version ?? 1,
     schemaVersion,
@@ -115,6 +125,7 @@ export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConf
       ...(memory ? { memory } : {}),
       ...(gateway ? { gateway } : {}),
       ...(adapters ? { adapters } : {}),
+      ...(router ? { router } : {}),
       ...(alwaysOn ? { alwaysOn } : {}),
     },
   });
@@ -257,6 +268,7 @@ function validateTopLevel(rawConfig: PolitRawConfig, diagnostics: PolitConfigDia
     "memory",
     "gateway",
     "adapters",
+    "router",
     "alwaysOn",
   ]);
   for (const key of Object.keys(rawConfig)) {
@@ -290,15 +302,20 @@ function parseAgent(
   }
 
   const model = parseAgentModelSelection(rawAgent.model, "agent.model", modelConfig, diagnostics);
-  const fallbackModel =
-    rawAgent.fallbackModel === undefined
-      ? undefined
-      : parseAgentModelSelection(rawAgent.fallbackModel, "agent.fallbackModel", modelConfig, diagnostics);
+  if (rawAgent.fallbackModel !== undefined) {
+    diagnostics.push({
+      code: "CONFIG_AGENT_FALLBACK_MODEL_DEPRECATED",
+      severity: "warning",
+      message:
+        "agent.fallbackModel has been removed. Move the value to router.fallback.default to keep fallback behaviour.",
+      path: "agent.fallbackModel",
+      recoverable: true,
+    });
+  }
   throwConfigErrorIfFatal(diagnostics);
 
   return {
     model,
-    fallbackModel,
   };
 }
 
@@ -501,6 +518,25 @@ function throwConfigErrorIfFatal(diagnostics: PolitConfigDiagnostic[]): void {
       diagnostics,
     );
   }
+}
+
+function parseRouterSection(
+  rawRouter: unknown,
+  modelConfig: ReturnType<typeof parseModelConfig>,
+  diagnostics: PolitConfigDiagnostic[],
+) {
+  const result = parseRouterConfig(rawRouter, modelConfig);
+  for (const issue of result.diagnostics) {
+    diagnostics.push({
+      code: issue.code,
+      severity: issue.severity,
+      message: issue.message,
+      path: issue.path,
+      hint: issue.hint,
+      recoverable: issue.severity !== "fatal",
+    });
+  }
+  return result.config;
 }
 
 function deepFreeze<T>(value: T): T {

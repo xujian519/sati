@@ -3,12 +3,12 @@ import { createModelRuntime } from "../../../src/model/index.js";
 import { createDefaultPermissionContext } from "../../../src/permission/index.js";
 import { loadPolitConfig } from "../../../src/polit/index.js";
 import { createBuiltinRegistry } from "../../../src/tool/index.js";
+import { createRouterRuntime } from "../../../src/router/index.js";
 
 const prompt = process.argv.slice(2).join(" ") || "Reply with exactly: PolitDeck agent loop OK";
 const cwd = process.cwd();
 const snapshot = loadPolitConfig();
 const selectedModel = snapshot.config.agent.model;
-const fallbackModel = snapshot.config.agent.fallbackModel;
 const registry = createBuiltinRegistry();
 const permissionContext = createDefaultPermissionContext({
   cwd,
@@ -18,8 +18,6 @@ const permissionContext = createDefaultPermissionContext({
 const config: AgentRuntimeConfig = {
   provider: selectedModel.provider,
   model: selectedModel.model,
-  fallbackProvider: fallbackModel?.provider,
-  fallbackModel: fallbackModel?.model,
   cwd,
   permissionMode: permissionContext.mode,
   permissionContext,
@@ -31,13 +29,17 @@ const config: AgentRuntimeConfig = {
   },
 };
 
+const modelRuntime = createModelRuntime(snapshot.config.model);
+const routerRuntime = createRouterRuntime(
+  snapshot.config.router ?? { scenarios: { default: selectedModel } },
+  { modelRuntime },
+);
+
 const session = createAgentSession({
   sessionId: "real-agent-loop",
   config,
   dependencies: {
-    model: {
-      stream: (request, signal) => createModelRuntime(snapshot.config.model, { signal }).stream(request),
-    },
+    router: routerRuntime,
     tools: {
       registry,
     },
@@ -55,8 +57,6 @@ console.log(
       configSnapshotVersion: snapshot.version,
       provider: selectedModel.provider,
       model: selectedModel.model,
-      fallbackProvider: fallbackModel?.provider,
-      fallbackModel: fallbackModel?.model,
       prompt,
     },
     null,
