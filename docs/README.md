@@ -32,7 +32,7 @@ tool          registry、runtime、builtin tools、scheduler
 - `[cron/](./cron/)`：当前 `src/cron` runtime、Gateway 方法、CLI 命令和存储格式。
 - `[always-on/](./always-on/)`：Always-On discovery 的旧行为、当前 gateway-native 实现方案和测试计划。
 - `[lifecycle-hooks-plugins/](./lifecycle-hooks-plugins/)`：生命周期、hooks 和插件系统文档。
-- `[tui-real-env-testing/](./tui-real-env-testing/)`：通过真实 TUI、真实 Gateway、真实模型和真实工具链路进行环境验收的测试文档。
+- `[tui-real-env-testing/](./tui-real-env-testing/)`：通过真实 TUI、真实 Gateway、Router、Memory/Context、Always-On、真实模型和真实工具链路进行环境验收的测试文档。
 - `politdeck-*-refactor-development-guide.md` / `politdeck-*-test-maintenance-guide.md`：各模块的设计演进和测试维护文档。
 
 ## 阅读顺序
