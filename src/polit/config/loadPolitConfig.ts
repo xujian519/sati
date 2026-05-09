@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { parseDocument } from "yaml";
+import { parseAlwaysOnConfig } from "../../always-on/config/parseAlwaysOnConfig.js";
 import { parseModelConfig } from "../../model/config/parseModelConfig.js";
 import { isRecord } from "../../model/config/schema.js";
 import { ModelConfigError } from "../../model/protocol/errors.js";
@@ -96,9 +97,10 @@ export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConf
   const memory = parseMemoryConfig(rawConfig.memory, diagnostics);
   const gateway = parseGatewayConfig(rawConfig.gateway, diagnostics);
   const adapters = parseAdaptersConfig(rawConfig.adapters, diagnostics);
+  const alwaysOn = parseAlwaysOnConfig(rawConfig.alwaysOn, diagnostics);
   throwConfigErrorIfFatal(diagnostics);
 
-  const redactedSnapshotConfig = redactConfig({ agent, model, extension, memory, gateway, adapters });
+  const redactedSnapshotConfig = redactConfig({ agent, model, extension, memory, gateway, adapters, alwaysOn });
   return deepFreeze({
     version: options.version ?? 1,
     schemaVersion,
@@ -113,6 +115,7 @@ export function loadPolitConfig(options: PolitConfigLoadOptions = {}): PolitConf
       ...(memory ? { memory } : {}),
       ...(gateway ? { gateway } : {}),
       ...(adapters ? { adapters } : {}),
+      ...(alwaysOn ? { alwaysOn } : {}),
     },
   });
 }
@@ -254,6 +257,7 @@ function validateTopLevel(rawConfig: PolitRawConfig, diagnostics: PolitConfigDia
     "memory",
     "gateway",
     "adapters",
+    "alwaysOn",
   ]);
   for (const key of Object.keys(rawConfig)) {
     if (!allowedKeys.has(key)) {

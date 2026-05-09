@@ -1,18 +1,52 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
+import { createAlwaysOnRuntime, type AlwaysOnRuntime } from "../always-on/index.js";
 import type { Gateway, GatewayEvent, GatewaySubmitTurnInput } from "../gateway/index.js";
 import { CliChannel, TuiChannel, FeishuChannel } from "../adapters/index.js";
+import { loadPolitConfig, resolvePolitHome } from "../polit/index.js";
 import { createLocalGateway } from "./createLocalGateway.js";
 import { startPolitDeckServer } from "./politdeckServer.js";
 
 async function main(argv = process.argv.slice(2)): Promise<void> {
   const command = argv[0];
   if (command === "server") {
-    const gateway = createLocalGateway({ projectRoot: process.cwd() });
+    const projectRoot = process.cwd();
+    const env = process.env;
+    const politHome = resolvePolitHome(env);
+    const snapshot = loadPolitConfig({ projectRoot, env });
+
+    let alwaysOn: AlwaysOnRuntime | undefined;
+    if (snapshot.config.alwaysOn) {
+      alwaysOn = createAlwaysOnRuntime({
+        config: snapshot.config.alwaysOn,
+        politHome,
+        projectKey: projectRoot,
+        logger: {
+          info: (message, data) =>
+            console.log(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
+          warn: (message, data) =>
+            console.warn(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
+        },
+      });
+    }
+
+    const gateway = createLocalGateway({
+      projectRoot,
+      politHome,
+      env,
+      extraTools: alwaysOn?.getTools(),
+      sessionOverrides: alwaysOn?.getSessionOverrides(),
+    });
+
+    if (alwaysOn) {
+      alwaysOn.bindGateway(gateway);
+      await alwaysOn.start();
+    }
+
     const server = await startPolitDeckServer({
       gateway,
       port: readPort(argv) ?? 18789,
-      staticAssetsPath: resolve(process.cwd(), "ui/dist"),
+      staticAssetsPath: resolve(projectRoot, "ui/dist"),
       feishu: new FeishuChannel(),
     });
     console.log(`PolitDeck server listening: ${server.url}`);
@@ -20,6 +54,19 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     if (server.tokenPath) {
       console.log(`Token: ${server.tokenPath}`);
     }
+    const stop = async () => {
+      try {
+        await alwaysOn?.stop();
+      } catch (error) {
+        console.warn(`[always-on] stop failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    };
+    process.on("SIGINT", () => {
+      void stop().finally(() => process.exit(0));
+    });
+    process.on("SIGTERM", () => {
+      void stop().finally(() => process.exit(0));
+    });
     await new Promise(() => undefined);
     return;
   }

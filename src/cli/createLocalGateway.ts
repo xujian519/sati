@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
 import { createAgentSession, type AgentRuntimeConfig, type CreateAgentSessionOptions } from "../agent/index.js";
 import {
   createGateway,
@@ -13,13 +14,17 @@ import { createDefaultPermissionContext } from "../permission/index.js";
 import { loadPolitConfig, resolvePolitHome } from "../polit/index.js";
 import { listProjectSessions } from "../session/index.js";
 import { createBuiltinRegistry } from "../tool/index.js";
-import type { ToolRegistry } from "../tool/index.js";
+import type { PolitDeckToolDefinition, ToolRegistry } from "../tool/index.js";
 
 export type CreateLocalGatewayOptions = {
   projectRoot?: string;
   politHome?: string;
   env?: Record<string, string | undefined>;
   permissionMode?: AgentRuntimeConfig["permissionMode"];
+  /** Tools merged into every per-project ToolRegistry. */
+  extraTools?: PolitDeckToolDefinition[];
+  /** Per-sessionKey config overrides (cwd / permissionMode). */
+  sessionOverrides?: SessionConfigOverrides;
 };
 
 export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gateway {
@@ -34,6 +39,8 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gat
     env,
     permissionMode: options.permissionMode ?? "default",
     now,
+    extraTools: options.extraTools,
+    sessionOverrides: options.sessionOverrides,
   });
   const defaultRuntime = registry.resolve();
 
@@ -56,6 +63,8 @@ type ProjectRuntimeRegistryOptions = {
   env: Record<string, string | undefined>;
   permissionMode: AgentRuntimeConfig["permissionMode"];
   now: () => Date;
+  extraTools?: PolitDeckToolDefinition[];
+  sessionOverrides?: SessionConfigOverrides;
 };
 
 type ProjectRuntime = {
@@ -79,11 +88,15 @@ class ProjectRuntimeRegistry {
     }
 
     const snapshot = loadPolitConfig({ projectRoot, env: this.options.env });
+    const tools = createBuiltinRegistry();
+    for (const tool of this.options.extraTools ?? []) {
+      tools.register(tool);
+    }
     const runtime: ProjectRuntime = {
       projectRoot,
       snapshot,
       model: createModelRuntime(snapshot.config.model),
-      tools: createBuiltinRegistry(),
+      tools,
       projectStorage: {
         projectRoot,
         politHome: this.options.politHome,
@@ -97,7 +110,7 @@ class ProjectRuntimeRegistry {
     const runtime = this.resolve(context.projectKey);
     return createAgentSession({
       sessionId: context.sessionKey,
-      config: this.createAgentConfig(runtime),
+      config: this.createAgentConfig(runtime, context.sessionKey),
       dependencies: {
         model: runtime.model,
         tools: { registry: runtime.tools },
@@ -123,21 +136,26 @@ class ProjectRuntimeRegistry {
     };
   }
 
-  private createAgentConfig(runtime: ProjectRuntime): CreateAgentSessionOptions["config"] {
+  private createAgentConfig(
+    runtime: ProjectRuntime,
+    sessionKey: string,
+  ): CreateAgentSessionOptions["config"] {
     const agent = runtime.snapshot.config.agent;
-    const permissionMode = this.options.permissionMode;
+    const override = this.options.sessionOverrides?.get(sessionKey);
+    const permissionMode = override?.permissionMode ?? this.options.permissionMode;
+    const cwd = override?.cwd ?? runtime.projectRoot;
     return {
       provider: agent.model.provider,
       model: agent.model.model,
-      cwd: runtime.projectRoot,
+      cwd,
       fallbackProvider: agent.fallbackModel?.provider,
       fallbackModel: agent.fallbackModel?.model,
       permissionMode,
       permissionContext: createDefaultPermissionContext({
-        cwd: runtime.projectRoot,
+        cwd,
         mode: permissionMode,
-        canPrompt: false,
-        bypassAvailable: true,
+        canPrompt: override?.canPrompt ?? false,
+        bypassAvailable: override?.bypassAvailable ?? true,
       }),
     };
   }

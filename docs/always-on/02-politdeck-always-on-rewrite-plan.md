@@ -4,6 +4,8 @@
 
 Always-On 在 PolitDeck 中只保留一条主线：在合适的时机，对一个项目自动执行一次主动发现；每次发现最多产出 1 份结构化 plan，并立即在该项目的隔离环境中自动执行该 plan，产出工作报告。
 
+每个项目同一时刻至多 1 个隔离环境（worktree 或 snapshot 拷贝）；该环境跨 fire 复用，runtime 不会自动删除。`discovery` 与 `execution` 两次 turn 都跑在该工作区内；用户原项目根仅作为 prepare 时的源与 gate 检查、plan/报告存储派生 projectId 的身份标识。
+
 ## 1. 架构
 
 Gateway-native Always-On。Always-On 是 `politdeck server` 进程内的一个 runtime 模块，不引入独立常驻进程，不引入新的本地 socket。
@@ -103,9 +105,8 @@ alwaysOn:
   workspace:
     gitWorktreeBaseDir: "${POLIT_HOME}/always-on/worktrees"
     snapshotBaseDir: "${POLIT_HOME}/always-on/snapshots"
-    maxConcurrentEnvs: 1
-    retainSuccessfulEnvs: false
-    retainFailedEnvs: true
+    snapshotMaxBytes: 1073741824
+    gitLfs: false
   execution:
     maxTurns: 30
     maxToolCalls: 200
@@ -121,8 +122,10 @@ alwaysOn:
 - `dailyBudget` 沿用旧语义：每天最多触发的 fire 次数。
 - 每次 fire 至多产出 1 份 plan，是协议层硬约束（见 §7），无对应配置项。
 - `dormancy.enabled` 控制是否启用“产出 0 plan 后转入静默并监听文件变化”的机制（见 §6）。
-- `workspace` 段只描述资源参数（基址、并发上限、保留策略等）；具体使用哪种隔离方式由 `WorkspaceProviderRegistry` 按 provider 注册顺序自动判定（见 §9），不提供 `strategy` 配置。
-- `workspace.maxConcurrentEnvs` 控制单项目同时存在的隔离环境上限，超出则后续 fire 进入 cooldown。
+- `workspace` 段只描述资源参数（基址、snapshot 大小上限、git lfs 开关）；具体使用哪种隔离方式由 `WorkspaceProviderRegistry` 按 provider 注册顺序自动判定（见 §9），不提供 `strategy` 配置。
+- 隔离环境单实例 + 永不自动删除：每个项目至多 1 个工作区目录，由 `state.currentWorkspace` 单点跟踪；fire 优先复用现有目录，仅在缺失时调用 provider.prepare。已删除字段（出现即触发 `ALWAYS_ON_FIELD_REMOVED` 致命诊断）：
+  - `workspace.maxConcurrentEnvs`：单实例改由 reuse 模型保证，不再可配。
+  - `workspace.retainSuccessfulEnvs` / `workspace.retainFailedEnvs`：runtime 永不自动删除工作区，用户手动 `rm -rf <handle.cwd>` 后下次 fire 自动 prepare 新的。
 - `execution` 段只描述运行边界（轮次、工具次数、超时）；执行 turn 的权限模式由本方案固定为 `bypassPermissions`，不可配置（见 §5）。
 - `projects.<absoluteProjectRoot>` 仅保留 `enabled` 一项。`sessionKey` 由 runtime 用稳定函数派生，不允许逐项目配置。
 
@@ -166,6 +169,13 @@ type AlwaysOnDiscoveryState = {
     since: string;
     lastBaselineAt: string;
     lastChangeAt?: string;
+  };
+  /** 跨 fire 持久化的隔离环境句柄；fire 启动时优先复用。 */
+  currentWorkspace?: {
+    runId: string;
+    strategy: "git-worktree" | "snapshot-copy";
+    cwd: string;
+    metadata: Record<string, string>;
   };
 };
 ```
@@ -224,23 +234,31 @@ DiscoveryScheduler.tick(projectKey)
        -> 不通过：根据 outcome 进入下一次 tick / dormancy；不写 lock
        -> 通过：acquire lock，markFireStarted
   -> DiscoveryFire.run()
-       1. produce plan
+       1. ensureAlwaysOnWorkspace(state):
+            if state.currentWorkspace and existsSync(cwd) -> reuse handle
+            else -> WorkspaceProviderRegistry.prepare(projectRoot, runId)
+                    state.currentWorkspace = { runId, strategy, cwd, metadata }
+            assertWorkspaceCwdSafe(handle)
+       2. discovery turn:
+            sessionOverrides.set(discoverySessionKey,
+              { cwd: workspace.cwd, permissionMode: "default" })
             gateway.submitTurn({
               sessionKey,
               channelKey: "always-on/discovery",
               projectKey,
-              message: buildDiscoveryPrompt(projectRoot),
+              message: buildDiscoveryPrompt({ projectRoot, workspaceCwd, chatDir, ... }),
               mode: "default",
               runId,
             })
             agent 调用 AlwaysOnDiscoveryPlanTool 至多 1 次
             tool 把 markdown 写到 plans/<planId>.md，并返回 PlanContract 校验通过的 record
-       2. 若 0 plan：
+       3. 若 0 plan：
             markFireCompleted(outcome="no_plan")
             进入 dormancy（如启用）
-            释放 lock；END
-       3. 若 1 plan：
-            workspace = WorkspaceProviderRegistry.resolve(projectRoot).prepare(runId)
+            释放 lock；END   （workspace 保留）
+       4. 若 1 plan：
+            sessionOverrides.set(executionSessionKey,
+              { cwd: workspace.cwd, permissionMode: "bypassPermissions" })
             gateway.submitTurn({
               sessionKey: deriveExecutionSessionKey(projectKey, runId),
               channelKey: "always-on/execute",
@@ -251,20 +269,22 @@ DiscoveryScheduler.tick(projectKey)
             })
             执行 turn 内部以 workspace.cwd 作为 AgentRuntimeConfig.cwd
             agent 调用 AlwaysOnReportTool 落 reports/<runId>.md
-       4. workspace.publish() 或 workspace.dispose()
        5. markFireCompleted(outcome="executed" | "failed")
        6. append run-history.jsonl
-       7. 释放 lock
+       7. 不调用 provider.dispose；workspace 跨 fire 复用，等待用户手动删除
+       8. 释放 lock
 ```
 
 关键不变量：
 
 - 任一时刻同 `projectKey` 至多 1 个 fire。靠 `discovery.lock` + `SessionRouter.beginTurn` 双重防护。
-- plan 与 execution 使用不同的 `sessionKey`，避免与用户主 session 冲突。`deriveExecutionSessionKey` 是稳定函数：`always-on/execute:project=<projectKey>:run=<runId>`。
-- 执行 turn 的 `cwd` 永远是隔离工作区路径，绝不是项目根本身。
-- 执行 turn 的权限模式固定为 `bypassPermissions`，agent 在隔离环境内可以执行任何工具调用，不再触发交互式权限询问。这是“先隔离、再放权”的契约，不是“放权再保护”，因此 §9 的隔离环境创建必须先成功。
+- 任一时刻同 `projectKey` 至多 1 个隔离工作区，由 `state.currentWorkspace` 单点跟踪；reuse 模型自然保证单实例约束，runtime 不再消费 `workspaceCount` / `maxConcurrentEnvs`。
+- discovery 与 execution 使用不同的 `sessionKey`，避免与用户主 session 冲突。`deriveExecutionSessionKey` 是稳定函数：`always-on/execute:project=<projectKey>:run=<runId>`；discovery 类似。
+- 两次 turn 的 `cwd` 都是 `workspace.cwd`（隔离工作区路径），绝不是项目根本身。
+- discovery turn 仍是 `default` 权限模式（仅访问工作区与聊天目录，写动作走默认权限审批）。execution turn 固定为 `bypassPermissions`：agent 在隔离环境内可以执行任何工具调用。这是“先隔离、再放权”的契约，因此 §9 的工作区准备必须先成功（reuse 失败也会回退到 prepare，再失败则 outcome 直接 `failed`）。
 - 任一 fire 的 outcome 必须落到 `state.json` 与 `run-history.jsonl`，不允许只在内存中维护。
 - agent 若没有调用 `AlwaysOnDiscoveryPlanTool`，按 0 plan 处理；若调用超过 1 次，第 2 次返回错误码 `plan_quota_exhausted`。每次 fire 仅允许 1 次成功调用是协议层硬约束，无可配置开关。
+- runtime 永不调用 `provider.dispose`；workspace 留给用户人工 `rm -rf <handle.cwd>`。删除后下次 fire 自动 prepare 新的。
 
 ## 6. 触发频率与 Dormancy
 
@@ -277,14 +297,14 @@ DiscoveryScheduler.tick(projectKey)
 | 全局未启用 | `disabled` |
 | 项目未启用 | `project_disabled` |
 | 项目路径不存在 | `project_missing` |
-| 无新鲜 lease | `no_fresh_lease` |
-| agent 忙 | `agent_busy` |
-| 最近用户消息 | `recent_user_msg` |
+| 静默期内无变化 | `dormant_no_signal` |
+| agent 忙（仅在 lease 列表非空时检查） | `agent_busy` |
+| 最近用户消息（仅在 lease 列表非空时检查） | `recent_user_msg` |
 | 冷却期 | `cooldown` |
 | 当日预算耗尽 | `daily_budget` |
 | 锁占用 | `lock_busy` |
-| 隔离环境上限 | `workspace_capacity` |
-| 静默期内无变化 | `dormant_no_signal` |
+
+> Channel lease 已降级为反向约束：lease 列表为空时既不阻塞触发，也不参与 `agent_busy / recent_user_msg` 判断；用户不在线即视为可触发候选。隔离环境数量不再作为 gate；单实例约束由 `DiscoveryFire.ensureWorkspace` 的 reuse 模型保证。
 
 第二层（新增）：dormancy 与文件信号。
 
@@ -424,6 +444,33 @@ fire outcome = executed | failed
 
 ## 9. 隔离环境抽象
 
+### 9.0 生命周期
+
+每个项目至多 1 个隔离环境（worktree 或 snapshot 拷贝），跨 fire 持久复用：
+
+```text
+DiscoveryFire.run()
+  state = stateStore.read()
+  if state.currentWorkspace and existsSync(state.currentWorkspace.cwd):
+      handle = reconstruct(state.currentWorkspace)         # reuse, 不调 prepare
+  else:
+      prepared = workspaceRegistry.prepare(projectRoot, runId)
+      stateStore.setCurrentWorkspace(prepared.handle)
+      handle = prepared.handle
+  assertWorkspaceCwdSafe(handle)                          # cwd 必须落在 worktrees/snapshots 基址下
+  ... discovery + execution turn 都用 handle.cwd ...
+  # runtime 永不调用 provider.dispose；workspace 留给用户人工清理
+```
+
+要点：
+
+- `state.currentWorkspace` 在 `state.json` 中持久化；server 重启后 reuse 路径仍然成立。
+- 状态漂移：`existsSync(cwd)` 是 reuse 的硬条件。用户手动 `rm -rf <cwd>` 后下一次 fire 自动走 prepare，并把新 handle 写回 state。
+- 异步异常（prepare 失败）不写 state.currentWorkspace；下次 fire 仍重试 prepare。
+- runtime 不再消费 `provider.dispose`；接口保留以备未来 “手动 prune” CLI 使用。
+
+### 9.x WorkspaceProvider 抽象
+
 隔离环境通过 `WorkspaceProvider` 接口统一抽象。
 
 ```ts
@@ -463,7 +510,7 @@ interface WorkspaceProvider {
 - 当前 git 版本支持 `git worktree`（>= 2.5）。
 - 工作区存在 `HEAD` 引用，且无未完成的 rebase / merge。
 
-`prepare`：
+`prepare`（仅在 `state.currentWorkspace` 缺失或 cwd 不存在时调用）：
 
 ```text
 git -C <projectRoot> rev-parse --show-toplevel             -> repoRoot
@@ -476,7 +523,7 @@ return { strategy: "git-worktree", cwd: worktreePath, metadata: { repoRoot, base
 
 `publish`：默认不向源仓库推送，只产出 `diff` 摘要写入 work report。如需保留更改，调用方可在 `publish()` 阶段调用 `git -C <worktreePath> add -A && git commit` 并把 commit hash 写入元信息，但不自动 push 到远端。
 
-`dispose`：
+`dispose`：runtime 永不调用；接口保留以备未来 “手动 prune” CLI 命令使用。其内部仍按下面顺序执行：
 
 ```text
 git -C <repoRoot> worktree remove --force <worktreePath>
@@ -485,7 +532,7 @@ git -C <repoRoot> worktree remove --force <worktreePath>
 
 注意事项：
 
-- 拒绝在含未跟踪重要文件的 dirty 工作区中并发执行 plan，避免与用户开发冲突。dirty 状态可通过 `git status --porcelain` 判断；策略由配置决定（默认 `prepare` 失败并 outcome `failed`）。
+- 拒绝在含未跟踪重要文件的 dirty 工作区中创建 worktree，避免与用户开发冲突。dirty 状态可通过 `git status --porcelain` 判断；默认 `isApplicable` 返回 false 让 SnapshotCopyProvider 接手，或 `prepare` 失败 outcome `failed`。
 - 子模块通过 `git worktree add --recurse-submodules` 处理；不可用时退化为 snapshot-copy。
 - LFS 资产仅在配置 `workspace.gitLfs: true` 时显式 fetch；默认不拉。
 
@@ -502,18 +549,18 @@ git -C <repoRoot> worktree remove --force <worktreePath>
 3. 通用降级：递归复制（`fs.cp` with `recursive: true`），同时按 ignore 列表跳过。
 4. 进一步降级（大型仓库）：调用系统 `rsync -a --exclude-from=<list>`。
 
-`prepare`：
+`prepare`（仅在 `state.currentWorkspace` 缺失或 cwd 不存在时调用）：
 
 ```text
 target = ${POLIT_HOME}/always-on/snapshots/<projectId>/<runId>
 按策略选择 cloneFile / reflink / fsCp / rsync
 应用 ignore 列表：.git/、node_modules/、dist/、.politdeck/、.politdeck-always-on/ 与配置项
-return { strategy: "snapshot-copy", cwd: target, metadata: { strategy: "<chosen>", baseSize } }
+return { strategy: "snapshot-copy", cwd: target, metadata: { copyStrategy: "<chosen>", baseSize } }
 ```
 
-`publish`：snapshot 模式不写回源项目。如需保留差异，调用方可在 `publish` 阶段把 `target` 与原项目 diff 摘要写入 work report，或将 `target` 重命名到 `${POLIT_HOME}/always-on/snapshots/<projectId>/keep/<runId>` 长期保留。
+`publish`：snapshot 模式不写回源项目。如需保留差异，调用方可在 `publish` 阶段把 `target` 与原项目 diff 摘要写入 work report。
 
-`dispose`：`fs.rm(target, { recursive: true, force: true })`。在 `retainSuccessfulEnvs: false` 与 `retainFailedEnvs: true` 的组合下，根据 outcome 决定保留还是删除。
+`dispose`：runtime 永不调用；保留接口以备未来 “手动 prune” CLI。
 
 注意事项：
 
@@ -523,11 +570,11 @@ return { strategy: "snapshot-copy", cwd: target, metadata: { strategy: "<chosen>
 
 ### 9.3 不可用兜底
 
-当所有 provider 都返回 `isApplicable: false`（如远程网盘只读项目、权限不足等），fire 直接以 `outcome: failed`、`error.code: "workspace_unavailable"` 结束；plan 状态置 `failed`；work report 由 runtime 兜底写入，说明无法准备隔离环境。这是受控失败而不是异常。
+当所有 provider 都返回 `isApplicable: false`（如远程网盘只读项目、权限不足等），fire 直接以 `outcome: failed`、`error.code: "workspace_unavailable"` 结束；不写 `state.currentWorkspace`；work report 由 runtime 兜底写入，说明无法准备隔离环境。这是受控失败而不是异常。
 
 ## 10. Channel Lease
 
-Lease 表示某个 channel 当前活跃地代表用户在与该项目交互。Lease 由 server 内存维护，不再写文件 heartbeat。
+Lease 是 server 内存里的活性信号；它**不再**作为 always-on 是否能触发的前置条件，仅在用户活跃时反向阻止 agent 抢话。Lease 由 server 内存维护，不再写文件 heartbeat。
 
 ```ts
 type AlwaysOnChannelLease = {
@@ -549,7 +596,11 @@ Lease 在以下时刻更新：
 - turn 完成（`busy=false`，`lastUserMsgAt = now`）。
 - channel 显式发送 lease ping（可选，用于长 idle TUI）。
 
-Discovery gate 视无 lease 或 lease 过期为 `no_fresh_lease`，与旧 `no_fresh_heartbeat` 等价。`preferChannel` 仅用于在多 lease 同时新鲜时选择目标 `sessionKey`，不影响 fire 是否触发。
+Gate 使用方式：
+
+- 当某项目在 `heartbeatStaleSeconds` 窗口内有任意 lease 时，参与 `agent_busy` / `recent_user_msg` 反向判断；任一条件命中则跳过本次 fire。
+- 当某项目无任何新鲜 lease（用户不在线）时，这两个 gate **跳过**，不阻塞触发；后续 cooldown / dailyBudget / lock 仍正常执行。
+- `preferChannel` 仅用于 lease 列表非空、且需要选择某个 channel 的反向判断目标时使用；不影响 fire 是否触发。
 
 ## 11. Gate 评估
 
@@ -557,16 +608,18 @@ Gate 是纯函数：
 
 ```ts
 type GateInput = {
+  projectKey: string;
   config: AlwaysOnConfig;
   state: AlwaysOnDiscoveryState;
   leases: AlwaysOnChannelLease[];
-  workspaceCount: number;
   now: Date;
   projectExists: boolean;
+  lockHeld: boolean;
+  sessionInFlight?: boolean;
 };
 
 type GateResult =
-  | { ok: true; lease: AlwaysOnChannelLease }
+  | { ok: true; lease?: AlwaysOnChannelLease }
   | { ok: false; reason: GateBlockReason };
 ```
 
@@ -576,16 +629,16 @@ type GateResult =
 2. `project_disabled`
 3. `project_missing`
 4. `dormant_no_signal`
-5. `no_fresh_lease`
-6. `agent_busy`（任一新鲜 lease `agentBusy === true`，或 `SessionRouter` 报告目标 `sessionKey` in-flight）
-7. `recent_user_msg`
-8. `cooldown`
-9. `daily_budget`
-10. `workspace_capacity`
-11. `lock_busy`
-12. `ok`
+5. `agent_busy`（仅在 lease 列表非空时检查；`SessionRouter` 报告目标 `sessionKey` in-flight 也命中此 gate）
+6. `recent_user_msg`（仅在 lease 列表非空时检查）
+7. `cooldown`
+8. `daily_budget`
+9. `lock_busy`
+10. `ok`（lease 为空时返回 `{ ok: true, lease: undefined }`；非空时附 `preferChannel` 选中的 lease）
 
 任何分支都必须返回结构化结果。Gate 不允许只打日志；测试和 UI 都必须能拿到 `reason`。
+
+`workspace_capacity` 与 `no_fresh_lease` 已废弃：单实例由 `DiscoveryFire.ensureWorkspace` 的 reuse 模型保证；用户不在线不再阻塞触发。两个旧 reason 不再出现在 `GateBlockReason` 联合类型中。
 
 ## 12. Feature Classification
 
@@ -593,14 +646,15 @@ type GateResult =
 | --- | --- | --- |
 | discovery config 默认值 | `compare` | 数值默认与旧实现保持一致；增量项（dormancy / workspace / execution）属新增 |
 | 项目级 opt-in | `compare` | 必须实现 |
-| heartbeat 文件 | `intentional_difference` | 改为 server 内存 lease；字段语义保留 |
-| discovery gates | `compare` | 旧 reason 完全保留；新增 `dormant_no_signal`、`workspace_capacity` |
+| heartbeat 文件 | `intentional_difference` | 改为 server 内存 lease；且 lease 仅做反向约束（`agent_busy` / `recent_user_msg`），缺失 lease 不再阻塞触发 |
+| discovery gates | `intentional_difference` | 删除 `no_fresh_lease`、`workspace_capacity`；新增 `dormant_no_signal`；其余 reason 保留 |
 | discovery request file 流转 | `intentional_difference` | 改为 server 直接 `Gateway.submitTurn()` |
 | TUI 5 秒 request 轮询 | `not_applicable` | 由 `AlwaysOnRuntime` 内部调度替代 |
-| discovery prompt 文本 | `compare` | 中英文 prompt 关键片段保留 |
+| discovery prompt 文本 | `compare` | 中英文 prompt 关键片段保留；新增 workspace cwd 与项目聊天目录提示 |
 | 一次产出最多 3 个 plan | `intentional_difference` | 改为最多 1 个 |
 | plan markdown required sections | `intentional_difference` | 重新定义章节集合（见 §7） |
-| plan auto-execute | `intentional_difference` | 旧实现仅保存，新实现直接在隔离环境执行 |
+| plan auto-execute | `intentional_difference` | 旧实现仅保存；新实现直接在隔离环境执行 |
+| 每次 fire 新建/销毁隔离环境 | `intentional_difference` | PolitDeck 跨 fire 复用同一隔离环境，runtime 永不自动删除；用户手动 `rm -rf` 后下次 fire 自动 prepare |
 | `approvalMode` 字段 | `not_applicable` | 自动执行场景不再分 manual / auto |
 | `agents.alwaysOn` legacy 迁移 | `not_applicable` | PolitDeck 无 EdgeClaw 旧配置 |
 
@@ -608,30 +662,45 @@ type GateResult =
 
 ## 13. 风险与边界
 
-- **隔离环境消耗磁盘**：worktree 在小仓库基本免费，snapshot-copy 在大仓库代价高。必须有 `workspace.snapshotMaxBytes`、`maxConcurrentEnvs`、`retainFailedEnvs` 等开关，禁止默认无限保留。
+- **隔离环境磁盘占用**：单实例 + 跨 fire 复用使每个项目最多占用 1 份工作区；总磁盘占用受限于一份 worktree 或 snapshot。代价是用户长期不删除可能让 worktree 累积大量未提交修改（“scratchpad” 模型）。`workspace.snapshotMaxBytes` 仅在首次 prepare 时生效，避免巨型仓库直接拖垮磁盘。
+- **workspace 状态漂移**：`state.currentWorkspace` 与磁盘可能不同步（用户手动 `rm -rf`、server 异常退出未持久化、跨主机共享 PolitHome）。`DiscoveryFire.ensureWorkspace` 用 `fs.existsSync(cwd)` 兜底——cwd 不存在则视为缺失并重新 prepare。state 缺失但磁盘上残留的 worktree/snapshot 目录是用户责任，runtime 不主动清理。
+- **workspace 跨 fire 累积**：上一次 plan 失败/成功的副作用对下一次 discovery 与 execution 都可见（dirty 工作区、临时文件、未提交 commit）。这是契约的一部分；用户预期通过手动删除回到干净基线。
 - **dormancy 无限挂起**：若项目长期无变化，watcher 会一直保持 idle。必须保证 watcher 在 server stop 时一定释放 handle；server 重启后能从 `state.dormant` 恢复。建议为 dormancy 设硬上限（如 24 小时无信号也强制重新评估一次）。
-- **session_busy 与 agent_busy 不一致**：`SessionRouter` 是真正的并发权威，lease 中的 `agentBusy` 只是 channel 上报。Gate 必须同时考虑两者；任一为 busy 都跳过。
+- **session_busy 与 agent_busy 不一致**：`SessionRouter` 是真正的并发权威，lease 中的 `agentBusy` 只是 channel 上报。Gate 必须同时考虑两者；任一为 busy 都跳过——但仅在 lease 列表非空时检查。
 - **plan 工具被多次调用**：通过 `PlanContract` 在 server 端硬限 1 次。第 2 次调用必须返回明确错误码 `plan_quota_exhausted`，被 agent loop 透传到模型。
 - **work report 缺失**：执行 turn 结束时 runtime 必须 sweep；缺失时由兜底逻辑补占位 report，并标 `outcome: failed`。
 - **WS final frame 差异**：`GatewayWsConnection` 在流结束追加 synthetic `turn_completed` final frame。Always-On 在 in-process 与 over-WS 模式下的事件采集必须显式区分真实 `turn_completed` 与 synthetic final，避免误判 `executed`。
 - **workspace 决策错误**：dirty git 工作区、子模块未初始化、跨卷 reflink、目标盘空间不足等都必须在 `prepare` 阶段以受控错误返回，而非中途崩溃。
 - **绕过 Gateway 的诱惑**：执行 plan 时必须仍走 `Gateway.submitTurn()`，不要直接调用 `AgentSession`。这是权限、上下文、工具运行时一致性的前提。
-- **执行 turn 处于 bypass 权限模式**：agent 在执行 turn 内可以执行任意工具调用，包括 shell、写文件、网络请求。其安全边界完全依赖 §9 的隔离环境真的隔离。隔离环境创建必须先成功；隔离工作区路径必须真实指向 `${POLIT_HOME}/always-on/worktrees/...` 或 `${POLIT_HOME}/always-on/snapshots/...` 而不是项目根；任何 provider 的 `prepare` 失败都必须直接 outcome `failed`，绝不允许在执行 turn 中回退到项目根作为 `cwd`。运行时还应在 sweep 阶段断言 `cwd` 一定位于隔离基址下，否则 outcome 强制 `failed` 并写明确的兜底原因。
+- **执行 turn 处于 bypass 权限模式**：agent 在执行 turn 内可以执行任意工具调用，包括 shell、写文件、网络请求。其安全边界完全依赖 §9 的隔离环境真的隔离。隔离环境必须先成功 ensure（reuse 或 prepare）；隔离工作区路径必须真实指向 `${POLIT_HOME}/always-on/worktrees/...` 或 `${POLIT_HOME}/always-on/snapshots/...` 而不是项目根；任何 ensure 失败都必须直接 outcome `failed`，绝不允许在执行 turn 中回退到项目根作为 `cwd`。`assertWorkspaceCwdSafe` 在 reuse 与 prepare 两条路径都生效。
+- **discovery turn 也跑在 workspace 内**：discovery turn 的 cwd 同样切换到 workspace（仍是 `default` 权限模式），让 plan 提议者与 plan 执行者看到的项目状态保持一致；project 根的 read/write 应通过工具的常规权限审批进行。
 
 ## 14. 验收标准
 
 实现完成的判定（不分阶段，全部满足）：
 
-- `alwaysOn` 配置解析、默认值、错误诊断有单测，覆盖 `trigger`、`dormancy`、`workspace`、`execution`、`projects` 五个子段；并校验 `discovery` 包装层、`workspace.strategy`、`plan` 段、`projects.<root>.sessionKey` / `projects.<root>.workspace` 等被移除字段在出现时给出明确诊断或被忽略。
-- `evaluateAlwaysOnDiscoveryGates` 对所有 `GateBlockReason` 有单测，包括新增的 `dormant_no_signal` 与 `workspace_capacity`。
+- `alwaysOn` 配置解析、默认值、错误诊断有单测，覆盖 `trigger`、`dormancy`、`workspace`、`execution`、`projects` 五个子段；并校验下列被移除字段在出现时产出 `ALWAYS_ON_FIELD_REMOVED` 致命诊断：
+  - 顶层：`discovery`、`plan`。
+  - `workspace`：`strategy`、`maxConcurrentEnvs`、`retainSuccessfulEnvs`、`retainFailedEnvs`。
+  - `execution`：`permissionMode`。
+  - 项目级：`sessionKey`、`workspace`。
+- `evaluateAlwaysOnDiscoveryGates` 对所有现存 `GateBlockReason` 有单测；并新增以下场景：
+  - lease 列表为空 + 其他 gate 全过 → `{ ok: true, lease: undefined }`。
+  - lease 列表为空时不触发 `agent_busy` / `recent_user_msg`。
+  - `no_fresh_lease` 与 `workspace_capacity` 已不再是 `GateBlockReason` 的合法成员。
+- `DiscoveryStateStore` 单测：`setCurrentWorkspace` / `clearCurrentWorkspace` 跨进程读回；包含 metadata 强制为 `Record<string,string>` 的 normalizer 校验。
+- `ensureAlwaysOnWorkspace` 单测（fake provider + 临时文件系统）：
+  - 首次 fire（state 无 currentWorkspace）→ 调 prepare 一次 + state 持久化新 handle。
+  - 第二次 fire（state 有 currentWorkspace 且 cwd 存在）→ 不调 prepare，返回 `reused: true`，handle.cwd 与 state 一致。
+  - state 有 currentWorkspace 但 cwd 已被人工删除 → 重新 prepare + 覆盖 state。
 - `SignalWatcher` 有单测：去抖、ignore glob、watcher 重启恢复、降级轮询。
 - `AlwaysOnDiscoveryPlanTool` 有单测：合法 plan 入库、缺任一章节拒绝、出现额外二级章节拒绝、二次调用返回 `plan_quota_exhausted`、超大文件拒绝；同时验证模板中不再出现 `Rollback` / `Risks` 章节会被接受。
 - `AlwaysOnReportTool` 有单测：合法 report 入库、缺章节兜底、缺调用兜底。
 - `WorkspaceProvider` 接口与两个内置 provider 各有单测：
-  - `GitWorktreeProvider`：worktree 创建、dirty 拒绝、dispose、worktree prune fallback。
+  - `GitWorktreeProvider`：worktree 创建、dirty 拒绝、`dispose` 接口契约（即便 runtime 永不调用，CLI 可能用到）、worktree prune fallback。
   - `SnapshotCopyProvider`：clonefile / reflink / fsCp / rsync 各路径选择、size cap、ignore glob、跨卷降级。
   - `WorkspaceProviderRegistry`：按 priority 自动选择、git 适用时优先 worktree、git 不适用时降级 snapshot、两者都不适用时 `workspace_unavailable`。
-- `AlwaysOnRuntime` 集成测试：用 fake `Gateway` 与 fake provider，分别覆盖 `executed`、`no_plan`、`failed`、`workspace_unavailable` 四种 outcome，并校验 `state.json`、`run-history.jsonl`、plan/report 文件落盘形态；执行 turn 提交参数中 `mode` 必须为 `bypassPermissions`、`cwd` 必须在隔离基址下，断言失败时 outcome 必须为 `failed`。
+- `AlwaysOnRuntime` 集成测试：用 fake `Gateway` 与 fake provider，分别覆盖 `executed`、`no_plan`、`failed`、`workspace_unavailable` 四种 outcome，并校验 `state.json`、`run-history.jsonl`、plan/report 文件落盘形态；discovery turn 提交参数中 `cwd` 等于 workspace.cwd、`mode` 等于 `default`；execution turn 提交参数中 `mode` 必须为 `bypassPermissions`、`cwd` 等于 workspace.cwd；断言失败时 outcome 必须为 `failed`；`provider.dispose` 在任一 outcome 下都不被调用。
 - 与旧实现的 `compare` 项有共享 scenario，并产出 dual parity 报告（参见 `03-always-on-test-plan.md`）。
 - 所有 `intentional_difference` 在 fixture 中带 reason；所有 `not_applicable` 在文档中有出处说明。
-- `politdeck server` 启动时构造 `AlwaysOnRuntime`；停止时释放所有 watcher、worktree、snapshot 句柄；进程被强制 kill 时遗留资源在下次启动时被自动 GC。
+- `politdeck server` 启动时构造 `AlwaysOnRuntime`；停止时释放所有 watcher 句柄；workspace 与 lock 文件由用户/重启时按 stale 规则清理。

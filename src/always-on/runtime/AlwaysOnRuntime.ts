@@ -1,0 +1,210 @@
+import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
+import type { Gateway } from "../../gateway/index.js";
+import type { PolitDeckToolDefinition } from "../../tool/index.js";
+import type { AlwaysOnConfig } from "../config/parseAlwaysOnConfig.js";
+import { resolveAlwaysOnPaths, type AlwaysOnPaths } from "../storage/AlwaysOnPaths.js";
+import { DiscoveryPlanStore } from "../storage/DiscoveryPlanStore.js";
+import { DiscoveryReportStore } from "../storage/DiscoveryReportStore.js";
+import { DiscoveryStateStore } from "../storage/DiscoveryStateStore.js";
+import {
+  createAlwaysOnDiscoveryPlanTool,
+  type CreateAlwaysOnDiscoveryPlanToolOptions,
+} from "../tool/AlwaysOnDiscoveryPlanTool.js";
+import {
+  createAlwaysOnReportTool,
+} from "../tool/AlwaysOnReportTool.js";
+import { GitWorktreeProvider } from "../workspace/GitWorktreeProvider.js";
+import { SnapshotCopyProvider } from "../workspace/SnapshotCopyProvider.js";
+import { WorkspaceProviderRegistry } from "../workspace/WorkspaceProviderRegistry.js";
+import { AlwaysOnRunContextRegistry } from "./AlwaysOnRunContextRegistry.js";
+import { ChannelLeaseRegistry } from "./ChannelLeaseRegistry.js";
+import { DiscoveryFire } from "./DiscoveryFire.js";
+import { DiscoveryScheduler } from "./DiscoveryScheduler.js";
+import { SessionConfigOverrides } from "./SessionConfigOverrides.js";
+
+export type AlwaysOnRuntimeLogger = {
+  info: (message: string, data?: Record<string, unknown>) => void;
+  warn: (message: string, data?: Record<string, unknown>) => void;
+};
+
+export type CreateAlwaysOnRuntimeOptions = {
+  config: AlwaysOnConfig;
+  politHome: string;
+  /** Absolute path of a project that this server hosts. */
+  projectKey: string;
+  now?: () => Date;
+  uuid?: () => string;
+  logger?: AlwaysOnRuntimeLogger;
+  /** Override for tests. */
+  workspaceRegistry?: WorkspaceProviderRegistry;
+  toolContractOptions?: CreateAlwaysOnDiscoveryPlanToolOptions["contract"];
+};
+
+const NOOP_LOGGER: AlwaysOnRuntimeLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+};
+
+/**
+ * AlwaysOnRuntime is the lifecycle owner for the entire Always-On module.
+ *
+ * Wiring sequence (see `02-politdeck-always-on-rewrite-plan.md` §1, §5):
+ *   1. Construct via `createAlwaysOnRuntime(...)` before the Gateway is built.
+ *   2. Pull tools via `runtime.getTools()` and feed them into the per-project
+ *      ToolRegistry that the Gateway uses.
+ *   3. Pull session overrides via `runtime.getSessionOverrides()` and let
+ *      `ProjectRuntimeRegistry` consult them when constructing AgentSessions.
+ *   4. Bind the Gateway via `runtime.bindGateway(gateway)`.
+ *   5. Call `runtime.start()` to launch the discovery scheduler.
+ *   6. Call `runtime.stop()` during server shutdown.
+ *
+ * The runtime never reaches into AgentSession internals; it only talks to the
+ * Gateway via `submitTurn`/`closeSession` so behavior matches what a normal
+ * channel adapter would observe.
+ */
+export class AlwaysOnRuntime {
+  readonly config: AlwaysOnConfig;
+  readonly projectKey: string;
+  readonly paths: AlwaysOnPaths;
+
+  private readonly stateStore: DiscoveryStateStore;
+  private readonly planStore: DiscoveryPlanStore;
+  private readonly reportStore: DiscoveryReportStore;
+  private readonly runContexts = new AlwaysOnRunContextRegistry();
+  private readonly leases: ChannelLeaseRegistry;
+  private readonly sessionOverrides = new SessionConfigOverrides();
+  private readonly workspaceRegistry: WorkspaceProviderRegistry;
+  private readonly logger: AlwaysOnRuntimeLogger;
+  private readonly now: () => Date;
+  private readonly uuid: () => string;
+  private readonly tools: PolitDeckToolDefinition[];
+
+  private gateway?: Gateway;
+  private fire?: DiscoveryFire;
+  private scheduler?: DiscoveryScheduler;
+
+  constructor(options: CreateAlwaysOnRuntimeOptions) {
+    this.config = options.config;
+    this.projectKey = resolve(options.projectKey);
+    this.paths = resolveAlwaysOnPaths({
+      politHome: options.politHome,
+      projectKey: this.projectKey,
+      worktreesBaseDir: options.config.workspace.gitWorktreeBaseDir,
+      snapshotsBaseDir: options.config.workspace.snapshotBaseDir,
+    });
+    this.logger = options.logger ?? NOOP_LOGGER;
+    this.now = options.now ?? (() => new Date());
+    this.uuid = options.uuid ?? randomUUID;
+
+    this.stateStore = new DiscoveryStateStore(this.paths);
+    this.planStore = new DiscoveryPlanStore(this.paths);
+    this.reportStore = new DiscoveryReportStore(this.paths);
+    this.leases = new ChannelLeaseRegistry(this.now);
+    this.workspaceRegistry = options.workspaceRegistry ?? this.buildDefaultWorkspaceRegistry();
+
+    this.tools = [
+      createAlwaysOnDiscoveryPlanTool({
+        runContexts: this.runContexts,
+        contract: options.toolContractOptions,
+        now: this.now,
+        uuid: this.uuid,
+      }),
+      createAlwaysOnReportTool({
+        runContexts: this.runContexts,
+        now: this.now,
+      }),
+    ];
+  }
+
+  getTools(): PolitDeckToolDefinition[] {
+    return [...this.tools];
+  }
+
+  getSessionOverrides(): SessionConfigOverrides {
+    return this.sessionOverrides;
+  }
+
+  getChannelLeases(): ChannelLeaseRegistry {
+    return this.leases;
+  }
+
+  getRunContexts(): AlwaysOnRunContextRegistry {
+    return this.runContexts;
+  }
+
+  bindGateway(gateway: Gateway): void {
+    if (this.gateway) {
+      throw new Error("AlwaysOnRuntime.bindGateway already called.");
+    }
+    this.gateway = gateway;
+    this.fire = new DiscoveryFire({
+      config: this.config,
+      paths: this.paths,
+      projectKey: this.projectKey,
+      gateway,
+      runContexts: this.runContexts,
+      workspaceRegistry: this.workspaceRegistry,
+      sessionOverrides: this.sessionOverrides,
+      stateStore: this.stateStore,
+      planStore: this.planStore,
+      reportStore: this.reportStore,
+      uuid: this.uuid,
+      now: this.now,
+      logger: this.logger,
+    });
+    this.scheduler = new DiscoveryScheduler({
+      config: this.config,
+      projectKey: this.projectKey,
+      paths: this.paths,
+      stateStore: this.stateStore,
+      leases: this.leases,
+      fire: this.fire,
+      uuid: this.uuid,
+      now: this.now,
+      logger: this.logger,
+      isSessionInFlight: () => false,
+    });
+  }
+
+  async start(): Promise<void> {
+    if (!this.config.enabled) {
+      this.logger.info("always-on disabled in config; runtime is a no-op.");
+      return;
+    }
+    if (!this.scheduler) {
+      throw new Error("AlwaysOnRuntime.start called before bindGateway.");
+    }
+    await this.scheduler.start();
+    this.logger.info("always-on runtime started", { projectKey: this.projectKey });
+  }
+
+  async stop(): Promise<void> {
+    await this.scheduler?.stop();
+    this.scheduler = undefined;
+    this.fire = undefined;
+    this.runContexts.list().forEach((ctx) => this.runContexts.unregister(ctx.sessionKey));
+    this.sessionOverrides.clear();
+    this.logger.info("always-on runtime stopped", { projectKey: this.projectKey });
+  }
+
+  private buildDefaultWorkspaceRegistry(): WorkspaceProviderRegistry {
+    const registry = new WorkspaceProviderRegistry();
+    registry.add(
+      new GitWorktreeProvider({
+        baseDir: this.paths.worktreesDir,
+      }),
+    );
+    registry.add(
+      new SnapshotCopyProvider({
+        baseDir: this.paths.snapshotsDir,
+        maxBytes: this.config.workspace.snapshotMaxBytes,
+      }),
+    );
+    return registry;
+  }
+}
+
+export function createAlwaysOnRuntime(options: CreateAlwaysOnRuntimeOptions): AlwaysOnRuntime {
+  return new AlwaysOnRuntime(options);
+}

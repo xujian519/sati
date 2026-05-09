@@ -1,3 +1,4 @@
+import type { AlwaysOnConfig } from "../../always-on/config/parseAlwaysOnConfig.js";
 import type { ModelConfig } from "../../model/protocol/canonical.js";
 
 export type PolitConfigSourceKind = "default" | "project" | "env";
@@ -38,6 +39,7 @@ export type PolitRawConfig = {
   memory?: unknown;
   gateway?: unknown;
   adapters?: unknown;
+  alwaysOn?: unknown;
 };
 
 export type PolitExtensionConfig = {
@@ -106,6 +108,7 @@ export type PolitConfig = {
   memory?: PolitMemoryConfig;
   gateway?: PolitGatewayConfig;
   adapters?: PolitAdaptersConfig;
+  alwaysOn?: AlwaysOnConfig;
 };
 
 export type PolitConfigSnapshot = {
