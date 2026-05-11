@@ -52,7 +52,7 @@ export function buildOpenAIRequest(
   request: CanonicalModelRequest,
   model: ModelDefinition,
 ): OpenAIRequestBody {
-  const messages = request.messages.flatMap(toOpenAIMessages);
+  const messages = repairOpenAIToolPairing(request.messages.flatMap(toOpenAIMessages));
   if (request.systemPrompt) {
     messages.unshift({ role: "system", content: request.systemPrompt });
   }
@@ -173,6 +173,43 @@ function toOpenAITool(tool: CanonicalToolSchema): OpenAITool {
       parameters: tool.inputSchema,
     },
   };
+}
+
+/**
+ * Last-resort safety net: walk the flattened OpenAI message list and ensure
+ * every assistant message with `tool_calls` is immediately followed by `tool`
+ * messages covering every `tool_call_id`. Missing ones get a placeholder.
+ */
+function repairOpenAIToolPairing(messages: OpenAIMessage[]): OpenAIMessage[] {
+  const out: OpenAIMessage[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    out.push(msg);
+
+    if (msg.role !== "assistant" || !msg.tool_calls?.length) continue;
+
+    const expectedIds = new Set(
+      (msg.tool_calls as Array<{ id: string }>).map((tc) => tc.id),
+    );
+
+    // Scan ahead for matching tool messages.
+    let j = i + 1;
+    while (j < messages.length && messages[j].role === "tool") {
+      const tid = messages[j].tool_call_id;
+      if (tid) expectedIds.delete(tid);
+      j++;
+    }
+
+    // Inject placeholders for any still-missing results.
+    for (const missingId of expectedIds) {
+      out.push({
+        role: "tool",
+        tool_call_id: missingId,
+        content: "[result truncated]",
+      });
+    }
+  }
+  return out;
 }
 
 function toOpenAIToolChoice(toolChoice: CanonicalToolChoice | undefined): unknown {
