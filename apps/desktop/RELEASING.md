@@ -64,11 +64,11 @@ npm version 0.2.1 -m "release(desktop): v%s"
 |---|---|---|
 | 本地测试（`--ad-hoc`） | 任意分支 | ❌ 不强制（可设 `ALLOW_UNTAGGED=1` 跳过） |
 | Pre-release（`-rc.*`） | release 分支 / feature 分支 | 建议但不强制 |
-| 正式 release（`--signed`） | **必须 main / master** | ✅ release.sh 在非 main 分支会拒绝 |
+| 正式 release（`--signed`） | **必须 main / master / release** | ✅ release.sh 在非允许分支会拒绝 |
 
-**为什么正式 release 要打在 main**：feature 分支被 squash merge 进 main 后，原 commit 仍然
-存在但不在 main 历史里——tag 没丢，但 `git log main` 找不到，给人"我装的版本对应的代码消失了"
-的错觉。打在 main 才能保证 tag → main commit 在一条线上。
+**为什么正式 release 要打在 main / release**：feature 分支被 squash merge 后，原 commit
+不在主线历史里——tag 没丢，但 `git log main` 找不到，给人"我装的版本对应的代码消失了"
+的错觉。打在 main 或 release 分支才能保证 tag 在可追溯的发版线上。
 
 ---
 

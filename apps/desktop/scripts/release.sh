@@ -142,15 +142,15 @@ else
     warn "No git tag '${EXPECTED_TAG}' (ALLOW_UNTAGGED=1)"
   fi
 
-  # Branch check (signed-only)
-  if [[ "$MODE" == "signed" && "$GIT_BRANCH" != "main" && "$GIT_BRANCH" != "master" ]]; then
+  # Branch check (signed-only): allow main, master, and release branches
+  if [[ "$MODE" == "signed" && "$GIT_BRANCH" != "main" && "$GIT_BRANCH" != "master" && "$GIT_BRANCH" != "release" ]]; then
     if [[ "${ALLOW_NON_MAIN_SIGNED:-0}" != "1" ]]; then
-      fail "release(--signed) requires main/master branch (current: ${GIT_BRANCH}).
+      fail "release(--signed) requires main/master/release branch (current: ${GIT_BRANCH}).
     内部测试请用: bash scripts/release.sh --ad-hoc
-    正式发版请: git checkout main && git merge --ff-only ${GIT_BRANCH}
+    正式发版请: git checkout release (或 main)
     Hotfix 强制覆盖: ALLOW_NON_MAIN_SIGNED=1 bash scripts/release.sh --signed"
     fi
-    warn "signed build from non-main branch '${GIT_BRANCH}' (ALLOW_NON_MAIN_SIGNED=1)"
+    warn "signed build from non-release branch '${GIT_BRANCH}' (ALLOW_NON_MAIN_SIGNED=1)"
   else
     ok "Branch: ${GIT_BRANCH}   ·   Build date: ${BUILD_DATE}"
   fi
