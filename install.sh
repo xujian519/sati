@@ -119,17 +119,25 @@ echo ""
 echo "Setting up CLI command..."
 CLI_TARGET="$INSTALL_DIR/ui/server/cli.js"
 chmod +x "$CLI_TARGET"
+TARGET_BIN="$BIN_LINK"
 
-if [[ -L "$BIN_LINK" ]]; then
-  rm -f "$BIN_LINK" 2>/dev/null || sudo rm -f "$BIN_LINK"
+if [[ -e "$BIN_LINK" || -L "$BIN_LINK" ]]; then
+  if rm -f "$BIN_LINK" 2>/dev/null; then
+    :
+  elif sudo -n rm -f "$BIN_LINK" 2>/dev/null; then
+    :
+  else
+    warn "Cannot update ${BIN_LINK} without sudo; falling back to user-local bin."
+    TARGET_BIN="$HOME/.local/bin/pilotdeck"
+  fi
 fi
 
-if [[ -w "$(dirname "$BIN_LINK")" ]]; then
-  ln -sf "$CLI_TARGET" "$BIN_LINK"
-  ok "pilotdeck command linked to ${DIM}${BIN_LINK}${RESET}"
+if [[ "$TARGET_BIN" == "$BIN_LINK" && -w "$(dirname "$BIN_LINK")" ]]; then
+  ln -sf "$CLI_TARGET" "$TARGET_BIN"
+  ok "pilotdeck command linked to ${DIM}${TARGET_BIN}${RESET}"
 elif sudo -n true 2>/dev/null; then
-  sudo ln -sf "$CLI_TARGET" "$BIN_LINK"
-  ok "pilotdeck command linked to ${DIM}${BIN_LINK}${RESET}"
+  sudo ln -sf "$CLI_TARGET" "$TARGET_BIN"
+  ok "pilotdeck command linked to ${DIM}${TARGET_BIN}${RESET}"
 else
   LOCAL_BIN="$HOME/.local/bin"
   mkdir -p "$LOCAL_BIN"
