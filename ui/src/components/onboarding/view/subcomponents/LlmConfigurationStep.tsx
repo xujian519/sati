@@ -141,35 +141,63 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
         }
       } catch { /* start fresh */ }
 
-      // Build merged config
-      if (!existingConfig.models || typeof existingConfig.models !== 'object') {
-        (existingConfig as Record<string, unknown>).models = {};
+      // Write the gateway-native pilotdeck.yaml shape directly:
+      //   model.providers.<id>.{protocol, url, apiKey, models.<modelId>}
+      //   agent.model = "<id>/<modelId>"
+      // Mixing this with the legacy ui-internal `models` / `agents` keys
+      // would create a hybrid object that the server-side
+      // normalizePilotDeckConfig() sees as yaml-shape (because `model`
+      // exists) and silently drops the ui-internal keys, throwing away
+      // the user's onboarding input.
+      const providerId = 'pilotdeck';
+      const modelId = model.trim();
+      const protocol = providerType === 'anthropic'
+        ? 'anthropic'
+        : providerType === 'openai-responses'
+          ? 'openai-responses'
+          : 'openai';
+
+      if (!existingConfig.schemaVersion) {
+        (existingConfig as Record<string, unknown>).schemaVersion = 1;
       }
-      const models = existingConfig.models as Record<string, unknown>;
-      if (!models.providers || typeof models.providers !== 'object') {
-        models.providers = {};
+      if (!existingConfig.model || typeof existingConfig.model !== 'object') {
+        (existingConfig as Record<string, unknown>).model = { providers: {} };
       }
-      const providers = models.providers as Record<string, unknown>;
-      providers.pilotdeck = {
-        type: providerType,
-        baseUrl: baseUrl.trim(),
+      const modelSection = existingConfig.model as Record<string, unknown>;
+      if (!modelSection.providers || typeof modelSection.providers !== 'object') {
+        modelSection.providers = {};
+      }
+      const yamlProviders = modelSection.providers as Record<string, Record<string, unknown>>;
+      const existingProvider = (yamlProviders[providerId] || {}) as Record<string, unknown>;
+      const existingProviderModels = (existingProvider.models && typeof existingProvider.models === 'object'
+        ? existingProvider.models
+        : {}) as Record<string, unknown>;
+      yamlProviders[providerId] = {
+        ...existingProvider,
+        protocol,
+        url: baseUrl.trim(),
         apiKey: apiKey.trim(),
+        timeoutMs: typeof existingProvider.timeoutMs === 'number' ? existingProvider.timeoutMs : 120000,
+        headers: existingProvider.headers && typeof existingProvider.headers === 'object'
+          ? existingProvider.headers
+          : {},
+        models: {
+          ...existingProviderModels,
+          [modelId]: existingProviderModels[modelId] || {},
+        },
       };
-      if (!models.entries || typeof models.entries !== 'object') {
-        models.entries = {};
+
+      if (!existingConfig.agent || typeof existingConfig.agent !== 'object') {
+        (existingConfig as Record<string, unknown>).agent = {};
       }
-      const entries = models.entries as Record<string, unknown>;
-      entries.default = {
-        provider: 'pilotdeck',
-        name: model.trim(),
-      };
-      if (!existingConfig.version) existingConfig.version = 1;
-      if (!existingConfig.agents) {
-        (existingConfig as Record<string, unknown>).agents = { main: { model: 'default' } };
-      }
-      if (!existingConfig.memory) {
-        (existingConfig as Record<string, unknown>).memory = { enabled: true };
-      }
+      const agentSection = existingConfig.agent as Record<string, unknown>;
+      agentSection.model = `${providerId}/${modelId}`;
+
+      // Strip any leftover ui-internal-shape keys from older onboarding
+      // runs so the server-side parser doesn't see a hybrid object.
+      delete (existingConfig as Record<string, unknown>).models;
+      delete (existingConfig as Record<string, unknown>).agents;
+      delete (existingConfig as Record<string, unknown>).version;
 
       const raw = stringifyYaml(existingConfig, { indent: 2, lineWidth: 0 });
 
