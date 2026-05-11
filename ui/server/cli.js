@@ -4,6 +4,7 @@ import fs from 'fs';
 import net from 'net';
 import os from 'os';
 import path from 'path';
+import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import {
   getPilotDeckConfigPath,
@@ -163,10 +164,34 @@ function assertPortAvailable(port, host) {
   });
 }
 
+function ensureFrontendBuild() {
+  const installDir = getInstallDir();
+  const distIndexPath = path.join(installDir, 'dist', 'index.html');
+  if (fs.existsSync(distIndexPath)) return;
+
+  console.log(`${c.warn('[WARN]')} Frontend build not found at ${c.dim(distIndexPath)}`);
+  console.log(`${c.info('[INFO]')} Building frontend before starting production server...`);
+
+  const result = spawnSync('npm', ['run', 'build'], {
+    cwd: installDir,
+    stdio: 'inherit',
+    env: { ...process.env, HUSKY: '0' },
+  });
+
+  if (result.status !== 0) {
+    throw new Error('Frontend build failed. Run "cd ui && npm install && npm run build" manually, then retry pilotdeck.');
+  }
+
+  if (!fs.existsSync(distIndexPath)) {
+    throw new Error(`Frontend build completed but ${distIndexPath} was not created.`);
+  }
+}
+
 async function startServer() {
   const host = process.env.HOST || '0.0.0.0';
   const port = process.env.SERVER_PORT || '3001';
   await assertPortAvailable(port, host);
+  ensureFrontendBuild();
 
   console.log(`\n${c.bright('pilotdeck')} starting...\n`);
   console.log(`${c.info('[INFO]')} Config: ${c.dim(getPilotDeckConfigPath())}`);
