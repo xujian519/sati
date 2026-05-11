@@ -20,6 +20,8 @@ type SubsystemResult = {
 export type ConfigReload = {
   processEnv?: SubsystemResult;
   memory?: SubsystemResult;
+  router?: SubsystemResult;
+  gateway?: SubsystemResult;
   proxy?: SubsystemResult;
 } & Record<string, unknown>;
 

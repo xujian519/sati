@@ -226,11 +226,12 @@ function buildProjectGroups(
 
 export type DashboardV2Props = {
   projectFilter?: string | null;
+  projectFullPath?: string | null;
   onSelectProject?: (projectName: string) => void;
   onDeselectProject?: () => void;
 };
 
-export default function DashboardV2({ projectFilter, onSelectProject, onDeselectProject }: DashboardV2Props = {}) {
+export default function DashboardV2({ projectFilter, projectFullPath, onSelectProject, onDeselectProject }: DashboardV2Props = {}) {
   const { t } = useTranslation('routing');
   const { data, loading, error, refresh } = useRoutingDashboard();
 
@@ -245,9 +246,12 @@ export default function DashboardV2({ projectFilter, onSelectProject, onDeselect
     let computedOverall = data.overall;
 
     if (projectFilter) {
-      filteredGroups = g.filter(
-        (grp) => grp.name === projectFilter || grp.displayName === projectFilter,
-      );
+      const matchesProject = (grp: ProjectGroup) =>
+        grp.name === projectFilter ||
+        grp.displayName === projectFilter ||
+        (projectFullPath && grp.fullPath === projectFullPath);
+
+      filteredGroups = g.filter(matchesProject);
       filteredGeneral = null;
 
       if (filteredGroups.length > 0) {
@@ -263,7 +267,12 @@ export default function DashboardV2({ projectFilter, onSelectProject, onDeselect
     }
 
     const recentProjects = projectFilter
-      ? data.projects.filter((p) => p.name === projectFilter || p.displayName === projectFilter)
+      ? data.projects.filter(
+          (p) =>
+            p.name === projectFilter ||
+            p.displayName === projectFilter ||
+            (projectFullPath && p.fullPath === projectFullPath),
+        )
       : data.projects;
     const recentUnmatched = projectFilter ? undefined : data.unmatchedSessions;
 
@@ -273,7 +282,7 @@ export default function DashboardV2({ projectFilter, onSelectProject, onDeselect
       recent: collectRecentRoutes(recentProjects, recentUnmatched),
       filteredOverall: computedOverall,
     };
-  }, [data, projectFilter]);
+  }, [data, projectFilter, projectFullPath]);
 
   if (loading && !data) {
     return (

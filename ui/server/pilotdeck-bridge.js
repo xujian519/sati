@@ -21,18 +21,22 @@
 
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 
 import {
     createLocalGateway,
     getLocalGatewayRouterStats,
 } from '../../dist/src/cli/createLocalGateway.js';
+import { resolvePilotHome, createProjectId } from '../../dist/src/pilot/index.js';
 import { SessionConfigOverrides } from '../../dist/src/always-on/runtime/SessionConfigOverrides.js';
 import { createNormalizedMessage } from './pilotdeck-message.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
+const GENERAL_HOME = resolvePilotHome(process.env);
 
 /** @type {import('../../dist/src/gateway/index.js').Gateway | null} */
 let gateway = null;
@@ -479,6 +483,103 @@ export function getActiveSessionIdsViaGateway() {
 }
 
 /**
+ * Read persisted stats from ~/.pilotdeck/router-stats.json when no
+ * in-memory ProjectRuntime exists yet (server just started).
+ * Returns a Map shaped like LocalGatewayRouterStatsByProject.
+ */
+function loadPersistedStatsFromDisk() {
+    const result = new Map();
+    try {
+        const statsPath = path.join(os.homedir(), '.pilotdeck', 'router-stats.json');
+        const raw = fs.readFileSync(statsPath, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (!parsed || !parsed.sessions || typeof parsed.sessions !== 'object') {
+            return result;
+        }
+        const allRecords = [];
+        for (const sess of Object.values(parsed.sessions)) {
+            if (sess && Array.isArray(sess.requestLog)) {
+                allRecords.push(...sess.requestLog);
+            }
+        }
+        allRecords.sort((a, b) => (a.startedAt || '').localeCompare(b.startedAt || ''));
+        if (allRecords.length > 0) {
+            const snapshot = {
+                aggregate: parsed.global || {},
+                records: allRecords.slice(-1000),
+            };
+            // Key under GENERAL_HOME so the sidebar "general" project matches,
+            // and also under REPO_ROOT for direct project matches.
+            result.set(GENERAL_HOME, snapshot);
+            if (REPO_ROOT !== GENERAL_HOME) {
+                result.set(REPO_ROOT, snapshot);
+            }
+        }
+    } catch {
+        // File doesn't exist or is malformed — return empty map
+    }
+    return result;
+}
+
+/**
+ * Read the first user prompt from a session transcript file to use as
+ * a human-readable title. Cached for the lifetime of the process.
+ */
+const _sessionTitleCache = new Map();
+
+function lookupSessionTitle(sessionId, projectKey) {
+    if (_sessionTitleCache.has(sessionId)) return _sessionTitleCache.get(sessionId);
+    const title = _readFirstPrompt(sessionId, projectKey);
+    _sessionTitleCache.set(sessionId, title);
+    return title;
+}
+
+function _readFirstPrompt(sessionId, projectKey) {
+    const pilotHome = GENERAL_HOME;
+    const candidates = projectKey
+        ? [path.join(pilotHome, 'projects', createProjectId(projectKey), 'chats', `${sessionId}.jsonl`)]
+        : [];
+    // Also check the general workspace (sessions may live there)
+    const generalChatPath = path.join(pilotHome, 'projects', createProjectId(pilotHome), 'chats', `${sessionId}.jsonl`);
+    if (!candidates.includes(generalChatPath)) candidates.push(generalChatPath);
+    // Scan all project dirs as last resort
+    try {
+        const projectsDir = path.join(pilotHome, 'projects');
+        const dirs = fs.readdirSync(projectsDir, { withFileTypes: true });
+        for (const d of dirs) {
+            if (!d.isDirectory()) continue;
+            const p = path.join(projectsDir, d.name, 'chats', `${sessionId}.jsonl`);
+            if (!candidates.includes(p)) candidates.push(p);
+        }
+    } catch { /* ignore */ }
+
+    for (const filePath of candidates) {
+        try {
+            const fd = fs.openSync(filePath, 'r');
+            try {
+                const buf = Buffer.alloc(4096);
+                const bytesRead = fs.readSync(fd, buf, 0, 4096, 0);
+                const head = buf.toString('utf-8', 0, bytesRead);
+                const firstLine = head.split('\n').find(l => l.includes('"type":"accepted_input"'));
+                if (firstLine) {
+                    const parsed = JSON.parse(firstLine);
+                    const text = parsed.messages
+                        ?.flatMap(m => m.content ?? [])
+                        .find(b => b.type === 'text')?.text;
+                    if (text?.trim()) {
+                        const trimmed = text.trim();
+                        return trimmed.length > 80 ? trimmed.slice(0, 77) + '…' : trimmed;
+                    }
+                }
+            } finally {
+                fs.closeSync(fd);
+            }
+        } catch { /* file not found or parse error — try next */ }
+    }
+    return null;
+}
+
+/**
  * Build a `DashboardData` payload from the per-project RouterRuntime
  * stats collected by `src/router/stats/TokenStatsCollector`. Shape
  * mirrors what `ui/src/hooks/useRoutingDashboard.ts` expects so the V2
@@ -486,7 +587,14 @@ export function getActiveSessionIdsViaGateway() {
  */
 export function getRouterDashboardData() {
     const gw = ensureGateway();
-    const statsByProject = getLocalGatewayRouterStats(gw) || new Map();
+    let statsByProject = getLocalGatewayRouterStats(gw) || new Map();
+
+    // When no ProjectRuntime has been created yet (server just started,
+    // no chat turn submitted), fall back to reading persisted stats from
+    // disk so the dashboard still renders historical data.
+    if (statsByProject.size === 0) {
+        statsByProject = loadPersistedStatsFromDisk();
+    }
 
     const projects = [];
     const overall = makeBucket();
@@ -502,7 +610,7 @@ export function getRouterDashboardData() {
             if (!sessionEntry) {
                 sessionEntry = {
                     sessionId: record.sessionId,
-                    title: record.sessionId,
+                    title: lookupSessionTitle(record.sessionId, projectKey) || record.sessionId,
                     provider: record.provider || 'pilotdeck',
                     lastActivity: record.endedAt,
                     routing: {
@@ -600,6 +708,7 @@ function addBuckets(target, source) {
 
 function mergeRecordIntoSession(routing, record) {
     const usage = record.usage || {};
+    const cost = record.cost || {};
     const bucket = {
         inputTokens: usage.inputTokens || 0,
         outputTokens: usage.outputTokens || 0,
@@ -608,11 +717,11 @@ function mergeRecordIntoSession(routing, record) {
             usage.totalTokens ??
             (usage.inputTokens || 0) + (usage.outputTokens || 0),
         requestCount: 1,
-        estimatedCost: 0,
+        estimatedCost: cost.total || 0,
     };
     addBuckets(routing.total, bucket);
 
-    const tierKey = record.scenarioType || 'default';
+    const tierKey = record.tier || record.scenarioType || 'default';
     routing.byTier[tierKey] = routing.byTier[tierKey] || makeBucket();
     addBuckets(routing.byTier[tierKey], bucket);
 
@@ -629,13 +738,19 @@ function mergeRecordIntoSession(routing, record) {
     addBuckets(routing.byModel[modelKey], bucket);
 }
 
+function isGeneralProject(projectKey) {
+    return path.resolve(projectKey) === path.resolve(GENERAL_HOME);
+}
+
 function deriveProjectName(projectKey) {
+    if (isGeneralProject(projectKey)) return 'general';
     return projectKey
         .replace(/^\/+/, '')
         .replace(/[^A-Za-z0-9._-]+/g, '-');
 }
 
 function deriveProjectDisplayName(projectKey) {
+    if (isGeneralProject(projectKey)) return 'general';
     const parts = projectKey.split('/').filter(Boolean);
     return parts.length > 0 ? parts[parts.length - 1] : projectKey;
 }

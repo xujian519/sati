@@ -935,7 +935,7 @@ function SplitBody(props: SplitBodyProps) {
         />
       );
     }
-    if (activeTab === 'dashboard') return <DashboardV2 projectFilter={selectedProject?.name} onSelectProject={onSelectProjectByName} onDeselectProject={onDeselectProject} />;
+    if (activeTab === 'dashboard') return <DashboardV2 projectFilter={selectedProject?.name} projectFullPath={selectedProject?.fullPath} onSelectProject={onSelectProjectByName} onDeselectProject={onDeselectProject} />;
     if (activeTab === 'memory') return <MemoryPanel selectedProject={selectedProject} />;
     if (activeTab === 'skills') return <SkillsV2 selectedProject={selectedProject} />;
     if (renderTasksAsTool) return <TasksV2 isVisible />;
