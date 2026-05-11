@@ -35,8 +35,11 @@ BUN_BIN="${RESOURCES}/bun-bin/bun"
 # `claudecodeui/`. Bundle filename + extracted runtime dir name remain
 # `claudecodeui` because server-manager.ts / electron-builder.yml hardcode it.
 CLAUDECODEUI_DIR="${REPO_ROOT}/ui"
-CLAUDE_CODE_MAIN_DIR="${REPO_ROOT}/claude-code-main"
-MEMORY_CORE_DIR="${REPO_ROOT}/pilotdeck-memory-core"
+# After the PilotDeck refactor, the "claude-code-main" code lives at repo root
+# (src/, scripts/, node_modules/, package.json). The bundle tar name and runtime
+# extraction dir remain "claude-code-main" for server-manager.ts compatibility.
+CLAUDE_CODE_MAIN_DIR="${REPO_ROOT}"
+MEMORY_CORE_DIR="${REPO_ROOT}/edgeclaw-memory-core"
 
 CCUI_BUNDLE="${RESOURCES}/claudecodeui-bundle.tar"
 CCM_BUNDLE="${RESOURCES}/claude-code-main-bundle.tar"
@@ -184,11 +187,11 @@ fi
 ok "Entitlements: $(basename "$ENTITLEMENTS")"
 
 [[ -d "$CLAUDECODEUI_DIR" ]] || fail "Missing claudecodeui at ${CLAUDECODEUI_DIR}"
-[[ -d "$CLAUDE_CODE_MAIN_DIR" ]] || fail "Missing claude-code-main at ${CLAUDE_CODE_MAIN_DIR}"
-[[ -d "$MEMORY_CORE_DIR" ]] || fail "Missing pilotdeck-memory-core at ${MEMORY_CORE_DIR}"
+[[ -d "$CLAUDE_CODE_MAIN_DIR/src" ]] || fail "Missing src/ at ${CLAUDE_CODE_MAIN_DIR}"
+[[ -d "$MEMORY_CORE_DIR" ]] || fail "Missing memory-core at ${MEMORY_CORE_DIR}"
 [[ -f "${MEMORY_CORE_DIR}/lib/index.js" ]] \
-  || fail "pilotdeck-memory-core/lib/index.js missing — run: (cd ${MEMORY_CORE_DIR} && npm run build)"
-ok "Source trees present (claudecodeui + claude-code-main + pilotdeck-memory-core)"
+  || fail "${MEMORY_CORE_DIR}/lib/index.js missing — run: (cd ${MEMORY_CORE_DIR} && npm run build)"
+ok "Source trees present (ui + repo-root/src + edgeclaw-memory-core)"
 
 # Bundled Node binary
 if [[ ! -x "$NODE_BIN" ]]; then
@@ -333,17 +336,22 @@ rm -f "$CCUI_BUNDLE"
 CCUI_MB=$(du -sm "$CCUI_BUNDLE" | awk '{print $1}')
 ok "claudecodeui bundle: ${CCUI_MB}MB → $(basename "$CCUI_BUNDLE")"
 
-# claude-code-main bundle: src/, gateway/, preload.ts, proxy.ts, router.ts,
-# package.json, bunfig.toml, pilotdeck-config.ts, scripts/, node_modules
-# IMPORTANT: do NOT strip src/**/*.md or src/**/examples — many bundled skills
-# (verify/, claudeApi/, etc.) inline .md files via `import md from './*.md'`
-# at runtime through Bun's text loader (see src/skills/bundled/*Content.ts).
+# claude-code-main bundle: after the PilotDeck refactor, the "main" code lives at
+# repo root. We bundle src/, scripts/, node_modules/, and any optional top-level
+# files. gateway/ was merged into src/gateway/ — include it if it exists as a
+# top-level dir, otherwise omit.
 rm -f "$CCM_BUNDLE"
+CCM_DIRS=(src/ scripts/ node_modules/)
+[[ -d "${CLAUDE_CODE_MAIN_DIR}/gateway" ]] && CCM_DIRS+=(gateway/)
+CCM_OPTIONAL_FILES="$(cd "$CLAUDE_CODE_MAIN_DIR" && ls \
+  package.json bunfig.toml preload.ts proxy.ts router.ts \
+  pilotdeck-config.ts tsconfig.json 2>/dev/null)"
 (cd "$CLAUDE_CODE_MAIN_DIR" && tar cf "$CCM_BUNDLE" \
   "${NODE_MODULES_EXCLUDES[@]}" \
-  package.json bunfig.toml \
-  $(ls preload.ts proxy.ts router.ts pilotdeck-config.ts tsconfig.json 2>/dev/null) \
-  src/ gateway/ scripts/ node_modules/) \
+  --exclude='apps' --exclude='ui' --exclude='old_ui' \
+  --exclude='edgeclaw-memory-core' --exclude='docs' --exclude='tests' \
+  --exclude='third-party' --exclude='dist' --exclude='.git' \
+  $CCM_OPTIONAL_FILES "${CCM_DIRS[@]}") \
   || fail "claude-code-main tar creation failed"
 CCM_MB=$(du -sm "$CCM_BUNDLE" | awk '{print $1}')
 ok "claude-code-main bundle: ${CCM_MB}MB → $(basename "$CCM_BUNDLE")"
