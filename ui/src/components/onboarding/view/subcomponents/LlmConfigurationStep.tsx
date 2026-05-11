@@ -150,7 +150,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
         models.providers = {};
       }
       const providers = models.providers as Record<string, unknown>;
-      providers.edgeclaw = {
+      providers.pilotdeck = {
         type: providerType,
         baseUrl: baseUrl.trim(),
         apiKey: apiKey.trim(),
@@ -160,7 +160,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
       }
       const entries = models.entries as Record<string, unknown>;
       entries.default = {
-        provider: 'edgeclaw',
+        provider: 'pilotdeck',
         name: model.trim(),
       };
       if (!existingConfig.version) existingConfig.version = 1;

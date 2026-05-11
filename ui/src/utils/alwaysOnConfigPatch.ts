@@ -1,6 +1,6 @@
 import type { SettingsProject } from '../components/settings/types/types';
 
-type EdgeClawConfigLike = Record<string, any>;
+type PilotDeckConfigLike = Record<string, any>;
 
 export function getAlwaysOnProjectRoot(project: SettingsProject): string {
   const root = project.fullPath || project.path || '';
@@ -8,14 +8,14 @@ export function getAlwaysOnProjectRoot(project: SettingsProject): string {
 }
 
 export function isAlwaysOnProjectEnabled(
-  config: EdgeClawConfigLike,
+  config: PilotDeckConfigLike,
   project: SettingsProject,
 ): boolean {
   const root = getAlwaysOnProjectRoot(project);
   return Boolean(root && config.alwaysOn?.discovery?.projects?.[root]?.enabled === true);
 }
 
-export function setAlwaysOnProjectEnabled<T extends EdgeClawConfigLike>(
+export function setAlwaysOnProjectEnabled<T extends PilotDeckConfigLike>(
   config: T,
   project: SettingsProject,
   enabled: boolean,

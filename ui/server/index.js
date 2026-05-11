@@ -250,7 +250,7 @@ function broadcastProgress(progress) {
     });
 }
 
-// Broadcasts ~/.edgeclaw/config.yaml reload events (from UI saves or external file edits)
+// Broadcasts ~/.pilotdeck/pilotdeck.yaml reload events (from UI saves or external file edits)
 // to every connected WebSocket client so open Settings tabs refresh instantly.
 function broadcastConfigReloaded(payload) {
     const message = JSON.stringify({ type: 'config:reloaded', ...payload });
@@ -2593,12 +2593,12 @@ async function startServer() {
 
                     console.log('');
                     console.log(c.dim('═'.repeat(63)));
-                    console.log(`  ${c.bright('CloudCLI Server - Ready')}`);
+                    console.log(`  ${c.bright('PolitDeck Server - Ready')}`);
                     console.log(c.dim('═'.repeat(63)));
                     console.log('');
                     console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://' + DISPLAY_HOST + ':' + SERVER_PORT)}`);
                     console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
-                    console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
+                    console.log(`${c.tip('[TIP]')}  Run "pilotdeck status" for full configuration details`);
                     console.log('');
 
                     const serverUrl = `http://${DISPLAY_HOST === '0.0.0.0' ? 'localhost' : DISPLAY_HOST}:${SERVER_PORT}`;

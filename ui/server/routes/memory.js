@@ -522,14 +522,14 @@ router.get('/dream-traces/:dreamTraceId', async (req, res) =>
 router.get('/export/current-project', async (req, res) =>
   withMemoryService(req, res, async ({ service }) => {
     const bundle = service.exportBundle();
-    sendBundleDownload(res, bundle, 'edgeclaw-memory-current-project');
+    sendBundleDownload(res, bundle, 'pilotdeck-memory-current-project');
   }),
 );
 
 router.get('/export/all-projects', async (_req, res) => {
   try {
     const bundle = await exportAllProjectsMemoryBundle();
-    sendBundleDownload(res, bundle, 'edgeclaw-memory-all-projects');
+    sendBundleDownload(res, bundle, 'pilotdeck-memory-all-projects');
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : String(error),
@@ -564,7 +564,7 @@ router.post('/import/all-projects', async (req, res) => {
 router.get('/export', async (req, res) =>
   withMemoryService(req, res, async ({ service }) => {
     const bundle = service.exportBundle();
-    sendBundleDownload(res, bundle, 'edgeclaw-memory-current-project');
+    sendBundleDownload(res, bundle, 'pilotdeck-memory-current-project');
   }),
 );
 

@@ -292,7 +292,7 @@
     "nextTaskPrompt": "Start the next task"
   },
   "composer": {
-    "placeholder": "Tell EdgeClaw what you want to get done…",
-    "welcomePlaceholder": "Tell EdgeClaw what you want to get done…"
+    "placeholder": "Tell PolitDeck what you want to get done…",
+    "welcomePlaceholder": "Tell PolitDeck what you want to get done…"
   }
 }

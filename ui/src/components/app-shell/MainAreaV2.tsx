@@ -144,7 +144,7 @@ export default function MainAreaV2(props: MainAreaV2Props) {
       {/* Header: breadcrumb left, tool switcher right. */}
       <header className="flex h-12 shrink-0 items-center px-6">
         {isSidebarCollapsed ? (
-          // Just the "expand sidebar" affordance — the EdgeClaw logo lives
+          // Just the "expand sidebar" affordance — the PolitDeck logo lives
           // in the sidebar header, so showing a duplicate badge here when
           // the sidebar is collapsed feels redundant.
           <button

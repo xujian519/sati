@@ -725,7 +725,7 @@ function DeleteProjectDialog({
 
         <div className="space-y-3 p-5">
           <p className="text-sm text-foreground">
-            This removes the project from EdgeClaw and deletes its session metadata.
+            This removes the project from PolitDeck and deletes its session metadata.
             {sessionCount > 0 ? (
               <>
                 {' '}
@@ -738,7 +738,7 @@ function DeleteProjectDialog({
           </p>
           <p className="text-xs text-muted-foreground">
             Files on disk are <span className="font-medium text-foreground">not</span> deleted —
-            only EdgeClaw&apos;s reference to them.
+            only PolitDeck&apos;s reference to them.
           </p>
           {error ? (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">

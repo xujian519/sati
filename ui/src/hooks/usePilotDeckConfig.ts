@@ -20,8 +20,6 @@ type SubsystemResult = {
 export type ConfigReload = {
   processEnv?: SubsystemResult;
   memory?: SubsystemResult;
-  router?: SubsystemResult;
-  gateway?: SubsystemResult;
   proxy?: SubsystemResult;
 } & Record<string, unknown>;
 
@@ -40,7 +38,7 @@ type ReloadInfo = {
   at: number;
 };
 
-export function useEdgeClawConfig() {
+export function usePilotDeckConfig() {
   const [path, setPath] = useState('');
   const [raw, setRaw] = useState('');
   const [exists, setExists] = useState(false);
