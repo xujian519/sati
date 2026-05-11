@@ -3,9 +3,9 @@ set -euo pipefail
 
 # PilotDeck one-line installer for macOS.
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/Gucc111/PolitDeck/feat/onboarding-and-installer/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Gucc111/PilotDeck/feat/onboarding-and-installer/install.sh | bash
 
-REPO_URL="${PILOTDECK_REPO_URL:-https://github.com/Gucc111/PolitDeck.git}"
+REPO_URL="${PILOTDECK_REPO_URL:-https://github.com/Gucc111/PilotDeck.git}"
 BRANCH="${PILOTDECK_BRANCH:-feat/onboarding-and-installer}"
 INSTALL_DIR="${PILOTDECK_INSTALL_DIR:-$HOME/.pilotdeck/app}"
 CONFIG_FILE="${PILOTDECK_CONFIG_PATH:-$HOME/.pilotdeck/pilotdeck.yaml}"
