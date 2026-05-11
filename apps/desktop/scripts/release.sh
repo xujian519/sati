@@ -341,17 +341,19 @@ ok "claudecodeui bundle: ${CCUI_MB}MB → $(basename "$CCUI_BUNDLE")"
 # files. gateway/ was merged into src/gateway/ — include it if it exists as a
 # top-level dir, otherwise omit.
 rm -f "$CCM_BUNDLE"
-CCM_DIRS=(src/ scripts/ node_modules/)
-[[ -d "${CLAUDE_CODE_MAIN_DIR}/gateway" ]] && CCM_DIRS+=(gateway/)
-CCM_OPTIONAL_FILES="$(cd "$CLAUDE_CODE_MAIN_DIR" && ls \
-  package.json bunfig.toml preload.ts proxy.ts router.ts \
-  pilotdeck-config.ts tsconfig.json 2>/dev/null)"
+CCM_ITEMS=(src/ scripts/ node_modules/)
+[[ -d "${CLAUDE_CODE_MAIN_DIR}/gateway" ]] && CCM_ITEMS+=(gateway/)
+for f in package.json bunfig.toml preload.ts proxy.ts router.ts \
+         pilotdeck-config.ts tsconfig.json; do
+  [[ -f "${CLAUDE_CODE_MAIN_DIR}/$f" ]] && CCM_ITEMS+=("$f")
+done
 (cd "$CLAUDE_CODE_MAIN_DIR" && tar cf "$CCM_BUNDLE" \
   "${NODE_MODULES_EXCLUDES[@]}" \
   --exclude='apps' --exclude='ui' --exclude='old_ui' \
   --exclude='edgeclaw-memory-core' --exclude='docs' --exclude='tests' \
   --exclude='third-party' --exclude='dist' --exclude='.git' \
-  $CCM_OPTIONAL_FILES "${CCM_DIRS[@]}") \
+  --exclude='config' --exclude='packages' \
+  "${CCM_ITEMS[@]}") \
   || fail "claude-code-main tar creation failed"
 CCM_MB=$(du -sm "$CCM_BUNDLE" | awk '{print $1}')
 ok "claude-code-main bundle: ${CCM_MB}MB → $(basename "$CCM_BUNDLE")"
