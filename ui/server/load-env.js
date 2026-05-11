@@ -48,7 +48,7 @@ export function loadRootPilotDeckEnv() {
   applyDerivedRuntimeEnv();
 
   if (!process.env.DATABASE_PATH) {
-    process.env.DATABASE_PATH = path.join(os.homedir(), '.cloudcli', 'auth.db');
+    process.env.DATABASE_PATH = path.join(os.homedir(), '.pilotdeck', 'auth.db');
   }
 
   return hasPilotDeckConfigFile();

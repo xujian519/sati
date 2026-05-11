@@ -74,7 +74,7 @@ export function buildDefaultPilotDeckConfig() {
       contextWindow: 160000,
       apiTimeoutMs: 120000,
       httpsProxy: '',
-      databasePath: path.join(os.homedir(), '.cloudcli', 'auth.db'),
+      databasePath: path.join(os.homedir(), '.pilotdeck', 'auth.db'),
       workspacesRoot: os.homedir(),
     },
     models: {
