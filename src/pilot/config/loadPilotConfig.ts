@@ -275,6 +275,11 @@ function validateTopLevel(rawConfig: PilotRawConfig, diagnostics: PilotConfigDia
     "router",
     "alwaysOn",
     "cron",
+    // Reserved namespace for ui/server (Web UI Express bridge). The PolitDeck
+    // gateway does not parse `webui.*` itself but tolerates it so a single
+    // ~/.pilotdeck/pilotdeck.yaml can carry both gateway-side and ui-side
+    // config without producing diagnostic noise.
+    "webui",
   ]);
   for (const key of Object.keys(rawConfig)) {
     if (!allowedKeys.has(key)) {

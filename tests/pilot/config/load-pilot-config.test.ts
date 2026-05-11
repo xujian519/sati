@@ -228,6 +228,64 @@ test("reload failure keeps the previous snapshot", async () => {
   }
 });
 
+test("accepts a webui top-level section without emitting an unknown-field warning", () => {
+  const pilotHome = makeTempDir();
+  try {
+    writeJson(getPilotConfigFilePath(pilotHome), {
+      schemaVersion: 1,
+      agent: validAgentConfig(),
+      model: validModelConfig(),
+      webui: {
+        runtime: { serverPort: 3001 },
+        memory: { autoIndexIntervalMinutes: 30 },
+      },
+    });
+
+    const snapshot = loadPilotConfig({
+      env: {
+        PILOT_HOME: pilotHome,
+        ANTHROPIC_API_KEY: "anthropic-key",
+      },
+    });
+
+    const unknownFieldWarnings = snapshot.diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === "CONFIG_UNKNOWN_FIELD" && diagnostic.path === "webui",
+    );
+    assert.equal(unknownFieldWarnings.length, 0);
+  } finally {
+    rmSync(pilotHome, { recursive: true, force: true });
+  }
+});
+
+test("warns on unknown top-level keys other than webui", () => {
+  const pilotHome = makeTempDir();
+  try {
+    writeJson(getPilotConfigFilePath(pilotHome), {
+      schemaVersion: 1,
+      agent: validAgentConfig(),
+      model: validModelConfig(),
+      bogus: { ignored: true },
+    });
+
+    const snapshot = loadPilotConfig({
+      env: {
+        PILOT_HOME: pilotHome,
+        ANTHROPIC_API_KEY: "anthropic-key",
+      },
+    });
+
+    const bogusWarnings = snapshot.diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === "CONFIG_UNKNOWN_FIELD" && diagnostic.path === "bogus",
+    );
+    assert.equal(bogusWarnings.length, 1);
+    assert.equal(bogusWarnings[0].severity, "warning");
+  } finally {
+    rmSync(pilotHome, { recursive: true, force: true });
+  }
+});
+
 function makeTempDir(): string {
   return mkdtempSync(join(tmpdir(), "pilotdeck-"));
 }
