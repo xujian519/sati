@@ -183,6 +183,8 @@ export type CanonicalUsage = {
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
   totalTokens?: number;
+  /** Cost reported by the API provider (e.g. OpenRouter `usage.cost`). */
+  nativeCost?: number;
 };
 
 export type CanonicalFinishReason =

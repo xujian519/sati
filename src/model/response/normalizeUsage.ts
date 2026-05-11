@@ -27,11 +27,13 @@ export function normalizeOpenAIUsage(raw: unknown): CanonicalUsage | undefined {
   const inputTokens = readNumber(raw.prompt_tokens) ?? readNumber(raw.input_tokens);
   const outputTokens = readNumber(raw.completion_tokens) ?? readNumber(raw.output_tokens);
   const totalTokens = readNumber(raw.total_tokens) ?? sumDefined(inputTokens, outputTokens);
+  const nativeCost = readNumber(raw.cost);
 
   return compactUsage({
     inputTokens,
     outputTokens,
     totalTokens,
+    nativeCost,
   });
 }
 
