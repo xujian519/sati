@@ -31,11 +31,27 @@ const URL_TYPE_MAP: Array<{ re: RegExp; type: string }> = [
   { re: /together/i, type: 'openai-chat' },
 ];
 
+const URL_PROVIDER_MAP: Array<{ re: RegExp; id: string }> = [
+  { re: /anthropic\.com/i, id: 'anthropic' },
+  { re: /openrouter\.ai/i, id: 'openrouter' },
+  { re: /openai\.com/i, id: 'openai' },
+  { re: /minimaxi?\.com/i, id: 'minimax' },
+  { re: /deepseek/i, id: 'deepseek' },
+  { re: /together/i, id: 'together' },
+];
+
 function detectProviderType(url: string): string | null {
   for (const { re, type } of URL_TYPE_MAP) {
     if (re.test(url)) return type;
   }
   return null;
+}
+
+function detectProviderId(url: string): string {
+  for (const { re, id } of URL_PROVIDER_MAP) {
+    if (re.test(url)) return id;
+  }
+  return 'custom';
 }
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
@@ -87,6 +103,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
     const p = PRESETS[key];
     setSelectedPreset(key);
     setBaseUrl(p.baseUrl);
+    setApiKey('');
     setModel(p.model);
     setProviderType(p.type);
     setAutoDetected(false);
@@ -127,21 +144,20 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      const { stringify: stringifyYaml, parse: parseYaml } = await import('yaml');
-
       // Read existing config to merge
       let existingConfig: Record<string, unknown> = {};
       try {
         const res = await authenticatedFetch('/api/config');
         if (res.ok) {
           const data = await res.json();
-          if (data.raw) {
-            existingConfig = parseYaml(data.raw) || {};
+          if (data.config && typeof data.config === 'object') {
+            existingConfig = data.config;
           }
         }
       } catch { /* start fresh */ }
 
-      // Build merged config
+      // Build merged config in the UI-internal shape. The server persists it
+      // as ~/.pilotdeck/pilotdeck.yaml with model/agent sections.
       if (!existingConfig.models || typeof existingConfig.models !== 'object') {
         (existingConfig as Record<string, unknown>).models = {};
       }
@@ -149,8 +165,11 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
       if (!models.providers || typeof models.providers !== 'object') {
         models.providers = {};
       }
+      const providerId = selectedPreset || detectProviderId(baseUrl);
+      const modelName = model.trim();
+      const entryId = `${providerId}/${modelName}`;
       const providers = models.providers as Record<string, unknown>;
-      providers.edgeclaw = {
+      providers[providerId] = {
         type: providerType,
         baseUrl: baseUrl.trim(),
         apiKey: apiKey.trim(),
@@ -159,23 +178,19 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
         models.entries = {};
       }
       const entries = models.entries as Record<string, unknown>;
-      entries.default = {
-        provider: 'edgeclaw',
-        name: model.trim(),
+      entries[entryId] = {
+        provider: providerId,
+        name: modelName,
       };
       if (!existingConfig.version) existingConfig.version = 1;
-      if (!existingConfig.agents) {
-        (existingConfig as Record<string, unknown>).agents = { main: { model: 'default' } };
-      }
+      (existingConfig as Record<string, unknown>).agents = { main: { model: entryId } };
       if (!existingConfig.memory) {
         (existingConfig as Record<string, unknown>).memory = { enabled: true };
       }
 
-      const raw = stringifyYaml(existingConfig, { indent: 2, lineWidth: 0 });
-
       const saveRes = await authenticatedFetch('/api/config', {
         method: 'PUT',
-        body: JSON.stringify({ raw }),
+        body: JSON.stringify({ config: existingConfig }),
       });
 
       if (!saveRes.ok) {
@@ -190,7 +205,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
     } finally {
       setSaving(false);
     }
-  }, [providerType, baseUrl, apiKey, model, onSaved]);
+  }, [providerType, baseUrl, apiKey, model, selectedPreset, onSaved]);
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-8">
@@ -258,7 +273,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
             </label>
             <input
               id="llm-api-key"
-              type="text"
+              type="password"
               value={apiKey}
               onChange={(e) => { setApiKey(e.target.value); handleFieldChange(); }}
               placeholder="sk-..."
@@ -311,7 +326,10 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
       </div>
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-3 border-t border-border pt-6">
+      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border pt-6">
+        {testStatus !== 'success' && (
+          <span className="mr-auto text-xs text-muted-foreground">Please test connection first.</span>
+        )}
         <button
           type="button"
           onClick={handleTest}

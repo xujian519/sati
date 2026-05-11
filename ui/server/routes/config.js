@@ -111,12 +111,16 @@ router.get('/provider', (_req, res) => {
       return res.json({ exists: false, provider: null });
     }
     const providers = config.models.providers;
-    const providerId = Object.keys(providers)[0];
+    const entries = config.models?.entries || {};
+    const mainModel = config.agents?.main?.model;
+    const configuredEntry = typeof mainModel === 'string'
+      ? entries[mainModel]
+      : null;
+    const providerId = configuredEntry?.provider || Object.keys(providers)[0];
     if (!providerId) return res.json({ exists: false, provider: null });
 
     const provider = providers[providerId] || {};
-    const entries = config.models?.entries || {};
-    const defaultEntry = entries.default || entries[Object.keys(entries)[0]] || {};
+    const defaultEntry = configuredEntry || entries[Object.keys(entries)[0]] || {};
 
     res.json({
       exists: true,

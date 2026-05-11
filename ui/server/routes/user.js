@@ -2,9 +2,29 @@ import express from 'express';
 import { userDb } from '../database/db.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { getSystemGitConfig } from '../utils/gitConfig.js';
+import { readPilotDeckConfigFile } from '../services/pilotdeckConfig.js';
 import { spawn } from 'child_process';
 
 const router = express.Router();
+
+function hasUsablePilotDeckConfig() {
+  const record = readPilotDeckConfigFile();
+  if (!record.exists) return false;
+
+  const providers = record.config?.models?.providers ?? {};
+  const entries = record.config?.models?.entries ?? {};
+  const mainModel = record.config?.agents?.main?.model;
+  const mainEntry = typeof mainModel === 'string' ? entries[mainModel] : null;
+  const providerId = mainEntry?.provider;
+  const provider = providerId ? providers[providerId] : null;
+
+  return Boolean(
+    provider?.baseUrl &&
+    provider?.apiKey &&
+    mainEntry?.name &&
+    mainModel,
+  );
+}
 
 function spawnAsync(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -92,9 +112,6 @@ router.post('/git-config', authenticateToken, async (req, res) => {
 
 router.post('/complete-onboarding', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
-    userDb.completeOnboarding(userId);
-
     res.json({
       success: true,
       message: 'Onboarding completed successfully'
@@ -107,8 +124,7 @@ router.post('/complete-onboarding', authenticateToken, async (req, res) => {
 
 router.get('/onboarding-status', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
-    const hasCompleted = userDb.hasCompletedOnboarding(userId);
+    const hasCompleted = hasUsablePilotDeckConfig();
 
     res.json({
       success: true,
