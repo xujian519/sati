@@ -7,8 +7,10 @@ import { CliChannel, TuiChannel, FeishuChannel } from "../adapters/index.js";
 import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
 import { createLocalGateway } from "./createLocalGateway.js";
 import { startPilotDeckServer } from "./pilotdeckServer.js";
+import { installGlobalProxy } from "./proxy.js";
 
 async function main(argv = process.argv.slice(2)): Promise<void> {
+  installGlobalProxy();
   const command = argv[0];
   if (command === "server") {
     const projectRoot = process.cwd();

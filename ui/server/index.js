@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 // Load environment variables before other imports execute
 import { assertRequiredPilotDeckEnv } from './load-env.js';
+// Install global fetch proxy (PILOTDECK_PROXY / HTTPS_PROXY) before any network calls
+import { installGlobalProxy } from '../../dist/src/cli/proxy.js';
+installGlobalProxy();
+
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
