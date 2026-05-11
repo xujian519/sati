@@ -3,6 +3,11 @@ import { Box, Text } from "ink";
 import type { TuiMessage } from "./types.js";
 import { pilotDeckDarkBlueTheme } from "./theme.js";
 
+function formatCharCount(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k chars`;
+  return `${n} chars`;
+}
+
 export function MessageResponse({ message }: { message: TuiMessage }): React.ReactNode {
   if (message.role === "user") {
     return (
@@ -21,7 +26,14 @@ export function MessageResponse({ message }: { message: TuiMessage }): React.Rea
         <Text color={pilotDeckDarkBlueTheme.brand} bold>
           PilotDeck
         </Text>
-        <Text color={pilotDeckDarkBlueTheme.text}>{message.text.trim()}</Text>
+        {message.thinking && message.thinking.length > 0 && (
+          <Text dimColor italic>
+            {"∴ Thinking"} ({formatCharCount(message.thinking.length)})
+          </Text>
+        )}
+        {message.text.trim().length > 0 && (
+          <Text color={pilotDeckDarkBlueTheme.text}>{message.text.trim()}</Text>
+        )}
       </Box>
     );
   }

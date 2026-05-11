@@ -5,7 +5,7 @@ export type TuiConnectionMode = "remote" | "in_process";
 export type TuiMessage =
   | { role: "system"; text: string }
   | { role: "user"; text: string }
-  | { role: "assistant"; text: string }
+  | { role: "assistant"; text: string; thinking?: string }
   | { role: "tool"; text: string; ok?: boolean }
   | { role: "error"; text: string };
 
@@ -25,6 +25,7 @@ export type TuiAppState = {
   mode: GatewayMode;
   isRunning: boolean;
   helpOpen: boolean;
+  scrollOffset: number;
 };
 
 export type TuiEventReducerResult = Pick<TuiAppState, "messages" | "activity" | "mode" | "isRunning">;
@@ -41,7 +42,7 @@ export function applyGatewayEventToTuiState(state: TuiEventReducerResult, event:
       return appendAssistantText(state, event.text);
     case "assistant_thinking_delta":
       return {
-        ...state,
+        ...appendAssistantThinking(state, event.text),
         activity: [{ id: `thinking-${state.activity.length}`, text: event.text, status: "info" as const }, ...state.activity].slice(0, 8),
       };
     case "tool_call_started":
@@ -91,11 +92,28 @@ function appendAssistantText(state: TuiEventReducerResult, text: string): TuiEve
   if (last?.role === "assistant") {
     return {
       ...state,
-      messages: [...state.messages.slice(0, -1), { role: "assistant", text: `${last.text}${text}` }],
+      messages: [...state.messages.slice(0, -1), { role: "assistant", text: `${last.text}${text}`, thinking: last.thinking }],
     };
   }
   return {
     ...state,
     messages: [...state.messages, { role: "assistant", text }],
+  };
+}
+
+function appendAssistantThinking(state: TuiEventReducerResult, text: string): TuiEventReducerResult {
+  if (!text) {
+    return state;
+  }
+  const last = state.messages.at(-1);
+  if (last?.role === "assistant") {
+    return {
+      ...state,
+      messages: [...state.messages.slice(0, -1), { role: "assistant", text: last.text, thinking: `${last.thinking ?? ""}${text}` }],
+    };
+  }
+  return {
+    ...state,
+    messages: [...state.messages, { role: "assistant", text: "", thinking: text }],
   };
 }

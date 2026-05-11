@@ -35,6 +35,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
     mode: "default",
     isRunning: false,
     helpOpen: false,
+    scrollOffset: 0,
   });
 
   useEffect(() => {
@@ -63,6 +64,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
         ...current,
         messages: [...current.messages, { role: "user", text: trimmed }],
         isRunning: true,
+        scrollOffset: 0,
       }));
 
       try {
@@ -89,6 +91,8 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
     [exit, props.gateway, props.projectKey, state.activeSessionKey, state.isRunning, state.mode],
   );
 
+  const scrollPage = Math.max(1, Math.floor(rows / 2));
+
   useInput((input, key) => {
     if (key.ctrl && input === "c") {
       if (state.isRunning) {
@@ -99,11 +103,30 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
       return;
     }
     if (key.escape) {
-      setState((current) => ({ ...current, helpOpen: false }));
+      setState((current) => ({ ...current, helpOpen: false, scrollOffset: 0 }));
       return;
     }
     if (input === "?" && state.input.length === 0) {
       setState((current) => ({ ...current, helpOpen: !current.helpOpen }));
+      return;
+    }
+
+    // PageUp / Shift+UpArrow: scroll up (increase offset from bottom)
+    if (key.pageUp || (key.shift && key.upArrow)) {
+      setState((current) => {
+        const maxOffset = Math.max(0, current.messages.length - 1);
+        return { ...current, scrollOffset: Math.min(maxOffset, current.scrollOffset + scrollPage) };
+      });
+      return;
+    }
+
+    // PageDown / Shift+DownArrow: scroll down (decrease offset toward bottom)
+    if (key.pageDown || (key.shift && key.downArrow)) {
+      setState((current) => ({
+        ...current,
+        scrollOffset: Math.max(0, current.scrollOffset - scrollPage),
+      }));
+      return;
     }
   });
 
