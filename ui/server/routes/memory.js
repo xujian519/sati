@@ -6,11 +6,11 @@ import {
   MemoryBundleValidationError,
 } from '../../../edgeclaw-memory-core/lib/index.js';
 import {
-  readEdgeClawConfigFile,
-  writeEdgeClawConfig,
-} from '../services/edgeclawConfig.js';
-import { reloadEdgeClawConfig } from '../services/edgeclawConfigReloader.js';
-import { suppressNextWatchEvent } from '../services/edgeclawConfigWatcher.js';
+  readPilotDeckConfigFile,
+  writePilotDeckConfig,
+} from '../services/pilotdeckConfig.js';
+import { reloadPilotDeckConfig } from '../services/pilotdeckConfigReloader.js';
+import { suppressNextWatchEvent } from '../services/pilotdeckConfigWatcher.js';
 import {
   clearAllMemoryData,
   exportAllProjectsMemoryBundle,
@@ -66,11 +66,11 @@ function getGlobalMemorySettingsFromConfig(config) {
 }
 
 function getGlobalMemorySettings() {
-  return getGlobalMemorySettingsFromConfig(readEdgeClawConfigFile().config);
+  return getGlobalMemorySettingsFromConfig(readPilotDeckConfigFile().config);
 }
 
 async function saveGlobalMemorySettings(partial = {}) {
-  const { config } = readEdgeClawConfigFile();
+  const { config } = readPilotDeckConfigFile();
   const current = getGlobalMemorySettingsFromConfig(config);
   const next = {
     reasoningMode: partial.reasoningMode === 'accuracy_first'
@@ -95,8 +95,8 @@ async function saveGlobalMemorySettings(partial = {}) {
     },
   };
   suppressNextWatchEvent();
-  const saved = await writeEdgeClawConfig(nextConfig);
-  await reloadEdgeClawConfig(saved.config);
+  const saved = await writePilotDeckConfig(nextConfig);
+  await reloadPilotDeckConfig(saved.config);
   return getGlobalMemorySettingsFromConfig(saved.config);
 }
 

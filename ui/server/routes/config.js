@@ -3,23 +3,23 @@ import fsPromises from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
 import {
-  buildDefaultEdgeClawConfig,
+  buildDefaultPilotDeckConfig,
   configToYaml,
-  getEdgeClawConfigPath,
+  getPilotDeckConfigPath,
   maskSecrets,
   parseConfigYaml,
   preserveMaskedSecrets,
-  readEdgeClawConfigFile,
-  validateEdgeClawConfig,
-  writeEdgeClawConfig,
-} from '../services/edgeclawConfig.js';
-import { reloadEdgeClawConfig } from '../services/edgeclawConfigReloader.js';
-import { suppressNextWatchEvent } from '../services/edgeclawConfigWatcher.js';
+  readPilotDeckConfigFile,
+  validatePilotDeckConfig,
+  writePilotDeckConfig,
+} from '../services/pilotdeckConfig.js';
+import { reloadPilotDeckConfig } from '../services/pilotdeckConfigReloader.js';
+import { suppressNextWatchEvent } from '../services/pilotdeckConfigWatcher.js';
 
 const router = express.Router();
 
 function serializeConfigResponse(record, reloadResult = null) {
-  const validation = validateEdgeClawConfig(record.config);
+  const validation = validatePilotDeckConfig(record.config);
   const maskedConfig = maskSecrets(record.config);
   return {
     exists: record.exists,
@@ -36,12 +36,12 @@ function serializeConfigResponse(record, reloadResult = null) {
 }
 
 function broadcastConfigEvent(payload) {
-  process.emit('edgeclaw:config-broadcast', payload);
+  process.emit('pilotdeck:config-broadcast', payload);
 }
 
 router.get('/', (_req, res) => {
   try {
-    const record = readEdgeClawConfigFile();
+    const record = readPilotDeckConfigFile();
     res.json(serializeConfigResponse(record));
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
@@ -52,7 +52,7 @@ router.post('/validate', (req, res) => {
   try {
     const raw = typeof req.body?.raw === 'string' ? req.body.raw : '';
     const config = raw ? parseConfigYaml(raw) : req.body?.config;
-    const validation = validateEdgeClawConfig(config);
+    const validation = validatePilotDeckConfig(config);
     res.status(validation.valid ? 200 : 400).json(validation);
   } catch (error) {
     res.status(400).json({ valid: false, errors: [error instanceof Error ? error.message : String(error)], warnings: [] });
@@ -61,7 +61,7 @@ router.post('/validate', (req, res) => {
 
 router.put('/', async (req, res) => {
   try {
-    const existing = readEdgeClawConfigFile().config;
+    const existing = readPilotDeckConfigFile().config;
     const incoming = typeof req.body?.raw === 'string'
       ? parseConfigYaml(req.body.raw)
       : req.body?.config;
@@ -71,8 +71,8 @@ router.put('/', async (req, res) => {
 
     const config = preserveMaskedSecrets(incoming, existing);
     suppressNextWatchEvent();
-    const saved = await writeEdgeClawConfig(config);
-    const reloadResult = await reloadEdgeClawConfig(saved.config);
+    const saved = await writePilotDeckConfig(config);
+    const reloadResult = await reloadPilotDeckConfig(saved.config);
     const response = serializeConfigResponse(
       { exists: true, configPath: saved.configPath, raw: saved.raw, config: saved.config },
       reloadResult,
@@ -89,12 +89,12 @@ router.put('/', async (req, res) => {
 
 router.post('/reload', async (_req, res) => {
   try {
-    const record = readEdgeClawConfigFile();
-    const validation = validateEdgeClawConfig(record.config);
+    const record = readPilotDeckConfigFile();
+    const validation = validatePilotDeckConfig(record.config);
     if (!validation.valid) {
       return res.status(400).json({ error: 'Invalid config', validation });
     }
-    const reloadResult = await reloadEdgeClawConfig(record.config);
+    const reloadResult = await reloadPilotDeckConfig(record.config);
     const response = serializeConfigResponse(record, reloadResult);
     broadcastConfigEvent({ source: 'ui-reload', ...response, timestamp: new Date().toISOString() });
     res.json(response);
@@ -105,7 +105,7 @@ router.post('/reload', async (_req, res) => {
 
 router.get('/provider', (_req, res) => {
   try {
-    const record = readEdgeClawConfigFile();
+    const record = readPilotDeckConfigFile();
     const config = record.config;
     if (!config?.models?.providers) {
       return res.json({ exists: false, provider: null });
@@ -207,13 +207,13 @@ router.post('/test-connection', async (req, res) => {
 });
 
 router.post('/open', async (_req, res) => {
-  const configPath = getEdgeClawConfigPath();
+  const configPath = getPilotDeckConfigPath();
   try {
     await fsPromises.mkdir(path.dirname(configPath), { recursive: true });
     try {
       await fsPromises.access(configPath);
     } catch {
-      await fsPromises.writeFile(configPath, configToYaml(buildDefaultEdgeClawConfig()), 'utf8');
+      await fsPromises.writeFile(configPath, configToYaml(buildDefaultPilotDeckConfig()), 'utf8');
     }
 
     const command = process.platform === 'darwin'

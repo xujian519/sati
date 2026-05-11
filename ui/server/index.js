@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Load environment variables before other imports execute
-import { assertRequiredEdgeClawEnv } from './load-env.js';
+import { assertRequiredPilotDeckEnv } from './load-env.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -32,7 +32,7 @@ const c = {
     dim: (text) => `${colors.dim}${text}${colors.reset}`,
 };
 
-assertRequiredEdgeClawEnv();
+assertRequiredPilotDeckEnv();
 console.log('SERVER_PORT from runtime config:', process.env.SERVER_PORT);
 
 import express from 'express';
@@ -71,7 +71,7 @@ import commandsRoutes from './routes/commands.js';
 import skillsRoutes from './routes/skills.js';
 import settingsRoutes from './routes/settings.js';
 import configRoutes from './routes/config.js';
-import { startEdgeClawConfigWatcher, stopEdgeClawConfigWatcher } from './services/edgeclawConfigWatcher.js';
+import { startPilotDeckConfigWatcher, stopPilotDeckConfigWatcher } from './services/pilotdeckConfigWatcher.js';
 import agentRoutes from './routes/agent.js';
 import projectsRoutes, { WORKSPACES_ROOT, validateWorkspacePath } from './routes/projects.js';
 import userRoutes from './routes/user.js';
@@ -131,7 +131,7 @@ const alwaysOnDiscoveryTriggerClient = startDiscoveryTriggerClient({
     getWriterId: (ws) => alwaysOnHeartbeat.getWriterId(ws)
 });
 let isGetProjectsRunning = false; // Flag to prevent reentrant calls
-let edgeClawProxyProcess = null;
+let pilotDeckProxyProcess = null;
 
 function resolveBunExecutable() {
     const candidates = [
@@ -179,31 +179,31 @@ async function waitForLocalPort(port, host = '127.0.0.1', timeoutMs = 4000) {
     return false;
 }
 
-async function ensureEdgeClawProxyRunning() {
-    // EdgeClaw proxy bootstrap was tied to the bundled claude-code-main /
+async function ensurePilotDeckProxyRunning() {
+    // The legacy in-process proxy bootstrap was tied to the bundled claude-code-main /
     // CCR pipeline that we removed during the PilotDeck-only migration.
     // Model traffic now flows through `src/gateway` directly. Returning
     // immediately keeps any callers happy without touching dead code.
     return;
     // The unreachable body below is left as historical scaffolding.
     // eslint-disable-next-line no-unreachable
-    const proxyPort = parseInt(process.env.PROXY_PORT || process.env.EDGECLAW_PROXY_PORT || '18080', 10);
+    const proxyPort = parseInt(process.env.PROXY_PORT || process.env.PILOTDECK_PROXY_PORT || '18080', 10);
     if (!proxyPort) return;
     if (await isLocalPortListening(proxyPort)) {
         console.log(`${c.info('[INFO]')} Reusing existing PilotDeck-friendly proxy on http://127.0.0.1:${proxyPort}`);
         return;
     }
 
-    console.error(`[ERROR] EdgeClaw proxy did not become ready on http://127.0.0.1:${proxyPort}`);
+    console.error(`[ERROR] PilotDeck proxy did not become ready on http://127.0.0.1:${proxyPort}`);
 }
 
-async function stopEdgeClawProxy() {
-    if (!edgeClawProxyProcess) {
+async function stopPilotDeckProxy() {
+    if (!pilotDeckProxyProcess) {
         return;
     }
 
-    const proxyProcess = edgeClawProxyProcess;
-    edgeClawProxyProcess = null;
+    const proxyProcess = pilotDeckProxyProcess;
+    pilotDeckProxyProcess = null;
 
     if (proxyProcess.exitCode !== null || proxyProcess.signalCode !== null) {
         return;
@@ -223,10 +223,10 @@ async function stopEdgeClawProxy() {
     });
 }
 
-process.on('edgeclaw:restart-proxy', async (done) => {
+process.on('pilotdeck:restart-proxy', async (done) => {
     try {
-        await stopEdgeClawProxy();
-        await ensureEdgeClawProxyRunning();
+        await stopPilotDeckProxy();
+        await ensurePilotDeckProxyRunning();
         if (typeof done === 'function') {
             done(null);
         }
@@ -260,7 +260,7 @@ function broadcastConfigReloaded(payload) {
         }
     });
 }
-process.on('edgeclaw:config-broadcast', broadcastConfigReloaded);
+process.on('pilotdeck:config-broadcast', broadcastConfigReloaded);
 
 // Setup file system watchers for Claude, Cursor, and Codex project/session folders
 async function setupProjectsWatcher() {
@@ -664,7 +664,7 @@ app.use('/memory-dashboard', authenticateToken, express.static(MEMORY_DASHBOARD_
 
 // Hard 404 boundary: anything still asking for /memory-dashboard/* after the
 // static middleware is a missing asset. Without this, the request would fall
-// through to the SPA wildcard below and return the EdgeClaw shell index.html,
+// through to the SPA wildcard below and return the PilotDeck shell index.html,
 // which the MemoryPanel iframe then renders — recursively nesting the entire
 // app inside itself (see bug: "嵌套显示 + general memory 多次出现").
 app.use('/memory-dashboard', (_req, res) => {
@@ -2610,7 +2610,7 @@ async function startServer() {
                     // Start watching the projects folder for changes
                     await setupProjectsWatcher();
 
-                    await ensureEdgeClawProxyRunning();
+                    await ensurePilotDeckProxyRunning();
 
                     // Start background memory scheduler for auto index/dream.
                     startMemoryScheduler();
@@ -2620,12 +2620,12 @@ async function startServer() {
                         console.error('[Plugins] Error during startup:', err.message);
                     });
 
-                    // Hot-reload watcher: external edits to ~/.edgeclaw/config.yaml
+                    // Hot-reload watcher: external edits to ~/.pilotdeck/pilotdeck.yaml
                     // (vim, Cursor, another process) trigger a validate+reload and push
                     // a "config:reloaded" event to every connected WebSocket client.
-                    await startEdgeClawConfigWatcher({
+                    await startPilotDeckConfigWatcher({
                         onEvent: (payload) => {
-                            process.emit('edgeclaw:config-broadcast', payload);
+                            process.emit('pilotdeck:config-broadcast', payload);
                         },
                     });
                 });
@@ -2642,9 +2642,9 @@ async function startServer() {
                 try {
                     stopMemoryScheduler();
                     closeMemoryServices();
-                    stopEdgeClawConfigWatcher();
+                    stopPilotDeckConfigWatcher();
                     alwaysOnDiscoveryTriggerClient.stop();
-                    await stopEdgeClawProxy();
+                    await stopPilotDeckProxy();
                     await stopAllPlugins();
                     // The CCR (Claude Code Router) and embedded-chrome
                     // helpers were retired with the four-provider runtime.

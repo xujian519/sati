@@ -11,8 +11,8 @@ import {
 import { extractProjectDirectory } from '../projects.js';
 import {
   buildMemoryDefaults,
-  readEdgeClawConfigFile,
-} from './edgeclawConfig.js';
+  readPilotDeckConfigFile,
+} from './pilotdeckConfig.js';
 
 const MEMORY_ROOT_DIR = path.join(os.homedir(), '.edgeclaw', 'memory');
 const MEMORY_WORKSPACES_ROOT = path.join(MEMORY_ROOT_DIR, 'workspaces');
@@ -39,7 +39,7 @@ function resolveWorkspaceDataDir(projectPath) {
 function buildServiceForDataDir(dataDir, workspaceDir = dataDir) {
   let memoryDefaults = {};
   try {
-    memoryDefaults = buildMemoryDefaults(readEdgeClawConfigFile().config);
+    memoryDefaults = buildMemoryDefaults(readPilotDeckConfigFile().config);
   } catch {
     memoryDefaults = {};
   }
@@ -390,7 +390,7 @@ export async function rollbackLastMemoryDream(service, dataDir) {
 
 export async function runMemorySchedulerCycle() {
   try {
-    if (!readEdgeClawConfigFile().config.memory?.enabled) {
+    if (!readPilotDeckConfigFile().config.memory?.enabled) {
       return null;
     }
   } catch {
@@ -419,7 +419,7 @@ export async function runMemorySchedulerCycle() {
 
 export function startMemoryScheduler() {
   try {
-    if (!readEdgeClawConfigFile().config.memory?.enabled) {
+    if (!readPilotDeckConfigFile().config.memory?.enabled) {
       return;
     }
   } catch {
@@ -452,7 +452,7 @@ export function getMemorySchedulerStatus() {
   let enabled = true;
   let configError = null;
   try {
-    enabled = readEdgeClawConfigFile().config.memory?.enabled !== false;
+    enabled = readPilotDeckConfigFile().config.memory?.enabled !== false;
   } catch (error) {
     configError = error instanceof Error ? error.message : String(error);
   }

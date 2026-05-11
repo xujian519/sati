@@ -3,17 +3,17 @@ import fsPromises from 'fs/promises';
 import path from 'path';
 import {
   configToYaml,
-  getEdgeClawConfigPath,
+  getPilotDeckConfigPath,
   maskSecrets,
-  readEdgeClawConfigFile,
-  validateEdgeClawConfig,
-} from './edgeclawConfig.js';
-import { reloadEdgeClawConfig } from './edgeclawConfigReloader.js';
+  readPilotDeckConfigFile,
+  validatePilotDeckConfig,
+} from './pilotdeckConfig.js';
+import { reloadPilotDeckConfig } from './pilotdeckConfigReloader.js';
 
-// Watches the unified ~/.edgeclaw/config.yaml for external edits (vim, Cursor, other IDEs)
-// and triggers the same reload path the UI uses on save, so *any* edit takes effect live.
-// When the UI itself writes the file it calls suppressNextWatchEvent() first to avoid a
-// redundant second reload.
+// Watches ~/.pilotdeck/pilotdeck.yaml for external edits (vim, Cursor, other IDEs)
+// and triggers the same reload path the UI uses on save, so *any* edit takes
+// effect live. When the UI itself writes the file it calls
+// suppressNextWatchEvent() first to avoid a redundant second reload.
 
 let watcher = null;
 let debounceTimer = null;
@@ -31,8 +31,6 @@ function signatureForFile(filePath) {
 }
 
 export function suppressNextWatchEvent() {
-  // A single logical write may produce several fs.watch events (truncate + write + rename).
-  // Suppress for a short grace window rather than counting events.
   suppressCount += 1;
   setTimeout(() => {
     suppressCount = Math.max(0, suppressCount - 1);
@@ -47,7 +45,7 @@ async function handleChange(configPath) {
 
   let record;
   try {
-    record = readEdgeClawConfigFile();
+    record = readPilotDeckConfigFile();
   } catch (error) {
     onEventHandler?.({
       source: 'watcher',
@@ -63,7 +61,7 @@ async function handleChange(configPath) {
     return;
   }
 
-  const validation = validateEdgeClawConfig(record.config);
+  const validation = validatePilotDeckConfig(record.config);
   const maskedConfig = maskSecrets(record.config);
 
   if (!validation.valid) {
@@ -80,7 +78,7 @@ async function handleChange(configPath) {
 
   let reloadResult = null;
   try {
-    reloadResult = await reloadEdgeClawConfig(record.config);
+    reloadResult = await reloadPilotDeckConfig(record.config);
   } catch (error) {
     onEventHandler?.({
       source: 'watcher',
@@ -104,18 +102,18 @@ async function handleChange(configPath) {
   });
 }
 
-export async function startEdgeClawConfigWatcher({ onEvent } = {}) {
-  stopEdgeClawConfigWatcher();
+export async function startPilotDeckConfigWatcher({ onEvent } = {}) {
+  stopPilotDeckConfigWatcher();
   onEventHandler = typeof onEvent === 'function' ? onEvent : null;
 
-  const configPath = getEdgeClawConfigPath();
+  const configPath = getPilotDeckConfigPath();
   const configDir = path.dirname(configPath);
   const configBase = path.basename(configPath);
 
   try {
     await fsPromises.mkdir(configDir, { recursive: true });
   } catch (error) {
-    console.warn('[edgeclaw-config-watcher] failed to ensure config dir:', error?.message || error);
+    console.warn('[pilotdeck-config-watcher] failed to ensure config dir:', error?.message || error);
     return;
   }
 
@@ -125,23 +123,21 @@ export async function startEdgeClawConfigWatcher({ onEvent } = {}) {
     watcher = fs.watch(configDir, { persistent: false }, (eventType, filename) => {
       if (filename && filename !== configBase) return;
       if (debounceTimer) clearTimeout(debounceTimer);
-      // Debounce so editors doing multi-step saves (e.g. write to temp + rename)
-      // produce a single reload.
       debounceTimer = setTimeout(() => {
         debounceTimer = null;
         void handleChange(configPath);
       }, 250);
     });
     watcher.on('error', (error) => {
-      console.warn('[edgeclaw-config-watcher] watch error:', error?.message || error);
+      console.warn('[pilotdeck-config-watcher] watch error:', error?.message || error);
     });
-    console.log(`[edgeclaw-config-watcher] watching ${configPath}`);
+    console.log(`[pilotdeck-config-watcher] watching ${configPath}`);
   } catch (error) {
-    console.warn('[edgeclaw-config-watcher] failed to start:', error?.message || error);
+    console.warn('[pilotdeck-config-watcher] failed to start:', error?.message || error);
   }
 }
 
-export function stopEdgeClawConfigWatcher() {
+export function stopPilotDeckConfigWatcher() {
   if (watcher) {
     try {
       watcher.close();
