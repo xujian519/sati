@@ -1,12 +1,18 @@
 import type { CanonicalMessage, CanonicalModelEvent } from "../../model/index.js";
 
-let _encoding: import("tiktoken").Tiktoken | null | undefined;
+interface TiktokenLike {
+  encode(text: string): Uint32Array | number[];
+  free(): void;
+}
 
-function getEncoding(): import("tiktoken").Tiktoken | null {
+let _encoding: TiktokenLike | null | undefined;
+
+function getEncoding(): TiktokenLike | null {
   if (_encoding !== undefined) return _encoding;
   try {
-    const { get_encoding } = require("tiktoken") as typeof import("tiktoken");
-    _encoding = get_encoding("cl100k_base");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const tiktoken = require("tiktoken");
+    _encoding = tiktoken.get_encoding("cl100k_base") as TiktokenLike;
     return _encoding;
   } catch {
     _encoding = null;

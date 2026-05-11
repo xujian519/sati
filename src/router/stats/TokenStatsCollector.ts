@@ -63,9 +63,13 @@ export class TokenStatsCollector {
     this.modelPricing = config?.modelPricing;
 
     if (this.enabled) {
-      const dir = path.join(os.homedir(), ".pilotdeck");
-      try { fs.mkdirSync(dir, { recursive: true }); } catch { /* ok */ }
-      this.filePath = path.join(dir, "router-stats.json");
+      if (config?.filePath) {
+        this.filePath = config.filePath;
+      } else {
+        const dir = path.join(os.homedir(), ".pilotdeck");
+        try { fs.mkdirSync(dir, { recursive: true }); } catch { /* ok */ }
+        this.filePath = path.join(dir, "router-stats.json");
+      }
       this.data = this.loadFromDisk();
       this.flushTimer = setInterval(() => { this.flushIfDirty(); }, AUTO_FLUSH_INTERVAL_MS);
       if (this.flushTimer.unref) this.flushTimer.unref();
@@ -77,7 +81,9 @@ export class TokenStatsCollector {
   observe(record: RouterStatsRecord): void {
     if (!this.enabled) return;
 
-    if (this.modelPricing) {
+    if (record.usage.nativeCost != null && record.usage.nativeCost > 0) {
+      record.cost = { input: 0, output: 0, cacheRead: 0, total: record.usage.nativeCost };
+    } else {
       record.cost = this.calculateCost(record.usage, record.provider, record.model);
     }
 
@@ -126,7 +132,15 @@ export class TokenStatsCollector {
   }
 
   recent(limit = 50): RouterStatsRecord[] {
-    return this.recentRecords.slice(-limit);
+    if (this.recentRecords.length > 0) {
+      return this.recentRecords.slice(-limit);
+    }
+    const allLogs: RouterStatsRecord[] = [];
+    for (const sess of Object.values(this.data.sessions)) {
+      allLogs.push(...sess.requestLog);
+    }
+    allLogs.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+    return allLogs.slice(-limit);
   }
 
   async flush(): Promise<void> {
@@ -216,13 +230,15 @@ export class TokenStatsCollector {
     provider: string,
     model: string,
   ): { input?: number; output?: number; cacheRead?: number } | undefined {
-    if (!this.modelPricing) return undefined;
-    const exact = this.modelPricing[`${provider}/${model}`];
-    if (exact) return exact;
-    for (const [key, val] of Object.entries(this.modelPricing)) {
-      if (model.includes(key) || key.includes(model)) return val;
+    const combined = `${provider}/${model}`;
+    if (this.modelPricing) {
+      const exact = this.modelPricing[combined];
+      if (exact) return exact;
+      for (const [key, val] of Object.entries(this.modelPricing)) {
+        if (model.includes(key) || key.includes(model)) return val;
+      }
     }
-    return undefined;
+    return lookupDefaultPricing(combined, model);
   }
 }
 
@@ -277,4 +293,31 @@ function bumpAggregate(agg: RouterStatsAggregate, record: RouterStatsRecord): vo
 
 function isAggregate(val: unknown): val is RouterStatsAggregate {
   return typeof val === "object" && val !== null && "totalRequests" in val;
+}
+
+// $/million tokens – fallback when neither nativeCost nor user modelPricing is available
+const DEFAULT_PRICING: Array<{ pattern: RegExp; input: number; output: number; cacheRead?: number }> = [
+  { pattern: /deepseek.*flash/i, input: 0.20, output: 0.60 },
+  { pattern: /deepseek.*chat/i, input: 0.50, output: 1.50 },
+  { pattern: /deepseek.*reasoner/i, input: 0.80, output: 2.00 },
+  { pattern: /claude.*opus/i, input: 15.00, output: 75.00, cacheRead: 1.50 },
+  { pattern: /claude.*sonnet/i, input: 3.00, output: 15.00, cacheRead: 0.30 },
+  { pattern: /claude.*haiku/i, input: 0.80, output: 4.00, cacheRead: 0.08 },
+  { pattern: /gpt-4o-mini/i, input: 0.15, output: 0.60, cacheRead: 0.075 },
+  { pattern: /gpt-4o/i, input: 2.50, output: 10.00, cacheRead: 1.25 },
+  { pattern: /gpt-4\.1/i, input: 2.00, output: 8.00, cacheRead: 0.50 },
+  { pattern: /gemini.*flash/i, input: 0.10, output: 0.40 },
+  { pattern: /gemini.*pro/i, input: 1.25, output: 5.00 },
+];
+
+function lookupDefaultPricing(
+  combined: string,
+  model: string,
+): { input?: number; output?: number; cacheRead?: number } | undefined {
+  for (const entry of DEFAULT_PRICING) {
+    if (entry.pattern.test(combined) || entry.pattern.test(model)) {
+      return { input: entry.input, output: entry.output, cacheRead: entry.cacheRead };
+    }
+  }
+  return undefined;
 }

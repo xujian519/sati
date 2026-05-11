@@ -186,7 +186,7 @@ test("RouterRuntime stats observe successful attempts when stats enabled", async
     ],
   ]);
   const router = createRouterRuntime(
-    { ...baseConfig, stats: { enabled: true } },
+    { ...baseConfig, stats: { enabled: true, filePath: `/tmp/pilotdeck-test-stats-${Date.now()}.json` } },
     { modelRuntime },
   );
   for await (const _event of router.stream(baseRequest, {
