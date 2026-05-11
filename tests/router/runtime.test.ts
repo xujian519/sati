@@ -250,6 +250,15 @@ test("RouterRuntime loads auto-orchestrate skill prompts from PluginRuntime", as
       { type: "message_end", finishReason: "stop" },
     ],
   ]);
+  const judgeRuntime: ModelRuntime = {
+    stream: modelRuntime.stream.bind(modelRuntime),
+    complete: async () => ({
+      role: "assistant" as const,
+      content: [{ type: "text" as const, text: "<tier>COMPLEX</tier>" }],
+      finishReason: "stop" as const,
+    }),
+    getCapabilities: modelRuntime.getCapabilities.bind(modelRuntime),
+  };
   const plugins = new PluginRuntime({
     projectRoot: "/tmp/project",
     pilotHome: "/tmp/pilot",
@@ -276,16 +285,27 @@ test("RouterRuntime loads auto-orchestrate skill prompts from PluginRuntime", as
   const router = createRouterRuntime(
     {
       ...baseConfig,
+      tokenSaver: {
+        enabled: true,
+        judge: { id: "primary/main", provider: "primary", model: "main" },
+        judgeTimeoutMs: 10000,
+        defaultTier: "COMPLEX",
+        tiers: {
+          SIMPLE: { model: { id: "primary/fast", provider: "primary", model: "fast" } },
+          COMPLEX: { model: { id: "primary/main", provider: "primary", model: "main" } },
+        },
+      },
       autoOrchestrate: {
         enabled: true,
         skillExtensionId: "orchestrate",
-        triggerTiers: [],
+        triggerTiers: ["COMPLEX"],
         blockedTools: [],
         slimSystemPrompt: false,
       },
     },
     {
       modelRuntime,
+      judgeRuntime,
       loadSkillPrompt: (extensionId) => plugins.loadSkillPrompt(extensionId),
     },
   );

@@ -6,9 +6,9 @@ test("planFallback returns scenario-specific list when present", () => {
   const plan = planFallback(
     {
       default: [{ id: "a/m", provider: "a", model: "m" }],
-      longContext: [{ id: "b/m", provider: "b", model: "m" }],
+      subagent: [{ id: "b/m", provider: "b", model: "m" }],
     },
-    "longContext",
+    "subagent",
   );
   assert.equal(plan.attempts.length, 1);
   assert.equal(plan.attempts[0]?.provider, "b");
@@ -17,7 +17,7 @@ test("planFallback returns scenario-specific list when present", () => {
 test("planFallback falls back to default list when scenario list is missing", () => {
   const plan = planFallback(
     { default: [{ id: "a/m", provider: "a", model: "m" }] },
-    "longContext",
+    "subagent",
   );
   assert.equal(plan.attempts.length, 1);
   assert.equal(plan.attempts[0]?.provider, "a");
