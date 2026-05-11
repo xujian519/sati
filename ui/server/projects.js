@@ -162,6 +162,44 @@ async function getProjects(progressCallback = null) {
         progressCallback({ phase: 'done', processed: total, total });
     }
 
+    // Virtual "general" workspace — a non-project chat space rooted at
+    // ~/.pilotdeck. SidebarV2 looks for a project whose `name` or
+    // `displayName` equals 'general' to populate the dedicated "General"
+    // toggle section. PolitDeck's gateway.listProjects() only returns
+    // real project directories, so we synthesize one here. New chats
+    // started from the General section use this cwd; sessions are
+    // sourced from the same backend as any other project.
+    const generalHome = resolvePilotHome(process.env);
+    let generalSessions = [];
+    try {
+        const generalSessionsResult = await getPilotDeckGateway()
+            .listSessions({ projectKey: generalHome, limit: 5 })
+            .catch(() => ({ sessions: [] }));
+        generalSessions = (generalSessionsResult.sessions || []).map((session) =>
+            toLegacySession(session, 'general'),
+        );
+        applyCustomSessionNames(generalSessions, 'claude');
+    } catch {
+        generalSessions = [];
+    }
+    rememberProjectDirectory('general', generalHome);
+    result.unshift({
+        name: 'general',
+        displayName: 'general',
+        fullPath: generalHome,
+        path: generalHome,
+        sessions: generalSessions,
+        cursorSessions: [],
+        codexSessions: [],
+        geminiSessions: [],
+        sessionMeta: {
+            total: generalSessions.length,
+            hasMore: false,
+        },
+        taskmaster: { hasTaskmaster: false },
+        alwaysOn: { enabled: false },
+    });
+
     return result;
 }
 
