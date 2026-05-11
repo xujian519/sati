@@ -1,0 +1,14 @@
+{
+  "name": "browser-use",
+  "version": "1.0.0",
+  "description": "Browser automation powered by @playwright/mcp (Microsoft)",
+  "mcpServers": {
+    "browser-use": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest",
+        "--headless"
+      ]
+    }
+  }
+}

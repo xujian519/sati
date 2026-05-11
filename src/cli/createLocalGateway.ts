@@ -44,6 +44,7 @@ import { createBuiltinRegistry } from "../tool/index.js";
 import type { PilotDeckToolDefinition, ToolRegistry } from "../tool/index.js";
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
 import type { EdgeClawMemoryProvider } from "../context/index.js";
+import { loadBuiltinPlugins } from "../extension/plugins/builtin/loadBuiltinPlugins.js";
 
 export type CreateLocalGatewayOptions = {
   projectRoot?: string;
@@ -234,6 +235,7 @@ class ProjectRuntimeRegistry {
     const pluginRuntime = new PluginRuntime({
       projectRoot,
       pilotHome: this.options.pilotHome,
+      builtinPlugins: loadBuiltinPlugins(),
       builtinPluginsEnabled: snapshot.config.extension.builtinPluginsEnabled,
     });
     const routerConfig = ensureRouterConfig(snapshot.config.router, snapshot.config.agent.model);
