@@ -479,7 +479,6 @@ function ensureRouterConfig(
   return {
     scenarios: {
       default: { id: defaultSelection.id, provider: defaultSelection.provider, model: defaultSelection.model },
-      longContextThreshold: 60_000,
     },
     zeroUsageRetry: { enabled: true, maxAttempts: 5 },
     stats: { enabled: true },

@@ -1,8 +1,8 @@
 import type { ModelConfig } from "../../model/index.js";
 import {
+  DEFAULT_ALLOWED_TOOLS,
   DEFAULT_BLOCKED_TOOLS,
   DEFAULT_JUDGE_TIMEOUT_MS,
-  DEFAULT_LONG_CONTEXT_THRESHOLD,
   DEFAULT_TRIGGER_TIERS,
   DEFAULT_ZERO_USAGE_MAX_ATTEMPTS,
   resolveProviderRef,
@@ -27,11 +27,8 @@ export type RouterConfigDiagnostic = {
 
 const SCENARIO_KEYS: RouterScenarioType[] = [
   "default",
-  "background",
-  "think",
-  "longContext",
-  "webSearch",
   "subagent",
+  "explicit",
 ];
 
 export type ParseRouterConfigResult = {
@@ -108,36 +105,8 @@ function parseScenarios(
     return undefined;
   }
 
-  const background = optionalRef(raw.background, "router.scenarios.background", modelConfig, diagnostics);
-  const think = optionalRef(raw.think, "router.scenarios.think", modelConfig, diagnostics);
-  const longContext = optionalRef(raw.longContext, "router.scenarios.longContext", modelConfig, diagnostics);
-  const webSearch = optionalRef(raw.webSearch, "router.scenarios.webSearch", modelConfig, diagnostics);
-
-  let longContextThreshold = DEFAULT_LONG_CONTEXT_THRESHOLD;
-  if (raw.longContextThreshold !== undefined) {
-    if (
-      typeof raw.longContextThreshold === "number" &&
-      Number.isInteger(raw.longContextThreshold) &&
-      raw.longContextThreshold > 0
-    ) {
-      longContextThreshold = raw.longContextThreshold;
-    } else {
-      diagnostics.push({
-        code: "ROUTER_LONG_CONTEXT_THRESHOLD_INVALID",
-        severity: "fatal",
-        path: "router.scenarios.longContextThreshold",
-        message: "longContextThreshold must be a positive integer.",
-      });
-    }
-  }
-
   return {
     default: defaultRef,
-    background,
-    think,
-    longContext,
-    webSearch,
-    longContextThreshold,
   };
 }
 
@@ -346,38 +315,15 @@ function parseTokenSaver(
       });
     } else {
       const policy = raw.subagent.policy;
-      if (
-        policy !== "skip" &&
-        policy !== "judge" &&
-        policy !== "inherit" &&
-        policy !== "fixed"
-      ) {
+      if (policy !== "skip" && policy !== "judge") {
         diagnostics.push({
           code: "ROUTER_TOKEN_SAVER_SUBAGENT_POLICY_INVALID",
           severity: "fatal",
           path: "router.tokenSaver.subagent.policy",
-          message: "subagent.policy must be one of skip / judge / inherit / fixed.",
+          message: "subagent.policy must be one of skip / judge.",
         });
       } else {
-        let subModel: RouterModelRef | undefined;
-        if (raw.subagent.model !== undefined) {
-          subModel = consumeRef(
-            raw.subagent.model,
-            "router.tokenSaver.subagent.model",
-            modelConfig,
-            diagnostics,
-          );
-        }
-        if (policy === "fixed" && !subModel) {
-          diagnostics.push({
-            code: "ROUTER_TOKEN_SAVER_SUBAGENT_MODEL_REQUIRED",
-            severity: "fatal",
-            path: "router.tokenSaver.subagent.model",
-            message: "subagent.policy=fixed requires subagent.model.",
-          });
-        } else {
-          subagent = { policy, model: subModel };
-        }
+        subagent = { policy };
       }
     }
   }
@@ -461,7 +407,22 @@ function parseAutoOrchestrate(
       });
     }
   }
-  let blockedTools: string[] = [...DEFAULT_BLOCKED_TOOLS];
+  let allowedTools: string[] | undefined;
+  let blockedTools: string[] | undefined;
+
+  if (raw.allowedTools !== undefined) {
+    if (Array.isArray(raw.allowedTools) && raw.allowedTools.every((entry) => typeof entry === "string")) {
+      allowedTools = raw.allowedTools as string[];
+    } else {
+      diagnostics.push({
+        code: "ROUTER_AUTO_ORCHESTRATE_ALLOWED_TOOLS_INVALID",
+        severity: "fatal",
+        path: "router.autoOrchestrate.allowedTools",
+        message: "allowedTools must be an array of strings.",
+      });
+    }
+  }
+
   if (raw.blockedTools !== undefined) {
     if (Array.isArray(raw.blockedTools) && raw.blockedTools.every((entry) => typeof entry === "string")) {
       blockedTools = raw.blockedTools as string[];
@@ -474,16 +435,50 @@ function parseAutoOrchestrate(
       });
     }
   }
+
+  if (allowedTools && blockedTools) {
+    diagnostics.push({
+      code: "ROUTER_AUTO_ORCHESTRATE_TOOLS_CONFLICT",
+      severity: "warning",
+      path: "router.autoOrchestrate",
+      message: "Both allowedTools and blockedTools are set; allowedTools takes precedence.",
+    });
+  }
+
+  if (!allowedTools && !blockedTools) {
+    allowedTools = [...DEFAULT_ALLOWED_TOOLS];
+  }
+
   const slimSystemPrompt = typeof raw.slimSystemPrompt === "boolean" ? raw.slimSystemPrompt : true;
   const skillExtensionId = typeof raw.skillExtensionId === "string" ? raw.skillExtensionId : undefined;
+
+  let subagentMaxTokens: number | undefined;
+  if (raw.subagentMaxTokens !== undefined) {
+    if (
+      typeof raw.subagentMaxTokens === "number" &&
+      Number.isInteger(raw.subagentMaxTokens) &&
+      raw.subagentMaxTokens > 0
+    ) {
+      subagentMaxTokens = raw.subagentMaxTokens;
+    } else {
+      diagnostics.push({
+        code: "ROUTER_AUTO_ORCHESTRATE_SUBAGENT_MAX_TOKENS_INVALID",
+        severity: "fatal",
+        path: "router.autoOrchestrate.subagentMaxTokens",
+        message: "subagentMaxTokens must be a positive integer.",
+      });
+    }
+  }
 
   return {
     enabled,
     mainAgentModel,
     triggerTiers,
+    allowedTools,
     blockedTools,
     slimSystemPrompt,
     skillExtensionId,
+    subagentMaxTokens,
   };
 }
 

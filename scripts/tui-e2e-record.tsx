@@ -79,7 +79,6 @@ async function main(): Promise<void> {
     snapshot.config.router ?? {
       scenarios: {
         default: { id: `${PROVIDER}/${MODEL}`, provider: PROVIDER, model: MODEL },
-        longContextThreshold: 60_000,
       },
       zeroUsageRetry: { enabled: true, maxAttempts: 5 },
     },

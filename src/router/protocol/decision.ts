@@ -1,9 +1,5 @@
 export type RouterScenarioType =
   | "default"
-  | "background"
-  | "think"
-  | "longContext"
-  | "webSearch"
   | "subagent"
   | "explicit";
 
@@ -16,7 +12,7 @@ export type RouterDecisionResolution =
 
 export type RouterMutationsLog = {
   systemPromptSlim?: { from: number; to: number; preservedKeywords: string[] };
-  toolsStripped?: { before: number; after: number; patterns: string[] };
+  toolsStripped?: { before: number; after: number; mode?: "allowlist" | "blocklist"; patterns: string[] };
   orchestrationPromptInjected?: { tier: string; chars: number };
   asyncAgentLaunchedRewritten?: boolean;
   subagentTagStripped?: boolean;

@@ -10,11 +10,6 @@ export type RouterModelRef = {
 
 export type RouterScenariosConfig = {
   default: RouterModelRef;
-  background?: RouterModelRef;
-  think?: RouterModelRef;
-  longContext?: RouterModelRef;
-  longContextThreshold?: number;
-  webSearch?: RouterModelRef;
 };
 
 export type RouterTierConfig = {
@@ -22,7 +17,9 @@ export type RouterTierConfig = {
   description?: string;
 };
 
-export type RouterTokenSaverSubagentPolicy = "skip" | "judge" | "inherit" | "fixed";
+export type RouterTokenSaverSubagentPolicy = "skip" | "judge";
+
+export const DEFAULT_SUBAGENT_POLICY: RouterTokenSaverSubagentPolicy = "judge";
 
 export type RouterTokenSaverConfig = {
   enabled: boolean;
@@ -32,7 +29,6 @@ export type RouterTokenSaverConfig = {
   rules?: string[];
   subagent?: {
     policy: RouterTokenSaverSubagentPolicy;
-    model?: RouterModelRef;
   };
   judgeTimeoutMs: number;
 };
@@ -42,9 +38,15 @@ export type RouterAutoOrchestrateConfig = {
   mainAgentModel?: RouterModelRef;
   skillExtensionId?: string;
   triggerTiers: string[];
-  blockedTools: string[];
+  /** Whitelist — only these tools are kept for the orchestrator. Takes precedence over blockedTools. */
+  allowedTools?: string[];
+  /** Blacklist — these tools are removed. Ignored when allowedTools is set. */
+  blockedTools?: string[];
   slimSystemPrompt: boolean;
+  subagentMaxTokens?: number;
 };
+
+export const DEFAULT_SUBAGENT_MAX_TOKENS = 48000;
 
 export type RouterStatsConfig = {
   enabled: boolean;
@@ -67,10 +69,12 @@ export type RouterConfig = {
   customRouter?: RouterCustomRouterConfig;
 };
 
-export const DEFAULT_LONG_CONTEXT_THRESHOLD = 60000;
 export const DEFAULT_JUDGE_TIMEOUT_MS = 5000;
 export const DEFAULT_ZERO_USAGE_MAX_ATTEMPTS = 5;
 export const DEFAULT_TRIGGER_TIERS = ["COMPLEX", "REASONING"];
+export const DEFAULT_ALLOWED_TOOLS = [
+  "Agent", "Task", "Read", "Grep", "Glob", "TodoRead", "TodoWrite",
+];
 export const DEFAULT_BLOCKED_TOOLS = [
   "mcp__browser-use__",
   "WebSearch",

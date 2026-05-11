@@ -31,11 +31,6 @@ export {
   type ScenarioResolution,
 } from "./scenario/decideScenario.js";
 export {
-  decideLongContext,
-  type LongContextDecision,
-  type LongContextHint,
-} from "./scenario/longContextThreshold.js";
-export {
   detectSubagent,
   stripSubagentTagFromMessages,
   type SubagentDetection,
