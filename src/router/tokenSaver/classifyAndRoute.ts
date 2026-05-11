@@ -55,7 +55,7 @@ export async function classifyAndRoute(
         content: [{ type: "text", text: prompt }],
       },
     ],
-    maxOutputTokens: 64,
+    maxOutputTokens: 256,
     temperature: 0,
     stream: false,
   };

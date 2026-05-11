@@ -3,9 +3,11 @@ import type {
   CanonicalModelRequest,
   ModelRuntime,
 } from "../model/index.js";
-import type {
-  RouterConfig,
-  RouterModelRef,
+import {
+  DEFAULT_SUBAGENT_MAX_TOKENS,
+  DEFAULT_SUBAGENT_POLICY,
+  type RouterConfig,
+  type RouterModelRef,
 } from "./config/schema.js";
 import type {
   PilotDeckCustomRouter,
@@ -33,6 +35,7 @@ import {
 } from "./retry/zeroUsageRetry.js";
 import { TokenStatsCollector } from "./stats/TokenStatsCollector.js";
 import { classifyAndRoute } from "./tokenSaver/classifyAndRoute.js";
+import { countMessagesTokens, countResponseTokens, dispose as disposeTokenizer } from "./utils/countTokens.js";
 
 export type RouterRuntimeDeps = {
   modelRuntime: ModelRuntime;
@@ -137,31 +140,64 @@ export function createRouterRuntime(
         : "scenario";
 
     let tokenSaverTier: string | undefined;
+    const subagentPolicy = config.tokenSaver?.subagent?.policy ?? DEFAULT_SUBAGENT_POLICY;
     if (
       !custom?.provider &&
       scenarioType !== "explicit" &&
       config.tokenSaver?.enabled &&
-      (input.isMainAgent || config.tokenSaver.subagent?.policy !== "skip")
+      (input.isMainAgent || subagentPolicy !== "skip")
     ) {
-      const tokenSaver = await classifyAndRoute({
-        config: config.tokenSaver,
-        messages: input.request.messages,
-        judgeRuntime,
-      });
-      if (tokenSaver) {
-        if (tokenSaver.failureReason) {
-          events.emit({
-            type: "pilotdeck_router_token_saver_failed",
-            sessionId: input.sessionId,
-            reason: tokenSaver.failureReason,
-            fallbackTier: tokenSaver.tier,
-          });
-        }
-        if (tokenSaver.resolvedFrom === "judge" || !selection) {
-          selection = tokenSaver.selection;
+      let stickyHit = false;
+
+      if (input.isMainAgent && input.request.messages.length > 1) {
+        const mainSticky = sessionStore.get(input.sessionId, false);
+        if (mainSticky?.stickyProvider && mainSticky.stickyModel) {
+          selection = {
+            id: `${mainSticky.stickyProvider}/${mainSticky.stickyModel}`,
+            provider: mainSticky.stickyProvider,
+            model: mainSticky.stickyModel,
+          };
           resolvedFrom = "tokenSaver";
+          tokenSaverTier = mainSticky.tokenSaverTier;
+          stickyHit = true;
         }
-        tokenSaverTier = tokenSaver.tier;
+      }
+
+      if (!input.isMainAgent && subagentPolicy === "judge" && input.request.messages.length > 1) {
+        const subSticky = sessionStore.get(input.sessionId, true);
+        if (subSticky?.stickyProvider && subSticky.stickyModel) {
+          selection = {
+            id: `${subSticky.stickyProvider}/${subSticky.stickyModel}`,
+            provider: subSticky.stickyProvider,
+            model: subSticky.stickyModel,
+          };
+          resolvedFrom = "tokenSaver";
+          tokenSaverTier = subSticky.tokenSaverTier;
+          stickyHit = true;
+        }
+      }
+
+      if (!stickyHit) {
+        const tokenSaver = await classifyAndRoute({
+          config: config.tokenSaver,
+          messages: input.request.messages,
+          judgeRuntime,
+        });
+        if (tokenSaver) {
+          if (tokenSaver.failureReason) {
+            events.emit({
+              type: "pilotdeck_router_token_saver_failed",
+              sessionId: input.sessionId,
+              reason: tokenSaver.failureReason,
+              fallbackTier: tokenSaver.tier,
+            });
+          }
+          if (tokenSaver.resolvedFrom === "judge" || !selection) {
+            selection = tokenSaver.selection;
+            resolvedFrom = "tokenSaver";
+          }
+          tokenSaverTier = tokenSaver.tier;
+        }
       }
     }
 
@@ -193,9 +229,14 @@ export function createRouterRuntime(
       mutations: {},
     };
 
+    const alreadyOrchestrating = sticky?.orchestrating === true;
+    const tokenSaverActive = config.tokenSaver?.enabled === true && tokenSaverTier != null;
+    const orchGate = tokenSaverActive || alreadyOrchestrating;
+
     let skillPrompt: string | undefined;
     if (
       config.autoOrchestrate?.enabled &&
+      orchGate &&
       input.isMainAgent &&
       config.autoOrchestrate.skillExtensionId &&
       deps.loadSkillPrompt
@@ -208,12 +249,13 @@ export function createRouterRuntime(
     }
 
     let mutations: RouterMutationsLog = {};
-    if (config.autoOrchestrate?.enabled) {
+    if (config.autoOrchestrate?.enabled && orchGate) {
       const orchestrated = applyOrchestration({
         request: input.request,
         config: config.autoOrchestrate,
         isMainAgent: input.isMainAgent,
         tier: tokenSaverTier,
+        alreadyOrchestrating,
         skillPrompt,
       });
       if (orchestrated.applied) {
@@ -224,6 +266,10 @@ export function createRouterRuntime(
           systemPrompt: orchestrated.request.systemPrompt,
         };
         decision.orchestrating = true;
+        if (config.autoOrchestrate.mainAgentModel) {
+          decision.provider = config.autoOrchestrate.mainAgentModel.provider;
+          decision.model = config.autoOrchestrate.mainAgentModel.model;
+        }
       }
     }
 
@@ -304,6 +350,19 @@ export function createRouterRuntime(
       const attemptRequest = applyDecisionToRequest(attemptDecision, request);
       lastAttempt = attempt;
       lastDecision = attemptDecision;
+
+      if (decision.isSubagent && config.autoOrchestrate?.subagentMaxTokens) {
+        const budget = config.autoOrchestrate.subagentMaxTokens;
+        const estimated = countMessagesTokens(attemptRequest.messages);
+        if (estimated > budget) {
+          yield {
+            type: "text_delta",
+            text: `[PilotDeck] Sub-agent budget exceeded (${estimated} est. tokens > ${budget} limit). Terminating.`,
+          } as CanonicalModelEvent;
+          yield { type: "message_end", finishReason: "stop" } as CanonicalModelEvent;
+          return;
+        }
+      }
 
       let zeroUsageAttempt = 0;
       while (true) {
@@ -405,16 +464,22 @@ export function createRouterRuntime(
         }
 
         const endedAt = (deps.now?.() ?? new Date()).toISOString();
-        if (outcome.usage) {
-          usageCache.observe(ctx.sessionId, outcome.usage);
+        let finalUsage = outcome.usage;
+        if (!finalUsage || (!finalUsage.inputTokens && !finalUsage.outputTokens)) {
+          const inputEst = countMessagesTokens(attemptRequest.messages);
+          const outputEst = countResponseTokens(outcome.buffered);
+          finalUsage = { inputTokens: inputEst, outputTokens: outputEst, totalTokens: inputEst + outputEst };
         }
+        usageCache.observe(ctx.sessionId, finalUsage);
         stats.observe({
           sessionId: ctx.sessionId,
           scenarioType: attemptDecision.scenarioType,
           resolvedFrom: attemptDecision.resolvedFrom,
           provider: attempt.provider,
           model: attempt.model,
-          usage: outcome.usage ?? {},
+          tier: decision.tokenSaverTier,
+          role: decision.isSubagent ? "subagent" : "main",
+          usage: finalUsage,
           startedAt,
           endedAt,
         });
@@ -433,13 +498,21 @@ export function createRouterRuntime(
         error: lastError,
       });
       const endedAt = (deps.now?.() ?? new Date()).toISOString();
+      let failUsage = lastUsage;
+      if (!failUsage || (!failUsage.inputTokens && !failUsage.outputTokens)) {
+        const inputEst = countMessagesTokens(request.messages);
+        const outputEst = countResponseTokens(lastBuffered);
+        failUsage = { inputTokens: inputEst, outputTokens: outputEst, totalTokens: inputEst + outputEst };
+      }
       stats.observe({
         sessionId: ctx.sessionId,
         scenarioType: lastDecision.scenarioType,
         resolvedFrom: lastDecision.resolvedFrom,
         provider: lastAttempt.provider,
         model: lastAttempt.model,
-        usage: lastUsage ?? {},
+        tier: decision.tokenSaverTier,
+        role: decision.isSubagent ? "subagent" : "main",
+        usage: failUsage,
         startedAt,
         endedAt,
       });
@@ -473,6 +546,9 @@ export function createRouterRuntime(
     },
     stats,
     async shutdown() {
+      await stats.flush();
+      stats.dispose();
+      disposeTokenizer();
       sessionStore.clear();
       usageCache.clear();
     },
@@ -555,3 +631,4 @@ async function* streamAttempt(
     },
   };
 }
+

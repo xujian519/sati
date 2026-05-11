@@ -11,6 +11,8 @@ export type OrchestrationInput = {
   config: RouterAutoOrchestrateConfig;
   isMainAgent: boolean;
   tier?: string;
+  /** When true the session was already orchestrating on a prior turn. */
+  alreadyOrchestrating?: boolean;
   /**
    * Optional skill prompt loaded by the caller (typically through extension).
    * The router does not load files directly — it just receives prepared text.
@@ -31,9 +33,11 @@ export function applyOrchestration(input: OrchestrationInput): OrchestrationResu
     return { request, mutations: {}, applied: false };
   }
 
-  const triggerTiers = config.triggerTiers ?? [];
-  if (triggerTiers.length > 0 && (!input.tier || !triggerTiers.includes(input.tier))) {
-    return { request, mutations: {}, applied: false };
+  if (!input.alreadyOrchestrating) {
+    const triggerTiers = config.triggerTiers ?? [];
+    if (triggerTiers.length > 0 && (!input.tier || !triggerTiers.includes(input.tier))) {
+      return { request, mutations: {}, applied: false };
+    }
   }
 
   let messages = request.messages;
@@ -50,7 +54,19 @@ export function applyOrchestration(input: OrchestrationInput): OrchestrationResu
   }
 
   let tools = request.tools;
-  if (tools && config.blockedTools && config.blockedTools.length > 0) {
+  if (tools && config.allowedTools && config.allowedTools.length > 0) {
+    const before = tools.length;
+    const allowed = new Set(config.allowedTools);
+    const filtered = tools.filter((tool: CanonicalToolSchema) => allowed.has(tool.name));
+    if (filtered.length !== before) {
+      tools = filtered;
+      mutations = {
+        ...mutations,
+        toolsStripped: { before, after: filtered.length, mode: "allowlist", patterns: config.allowedTools },
+      };
+      mutated = true;
+    }
+  } else if (tools && config.blockedTools && config.blockedTools.length > 0) {
     const before = tools.length;
     const blocked = new Set(config.blockedTools);
     const filtered = tools.filter((tool: CanonicalToolSchema) => !blocked.has(tool.name));
@@ -58,7 +74,7 @@ export function applyOrchestration(input: OrchestrationInput): OrchestrationResu
       tools = filtered;
       mutations = {
         ...mutations,
-        toolsStripped: { before, after: filtered.length, patterns: config.blockedTools },
+        toolsStripped: { before, after: filtered.length, mode: "blocklist", patterns: config.blockedTools },
       };
       mutated = true;
     }
@@ -108,18 +124,35 @@ function injectOrchestrationPrompt(
   return [reminder, ...messages];
 }
 
+const SLIM_HEADER = "You are an orchestration agent. Use the Agent tool to delegate all work to sub-agents.";
+const MEMORY_KEYWORDS = [
+  "memory_search", "memory_overview", "memory_get",
+  "memory_list", "memory_flush", "memory_dream",
+  "ClawXMemory", "cache_control",
+];
+
 function trimSystemPrompt(prompt: string): { text: string; preservedKeywords: string[] } {
   const lines = prompt.split("\n");
   const preservedKeywords: string[] = [];
-  const keptLines: string[] = [];
+  const memoryLines: string[] = [];
+  let inMemoryBlock = false;
+
   for (const line of lines) {
     const lower = line.toLowerCase();
-    if (lower.includes("memory") || lower.includes("cache_control")) {
+    const isMemory = MEMORY_KEYWORDS.some(kw => lower.includes(kw.toLowerCase()));
+    if (isMemory) {
+      inMemoryBlock = true;
+      memoryLines.push(line);
       preservedKeywords.push(line.trim().slice(0, 40));
-      keptLines.push(line);
-    } else if (keptLines.length === 0) {
-      keptLines.push(line);
+    } else if (inMemoryBlock && line.trim().length > 0) {
+      memoryLines.push(line);
+    } else {
+      inMemoryBlock = false;
     }
   }
-  return { text: keptLines.join("\n"), preservedKeywords };
+
+  const text = memoryLines.length > 0
+    ? SLIM_HEADER + "\n\n" + memoryLines.join("\n")
+    : SLIM_HEADER;
+  return { text, preservedKeywords };
 }
