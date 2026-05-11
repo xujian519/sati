@@ -332,7 +332,7 @@ function ChatInterfaceV2({
     <ComposerV2
       input={input}
       placeholder={t('composer.placeholder', {
-        defaultValue: 'Tell EdgeClaw what you want to get done…',
+        defaultValue: 'Tell PolitDeck what you want to get done…',
       }) as string}
       textareaRef={textareaRef}
       inputHighlightRef={inputHighlightRef}

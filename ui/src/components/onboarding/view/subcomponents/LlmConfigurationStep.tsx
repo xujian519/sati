@@ -144,53 +144,81 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
+      const { stringify: stringifyYaml, parse: parseYaml } = await import('yaml');
+
       // Read existing config to merge
       let existingConfig: Record<string, unknown> = {};
       try {
         const res = await authenticatedFetch('/api/config');
         if (res.ok) {
           const data = await res.json();
-          if (data.config && typeof data.config === 'object') {
-            existingConfig = data.config;
+          if (data.raw) {
+            existingConfig = parseYaml(data.raw) || {};
           }
         }
       } catch { /* start fresh */ }
 
-      // Build merged config in the UI-internal shape. The server persists it
-      // as ~/.pilotdeck/pilotdeck.yaml with model/agent sections.
-      if (!existingConfig.models || typeof existingConfig.models !== 'object') {
-        (existingConfig as Record<string, unknown>).models = {};
-      }
-      const models = existingConfig.models as Record<string, unknown>;
-      if (!models.providers || typeof models.providers !== 'object') {
-        models.providers = {};
-      }
+      // Write the gateway-native pilotdeck.yaml shape directly:
+      //   model.providers.<id>.{protocol, url, apiKey, models.<modelId>}
+      //   agent.model = "<id>/<modelId>"
+      // Mixing this with the legacy ui-internal `models` / `agents` keys
+      // would create a hybrid object that the server-side
+      // normalizePilotDeckConfig() sees as yaml-shape (because `model`
+      // exists) and silently drops the ui-internal keys, throwing away
+      // the user's onboarding input.
       const providerId = selectedPreset || detectProviderId(baseUrl);
-      const modelName = model.trim();
-      const entryId = `${providerId}/${modelName}`;
-      const providers = models.providers as Record<string, unknown>;
-      providers[providerId] = {
-        type: providerType,
-        baseUrl: baseUrl.trim(),
+      const modelId = model.trim();
+      const protocol = providerType === 'anthropic'
+        ? 'anthropic'
+        : providerType === 'openai-responses'
+          ? 'openai-responses'
+          : 'openai';
+
+      if (!existingConfig.schemaVersion) {
+        (existingConfig as Record<string, unknown>).schemaVersion = 1;
+      }
+      if (!existingConfig.model || typeof existingConfig.model !== 'object') {
+        (existingConfig as Record<string, unknown>).model = { providers: {} };
+      }
+      const modelSection = existingConfig.model as Record<string, unknown>;
+      if (!modelSection.providers || typeof modelSection.providers !== 'object') {
+        modelSection.providers = {};
+      }
+      const yamlProviders = modelSection.providers as Record<string, Record<string, unknown>>;
+      const existingProvider = (yamlProviders[providerId] || {}) as Record<string, unknown>;
+      const existingProviderModels = (existingProvider.models && typeof existingProvider.models === 'object'
+        ? existingProvider.models
+        : {}) as Record<string, unknown>;
+      yamlProviders[providerId] = {
+        ...existingProvider,
+        protocol,
+        url: baseUrl.trim(),
         apiKey: apiKey.trim(),
+        timeoutMs: typeof existingProvider.timeoutMs === 'number' ? existingProvider.timeoutMs : 120000,
+        headers: existingProvider.headers && typeof existingProvider.headers === 'object'
+          ? existingProvider.headers
+          : {},
+        models: {
+          ...existingProviderModels,
+          [modelId]: existingProviderModels[modelId] || {},
+        },
       };
-      if (!models.entries || typeof models.entries !== 'object') {
-        models.entries = {};
+
+      if (!existingConfig.agent || typeof existingConfig.agent !== 'object') {
+        (existingConfig as Record<string, unknown>).agent = {};
       }
-      const entries = models.entries as Record<string, unknown>;
-      entries[entryId] = {
-        provider: providerId,
-        name: modelName,
-      };
-      if (!existingConfig.version) existingConfig.version = 1;
-      (existingConfig as Record<string, unknown>).agents = { main: { model: entryId } };
-      if (!existingConfig.memory) {
-        (existingConfig as Record<string, unknown>).memory = { enabled: true };
-      }
+      const agentSection = existingConfig.agent as Record<string, unknown>;
+      agentSection.model = `${providerId}/${modelId}`;
+
+      // Strip any leftover ui-internal-shape keys from older onboarding
+      // runs so the server-side parser doesn't see a hybrid object.
+      delete (existingConfig as Record<string, unknown>).models;
+      delete (existingConfig as Record<string, unknown>).agents;
+      delete (existingConfig as Record<string, unknown>).version;
 
       const saveRes = await authenticatedFetch('/api/config', {
         method: 'PUT',
-        body: JSON.stringify({ config: existingConfig }),
+        body: JSON.stringify({ raw: stringifyYaml(existingConfig, { indent: 2, lineWidth: 0 }) }),
       });
 
       if (!saveRes.ok) {

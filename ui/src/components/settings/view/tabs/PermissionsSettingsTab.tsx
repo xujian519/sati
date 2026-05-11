@@ -63,7 +63,7 @@ function persist(updates: Partial<PilotDeckSettings>) {
 type PermissionsExport = {
   version: 1;
   exportedAt: string;
-  source: 'edgeclaw';
+  source: 'pilotdeck';
   allowedTools: string[];
   disallowedTools: string[];
   skipPermissions: boolean;
@@ -74,7 +74,7 @@ function buildExportPayload(): PermissionsExport {
   return {
     version: 1,
     exportedAt: new Date().toISOString(),
-    source: 'edgeclaw',
+    source: 'pilotdeck',
     allowedTools: settings.allowedTools,
     disallowedTools: settings.disallowedTools,
     skipPermissions: Boolean(settings.skipPermissions),
@@ -227,7 +227,7 @@ export default function PermissionsSettingsTab() {
     try {
       const payload = buildExportPayload();
       const stamp = new Date().toISOString().slice(0, 10);
-      downloadJson(`edgeclaw-permissions-${stamp}.json`, payload);
+      downloadJson(`pilotdeck-permissions-${stamp}.json`, payload);
       setBanner({
         kind: 'success',
         message: t('permissions.exportSuccess', {

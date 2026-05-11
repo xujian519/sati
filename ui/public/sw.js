@@ -1,7 +1,10 @@
-// Service Worker for CloudCLI PWA
+// Service Worker for PolitDeck PWA
 // Cache only manifest (needed for PWA install). HTML and JS are never pre-cached
 // so a rebuild + refresh always picks up the latest assets.
-const CACHE_NAME = 'claude-ui-v2';
+// Bump this token whenever a cached asset's contents change (icons, manifest).
+// The activate handler below purges every cache whose name doesn't match,
+// so existing PWAs pick up the new visuals on the next page load.
+const CACHE_NAME = 'politdeck-v1';
 const urlsToCache = [
   '/manifest.json'
 ];
@@ -79,7 +82,7 @@ self.addEventListener('push', event => {
   try {
     payload = event.data.json();
   } catch {
-    payload = { title: 'CloudCLI', body: event.data.text() };
+    payload = { title: 'PolitDeck', body: event.data.text() };
   }
 
   const options = {
@@ -92,7 +95,7 @@ self.addEventListener('push', event => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(payload.title || 'CloudCLI', options)
+    self.registration.showNotification(payload.title || 'PolitDeck', options)
   );
 });
 

@@ -15,8 +15,8 @@ import type { Project, ProjectSession } from '../types/app';
  * via `useCustomNamesVersion()`.
  */
 
-const PROJECT_KEY = 'edgeclaw:customProjectNames';
-const SESSION_KEY = 'edgeclaw:customSessionTitles';
+const PROJECT_KEY = 'pilotdeck:customProjectNames';
+const SESSION_KEY = 'pilotdeck:customSessionTitles';
 const CHANGE_EVENT = 'customnames:changed';
 
 type NameMap = Record<string, string>;

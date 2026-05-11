@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { Button } from '../../../../shared/view/ui';
-import { useEdgeClawConfig, type ConfigReload } from '../../../../hooks/useEdgeClawConfig';
+import { usePilotDeckConfig, type ConfigReload } from '../../../../hooks/usePilotDeckConfig';
 import {
   getAlwaysOnProjectRoot,
   isAlwaysOnProjectEnabled,
@@ -42,7 +42,7 @@ type ModelEntry = {
   contextWindow?: number;
 };
 
-type EdgeClawConfig = {
+type PilotDeckConfig = {
   version?: number;
   runtime?: {
     host?: string;
@@ -171,10 +171,10 @@ function sourceLabel(source: string): string {
 
 // ── Form-mode helpers ──────────────────────────────────────────────────
 
-function safeParseYaml(text: string): EdgeClawConfig | null {
+function safeParseYaml(text: string): PilotDeckConfig | null {
   try {
     const value = parseYaml(text);
-    if (value && typeof value === 'object' && !Array.isArray(value)) return value as EdgeClawConfig;
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value as PilotDeckConfig;
     return null;
   } catch {
     return null;
@@ -189,13 +189,13 @@ function safeParseYaml(text: string): EdgeClawConfig | null {
  * who care about hand-formatted YAML should use the Raw YAML tab — that mode
  * just edits the textarea and never reserializes.
  */
-function configToYamlString(config: EdgeClawConfig): string {
+function configToYamlString(config: PilotDeckConfig): string {
   return stringifyYaml(config, { indent: 2, lineWidth: 0 });
 }
 
 type Path = readonly (string | number)[];
 
-function patch<T extends EdgeClawConfig>(config: T, path: Path, value: unknown): T {
+function patch<T extends PilotDeckConfig>(config: T, path: Path, value: unknown): T {
   // Immutable deep set. Each key cloned along the way so React picks up the
   // change. Numeric segments materialise arrays; everything else materialises
   // objects.
@@ -303,9 +303,9 @@ function FormRow({ label, description, children }: { label: string; description?
 
 // ── Section components ─────────────────────────────────────────────────
 
-function RuntimeSection({ config, onChange }: { config: EdgeClawConfig; onChange: (next: EdgeClawConfig) => void }) {
+function RuntimeSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const r = config.runtime ?? {};
-  const set = <K extends keyof NonNullable<EdgeClawConfig['runtime']>>(key: K, value: NonNullable<EdgeClawConfig['runtime']>[K]) =>
+  const set = <K extends keyof NonNullable<PilotDeckConfig['runtime']>>(key: K, value: NonNullable<PilotDeckConfig['runtime']>[K]) =>
     onChange(patch(config, ['runtime', key as string], value));
   return (
     <SettingsSection title="Runtime" description="Ports the server binds to and request timeouts.">
@@ -329,7 +329,7 @@ function RuntimeSection({ config, onChange }: { config: EdgeClawConfig; onChange
           <NumberInput value={r.apiTimeoutMs} placeholder="120000" onChange={(v) => set('apiTimeoutMs', v as any)} />
         </FormRow>
         <FormRow label="Database path" description="SQLite auth/projects database (~ expands to home).">
-          <TextInput value={r.databasePath} placeholder="~/.edgeclaw/auth.db" monospace onChange={(v) => set('databasePath', v)} />
+          <TextInput value={r.databasePath} placeholder="~/.pilotdeck/auth.db" monospace onChange={(v) => set('databasePath', v)} />
         </FormRow>
         <FormRow label="Workspaces root" description="Directory under which projects are scanned.">
           <TextInput value={r.workspacesRoot} placeholder="~" monospace onChange={(v) => set('workspacesRoot', v)} />
@@ -339,7 +339,7 @@ function RuntimeSection({ config, onChange }: { config: EdgeClawConfig; onChange
   );
 }
 
-function ProvidersEditor({ config, onChange }: { config: EdgeClawConfig; onChange: (next: EdgeClawConfig) => void }) {
+function ProvidersEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const providers = config.models?.providers ?? {};
   const ids = Object.keys(providers);
 
@@ -431,7 +431,7 @@ function ProvidersEditor({ config, onChange }: { config: EdgeClawConfig; onChang
   );
 }
 
-function EntriesEditor({ config, onChange }: { config: EdgeClawConfig; onChange: (next: EdgeClawConfig) => void }) {
+function EntriesEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const entries = config.models?.entries ?? {};
   const providerIds = Object.keys(config.models?.providers ?? {});
   const ids = Object.keys(entries);
@@ -516,7 +516,7 @@ function EntriesEditor({ config, onChange }: { config: EdgeClawConfig; onChange:
   );
 }
 
-function ModelsSection({ config, onChange }: { config: EdgeClawConfig; onChange: (next: EdgeClawConfig) => void }) {
+function ModelsSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   return (
     <SettingsSection title="Models" description="Define upstream providers and the named model entries that agents bind to.">
       <div className="space-y-4">
@@ -527,7 +527,7 @@ function ModelsSection({ config, onChange }: { config: EdgeClawConfig; onChange:
   );
 }
 
-function AgentsSection({ config, onChange }: { config: EdgeClawConfig; onChange: (next: EdgeClawConfig) => void }) {
+function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const entries = config.models?.entries ?? {};
   const entryIds = Object.keys(entries);
   const main = config.agents?.main ?? {};
@@ -561,9 +561,9 @@ function AlwaysOnSection({
   projects,
   onChange,
 }: {
-  config: EdgeClawConfig;
+  config: PilotDeckConfig;
   projects: SettingsProject[];
-  onChange: (next: EdgeClawConfig) => void;
+  onChange: (next: PilotDeckConfig) => void;
 }) {
   const trigger = config.alwaysOn?.discovery?.trigger ?? {};
   const projectRows = projects
@@ -641,7 +641,7 @@ function AlwaysOnSection({
   );
 }
 
-function MemorySection({ config, onChange }: { config: EdgeClawConfig; onChange: (next: EdgeClawConfig) => void }) {
+function MemorySection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const m = config.memory ?? {};
   const entryIds = Object.keys(config.models?.entries ?? {});
   const options = [
@@ -649,7 +649,7 @@ function MemorySection({ config, onChange }: { config: EdgeClawConfig; onChange:
     ...entryIds.map((id) => ({ value: id, label: id })),
   ];
   return (
-    <SettingsSection title="Memory" description="EdgeClaw memory service — embeddings & summarisation pipelines.">
+    <SettingsSection title="Memory" description="PolitDeck memory service — embeddings & summarisation pipelines.">
       <SettingsCard>
         <SettingsRow label="Enabled" description="Toggles the memory service. Disabled by default.">
           <SettingsToggle
@@ -668,7 +668,7 @@ function MemorySection({ config, onChange }: { config: EdgeClawConfig; onChange:
   );
 }
 
-function RouterSection({ config, onChange }: { config: EdgeClawConfig; onChange: (next: EdgeClawConfig) => void }) {
+function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const r = config.router ?? {};
   return (
     <SettingsSection title="Router" description="Embedded Claude Code Router (CCR) for fan-out across providers.">
@@ -688,7 +688,7 @@ function RouterSection({ config, onChange }: { config: EdgeClawConfig; onChange:
   );
 }
 
-function GatewaySection({ config, onChange }: { config: EdgeClawConfig; onChange: (next: EdgeClawConfig) => void }) {
+function GatewaySection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const g = config.gateway ?? {};
   return (
     <SettingsSection title="Gateway" description="Messaging gateway (Feishu / Telegram / Discord / Slack) — channel-level secrets are best edited via Raw YAML.">
@@ -702,7 +702,7 @@ function GatewaySection({ config, onChange }: { config: EdgeClawConfig; onChange
         </SettingsRow>
         {g.enabled && (
           <FormRow label="Gateway home" description="Working directory for gateway state and per-channel configs.">
-            <TextInput value={g.home} placeholder="~/.edgeclaw/gateway" monospace onChange={(v) => onChange(patch(config, ['gateway', 'home'], v))} />
+            <TextInput value={g.home} placeholder="~/.pilotdeck/gateway" monospace onChange={(v) => onChange(patch(config, ['gateway', 'home'], v))} />
           </FormRow>
         )}
       </SettingsCard>
@@ -787,7 +787,7 @@ function RawYamlView({
 
 type ViewMode = 'form' | 'raw';
 
-export default function EdgeClawConfigTab({ projects = [] }: { projects?: SettingsProject[] }) {
+export default function PilotDeckConfigTab({ projects = [] }: { projects?: SettingsProject[] }) {
   const { t } = useTranslation('settings');
   const {
     path,
@@ -809,16 +809,16 @@ export default function EdgeClawConfigTab({ projects = [] }: { projects?: Settin
     save,
     reloadConfig,
     openFile,
-  } = useEdgeClawConfig();
+  } = usePilotDeckConfig();
 
   // View mode persists across mounts so power users who prefer the textarea
   // don't get bumped back to form-mode every time they re-open Settings.
   const [view, setView] = useState<ViewMode>(() => {
     if (typeof localStorage === 'undefined') return 'form';
-    return (localStorage.getItem('edgeclaw:configView') as ViewMode) || 'form';
+    return (localStorage.getItem('pilotdeck:configView') as ViewMode) || 'form';
   });
   useEffect(() => {
-    try { localStorage.setItem('edgeclaw:configView', view); } catch { /* swallow */ }
+    try { localStorage.setItem('pilotdeck:configView', view); } catch { /* swallow */ }
   }, [view]);
 
   // Active form section. Keeping it local — sections aren't deep-linkable
@@ -837,7 +837,7 @@ export default function EdgeClawConfigTab({ projects = [] }: { projects?: Settin
   // single code path: server-side validation, watcher debouncing, and
   // subsystem hot-reload all work whether the edit came from the form, the
   // textarea, or an external editor.
-  const onFormChange = (next: EdgeClawConfig) => {
+  const onFormChange = (next: PilotDeckConfig) => {
     try {
       setRaw(configToYamlString(next));
     } catch (caught) {
