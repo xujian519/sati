@@ -155,11 +155,20 @@ export function startCronDaemonDetached({
   // into a real log file instead of /dev/null so the daemon is debuggable
   // post-mortem. Stdin stays 'ignore' (the daemon never reads input).
   const stdio = fd === null ? 'ignore' : ['ignore', fd, fd];
-  const child = spawnFn(command, args, {
-    cwd: process.cwd(),
-    env: buildCronDaemonEnv(),
-    detached: true,
-    stdio
+  let child;
+  try {
+    child = spawnFn(command, args, {
+      cwd: process.cwd(),
+      env: buildCronDaemonEnv(),
+      detached: true,
+      stdio
+    });
+  } catch (err) {
+    console.warn(`[WARN] Cron daemon spawn failed: ${err.message}`);
+    return null;
+  }
+  child.on('error', (err) => {
+    console.warn(`[WARN] Cron daemon process error: ${err.message}`);
   });
   if (typeof child?.unref === 'function') {
     child.unref();
