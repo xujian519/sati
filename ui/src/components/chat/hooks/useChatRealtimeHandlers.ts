@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { PendingPermissionRequest } from '../types/types';
 import type { Project, ProjectSession, SessionProvider } from '../../../types/app';
@@ -102,9 +102,9 @@ export function useChatRealtimeHandlers({
 }: UseChatRealtimeHandlersArgs) {
   const { subscribe } = useWebSocket();
 
-  // The handler runs synchronously inside the WebSocket onmessage callback
-  // (see WebSocketContext.subscribe) so every message is observed in arrival
-  // order without React 18 state-batching collapsing intermediate values.
+  const accumulatedThinkingRef = useRef('');
+  const thinkingTimerRef = useRef<number | null>(null);
+
   const handleMessage = useCallback((latestMessage: LatestChatMessage) => {
     if (!latestMessage) return;
 
@@ -189,6 +189,16 @@ export function useChatRealtimeHandlers({
     if (msg.kind === 'stream_delta') {
       const text = msg.content || '';
       if (!text) return;
+      // Flush any accumulated thinking before text starts
+      if (accumulatedThinkingRef.current && sid) {
+        if (thinkingTimerRef.current) {
+          clearTimeout(thinkingTimerRef.current);
+          thinkingTimerRef.current = null;
+        }
+        sessionStore.updateStreamingThinking(sid, accumulatedThinkingRef.current, provider);
+        sessionStore.finalizeStreamingThinking(sid);
+        accumulatedThinkingRef.current = '';
+      }
       streamBufferRef.current += text;
       accumulatedStreamRef.current += text;
       if (!streamTimerRef.current) {
@@ -202,6 +212,22 @@ export function useChatRealtimeHandlers({
       // Also route to store for non-active sessions
       if (sid && sid !== activeViewSessionId) {
         sessionStore.appendRealtime(sid, msg as NormalizedMessage);
+      }
+      return;
+    }
+
+    // --- Thinking: accumulate into a single message like stream_delta ---
+    if (msg.kind === 'thinking') {
+      const text = msg.content || '';
+      if (!text) return;
+      accumulatedThinkingRef.current += text;
+      if (!thinkingTimerRef.current) {
+        thinkingTimerRef.current = window.setTimeout(() => {
+          thinkingTimerRef.current = null;
+          if (sid) {
+            sessionStore.updateStreamingThinking(sid, accumulatedThinkingRef.current, provider);
+          }
+        }, 100);
       }
       return;
     }
@@ -223,10 +249,15 @@ export function useChatRealtimeHandlers({
     }
 
     // --- Turn boundary: finalize in-flight streaming before non-stream msgs ---
-    // In multi-turn SDK queries, text from different turns is streamed into the
-    // same accumulatedStreamRef. Without flushing here, a single finalized text
-    // message would merge text from all turns, causing duplicates when the
-    // server catch-up (refreshFromServer) returns individual turn messages.
+    if (accumulatedThinkingRef.current && sid) {
+      if (thinkingTimerRef.current) {
+        clearTimeout(thinkingTimerRef.current);
+        thinkingTimerRef.current = null;
+      }
+      sessionStore.updateStreamingThinking(sid, accumulatedThinkingRef.current, provider);
+      sessionStore.finalizeStreamingThinking(sid);
+      accumulatedThinkingRef.current = '';
+    }
     if (accumulatedStreamRef.current && sid) {
       if (streamTimerRef.current) {
         clearTimeout(streamTimerRef.current);
@@ -283,6 +314,16 @@ export function useChatRealtimeHandlers({
         // #region agent log
         fetch('http://127.0.0.1:7450/ingest/6d23a73d-7d80-486b-b66d-c1253f9689d3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ad403'},body:JSON.stringify({sessionId:'5ad403',location:'useChatRealtimeHandlers.ts:complete',message:'complete event clears all pending permissions',data:{sid,currentSessionId,selectedSessionId:selectedSession?.id},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{});
         // #endregion
+        // Flush any remaining thinking state
+        if (thinkingTimerRef.current) {
+          clearTimeout(thinkingTimerRef.current);
+          thinkingTimerRef.current = null;
+        }
+        if (sid && accumulatedThinkingRef.current) {
+          sessionStore.updateStreamingThinking(sid, accumulatedThinkingRef.current, provider);
+          sessionStore.finalizeStreamingThinking(sid);
+        }
+        accumulatedThinkingRef.current = '';
         // Flush any remaining streaming state
         if (streamTimerRef.current) {
           clearTimeout(streamTimerRef.current);

@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ChevronRight } from 'lucide-react';
 import type {
   ChatMessage,
   PilotDeckPermissionSuggestion,
@@ -40,9 +40,6 @@ const shouldDelegate = (message: ChatMessage): boolean => {
   const t = message.type;
   // These types have custom bespoke renderings we preserve 1:1 from legacy.
   if (t !== 'user' && t !== 'assistant' && t !== 'error') return true;
-  // Assistant messages that are purely "thinking" preludes go through legacy
-  // so the thinking panel renders correctly.
-  if (t === 'assistant' && message.isThinking && !message.content) return true;
   return false;
 };
 
@@ -118,6 +115,23 @@ function MessageRowV2({
         <div className="min-w-0 flex-1 pt-0.5 text-[14px] leading-relaxed text-red-500">
           <Markdown>{formattedContent}</Markdown>
         </div>
+      </div>
+    );
+  }
+
+  // Thinking: collapsible accordion
+  if (message.isThinking) {
+    return (
+      <div className="min-w-0 text-[14px] leading-relaxed">
+        <details className="group">
+          <summary className="flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-medium text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+            <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" strokeWidth={2} />
+            <span>Thinking</span>
+          </summary>
+          <div className="mt-1.5 border-l-2 border-neutral-300 pl-3 text-[13px] text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+            <Markdown>{formattedContent}</Markdown>
+          </div>
+        </details>
       </div>
     );
   }

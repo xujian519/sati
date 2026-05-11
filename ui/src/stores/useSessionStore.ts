@@ -577,6 +577,59 @@ export function useSessionStore() {
   }, [notify]);
 
   /**
+   * Update or create a streaming thinking message (accumulated thinking so far).
+   * Mirrors updateStreaming but uses kind='thinking' and a separate well-known ID.
+   */
+  const updateStreamingThinking = useCallback((sessionId: string, accumulatedText: string, msgProvider: SessionProvider) => {
+    const slot = getSlot(sessionId);
+    const streamId = `__streaming_thinking_${sessionId}`;
+    const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
+    if (idx >= 0) {
+      const existing = slot.realtimeMessages[idx];
+      slot.realtimeMessages = [...slot.realtimeMessages];
+      slot.realtimeMessages[idx] = {
+        ...existing,
+        provider: msgProvider,
+        content: accumulatedText,
+      };
+    } else {
+      const msg: NormalizedMessage = {
+        id: streamId,
+        sessionId,
+        timestamp: new Date().toISOString(),
+        provider: msgProvider,
+        kind: 'thinking',
+        content: accumulatedText,
+      };
+      slot.realtimeMessages = [...slot.realtimeMessages, msg];
+    }
+    recomputeMergedIfNeeded(slot);
+    notify(sessionId);
+  }, [getSlot, notify]);
+
+  /**
+   * Finalize streaming thinking: replace the well-known streaming thinking ID
+   * with a unique ID so subsequent thinking blocks don't overwrite it.
+   */
+  const finalizeStreamingThinking = useCallback((sessionId: string) => {
+    const slot = storeRef.current.get(sessionId);
+    if (!slot) return;
+    const streamId = `__streaming_thinking_${sessionId}`;
+    const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
+    if (idx >= 0) {
+      const stream = slot.realtimeMessages[idx];
+      const newId = `thinking_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      slot.realtimeMessages = [...slot.realtimeMessages];
+      slot.realtimeMessages[idx] = {
+        ...stream,
+        id: newId,
+      };
+      recomputeMergedIfNeeded(slot);
+      notify(sessionId);
+    }
+  }, [notify]);
+
+  /**
    * Clear realtime messages for a session (e.g., after stream completes and server fetch catches up).
    */
   const clearRealtime = useCallback((sessionId: string) => {
@@ -615,6 +668,8 @@ export function useSessionStore() {
     isStale,
     updateStreaming,
     finalizeStreaming,
+    updateStreamingThinking,
+    finalizeStreamingThinking,
     clearRealtime,
     getMessages,
     getSessionSlot,
@@ -622,6 +677,7 @@ export function useSessionStore() {
     getSlot, has, fetchFromServer, fetchMore,
     appendRealtime, appendRealtimeBatch, refreshFromServer,
     setActiveSession, setStatus, isStale, updateStreaming, finalizeStreaming,
+    updateStreamingThinking, finalizeStreamingThinking,
     clearRealtime, getMessages, getSessionSlot,
   ]);
 }
