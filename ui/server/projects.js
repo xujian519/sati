@@ -107,9 +107,48 @@ function toLegacySession(session, projectName) {
     };
 }
 
+async function readMarkedProjectPaths() {
+    // Scan ~/.pilotdeck/projects/<id>/.cwd to recover real workspace paths
+    // for projects whose encoded id is ambiguous (see addProjectManually).
+    // Returns a Map<id, absoluteCwd>; missing/unreadable markers are skipped.
+    const pilotHome = resolvePilotHome(process.env);
+    const projectsDir = path.join(pilotHome, 'projects');
+    const result = new Map();
+    let entries = [];
+    try {
+        entries = await fs.readdir(projectsDir, { withFileTypes: true });
+    } catch {
+        return result;
+    }
+    for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const cwdFile = path.join(projectsDir, entry.name, '.cwd');
+        try {
+            const raw = await fs.readFile(cwdFile, 'utf8');
+            const cwd = raw.trim();
+            if (cwd) result.set(entry.name, cwd);
+        } catch {
+            // No marker — listProjects can still surface this project via
+            // its heuristic decoder when the path is unambiguous.
+        }
+    }
+    return result;
+}
+
 async function getProjects(progressCallback = null) {
     const gateway = getPilotDeckGateway();
     const { projects: webProjects } = await gateway.listProjects();
+    const markedProjects = await readMarkedProjectPaths();
+    const seenByPath = new Set(
+        webProjects.map((p) => p.fullPath || p.projectKey).filter(Boolean),
+    );
+    // Backfill any project whose `.cwd` marker exists but listProjects()
+    // failed to surface (typically because the path contains '-').
+    for (const [, markedCwd] of markedProjects) {
+        if (seenByPath.has(markedCwd)) continue;
+        webProjects.push({ fullPath: markedCwd, projectKey: markedCwd, sessionCount: 0 });
+        seenByPath.add(markedCwd);
+    }
     const total = webProjects.length;
 
     const result = [];
@@ -257,21 +296,22 @@ async function addProjectManually(projectPath, _displayName = null) {
     const name = createProjectId(absolute);
     rememberProjectDirectory(name, absolute);
 
-    // PolitDeck's gateway.listProjects() enumerates ~/.pilotdeck/projects/<id>/
-    // subdirectories. A freshly-added workspace has no chat session yet, so
-    // without materializing the project dir here it would not show up in
-    // sidebar refresh — gateway has nothing to list. Creating an empty
-    // directory is a cheap, idempotent way to register the project with the
-    // gateway so listProjects() surfaces it immediately after wizard close.
+    // Materialize a PolitDeck project directory and drop a `.cwd` marker
+    // recording the real absolute path. We need the marker because
+    // createProjectId() encodes both '/' and literal '-' to '-', so the
+    // encoded id alone is ambiguous (e.g. /Users/me/claude-code and
+    // /Users/me/claude/code share the id "Users-me-claude-code").
+    // PolitDeck's listWebProjects() heuristically tries each `-` as a
+    // path separator and drops the project when no decode matches an
+    // existing directory — which would silently lose workspaces whose
+    // real path contains a dash. getProjects() reads `.cwd` to backfill
+    // any project listProjects() couldn't recover.
     const pilotHome = resolvePilotHome(process.env);
     const projectDir = path.join(pilotHome, 'projects', name);
     try {
         await fs.mkdir(projectDir, { recursive: true });
+        await fs.writeFile(path.join(projectDir, '.cwd'), absolute, 'utf8');
     } catch (error) {
-        // Best-effort: if we can't create the dir, the wizard still succeeded
-        // semantically (the path exists on disk and is cached in memory).
-        // The project just won't appear in the sidebar until the user starts
-        // a chat session there.
         console.warn(
             `[projects] failed to materialize PolitDeck project dir for ${name}:`,
             error?.message || error,
