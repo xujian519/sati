@@ -29,7 +29,7 @@ export {
   type SubagentTranscriptHandle,
 } from "./transcript/JsonlTranscriptWriter.js";
 export { readTranscript, type AgentTranscriptReadResult } from "./transcript/TranscriptReader.js";
-export { replayTranscriptEntries, type AgentTranscriptReplayResult } from "./transcript/TranscriptReplay.js";
+export { replayTranscriptEntries, findLastCompactBoundaryIndex, type AgentTranscriptReplayResult } from "./transcript/TranscriptReplay.js";
 export { replaySubagentTranscript } from "./transcript/replaySubagentTranscript.js";
 export type {
   AgentAcceptedInputTranscriptEntry,
