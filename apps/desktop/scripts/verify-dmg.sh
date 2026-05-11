@@ -7,7 +7,7 @@
 #   2. App bundle 结构正确（4 个 Helper、Frameworks、node-bin、bun-bin、bundles）
 #   3. 代码签名通过 codesign --verify --deep --strict
 #   4. claudecodeui-bundle.tar 解开后存在 server/index.js
-#   5. claude-code-main-bundle.tar 解开后存在 src/entrypoints/cli.tsx
+#   5. claude-code-main-bundle.tar 解开后存在 src/cli/pilotdeck.ts
 #   6. 用打包好的 node 直接 spawn server/index.js + 访问 /health
 #
 # Usage:
@@ -175,8 +175,8 @@ else
   exit 1
 fi
 
-[[ -f "$CCM_DIR/src/entrypoints/cli.tsx" ]] && pass "src/entrypoints/cli.tsx present" \
-  || fail "src/entrypoints/cli.tsx missing"
+[[ -f "$CCM_DIR/src/cli/pilotdeck.ts" ]] && pass "src/cli/pilotdeck.ts present" \
+  || fail "src/cli/pilotdeck.ts missing"
 [[ -f "$CCM_DIR/preload.ts" ]] && pass "preload.ts present" \
   || warn "preload.ts missing"
 
