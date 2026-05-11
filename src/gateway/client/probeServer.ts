@@ -37,7 +37,11 @@ export async function connectRemoteGatewayIfAvailable(
   if (!probe.ok || !probe.token) {
     return undefined;
   }
-  return createRemoteGateway({ url: probe.wsUrl, token: probe.token, clientName: "cli" });
+  try {
+    return await createRemoteGateway({ url: probe.wsUrl, token: probe.token, clientName: "cli" });
+  } catch {
+    return undefined;
+  }
 }
 
 function toWsUrl(url: string): string {

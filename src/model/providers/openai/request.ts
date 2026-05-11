@@ -29,18 +29,6 @@ export type OpenAIRequestBody = {
       strict?: boolean;
     };
   };
-  /**
-   * OpenRouter / DeepSeek reasoning control. When `thinking` is explicitly
-   * disabled on the canonical request, we lower it to `{ enabled: false }`
-   * so reasoning models skip chain-of-thought (saves latency + tokens).
-   */
-  reasoning?: { enabled: boolean };
-  /**
-   * When streaming, request the provider to include a final usage chunk.
-   * Without this, OpenAI-compatible providers never report token counts
-   * in streaming mode and the router falls back to estimation.
-   */
-  stream_options?: { include_usage: boolean };
 };
 
 type OpenAIMessage = {
@@ -48,14 +36,6 @@ type OpenAIMessage = {
   content?: string | unknown[];
   tool_calls?: unknown[];
   tool_call_id?: string;
-  /**
-   * Reasoning providers (DeepSeek's `deepseek-reasoner` / `deepseek-v4-pro`,
-   * etc.) require the prior turn's chain-of-thought to be echoed back in
-   * this field on every follow-up request, otherwise the API rejects the
-   * call with "The reasoning_content in the thinking mode must be passed
-   * back to the API". Providers that don't recognize the field just
-   * ignore it.
-   */
   reasoning_content?: string;
 };
 
@@ -100,14 +80,6 @@ export function buildOpenAIRequest(
     };
   }
 
-  if (body.stream) {
-    body.stream_options = { include_usage: true };
-  }
-
-  if (request.thinking?.enabled === false) {
-    body.reasoning = { enabled: false };
-  }
-
   return body;
 }
 
@@ -131,35 +103,24 @@ function toOpenAIMessages(message: CanonicalMessage): OpenAIMessage[] {
       },
     }));
 
-  // Split thinking blocks out of the regular content stream: reasoning
-  // providers (DeepSeek `deepseek-reasoner` / `deepseek-v4-pro`) expect
-  // them to be echoed back via the separate `reasoning_content` field,
-  // and they reject requests that hide the prior reasoning inside
-  // `content`. Non-reasoning providers ignore `reasoning_content`.
-  const reasoningBlocks = message.content.filter((block) => block.type === "thinking");
-  const reasoningText = reasoningBlocks
-    .map((block) => (block.type === "thinking" ? block.text : ""))
-    .filter((text) => text.length > 0)
-    .join("\n");
-
+  const thinkingBlocks = message.content.filter((block) => block.type === "thinking");
   const normalContent = message.content.filter(
-    (block) =>
-      block.type !== "tool_result"
-      && block.type !== "tool_call"
-      && block.type !== "thinking",
+    (block) => block.type !== "tool_result" && block.type !== "tool_call" && block.type !== "thinking",
   );
 
   const messages: OpenAIMessage[] = [];
-  if (normalContent.length > 0 || assistantToolCalls.length > 0 || reasoningText.length > 0) {
-    const entry: OpenAIMessage = {
+  if (normalContent.length > 0 || assistantToolCalls.length > 0 || thinkingBlocks.length > 0) {
+    const msg: OpenAIMessage = {
       role: message.role,
       content: normalContent.length > 0 ? toOpenAIContent(normalContent) : undefined,
       tool_calls: assistantToolCalls.length > 0 ? assistantToolCalls : undefined,
     };
-    if (reasoningText.length > 0 && message.role === "assistant") {
-      entry.reasoning_content = reasoningText;
+    // DeepSeek V4 requires reasoning_content to be passed back on assistant
+    // messages in multi-turn conversations; omitting it causes a 400 error.
+    if (message.role === "assistant" && thinkingBlocks.length > 0) {
+      msg.reasoning_content = thinkingBlocks.map((b) => b.text).join("\n");
     }
-    messages.push(entry);
+    messages.push(msg);
   }
 
   return [...messages, ...toolResultMessages];

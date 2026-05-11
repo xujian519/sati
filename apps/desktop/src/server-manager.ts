@@ -4,16 +4,19 @@
  * Adapted from OpenClaw's GatewayManager (apps/electron/src/gateway-manager.ts).
  * Key differences:
  *   - Spawns `node-bin/node claudecodeui/server/index.js` (instead of entry.js gateway)
- *   - Three tarballs to extract (claudecodeui/server resolves edgeclaw-memory-core
- *     via `../../../edgeclaw-memory-core/lib/index.js`, so all three must be siblings):
+ *   - Three tarballs to extract (claudecodeui/server resolves pilotdeck-memory-core
+ *     via `../../../pilotdeck-memory-core/lib/index.js`, so all three must be siblings):
  *       Resources/claudecodeui-bundle.tar         → Resources/claudecodeui/
  *       Resources/claude-code-main-bundle.tar     → Resources/claude-code-main/
- *       Resources/edgeclaw-memory-core-bundle.tar → Resources/edgeclaw-memory-core/
+ *       Resources/pilotdeck-memory-core-bundle.tar → Resources/pilotdeck-memory-core/
  *   - Sets BUN_BIN, CLAUDE_CODE_MAIN_DIR so the server can spawn `bun` subprocesses
  *   - claudecodeui /health responds with `{status: "ok", ...}` (not `{ok: true}`)
  */
 
 import { execSync, spawn, type ChildProcess } from "node:child_process";
+import { promisify } from "node:util";
+import { execFile as execFileCb } from "node:child_process";
+const execFile = promisify(execFileCb);
 import { randomBytes } from "node:crypto";
 import { EventEmitter } from "node:events";
 import * as fs from "node:fs/promises";
@@ -43,24 +46,24 @@ const RESTART_BACKOFF_MS = [2000, 4000, 8000] as const;
 // caps at ~64k, OpenAI-compatible Chat caps at 32k for most providers).
 //
 // User can override via CLAUDE_CODE_MAX_OUTPUT_TOKENS env or
-// agents.main.params.maxOutputTokens in ~/.edgeclaw/config.yaml (the latter is
-// wired up in ui/server/services/edgeclawConfig.js → buildRuntimeEnv).
+// agents.main.params.maxOutputTokens in ~/.pilotdeck/pilotdeck.yaml (the latter is
+// wired up in ui/server/services/pilotdeckConfig.js → buildRuntimeEnv).
 const REASONING_FRIENDLY_MAX_OUTPUT_TOKENS = "16000";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function getEdgeClawDir(): string {
-  return path.join(os.homedir(), ".edgeclaw");
+function getPilotDeckDir(): string {
+  return path.join(os.homedir(), ".pilotdeck");
 }
 
 function getPidFilePath(): string {
-  return path.join(getEdgeClawDir(), "desktop.server.pid");
+  return path.join(getPilotDeckDir(), "desktop.server.pid");
 }
 
-async function ensureEdgeClawDir(): Promise<void> {
-  await fs.mkdir(getEdgeClawDir(), { recursive: true });
+async function ensurePilotDeckDir(): Promise<void> {
+  await fs.mkdir(getPilotDeckDir(), { recursive: true });
 }
 
 /**
@@ -75,7 +78,7 @@ async function ensureEdgeClawDir(): Promise<void> {
  * which is per-user, writable, survives macOS upgrades, and is the standard
  * location Electron's `app.getPath('userData')` resolves to.
  *
- * We key on the EdgeClaw bundle version so that upgrading the app forces a
+ * We key on the PilotDeck bundle version so that upgrading the app forces a
  * fresh extraction (otherwise stale source files from the previous version
  * would silently win). Old version dirs are GC'd on next startup via
  * `cleanupStaleRuntimeVersions()`.
@@ -85,7 +88,7 @@ function getRuntimeBaseDir(version: string): string {
     os.homedir(),
     "Library",
     "Application Support",
-    "EdgeClaw",
+    "PilotDeck",
     "runtime",
     version,
   );
@@ -123,7 +126,7 @@ async function pickAvailablePort(): Promise<number> {
 }
 
 function getServerLogPath(): string {
-  return path.join(os.homedir(), ".edgeclaw", "desktop.server.log");
+  return path.join(os.homedir(), ".pilotdeck", "desktop.server.log");
 }
 
 function readTailSafe(filePath: string, maxBytes: number): string {
@@ -204,9 +207,29 @@ async function cleanupStaleOrOrphanPid(): Promise<void> {
   }
 }
 
-async function waitForServerHealth(port: number): Promise<void> {
+/**
+ * Poll http://127.0.0.1:<port>/health until it returns `{status: "ok"}` or
+ * we hit the startup timeout.
+ *
+ * If `child` is provided, we additionally short-circuit the moment the
+ * child process exits (exitCode !== null || signalCode !== null). Without
+ * this fast-fail, a child that crashes ~10ms after spawn (e.g. because
+ * load-env.js threw on missing config) still keeps us polling for the full
+ * 60-second deadline before the user sees the error dialog.
+ */
+async function waitForServerHealth(
+  port: number,
+  child?: ChildProcess,
+): Promise<void> {
   const deadline = Date.now() + STARTUP_HEALTH_TIMEOUT_MS;
   while (Date.now() < deadline) {
+    if (child && (child.exitCode !== null || child.signalCode !== null)) {
+      throw new Error(
+        `Server child exited before becoming healthy (code=${
+          child.exitCode ?? "null"
+        }, signal=${child.signalCode ?? "null"})`,
+      );
+    }
     try {
       const res = await fetch(`http://127.0.0.1:${port}/health`, {
         signal: AbortSignal.timeout(HEALTH_REQUEST_TIMEOUT_MS),
@@ -238,7 +261,7 @@ export type ServerManagerOptions = {
   devRepoRoot?: string;
   /**
    * Bundle version (typically `app.getVersion()`). Used to pick the per-version
-   * runtime extraction directory under `~/Library/Application Support/EdgeClaw/
+   * runtime extraction directory under `~/Library/Application Support/PilotDeck/
    * runtime/<version>/`. Required when `dev: false` so that upgrading the app
    * forces a fresh re-extraction of bundled tarballs.
    */
@@ -250,6 +273,17 @@ export type ServerManagerEvents = {
   error: [error: Error];
   restarting: [attempt: number];
   "max-restarts": [];
+  /**
+   * Phase-label updates emitted while start() is in flight. Consumed by
+   * the splash window so users get visible feedback during the long
+   * first-launch tarball extraction. Strings are user-facing Chinese
+   * copy — keep them short (≤ 24 chars), end-state-shaped, and
+   * deliberately *abstracted* away from internal bundle names: users
+   * shouldn't see "claudecodeui" or "claude-code-main", they should see
+   * "正在解压应用资源 (1/3)" etc. The internal labels are mapped at the
+   * resolvePaths() call site.
+   */
+  progress: [phase: string];
 };
 
 export class ServerManager extends EventEmitter<ServerManagerEvents> {
@@ -265,6 +299,14 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
   private restartAttempts = 0;
   private stableTimer: ReturnType<typeof setTimeout> | null = null;
   private exitHandlerBound = false;
+  /**
+   * Set to true while the very first start() is in flight. The exit watchdog
+   * checks this and refuses to schedule a restart until the initial start
+   * either succeeds or rejects, otherwise an early-crashing child triggers
+   * concurrent restart attempts that race against the still-pending health
+   * polling loop (and double-emit "error" events).
+   */
+  private initialStartInFlight = false;
 
   constructor(options: ServerManagerOptions = {}) {
     super();
@@ -278,13 +320,21 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
    * marker. The marker stores the source tarball mtime+size so that if the
    * bundled tar is updated (e.g. after an in-place reinstall over the same
    * version) we re-extract automatically.
+   *
+   * Switched from `execSync('tar xf ...')` to `await execFile('tar', ...)`
+   * so the Electron main loop can keep handling IPC (in particular the
+   * splash window's status-update channel) while the ~700MB total of
+   * bundled tarballs is unpacked. Sync extraction blocked the main thread
+   * for tens of seconds on cold APFS caches; the splash text would freeze
+   * mid-update and users would assume the app crashed.
    */
-  private ensureBundleExtracted(
+  private async ensureBundleExtracted(
     tarballSourceDir: string,
     runtimeBaseDir: string,
     tarballName: string,
     destDirName: string,
-  ): string {
+    progressLabel: string,
+  ): Promise<string> {
     const destDir = path.join(runtimeBaseDir, destDirName);
     const tarball = path.join(tarballSourceDir, tarballName);
     const marker = path.join(destDir, ".extracted");
@@ -305,22 +355,33 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       }
     }
 
-    // Fresh extract: nuke any partial leftover so we don't merge stale + new
-    // payloads (could happen if a previous extraction was interrupted).
+    // Single user-visible phase covers both the partial-leftover nuke and
+    // the actual tar extraction — users don't care which sub-step we're
+    // on, and "正在解压…" stays accurate throughout (cleanup is fast,
+    // tar dominates wall-clock).
+    this.emit("progress", `${progressLabel}…首次安装可能需要 30 秒`);
+
     if (fsSync.existsSync(destDir)) {
-      fsSync.rmSync(destDir, { recursive: true, force: true });
+      // Fresh extract: nuke any partial leftover so we don't merge stale
+      // + new payloads (could happen if a previous extraction was
+      // interrupted).
+      await fs.rm(destDir, { recursive: true, force: true });
     }
-    fsSync.mkdirSync(destDir, { recursive: true });
-    execSync(`tar xf "${tarball}" -C "${destDir}"`, {
-      stdio: "ignore",
+    await fs.mkdir(destDir, { recursive: true });
+
+    await execFile("/usr/bin/tar", ["xf", tarball, "-C", destDir], {
       timeout: 180_000,
+      // Don't capture stdout/stderr to memory; tar is intentionally quiet
+      // unless something fails, in which case it writes to stderr and
+      // exits non-zero — execFile rejects with the stderr captured for us.
+      maxBuffer: 1024 * 1024,
     });
-    fsSync.writeFileSync(marker, expectedMarker);
+    await fs.writeFile(marker, expectedMarker);
     return destDir;
   }
 
   /**
-   * Best-effort cleanup of `~/Library/Application Support/EdgeClaw/runtime/`
+   * Best-effort cleanup of `~/Library/Application Support/PilotDeck/runtime/`
    * subdirectories belonging to other versions. Called at startup so that
    * upgrading the app reclaims disk (~1GB per stale version).
    */
@@ -344,13 +405,13 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     }
   }
 
-  private resolvePaths(): {
+  private async resolvePaths(): Promise<{
     nodeBin: string;
     bunBin: string;
     serverEntry: string;
     serverCwd: string;
     claudeCodeMainDir: string;
-  } {
+  }> {
     if (this.dev) {
       const root = this.devRepoRoot;
       if (!root)
@@ -392,27 +453,44 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     }
     const runtimeBaseDir = getRuntimeBaseDir(this.appVersion);
     fsSync.mkdirSync(runtimeBaseDir, { recursive: true });
+    // Stale-version GC runs silently — it only does work on upgrades and
+    // there's nothing useful to tell the user about it. Bundling its
+    // wall-clock into the next phase keeps the splash sequence shorter.
     this.cleanupStaleRuntimeVersions(this.appVersion);
 
     // Order matters only for clarity; resolution at runtime is via ../../../
     // path walks so all three must end up as siblings inside runtimeBaseDir.
-    this.ensureBundleExtracted(
+    // Each ensureBundleExtracted is awaited *sequentially* (not Promise.all)
+    // because: (a) tar is single-threaded I/O bound — parallel extraction
+    // saturates the disk and gives no wall-clock win; (b) sequential
+    // execution means the splash status label tracks reality (one tarball
+    // at a time) instead of showing one phase while three race in the
+    // background.
+    //
+    // Progress labels are intentionally generic ("应用资源 (N/3)") rather
+    // than naming the internal bundle (memory-core / claudecodeui /
+    // claude-code-main) — those names mean nothing to end users and the
+    // (N/3) index gives enough sense of "how many steps left".
+    await this.ensureBundleExtracted(
       resources,
       runtimeBaseDir,
-      "edgeclaw-memory-core-bundle.tar",
-      "edgeclaw-memory-core",
+      "pilotdeck-memory-core-bundle.tar",
+      "pilotdeck-memory-core",
+      "正在解压应用资源 (1/3)",
     );
-    const claudeCodeUiDir = this.ensureBundleExtracted(
+    const claudeCodeUiDir = await this.ensureBundleExtracted(
       resources,
       runtimeBaseDir,
       "claudecodeui-bundle.tar",
       "claudecodeui",
+      "正在解压应用资源 (2/3)",
     );
-    const claudeCodeMainDir = this.ensureBundleExtracted(
+    const claudeCodeMainDir = await this.ensureBundleExtracted(
       resources,
       runtimeBaseDir,
       "claude-code-main-bundle.tar",
       "claude-code-main",
+      "正在解压应用资源 (3/3)",
     );
     return {
       // Native binaries stay under the read-only Resources/ — no need to copy
@@ -589,6 +667,15 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
 
       if (this.stopRequested) return;
 
+      // While the very first start is still pending, let the outer
+      // startProcessAndWaitReady -> waitForServerHealth() short-circuit
+      // path surface the failure (it already collects the log tail and
+      // throws via start() -> caller). Skipping watchdog work here keeps
+      // us from emitting a duplicate "error" event before the caller's
+      // try/catch attaches its handler, and from spawning concurrent
+      // restart attempts that race the still-pending health poll loop.
+      if (this.initialStartInFlight) return;
+
       const err = new Error(
         `Server exited unexpectedly (code=${code ?? "null"}, signal=${signal ?? "null"})`,
       );
@@ -624,7 +711,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
   }
 
   private async writePidFile(pid: number): Promise<void> {
-    await ensureEdgeClawDir();
+    await ensurePilotDeckDir();
     await fs.writeFile(getPidFilePath(), `${pid}\n`, "utf8");
   }
 
@@ -639,7 +726,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
   private async startProcessAndWaitReady(): Promise<{ port: number }> {
     await cleanupStaleOrOrphanPid();
     // Kill leftover proxy/cron-daemon from a previous (crashed or
-    // SIGKILL'd-by-Activity-Monitor) run. ensureEdgeClawProxyRunning() in the
+    // SIGKILL'd-by-Activity-Monitor) run. ensurePilotDeckProxyRunning() in the
     // ui server otherwise short-circuits when port 18080 is occupied and
     // never gets a chance to attach its stdout pipe, so logs from the stale
     // proxy never reach desktop.server.log.
@@ -648,12 +735,13 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     const chosenPort = await pickAvailablePort();
     // NOTE: proxy port is intentionally NOT overridden here. claudecodeui
     // spawns proxy.ts as a subprocess (in claude-code-main) which loads its
-    // own config from ~/.edgeclaw/config.yaml. If we set EDGECLAW_PROXY_PORT
+    // own config from ~/.pilotdeck/pilotdeck.yaml. If we set PILOTDECK_PROXY_PORT
     // here, the parent server waits on the new port but the spawned proxy.ts
     // still binds runtime.proxyPort from yaml → mismatch. Leave proxy port
     // to YAML so parent + child agree.
+    this.emit("progress", "配置运行环境…");
     const { nodeBin, bunBin, serverEntry, serverCwd, claudeCodeMainDir } =
-      this.resolvePaths();
+      await this.resolvePaths();
 
     if (!fsSync.existsSync(nodeBin)) {
       throw new Error(`Bundled Node not found at ${nodeBin}`);
@@ -688,9 +776,9 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
         REASONING_FRIENDLY_MAX_OUTPUT_TOKENS,
     };
 
-    // Mirror server stdout/stderr to ~/.edgeclaw/desktop.server.log so failures
+    // Mirror server stdout/stderr to ~/.pilotdeck/desktop.server.log so failures
     // are diagnosable even when the user launches via Finder/Dock (no terminal).
-    await ensureEdgeClawDir();
+    await ensurePilotDeckDir();
     const logPath = getServerLogPath();
     const logStream = fsSync.createWriteStream(logPath, { flags: "a" });
     logStream.write(
@@ -721,8 +809,9 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
 
     await this.writePidFile(child.pid);
 
+    this.emit("progress", "启动本地服务…");
     try {
-      await waitForServerHealth(chosenPort);
+      await waitForServerHealth(chosenPort, child);
     } catch (err) {
       this.stopRequested = true;
       await this.killChildGracefully();
@@ -769,15 +858,18 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
 
     this.stopRequested = false;
     this.restartAttempts = 0;
+    this.initialStartInFlight = true;
 
     this.startPromise = (async () => {
       try {
         const { port } = await this.startProcessAndWaitReady();
         this.port = port;
+        this.initialStartInFlight = false;
         this.emit("ready", port);
         this.scheduleStableReset();
         return { port };
       } catch (e: unknown) {
+        this.initialStartInFlight = false;
         const err = e instanceof Error ? e : new Error(String(e));
         this.emit("error", err);
         throw err;
@@ -800,10 +892,10 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
 
     await this.removePidFile();
     // The ui-server's SIGTERM handler stops the proxy and (after our
-    // edgeclawConfig.js patch) the cron daemon. As a belt-and-suspenders
+    // pilotdeckConfig.js patch) the cron daemon. As a belt-and-suspenders
     // safety net — in case the parent died via SIGKILL, hung past the SIGTERM
     // grace, or the user used `kill -9` from Activity Monitor — sweep any
-    // remaining orphans now so quitting EdgeClaw really leaves zero processes.
+    // remaining orphans now so quitting PilotDeck really leaves zero processes.
     await this.cleanupOrphanRuntimeProcesses();
     this.stopRequested = false;
   }

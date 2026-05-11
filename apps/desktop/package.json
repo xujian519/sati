@@ -1,7 +1,7 @@
 {
-  "name": "@edgeclaw/desktop",
-  "version": "0.1.0",
-  "description": "EdgeClaw macOS Desktop App (Electron shell + claudecodeui + claude-code-main)",
+  "name": "@pilotdeck/desktop",
+  "version": "0.1.4",
+  "description": "PilotDeck macOS Desktop App (Electron shell + claudecodeui + claude-code-main)",
   "main": "dist/main.js",
   "private": true,
   "license": "AGPL-3.0-or-later",
@@ -16,7 +16,9 @@
     "download-node": "bash scripts/download-node.sh",
     "download-bun": "bash scripts/download-bun.sh"
   },
-  "dependencies": {},
+  "dependencies": {
+    "yaml": "^2.8.3"
+  },
   "devDependencies": {
     "@electron/notarize": "^3.0.0",
     "@types/node": "^22.0.0",
@@ -24,5 +26,5 @@
     "electron-builder": "^26.0.12",
     "typescript": "^5.8.3"
   },
-  "author": "EdgeClaw Contributors"
+  "author": "PilotDeck Contributors"
 }

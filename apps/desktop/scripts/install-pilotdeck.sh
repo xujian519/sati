@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install-edgeclaw.sh — One-step EdgeClaw repair / launch helper.
+# install-pilotdeck.sh — One-step PilotDeck repair / launch helper.
 #
 # WHY THIS EXISTS
 # ---------------
@@ -10,7 +10,7 @@
 # Mechanism: the OS attaches a `com.apple.provenance` extended attribute to
 # the .app, naming the sandbox identity that wrote it to disk. Gatekeeper
 # treats sandboxed-IM provenance as low-trust and refuses to execute,
-# producing a "无法启动 EdgeClaw 应用程序" dialog that flashes once and
+# producing a "无法启动 PilotDeck 应用程序" dialog that flashes once and
 # disappears. `codesign --verify` reports valid because the signature itself
 # is fine — the rejection happens at *execution policy* level, not signature
 # level. Plain `xattr -d com.apple.quarantine` is NOT sufficient; provenance
@@ -18,16 +18,16 @@
 #
 # WHAT THIS SCRIPT DOES
 # ---------------------
-#   1. Locates EdgeClaw.app (argv[1], /Applications, ~/Downloads, ~/Desktop)
+#   1. Locates PilotDeck.app (argv[1], /Applications, ~/Downloads, ~/Desktop)
 #   2. Lists current xattrs so the user can see what's wrong
 #   3. Strips ALL xattrs (quarantine + provenance + finder + writer-id)
 #   4. Re-verifies code signature and Gatekeeper assessment
 #   5. Optionally launches the app
 #
 # Usage:
-#   bash install-edgeclaw.sh              # auto-discover
-#   bash install-edgeclaw.sh /path/to/EdgeClaw.app
-#   bash install-edgeclaw.sh --launch     # also `open` the app at the end
+#   bash install-pilotdeck.sh              # auto-discover
+#   bash install-pilotdeck.sh /path/to/PilotDeck.app
+#   bash install-pilotdeck.sh --launch     # also `open` the app at the end
 
 set -euo pipefail
 
@@ -60,10 +60,10 @@ done
 locate_app() {
   local candidates=(
     "${1:-}"
-    "/Applications/EdgeClaw.app"
-    "$HOME/Applications/EdgeClaw.app"
-    "$HOME/Downloads/EdgeClaw.app"
-    "$HOME/Desktop/EdgeClaw.app"
+    "/Applications/PilotDeck.app"
+    "$HOME/Applications/PilotDeck.app"
+    "$HOME/Downloads/PilotDeck.app"
+    "$HOME/Desktop/PilotDeck.app"
   )
   for p in "${candidates[@]}"; do
     [[ -n "$p" && -d "$p" ]] && { echo "$p"; return 0; }
@@ -71,12 +71,12 @@ locate_app() {
   return 1
 }
 
-APP="$(locate_app "$APP_ARG")" || fail "EdgeClaw.app not found.
+APP="$(locate_app "$APP_ARG")" || fail "PilotDeck.app not found.
   Pass path as the first argument, e.g.:
-    bash install-edgeclaw.sh /path/to/EdgeClaw.app
-  Or drag EdgeClaw.app into /Applications first, then re-run."
+    bash install-pilotdeck.sh /path/to/PilotDeck.app
+  Or drag PilotDeck.app into /Applications first, then re-run."
 
-printf "${BLD}EdgeClaw 安装修复工具${RST}\n"
+printf "${BLD}PilotDeck 安装修复工具${RST}\n"
 info "Target: $APP"
 
 step "1. 当前扩展属性 (xattrs)"
@@ -114,7 +114,7 @@ if codesign --verify --deep --strict "$APP" 2>/dev/null; then
   ok "签名有效 — Authority: ${AUTHORITY:-unknown}"
 else
   warn "签名验证失败 (这通常意味着 .app 在传输中损坏)"
-  warn "建议:重新从干净渠道下载 EdgeClaw-*.dmg"
+  warn "建议:重新从干净渠道下载 PilotDeck-*.dmg"
 fi
 
 step "4. Notarize ticket (stapler)"
@@ -130,7 +130,7 @@ else
   warn "Stapled ticket 缺失:"
   echo "$STAPLER_OUT" | sed 's/^/      /'
   warn "→ 这份 .app 不是最新打包出来的版本(可能用了某次 unnotarized release)"
-  warn "→ 请联系打包者拿最新 EdgeClaw-*.dmg(目前最新版本由 release.sh --signed 产出)"
+  warn "→ 请联系打包者拿最新 PilotDeck-*.dmg(目前最新版本由 release.sh --signed 产出)"
 fi
 
 step "5. Gatekeeper 评估"
@@ -149,9 +149,9 @@ else
 fi
 
 step "6. 完成"
-ok "可以正常启动 EdgeClaw 了"
+ok "可以正常启动 PilotDeck 了"
 echo
-echo "  方式 1 (Finder/Dock):  双击 ${BLD}EdgeClaw${RST}"
+echo "  方式 1 (Finder/Dock):  双击 ${BLD}PilotDeck${RST}"
 echo "  方式 2 (Terminal):     open '${APP}'"
 echo
 

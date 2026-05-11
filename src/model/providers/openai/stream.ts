@@ -134,12 +134,12 @@ export function normalizeOpenAIStreamEvent(
       events.push(...splitThinkContent(delta.content, state, raw));
     }
 
-    // OpenRouter / DeepInfra / Parasail forward reasoning-model chain-of-
-    // thought via the non-standard `delta.reasoning` field (e.g. Kimi K2.6,
-    // DeepSeek R1, Qwen QwQ). Map it to thinking_delta so PilotDeck can
-    // surface / persist the reasoning instead of silently dropping it.
-    if (typeof delta.reasoning === "string" && delta.reasoning.length > 0) {
-      events.push({ type: "thinking_delta", text: delta.reasoning, raw });
+    // Reasoning-model chain-of-thought comes in two non-standard fields:
+    //   - `delta.reasoning`         — OpenRouter / DeepInfra / Parasail
+    //   - `delta.reasoning_content` — DeepSeek native API (V4 series)
+    const reasoning = delta.reasoning ?? delta.reasoning_content;
+    if (typeof reasoning === "string" && reasoning.length > 0) {
+      events.push({ type: "thinking_delta", text: reasoning, raw });
     }
 
     // DeepSeek official API uses `reasoning_content` instead of `reasoning`.
