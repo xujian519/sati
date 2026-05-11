@@ -256,6 +256,28 @@ async function addProjectManually(projectPath, _displayName = null) {
     const absolute = path.resolve(projectPath);
     const name = createProjectId(absolute);
     rememberProjectDirectory(name, absolute);
+
+    // PolitDeck's gateway.listProjects() enumerates ~/.pilotdeck/projects/<id>/
+    // subdirectories. A freshly-added workspace has no chat session yet, so
+    // without materializing the project dir here it would not show up in
+    // sidebar refresh — gateway has nothing to list. Creating an empty
+    // directory is a cheap, idempotent way to register the project with the
+    // gateway so listProjects() surfaces it immediately after wizard close.
+    const pilotHome = resolvePilotHome(process.env);
+    const projectDir = path.join(pilotHome, 'projects', name);
+    try {
+        await fs.mkdir(projectDir, { recursive: true });
+    } catch (error) {
+        // Best-effort: if we can't create the dir, the wizard still succeeded
+        // semantically (the path exists on disk and is cached in memory).
+        // The project just won't appear in the sidebar until the user starts
+        // a chat session there.
+        console.warn(
+            `[projects] failed to materialize PolitDeck project dir for ${name}:`,
+            error?.message || error,
+        );
+    }
+
     return {
         name,
         displayName: projectDisplayName(absolute),
