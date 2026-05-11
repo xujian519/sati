@@ -1,7 +1,7 @@
 {
   "name": "@pilotdeck/desktop",
-  "version": "0.0.1",
-  "description": "PilotDeck macOS Desktop App (Electron shell + claudecodeui + claude-code-main)",
+  "version": "0.0.2",
+  "description": "PilotDeck macOS Desktop App (Electron shell + pilotdeckui + pilotdeck-main)",
   "main": "dist/main.js",
   "private": true,
   "license": "AGPL-3.0-or-later",
