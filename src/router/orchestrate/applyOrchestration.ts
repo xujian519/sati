@@ -136,9 +136,23 @@ function trimSystemPrompt(prompt: string): { text: string; preservedKeywords: st
   const preservedKeywords: string[] = [];
   const memoryLines: string[] = [];
   let inMemoryBlock = false;
+  let inTagBlock = false;
 
   for (const line of lines) {
     const lower = line.toLowerCase();
+
+    if (lower.includes("<memory-context")) {
+      inTagBlock = true;
+    }
+    if (inTagBlock) {
+      memoryLines.push(line);
+      if (lower.includes("</memory-context>")) {
+        inTagBlock = false;
+        preservedKeywords.push("memory-context-block");
+      }
+      continue;
+    }
+
     const isMemory = MEMORY_KEYWORDS.some(kw => lower.includes(kw.toLowerCase()));
     if (isMemory) {
       inMemoryBlock = true;
