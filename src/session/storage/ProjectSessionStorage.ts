@@ -29,16 +29,36 @@ export type AgentProjectSessionStorage = {
   transcript: JsonlTranscriptWriter;
 };
 
+/**
+ * Sanitize a sessionId for safe use as a single filename component.
+ *
+ * sessionKeys for non-Web channels (TUI/CLI) embed the absolute project path,
+ * e.g. `tui:project=/Users/foo/work/repo:default`. Without sanitization the
+ * raw `/` characters make `path.resolve()` treat the sessionId as multiple
+ * path segments, burying the transcript under
+ * `chats/tui:project=/Users/foo/work/repo:default.jsonl` (a deep dir tree)
+ * instead of a flat file. `listProjectSessions` then can't find these
+ * sessions in its flat `chats/` scan.
+ *
+ * We replace **only** path-separator characters (`/` and `\`) so existing
+ * keys like `web:s_<uuid>` (which legitimately use `:`) keep their
+ * on-disk filenames unchanged and stay backward compatible.
+ */
+export function sanitizeSessionIdForPath(sessionId: string): string {
+  return sessionId.replace(/[\\/]+/g, "-").replace(/^-+|-+$/g, "") || "session";
+}
+
 export function createAgentProjectSessionStorage(
   options: AgentProjectSessionStorageOptions,
 ): AgentProjectSessionStorage {
   const chatDir = getPilotProjectChatDir(options.projectRoot, options.pilotHome);
-  const transcriptPath = resolve(chatDir, `${options.sessionId}.jsonl`);
-  const toolResultsDir = resolve(chatDir, options.sessionId, "tool-results");
-  const fileHistoryDir = resolve(chatDir, options.sessionId, "file-history");
-  const subagentsDir = resolve(chatDir, options.sessionId, "subagents");
+  const safeId = sanitizeSessionIdForPath(options.sessionId);
+  const transcriptPath = resolve(chatDir, `${safeId}.jsonl`);
+  const toolResultsDir = resolve(chatDir, safeId, "tool-results");
+  const fileHistoryDir = resolve(chatDir, safeId, "file-history");
+  const subagentsDir = resolve(chatDir, safeId, "subagents");
   const subagentTranscriptPath = (subagentId: string): string =>
-    resolve(subagentsDir, `${subagentId}.jsonl`);
+    resolve(subagentsDir, `${sanitizeSessionIdForPath(subagentId)}.jsonl`);
   return {
     chatDir,
     transcriptPath,

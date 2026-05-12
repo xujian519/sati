@@ -30,7 +30,7 @@ import {
     getPilotDeckGateway,
     getPilotDeckRepoRoot,
 } from './pilotdeck-bridge.js';
-import { resolvePilotHome, createProjectId } from './utils/pilotPaths.js';
+import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from './utils/pilotPaths.js';
 import sessionManager from './sessionManager.js';
 import { applyCustomSessionNames } from './database/db.js';
 
@@ -337,22 +337,29 @@ async function deleteSession(projectName, sessionId, _options = {}) {
     const fullPath = await extractProjectDirectory(projectName);
     const pilotHome = resolvePilotHome(process.env);
     const projectId = createProjectId(fullPath);
-    const transcript = path.join(
-        pilotHome,
-        'projects',
-        projectId,
-        'chats',
-        `${sessionId}.jsonl`,
-    );
-    try {
-        await fs.unlink(transcript);
-        return true;
-    } catch (error) {
-        if (error?.code === 'ENOENT') {
-            return false;
+    // Try the sanitized filename first (current storage layout), then the
+    // raw form (legacy files written before the sanitize fix).
+    const safeId = sanitizeSessionIdForPath(sessionId);
+    const filenames = safeId === sessionId ? [sessionId] : [safeId, sessionId];
+    let removed = false;
+    for (const name of filenames) {
+        const transcript = path.join(
+            pilotHome,
+            'projects',
+            projectId,
+            'chats',
+            `${name}.jsonl`,
+        );
+        try {
+            await fs.unlink(transcript);
+            removed = true;
+        } catch (error) {
+            if (error?.code !== 'ENOENT') {
+                throw error;
+            }
         }
-        throw error;
     }
+    return removed;
 }
 
 async function deleteProject(projectName, force = false) {

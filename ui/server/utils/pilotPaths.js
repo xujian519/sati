@@ -52,3 +52,21 @@ export function createProjectId(projectRoot) {
         'project'
     );
 }
+
+/**
+ * Sanitize a sessionId for safe use as a filename component.
+ *
+ * TUI/CLI sessionKeys embed the absolute project path (e.g.
+ * `tui:project=/Users/foo/work/repo:default`). Without sanitization
+ * the raw `/` characters make `path.resolve()` treat it as multiple
+ * path segments, burying the transcript in nested dirs that
+ * `listProjectSessions` can't find.
+ *
+ * Keep in sync with `src/session/storage/ProjectSessionStorage.ts`.
+ *
+ * @param {string} sessionId Raw session key.
+ * @returns {string} Filename-safe session identifier.
+ */
+export function sanitizeSessionIdForPath(sessionId) {
+    return sessionId.replace(/[\\/]+/g, '-').replace(/^-+|-+$/g, '') || 'session';
+}

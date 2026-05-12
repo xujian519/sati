@@ -23,6 +23,7 @@ import type {
 import { listProjectSessions, readTranscript, replayTranscriptEntries, type SessionInfo } from "../../session/index.js";
 import { resolve } from "node:path";
 import { getPilotProjectChatDir } from "../../pilot/index.js";
+import { sanitizeSessionIdForPath } from "../../session/storage/ProjectSessionStorage.js";
 import type {
   WebReadSessionMessagesInput,
   WebReadSessionMessagesResult,
@@ -43,7 +44,7 @@ export async function readWebSessionMessages(
   const sessionInfo = await locateSession(input.sessionKey, options);
   const transcriptPath = resolve(
     getPilotProjectChatDir(options.projectRoot, options.pilotHome),
-    `${input.sessionKey}.jsonl`,
+    `${sanitizeSessionIdForPath(input.sessionKey)}.jsonl`,
   );
   const { entries } = await readTranscript(transcriptPath);
   const replay = replayTranscriptEntries(entries);
@@ -92,7 +93,13 @@ async function locateSession(
     projectRoot: options.projectRoot,
     pilotHome: options.pilotHome,
   });
-  return sessions.find((session) => session.sessionId === sessionKey);
+  // sessionId in SessionInfo is the on-disk filename (already sanitized);
+  // the incoming sessionKey may still be the raw form (e.g. tui:project=/foo:default).
+  // Compare against the sanitized form so locating works for both shapes.
+  const safeKey = sanitizeSessionIdForPath(sessionKey);
+  return sessions.find(
+    (session) => session.sessionId === sessionKey || session.sessionId === safeKey,
+  );
 }
 
 function parseCursor(cursor?: string): number {
