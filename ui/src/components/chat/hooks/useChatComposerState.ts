@@ -1058,8 +1058,9 @@ export function useChatComposerState({
       // four-provider runtime only honored allowedTools for the Claude
       // adapter. After the PolitDeck-only migration every provider
       // routes through the same gateway PermissionContext, so we let
-      // every provider write its grants through to localStorage and
-      // pick them up via syncPermissionRules on the next turn.
+      // every provider persist its grants to localStorage and have the
+      // pilotdeck server pick them up via the gateway PermissionRuntime
+      // on the next turn.
       return grantClaudeToolPermission(suggestion.entry);
     },
     [],
