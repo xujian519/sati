@@ -509,6 +509,20 @@ export function expandTilde(value) {
   return text;
 }
 
+export async function writeRawPilotDeckYaml(yamlObj) {
+  const validation = validatePilotDeckConfig(yamlObj);
+  if (!validation.valid) {
+    const error = new Error('Invalid PilotDeck config');
+    error.validation = validation;
+    throw error;
+  }
+  const configPath = getPilotDeckConfigPath();
+  await fsPromises.mkdir(path.dirname(configPath), { recursive: true });
+  const raw = stringifyYaml(yamlObj, { lineWidth: 0 });
+  await fsPromises.writeFile(configPath, raw, 'utf8');
+  return { configPath, raw, validation, config: validation.config };
+}
+
 export function rawYamlToMaskedString(rawYaml) {
   const obj = isRecord(rawYaml) ? rawYaml : {};
   return stringifyYaml(maskSecrets(obj), { lineWidth: 0 });
