@@ -6,8 +6,8 @@
 #   1. DMG 结构完整、可挂载
 #   2. App bundle 结构正确（4 个 Helper、Frameworks、node-bin、bun-bin、bundles）
 #   3. 代码签名通过 codesign --verify --deep --strict
-#   4. claudecodeui-bundle.tar 解开后存在 server/index.js
-#   5. claude-code-main-bundle.tar 解开后存在 src/cli/pilotdeck.ts
+#   4. pilotdeckui-bundle.tar 解开后存在 server/index.js
+#   5. pilotdeck-main-bundle.tar 解开后存在 src/cli/pilotdeck.ts
 #   6. 用打包好的 node 直接 spawn server/index.js + 访问 /health
 #
 # Usage:
@@ -87,10 +87,10 @@ RES="$APP/Contents/Resources"
                                         || fail "node-bin/node missing or not executable"
 [[ -x "$RES/bun-bin/bun" ]]             && pass "Bundled Bun present ($("$RES/bun-bin/bun" --version))" \
                                         || fail "bun-bin/bun missing or not executable"
-[[ -f "$RES/claudecodeui-bundle.tar" ]] && pass "claudecodeui-bundle.tar present ($(du -sh "$RES/claudecodeui-bundle.tar" | awk '{print $1}'))" \
-                                        || fail "claudecodeui-bundle.tar missing"
-[[ -f "$RES/claude-code-main-bundle.tar" ]] && pass "claude-code-main-bundle.tar present ($(du -sh "$RES/claude-code-main-bundle.tar" | awk '{print $1}'))" \
-                                        || fail "claude-code-main-bundle.tar missing"
+[[ -f "$RES/pilotdeckui-bundle.tar" ]] && pass "pilotdeckui-bundle.tar present ($(du -sh "$RES/pilotdeckui-bundle.tar" | awk '{print $1}'))" \
+                                        || fail "pilotdeckui-bundle.tar missing"
+[[ -f "$RES/pilotdeck-main-bundle.tar" ]] && pass "pilotdeck-main-bundle.tar present ($(du -sh "$RES/pilotdeck-main-bundle.tar" | awk '{print $1}'))" \
+                                        || fail "pilotdeck-main-bundle.tar missing"
 [[ -f "$RES/pilotdeck-memory-core-bundle.tar" ]] && pass "pilotdeck-memory-core-bundle.tar present ($(du -sh "$RES/pilotdeck-memory-core-bundle.tar" | awk '{print $1}'))" \
                                         || fail "pilotdeck-memory-core-bundle.tar missing"
 
@@ -152,12 +152,12 @@ hdr "5. Bundle extraction smoke test"
 SANDBOX="$(mktemp -d -t pilotdeck-desktop-verify.XXXXXX)"
 info "Sandbox: $SANDBOX"
 
-CCUI_DIR="$SANDBOX/claudecodeui"
+CCUI_DIR="$SANDBOX/pilotdeckui"
 mkdir -p "$CCUI_DIR"
-if tar xf "$RES/claudecodeui-bundle.tar" -C "$CCUI_DIR" 2>/tmp/pilotdeck-vrf-tar1.log; then
-  pass "claudecodeui-bundle.tar extracted ($(du -sh "$CCUI_DIR" | awk '{print $1}'))"
+if tar xf "$RES/pilotdeckui-bundle.tar" -C "$CCUI_DIR" 2>/tmp/pilotdeck-vrf-tar1.log; then
+  pass "pilotdeckui-bundle.tar extracted ($(du -sh "$CCUI_DIR" | awk '{print $1}'))"
 else
-  fail "claudecodeui tar extract failed:"; cat /tmp/pilotdeck-vrf-tar1.log
+  fail "pilotdeckui tar extract failed:"; cat /tmp/pilotdeck-vrf-tar1.log
   exit 1
 fi
 
@@ -166,12 +166,12 @@ fi
 [[ -f "$CCUI_DIR/dist/index.html" ]] && pass "dist/index.html (vite build) present" \
   || warn "dist/index.html missing (UI may not load)"
 
-CCM_DIR="$SANDBOX/claude-code-main"
+CCM_DIR="$SANDBOX/pilotdeck-main"
 mkdir -p "$CCM_DIR"
-if tar xf "$RES/claude-code-main-bundle.tar" -C "$CCM_DIR" 2>/tmp/pilotdeck-vrf-tar2.log; then
-  pass "claude-code-main-bundle.tar extracted ($(du -sh "$CCM_DIR" | awk '{print $1}'))"
+if tar xf "$RES/pilotdeck-main-bundle.tar" -C "$CCM_DIR" 2>/tmp/pilotdeck-vrf-tar2.log; then
+  pass "pilotdeck-main-bundle.tar extracted ($(du -sh "$CCM_DIR" | awk '{print $1}'))"
 else
-  fail "claude-code-main tar extract failed:"; cat /tmp/pilotdeck-vrf-tar2.log
+  fail "pilotdeck-main tar extract failed:"; cat /tmp/pilotdeck-vrf-tar2.log
   exit 1
 fi
 
@@ -192,15 +192,15 @@ fi
 [[ -f "$MEM_DIR/lib/index.js" ]] && pass "pilotdeck-memory-core/lib/index.js present" \
   || fail "pilotdeck-memory-core/lib/index.js missing"
 
-# ─────────────── claudecodeui server smoke test ───────────────
-hdr "6. claudecodeui server smoke test"
+# ─────────────── pilotdeckui server smoke test ───────────────
+hdr "6. pilotdeckui server smoke test"
 
 PORT="$(node -e 'const s=require("net").createServer();s.listen(0,()=>{console.log(s.address().port);s.close();});' 2>/dev/null || echo 28790)"
 
 # Need a structured config file to satisfy assertRequiredPilotDeckEnv()
 # Schema: models.providers.<id>.{baseUrl,apiKey}, models.entries.<id>.{provider,name}, agents.main.model
 # Bake the dynamic SERVER_PORT into runtime.serverPort because applyConfigToProcessEnv
-# overrides whatever env was set when claudecodeui boots.
+# overrides whatever env was set when pilotdeckui boots.
 mkdir -p "$SANDBOX/home/.pilotdeck"
 cat > "$SANDBOX/home/.pilotdeck/pilotdeck.yaml" <<EOF
 version: 1
@@ -226,6 +226,22 @@ memory:
 EOF
 pass "Stub pilotdeck.yaml created (serverPort=${PORT})"
 SRV_LOG="$SANDBOX/server.log"
+
+# UI server files use relative imports that resolve outside the pilotdeckui/ dir:
+#   projects.js    → ../../dist/src/pilot/index.js  (→ $SANDBOX/dist/)
+#   routes/memory.js → ../../../../edgeclaw-memory-core/lib/index.js (→ $SANDBOX/edgeclaw-memory-core/)
+# Create symlinks so these cross-bundle imports resolve in the sandbox.
+if [[ -d "$CCM_DIR/dist" ]]; then
+  ln -sfn "$CCM_DIR/dist" "$SANDBOX/dist"
+  pass "Symlinked \$SANDBOX/dist → pilotdeck-main/dist"
+fi
+if [[ -d "$MEM_DIR" ]]; then
+  ln -sfn "$MEM_DIR" "$SANDBOX/edgeclaw-memory-core"
+  # Also expose as a node_modules package so bare `import 'edgeclaw-memory-core'` resolves
+  mkdir -p "$CCM_DIR/node_modules"
+  ln -sfn "$MEM_DIR" "$CCM_DIR/node_modules/edgeclaw-memory-core"
+  pass "Symlinked \$SANDBOX/edgeclaw-memory-core → pilotdeck-memory-core"
+fi
 
 info "Spawning: node-bin/node $CCUI_DIR/server/index.js (port $PORT)"
 (
