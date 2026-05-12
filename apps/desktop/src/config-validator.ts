@@ -1,26 +1,30 @@
 /**
  * Lightweight ~/.pilotdeck/pilotdeck.yaml validator owned by the desktop shell.
  *
- * Why this lives here (not in ui/server):
- *   - We need to decide *before spawning the server* whether the config is
- *     usable. The server's load-env.js does a similar check but only after
- *     the child has already crashed — by which point the user is staring at
- *     a 60-second progress bar and an ANSI-soup error log tail.
- *   - The desktop shell can't import the server's bundled
- *     pilotdeckConfig.js at electron build time (that lives in a runtime tar
- *     extracted to ~/Library/Application Support/PilotDeck/runtime/<v>/), so
- *     we duck-type the same minimal contract that load-env.js asserts:
- *       1. there is a "main" agent model entry that resolves
- *       2. that entry's provider has a non-empty baseUrl + apiKey
- *       3. the entry has a non-empty `name` (the actual model id)
+ * Supports two schema variants:
  *
- * Failure modes we explicitly catch (the ones users hit in the wild):
- *   - File exists but is empty / "version: 1" only
- *   - File holds an old schema (no models.providers.<x>)
- *   - Provider exists but baseUrl or apiKey is empty (e.g. user deleted the
- *     value while keeping the key)
- *   - models.entries.default.name is empty
- *   - models.entries.default.provider points at a non-existent provider
+ * NEW (schemaVersion: 1):
+ *   model:
+ *     providers:
+ *       <providerName>:
+ *         url: https://...
+ *         apiKey: sk-xxx
+ *   agent:
+ *     model: <providerName>/<modelName>
+ *
+ * LEGACY (onboarding-generated):
+ *   models:
+ *     providers:
+ *       <name>:
+ *         baseUrl: https://...
+ *         apiKey: sk-xxx
+ *     entries:
+ *       default:
+ *         provider: <name>
+ *         name: <modelName>
+ *   agents:
+ *     main:
+ *       model: default
  */
 
 import * as fs from "node:fs";
@@ -36,6 +40,103 @@ function nonEmptyString(value: unknown): value is string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function validateNewSchema(parsed: Record<string, unknown>): ConfigValidationResult {
+  const missing: string[] = [];
+
+  const model = isRecord(parsed.model) ? parsed.model : {};
+  const providers = isRecord(model.providers) ? model.providers : {};
+
+  if (Object.keys(providers).length === 0) {
+    missing.push("model.providers");
+  }
+
+  const agent = isRecord(parsed.agent) ? parsed.agent : {};
+  const agentModel = nonEmptyString(agent.model) ? agent.model : "";
+
+  if (!agentModel) {
+    missing.push("agent.model");
+  }
+
+  if (agentModel && Object.keys(providers).length > 0) {
+    const slashIdx = agentModel.indexOf("/");
+    const providerName =
+      slashIdx > 0 ? agentModel.slice(0, slashIdx) : agentModel;
+    const provider = isRecord(providers[providerName])
+      ? providers[providerName]
+      : null;
+
+    if (!provider) {
+      missing.push(`model.providers.${providerName}`);
+    } else {
+      if (!nonEmptyString(provider.url)) {
+        missing.push(`model.providers.${providerName}.url`);
+      }
+      if (!nonEmptyString(provider.apiKey)) {
+        missing.push(`model.providers.${providerName}.apiKey`);
+      }
+    }
+  }
+
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      reason: `配置文件缺少以下字段：${missing.join(", ")}`,
+      missing,
+    };
+  }
+  return { ok: true };
+}
+
+function validateLegacySchema(
+  parsed: Record<string, unknown>,
+): ConfigValidationResult {
+  const missing: string[] = [];
+
+  const models = isRecord(parsed.models) ? parsed.models : {};
+  const providers = isRecord(models.providers) ? models.providers : {};
+
+  if (Object.keys(providers).length === 0) {
+    missing.push("models.providers");
+  }
+
+  const entries = isRecord(models.entries) ? models.entries : {};
+  const defaultEntry = isRecord(entries.default) ? entries.default : null;
+
+  if (!defaultEntry) {
+    missing.push("models.entries.default");
+  } else {
+    const provName = nonEmptyString(defaultEntry.provider)
+      ? defaultEntry.provider
+      : "";
+    if (!provName) {
+      missing.push("models.entries.default.provider");
+    } else {
+      const prov = isRecord(providers[provName]) ? providers[provName] : null;
+      if (!prov) {
+        missing.push(`models.providers.${provName}`);
+      } else {
+        const url = nonEmptyString(prov.baseUrl)
+          ? prov.baseUrl
+          : nonEmptyString(prov.url)
+            ? prov.url
+            : "";
+        if (!url) missing.push(`models.providers.${provName}.baseUrl`);
+        if (!nonEmptyString(prov.apiKey))
+          missing.push(`models.providers.${provName}.apiKey`);
+      }
+    }
+  }
+
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      reason: `配置文件缺少以下字段：${missing.join(", ")}`,
+      missing,
+    };
+  }
+  return { ok: true };
 }
 
 export function validatePilotDeckConfigFile(
@@ -77,50 +178,21 @@ export function validatePilotDeckConfigFile(
     return {
       ok: false,
       reason: "配置文件内容不是合法的 YAML 对象",
-      missing: ["models", "agents"],
+      missing: ["model", "agent"],
     };
   }
 
-  const agents = isRecord(parsed.agents) ? parsed.agents : {};
-  const main = isRecord(agents.main) ? agents.main : {};
-  const mainModelId = nonEmptyString(main.model) ? main.model : "default";
-
-  const models = isRecord(parsed.models) ? parsed.models : {};
-  const entries = isRecord(models.entries) ? models.entries : {};
-  const entry = isRecord(entries[mainModelId]) ? entries[mainModelId] : null;
-
-  const missing: string[] = [];
-  if (!entry) {
-    missing.push(`models.entries.${mainModelId}`);
+  // Detect schema variant: new uses `model` (singular), legacy uses `models` (plural)
+  if (isRecord(parsed.model) || isRecord(parsed.agent)) {
+    return validateNewSchema(parsed);
+  }
+  if (isRecord(parsed.models) || isRecord(parsed.agents)) {
+    return validateLegacySchema(parsed);
   }
 
-  const providers = isRecord(models.providers) ? models.providers : {};
-  const providerId =
-    entry && nonEmptyString(entry.provider) ? entry.provider : "";
-  const provider =
-    providerId && isRecord(providers[providerId]) ? providers[providerId] : null;
-
-  if (entry && !provider) {
-    missing.push(`models.providers.${providerId || "<unset>"}`);
-  }
-
-  if (entry && !nonEmptyString(entry.name)) {
-    missing.push(`models.entries.${mainModelId}.name`);
-  }
-  if (provider && !nonEmptyString(provider.baseUrl)) {
-    missing.push(`models.providers.${providerId}.baseUrl`);
-  }
-  if (provider && !nonEmptyString(provider.apiKey)) {
-    missing.push(`models.providers.${providerId}.apiKey`);
-  }
-
-  if (missing.length > 0) {
-    return {
-      ok: false,
-      reason: `配置文件缺少以下字段：${missing.join(", ")}`,
-      missing,
-    };
-  }
-
-  return { ok: true };
+  return {
+    ok: false,
+    reason: "配置文件缺少 model/agent 或 models/agents 段",
+    missing: ["model", "agent"],
+  };
 }

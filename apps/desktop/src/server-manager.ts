@@ -1,16 +1,16 @@
 /**
- * ServerManager — owns the claudecodeui Express server child process.
+ * ServerManager — owns the pilotdeckui Express server child process.
  *
  * Adapted from OpenClaw's GatewayManager (apps/electron/src/gateway-manager.ts).
  * Key differences:
- *   - Spawns `node-bin/node claudecodeui/server/index.js` (instead of entry.js gateway)
- *   - Three tarballs to extract (claudecodeui/server resolves pilotdeck-memory-core
+ *   - Spawns `node-bin/node pilotdeckui/server/index.js` (instead of entry.js gateway)
+ *   - Three tarballs to extract (pilotdeckui/server resolves pilotdeck-memory-core
  *     via `../../../pilotdeck-memory-core/lib/index.js`, so all three must be siblings):
- *       Resources/claudecodeui-bundle.tar         → Resources/claudecodeui/
- *       Resources/claude-code-main-bundle.tar     → Resources/claude-code-main/
- *       Resources/pilotdeck-memory-core-bundle.tar → Resources/pilotdeck-memory-core/
- *   - Sets BUN_BIN, CLAUDE_CODE_MAIN_DIR so the server can spawn `bun` subprocesses
- *   - claudecodeui /health responds with `{status: "ok", ...}` (not `{ok: true}`)
+ *       Resources/pilotdeckui-bundle.tar         → Resources/pilotdeckui/
+ *       Resources/pilotdeck-main-bundle.tar     → Resources/pilotdeck-main/
+ *       Resources/pilotdeck-memory-core-bundle.tar → Resources/edgeclaw-memory-core/
+ *   - Sets BUN_BIN, PILOTDECK_MAIN_DIR so the server can spawn `bun` subprocesses
+ *   - pilotdeckui /health responds with `{status: "ok", ...}` (not `{ok: true}`)
  */
 
 import { execSync, spawn, type ChildProcess } from "node:child_process";
@@ -45,7 +45,7 @@ const RESTART_BACKOFF_MS = [2000, 4000, 8000] as const;
 // answer; 16k leaves headroom without risking provider rejections (MiniMax
 // caps at ~64k, OpenAI-compatible Chat caps at 32k for most providers).
 //
-// User can override via CLAUDE_CODE_MAX_OUTPUT_TOKENS env or
+// User can override via PILOTDECK_MAX_OUTPUT_TOKENS env or
 // agents.main.params.maxOutputTokens in ~/.pilotdeck/pilotdeck.yaml (the latter is
 // wired up in ui/server/services/pilotdeckConfig.js → buildRuntimeEnv).
 const REASONING_FRIENDLY_MAX_OUTPUT_TOKENS = "16000";
@@ -255,7 +255,7 @@ export type ServerManagerOptions = {
    */
   dev?: boolean;
   /**
-   * Repo root (the parent of `claudecodeui/` and `claude-code-main/`).
+   * Repo root (the parent of `pilotdeckui/` and `pilotdeck-main/`).
    * Required when `dev: true`.
    */
   devRepoRoot?: string;
@@ -279,7 +279,7 @@ export type ServerManagerEvents = {
    * first-launch tarball extraction. Strings are user-facing Chinese
    * copy — keep them short (≤ 24 chars), end-state-shaped, and
    * deliberately *abstracted* away from internal bundle names: users
-   * shouldn't see "claudecodeui" or "claude-code-main", they should see
+   * shouldn't see "pilotdeckui" or "pilotdeck-main", they should see
    * "正在解压应用资源 (1/3)" etc. The internal labels are mapped at the
    * resolvePaths() call site.
    */
@@ -410,7 +410,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     bunBin: string;
     serverEntry: string;
     serverCwd: string;
-    claudeCodeMainDir: string;
+    pilotDeckMainDir: string;
   }> {
     if (this.dev) {
       const root = this.devRepoRoot;
@@ -433,9 +433,9 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
           "bun-bin",
           "bun",
         ),
-        serverEntry: path.join(root, "claudecodeui", "server", "index.js"),
-        serverCwd: path.join(root, "claudecodeui"),
-        claudeCodeMainDir: path.join(root, "claude-code-main"),
+        serverEntry: path.join(root, "pilotdeckui", "server", "index.js"),
+        serverCwd: path.join(root, "pilotdeckui"),
+        pilotDeckMainDir: path.join(root, "pilotdeck-main"),
       };
     }
     const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string })
@@ -468,44 +468,74 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     // background.
     //
     // Progress labels are intentionally generic ("应用资源 (N/3)") rather
-    // than naming the internal bundle (memory-core / claudecodeui /
-    // claude-code-main) — those names mean nothing to end users and the
+    // than naming the internal bundle (memory-core / pilotdeckui /
+    // pilotdeck-main) — those names mean nothing to end users and the
     // (N/3) index gives enough sense of "how many steps left".
     await this.ensureBundleExtracted(
       resources,
       runtimeBaseDir,
       "pilotdeck-memory-core-bundle.tar",
-      "pilotdeck-memory-core",
+      "edgeclaw-memory-core",
       "正在解压应用资源 (1/3)",
     );
-    const claudeCodeUiDir = await this.ensureBundleExtracted(
+    const pilotDeckUiDir = await this.ensureBundleExtracted(
       resources,
       runtimeBaseDir,
-      "claudecodeui-bundle.tar",
-      "claudecodeui",
+      "pilotdeckui-bundle.tar",
+      "pilotdeckui",
       "正在解压应用资源 (2/3)",
     );
-    const claudeCodeMainDir = await this.ensureBundleExtracted(
+    const pilotDeckMainDir = await this.ensureBundleExtracted(
       resources,
       runtimeBaseDir,
-      "claude-code-main-bundle.tar",
-      "claude-code-main",
+      "pilotdeck-main-bundle.tar",
+      "pilotdeck-main",
       "正在解压应用资源 (3/3)",
     );
+
+    // ui/server/ files import compiled JS via relative paths like
+    // `../../dist/src/pilot/index.js`. From pilotdeckui/server/ that
+    // resolves to <runtimeBaseDir>/dist/src/..., but the actual dist/
+    // tree lives inside <runtimeBaseDir>/pilotdeck-main/dist/. A symlink
+    // bridges the gap so all ESM resolve calls succeed at runtime.
+    const distLink = path.join(runtimeBaseDir, "dist");
+    const distTarget = path.join(pilotDeckMainDir, "dist");
+    if (fsSync.existsSync(distTarget) && !fsSync.existsSync(distLink)) {
+      fsSync.symlinkSync(distTarget, distLink);
+    }
+
+    // edgeclaw-memory-core is a file: dependency in the repo's package.json.
+    // The release tar excludes the top-level edgeclaw-memory-core/ (it has
+    // its own bundle), which also strips the node_modules/ symlink.
+    // Compiled code does `import ... from "edgeclaw-memory-core"` (bare
+    // specifier), so Node must find it under pilotdeck-main/node_modules/.
+    const memNodeModLink = path.join(
+      pilotDeckMainDir,
+      "node_modules",
+      "edgeclaw-memory-core",
+    );
+    const memCoreDir = path.join(runtimeBaseDir, "edgeclaw-memory-core");
+    if (
+      fsSync.existsSync(memCoreDir) &&
+      !fsSync.existsSync(memNodeModLink)
+    ) {
+      fsSync.symlinkSync(memCoreDir, memNodeModLink);
+    }
+
     return {
       // Native binaries stay under the read-only Resources/ — no need to copy
       // them out (they're already executable + signed in place).
       nodeBin: path.join(resources, "node-bin", "node"),
       bunBin: path.join(resources, "bun-bin", "bun"),
-      serverEntry: path.join(claudeCodeUiDir, "server", "index.js"),
-      serverCwd: claudeCodeUiDir,
-      claudeCodeMainDir,
+      serverEntry: path.join(pilotDeckUiDir, "server", "index.js"),
+      serverCwd: pilotDeckUiDir,
+      pilotDeckMainDir,
     };
   }
 
   // ───────────────────────── Orphan-process cleanup ───────────────────────
   //
-  // The claudecodeui server spawns a Bun "cron daemon" as a *detached* sibling
+  // The pilotdeckui server spawns a Bun "cron daemon" as a *detached* sibling
   // (so multiple UI servers across different windows can share state) AND a
   // Bun "proxy" child that listens on PROXY_PORT. Neither is automatically
   // killed when our top-level Node child dies; both can leak across app
@@ -733,14 +763,14 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     await this.cleanupOrphanRuntimeProcesses();
 
     const chosenPort = await pickAvailablePort();
-    // NOTE: proxy port is intentionally NOT overridden here. claudecodeui
-    // spawns proxy.ts as a subprocess (in claude-code-main) which loads its
+    // NOTE: proxy port is intentionally NOT overridden here. pilotdeckui
+    // spawns proxy.ts as a subprocess (in pilotdeck-main) which loads its
     // own config from ~/.pilotdeck/pilotdeck.yaml. If we set PILOTDECK_PROXY_PORT
     // here, the parent server waits on the new port but the spawned proxy.ts
     // still binds runtime.proxyPort from yaml → mismatch. Leave proxy port
     // to YAML so parent + child agree.
     this.emit("progress", "配置运行环境…");
-    const { nodeBin, bunBin, serverEntry, serverCwd, claudeCodeMainDir } =
+    const { nodeBin, bunBin, serverEntry, serverCwd, pilotDeckMainDir } =
       await this.resolvePaths();
 
     if (!fsSync.existsSync(nodeBin)) {
@@ -756,12 +786,12 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       FORCE_COLOR: "0",
       SERVER_PORT: String(chosenPort),
       // Force loopback regardless of what runtime.host says in YAML.
-      // claudecodeui's buildRuntimeEnv now respects pre-set env vars.
+      // pilotdeckui's buildRuntimeEnv now respects pre-set env vars.
       HOST: "127.0.0.1",
-      // Ensure spawned `bun` subprocess (claude-code-main cli.tsx) finds the bundled bun
+      // Ensure spawned `bun` subprocess (pilotdeck-main cli.tsx) finds the bundled bun
       BUN_BIN: bunBin,
-      // Tell claudecodeui where claude-code-main lives
-      CLAUDE_CODE_MAIN_DIR: claudeCodeMainDir,
+      // Tell pilotdeckui where pilotdeck-main lives
+      PILOTDECK_MAIN_DIR: pilotDeckMainDir,
       // Prepend bundled Node + Bun to PATH so any indirect lookups resolve our binaries
       PATH: `${path.dirname(nodeBin)}:${path.dirname(bunBin)}:${
         process.env.PATH ?? ""
@@ -771,8 +801,8 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       // agents.main.params.maxOutputTokens) wins via the spread above… except
       // process.env doesn't normally carry this var, so this default applies
       // unless overridden. See REASONING_FRIENDLY_MAX_OUTPUT_TOKENS docstring.
-      CLAUDE_CODE_MAX_OUTPUT_TOKENS:
-        process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS ??
+      PILOTDECK_MAX_OUTPUT_TOKENS:
+        process.env.PILOTDECK_MAX_OUTPUT_TOKENS ??
         REASONING_FRIENDLY_MAX_OUTPUT_TOKENS,
     };
 

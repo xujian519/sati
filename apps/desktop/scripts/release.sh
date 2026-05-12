@@ -10,7 +10,7 @@
 #   bash scripts/release.sh --ad-hoc        # force ad-hoc (local test)
 #   bash scripts/release.sh --signed        # require Developer ID; fail if missing
 #   bash scripts/release.sh --skip-notarize # signed but no notarization
-#   bash scripts/release.sh --skip-build    # reuse existing claudecodeui/dist
+#   bash scripts/release.sh --skip-build    # reuse existing pilotdeckui/dist
 #   bash scripts/release.sh --skip-verify   # skip post-build verification
 #   bash scripts/release.sh --skip-publish  # skip GitHub Release upload
 #
@@ -32,17 +32,17 @@ NODE_BIN="${RESOURCES}/node-bin/node"
 BUN_BIN="${RESOURCES}/bun-bin/bun"
 
 # Source tree path: this repo names the UI dir `ui/`; spike originally used
-# `claudecodeui/`. Bundle filename + extracted runtime dir name remain
-# `claudecodeui` because server-manager.ts / electron-builder.yml hardcode it.
-CLAUDECODEUI_DIR="${REPO_ROOT}/ui"
-# After the PilotDeck refactor, the "claude-code-main" code lives at repo root
+# `pilotdeckui/`. Bundle filename + extracted runtime dir name remain
+# `pilotdeckui` because server-manager.ts / electron-builder.yml hardcode it.
+PILOTDECKUI_DIR="${REPO_ROOT}/ui"
+# After the PilotDeck refactor, the "pilotdeck-main" code lives at repo root
 # (src/, scripts/, node_modules/, package.json). The bundle tar name and runtime
-# extraction dir remain "claude-code-main" for server-manager.ts compatibility.
-CLAUDE_CODE_MAIN_DIR="${REPO_ROOT}"
+# extraction dir remain "pilotdeck-main" for server-manager.ts compatibility.
+PILOTDECK_MAIN_DIR="${REPO_ROOT}"
 MEMORY_CORE_DIR="${REPO_ROOT}/edgeclaw-memory-core"
 
-CCUI_BUNDLE="${RESOURCES}/claudecodeui-bundle.tar"
-CCM_BUNDLE="${RESOURCES}/claude-code-main-bundle.tar"
+PDUI_BUNDLE="${RESOURCES}/pilotdeckui-bundle.tar"
+PDM_BUNDLE="${RESOURCES}/pilotdeck-main-bundle.tar"
 MEM_BUNDLE="${RESOURCES}/pilotdeck-memory-core-bundle.tar"
 
 # ─────────────── Args ───────────────
@@ -186,8 +186,8 @@ fi
 [[ -f "$ENTITLEMENTS" ]] || fail "Missing entitlements: ${ENTITLEMENTS}"
 ok "Entitlements: $(basename "$ENTITLEMENTS")"
 
-[[ -d "$CLAUDECODEUI_DIR" ]] || fail "Missing claudecodeui at ${CLAUDECODEUI_DIR}"
-[[ -d "$CLAUDE_CODE_MAIN_DIR/src" ]] || fail "Missing src/ at ${CLAUDE_CODE_MAIN_DIR}"
+[[ -d "$PILOTDECKUI_DIR" ]] || fail "Missing pilotdeckui at ${PILOTDECKUI_DIR}"
+[[ -d "$PILOTDECK_MAIN_DIR/src" ]] || fail "Missing src/ at ${PILOTDECK_MAIN_DIR}"
 [[ -d "$MEMORY_CORE_DIR" ]] || fail "Missing memory-core at ${MEMORY_CORE_DIR}"
 [[ -f "${MEMORY_CORE_DIR}/lib/index.js" ]] \
   || fail "${MEMORY_CORE_DIR}/lib/index.js missing — run: (cd ${MEMORY_CORE_DIR} && npm run build)"
@@ -227,20 +227,20 @@ EOF
 ok "build-info.json: v${VERSION} (${GIT_SHA}) @ ${BUILD_DATE} [${MODE}]"
 
 # ============================================================================
-step "Build claudecodeui (vite)"
+step "Build pilotdeckui (vite)"
 # ============================================================================
 
 if [[ "$SKIP_BUILD" == "1" ]]; then
-  if [[ -d "${CLAUDECODEUI_DIR}/dist" ]]; then
-    warn "Skipped (--skip-build). Reusing existing claudecodeui/dist/"
+  if [[ -d "${PILOTDECKUI_DIR}/dist" ]]; then
+    warn "Skipped (--skip-build). Reusing existing pilotdeckui/dist/"
   else
-    fail "Cannot --skip-build: claudecodeui/dist/ missing."
+    fail "Cannot --skip-build: pilotdeckui/dist/ missing."
   fi
 else
   info "npm run build (vite)…"
-  (cd "$CLAUDECODEUI_DIR" && npm run build) >/tmp/pilotdeck-ccui-build.log 2>&1 \
-    || { tail -40 /tmp/pilotdeck-ccui-build.log; fail "claudecodeui build failed (see /tmp/pilotdeck-ccui-build.log)"; }
-  ok "claudecodeui built"
+  (cd "$PILOTDECKUI_DIR" && npm run build) >/tmp/pilotdeck-pdui-build.log 2>&1 \
+    || { tail -40 /tmp/pilotdeck-pdui-build.log; fail "pilotdeckui build failed (see /tmp/pilotdeck-pdui-build.log)"; }
+  ok "pilotdeckui built"
 fi
 
 # ============================================================================
@@ -256,7 +256,7 @@ if [[ "$MODE" == "signed" ]]; then
   #  - native node addons:  *.node, *.dylib, *.so, *.bare, spawn-helper
   #  - vendored ripgrep:    rg under any *darwin* path
   #    (matches arm64-darwin/, x64-darwin/, aarch64-apple-darwin/)
-  # Search roots include claude-code-main/src/ because some packages vendor
+  # Search roots include pilotdeck-main/src/ because some packages vendor
   # binaries outside node_modules (e.g. src/utils/vendor/ripgrep/arm64-darwin/rg).
   while IFS= read -r -d '' f; do
     if codesign --force --sign "$IDENTITY" --timestamp --options runtime \
@@ -266,9 +266,9 @@ if [[ "$MODE" == "signed" ]]; then
       sign_fail=$((sign_fail+1))
     fi
   done < <(find \
-    "${CLAUDECODEUI_DIR}/node_modules" \
-    "${CLAUDE_CODE_MAIN_DIR}/node_modules" \
-    "${CLAUDE_CODE_MAIN_DIR}/src" \
+    "${PILOTDECKUI_DIR}/node_modules" \
+    "${PILOTDECK_MAIN_DIR}/node_modules" \
+    "${PILOTDECK_MAIN_DIR}/src" \
     -type f \
     \( -name "*.node" -o -name "*.dylib" -o -name "*.so" \
        -o -name "*.bare" -o -name "spawn-helper" \
@@ -288,12 +288,32 @@ else
 fi
 
 # ============================================================================
-step "Create bundles (claudecodeui + claude-code-main)"
+step "Build pilotdeck-main (TypeScript → dist/)"
+# ============================================================================
+# ui/server/ imports compiled JS from ../../dist/src/ (e.g. pilot/index.js,
+# cli/createLocalGateway.js). The dist/ tree is NOT checked in — it must be
+# rebuilt before bundling so the packaged app can resolve those imports.
+
+if [[ "$SKIP_BUILD" == "1" ]]; then
+  if [[ -d "${PILOTDECK_MAIN_DIR}/dist/src" ]]; then
+    warn "Skipped (--skip-build). Reusing existing dist/src/"
+  else
+    fail "Cannot --skip-build: dist/src/ missing. Run: (cd ${PILOTDECK_MAIN_DIR} && npm run build)"
+  fi
+else
+  info "npm run build (tsc)…"
+  (cd "$PILOTDECK_MAIN_DIR" && npm run build) >/tmp/pilotdeck-main-build.log 2>&1 \
+    || { tail -40 /tmp/pilotdeck-main-build.log; fail "pilotdeck-main build failed (see /tmp/pilotdeck-main-build.log)"; }
+  ok "pilotdeck-main built (dist/src/)"
+fi
+
+# ============================================================================
+step "Create bundles (pilotdeckui + pilotdeck-main)"
 # ============================================================================
 
 # NODE_MODULES_EXCLUDES: aggressively trim node_modules — these dirs/files are
 # never imported at runtime, so safe to drop. Patterns are scoped to node_modules
-# to avoid breaking source trees that DO ship .md / examples (e.g. claude-code-main
+# to avoid breaking source trees that DO ship .md / examples (e.g. pilotdeck-main
 # bundles skill .md files via Bun text imports → see src/skills/bundled/*Content.ts).
 NODE_MODULES_EXCLUDES=(
   --exclude='*.map'
@@ -323,45 +343,46 @@ NODE_MODULES_EXCLUDES=(
   --exclude='node_modules/**/*.md'
 )
 
-# claudecodeui bundle: server/, dist/, shared/, scripts/, package.json, node_modules
-# Note: claudecodeui server source is JS, no runtime .md imports → safe to also
+# pilotdeckui bundle: server/, dist/, shared/, scripts/, package.json, node_modules
+# Note: pilotdeckui server source is JS, no runtime .md imports → safe to also
 # strip top-level test/__tests__ dirs.
-rm -f "$CCUI_BUNDLE"
-(cd "$CLAUDECODEUI_DIR" && tar cf "$CCUI_BUNDLE" \
+rm -f "$PDUI_BUNDLE"
+(cd "$PILOTDECKUI_DIR" && tar cf "$PDUI_BUNDLE" \
   "${NODE_MODULES_EXCLUDES[@]}" \
   --exclude='**/__tests__' \
   --exclude='**/*.test.js' \
   package.json server/ shared/ dist/ scripts/ node_modules/) \
-  || fail "claudecodeui tar creation failed"
-CCUI_MB=$(du -sm "$CCUI_BUNDLE" | awk '{print $1}')
-ok "claudecodeui bundle: ${CCUI_MB}MB → $(basename "$CCUI_BUNDLE")"
+  || fail "pilotdeckui tar creation failed"
+PDUI_MB=$(du -sm "$PDUI_BUNDLE" | awk '{print $1}')
+ok "pilotdeckui bundle: ${PDUI_MB}MB → $(basename "$PDUI_BUNDLE")"
 
-# claude-code-main bundle: after the PilotDeck refactor, the "main" code lives at
-# repo root. We bundle src/, scripts/, node_modules/, and any optional top-level
-# files. gateway/ was merged into src/gateway/ — include it if it exists as a
-# top-level dir, otherwise omit.
-rm -f "$CCM_BUNDLE"
-CCM_ITEMS=(src/ scripts/ node_modules/)
-[[ -d "${CLAUDE_CODE_MAIN_DIR}/gateway" ]] && CCM_ITEMS+=(gateway/)
+# pilotdeck-main bundle: after the PilotDeck refactor, the "main" code lives at
+# repo root. We bundle src/, dist/src/ (compiled JS — required by ui/server/
+# imports like ../../dist/src/pilot/index.js), scripts/, node_modules/, and any
+# optional top-level files. gateway/ was merged into src/gateway/ — include it
+# if it exists as a top-level dir, otherwise omit.
+rm -f "$PDM_BUNDLE"
+PDM_ITEMS=(src/ dist/src/ scripts/ node_modules/)
+[[ -d "${PILOTDECK_MAIN_DIR}/gateway" ]] && PDM_ITEMS+=(gateway/)
 for f in package.json bunfig.toml preload.ts proxy.ts router.ts \
          pilotdeck-config.ts tsconfig.json; do
-  [[ -f "${CLAUDE_CODE_MAIN_DIR}/$f" ]] && CCM_ITEMS+=("$f")
+  [[ -f "${PILOTDECK_MAIN_DIR}/$f" ]] && PDM_ITEMS+=("$f")
 done
-(cd "$CLAUDE_CODE_MAIN_DIR" && tar cf "$CCM_BUNDLE" \
+(cd "$PILOTDECK_MAIN_DIR" && tar cf "$PDM_BUNDLE" \
   "${NODE_MODULES_EXCLUDES[@]}" \
   --exclude='apps' --exclude='ui' --exclude='old_ui' \
   --exclude='edgeclaw-memory-core' --exclude='docs' --exclude='tests' \
-  --exclude='third-party' --exclude='dist' --exclude='.git' \
-  --exclude='config' --exclude='packages' \
-  "${CCM_ITEMS[@]}") \
-  || fail "claude-code-main tar creation failed"
-CCM_MB=$(du -sm "$CCM_BUNDLE" | awk '{print $1}')
-ok "claude-code-main bundle: ${CCM_MB}MB → $(basename "$CCM_BUNDLE")"
+  --exclude='third-party' --exclude='dist/tests' --exclude='dist/scripts' \
+  --exclude='.git' --exclude='packages' \
+  "${PDM_ITEMS[@]}") \
+  || fail "pilotdeck-main tar creation failed"
+PDM_MB=$(du -sm "$PDM_BUNDLE" | awk '{print $1}')
+ok "pilotdeck-main bundle: ${PDM_MB}MB → $(basename "$PDM_BUNDLE")"
 
 # pilotdeck-memory-core bundle: package.json + lib/ (prebuilt JS) + ui-source/
-# (UI dashboard served by claudecodeui /memory-dashboard route — without it the
+# (UI dashboard served by pilotdeckui /memory-dashboard route — without it the
 #  iframe falls through to the SPA index and recursively renders the whole app).
-# 注意：claudecodeui/server 和 claude-code-main 都通过 ../../../pilotdeck-memory-core 找它
+# 注意：pilotdeckui/server 和 pilotdeck-main 都通过 ../../../pilotdeck-memory-core 找它
 rm -f "$MEM_BUNDLE"
 [[ -f "${MEMORY_CORE_DIR}/ui-source/index.html" ]] \
   || fail "pilotdeck-memory-core/ui-source/index.html missing — required for /memory-dashboard"
