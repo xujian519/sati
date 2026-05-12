@@ -460,7 +460,7 @@
     }
   },
   "edgeClawConfig": {
-    "loading": "正在加载 PolitDeck 配置...",
+    "loading": "正在加载 PilotDeck 配置...",
     "header": {
       "configFile": "配置文件",
       "configPreview": "配置预览",
@@ -494,7 +494,7 @@
       },
       "memory": {
         "label": "记忆",
-        "description": "PolitDeck 记忆服务"
+        "description": "PilotDeck 记忆服务"
       },
       "customEnv": {
         "label": "环境变量",

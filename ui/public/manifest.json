@@ -1,7 +1,7 @@
 {
-  "name": "PolitDeck",
-  "short_name": "PolitDeck",
-  "description": "PolitDeck — agent-driven development workspace",
+  "name": "PilotDeck",
+  "short_name": "PilotDeck",
+  "description": "PilotDeck — agent-driven development workspace",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

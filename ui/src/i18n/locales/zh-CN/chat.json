@@ -275,8 +275,8 @@
     "nextTaskPrompt": "开始下一个任务"
   },
   "composer": {
-    "placeholder": "告诉 PolitDeck 你想完成什么…",
-    "welcomePlaceholder": "告诉 PolitDeck 你想完成什么…"
+    "placeholder": "告诉 PilotDeck 你想完成什么…",
+    "welcomePlaceholder": "告诉 PilotDeck 你想完成什么…"
   },
   "welcome": {
     "greetingWithProject": "今天想做点什么？",

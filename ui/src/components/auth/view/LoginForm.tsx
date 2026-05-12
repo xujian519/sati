@@ -58,7 +58,7 @@ export default function LoginForm() {
     <AuthScreenLayout
       title={t('login.title')}
       description={t('login.description')}
-      footerText="Enter your credentials to access PolitDeck"
+      footerText="Enter your credentials to access PilotDeck"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <AuthInputField

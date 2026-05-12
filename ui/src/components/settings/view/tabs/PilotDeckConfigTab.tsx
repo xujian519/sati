@@ -785,7 +785,7 @@ function MemorySection({ config, onChange }: { config: PilotDeckConfig; onChange
     ...entryIds.map((id) => ({ value: id, label: id })),
   ];
   return (
-    <SettingsSection title="Memory" description="PolitDeck memory service — embeddings & summarisation pipelines.">
+    <SettingsSection title="Memory" description="PilotDeck memory service — embeddings & summarisation pipelines.">
       <SettingsCard>
         <SettingsRow label="Enabled" description="Toggles the memory service. Disabled by default.">
           <SettingsToggle

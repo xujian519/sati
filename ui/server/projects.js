@@ -204,7 +204,7 @@ async function getProjects(progressCallback = null) {
     // Virtual "general" workspace — a non-project chat space rooted at
     // ~/.pilotdeck. SidebarV2 looks for a project whose `name` or
     // `displayName` equals 'general' to populate the dedicated "General"
-    // toggle section. PolitDeck's gateway.listProjects() only returns
+    // toggle section. PilotDeck's gateway.listProjects() only returns
     // real project directories, so we synthesize one here. New chats
     // started from the General section use this cwd; sessions are
     // sourced from the same backend as any other project.
@@ -262,7 +262,7 @@ async function getSessions(projectName, limit = 5, offset = 0) {
 }
 
 /**
- * Resolve a `projectName` (encoded form like `-Users-miwi-PolitDeck`,
+ * Resolve a `projectName` (encoded form like `-Users-miwi-PilotDeck`,
  * a basename, or an already-absolute path) to the absolute project root.
  * Falls back to consulting the directory cache populated by
  * `getProjects()` so worktree-aware paths resolve correctly.
@@ -296,12 +296,12 @@ async function addProjectManually(projectPath, _displayName = null) {
     const name = createProjectId(absolute);
     rememberProjectDirectory(name, absolute);
 
-    // Materialize a PolitDeck project directory and drop a `.cwd` marker
+    // Materialize a PilotDeck project directory and drop a `.cwd` marker
     // recording the real absolute path. We need the marker because
     // createProjectId() encodes both '/' and literal '-' to '-', so the
     // encoded id alone is ambiguous (e.g. /Users/me/claude-code and
     // /Users/me/claude/code share the id "Users-me-claude-code").
-    // PolitDeck's listWebProjects() heuristically tries each `-` as a
+    // PilotDeck's listWebProjects() heuristically tries each `-` as a
     // path separator and drops the project when no decode matches an
     // existing directory — which would silently lose workspaces whose
     // real path contains a dash. getProjects() reads `.cwd` to backfill
@@ -313,7 +313,7 @@ async function addProjectManually(projectPath, _displayName = null) {
         await fs.writeFile(path.join(projectDir, '.cwd'), absolute, 'utf8');
     } catch (error) {
         console.warn(
-            `[projects] failed to materialize PolitDeck project dir for ${name}:`,
+            `[projects] failed to materialize PilotDeck project dir for ${name}:`,
             error?.message || error,
         );
     }

@@ -82,10 +82,10 @@ export default function SetupForm() {
 
   return (
     <AuthScreenLayout
-      title="Welcome to PolitDeck"
+      title="Welcome to PilotDeck"
       description="Set up your account to get started"
       footerText="This is a single-user system. Only one account can be created."
-      logo={<img src="/logo.svg" alt="PolitDeck" className="h-16 w-16" />}
+      logo={<img src="/logo.svg" alt="PilotDeck" className="h-16 w-16" />}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <AuthInputField

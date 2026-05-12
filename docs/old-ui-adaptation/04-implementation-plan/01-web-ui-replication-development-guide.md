@@ -1,6 +1,6 @@
 # Web UI 复刻开发文档
 
-本文为 `/Users/miwi/PolitDeck/ui` Web UI 复刻 `old_ui` 前端能力的实施指南。后端运行时锁定为 `/Users/miwi/PolitDeck/src/gateway` + 少量补齐的 Web-facing contracts，禁止 React 直接依赖 `src/agent` / `src/tool` / `src/session/transcript` 内部或旧 Express provider 后端。
+本文为 `/Users/miwi/PilotDeck/ui` Web UI 复刻 `old_ui` 前端能力的实施指南。后端运行时锁定为 `/Users/miwi/PilotDeck/src/gateway` + 少量补齐的 Web-facing contracts，禁止 React 直接依赖 `src/agent` / `src/tool` / `src/session/transcript` 内部或旧 Express provider 后端。
 
 阅读顺序：先 `01-old-ui-current-state/`，再 `02-src-adaptation-plan/`，最后本文 + `02-web-ui-parity-test-guide.md`。
 

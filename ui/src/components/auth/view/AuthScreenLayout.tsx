@@ -50,7 +50,7 @@ export default function AuthScreenLayout({
                 rel="noopener noreferrer"
                 className="text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground"
               >
-                PolitDeck is open source
+                PilotDeck is open source
               </a>
             </div>
           )}

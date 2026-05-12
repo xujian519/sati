@@ -125,7 +125,7 @@ function buildPushBody(event) {
   const message = CODE_MAP[event.code] || 'You have a new notification';
 
   return {
-    title: sessionName || 'PolitDeck',
+    title: sessionName || 'PilotDeck',
     body: `${providerLabel}: ${message}`,
     data: {
       sessionId: event.sessionId || null,
