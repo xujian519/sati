@@ -509,6 +509,11 @@ export function expandTilde(value) {
   return text;
 }
 
+export function rawYamlToMaskedString(rawYaml) {
+  const obj = isRecord(rawYaml) ? rawYaml : {};
+  return stringifyYaml(maskSecrets(obj), { lineWidth: 0 });
+}
+
 export function configToYaml(config) {
   const normalized = normalizePilotDeckConfig(config);
   const yamlShape = adaptInternalToPilotDeckYaml(normalized, {});
