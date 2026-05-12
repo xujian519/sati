@@ -482,7 +482,7 @@ function ensureRouterConfig(
     scenarios: {
       default: { id: defaultSelection.id, provider: defaultSelection.provider, model: defaultSelection.model },
     },
-    zeroUsageRetry: { enabled: true, maxAttempts: 5 },
+    zeroUsageRetry: { enabled: true, maxAttempts: 2 },
     stats: { enabled: true },
   };
 }

@@ -3,6 +3,9 @@ import {
   DEFAULT_ALLOWED_TOOLS,
   DEFAULT_BLOCKED_TOOLS,
   DEFAULT_JUDGE_TIMEOUT_MS,
+  DEFAULT_TIER_DESCRIPTIONS,
+  DEFAULT_TIER_NAME,
+  DEFAULT_TIER_RULES,
   DEFAULT_TRIGGER_TIERS,
   DEFAULT_ZERO_USAGE_MAX_ATTEMPTS,
   resolveProviderRef,
@@ -272,14 +275,18 @@ function parseTokenSaver(
     }
     tiers[name] = {
       model: ref,
-      description: typeof body.description === "string" ? body.description : undefined,
+      description: typeof body.description === "string"
+        ? body.description
+        : DEFAULT_TIER_DESCRIPTIONS[name],
     };
   }
   if (Object.keys(tiers).length === 0) {
     return undefined;
   }
 
-  let defaultTier = typeof raw.defaultTier === "string" ? raw.defaultTier : Object.keys(tiers)[0]!;
+  let defaultTier = typeof raw.defaultTier === "string"
+    ? raw.defaultTier
+    : (tiers[DEFAULT_TIER_NAME] ? DEFAULT_TIER_NAME : Object.keys(tiers)[0]!);
   if (!tiers[defaultTier]) {
     diagnostics.push({
       code: "ROUTER_TOKEN_SAVER_DEFAULT_TIER_UNKNOWN",
@@ -302,6 +309,8 @@ function parseTokenSaver(
         message: "router.tokenSaver.rules must be an array of strings.",
       });
     }
+  } else {
+    rules = [...DEFAULT_TIER_RULES];
   }
 
   let subagent: RouterTokenSaverConfig["subagent"];
