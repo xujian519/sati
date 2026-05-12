@@ -29,6 +29,18 @@ export function formatToolInputForDisplay(input: unknown) {
   }
 }
 
+// Backend `PilotDeckToolErrorCode` values that map to "user can fix this by
+// granting a permission rule". Anything else (e.g. `tool_execution_failed`,
+// `file_not_found`, `tool_timeout`) is a real failure unrelated to ACL state,
+// and surfacing the "Add to Allowed Tools" CTA for those cases is actively
+// misleading — clicking it adds the rule, but the next retry still fails
+// because the original error was not about permissions.
+const PERMISSION_ERROR_CODES = new Set<string>([
+  'permission_denied',
+  'permission_required',
+  'permission_cancelled',
+]);
+
 export function getPilotDeckPermissionSuggestion(
   message: ChatMessage | null | undefined,
   _provider: string,
@@ -38,6 +50,13 @@ export function getPilotDeckPermissionSuggestion(
   // PermissionContext, so the "Permission added" affordance is useful
   // regardless of which model is selected.
   if (!message?.toolResult?.isError) return null;
+
+  // Only offer the rule-grant affordance for genuine permission failures.
+  // For historical / replayed messages without an `errorCode` we fall back to
+  // the legacy behaviour (showing the suggestion) so users on older
+  // transcripts still see it.
+  const errorCode = message.toolResult.errorCode;
+  if (errorCode && !PERMISSION_ERROR_CODES.has(errorCode)) return null;
 
   const toolName = message?.toolName;
   const entry = buildClaudeToolPermissionEntry(toolName, message.toolInput);

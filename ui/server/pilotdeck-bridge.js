@@ -250,6 +250,12 @@ function gatewayEventToFrames(event, sessionId, provider) {
                     toolId: event.toolCallId,
                     content: event.resultPreview ?? '',
                     isError: !event.ok,
+                    // errorCode lets the UI distinguish permission denials
+                    // (`permission_denied` / `permission_required`) from
+                    // ordinary execution failures (`tool_execution_failed`,
+                    // `file_not_found`, …) so the "Add to Allowed Tools"
+                    // affordance only fires for the former.
+                    ...(event.errorCode && { errorCode: event.errorCode }),
                 }),
             ];
         case 'permission_request':

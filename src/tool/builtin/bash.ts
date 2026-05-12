@@ -76,7 +76,15 @@ export function createBashTool(options?: CreateBashToolOptions): PilotDeckToolDe
       }
 
       if (result.exitCode !== 0) {
-        throw new PilotDeckToolRuntimeError("tool_execution_failed", "Shell command failed", {
+        // Surface stdout/stderr in the message body so the model (and the UI
+        // tool-result preview) can reason about WHY the command failed.
+        // Without this, every non-zero exit collapsed to the literal string
+        // "Shell command failed", which made `ls /missing`, `grep no-match`,
+        // `test`, etc. look like infrastructure crashes and also tricked the
+        // UI's generic "Add to Allowed Tools" affordance into firing for
+        // any non-permission failure.
+        const summary = formatShellFailure(input.command, result);
+        throw new PilotDeckToolRuntimeError("tool_execution_failed", summary, {
           command: input.command,
           exitCode: result.exitCode,
           stdout: result.stdout,
@@ -115,6 +123,21 @@ function formatShellResult(stdout: string, stderr: string, exitCode: number | nu
     parts.push(stderr);
   }
   return parts.length > 0 ? parts.join("\n") : `exitCode: ${exitCode ?? "null"}`;
+}
+
+function formatShellFailure(
+  command: string,
+  result: { exitCode: number | null; stdout: string; stderr: string },
+): string {
+  const lines: string[] = [];
+  lines.push(`Command exited with code ${result.exitCode ?? "null"}: ${command}`);
+  if (result.stderr.length > 0) {
+    lines.push("", "stderr:", result.stderr.trimEnd());
+  }
+  if (result.stdout.length > 0) {
+    lines.push("", "stdout:", result.stdout.trimEnd());
+  }
+  return lines.join("\n");
 }
 
 export type { PilotDeckCommandOptions, PilotDeckCommandResult, PilotDeckCommandRunner } from "./bash/commandRunner.js";

@@ -51,6 +51,8 @@ export type WebGatewayEvent =
       toolCallId: string;
       ok: boolean;
       resultPreview?: string;
+      /** Mirrors `GatewayEvent.tool_call_finished.errorCode`. */
+      errorCode?: string;
     }
   | {
       type: "permission_request";

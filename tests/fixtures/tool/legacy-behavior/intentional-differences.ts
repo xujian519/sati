@@ -33,4 +33,15 @@ export const intentionalDifferences: PilotDeckIntentionalDifference[] = [
     risk: "same",
     reviewRequiredBeforeRelease: true,
   },
+  {
+    id: "bash-non-zero-message-context",
+    legacyBehavior:
+      "Bash returns the literal text 'Shell command failed' as the tool error message; exitCode/stdout/stderr only available via separate result fields.",
+    pilotdeckBehavior:
+      "bash error text is `Command exited with code <N>: <command>` followed by the captured stderr and stdout, so the model + UI can distinguish e.g. `ls /missing` (file already gone, exit 1) from an actual infrastructure crash without scraping a separate details bag.",
+    reason:
+      "The opaque legacy string made every non-zero exit look identical, which (a) tripped the Web UI's 'Add to Allowed Tools' affordance for non-permission failures and (b) gave the agent no signal to recognize benign exit codes like `ls`/`grep`/`test` returning no-match.",
+    risk: "lower",
+    reviewRequiredBeforeRelease: false,
+  },
 ];

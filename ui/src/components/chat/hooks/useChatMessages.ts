@@ -68,6 +68,7 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
               content: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
               isError: Boolean(tr.isError),
               toolUseResult: (tr as any).toolUseResult,
+              errorCode: (tr as any).errorCode,
             }
           : null;
 

@@ -117,6 +117,8 @@ cd ui && npm run dev
 
 **改 `src/**` 后**：`Ctrl-C` 重启整个 `npm run dev`（或单独 kill `[gateway]` 进程让 concurrently 重启它）。`ui/server/**` 改完也是重启，但**改 `ui/src/**` HMR 自动接管**。
 
+> ⚠️ **绝对别开 `http://localhost:3001`**：3001 是 `ui/server` Express，**只要本地存在 `ui/dist/`**（之前跑过 `npm run start` / `vite build` 留下的）它就会喂这份 prod bundle 给浏览器，于是 dev 改的 `ui/src/**` 全部看不到、HMR 也不生效。判断现场：浏览器 URL 是 3001、Network 里 JS 路径是 `/assets/xxx.hash.js` 而不是 `/src/...` → 就是中招。处理：`rm -rf ui/dist` + 浏览器换到 5173。SW 还可能缓存老 bundle，配 DevTools → Application → Service Workers → Unregister 再 hard reload。
+
 ### 4b · 准生产（无 HMR，build 前端 + 两进程）
 
 ```bash
@@ -180,6 +182,7 @@ cd ui && npm run server     # node --import tsx server/index.js
 | 改了 `src/**` 但没生效 | 重启 `[gateway]` 进程（kill PID 或重启整个 `npm run dev`）。ui/server 不需要重启 |
 | 改了 `ui/server/**` 但没生效 | 重启 `[server]` 进程。gateway 不需要重启 |
 | 改了 `ui/src/**` 但没生效 | dev 模式 Vite HMR 自动接管；prod 模式需要重新 `npm run start`（会 build） |
+| dev 时改前端没生效 + 浏览器 URL 是 3001 | 你撞 prod bundle 了。`rm -rf ui/dist` + 浏览器换 `http://localhost:5173`，DevTools Application → SW Unregister 后再 hard reload |
 | `npm install` 报 node-gyp / node-pty / better-sqlite3 | 装 `xcode-select --install` + `python3`；再跑 `cd ui && npm rebuild` |
 | 5173 转发 502 | bridge（3001）没起来或 gateway（18789）没起来；查 `[server]` / `[gateway]` stderr |
 | WS 不通 | `curl http://localhost:3001/api/health`；不通就是 bridge 没起 |

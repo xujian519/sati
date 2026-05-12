@@ -17,6 +17,14 @@ export interface ChatImage {
 export interface ToolResult {
   content?: unknown;
   isError?: boolean;
+  /**
+   * `PilotDeckToolErrorCode` from the backend (e.g. `permission_denied`,
+   * `permission_required`, `tool_execution_failed`, `file_not_found`).
+   * Optional because legacy / replayed messages may not carry it. Used by
+   * `getPilotDeckPermissionSuggestion` to gate the "Add to Allowed Tools"
+   * affordance so it only fires for genuine permission failures.
+   */
+  errorCode?: string;
   timestamp?: string | number | Date;
   toolUseResult?: unknown;
   [key: string]: unknown;

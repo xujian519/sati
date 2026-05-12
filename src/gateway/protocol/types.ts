@@ -53,7 +53,20 @@ export type GatewayEvent =
   | { type: "assistant_text_delta"; text: string }
   | { type: "assistant_thinking_delta"; text: string }
   | { type: "tool_call_started"; toolCallId: string; name: string; argsPreview?: string }
-  | { type: "tool_call_finished"; toolCallId: string; ok: boolean; resultPreview?: string }
+  | {
+      type: "tool_call_finished";
+      toolCallId: string;
+      ok: boolean;
+      resultPreview?: string;
+      /**
+       * `PilotDeckToolErrorCode` of the underlying failure when `ok === false`.
+       * Hosts use this to render type-specific affordances — e.g. the Web UI
+       * only surfaces the "Add to Allowed Tools" suggestion for
+       * `permission_denied` / `permission_required`, not for execution
+       * failures like a non-zero shell exit code.
+       */
+      errorCode?: string;
+    }
   | { type: "permission_request"; requestId: string; toolName: string; payload: unknown }
   /**
    * B1 elicitation request: a tool (`ask_user_question`) wants the host

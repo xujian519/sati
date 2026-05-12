@@ -42,6 +42,13 @@ export type WebMessage = {
   requestId?: string;
   ok?: boolean;
   text?: string;
+  /**
+   * `PilotDeckToolErrorCode` of the underlying failure when
+   * `kind === 'tool_result'` and `ok === false`. Empty for non-error or
+   * non-tool-result frames. See `chatPermissions.ts` for how the host UI
+   * uses this.
+   */
+  errorCode?: string;
   payload?: unknown;
   source: "live" | "history";
   finishReason?: string;
@@ -195,6 +202,7 @@ export function applyWebGatewayEvent(
                   kind: "tool_result",
                   ok: event.ok,
                   text: event.resultPreview ?? m.text,
+                  ...(event.errorCode && { errorCode: event.errorCode }),
                 }
               : m,
           ),
@@ -212,6 +220,7 @@ export function applyWebGatewayEvent(
         toolCallId: event.toolCallId,
         ok: event.ok,
         text: event.resultPreview,
+        ...(event.errorCode && { errorCode: event.errorCode }),
         source: "live",
       };
       return {

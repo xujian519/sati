@@ -46,6 +46,13 @@ export interface NormalizedMessage {
   toolId?: string;
   toolResult?: { content: string; isError: boolean; toolUseResult?: unknown } | null;
   isError?: boolean;
+  /**
+   * `PilotDeckToolErrorCode` from the gateway when `kind === 'tool_result'`
+   * and `isError === true` — flat on the frame because the bridge merges
+   * `tool_call_finished.errorCode` here verbatim. See
+   * `pilotdeck-bridge.js#tool_call_finished` and `chatPermissions.ts`.
+   */
+  errorCode?: string;
   text?: string;
   tokens?: number;
   canInterrupt?: boolean;

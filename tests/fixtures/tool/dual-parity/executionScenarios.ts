@@ -58,10 +58,20 @@ export const dualParityExecutionScenarios: DualParityExecutionScenario[] = [
   },
   {
     id: "bash-non-zero",
-    status: "compare",
+    status: "intentional_difference",
     workspace: {},
     legacy: { toolName: "Bash", input: { command: "sh -c 'exit 2'" } },
     pilotdeck: { toolName: "bash", input: { command: "sh -c 'exit 2'" } },
+    // Both legacy and PilotDeck still surface the same `tool_execution_failed`
+    // errorCode (status="error"), but PilotDeck includes the exit code and
+    // stderr/stdout context in the error text (e.g. "Command exited with
+    // code 2: sh -c 'exit 2'\n\nstderr: …") instead of the literal opaque
+    // "Shell command failed" the legacy BashTool returns. See
+    // `intentional-differences.ts#bash-non-zero-message-context` for the
+    // rationale (agent + UI need diagnostic info to distinguish "files were
+    // already deleted" from a real infrastructure failure).
+    reason:
+      "PilotDeck bash error text includes exitCode/stdout/stderr context for diagnosis; legacy returns the literal 'Shell command failed'.",
   },
   {
     id: "grep-content-mode",

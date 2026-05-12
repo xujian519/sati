@@ -286,6 +286,7 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
           toolCallId: event.result.toolCallId,
           ok: event.result.type === "success",
           resultPreview: event.result.content.map(contentToText).join("\n"),
+          ...(event.result.type === "error" && { errorCode: event.result.error.code }),
         },
       ];
     case "mode_change_requested":
