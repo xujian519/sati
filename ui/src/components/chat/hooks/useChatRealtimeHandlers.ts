@@ -403,6 +403,7 @@ export function useChatRealtimeHandlers({
             context: msg.context,
             sessionId: permSid || null,
             receivedAt: new Date(),
+            isElicitation: Boolean((msg as { isElicitation?: boolean }).isElicitation),
           }];
         });
         setIsLoading(true);

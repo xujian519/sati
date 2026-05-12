@@ -264,20 +264,29 @@ function gatewayEventToFrames(event, sessionId, provider) {
                 }),
             ];
         case 'elicitation_request':
+            // Route structured elicitation through the same `permission_request`
+            // shape the UI already uses for the permission banner, so the
+            // registered `AskUserQuestion` PermissionPanel (rich multi-step
+            // multi-select dialog) renders inline in the chat instead of the
+            // legacy "wait in CLI" yellow box. We force `toolName` to the
+            // PascalCase alias that matches `registerPermissionPanel('AskUserQuestion', ...)`
+            // and tag the frame with `isElicitation: true` so the composer can
+            // route the user's answer back through `elicitation-response`
+            // (GatewayElicitationBus) instead of `claude-permission-response`
+            // (GatewayPermissionBus).
             return [
                 createNormalizedMessage({
                     ...base,
-                    kind: 'interactive_prompt',
-                    content:
-                        event.questions
-                            ?.map((q) => q.prompt)
-                            .filter(Boolean)
-                            .join('\n') ?? '',
+                    kind: 'permission_request',
                     requestId: event.requestId,
                     toolCallId: event.toolCallId,
-                    toolName: event.toolName,
-                    questions: event.questions,
-                    metadata: event.metadata,
+                    toolName: 'AskUserQuestion',
+                    input: {
+                        questions: event.questions,
+                        metadata: event.metadata,
+                    },
+                    context: { provider, originalToolName: event.toolName },
+                    isElicitation: true,
                 }),
             ];
         case 'elicitation_cancelled':

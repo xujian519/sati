@@ -88,6 +88,13 @@ export interface PendingPermissionRequest {
   context?: unknown;
   sessionId?: string | null;
   receivedAt?: Date;
+  /**
+   * True when this request originated from a gateway elicitation channel
+   * (e.g. `ask_user_question`) rather than the permission bus. The decision
+   * needs to round-trip through `elicitation-response` instead of the
+   * regular `claude-permission-response` frame.
+   */
+  isElicitation?: boolean;
 }
 
 export interface QuestionOption {

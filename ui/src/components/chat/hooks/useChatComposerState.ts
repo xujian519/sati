@@ -73,6 +73,7 @@ interface UseChatComposerStateArgs {
   setIsAborting: (aborting: boolean) => void;
   setClaudeStatus: (status: { text: string; tokens: number; can_interrupt: boolean } | null) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
+  pendingPermissionRequests: PendingPermissionRequest[];
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
 }
 
@@ -135,6 +136,7 @@ export function useChatComposerState({
   setIsAborting,
   setClaudeStatus,
   setIsUserScrolledUp,
+  pendingPermissionRequests,
   setPendingPermissionRequests,
 }: UseChatComposerStateArgs) {
   const [input, setInput] = useState(() => {
@@ -1078,6 +1080,28 @@ export function useChatComposerState({
       }
 
       validIds.forEach((requestId) => {
+        const pending = pendingPermissionRequests.find((r) => r.requestId === requestId);
+        if (pending?.isElicitation) {
+          // Elicitation flow (e.g. `ask_user_question`): submit selections
+          // through GatewayElicitationBus, not GatewayPermissionBus.
+          const submittedAnswers =
+            (decision?.updatedInput as { answers?: Record<string, string | string[]> } | undefined)?.answers ?? {};
+          const hasAnswers = Object.keys(submittedAnswers).length > 0;
+          const answer =
+            decision?.allow && hasAnswers
+              ? { type: 'answered' as const, answers: submittedAnswers }
+              : {
+                  type: 'cancelled' as const,
+                  reason: decision?.message ?? (decision?.allow ? 'skipped' : 'declined'),
+                };
+          sendMessage({
+            type: 'elicitation-response',
+            requestId,
+            answer,
+          });
+          return;
+        }
+
         sendMessage({
           type: 'claude-permission-response',
           requestId,
@@ -1096,7 +1120,7 @@ export function useChatComposerState({
         return next;
       });
     },
-    [sendMessage, setClaudeStatus, setPendingPermissionRequests],
+    [pendingPermissionRequests, sendMessage, setClaudeStatus, setPendingPermissionRequests],
   );
 
   const [isInputFocused, setIsInputFocused] = useState(false);

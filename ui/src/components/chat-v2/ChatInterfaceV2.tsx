@@ -212,6 +212,7 @@ function ChatInterfaceV2({
     setIsAborting,
     setClaudeStatus,
     setIsUserScrolledUp,
+    pendingPermissionRequests,
     setPendingPermissionRequests,
   });
 
