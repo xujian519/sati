@@ -29,6 +29,18 @@ export type OpenAIRequestBody = {
       strict?: boolean;
     };
   };
+  /**
+   * OpenRouter / DeepSeek reasoning control. When `thinking` is explicitly
+   * disabled on the canonical request, we lower it to `{ enabled: false }`
+   * so reasoning models skip chain-of-thought (saves latency + tokens).
+   */
+  reasoning?: { enabled: boolean };
+  /**
+   * When streaming, request the provider to include a final usage chunk.
+   * Without this, OpenAI-compatible providers never report token counts
+   * in streaming mode and the router falls back to estimation.
+   */
+  stream_options?: { include_usage: boolean };
 };
 
 type OpenAIMessage = {
@@ -77,6 +89,14 @@ export function buildOpenAIRequest(
         strict: request.outputSchema.strict ?? true,
       },
     };
+  }
+
+  if (body.stream) {
+    body.stream_options = { include_usage: true };
+  }
+
+  if (request.thinking?.enabled === false) {
+    body.reasoning = { enabled: false };
   }
 
   return body;
