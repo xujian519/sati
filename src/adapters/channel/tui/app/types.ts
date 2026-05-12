@@ -40,11 +40,15 @@ export function applyGatewayEventToTuiState(state: TuiEventReducerResult, event:
       };
     case "assistant_text_delta":
       return appendAssistantText(state, event.text);
-    case "assistant_thinking_delta":
+    case "assistant_thinking_delta": {
+      const updated = appendAssistantThinking(state, event.text);
+      const last = updated.messages.at(-1);
+      const thinkLen = last?.role === "assistant" ? (last.thinking?.length ?? 0) : 0;
       return {
-        ...appendAssistantThinking(state, event.text),
-        activity: [{ id: `thinking-${state.activity.length}`, text: event.text, status: "info" as const }, ...state.activity].slice(0, 8),
+        ...updated,
+        activity: [{ id: `thinking-${thinkLen}`, text: event.text, status: "info" as const }, ...state.activity].slice(0, 8),
       };
+    }
     case "tool_call_started":
       return {
         ...state,
