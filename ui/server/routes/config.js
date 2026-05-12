@@ -2,7 +2,6 @@ import express from 'express';
 import fsPromises from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
-import { parse as parseYaml } from 'yaml';
 import {
   buildDefaultPilotDeckConfig,
   configToYaml,
@@ -13,7 +12,7 @@ import {
   rawYamlToMaskedString,
   readPilotDeckConfigFile,
   validatePilotDeckConfig,
-  writeRawPilotDeckYaml,
+  writePilotDeckConfig,
 } from '../services/pilotdeckConfig.js';
 import { reloadPilotDeckConfig } from '../services/pilotdeckConfigReloader.js';
 import { suppressNextWatchEvent } from '../services/pilotdeckConfigWatcher.js';
@@ -63,25 +62,21 @@ router.post('/validate', (req, res) => {
 
 router.put('/', async (req, res) => {
   try {
-    const rawString = typeof req.body?.raw === 'string' ? req.body.raw : null;
-    if (!rawString) {
-      return res.status(400).json({ error: 'raw YAML is required' });
+    const existing = readPilotDeckConfigFile().config;
+    const incoming = typeof req.body?.raw === 'string'
+      ? parseConfigYaml(req.body.raw)
+      : req.body?.config;
+    if (!incoming || typeof incoming !== 'object') {
+      return res.status(400).json({ error: 'config or raw YAML is required' });
     }
 
-    const incomingYaml = parseYaml(rawString);
-    if (!incomingYaml || typeof incomingYaml !== 'object') {
-      return res.status(400).json({ error: 'Invalid YAML' });
-    }
-
-    const diskRecord = readPilotDeckConfigFile();
-    const restored = preserveMaskedSecrets(incomingYaml, diskRecord.rawYaml);
-
+    const config = preserveMaskedSecrets(incoming, existing);
     suppressNextWatchEvent();
-    const saved = await writeRawPilotDeckYaml(restored);
+    const saved = await writePilotDeckConfig(config);
     const reloadResult = await reloadPilotDeckConfig(saved.config);
     const freshRecord = readPilotDeckConfigFile();
     const response = serializeConfigResponse(
-      { exists: true, configPath: saved.configPath, ...freshRecord },
+      { exists: true, configPath: saved.configPath, raw: freshRecord.raw, config: freshRecord.config, rawYaml: freshRecord.rawYaml },
       reloadResult,
     );
     broadcastConfigEvent({ source: 'ui-save', ...response, timestamp: new Date().toISOString() });
