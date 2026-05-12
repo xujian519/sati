@@ -128,14 +128,17 @@ export class GatewayWsClient {
 
 class AsyncEventQueue<T> implements AsyncIterable<T> {
   private readonly values: T[] = [];
-  private readonly waiters: Array<(result: IteratorResult<T>) => void> = [];
+  private readonly waiters: Array<{
+    resolve: (result: IteratorResult<T>) => void;
+    reject: (error: Error) => void;
+  }> = [];
   private closed = false;
   private error?: Error;
 
   push(value: T): void {
     const waiter = this.waiters.shift();
     if (waiter) {
-      waiter({ done: false, value });
+      waiter.resolve({ done: false, value });
       return;
     }
     this.values.push(value);
@@ -144,13 +147,16 @@ class AsyncEventQueue<T> implements AsyncIterable<T> {
   close(): void {
     this.closed = true;
     for (const waiter of this.waiters.splice(0)) {
-      waiter({ done: true, value: undefined });
+      waiter.resolve({ done: true, value: undefined });
     }
   }
 
   fail(error: Error): void {
     this.error = error;
-    this.close();
+    this.closed = true;
+    for (const waiter of this.waiters.splice(0)) {
+      waiter.reject(error);
+    }
   }
 
   [Symbol.asyncIterator](): AsyncIterator<T> {
@@ -170,7 +176,7 @@ class AsyncEventQueue<T> implements AsyncIterable<T> {
     if (this.closed) {
       return Promise.resolve({ done: true, value: undefined });
     }
-    return new Promise((resolve) => this.waiters.push(resolve));
+    return new Promise((resolve, reject) => this.waiters.push({ resolve, reject }));
   }
 }
 
