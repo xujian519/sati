@@ -53,6 +53,9 @@ export async function listWebProjects(
       // project list trustworthy.
       continue;
     }
+    if (resolve(fullPath) === resolve(options.pilotHome)) {
+      continue;
+    }
     const summary = await summarizeProject(fullPath, options);
     seen.add(summary.projectKey);
     projects.push(summary);
