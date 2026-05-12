@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, KeyboardEvent, RefObject, SetStateAction } from 'react';
 import { api } from '../../../utils/api';
 import { escapeRegExp } from '../utils/chatFormatting';
@@ -55,40 +55,68 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
   const [cursorPosition, setCursorPosition] = useState(0);
   const [atSymbolPosition, setAtSymbolPosition] = useState(-1);
 
-  useEffect(() => {
-    const abortController = new AbortController();
+  // Track the latest in-flight fetch so a refresh triggered by reopening
+  // the @ dropdown can supersede the one kicked off on project switch.
+  const inFlightFetchRef = useRef<AbortController | null>(null);
 
-    const fetchProjectFiles = async () => {
-      const projectName = selectedProject?.name;
+  const fetchProjectFiles = useCallback(async () => {
+    const projectName = selectedProject?.name;
+    if (!projectName) {
       setFileList([]);
       setFilteredFiles([]);
-      if (!projectName) {
+      return;
+    }
+
+    inFlightFetchRef.current?.abort();
+    const abortController = new AbortController();
+    inFlightFetchRef.current = abortController;
+
+    try {
+      const response = await api.getFiles(projectName, { signal: abortController.signal });
+      if (!response.ok) {
         return;
       }
-
-
-      try {
-        const response = await api.getFiles(projectName, { signal: abortController.signal });
-        if (!response.ok) {
-          return;
-        }
-
-        const files = (await response.json()) as ProjectFileNode[];
-        setFileList(flattenFileTree(files));
-      } catch (error) {
-        // Ignore aborts from rapid project switches; we only care about the latest request.
-        if ((error as { name?: string })?.name === 'AbortError') {
-          return;
-        }
-        console.error('Error fetching files:', error);
+      const files = (await response.json()) as ProjectFileNode[];
+      if (abortController.signal.aborted) {
+        return;
       }
-    };
+      setFileList(flattenFileTree(files));
+    } catch (error) {
+      // Ignore aborts from rapid project switches / refreshes.
+      if ((error as { name?: string })?.name === 'AbortError') {
+        return;
+      }
+      console.error('Error fetching files:', error);
+    } finally {
+      if (inFlightFetchRef.current === abortController) {
+        inFlightFetchRef.current = null;
+      }
+    }
+  }, [selectedProject?.name]);
 
+  // Initial fetch + reset on project change.
+  useEffect(() => {
+    setFileList([]);
+    setFilteredFiles([]);
     fetchProjectFiles();
     return () => {
-      abortController.abort();
+      inFlightFetchRef.current?.abort();
     };
-  }, [selectedProject?.name]);
+  }, [fetchProjectFiles]);
+
+  // Refresh whenever the @ dropdown transitions from closed → open, so
+  // files created / renamed / deleted in the Files tab since the last
+  // project switch show up immediately. We intentionally do NOT refetch
+  // on every keystroke while the dropdown is already open — the snapshot
+  // taken on open is good enough for that session of typing.
+  const wasDropdownOpenRef = useRef(false);
+  useEffect(() => {
+    const wasOpen = wasDropdownOpenRef.current;
+    wasDropdownOpenRef.current = showFileDropdown;
+    if (!wasOpen && showFileDropdown) {
+      fetchProjectFiles();
+    }
+  }, [showFileDropdown, fetchProjectFiles]);
 
   useEffect(() => {
     const textBeforeCursor = input.slice(0, cursorPosition);
