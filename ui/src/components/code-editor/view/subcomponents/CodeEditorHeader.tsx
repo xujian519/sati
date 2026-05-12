@@ -1,4 +1,4 @@
-import { Code2, Download, Eye, Maximize2, Minimize2, Save, X } from 'lucide-react';
+import { ChevronsLeftRight, ChevronsRightLeft, Code2, Download, Eye, Maximize2, Minimize2, Save, X } from 'lucide-react';
 import type { CodeEditorFile } from '../../types/types';
 
 type CodeEditorHeaderProps = {
@@ -9,6 +9,12 @@ type CodeEditorHeaderProps = {
   markdownPreview: boolean;
   saving: boolean;
   saveSuccess: boolean;
+  // Only relevant in sidebar (split-pane) mode: lets the user toggle between
+  // a left-tree+right-editor split and a full-width editor that occupies the
+  // whole main area. Both must be defined for the toggle to render — when
+  // they're omitted (e.g. modal mode) the slot is skipped.
+  isExpanded?: boolean;
+  onToggleExpand?: (() => void) | null;
   onToggleMarkdownPreview: () => void;
   onDownload: () => void;
   onSave: () => void;
@@ -24,6 +30,8 @@ type CodeEditorHeaderProps = {
     saved: string;
     fullscreen: string;
     exitFullscreen: string;
+    expand: string;
+    collapse: string;
     close: string;
   };
 };
@@ -36,6 +44,8 @@ export default function CodeEditorHeader({
   markdownPreview,
   saving,
   saveSuccess,
+  isExpanded = false,
+  onToggleExpand = null,
   onToggleMarkdownPreview,
   onDownload,
   onSave,
@@ -132,6 +142,22 @@ export default function CodeEditorHeader({
             )}
           </button>
         )}
+
+        {isSidebar && onToggleExpand ? (
+          <button
+            type="button"
+            onClick={onToggleExpand}
+            className={iconBtn}
+            title={isExpanded ? labels.collapse : labels.expand}
+            aria-label={isExpanded ? labels.collapse : labels.expand}
+          >
+            {isExpanded ? (
+              <ChevronsRightLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
+            ) : (
+              <ChevronsLeftRight className="h-3.5 w-3.5" strokeWidth={1.75} />
+            )}
+          </button>
+        ) : null}
 
         <button type="button" onClick={onClose} className={iconBtn} title={labels.close}>
           <X className="h-3.5 w-3.5" strokeWidth={1.75} />

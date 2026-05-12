@@ -20,6 +20,8 @@
     "saved": "Saved!",
     "exitFullscreen": "Exit fullscreen",
     "fullscreen": "Fullscreen",
+    "expand": "Expand to full width",
+    "collapse": "Collapse to split view",
     "close": "Close",
     "previewMarkdown": "Preview markdown",
     "editMarkdown": "Edit markdown"

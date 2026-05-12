@@ -20,6 +20,8 @@
     "saved": "已保存！",
     "exitFullscreen": "退出全屏",
     "fullscreen": "全屏",
+    "expand": "展开为全宽",
+    "collapse": "收起为分栏视图",
     "close": "关闭"
   },
   "footer": {

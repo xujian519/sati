@@ -202,6 +202,8 @@ export default function CodeEditor({
             markdownPreview={markdownPreview}
             saving={saving}
             saveSuccess={saveSuccess}
+            isExpanded={isExpanded}
+            onToggleExpand={onToggleExpand}
             onToggleMarkdownPreview={() => setMarkdownPreview((previous) => !previous)}
             onDownload={handleDownload}
             onSave={handleSave}
@@ -217,6 +219,8 @@ export default function CodeEditor({
               saved: t('actions.saved'),
               fullscreen: t('actions.fullscreen'),
               exitFullscreen: t('actions.exitFullscreen'),
+              expand: t('actions.expand', { defaultValue: 'Expand to full width' }),
+              collapse: t('actions.collapse', { defaultValue: 'Collapse to split view' }),
               close: t('actions.close'),
             }}
           />
