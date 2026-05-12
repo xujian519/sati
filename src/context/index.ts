@@ -6,7 +6,7 @@ export {
   type AgentPreparedContext,
 } from "./ContextRuntime.js";
 export { NullContextRuntime } from "./NullContextRuntime.js";
-export { DefaultContextRuntime, type DefaultContextRuntimeOptions } from "./DefaultContextRuntime.js";
+export { DefaultContextRuntime, type AutoCompactResult, type CompactionTier, type DefaultContextRuntimeOptions } from "./DefaultContextRuntime.js";
 export type {
   ContextBoundary,
   ContextDiagnostic,
@@ -99,6 +99,13 @@ export {
   ContextOverflowRecovery,
   type ContextOverflowRecoveryOptions,
 } from "./recovery/ContextOverflowRecovery.js";
+export {
+  collectToolCallIds,
+  collectToolResultIds,
+  ensureTrailingUserMessage,
+  stripUnpairedToolCalls,
+  stripUnpairedToolResults,
+} from "./compaction/toolPairIntegrity.js";
 export {
   NullExtensionResolver,
   type ContributedCommand,

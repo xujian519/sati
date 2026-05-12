@@ -1,9 +1,17 @@
 import type { CanonicalMessage } from "../model/index.js";
 import { ToolResultBudget } from "./budget/ToolResultBudget.js";
-import type { TokenBudgetManager } from "./budget/TokenBudgetManager.js";
+import type { TokenBudgetManager, TokenBudgetSnapshot } from "./budget/TokenBudgetManager.js";
 import type { AutoCompactionPolicy } from "./compaction/AutoCompactionPolicy.js";
-import type { CompactionEngine } from "./compaction/CompactionEngine.js";
+import {
+  type CompactionEngine,
+  type CompactionResult,
+  buildPostCompactMessages,
+} from "./compaction/CompactionEngine.js";
 import type { CachedMicroCompactionEngine } from "./compaction/CachedMicroCompactionEngine.js";
+import type { MicroCompactionEngine } from "./compaction/MicroCompactionEngine.js";
+import type { SnipEngine } from "./compaction/SnipEngine.js";
+import { ensureTrailingUserMessage } from "./compaction/toolPairIntegrity.js";
+import type { ContextOverflowRecovery } from "./recovery/ContextOverflowRecovery.js";
 import { NullExtensionResolver, type ExtensionResolver } from "./extension/ExtensionResolver.js";
 import { MemoryAttachmentBuilder } from "./memory/MemoryAttachmentBuilder.js";
 import type { MemoryResolver } from "./memory/MemoryResolver.js";
@@ -21,35 +29,43 @@ import type {
   ModelContext,
 } from "./protocol/types.js";
 
+export type CompactionTier = "micro" | "snip" | "full";
+
+export type AutoCompactResult =
+  | { type: "skipped"; snapshot: TokenBudgetSnapshot }
+  | { type: "compacted"; messages: CanonicalMessage[]; tier: CompactionTier; result?: CompactionResult };
+
 export type DefaultContextRuntimeOptions = {
   extension?: ExtensionResolver;
   promptAssembler?: PromptAssembler;
   messageProjector?: MessageProjector;
   toolResultBudget?: ToolResultBudget;
   memoryResolver?: MemoryResolver;
-  /**
-   * A2 — token budget manager (provider-aware tokenizer fallback).
-   * Held by the runtime so future compaction decisions can probe usage.
-   */
+  /** A2 — token budget manager (provider-aware tokenizer fallback). */
   tokenBudget?: TokenBudgetManager;
-  /**
-   * A5 — full-conversation compaction engine. Constructed by the host
-   * (createLocalGateway) and stashed on the runtime so the loop can
-   * eventually call summarize() once we wire reactive compaction.
-   */
+  /** A5 — full-conversation compaction engine (summarize via model call). */
   compactionEngine?: CompactionEngine;
-  /**
-   * A5 — token-budget-driven policy that decides when to summarize.
-   * Same lifecycle as `compactionEngine` — construction-only for now.
-   */
+  /** A5 — token-budget-driven policy that decides when to summarize. */
   autoCompactionPolicy?: AutoCompactionPolicy;
   /**
    * A4 — opt-in cached micro-compaction engine. Construction is gated by
    * `PilotConfig.context.cachedMicrocompactEnabled` upstream.
    */
   microcompactEngine?: CachedMicroCompactionEngine;
+  /** Tier 1 — truncates old tool_result content (time-based path). */
+  microCompaction?: MicroCompactionEngine;
+  /** Tier 2 — prunes middle turns, keeping head + tail anchors. */
+  snipEngine?: SnipEngine;
+  /** Reactive overflow recovery (prompt_too_long → truncate head). */
+  overflowRecovery?: ContextOverflowRecovery;
   /** Project root forwarded to MemoryResolver.retrieve. */
   projectRoot?: string;
+  /**
+   * Maximum context window size (tokens) for the active model. Used by
+   * `tryAutoCompact` to evaluate whether proactive compaction is needed.
+   * Falls back to 8192 when unset.
+   */
+  maxContextTokens?: number;
   /**
    * keepRatio used on the first reactive truncate. Legacy hint is 0.5 — keep
    * the back half of the conversation. Decision §3.2.
@@ -60,6 +76,7 @@ export type DefaultContextRuntimeOptions = {
   now?: () => Date;
 };
 
+const DEFAULT_MAX_CONTEXT_TOKENS = 8192;
 const DEFAULT_TRUNCATE_FIRST_RATIO = 0.5;
 const DEFAULT_TRUNCATE_SECOND_RATIO = 0.25;
 
@@ -70,12 +87,15 @@ export class DefaultContextRuntime implements ContextRuntime {
   private readonly toolResultBudget?: ToolResultBudget;
   private readonly memoryResolver?: MemoryResolver;
   private readonly memoryAttachmentBuilder?: MemoryAttachmentBuilder;
-  /** A2/A4/A5 — held for downstream wiring (compaction loop, microcompact). */
   readonly tokenBudget?: TokenBudgetManager;
   readonly compactionEngine?: CompactionEngine;
   readonly autoCompactionPolicy?: AutoCompactionPolicy;
   readonly microcompactEngine?: CachedMicroCompactionEngine;
+  private readonly microCompaction?: MicroCompactionEngine;
+  private readonly snipEngine?: SnipEngine;
+  private readonly overflowRecovery?: ContextOverflowRecovery;
   private readonly projectRoot?: string;
+  private readonly maxContextTokens: number;
   private readonly truncateFirstKeepRatio: number;
   private readonly truncateSecondKeepRatio: number;
   private readonly now: () => Date;
@@ -93,7 +113,11 @@ export class DefaultContextRuntime implements ContextRuntime {
     this.compactionEngine = options.compactionEngine;
     this.autoCompactionPolicy = options.autoCompactionPolicy;
     this.microcompactEngine = options.microcompactEngine;
+    this.microCompaction = options.microCompaction;
+    this.snipEngine = options.snipEngine;
+    this.overflowRecovery = options.overflowRecovery;
     this.projectRoot = options.projectRoot;
+    this.maxContextTokens = options.maxContextTokens ?? DEFAULT_MAX_CONTEXT_TOKENS;
     this.truncateFirstKeepRatio = options.truncateFirstKeepRatio ?? DEFAULT_TRUNCATE_FIRST_RATIO;
     this.truncateSecondKeepRatio = options.truncateSecondKeepRatio ?? DEFAULT_TRUNCATE_SECOND_RATIO;
     this.now = options.now ?? (() => new Date());
@@ -198,7 +222,76 @@ export class DefaultContextRuntime implements ContextRuntime {
     }
   }
 
+  async tryAutoCompact(input: {
+    messages: CanonicalMessage[];
+    abortSignal?: AbortSignal;
+  }): Promise<AutoCompactResult> {
+    if (!this.autoCompactionPolicy || !this.tokenBudget) {
+      return {
+        type: "skipped",
+        snapshot: {
+          tokens: 0,
+          maxContextTokens: this.maxContextTokens,
+          warningRatio: 0,
+          blockingRatio: 0,
+          state: "ok",
+          ratio: 0,
+        },
+      };
+    }
+    let messages = input.messages;
+    const decision = this.autoCompactionPolicy.evaluate(messages, this.maxContextTokens);
+    if (decision.type !== "trigger") {
+      return { type: "skipped", snapshot: decision.snapshot };
+    }
+
+    // Tier 1: MicroCompaction — truncate old tool_result content.
+    if (this.microCompaction) {
+      const r = this.microCompaction.apply({ messages });
+      if (r.rewritten > 0) {
+        messages = r.messages;
+        const snap = this.tokenBudget.evaluate(messages, this.maxContextTokens);
+        if (snap.state === "ok") {
+          return { type: "compacted", messages: ensureTrailingUserMessage(messages), tier: "micro" };
+        }
+      }
+    }
+
+    // Tier 2: SnipEngine — prune middle turns, keep head + tail.
+    if (this.snipEngine) {
+      const r = this.snipEngine.snip(messages);
+      if (r.applied) {
+        messages = r.messages;
+        const snap = this.tokenBudget.evaluate(messages, this.maxContextTokens);
+        if (snap.state === "ok") {
+          return { type: "compacted", messages: ensureTrailingUserMessage(messages), tier: "snip" };
+        }
+      }
+    }
+
+    // Tier 3: CompactionEngine — full summarization via model call.
+    if (this.compactionEngine) {
+      const result = await this.compactionEngine.run({
+        trigger: "auto",
+        messages,
+        signal: input.abortSignal,
+      });
+      return {
+        type: "compacted",
+        messages: ensureTrailingUserMessage(buildPostCompactMessages(result)),
+        tier: "full",
+        result,
+      };
+    }
+
+    return { type: "skipped", snapshot: decision.snapshot };
+  }
+
   async recoverFromModelError(input: ContextRecoveryInput): Promise<ContextRecoveryDecision> {
+    if (this.overflowRecovery) {
+      return this.overflowRecovery.decide(input);
+    }
+    // Fallback: inline logic when no ContextOverflowRecovery is injected.
     if (input.error.code !== "prompt_too_long") {
       return {
         type: "give_up",

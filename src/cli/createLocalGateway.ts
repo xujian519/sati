@@ -5,8 +5,11 @@ import {
   AutoCompactionPolicy,
   CachedMicroCompactionEngine,
   CompactionEngine,
+  ContextOverflowRecovery,
   DefaultContextRuntime,
+  MicroCompactionEngine,
   PluginRuntimeExtensionResolver,
+  SnipEngine,
   TokenBudgetManager,
   ToolResultBudget,
   createEdgeClawMemoryProviderFromConfig,
@@ -355,9 +358,6 @@ class ProjectRuntimeRegistry {
       projectStorage: runtime.projectStorage,
       extendDependencies: (storage) => {
         const toolResultBudget = new ToolResultBudget({ toolResultsDir: storage.toolResultsDir });
-        // A2 / A5 — provider-aware token budget + compaction engines.
-        // Construction-only here; AgentLoop's reactive compaction loop
-        // consumes them via DefaultContextRuntime in a follow-up.
         const tokenBudget = new TokenBudgetManager();
         const compactionEngine = new CompactionEngine({
           model: {
@@ -370,14 +370,34 @@ class ProjectRuntimeRegistry {
               }),
           },
           tokenBudget,
+          lifecycle: {
+            async dispatch(input) {
+              await lifecycle.dispatch({
+                event: input.event,
+                baseInput: {
+                  sessionId: context.sessionKey,
+                  transcriptPath: "",
+                  cwd: projectRoot,
+                  permissionMode: "default",
+                },
+                payload: input.payload,
+                matchQuery: input.event,
+              });
+            },
+          },
           provider: runtime.snapshot.config.agent.model.provider,
           model_: runtime.snapshot.config.agent.model.model,
           now,
         });
         const autoCompactionPolicy = new AutoCompactionPolicy({ tokenBudget });
-        // A4 — cached microcompact (Anthropic-only). Default disabled —
-        // upstream PilotConfig flag flips this on once the schema lands.
         const microcompactEngine = new CachedMicroCompactionEngine({ enabled: false });
+        const microCompaction = new MicroCompactionEngine();
+        const snipEngine = new SnipEngine();
+        const overflowRecovery = new ContextOverflowRecovery();
+        const caps = runtime.model.getCapabilities(
+          runtime.snapshot.config.agent.model.provider,
+          runtime.snapshot.config.agent.model.model,
+        );
         const contextRuntime = new DefaultContextRuntime({
           extension,
           projectRoot,
@@ -387,6 +407,10 @@ class ProjectRuntimeRegistry {
           compactionEngine,
           autoCompactionPolicy,
           microcompactEngine,
+          microCompaction,
+          snipEngine,
+          overflowRecovery,
+          maxContextTokens: caps.maxContextTokens,
           now,
         });
         const fileHistory = new FileHistoryStore({

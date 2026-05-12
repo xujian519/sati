@@ -1,3 +1,4 @@
+import type { CanonicalMessage } from "../model/index.js";
 import type {
   ContextBoundary,
   ContextCaptureTurnInput,
@@ -9,6 +10,7 @@ import type {
   ContextToolResultResult,
   ModelContext,
 } from "./protocol/types.js";
+import type { AutoCompactResult } from "./DefaultContextRuntime.js";
 
 export type AgentContextPrepareInput = ContextPrepareInput;
 export type AgentPreparedContext = ModelContext;
@@ -45,4 +47,13 @@ export type AgentContextRuntime = {
    * implementation swallows so a failing memory backend never breaks a turn.
    */
   captureTurn?(input: AgentContextCaptureTurnInput): Promise<void>;
+  /**
+   * Optional. Proactive auto-compaction: evaluates the token budget and
+   * triggers summarization when the context approaches `maxContextTokens`.
+   * Minimal runtimes (`NullContextRuntime`) leave this undefined.
+   */
+  tryAutoCompact?(input: {
+    messages: CanonicalMessage[];
+    abortSignal?: AbortSignal;
+  }): Promise<AutoCompactResult>;
 };
