@@ -27,6 +27,10 @@ import {
   type ListSessionsResult,
 } from "../gateway/index.js";
 import {
+  GATEWAY_PERMISSION_CALLBACK_NAME,
+  createGatewayPermissionHook,
+} from "../gateway/permission/createGatewayPermissionHook.js";
+import {
   McpRuntime,
   createMcpToolDefinitionsFromRuntime,
   parsePluginMcpServers,
@@ -310,7 +314,43 @@ class ProjectRuntimeRegistry {
     await runtime.pluginRuntime.refresh();
     await this.ensureMcpReady(runtime);
     const contributions = runtime.pluginRuntime.snapshotContributions();
-    const lifecycle = new LifecycleRuntime(new HookRuntime(contributions.hooks));
+
+    // Inject the gateway's interactive permission hook so the agent's
+    // PermissionRequest lifecycle is round-tripped through the Web UI
+    // instead of returning `permission_required` errors. The hook
+    // mutates the session's live `permissionRules.allow` array on
+    // `remember=true`, so a subsequent tool call inside the same turn
+    // bypasses the ask path without waiting for the next turn's
+    // SessionConfigOverrides sync.
+    const gw = this.gateway;
+    const sessionOverride = this.options.sessionOverrides?.get(context.sessionKey);
+    const liveAllowRules = sessionOverride?.permissionRules?.allow;
+    const hookSettings: typeof contributions.hooks = gw && liveAllowRules
+      ? {
+          ...contributions.hooks,
+          PermissionRequest: [
+            ...(contributions.hooks.PermissionRequest ?? []),
+            {
+              hooks: [
+                { type: "callback", name: GATEWAY_PERMISSION_CALLBACK_NAME },
+              ],
+            },
+          ],
+        }
+      : contributions.hooks;
+    const hookRuntime = new HookRuntime(hookSettings);
+    if (gw && liveAllowRules) {
+      hookRuntime.getCallbackExecutor().register(
+        GATEWAY_PERMISSION_CALLBACK_NAME,
+        createGatewayPermissionHook({
+          sessionKey: context.sessionKey,
+          bus: gw.getPermissionBus(),
+          emit: (event) => gw.emitForSession(context.sessionKey, event),
+          permissionRules: liveAllowRules,
+        }),
+      );
+    }
+    const lifecycle = new LifecycleRuntime(hookRuntime);
     const extension = new PluginRuntimeExtensionResolver(runtime.pluginRuntime);
     const projectRoot = runtime.projectRoot;
     const memoryResolver = runtime.memory;

@@ -1051,12 +1051,18 @@ export function useChatComposerState({
 
   const handleGrantToolPermission = useCallback(
     (suggestion: { entry: string; toolName: string }) => {
-      if (!suggestion || provider !== 'claude') {
+      if (!suggestion) {
         return { success: false };
       }
+      // Previously gated on `provider === 'claude'` because the legacy
+      // four-provider runtime only honored allowedTools for the Claude
+      // adapter. After the PolitDeck-only migration every provider
+      // routes through the same gateway PermissionContext, so we let
+      // every provider write its grants through to localStorage and
+      // pick them up via syncPermissionRules on the next turn.
       return grantClaudeToolPermission(suggestion.entry);
     },
-    [provider],
+    [],
   );
 
   const handlePermissionDecision = useCallback(
