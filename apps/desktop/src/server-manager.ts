@@ -784,6 +784,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       ...process.env,
       NO_COLOR: "1",
       FORCE_COLOR: "0",
+      PILOTDECK_DESKTOP: "1",
       SERVER_PORT: String(chosenPort),
       // Force loopback regardless of what runtime.host says in YAML.
       // pilotdeckui's buildRuntimeEnv now respects pre-set env vars.
