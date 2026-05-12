@@ -205,19 +205,16 @@ export class DefaultContextRuntime implements ContextRuntime {
         reason: `non_recoverable_model_error:${input.error.code}`,
       };
     }
-    if (!input.hasAttemptedCompact) {
+    if (input.hasAttemptedCompact) {
       return {
-        type: "truncate_head_and_retry",
-        keepRatio: this.truncateFirstKeepRatio,
-        reason: "ptl-first-attempt",
+        type: "give_up",
+        reason: "ptl-exhausted-after-two-attempts",
       };
     }
-    // Decision §3.2 / §3.1 #8 — second PTL: aggressive truncate; if it still
-    // fails, the loop must turn_failed (no third try).
     return {
       type: "truncate_head_and_retry",
-      keepRatio: this.truncateSecondKeepRatio,
-      reason: "ptl-second-attempt-aggressive",
+      keepRatio: this.truncateFirstKeepRatio,
+      reason: "ptl-first-attempt",
     };
   }
 }

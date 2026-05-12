@@ -27,8 +27,9 @@ export class ContextOverflowRecovery {
     if (input.error.code !== "prompt_too_long") {
       return { type: "give_up", reason: `non_recoverable_model_error:${input.error.code}` };
     }
-    return input.hasAttemptedCompact
-      ? { type: "truncate_head_and_retry", keepRatio: this.second, reason: "ptl-second-attempt-aggressive" }
-      : { type: "truncate_head_and_retry", keepRatio: this.first, reason: "ptl-first-attempt" };
+    if (input.hasAttemptedCompact) {
+      return { type: "give_up", reason: "ptl-exhausted-after-two-attempts" };
+    }
+    return { type: "truncate_head_and_retry", keepRatio: this.first, reason: "ptl-first-attempt" };
   }
 }
