@@ -2,8 +2,9 @@ import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
 import {
+  configToYaml,
   getPilotDeckConfigPath,
-  rawYamlToMaskedString,
+  maskSecrets,
   readPilotDeckConfigFile,
   validatePilotDeckConfig,
 } from './pilotdeckConfig.js';
@@ -61,13 +62,13 @@ async function handleChange(configPath) {
   }
 
   const validation = validatePilotDeckConfig(record.config);
-  const maskedRaw = rawYamlToMaskedString(record.rawYaml);
+  const maskedConfig = maskSecrets(record.config);
 
   if (!validation.valid) {
     onEventHandler?.({
       source: 'watcher',
       path: record.configPath,
-      raw: maskedRaw,
+      raw: configToYaml(maskedConfig),
       validation: { valid: false, errors: validation.errors, warnings: validation.warnings },
       reload: null,
       timestamp: new Date().toISOString(),
@@ -82,7 +83,7 @@ async function handleChange(configPath) {
     onEventHandler?.({
       source: 'watcher',
       path: record.configPath,
-      raw: maskedRaw,
+      raw: configToYaml(maskedConfig),
       validation: { valid: true, errors: [], warnings: validation.warnings },
       reload: null,
       error: error instanceof Error ? error.message : String(error),
@@ -94,7 +95,7 @@ async function handleChange(configPath) {
   onEventHandler?.({
     source: 'watcher',
     path: record.configPath,
-    raw: maskedRaw,
+    raw: configToYaml(maskedConfig),
     validation: { valid: true, errors: [], warnings: validation.warnings },
     reload: reloadResult,
     timestamp: new Date().toISOString(),

@@ -9,7 +9,6 @@ import {
   maskSecrets,
   parseConfigYaml,
   preserveMaskedSecrets,
-  rawYamlToMaskedString,
   readPilotDeckConfigFile,
   validatePilotDeckConfig,
   writePilotDeckConfig,
@@ -25,7 +24,7 @@ function serializeConfigResponse(record, reloadResult = null) {
   return {
     exists: record.exists,
     path: record.configPath,
-    raw: rawYamlToMaskedString(record.rawYaml),
+    raw: configToYaml(maskedConfig),
     config: maskedConfig,
     validation: {
       valid: validation.valid,
@@ -74,9 +73,8 @@ router.put('/', async (req, res) => {
     suppressNextWatchEvent();
     const saved = await writePilotDeckConfig(config);
     const reloadResult = await reloadPilotDeckConfig(saved.config);
-    const freshRecord = readPilotDeckConfigFile();
     const response = serializeConfigResponse(
-      { exists: true, configPath: saved.configPath, raw: freshRecord.raw, config: freshRecord.config, rawYaml: freshRecord.rawYaml },
+      { exists: true, configPath: saved.configPath, raw: saved.raw, config: saved.config },
       reloadResult,
     );
     broadcastConfigEvent({ source: 'ui-save', ...response, timestamp: new Date().toISOString() });
