@@ -58,12 +58,6 @@ export async function listWebProjects(
     projects.push(summary);
   }
 
-  // Always include the default project root, even if no chats exist yet.
-  const defaultSummary = await summarizeProject(options.defaultProjectRoot, options);
-  if (!seen.has(defaultSummary.projectKey)) {
-    projects.unshift(defaultSummary);
-  }
-
   projects.sort((left, right) => (right.lastActivity ?? 0) - (left.lastActivity ?? 0));
   return { projects };
 }
