@@ -6,3 +6,6 @@ RUN chmod +x /usr/local/bin/bun && bun --version
 
 RUN apt-get update -qq && apt-get install -y --no-install-recommends git && \
     rm -rf /var/lib/apt/lists/*
+
+# Install Playwright chromium + system deps for browser-use MCP
+RUN npx playwright install --with-deps chromium
