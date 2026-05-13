@@ -6,6 +6,7 @@
   "type": "module",
   "main": "server/index.js",
   "scripts": {
+    "predev": "node ../scripts/bootstrap-pilotdeck-config.mjs",
     "dev": "concurrently --kill-others --names gateway,server,client \"npm:dev:gateway\" \"npm:dev:server\" \"npm:dev:client\"",
     "dev:gateway": "npm --prefix .. run server",
     "dev:server": "node --import tsx server/index.js",

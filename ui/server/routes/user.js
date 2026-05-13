@@ -7,6 +7,10 @@ import { spawn } from 'child_process';
 
 const router = express.Router();
 
+// Sentinel api-key written by scripts/bootstrap-pilotdeck-config.mjs so the
+// engine can boot. Treated as "not configured" so the UI routes to onboarding.
+const PLACEHOLDER_API_KEY = 'PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE';
+
 function hasUsablePilotDeckConfig() {
   const record = readPilotDeckConfigFile();
   if (!record.exists) return false;
@@ -25,10 +29,11 @@ function hasUsablePilotDeckConfig() {
   if (!provider || typeof provider !== 'object') return false;
 
   const hasUrl = typeof provider.url === 'string' && provider.url.trim();
-  const hasKey = typeof provider.apiKey === 'string' && provider.apiKey.trim();
+  const apiKey = typeof provider.apiKey === 'string' ? provider.apiKey.trim() : '';
+  const hasRealKey = Boolean(apiKey) && apiKey !== PLACEHOLDER_API_KEY;
   const hasModel = provider.models && typeof provider.models === 'object' && modelId in provider.models;
 
-  return Boolean(hasUrl && hasKey && hasModel);
+  return Boolean(hasUrl && hasRealKey && hasModel);
 }
 
 function spawnAsync(command, args, options = {}) {
