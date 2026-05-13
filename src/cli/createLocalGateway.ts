@@ -1,4 +1,5 @@
-import { resolve } from "node:path";
+import { appendFileSync, mkdirSync as mkdirSyncFs } from "node:fs";
+import { resolve, join as joinPath } from "node:path";
 import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
 import type { AgentRuntimeConfig, CreateAgentSessionOptions } from "../agent/index.js";
 import {
@@ -48,8 +49,9 @@ import { readWebSessionMessages } from "../web/server/readSessionMessages.js";
 import { describeWebProject, listWebProjects } from "../web/server/listProjects.js";
 import { BackgroundTaskRuntime } from "../task/runtime/BackgroundTaskRuntime.js";
 import { createBuiltinRegistry } from "../tool/index.js";
-import type { PilotDeckToolDefinition, ToolRegistry } from "../tool/index.js";
+import type { PilotDeckToolDefinition, ToolRegistry, PilotDeckElicitationChannel } from "../tool/index.js";
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
+import type { RouterEventBus, RouterEvent } from "../router/protocol/events.js";
 import type { EdgeClawMemoryProvider } from "../context/index.js";
 import { loadBuiltinPlugins } from "../extension/plugins/builtin/loadBuiltinPlugins.js";
 
@@ -71,6 +73,12 @@ export type CreateLocalGatewayOptions = {
    * end-to-end against a deterministic transport. NOT part of the public API.
    */
   __testModelFactory?: (snapshot: PilotConfigSnapshot) => ModelRuntime;
+  /**
+   * When true, `ask_user_question` tool calls are answered automatically
+   * (first option selected) instead of waiting for a human. Intended for
+   * benchmark / headless runs where no interactive user is present.
+   */
+  autoElicitation?: boolean;
 };
 
 export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gateway {
@@ -88,6 +96,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gat
     extraTools: options.extraTools,
     sessionOverrides: options.sessionOverrides,
     modelFactory: options.__testModelFactory,
+    autoElicitation: options.autoElicitation,
   });
   const defaultRuntime = registry.resolve();
   const router = new SessionRouter({
@@ -129,6 +138,7 @@ type ProjectRuntimeRegistryOptions = {
   sessionOverrides?: SessionConfigOverrides;
   /** @internal Test hook from `CreateLocalGatewayOptions.__testModelFactory`. */
   modelFactory?: (snapshot: PilotConfigSnapshot) => ModelRuntime;
+  autoElicitation?: boolean;
 };
 
 type ProjectRuntime = {
@@ -177,6 +187,19 @@ class ProjectRuntimeRegistry {
 
   setGateway(gateway: InProcessGateway): void {
     this.gateway = gateway;
+  }
+
+  private buildRouterEventBus(): RouterEventBus {
+    const pilotHome = this.options.pilotHome;
+    const eventsPath = joinPath(pilotHome, "router-events.jsonl");
+    try { mkdirSyncFs(pilotHome, { recursive: true }); } catch { /* exists */ }
+    return {
+      emit(event: RouterEvent) {
+        try {
+          appendFileSync(eventsPath, JSON.stringify(event) + "\n");
+        } catch { /* best-effort, never crash the agent loop */ }
+      },
+    };
   }
 
   /**
@@ -230,6 +253,7 @@ class ProjectRuntimeRegistry {
       now: this.options.now,
       customRouterRegistry: pluginRuntime,
       loadSkillPrompt: (extensionId) => pluginRuntime.loadSkillPrompt(extensionId),
+      events: this.buildRouterEventBus(),
     });
     const backgroundTasks = new BackgroundTaskRuntime({ now: this.options.now });
     const tools = createBuiltinRegistry({ backgroundTasks: { runtime: backgroundTasks } });
@@ -418,13 +442,15 @@ class ProjectRuntimeRegistry {
           now: this.options.now,
         });
         const gw = this.gateway;
-        const elicitation = gw
-          ? new GatewayElicitationChannel({
-              sessionKey: context.sessionKey,
-              bus: gw.getElicitationBus(),
-              emit: (event) => gw.emitForSession(context.sessionKey, event),
-            })
-          : undefined;
+        const elicitation = this.options.autoElicitation
+          ? createAutoElicitationChannel()
+          : gw
+            ? new GatewayElicitationChannel({
+                sessionKey: context.sessionKey,
+                bus: gw.getElicitationBus(),
+                emit: (event) => gw.emitForSession(context.sessionKey, event),
+              })
+            : undefined;
         const subagentTranscript: AgentSubagentTranscriptHooks = {
           recordSubagentStarted: (args) =>
             storage.transcript.recordSubagentStarted(args.sessionId, args.turnId, {
@@ -517,22 +543,39 @@ class ProjectRuntimeRegistry {
   }
 }
 
+function createAutoElicitationChannel(): PilotDeckElicitationChannel {
+  return {
+    async askUser(request) {
+      const answers: Record<string, string | string[]> = {};
+      for (const q of request.questions) {
+        if (q.options.length > 0) {
+          answers[q.question] = q.multiSelect
+            ? [q.options[0].label]
+            : q.options[0].label;
+        } else {
+          answers[q.question] = "yes";
+        }
+      }
+      return { type: "answered", answers };
+    },
+  };
+}
+
 function ensureRouterConfig(
   router: RouterConfig | undefined,
   defaultSelection: PilotAgentModelSelection,
 ): RouterConfig {
+  const defaultRef = { id: defaultSelection.id, provider: defaultSelection.provider, model: defaultSelection.model };
   if (router) {
-    // Make sure stats collection is on so the Web UI Dashboard tab can
-    // render router activity. Users can opt out via PilotDeck config.
     return {
       ...router,
+      fallback: router.fallback ?? { default: [defaultRef] },
       stats: router.stats ?? { enabled: true },
     };
   }
   return {
-    scenarios: {
-      default: { id: defaultSelection.id, provider: defaultSelection.provider, model: defaultSelection.model },
-    },
+    scenarios: { default: defaultRef },
+    fallback: { default: [defaultRef] },
     zeroUsageRetry: { enabled: true, maxAttempts: 2 },
     stats: { enabled: true },
   };
