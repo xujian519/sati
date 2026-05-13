@@ -20,6 +20,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
 
     let alwaysOn: AlwaysOnRuntime | undefined;
     let cron: CronRuntime | undefined;
+    let deferredBroadcast: ((name: string, payload?: unknown) => void) | undefined;
     if (snapshot.config.alwaysOn) {
       alwaysOn = createAlwaysOnRuntime({
         config: snapshot.config.alwaysOn,
@@ -30,6 +31,12 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
             console.log(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
           warn: (message, data) =>
             console.warn(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
+        },
+        onWorktreeCreated: (runId, cwd) => {
+          deferredBroadcast?.("worktree_created", { runId, cwd });
+        },
+        onWorktreeRemoved: (cwd) => {
+          deferredBroadcast?.("worktree_removed", { cwd });
         },
       });
     }
@@ -47,7 +54,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       });
     }
 
-    const { gateway, dispose: disposeGateway } = createLocalGateway({
+    const { gateway, dispose: disposeGateway, bindServer } = createLocalGateway({
       projectRoot,
       pilotHome,
       env,
@@ -71,6 +78,8 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       staticAssetsPath: resolve(projectRoot, "ui/dist"),
       feishu: new FeishuChannel(),
     });
+    bindServer(server);
+    deferredBroadcast = (name, payload) => server.broadcastNotification(name, payload);
     console.log(`PilotDeck server listening: ${server.url}`);
     console.log(`WebSocket: ${server.wsUrl}`);
     if (server.tokenPath) {

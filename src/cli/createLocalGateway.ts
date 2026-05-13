@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync as mkdirSyncFs } from "node:fs";
 import { resolve, join as joinPath } from "node:path";
 import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
-import type { AgentRuntimeConfig, CreateAgentSessionOptions } from "../agent/index.js";
+import { createAgentEventBuffer, type AgentRuntimeConfig, type CreateAgentSessionOptions } from "../agent/index.js";
 import {
   AutoCompactionPolicy,
   CachedMicroCompactionEngine,
@@ -92,6 +92,7 @@ export type CreateLocalGatewayResult = {
   configStore: PilotConfigStore;
   registry: ProjectRuntimeRegistry;
   dispose: () => void;
+  bindServer: (server: { broadcastNotification(name: string, payload?: unknown): void }) => void;
 };
 
 export function createLocalGateway(options: CreateLocalGatewayOptions = {}): CreateLocalGatewayResult {
@@ -117,6 +118,9 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   const configStore = createPilotConfigStoreSync({ projectRoot, env });
   const stopWatching = configStore.startWatching();
 
+  let boundServer: { broadcastNotification(name: string, payload?: unknown): void } | undefined;
+  const configChangeLifecycle = new LifecycleRuntime(new HookRuntime({}));
+
   configStore.subscribe((event) => {
     const { changeClasses, changedPaths } = event;
     if (changeClasses.length === 0) {
@@ -130,6 +134,13 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     // eslint-disable-next-line no-console
     console.log("[pilotdeck] Config reloaded, invalidating runtimes:", changedPaths.join(", "));
     registry.invalidate();
+    configChangeLifecycle.dispatch({
+      event: "ConfigChange",
+      baseInput: { sessionId: "", transcriptPath: "", cwd: projectRoot },
+      payload: { changedPaths, changeClasses },
+      matchQuery: "ConfigChange",
+    }).catch(() => {});
+    boundServer?.broadcastNotification("config_changed", { changedPaths, changeClasses });
   });
 
   const router = new SessionRouter({
@@ -175,6 +186,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     configStore,
     registry,
     dispose: stopWatching,
+    bindServer: (server) => { boundServer = server; },
   };
 }
 
@@ -438,6 +450,7 @@ class ProjectRuntimeRegistry {
     const memoryResolver = runtime.memory;
     const now = this.options.now;
 
+    const eventBuf = createAgentEventBuffer();
     const resumed = await resumeAgentSession({
       sessionId: context.sessionKey,
       config: this.createAgentConfig(runtime, context.sessionKey),
@@ -451,6 +464,8 @@ class ProjectRuntimeRegistry {
         // the only one in scope.
         lifecycle,
         now: this.options.now,
+        eventEmitter: eventBuf.emitter,
+        drainEvents: eventBuf.drain,
       },
       projectStorage: runtime.projectStorage,
       extendDependencies: (storage) => {
@@ -485,6 +500,7 @@ class ProjectRuntimeRegistry {
           provider: runtime.snapshot.config.agent.model.provider,
           model_: runtime.snapshot.config.agent.model.model,
           now,
+          eventEmitter: eventBuf.emitter,
         });
         const autoCompactionPolicy = new AutoCompactionPolicy({ tokenBudget });
         const microcompactEngine = new CachedMicroCompactionEngine({ enabled: false });
@@ -522,6 +538,23 @@ class ProjectRuntimeRegistry {
                 sessionKey: context.sessionKey,
                 bus: gw.getElicitationBus(),
                 emit: (event) => gw.emitForSession(context.sessionKey, event),
+                dispatchHook: (hookEvent, payload) => {
+                  lifecycle.dispatch({
+                    event: hookEvent as import("../extension/hooks/protocol/events.js").PilotDeckHookEvent,
+                    baseInput: { sessionId: context.sessionKey, transcriptPath: "", cwd: projectRoot },
+                    payload,
+                    matchQuery: hookEvent,
+                  }).catch(() => {});
+                },
+                emitAgentEvent: (_type, payload) => {
+                  eventBuf.emitter({
+                    type: "elicitation_requested",
+                    sessionId: context.sessionKey,
+                    turnId: "",
+                    requestId: payload.requestId,
+                    toolName: payload.toolName,
+                  });
+                },
               })
             : undefined;
         const subagentTranscript: AgentSubagentTranscriptHooks = {

@@ -58,6 +58,7 @@ export type InProcessGatewayOptions = {
    * the PilotConfigStore + ProjectRuntimeRegistry lifecycle.
    */
   reloadConfig?: () => Promise<ReloadConfigResult>;
+  dispatchHookForSession?: (sessionKey: string, event: string, payload: Record<string, unknown>) => void;
 };
 
 export class InProcessGateway implements Gateway {
@@ -240,6 +241,7 @@ export class InProcessGateway implements Gateway {
     const entry = this.elicitationBus.consume(input.sessionKey, input.requestId);
     if (!entry) return { delivered: false };
     entry.resolve(input.answer);
+    this.options.dispatchHookForSession?.(input.sessionKey, "ElicitationResult", { requestId: input.requestId, delivered: true });
     return { delivered: true };
   }
 
@@ -338,6 +340,28 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
           recoverable: true,
         },
       ];
+    case "session_ended":
+    case "user_prompt_submitted":
+    case "setup_completed":
+    case "instructions_loaded":
+    case "stop_requested":
+    case "stop_failure":
+    case "compact_started":
+    case "compact_completed":
+    case "subagent_started":
+    case "subagent_completed":
+    case "elicitation_resolved":
+      return [];
+    case "pre_tool_execute":
+      return [];
+    case "post_tool_execute":
+      return [];
+    case "permission_requested":
+      return [];
+    case "permission_denied":
+      return [];
+    case "elicitation_requested":
+      return [];
     default:
       return [];
   }

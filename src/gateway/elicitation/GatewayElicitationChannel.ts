@@ -43,6 +43,8 @@ export type GatewayElicitationChannelOptions = {
   emit(event: GatewayEvent): void;
   /** Optional UUID generator (test override). Defaults to `crypto.randomUUID`. */
   uuid?: () => string;
+  dispatchHook?: (event: string, payload: Record<string, unknown>) => void | Promise<void>;
+  emitAgentEvent?: (type: "elicitation_requested", payload: { requestId: string; toolName: string }) => void;
 };
 
 export class GatewayElicitationChannel implements PilotDeckElicitationChannel {
@@ -91,6 +93,8 @@ export class GatewayElicitationChannel implements PilotDeckElicitationChannel {
         questions: request.questions,
         metadata: request.metadata,
       });
+      this.options.dispatchHook?.("Elicitation", { requestId, toolName: request.toolName, toolCallId: request.toolCallId });
+      this.options.emitAgentEvent?.("elicitation_requested", { requestId, toolName: request.toolName });
 
       if (request.signal) {
         if (request.signal.aborted) {

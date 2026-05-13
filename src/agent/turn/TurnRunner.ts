@@ -69,6 +69,7 @@ export class TurnRunner {
       matchQuery: "UserPromptSubmit",
       signal: options.abortSignal,
     });
+    yield { type: "user_prompt_submitted", sessionId: options.sessionId, turnId: options.turnId, prompt };
     if (userPromptHooks?.effects.some((effect) => effect.type === "block")) {
       const result = this.createErrorResult(
         options,

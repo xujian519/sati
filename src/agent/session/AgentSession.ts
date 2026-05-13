@@ -47,6 +47,18 @@ export class AgentSession {
       matchQuery: "SessionStart",
       signal: this.state.abortController.signal,
     });
+    await this.options.lifecycle?.dispatch({
+      event: "Setup",
+      baseInput: {
+        sessionId: this.state.sessionId,
+        transcriptPath: this.options.transcriptPath ?? "",
+        cwd: this.options.cwd ?? process.cwd(),
+      },
+      payload: {},
+      matchQuery: "Setup",
+      signal: this.state.abortController.signal,
+    });
+    yield { type: "setup_completed", sessionId: this.state.sessionId };
 
     const runResult = yield* this.options.turnRunner.run({
       sessionId: this.state.sessionId,
@@ -65,6 +77,7 @@ export class AgentSession {
     );
     this.state.status = runResult.result.type === "aborted" ? "aborted" : runResult.result.type === "error" ? "failed" : "idle";
     this.state.currentTurnId = undefined;
+    const sessionEndReason = this.state.status === "aborted" ? "other" : "prompt_input_exit";
     await this.options.lifecycle?.dispatch({
       event: "SessionEnd",
       baseInput: {
@@ -72,10 +85,11 @@ export class AgentSession {
         transcriptPath: this.options.transcriptPath ?? "",
         cwd: this.options.cwd ?? process.cwd(),
       },
-      payload: { reason: this.state.status === "aborted" ? "other" : "prompt_input_exit" },
+      payload: { reason: sessionEndReason },
       matchQuery: "SessionEnd",
       signal: this.state.abortController.signal,
     });
+    yield { type: "session_ended", sessionId: this.state.sessionId, reason: sessionEndReason };
   }
 
   abort(reason?: string): void {

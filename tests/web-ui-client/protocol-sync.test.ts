@@ -59,6 +59,9 @@ test("Every GatewayEvent variant is also a WebGatewayEvent", () => {
     { type: "elicitation_cancelled", requestId: "e" },
     { type: "structured_output", payload: {} },
     { type: "plan_mode_changed", mode: "plan" },
+    { type: "config_changed", changedPaths: [], changeClasses: [] },
+    { type: "worktree_created", runId: "r", cwd: "/tmp" },
+    { type: "worktree_removed", cwd: "/tmp" },
     { type: "turn_completed", usage: {}, finishReason: "completed" },
     { type: "error", message: "boom", recoverable: true },
   ];

@@ -203,6 +203,7 @@ export class SubAgentSession {
       registry,
       permissionRuntime,
       this.options.parentDependencies.lifecycle,
+      this.options.parentDependencies.eventEmitter,
     );
     const scheduler = new ConcurrentToolScheduler(toolRuntime, registry);
     return {

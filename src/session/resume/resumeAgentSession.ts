@@ -28,7 +28,7 @@ export type ResumeSessionDependencyExtension = (
 ) => Partial<
   Pick<
     AgentRuntimeDependencies,
-    "context" | "fileHistory" | "subagentTranscript" | "elicitation"
+    "context" | "fileHistory" | "subagentTranscript" | "elicitation" | "eventEmitter" | "drainEvents"
   >
 >;
 
@@ -61,6 +61,8 @@ export async function resumeAgentSession(options: ResumeAgentSessionOptions): Pr
     ...(extension.fileHistory ? { fileHistory: extension.fileHistory } : {}),
     ...(extension.subagentTranscript ? { subagentTranscript: extension.subagentTranscript } : {}),
     ...(extension.elicitation ? { elicitation: extension.elicitation } : {}),
+    ...(extension.eventEmitter ? { eventEmitter: extension.eventEmitter } : {}),
+    ...(extension.drainEvents ? { drainEvents: extension.drainEvents } : {}),
   };
 
   const { session } = createAgentSessionWithStorage({

@@ -25,6 +25,7 @@ import type { AgentPermissionDenial, AgentTurnResult } from "../protocol/result.
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
 import type { LifecycleDispatchResult } from "../../lifecycle/index.js";
+import type { PilotDeckHookEvent } from "../../extension/hooks/protocol/events.js";
 import { NullContextRuntime } from "../../context/NullContextRuntime.js";
 import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
 import type { ContextRecoveryDecision } from "../../context/index.js";
@@ -125,6 +126,7 @@ export class AgentLoop {
           // Auto-compaction must never block the model call — proceed with
           // the original messages if evaluation or summarization fails.
         }
+        yield* this.drainEventBuffer();
       }
 
       const request = await this.createModelRequest(messages, input);
@@ -151,9 +153,9 @@ export class AgentLoop {
           }
         }
       } catch (error) {
-        await this.dispatchLifecycle(input, "StopFailure", {
-          error: error instanceof Error ? error.message : String(error),
-        });
+        const stopFailureMsg = error instanceof Error ? error.message : String(error);
+        await this.dispatchLifecycle(input, "StopFailure", { error: stopFailureMsg });
+        yield { type: "stop_failure", sessionId: input.sessionId, turnId: input.turnId, error: stopFailureMsg };
         const result = this.createTurnResult(input, {
           type: "error",
           stopReason: "model_error",
@@ -162,7 +164,7 @@ export class AgentLoop {
           turns: turnCount,
           startedAt,
           finalMessage,
-          errors: [agentError("agent_model_error", error instanceof Error ? error.message : String(error))],
+          errors: [agentError("agent_model_error", stopFailureMsg)],
         });
         yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
         await captureTurn(result.type === "error");
@@ -255,9 +257,8 @@ export class AgentLoop {
         // (see `runFallbackChain` + `zeroUsageRetry`); the loop only
         // classifies the surfaced error and falls through.
         const classified = classifyModelError(assembled.error);
-        await this.dispatchLifecycle(input, "StopFailure", {
-          error: assembled.error,
-        });
+        await this.dispatchLifecycle(input, "StopFailure", { error: assembled.error });
+        yield { type: "stop_failure", sessionId: input.sessionId, turnId: input.turnId, error: typeof assembled.error === "string" ? assembled.error : JSON.stringify(assembled.error) };
         const result = this.createTurnResult(input, {
           type: "error",
           stopReason: classified.stopReason,
@@ -279,6 +280,7 @@ export class AgentLoop {
           stopHookActive: false,
           lastAssistantMessage: textFromMessage(assembled.message),
         });
+        yield { type: "stop_requested", sessionId: input.sessionId, turnId: input.turnId };
         messages.push(...stopHooks.messages);
         const stopBlock = findLifecycleBlock(stopHooks);
         if (stopBlock) {
@@ -325,6 +327,7 @@ export class AgentLoop {
           createMissingToolResult(call, this.now, error instanceof Error ? error.message : String(error)),
         );
       }
+      yield* this.drainEventBuffer();
 
       const pairedResults = ensureToolResultPairing(toolCalls, results, this.now);
       permissionDenials = [...permissionDenials, ...collectPermissionDenials(pairedResults)];
@@ -465,6 +468,16 @@ export class AgentLoop {
       customSystemPrompt: this.config.systemPrompt,
     });
 
+    this.dispatchLifecycle(input, "InstructionsLoaded", {
+      hasSystemPrompt: !!prepared.systemPrompt,
+    }).catch(() => {});
+    this.dependencies.eventEmitter?.({
+      type: "instructions_loaded",
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      hasSystemPrompt: !!prepared.systemPrompt,
+    });
+
     return {
       provider: this.config.provider,
       model: this.config.model,
@@ -555,6 +568,17 @@ export class AgentLoop {
           transcriptRelativePath,
           subagentSessionId,
         });
+        await this.dispatchLifecycle(input, "SubagentStart", {
+          subagentId,
+          subagentType: def.id,
+        });
+        this.dependencies.eventEmitter?.({
+          type: "subagent_started",
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          subagentId,
+          subagentType: def.id,
+        });
 
         const subSession = new SubAgentSession({
           definition: def,
@@ -593,6 +617,20 @@ export class AgentLoop {
             durationMs: 0,
             errored: true,
           });
+          await this.dispatchLifecycle(input, "SubagentStop", {
+            subagentId,
+            subagentType: def.id,
+            success: false,
+          });
+          this.dependencies.eventEmitter?.({
+            type: "subagent_completed",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            subagentId,
+            subagentType: def.id,
+            success: false,
+            durationMs: 0,
+          });
           throw err;
         }
 
@@ -606,6 +644,20 @@ export class AgentLoop {
           turns: report.turns,
           durationMs: report.durationMs,
           errored,
+        });
+        await this.dispatchLifecycle(input, "SubagentStop", {
+          subagentId,
+          subagentType: def.id,
+          success: !errored,
+        });
+        this.dependencies.eventEmitter?.({
+          type: "subagent_completed",
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          subagentId,
+          subagentType: def.id,
+          success: !errored,
+          durationMs: report.durationMs,
         });
 
         return {
@@ -621,7 +673,7 @@ export class AgentLoop {
 
   private async dispatchLifecycle(
     input: AgentLoopInput,
-    event: "Stop" | "StopFailure",
+    event: PilotDeckHookEvent,
     payload: Record<string, unknown>,
   ): Promise<LifecycleDispatchResult> {
     return this.dependencies.lifecycle?.dispatch({
@@ -643,6 +695,13 @@ export class AgentLoop {
       blockingErrors: [],
       nonBlockingErrors: [],
     };
+  }
+
+  private *drainEventBuffer(): Generator<AgentEvent> {
+    const events = this.dependencies.drainEvents?.() ?? [];
+    for (const event of events) {
+      yield event;
+    }
   }
 
   private createTurnResult(
