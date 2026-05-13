@@ -19,6 +19,15 @@ export class GatewayWsConnection {
     ws.onMessage((message) => void this.handleMessage(message));
   }
 
+  sendNotification(name: string, payload?: unknown): void {
+    if (!this.authed) return;
+    this.ws.sendText(JSON.stringify({ type: "notification", name, payload }));
+  }
+
+  onClose(callback: () => void): void {
+    this.ws.onClose(callback);
+  }
+
   private async handleMessage(message: string): Promise<void> {
     let frame: unknown;
     try {
@@ -138,6 +147,11 @@ export class GatewayWsConnection {
         return this.options.gateway.listProjects();
       case "describe_project":
         return this.options.gateway.describeProject(frame.params as never);
+      case "reload_config":
+        if (this.options.gateway.reloadConfig) {
+          return this.options.gateway.reloadConfig();
+        }
+        return Promise.resolve({ reloaded: false });
       default:
         throw new Error(`Unknown gateway method ${(frame as { method?: string }).method}.`);
     }

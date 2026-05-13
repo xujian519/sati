@@ -93,7 +93,8 @@ export type WebGatewayMethod =
   | "rename_session"
   | "delete_session"
   | "list_projects"
-  | "describe_project";
+  | "describe_project"
+  | "reload_config";
 
 export type WebSubmitTurnInput = {
   sessionKey: string;

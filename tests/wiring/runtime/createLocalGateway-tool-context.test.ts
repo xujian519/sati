@@ -131,7 +131,7 @@ test("WIRING runtime: createLocalGateway can run a turn end-to-end with __testMo
   const env = makeProjectRoot();
   try {
     const { model, lastRequest } = makeRecordingModel();
-    const gateway = createLocalGateway({
+    const { gateway } = createLocalGateway({
       projectRoot: env.projectRoot,
       pilotHome: env.pilotHome,
       env: scrubProcessEnv(),
@@ -177,7 +177,7 @@ test("WIRING runtime: respondElicitation returns delivered=false for an unknown 
   const env = makeProjectRoot();
   try {
     const { model } = makeRecordingModel();
-    const gateway = createLocalGateway({
+    const { gateway } = createLocalGateway({
       projectRoot: env.projectRoot,
       pilotHome: env.pilotHome,
       env: scrubProcessEnv(),

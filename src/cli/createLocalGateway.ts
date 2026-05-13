@@ -42,6 +42,7 @@ import {
 import { createModelRuntime, type ModelRuntime } from "../model/index.js";
 import { createDefaultPermissionContext, type PermissionRule } from "../permission/index.js";
 import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
+import { createPilotConfigStoreSync, type PilotConfigStore } from "../pilot/config/PilotConfigStore.js";
 import type { PilotAgentModelSelection, PilotConfigSnapshot } from "../pilot/config/types.js";
 import type { RouterConfig } from "../router/config/schema.js";
 import { listProjectSessions, resumeAgentSession } from "../session/index.js";
@@ -86,7 +87,14 @@ export type CreateLocalGatewayOptions = {
   autoElicitation?: boolean;
 };
 
-export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gateway {
+export type CreateLocalGatewayResult = {
+  gateway: Gateway;
+  configStore: PilotConfigStore;
+  registry: ProjectRuntimeRegistry;
+  dispose: () => void;
+};
+
+export function createLocalGateway(options: CreateLocalGatewayOptions = {}): CreateLocalGatewayResult {
   const baseEnv = options.env ?? process.env;
   const projectRoot = resolve(options.projectRoot ?? process.cwd());
   const pilotHome = options.pilotHome ?? resolvePilotHome(baseEnv);
@@ -105,6 +113,25 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gat
     autoElicitation: options.autoElicitation,
   });
   const defaultRuntime = registry.resolve();
+
+  const configStore = createPilotConfigStoreSync({ projectRoot, env });
+  const stopWatching = configStore.startWatching();
+
+  configStore.subscribe((event) => {
+    const { changeClasses, changedPaths } = event;
+    if (changeClasses.length === 0) {
+      return;
+    }
+    if (changeClasses.every((c) => c === "restart-required")) {
+      // eslint-disable-next-line no-console
+      console.warn("[pilotdeck] Config change requires process restart:", changedPaths.join(", "));
+      return;
+    }
+    // eslint-disable-next-line no-console
+    console.log("[pilotdeck] Config reloaded, invalidating runtimes:", changedPaths.join(", "));
+    registry.invalidate();
+  });
+
   const router = new SessionRouter({
     createSession: (ctx) => registry.createSession(ctx),
     listSessions: (input) => registry.listSessions(input),
@@ -126,12 +153,29 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gat
       listWebProjects({ pilotHome, defaultProjectRoot: projectRoot }),
     describeProject: (input) =>
       describeWebProject(input.projectKey, { pilotHome, defaultProjectRoot: projectRoot }),
+    async reloadConfig() {
+      let changedPaths: string[] = [];
+      const unsubscribe = configStore.subscribe((event) => {
+        changedPaths = event.changedPaths;
+      });
+      try {
+        await configStore.reload("rpc");
+      } finally {
+        unsubscribe();
+      }
+      return { reloaded: true, changedPaths };
+    },
   });
   // Hand the gateway back to the registry so per-session creation can
   // build a `GatewayElicitationChannel` against this gateway's bus +
   // emit-sink (B1).
   registry.setGateway(gateway);
-  return gateway;
+  return {
+    gateway,
+    configStore,
+    registry,
+    dispose: stopWatching,
+  };
 }
 
 type ProjectRuntimeRegistryOptions = {
@@ -235,6 +279,28 @@ class ProjectRuntimeRegistry {
       this.fallbackRuleSets.set(sessionKey, auto);
     }
     return auto;
+  }
+
+  /**
+   * Drop cached runtimes so the next `resolve()` call rebuilds from
+   * a fresh `loadPilotConfig()` snapshot. Gracefully shuts down any
+   * active MCP connections before discarding the entry.
+   */
+  invalidate(projectRoot?: string): void {
+    if (projectRoot) {
+      const runtime = this.runtimes.get(projectRoot);
+      if (runtime?.mcpRuntime) {
+        runtime.mcpRuntime.stop().catch(() => {});
+      }
+      this.runtimes.delete(projectRoot);
+    } else {
+      for (const [, runtime] of this.runtimes) {
+        if (runtime.mcpRuntime) {
+          runtime.mcpRuntime.stop().catch(() => {});
+        }
+      }
+      this.runtimes.clear();
+    }
   }
 
   resolve(projectKey?: string): ProjectRuntime {

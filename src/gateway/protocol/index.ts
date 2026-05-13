@@ -13,6 +13,7 @@ export type {
   ListSessionsInput,
   ListSessionsResult,
   NewSessionInput,
+  ReloadConfigResult,
   TurnUsage,
 } from "./types.js";
 export type {
@@ -22,6 +23,7 @@ export type {
   WsGatewayMethod,
   WsHelloFrame,
   WsHelloOk,
+  WsNotificationFrame,
   WsRequestFrame,
   WsResponseFrame,
 } from "./frames.js";

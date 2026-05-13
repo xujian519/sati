@@ -18,6 +18,7 @@ import type {
   ListSessionsInput,
   ListSessionsResult,
   NewSessionInput,
+  ReloadConfigResult,
   WebDescribeProjectInput,
   WebListProjectsResult,
   WebProjectSummary,
@@ -51,6 +52,12 @@ export type InProcessGatewayOptions = {
    */
   listProjects?: () => Promise<WebListProjectsResult>;
   describeProject?: (input: WebDescribeProjectInput) => Promise<WebProjectSummary>;
+  /**
+   * Pluggable config-reload handler wired by `createLocalGateway`.
+   * When set, `reloadConfig()` delegates to this callback which owns
+   * the PilotConfigStore + ProjectRuntimeRegistry lifecycle.
+   */
+  reloadConfig?: () => Promise<ReloadConfigResult>;
 };
 
 export class InProcessGateway implements Gateway {
@@ -269,6 +276,13 @@ export class InProcessGateway implements Gateway {
       throw new Error("describe_project is not configured.");
     }
     return this.options.describeProject(input);
+  }
+
+  async reloadConfig(): Promise<ReloadConfigResult> {
+    if (!this.options.reloadConfig) {
+      return { reloaded: false };
+    }
+    return this.options.reloadConfig();
   }
 
   private requireCron(): GatewayCronController {

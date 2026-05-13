@@ -30,6 +30,7 @@ export type GatewayServer = {
   token: string;
   tokenPath?: string;
   close(): Promise<void>;
+  broadcastNotification(name: string, payload?: unknown): void;
 };
 
 export async function startGatewayServer(options: GatewayServerOptions): Promise<GatewayServer> {
@@ -41,10 +42,14 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
     ? { token: options.token, tokenPath: undefined }
     : await ensureGatewayAuthToken();
 
+  const connections = new Set<GatewayWsConnection>();
+
   const server = createServer((request, response) => {
     void handleHttpRequest(request, response, options, auth.token);
   });
-  server.on("upgrade", (request, socket) => handleUpgrade(request, socket, options, auth.token));
+  server.on("upgrade", (request, socket) =>
+    handleUpgrade(request, socket, options, auth.token, connections),
+  );
 
   await listen(server, options.port ?? 18789, host);
   const address = server.address();
@@ -55,6 +60,11 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
     token: auth.token,
     tokenPath: auth.tokenPath,
     close: () => close(server),
+    broadcastNotification(name: string, payload?: unknown) {
+      for (const conn of connections) {
+        conn.sendNotification(name, payload);
+      }
+    },
   };
 }
 
@@ -99,7 +109,13 @@ async function handleHttpRequest(
   response.end("not found");
 }
 
-function handleUpgrade(request: IncomingMessage, socket: Duplex, options: GatewayServerOptions, token: string): void {
+function handleUpgrade(
+  request: IncomingMessage,
+  socket: Duplex,
+  options: GatewayServerOptions,
+  token: string,
+  connections: Set<GatewayWsConnection>,
+): void {
   const url = new URL(request.url ?? "/", "http://127.0.0.1");
   if (url.pathname !== "/ws") {
     socket.destroy();
@@ -121,11 +137,13 @@ function handleUpgrade(request: IncomingMessage, socket: Duplex, options: Gatewa
     ].join("\r\n"),
   );
   const ws = new TextWebSocketConnection(socket as Socket);
-  new GatewayWsConnection(ws, {
+  const conn = new GatewayWsConnection(ws, {
     gateway: options.gateway,
     token,
     serverVersion: options.serverVersion ?? "0.1.0",
   });
+  connections.add(conn);
+  conn.onClose(() => connections.delete(conn));
 }
 
 function listen(server: Server, port: number, host: string): Promise<void> {

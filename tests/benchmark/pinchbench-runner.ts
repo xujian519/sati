@@ -232,7 +232,7 @@ async function main(): Promise<void> {
     try {
       workspace = await prepareTaskWorkspace(task, skillDir);
 
-      const gateway: Gateway = createLocalGateway({
+      const { gateway }: { gateway: Gateway } = createLocalGateway({
         projectRoot: workspace.cwd,
         permissionMode: "bypassPermissions",
       });

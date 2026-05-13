@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { GatewayEvent } from "../protocol/types.js";
-import type { GatewayWsClientName, WsEventFrame, WsGatewayMethod, WsHelloOk, WsResponseFrame } from "../protocol/frames.js";
+import type { GatewayWsClientName, WsEventFrame, WsGatewayMethod, WsHelloOk, WsNotificationFrame, WsResponseFrame } from "../protocol/frames.js";
 import { PILOTDECK_GATEWAY_PROTOCOL_VERSION } from "../protocol/version.js";
+
+export type GatewayWsNotificationHandler = (name: string, payload: unknown) => void;
 
 export type GatewayWsClientOptions = {
   url: string;
@@ -19,10 +21,15 @@ type PendingRequest = {
 export class GatewayWsClient {
   private readonly pending = new Map<string, PendingRequest>();
   private readonly streams = new Map<string, AsyncEventQueue<GatewayEvent>>();
+  private readonly notificationHandlers: GatewayWsNotificationHandler[] = [];
   private ws?: WebSocket;
   private hello?: WsHelloOk;
 
   constructor(private readonly options: GatewayWsClientOptions) {}
+
+  onNotification(handler: GatewayWsNotificationHandler): void {
+    this.notificationHandlers.push(handler);
+  }
 
   async connect(): Promise<WsHelloOk> {
     const ws = new WebSocket(this.options.url);
@@ -82,9 +89,17 @@ export class GatewayWsClient {
   }
 
   private handleMessage(message: string): void {
-    const frame = JSON.parse(message) as WsHelloOk | WsResponseFrame | WsEventFrame;
+    const frame = JSON.parse(message) as WsHelloOk | WsResponseFrame | WsEventFrame | WsNotificationFrame;
     if (frame.type === "hello_ok") {
       this.hello = frame;
+      return;
+    }
+    if (frame.type === "notification") {
+      for (const handler of this.notificationHandlers) {
+        try {
+          handler(frame.name, frame.payload);
+        } catch { /* notification handlers must not crash the client */ }
+      }
       return;
     }
     if (frame.type === "response") {

@@ -33,7 +33,8 @@ export type WsGatewayMethod =
   | "permission_decide"
   | "read_session_messages"
   | "list_projects"
-  | "describe_project";
+  | "describe_project"
+  | "reload_config";
 
 export type WsRequestFrame = {
   type: "request";
@@ -64,4 +65,15 @@ export type WsEventFrame = {
   event: GatewayEvent;
 };
 
-export type WsGatewayFrame = WsHelloFrame | WsHelloOk | WsRequestFrame | WsResponseFrame | WsEventFrame;
+/**
+ * Server-pushed notification (no request id). Sent after `hello_ok` to
+ * inform connected clients about asynchronous state changes (e.g. a
+ * config reload triggered by a file-system watcher or another client).
+ */
+export type WsNotificationFrame = {
+  type: "notification";
+  name: string;
+  payload?: unknown;
+};
+
+export type WsGatewayFrame = WsHelloFrame | WsHelloOk | WsRequestFrame | WsResponseFrame | WsEventFrame | WsNotificationFrame;

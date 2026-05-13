@@ -18,6 +18,14 @@ import {
 } from '../services/pilotdeckConfig.js';
 import { reloadPilotDeckConfig } from '../services/pilotdeckConfigReloader.js';
 import { suppressNextWatchEvent } from '../services/pilotdeckConfigWatcher.js';
+import { getPilotDeckGateway } from '../pilotdeck-bridge.js';
+
+async function notifyGatewayConfigReload() {
+  try {
+    const gw = await getPilotDeckGateway();
+    if (gw?.reloadConfig) await gw.reloadConfig();
+  } catch { /* gateway unreachable — self-watch will pick up the change */ }
+}
 
 const router = express.Router();
 
@@ -119,6 +127,7 @@ router.put('/', async (req, res) => {
     }
 
     const reloadResult = await reloadPilotDeckConfig(saved.config);
+    void notifyGatewayConfigReload();
     // Re-read disk so the response's `raw` field comes from the actual
     // (lossless) file rather than the lossy round-trip output, and so
     // `serializeConfigResponse` has a `rawYaml` to render the full view.
@@ -142,6 +151,7 @@ router.post('/reload', async (_req, res) => {
       return res.status(400).json({ error: 'Invalid config', validation });
     }
     const reloadResult = await reloadPilotDeckConfig(record.config);
+    void notifyGatewayConfigReload();
     const response = serializeConfigResponse(record, reloadResult);
     broadcastConfigEvent({ source: 'ui-reload', ...response, timestamp: new Date().toISOString() });
     res.json(response);

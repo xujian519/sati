@@ -47,7 +47,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       });
     }
 
-    const gateway = createLocalGateway({
+    const { gateway, dispose: disposeGateway } = createLocalGateway({
       projectRoot,
       pilotHome,
       env,
@@ -78,6 +78,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     }
     const stop = async () => {
       try {
+        disposeGateway();
         await alwaysOn?.stop();
         await cron?.stop();
       } catch (error) {
@@ -110,7 +111,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     const probeUrl = `http://127.0.0.1:${gatewayPort}`;
     const fallbackGateway = createFallbackGateway();
     try {
-      const local = createLocalGateway({ projectRoot: process.cwd() });
+      const { gateway: local } = createLocalGateway({ projectRoot: process.cwd() });
       await new TuiChannel({
         projectKey: process.cwd(),
         cwd: process.cwd(),
@@ -128,7 +129,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
-  const fallbackGateway = createLocalGateway({ projectRoot: process.cwd() });
+  const { gateway: fallbackGateway } = createLocalGateway({ projectRoot: process.cwd() });
   await new CliChannel({ argv, projectKey: process.cwd() }).start({ gateway: fallbackGateway });
 }
 
