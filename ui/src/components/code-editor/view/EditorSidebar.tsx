@@ -17,10 +17,12 @@ type EditorSidebarProps = {
   fillSpace?: boolean;
 };
 
-// Minimum width for the left content (file tree, chat, etc.)
-const MIN_LEFT_CONTENT_WIDTH = 200;
+// Keep enough of the Files split visible so the editor cannot cover the chat
+// and file tree when CodeMirror reports wide virtualized content.
+const MIN_LEFT_CONTENT_WIDTH = 420;
 // Minimum width for the editor sidebar
 const MIN_EDITOR_WIDTH = 280;
+const AUTO_EDITOR_WIDTH_RATIO = 0.5;
 
 export default function EditorSidebar({
   editingFile,
@@ -39,7 +41,10 @@ export default function EditorSidebar({
   const containerRef = useRef<HTMLDivElement>(null);
   const [effectiveWidth, setEffectiveWidth] = useState(editorWidth);
 
-  // Adjust editor width when container size changes to ensure buttons are always visible
+  // Adjust editor width when container size changes to ensure buttons are always visible.
+  // In the Files tab's default mode, this intentionally produces a stable
+  // measured width rather than letting the editor's content influence flex
+  // sizing while CodeMirror virtualizes long lines during scroll.
   useEffect(() => {
     if (!editingFile || isMobile || poppedOut) return;
 
@@ -56,11 +61,11 @@ export default function EditorSidebar({
       if (maxEditorWidth < MIN_EDITOR_WIDTH) {
         // Not enough space - pop out the editor so user can still see everything
         setPoppedOut(true);
-      } else if (editorWidth > maxEditorWidth) {
-        // Editor is too wide - constrain it to ensure left content has space
-        setEffectiveWidth(maxEditorWidth);
       } else {
-        setEffectiveWidth(editorWidth);
+        const requestedWidth = fillSpace && !hasManualWidth && !editorExpanded
+          ? Math.min(editorWidth, Math.floor(containerWidth * AUTO_EDITOR_WIDTH_RATIO))
+          : editorWidth;
+        setEffectiveWidth(Math.min(requestedWidth, maxEditorWidth));
       }
     };
 
@@ -78,7 +83,7 @@ export default function EditorSidebar({
       window.removeEventListener('resize', updateWidth);
       resizeObserver.disconnect();
     };
-  }, [editingFile, isMobile, poppedOut, editorWidth]);
+  }, [editingFile, fillSpace, hasManualWidth, isMobile, poppedOut, editorExpanded, editorWidth]);
 
   if (!editingFile) {
     return null;
@@ -98,11 +103,21 @@ export default function EditorSidebar({
     );
   }
 
-  // In files tab, fill the remaining width unless user has dragged manually.
-  const useFlexLayout = editorExpanded || (fillSpace && !hasManualWidth);
+  const useAutoFilesWidth = fillSpace && !hasManualWidth && !editorExpanded;
+  const containerClassName = editorExpanded
+    ? 'flex h-full min-w-0 flex-1 basis-0'
+    : 'flex h-full min-w-0 flex-shrink-0';
+  const containerStyle = editorExpanded
+    ? undefined
+    : {
+        width: useAutoFilesWidth
+          ? `min(${editorWidth}px, ${AUTO_EDITOR_WIDTH_RATIO * 100}%, calc(100% - ${MIN_LEFT_CONTENT_WIDTH}px))`
+          : `${effectiveWidth}px`,
+        minWidth: `${MIN_EDITOR_WIDTH}px`,
+      };
 
   return (
-    <div ref={containerRef} className={`flex h-full min-w-0 flex-shrink-0 ${editorExpanded ? 'flex-1' : ''}`}>
+    <div ref={containerRef} className={containerClassName} style={containerStyle}>
       {!editorExpanded && (
         <div
           ref={resizeHandleRef}
@@ -116,8 +131,7 @@ export default function EditorSidebar({
       )}
 
       <div
-        className={`h-full overflow-hidden border-l border-neutral-200 dark:border-neutral-800 ${useFlexLayout ? 'min-w-0 flex-1' : `min-w-[ flex-shrink-0${MIN_EDITOR_WIDTH}px]`}`}
-        style={useFlexLayout ? undefined : { width: `${effectiveWidth}px`, minWidth: `${MIN_EDITOR_WIDTH}px` }}
+        className="h-full min-w-0 flex-1 overflow-hidden border-l border-neutral-200 dark:border-neutral-800"
       >
         <CodeEditor
           file={editingFile}
