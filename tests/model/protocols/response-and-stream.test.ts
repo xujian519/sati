@@ -104,6 +104,43 @@ test("normalizes OpenAI streaming deltas and assembles tool arguments", () => {
   assert.equal(end.at(-1)?.type, "message_end");
 });
 
+test("OpenAI reasoning deltas: emits each incremental delta exactly once", () => {
+  // Bug regression: DeepSeek's native API uses `delta.reasoning_content`.
+  // An earlier version of the parser pushed it twice (once via the
+  // `reasoning ?? reasoning_content` branch, once via the
+  // reasoning_content-specific branch).
+  const state = createStreamNormalizerState();
+  const events: Array<ReturnType<typeof normalizeStreamEvent>[number]> = [];
+  for (const chunk of ["So ", "the ", "answer."]) {
+    events.push(...normalizeStreamEvent("openai", { choices: [{ delta: { reasoning_content: chunk } }] }, state));
+  }
+  const reasoning = events.filter((e) => e.type === "thinking_delta") as Array<{ type: "thinking_delta"; text: string }>;
+  assert.deepEqual(
+    reasoning.map((e) => e.text),
+    ["So ", "the ", "answer."],
+    "should emit each incremental delta once, no duplicates",
+  );
+});
+
+test("OpenAI reasoning deltas: collapses cumulative-snapshot streams to diffs", () => {
+  // Bug regression: Yeysai's Gemini wrapper (and similar proxies) emit
+  // cumulative reasoning content per chunk — each delta carries
+  // "everything emitted so far", not just the new piece. Without diff
+  // detection the thinking buffer balloons triangularly (N tokens
+  // render N×(N+1)/2 chars).
+  const state = createStreamNormalizerState();
+  const events: Array<ReturnType<typeof normalizeStreamEvent>[number]> = [];
+  for (const snapshot of ["So", "So the", "So the only", "So the only answer"]) {
+    events.push(...normalizeStreamEvent("openai", { choices: [{ delta: { reasoning: snapshot } }] }, state));
+  }
+  const reasoning = events.filter((e) => e.type === "thinking_delta") as Array<{ type: "thinking_delta"; text: string }>;
+  assert.deepEqual(
+    reasoning.map((e) => e.text),
+    ["So", " the", " only", " answer"],
+    "snapshot stream should produce suffix-diff deltas, never repeating earlier prefix",
+  );
+});
+
 test("normalizes Anthropic streaming tool_use into a complete tool call", () => {
   const state = createStreamNormalizerState();
   const start = normalizeStreamEvent("anthropic", { type: "message_start" }, state);
