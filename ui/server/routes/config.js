@@ -2,6 +2,7 @@ import express from 'express';
 import fsPromises from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
+import { parse as parseYaml } from 'yaml';
 import {
   buildDefaultPilotDeckConfig,
   configToYaml,
@@ -13,6 +14,7 @@ import {
   readPilotDeckConfigFile,
   validatePilotDeckConfig,
   writePilotDeckConfig,
+  writeRawPilotDeckYaml,
 } from '../services/pilotdeckConfig.js';
 import { reloadPilotDeckConfig } from '../services/pilotdeckConfigReloader.js';
 import { suppressNextWatchEvent } from '../services/pilotdeckConfigWatcher.js';
@@ -69,17 +71,53 @@ router.post('/validate', (req, res) => {
 
 router.put('/', async (req, res) => {
   try {
-    const existing = readPilotDeckConfigFile().config;
-    const incoming = typeof req.body?.raw === 'string'
-      ? parseConfigYaml(req.body.raw)
-      : req.body?.config;
-    if (!incoming || typeof incoming !== 'object') {
-      return res.status(400).json({ error: 'config or raw YAML is required' });
+    // Two submission shapes coexist:
+    //
+    //   • `{ raw: "..." }` from the Raw YAML editor → write the
+    //     parsed YAML object to disk verbatim via
+    //     writeRawPilotDeckYaml. This is the only path that preserves
+    //     router/gateway/adapters/extension/cron/alwaysOn edits,
+    //     because the ui-internal schema doesn't model them.
+    //
+    //   • `{ config: {...} }` from structured editors (provider
+    //     picker, memory editor, onboarding LLM step) → run through
+    //     writePilotDeckConfig, which round-trips through
+    //     ui-internal but read-modify-writes the rest from disk so
+    //     non-ui segments aren't dropped.
+    //
+    // Removing the `config` branch is what got 5ad9f29 reverted;
+    // never collapse the two paths into one — they have different
+    // semantics and different callers.
+    const diskRecord = readPilotDeckConfigFile();
+    const rawString = typeof req.body?.raw === 'string' ? req.body.raw : null;
+
+    let saved;
+    if (rawString !== null) {
+      let parsed;
+      try {
+        parsed = parseYaml(rawString);
+      } catch (parseErr) {
+        return res.status(400).json({
+          error: `Invalid YAML: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+        });
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return res.status(400).json({ error: 'raw YAML must parse to an object' });
+      }
+      // Re-hydrate any field the UI received as "********" with the
+      // original disk value so saving the masked view back is a no-op
+      // for secrets the user didn't actually touch.
+      const restored = preserveMaskedSecrets(parsed, diskRecord.rawYaml ?? {});
+      suppressNextWatchEvent();
+      saved = await writeRawPilotDeckYaml(restored);
+    } else if (req.body?.config && typeof req.body.config === 'object') {
+      const restored = preserveMaskedSecrets(req.body.config, diskRecord.config);
+      suppressNextWatchEvent();
+      saved = await writePilotDeckConfig(restored);
+    } else {
+      return res.status(400).json({ error: 'raw YAML or config object is required' });
     }
 
-    const config = preserveMaskedSecrets(incoming, existing);
-    suppressNextWatchEvent();
-    const saved = await writePilotDeckConfig(config);
     const reloadResult = await reloadPilotDeckConfig(saved.config);
     // Re-read disk so the response's `raw` field comes from the actual
     // (lossless) file rather than the lossy round-trip output, and so

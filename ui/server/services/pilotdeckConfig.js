@@ -502,6 +502,37 @@ export async function writePilotDeckConfig(config) {
   return { configPath, raw, validation, config: normalized };
 }
 
+// Lossless write path used by PUT /api/config when the client submits
+// `{ raw: "..." }` (Raw YAML editor). The parsed YAML object is written
+// to disk verbatim — no internal-schema round-trip — so router /
+// gateway / adapters / extension / cron / alwaysOn edits land
+// untouched.
+//
+// validatePilotDeckConfig still runs (it normalizes internally, so it
+// only enforces ui-internal-relevant checks: main model existence,
+// provider URL/key, memory model). Gateway-side schemas are validated
+// by the gateway's own PilotConfigStore on reload, which is the right
+// boundary for those fields.
+//
+// IMPORTANT: this writer is the safe counterpart to `writePilotDeckConfig`,
+// not a replacement. Structured editors (provider picker, memory
+// editor, onboarding) still post `{ config }` and need the lossy path
+// because they only know about the ui-internal slice. Removing the
+// `{ config }` PUT branch is what got 5ad9f29 reverted; keep both.
+export async function writeRawPilotDeckYaml(yamlObj) {
+  const validation = validatePilotDeckConfig(yamlObj);
+  if (!validation.valid) {
+    const error = new Error('Invalid PilotDeck config');
+    error.validation = validation;
+    throw error;
+  }
+  const configPath = getPilotDeckConfigPath();
+  await fsPromises.mkdir(path.dirname(configPath), { recursive: true });
+  const raw = stringifyYaml(yamlObj, { lineWidth: 0 });
+  await fsPromises.writeFile(configPath, raw, 'utf8');
+  return { configPath, raw, validation, config: validation.config };
+}
+
 export function expandTilde(value) {
   const text = normalizeString(value);
   if (text === '~') return os.homedir();
