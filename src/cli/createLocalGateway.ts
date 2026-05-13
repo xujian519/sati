@@ -67,6 +67,11 @@ export type CreateLocalGatewayOptions = {
   /** Optional Cron runtime controller exposed through Gateway management methods. */
   cron?: GatewayCronController;
   /**
+   * Additional directories the agent is allowed to read/write outside of `projectRoot`.
+   * Passed to PermissionContext so `pathSafety` accepts paths within these roots.
+   */
+  additionalWorkingDirectories?: string[];
+  /**
    * @internal Testing hook — replaces the production `createModelRuntime`
    * call when present. Tests can return a fake `ModelRuntime` (e.g. a scripted
    * stream) so the rest of the wiring (Router, Tools, Context, AgentLoop) runs
@@ -95,6 +100,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gat
     now,
     extraTools: options.extraTools,
     sessionOverrides: options.sessionOverrides,
+    additionalWorkingDirectories: options.additionalWorkingDirectories,
     modelFactory: options.__testModelFactory,
     autoElicitation: options.autoElicitation,
   });
@@ -136,6 +142,7 @@ type ProjectRuntimeRegistryOptions = {
   now: () => Date;
   extraTools?: PilotDeckToolDefinition[];
   sessionOverrides?: SessionConfigOverrides;
+  additionalWorkingDirectories?: string[];
   /** @internal Test hook from `CreateLocalGatewayOptions.__testModelFactory`. */
   modelFactory?: (snapshot: PilotConfigSnapshot) => ModelRuntime;
   autoElicitation?: boolean;
@@ -533,6 +540,7 @@ class ProjectRuntimeRegistry {
         mode: permissionMode,
         canPrompt: override?.canPrompt ?? false,
         bypassAvailable: override?.bypassAvailable ?? true,
+        additionalWorkingDirectories: this.options.additionalWorkingDirectories,
         rules: {
           allow: liveRuleSet.allow,
           deny: liveRuleSet.deny,

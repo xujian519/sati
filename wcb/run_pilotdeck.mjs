@@ -318,6 +318,7 @@ async function runTask(task, args) {
       pilotHome,
       permissionMode: "bypassPermissions",
       autoElicitation: true,
+      additionalWorkingDirectories: ["/tmp", "/workspace"],
       env: { ...process.env },
     });
 

@@ -22,10 +22,22 @@ export function resolvePilotDeckWorkspacePath(
     };
   }
 
+  const absolutePath = path.resolve(path.isAbsolute(inputPath) ? inputPath : path.join(context.cwd, inputPath));
+
+  if (context.permissionMode === "bypassPermissions") {
+    const relativePath = path.relative(context.cwd, absolutePath) || ".";
+    if (options?.forWrite && isWriteDenied(relativePath)) {
+      return {
+        ok: false,
+        error: toolError("path_not_allowed", `Writing to ${relativePath} is not allowed by default.`),
+      };
+    }
+    return { ok: true, absolutePath, relativePath, root: context.cwd };
+  }
+
   const roots = [context.cwd, ...context.permissionContext.additionalWorkingDirectories].map((root) =>
     path.resolve(root),
   );
-  const absolutePath = path.resolve(path.isAbsolute(inputPath) ? inputPath : path.join(context.cwd, inputPath));
   const root = roots.find((candidate) => isPathWithinRoot(absolutePath, candidate));
 
   if (!root) {
