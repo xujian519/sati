@@ -58,6 +58,10 @@ export type GatewayEvent =
       toolCallId: string;
       ok: boolean;
       resultPreview?: string;
+      resultLineCount?: number;
+      resultBytes?: number;
+      toolName?: string;
+      resultPath?: string;
       /**
        * `PilotDeckToolErrorCode` of the underlying failure when `ok === false`.
        * Hosts use this to render type-specific affordances — e.g. the Web UI
@@ -67,6 +71,7 @@ export type GatewayEvent =
        */
       errorCode?: string;
     }
+  | { type: "tool_result_detail_available"; toolCallId: string; resultPath?: string; fullText?: string }
   | { type: "permission_request"; requestId: string; toolName: string; payload: unknown }
   /**
    * B1 elicitation request: a tool (`ask_user_question`) wants the host

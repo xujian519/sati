@@ -1,5 +1,6 @@
 import { appendFileSync, mkdirSync as mkdirSyncFs } from "node:fs";
 import { resolve, join as joinPath } from "node:path";
+import { tmpdir } from "node:os";
 import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
 import { createAgentEventBuffer, type AgentRuntimeConfig, type CreateAgentSessionOptions } from "../agent/index.js";
 import {
@@ -153,6 +154,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   const gateway = new InProcessGateway(router, {
     now,
     serverInfo: { mode: "in_process", projectKey: projectRoot },
+    toolResultsDir: resolve(tmpdir(), "pilotdeck-tool-output", process.pid.toString()),
     cron: options.cron,
     readSessionMessages: (input) =>
       readWebSessionMessages(input, {
