@@ -48,13 +48,10 @@ import { promises as fsPromises } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
 import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from './utils/pilotPaths.js';
-// Imported from TypeScript source — requires `node --import tsx` so the
-// module is transformed at load time. Keeping the bridge off
-// `dist/src/` is what lets `ui/server` survive `src/**` edits without
-// `npm run build`; the gateway server (also tsx-launched) restarts and
-// picks up the new code, while `ui/server` keeps running as a plain
-// client.
-import { createRemoteGateway } from '../../src/gateway/index.js';
+// Use the compiled gateway client from dist/ so the UI server can run
+// without tsx (tsx 4.x es-module-lexer has a known parse bug on this
+// file). Run `npm run build` in the repo root when gateway source changes.
+import { createRemoteGateway } from '../../dist/src/gateway/index.js';
 import { createNormalizedMessage } from './pilotdeck-message.js';
 import { readPermissionSettings } from './services/permissionSettings.js';
 
