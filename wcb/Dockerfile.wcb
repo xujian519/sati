@@ -1,0 +1,8 @@
+FROM wildclawbench-claudecode-ubuntu:v0.2-patched
+
+# PilotDeck needs bun (for run_pilotdeck.mjs) and git (for task warmup/workspace)
+COPY bun-bin/bun /usr/local/bin/bun
+RUN chmod +x /usr/local/bin/bun && bun --version
+
+RUN apt-get update -qq && apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
