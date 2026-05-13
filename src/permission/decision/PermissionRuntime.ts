@@ -49,6 +49,15 @@ export class PermissionRuntime {
     const toolDecision = normalizeToolPermission(toolPermission, tool, input, toolCallId, permissionContext);
     if (toolDecision) {
       if (toolDecision.type === "ask") {
+        // In bypassPermissions mode, tool-level ask is overridden to allow.
+        // Explicit ask *rules* (checked above) are still respected.
+        if (permissionContext.mode === "bypassPermissions") {
+          return allow({
+            type: "mode",
+            mode: "bypassPermissions",
+            message: `bypassPermissions overrides tool-level ask for ${tool.name}.`,
+          });
+        }
         return finalizeAsk(toolDecision, permissionContext);
       }
       return toolDecision;
