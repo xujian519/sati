@@ -46,6 +46,7 @@ export type GatewaySubmitTurnInput = {
   attachments?: ChannelAttachment[];
   mode?: GatewayMode;
   runId?: string;
+  maxTurns?: number;
 };
 
 export type GatewayEvent =
@@ -100,6 +101,7 @@ export type GatewayEvent =
   | { type: "worktree_created"; runId: string; cwd: string }
   | { type: "worktree_removed"; cwd: string }
   | { type: "turn_completed"; usage: TurnUsage; finishReason: AgentTurnResult["stopReason"] | string }
+  | { type: "agent_status"; event: string; detail?: Record<string, unknown> }
   | { type: "error"; message: string; code?: string; recoverable: boolean };
 
 export type GatewayElicitationResponseInput = {

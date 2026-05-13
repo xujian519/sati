@@ -174,6 +174,7 @@ export class InProcessGateway implements Gateway {
           agentInput,
           {
             turnId: runId,
+            maxTurns: input.maxTurns,
             permissionMode,
             permissionRules: {
               ...persistedRules,
@@ -427,16 +428,42 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
       }
       return events;
     }
+    case "compact_started":
+      return [{
+        type: "agent_status",
+        event: "compact_started",
+        detail: { trigger: event.trigger, preTokens: event.preTokens },
+      }];
+    case "compact_completed":
+      return [{
+        type: "agent_status",
+        event: "compact_completed",
+        detail: { status: event.status, preTokens: event.preTokens, postTokens: event.postTokens },
+      }];
+    case "turn_continued":
+      return [{
+        type: "agent_status",
+        event: "turn_continued",
+        detail: { reason: event.reason },
+      }];
+    case "subagent_started":
+      return [{
+        type: "agent_status",
+        event: "subagent_started",
+        detail: { subagentId: event.subagentId, subagentType: event.subagentType },
+      }];
+    case "subagent_completed":
+      return [{
+        type: "agent_status",
+        event: "subagent_completed",
+        detail: { subagentId: event.subagentId, subagentType: event.subagentType, success: event.success, durationMs: event.durationMs },
+      }];
     case "session_ended":
     case "user_prompt_submitted":
     case "setup_completed":
     case "instructions_loaded":
     case "stop_requested":
     case "stop_failure":
-    case "compact_started":
-    case "compact_completed":
-    case "subagent_started":
-    case "subagent_completed":
     case "elicitation_resolved":
       return [];
     case "pre_tool_execute":
