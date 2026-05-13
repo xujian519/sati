@@ -20,7 +20,7 @@ import type { CanonicalMessage } from "../../../src/model/index.js";
 for (const scenario of ROUGH_TOKEN_SCENARIOS) {
   test(`legacy parity / rough token / ${scenario.id}`, () => {
     if (scenario.parityStatus !== "compare") return;
-    const manager = new TokenBudgetManager({ bytesPerToken: scenario.bytesPerToken });
+    const manager = new TokenBudgetManager();
     const tokens = manager.estimateTextTokens(scenario.text);
     assert.equal(tokens, scenario.expectedTokens, `[${scenario.source}]`);
   });

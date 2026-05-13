@@ -1,6 +1,6 @@
 import { resolvePluginDirectories } from "../discovery/PluginDirectoryResolver.js";
-import { discoverPluginPaths } from "../discovery/discoverLocalPlugins.js";
-import { loadPluginFromPath } from "../loading/PluginLoader.js";
+import { discoverPluginPaths, discoverSkillPaths } from "../discovery/discoverLocalPlugins.js";
+import { loadPluginFromPath, loadSkillFromPath } from "../loading/PluginLoader.js";
 import { loadPluginHooks } from "../loading/PluginHookLoader.js";
 import type { LoadedPluginCommand } from "../loading/PluginCommandLoader.js";
 import type { PilotDeckLoadedPlugin } from "../protocol/plugin.js";
@@ -187,16 +187,28 @@ export class PluginRuntime {
       projectRoot: this.options.projectRoot,
       pilotHome: this.options.pilotHome,
     });
-    const discovered = await discoverPluginPaths([
-      { path: paths.globalPluginsDir, source: "global" },
-      { path: paths.projectPluginsDir, source: "project" },
+    const [discovered, discoveredSkills] = await Promise.all([
+      discoverPluginPaths([
+        { path: paths.globalPluginsDir, source: "global" },
+        { path: paths.projectPluginsDir, source: "project" },
+      ]),
+      discoverSkillPaths([
+        { path: paths.globalSkillsDir, source: "global" },
+        { path: paths.projectSkillsDir, source: "project" },
+      ]),
     ]);
-    const loaded = await Promise.all(
-      discovered.map((plugin) => loadPluginFromPath(plugin.path, plugin.source).catch(() => undefined)),
-    );
+    const [loaded, loadedSkills] = await Promise.all([
+      Promise.all(
+        discovered.map((plugin) => loadPluginFromPath(plugin.path, plugin.source).catch(() => undefined)),
+      ),
+      Promise.all(
+        discoveredSkills.map((s) => loadSkillFromPath(s.path, s.source).catch(() => undefined)),
+      ),
+    ]);
     const plugins = [
       ...enabledBuiltinPlugins(this.options.builtinPlugins ?? [], this.options.builtinPluginsEnabled ?? {}),
       ...loaded.filter(isLoadedPlugin),
+      ...loadedSkills.filter(isLoadedPlugin),
     ];
     this.registry.replaceAll(plugins);
     return {

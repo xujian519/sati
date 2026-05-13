@@ -2,15 +2,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AlertCircle,
+  Check,
   CheckCircle2,
   Code2,
   FileCog,
   FolderOpen,
+  Image as ImageIcon,
   Info,
   LayoutList,
   Plus,
   RefreshCw,
   Save,
+  Star,
   Trash2,
   XCircle,
 } from 'lucide-react';
@@ -27,42 +30,61 @@ import SettingsRow from '../SettingsRow';
 import SettingsSection from '../SettingsSection';
 import SettingsToggle from '../SettingsToggle';
 import { cn } from '../../../../lib/utils';
+import {
+  CATALOG_PROVIDERS,
+  findCatalogProviderById,
+  type CatalogProvider,
+  type CatalogModel,
+} from '../../../../shared/catalogProviders';
 import type { SettingsProject } from '../../types/types';
 
-// ── Types ──────────────────────────────────────────────────────────────
+// ── V2 schema types ────────────────────────────────────────────────────
+// Schema mirrors ~/.pilotdeck/pilotdeck.yaml exactly. No more
+// pre-/post-translation in the backend — disk shape === UI shape.
 
-type Provider = {
-  type?: string;
-  baseUrl?: string;
+type V2Provider = {
+  protocol?: 'openai' | 'anthropic';
+  url?: string;
   apiKey?: string;
+  timeoutMs?: number;
   headers?: Record<string, string>;
-};
-
-type ModelEntry = {
-  provider?: string;
-  name?: string;
-  contextWindow?: number;
+  models?: Record<string, Record<string, unknown> | null>;
 };
 
 type PilotDeckConfig = {
-  version?: number;
-  runtime?: {
-    host?: string;
-    serverPort?: number;
-    vitePort?: number;
-    proxyPort?: number;
-    contextWindow?: number;
-    apiTimeoutMs?: number;
-    databasePath?: string;
-    workspacesRoot?: string;
-  };
-  models?: {
-    providers?: Record<string, Provider>;
-    entries?: Record<string, ModelEntry>;
-  };
-  agents?: {
-    main?: { model?: string; params?: Record<string, unknown> };
+  schemaVersion?: number;
+  agent?: {
+    model?: string;
+    params?: Record<string, unknown>;
     subagents?: { default?: string; params?: Record<string, unknown> };
+  };
+  model?: {
+    providers?: Record<string, V2Provider>;
+  };
+  memory?: {
+    enabled?: boolean;
+    model?: string;
+    apiType?: string;
+    reasoningMode?: string;
+    autoIndexIntervalMinutes?: number;
+    autoDreamIntervalMinutes?: number;
+    captureStrategy?: string;
+    includeAssistant?: boolean;
+    maxMessageChars?: number;
+    heartbeatBatchSize?: number;
+  };
+  webui?: {
+    runtime?: {
+      host?: string;
+      serverPort?: number;
+      vitePort?: number;
+      proxyPort?: number;
+      contextWindow?: number;
+      apiTimeoutMs?: number;
+      httpsProxy?: string;
+      databasePath?: string;
+      workspacesRoot?: string;
+    };
   };
   alwaysOn?: {
     enabled?: boolean;
@@ -94,7 +116,6 @@ type PilotDeckConfig = {
     projects?: Record<string, { enabled?: boolean }>;
   };
   customEnv?: Record<string, string>;
-  memory?: { enabled?: boolean; model?: string; params?: Record<string, unknown> };
   router?: {
     enabled?: boolean;
     stats?: {
@@ -105,17 +126,17 @@ type PilotDeckConfig = {
   gateway?: { enabled?: boolean; home?: string } & Record<string, unknown>;
 };
 
-type SectionId = 'runtime' | 'models' | 'agents' | 'customEnv' | 'alwaysOn' | 'memory' | 'router' | 'gateway';
+type SectionId = 'models' | 'agents' | 'memory' | 'router' | 'gateway' | 'customEnv' | 'alwaysOn' | 'advanced';
 
 const SECTIONS: Array<{ id: SectionId; labelKey: string; descriptionKey: string }> = [
-  { id: 'runtime', labelKey: 'runtime',  descriptionKey: 'runtime' },
-  { id: 'models',  labelKey: 'models',   descriptionKey: 'models' },
-  { id: 'agents',  labelKey: 'agents',   descriptionKey: 'agents' },
+  { id: 'models',    labelKey: 'models',    descriptionKey: 'models' },
+  { id: 'agents',    labelKey: 'agents',    descriptionKey: 'agents' },
+  { id: 'memory',    labelKey: 'memory',    descriptionKey: 'memory' },
+  { id: 'router',    labelKey: 'router',    descriptionKey: 'router' },
+  { id: 'gateway',   labelKey: 'gateway',   descriptionKey: 'gateway' },
   { id: 'customEnv', labelKey: 'customEnv', descriptionKey: 'customEnv' },
-  { id: 'alwaysOn', labelKey: 'alwaysOn', descriptionKey: 'alwaysOn' },
-  { id: 'memory',  labelKey: 'memory',   descriptionKey: 'memory' },
-  { id: 'router',  labelKey: 'router',   descriptionKey: 'router' },
-  { id: 'gateway', labelKey: 'gateway',  descriptionKey: 'gateway' },
+  { id: 'alwaysOn',  labelKey: 'alwaysOn',  descriptionKey: 'alwaysOn' },
+  { id: 'advanced',  labelKey: 'runtime',   descriptionKey: 'runtime' },
 ];
 
 // ── Reload-status presentation (kept identical to legacy raw view) ──────
@@ -328,30 +349,33 @@ function FormRow({ label, description, children }: { label: string; description?
 
 // ── Section components ─────────────────────────────────────────────────
 
-function RuntimeSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
-  const r = config.runtime ?? {};
-  const set = <K extends keyof NonNullable<PilotDeckConfig['runtime']>>(key: K, value: NonNullable<PilotDeckConfig['runtime']>[K]) =>
-    onChange(patch(config, ['runtime', key as string], value));
+function AdvancedSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const r = config.webui?.runtime ?? {};
+  const set = (key: string, value: unknown) =>
+    onChange(patch(config, ['webui', 'runtime', key], value));
   return (
-    <SettingsSection title="Runtime" description="Ports the server binds to and request timeouts.">
+    <SettingsSection
+      title="Advanced (Runtime)"
+      description="Ports, paths, and timeouts the UI server uses. Most users never need to touch these."
+    >
       <SettingsCard divided>
         <FormRow label="Host" description="Bind interface for the HTTP/WebSocket server.">
           <TextInput value={r.host} placeholder="0.0.0.0" onChange={(v) => set('host', v)} />
         </FormRow>
         <FormRow label="Server port" description="Express + WebSocket port.">
-          <NumberInput value={r.serverPort} placeholder="3001" onChange={(v) => set('serverPort', v as any)} />
+          <NumberInput value={r.serverPort} placeholder="3001" onChange={(v) => set('serverPort', v)} />
         </FormRow>
         <FormRow label="Vite port" description="Frontend dev server (only used when running `npm run dev`).">
-          <NumberInput value={r.vitePort} placeholder="5173" onChange={(v) => set('vitePort', v as any)} />
+          <NumberInput value={r.vitePort} placeholder="5173" onChange={(v) => set('vitePort', v)} />
         </FormRow>
         <FormRow label="Proxy port" description="Local LLM proxy (Claude Agent SDK target).">
-          <NumberInput value={r.proxyPort} placeholder="18080" onChange={(v) => set('proxyPort', v as any)} />
+          <NumberInput value={r.proxyPort} placeholder="18080" onChange={(v) => set('proxyPort', v)} />
         </FormRow>
         <FormRow label="Context window" description="Default token budget for new sessions.">
-          <NumberInput value={r.contextWindow} placeholder="160000" onChange={(v) => set('contextWindow', v as any)} />
+          <NumberInput value={r.contextWindow} placeholder="160000" onChange={(v) => set('contextWindow', v)} />
         </FormRow>
         <FormRow label="API timeout (ms)" description="Per-request upstream timeout.">
-          <NumberInput value={r.apiTimeoutMs} placeholder="120000" onChange={(v) => set('apiTimeoutMs', v as any)} />
+          <NumberInput value={r.apiTimeoutMs} placeholder="120000" onChange={(v) => set('apiTimeoutMs', v)} />
         </FormRow>
         <FormRow label="Database path" description="SQLite auth/projects database (~ expands to home).">
           <TextInput value={r.databasePath} placeholder="~/.pilotdeck/auth.db" monospace onChange={(v) => set('databasePath', v)} />
@@ -359,223 +383,619 @@ function RuntimeSection({ config, onChange }: { config: PilotDeckConfig; onChang
         <FormRow label="Workspaces root" description="Directory under which projects are scanned.">
           <TextInput value={r.workspacesRoot} placeholder="~" monospace onChange={(v) => set('workspacesRoot', v)} />
         </FormRow>
+        <FormRow label="HTTPS proxy" description="Outbound HTTPS proxy URL (HTTPS_PROXY / https_proxy).">
+          <TextInput value={r.httpsProxy} placeholder="http://127.0.0.1:7890" monospace onChange={(v) => set('httpsProxy', v)} />
+        </FormRow>
       </SettingsCard>
     </SettingsSection>
   );
 }
 
-function ProvidersEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
-  const providers = config.models?.providers ?? {};
-  const ids = Object.keys(providers);
+function ProviderCard({
+  providerId,
+  provider,
+  onChange,
+  onRemove,
+  onRename,
+  catalogEntry,
+  activeModelRef,
+  onSetActive,
+}: {
+  providerId: string;
+  provider: V2Provider;
+  onChange: (next: V2Provider) => void;
+  onRemove: () => void;
+  onRename: (newId: string) => void;
+  catalogEntry?: CatalogProvider;
+  activeModelRef: string;
+  onSetActive: (modelRef: string) => void;
+}) {
+  const isMaskedKey = provider.apiKey === MASK;
+  const protocol = provider.protocol ?? catalogEntry?.protocol ?? 'openai';
+  const effectiveUrl = provider.url || catalogEntry?.defaultUrl || '';
+  const enabledModels = Object.keys(provider.models ?? {});
+  const [newModelId, setNewModelId] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const setProvider = (id: string, prov: Provider) => onChange(patch(config, ['models', 'providers', id], prov));
-  const removeProvider = (id: string) => {
-    const next = { ...providers };
-    delete next[id];
-    onChange(patch(config, ['models', 'providers'], next));
+  const update = (patch: Partial<V2Provider>) => onChange({ ...provider, ...patch });
+
+  const addModel = (mid: string) => {
+    const id = mid.trim();
+    if (!id) return;
+    if (provider.models && id in provider.models) return;
+    update({ models: { ...(provider.models ?? {}), [id]: {} } });
+    setNewModelId('');
   };
-  const renameProvider = (oldId: string, newId: string) => {
-    if (!newId || newId === oldId || providers[newId]) return;
-    const next: Record<string, Provider> = {};
-    for (const [k, v] of Object.entries(providers)) next[k === oldId ? newId : k] = v;
-    onChange(patch(config, ['models', 'providers'], next));
+  const removeModel = (mid: string) => {
+    const next = { ...(provider.models ?? {}) };
+    delete next[mid];
+    update({ models: next });
+    // If the removed model was the main agent, clear agent.model so
+    // validation flags it explicitly instead of silently breaking.
+    if (`${providerId}/${mid}` === activeModelRef) onSetActive('');
   };
-  const addProvider = () => {
-    let i = 1;
-    while (providers[`provider${i}`]) i++;
-    setProvider(`provider${i}`, { type: 'openai-chat', baseUrl: '', apiKey: '' });
+  const toggleCatalogModel = (mid: string) => {
+    if (provider.models && mid in provider.models) {
+      removeModel(mid);
+    } else {
+      addModel(mid);
+    }
   };
+
+  const containsActive = activeModelRef.startsWith(`${providerId}/`) &&
+    enabledModels.includes(activeModelRef.slice(providerId.length + 1));
 
   return (
-    <SettingsCard className="space-y-3 p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-sm font-semibold text-foreground">Providers</div>
-          <div className="text-xs text-muted-foreground">Upstream LLM endpoints. The provider id is referenced by model entries.</div>
+    <div className={cn(
+      'space-y-3 rounded-lg border bg-background/50 p-4 transition-colors',
+      containsActive ? 'border-foreground/40 ring-1 ring-foreground/10' : 'border-border',
+    )}>
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            {catalogEntry && (
+              <div className="text-sm font-semibold text-foreground">{catalogEntry.displayName}</div>
+            )}
+            {containsActive && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-foreground/30 bg-foreground/5 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+                <Star className="h-2.5 w-2.5 fill-current" strokeWidth={0} />
+                Main agent
+              </span>
+            )}
+          </div>
+          <div className="mt-1 flex items-center gap-2">
+            <span className="text-[11px] text-muted-foreground">id</span>
+            <input
+              value={providerId}
+              onChange={(e) => onRename(e.target.value.trim())}
+              className="rounded-md border border-border bg-background px-2 py-0.5 font-mono text-[11px] text-foreground outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
         </div>
-        <Button variant="outline" size="sm" onClick={addProvider}>+ Add provider</Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRemove}
+          className="text-destructive hover:text-destructive"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
       </div>
-      {ids.length === 0 && (
-        <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-          No providers configured.
+
+      {/* API key — the only required field */}
+      <label className="block text-xs text-muted-foreground">
+        <span className="mb-1 block">API key</span>
+        <TextInput
+          type="password"
+          value={provider.apiKey}
+          placeholder={isMaskedKey ? 'Existing key kept — type to replace' : 'sk-...'}
+          onChange={(v) => update({ apiKey: v })}
+        />
+        {isMaskedKey && (
+          <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+            <Info className="h-3 w-3" />
+            Key hidden; leave as-is to keep, retype to replace.
+          </span>
+        )}
+      </label>
+
+      {/* Models — chip-style toggles for catalog models + a free-form input.
+          Each enabled chip has a star icon: filled when this is the main
+          agent model, outlined (hover-revealed) otherwise. Click the chip
+          body to enable/disable; click the star to set as main. */}
+      <div>
+        <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+          <span>Enabled models</span>
+          <span className="text-[10px] text-muted-foreground/60">
+            click <Star className="inline h-2.5 w-2.5" /> to set main agent
+          </span>
+          <span className="text-[10px] text-muted-foreground/60">
+            · <ImageIcon className="inline h-2.5 w-2.5" /> supports image input
+          </span>
         </div>
-      )}
-      {ids.map((id) => {
-        const p = providers[id] ?? {};
-        const isMaskedKey = p.apiKey === MASK;
-        return (
-          <div key={id} className="space-y-2 rounded-lg border border-border bg-background/50 p-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">id</span>
-              <input
-                value={id}
-                onChange={(e) => renameProvider(id, e.target.value.trim())}
-                className="flex-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+        {catalogEntry && catalogEntry.models.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {catalogEntry.models.map((m) => {
+              const on = provider.models && m.id in provider.models;
+              const ref = `${providerId}/${m.id}`;
+              const isActive = on && ref === activeModelRef;
+              return (
+                <div
+                  key={m.id}
+                  className={cn(
+                    'group inline-flex items-center rounded-md border text-[11px] transition-colors',
+                    on
+                      ? isActive
+                        ? 'border-foreground bg-foreground/15 text-foreground'
+                        : 'border-foreground/40 bg-foreground/10 text-foreground'
+                      : 'border-border bg-muted text-muted-foreground hover:border-foreground/30 hover:text-foreground',
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleCatalogModel(m.id)}
+                    className="inline-flex items-center gap-1 px-2 py-1"
+                    title={on ? 'Click to disable' : 'Click to enable'}
+                  >
+                    {on && <Check className="h-3 w-3" strokeWidth={2.5} />}
+                    {m.displayName}
+                    {m.supportsImage && (
+                      <ImageIcon
+                        className="h-3 w-3 text-muted-foreground/70"
+                        strokeWidth={2}
+                      />
+                    )}
+                  </button>
+                  {on && (
+                    <button
+                      type="button"
+                      onClick={() => onSetActive(ref)}
+                      title={isActive ? 'Currently the main agent model' : 'Set as main agent model'}
+                      className={cn(
+                        'border-l border-current/20 px-1.5 py-1 transition-opacity',
+                        isActive ? 'opacity-100' : 'opacity-30 hover:opacity-100',
+                      )}
+                    >
+                      <Star className={cn('h-3 w-3', isActive && 'fill-current')} strokeWidth={isActive ? 0 : 2} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {/* Custom (off-catalog) models currently enabled */}
+        {enabledModels.filter((mid) => !catalogEntry || !catalogEntry.models.some((m) => m.id === mid)).map((mid) => {
+          const ref = `${providerId}/${mid}`;
+          const isActive = ref === activeModelRef;
+          return (
+            <div key={mid} className={cn(
+              'mb-1 flex items-center gap-2 rounded-md border px-2 py-1 text-[11px]',
+              isActive ? 'border-foreground/40 bg-foreground/10 text-foreground' : 'border-border bg-muted/40',
+            )}>
+              <code className="flex-1 truncate font-mono">{mid}</code>
+              <button
+                type="button"
+                onClick={() => onSetActive(ref)}
+                title={isActive ? 'Currently the main agent model' : 'Set as main agent model'}
+                className={cn(
+                  'transition-opacity',
+                  isActive ? 'text-foreground opacity-100' : 'text-muted-foreground opacity-40 hover:opacity-100',
+                )}
+              >
+                <Star className={cn('h-3 w-3', isActive && 'fill-current')} strokeWidth={isActive ? 0 : 2} />
+              </button>
+              <button
+                type="button"
+                onClick={() => removeModel(mid)}
+                className="text-muted-foreground hover:text-destructive"
+                title="Remove"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          );
+        })}
+        {/* Add custom model */}
+        <div className="flex items-center gap-2">
+          <input
+            value={newModelId}
+            onChange={(e) => setNewModelId(e.target.value)}
+            placeholder="Custom model ID"
+            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-[11px] text-foreground outline-none focus:ring-1 focus:ring-ring"
+            onKeyDown={(e) => { if (e.key === 'Enter') addModel(newModelId); }}
+          />
+          <Button variant="outline" size="sm" className="shrink-0" onClick={() => addModel(newModelId)} disabled={!newModelId.trim()}>
+            <Plus className="mr-1 h-3 w-3" />
+            Add
+          </Button>
+        </div>
+      </div>
+
+      {/* Advanced — protocol + URL (filled from catalog by default) */}
+      <div className="border-t border-border/60 pt-2">
+        <button
+          type="button"
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="text-[11px] text-muted-foreground hover:text-foreground"
+        >
+          {showAdvanced ? 'Hide' : 'Show'} advanced (protocol &amp; URL)
+        </button>
+        {showAdvanced && (
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[140px_1fr]">
+            <label className="text-[11px] text-muted-foreground">
+              <span className="mb-1 block">Protocol</span>
+              <Select
+                value={protocol}
+                onChange={(v) => update({ protocol: v as 'openai' | 'anthropic' })}
+                options={[
+                  { value: 'openai',    label: 'openai (chat-completions)' },
+                  { value: 'anthropic', label: 'anthropic (messages API)' },
+                ]}
               />
-              <Button variant="ghost" size="sm" onClick={() => removeProvider(id)} className="text-destructive hover:text-destructive">Remove</Button>
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <label className="text-xs text-muted-foreground">
-                <span className="mb-1 block">Type</span>
-                <Select
-                  value={p.type ?? 'openai-chat'}
-                  onChange={(v) => setProvider(id, { ...p, type: v })}
-                  options={[
-                    { value: 'openai-chat',     label: 'openai-chat' },
-                    { value: 'openai-responses', label: 'openai-responses' },
-                    { value: 'anthropic',       label: 'anthropic' },
-                    { value: 'litellm',         label: 'litellm' },
-                    { value: 'ccr',             label: 'ccr' },
-                  ]}
-                />
-              </label>
-              <label className="text-xs text-muted-foreground">
-                <span className="mb-1 block">Base URL</span>
-                <TextInput value={p.baseUrl} placeholder="https://api.example.com" monospace onChange={(v) => setProvider(id, { ...p, baseUrl: v })} />
-              </label>
-            </div>
-            <label className="block text-xs text-muted-foreground">
-              <span className="mb-1 block">API key</span>
+            </label>
+            <label className="text-[11px] text-muted-foreground">
+              <span className="mb-1 block">Base URL</span>
               <TextInput
-                type="password"
-                value={p.apiKey}
-                placeholder={isMaskedKey ? 'Existing key kept — type to replace' : 'sk-...'}
-                onChange={(v) => setProvider(id, { ...p, apiKey: v })}
+                value={provider.url}
+                placeholder={catalogEntry?.defaultUrl || 'https://api.example.com/v1'}
+                monospace
+                onChange={(v) => update({ url: v })}
               />
-              {isMaskedKey && (
-                <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <Info className="h-3 w-3" />
-                  Key hidden; leave as-is to keep, retype to replace.
+              {!provider.url && catalogEntry && (
+                <span className="mt-0.5 block text-[10px] text-muted-foreground/70">
+                  Defaults to <code className="font-mono">{catalogEntry.defaultUrl}</code> from catalog.
                 </span>
               )}
             </label>
+            {effectiveUrl && (
+              <div className="col-span-full text-[10px] text-muted-foreground">
+                Effective: <code className="font-mono">{effectiveUrl}</code>
+              </div>
+            )}
           </div>
-        );
-      })}
-    </SettingsCard>
+        )}
+      </div>
+    </div>
   );
 }
 
-function EntriesEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
-  const entries = config.models?.entries ?? {};
-  const providerIds = Object.keys(config.models?.providers ?? {});
-  const ids = Object.keys(entries);
-
-  const setEntry = (id: string, e: ModelEntry) => onChange(patch(config, ['models', 'entries', id], e));
-  const removeEntry = (id: string) => {
-    const next = { ...entries };
-    delete next[id];
-    onChange(patch(config, ['models', 'entries'], next));
-  };
-  const renameEntry = (oldId: string, newId: string) => {
-    if (!newId || newId === oldId || entries[newId]) return;
-    const next: Record<string, ModelEntry> = {};
-    for (const [k, v] of Object.entries(entries)) next[k === oldId ? newId : k] = v;
-    onChange(patch(config, ['models', 'entries'], next));
-  };
-  const addEntry = () => {
-    const baseId = entries.default ? 'entry' : 'default';
-    let id = baseId;
-    let i = 1;
-    while (entries[id]) { id = `${baseId}${i++}`; }
-    setEntry(id, { provider: providerIds[0] ?? '', name: '' });
-  };
-
+function CatalogPicker({
+  existingIds,
+  onPick,
+  onCustom,
+}: {
+  existingIds: Set<string>;
+  onPick: (catalog: CatalogProvider) => void;
+  onCustom: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const available = CATALOG_PROVIDERS.filter((p) => !existingIds.has(p.id));
+  if (!open) {
+    return (
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <Plus className="mr-1 h-3.5 w-3.5" />
+        Add provider
+      </Button>
+    );
+  }
   return (
-    <SettingsCard className="space-y-3 p-4">
+    <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
       <div className="flex items-center justify-between">
-        <div>
-          <div className="text-sm font-semibold text-foreground">Model entries</div>
-          <div className="text-xs text-muted-foreground">Named model bindings — agents reference these by id.</div>
-        </div>
-        <Button variant="outline" size="sm" onClick={addEntry} disabled={providerIds.length === 0}>+ Add entry</Button>
+        <div className="text-sm font-medium text-foreground">Add a provider</div>
+        <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
       </div>
-      {providerIds.length === 0 && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-          Add at least one provider before creating model entries.
-        </div>
-      )}
-      {ids.length === 0 && providerIds.length > 0 && (
-        <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-          No entries yet.
-        </div>
-      )}
-      {ids.map((id) => {
-        const entry = entries[id] ?? {};
-        return (
-          <div key={id} className="space-y-2 rounded-lg border border-border bg-background/50 p-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">id</span>
-              <input
-                value={id}
-                onChange={(e) => renameEntry(id, e.target.value.trim())}
-                className="flex-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
-              />
-              <Button variant="ghost" size="sm" onClick={() => removeEntry(id)} className="text-destructive hover:text-destructive">Remove</Button>
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <label className="text-xs text-muted-foreground">
-                <span className="mb-1 block">Provider</span>
-                <Select
-                  value={entry.provider}
-                  onChange={(v) => setEntry(id, { ...entry, provider: v })}
-                  options={[
-                    { value: '', label: '— pick provider —' },
-                    ...providerIds.map((pid) => ({ value: pid, label: pid })),
-                  ]}
-                />
-              </label>
-              <label className="text-xs text-muted-foreground">
-                <span className="mb-1 block">Model name</span>
-                <TextInput value={entry.name} placeholder="claude-sonnet-4-5" monospace onChange={(v) => setEntry(id, { ...entry, name: v })} />
-              </label>
-            </div>
-            <label className="block text-xs text-muted-foreground">
-              <span className="mb-1 block">Context window (optional)</span>
-              <NumberInput value={entry.contextWindow} placeholder="160000" onChange={(v) => setEntry(id, { ...entry, contextWindow: v })} />
-            </label>
-          </div>
-        );
-      })}
-    </SettingsCard>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {available.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => { onPick(p); setOpen(false); }}
+            className="rounded-md border border-border bg-background px-3 py-2 text-left text-sm transition-colors hover:border-foreground/40 hover:bg-muted"
+          >
+            <div className="font-medium text-foreground">{p.displayName}</div>
+            <div className="mt-0.5 text-[10px] text-muted-foreground">{p.models.length} models</div>
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => { onCustom(); setOpen(false); }}
+          className="rounded-md border border-dashed border-border bg-background px-3 py-2 text-left text-sm transition-colors hover:border-foreground/40 hover:bg-muted"
+        >
+          <div className="font-medium text-foreground">+ Custom</div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">Manual setup</div>
+        </button>
+      </div>
+    </div>
   );
 }
 
 function ModelsSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const providers = config.model?.providers ?? {};
+  const ids = Object.keys(providers);
+  const activeModelRef = config.agent?.model ?? '';
+
+  const setProvider = (id: string, prov: V2Provider) =>
+    onChange(patch(config, ['model', 'providers', id], prov));
+  const removeProvider = (id: string) => {
+    const next = { ...providers };
+    delete next[id];
+    let nextConfig = patch(config, ['model', 'providers'], next);
+    // Clear agent.model if its provider was just removed.
+    if (activeModelRef.startsWith(`${id}/`)) {
+      nextConfig = patch(nextConfig, ['agent', 'model'], '');
+    }
+    onChange(nextConfig);
+  };
+  const renameProvider = (oldId: string, newId: string) => {
+    if (!newId || newId === oldId || providers[newId]) return;
+    const next: Record<string, V2Provider> = {};
+    for (const [k, v] of Object.entries(providers)) next[k === oldId ? newId : k] = v;
+    let nextConfig = patch(config, ['model', 'providers'], next);
+    // Update agent.model if it referenced the renamed provider.
+    if (activeModelRef.startsWith(`${oldId}/`)) {
+      const modelPart = activeModelRef.slice(oldId.length + 1);
+      nextConfig = patch(nextConfig, ['agent', 'model'], `${newId}/${modelPart}`);
+    }
+    onChange(nextConfig);
+  };
+  const setActive = (ref: string) => {
+    onChange(patch(config, ['agent', 'model'], ref));
+  };
+
+  const handleCatalogPick = (cp: CatalogProvider) => {
+    if (providers[cp.id]) return;
+    setProvider(cp.id, {
+      apiKey: '',
+      // protocol and url are stored explicitly so the saved yaml carries
+      // them — backend catalog auto-fill kicks in only when the disk
+      // value is missing, which is what we want for user-edited configs.
+      protocol: cp.protocol,
+      url: cp.defaultUrl,
+      models: {},
+    });
+  };
+
+  const handleCustom = () => {
+    let i = 1;
+    while (providers[`provider${i}`]) i++;
+    setProvider(`provider${i}`, {
+      protocol: 'openai',
+      url: '',
+      apiKey: '',
+      models: {},
+    });
+  };
+
   return (
-    <SettingsSection title="Models" description="Define upstream providers and the named model entries that agents bind to.">
-      <div className="space-y-4">
-        <ProvidersEditor config={config} onChange={onChange} />
-        <EntriesEditor  config={config} onChange={onChange} />
+    <SettingsSection
+      title="Models"
+      description="Configure your LLM providers. The catalog auto-fills protocol, URL, and model capabilities — you only need to paste an API key and pick which models to enable."
+    >
+      <div className="space-y-3">
+        {ids.length === 0 && (
+          <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+            No providers configured yet. Click "Add provider" to get started.
+          </div>
+        )}
+        {ids.map((id) => (
+          <ProviderCard
+            key={id}
+            providerId={id}
+            provider={providers[id] ?? {}}
+            catalogEntry={findCatalogProviderById(id)}
+            activeModelRef={activeModelRef}
+            onSetActive={setActive}
+            onChange={(next) => setProvider(id, next)}
+            onRemove={() => removeProvider(id)}
+            onRename={(newId) => renameProvider(id, newId)}
+          />
+        ))}
+        <CatalogPicker
+          existingIds={new Set(ids)}
+          onPick={handleCatalogPick}
+          onCustom={handleCustom}
+        />
       </div>
     </SettingsSection>
   );
 }
 
-function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
-  const entries = config.models?.entries ?? {};
-  const entryIds = Object.keys(entries);
-  const main = config.agents?.main ?? {};
-  const subagents = config.agents?.subagents ?? {};
+// Build the "provider/model" options for agent / memory model dropdowns
+// from the currently-enabled providers and their enabled model ids.
+function buildModelRefOptions(config: PilotDeckConfig): Array<{ value: string; label: string }> {
+  const out: Array<{ value: string; label: string }> = [];
+  const providers = config.model?.providers ?? {};
+  for (const [pid, prov] of Object.entries(providers)) {
+    if (!prov?.models) continue;
+    const catalog = findCatalogProviderById(pid);
+    for (const mid of Object.keys(prov.models)) {
+      const catalogModel = catalog?.models.find((m) => m.id === mid);
+      out.push({
+        value: `${pid}/${mid}`,
+        label: catalog && catalogModel
+          ? `${catalog.displayName}: ${catalogModel.displayName}`
+          : `${pid}/${mid}`,
+      });
+    }
+  }
+  return out;
+}
 
-  const entryOptions = [
-    { value: '', label: '— pick model entry —' },
-    ...entryIds.map((id) => ({ value: id, label: id })),
+function activeModelCapabilities(config: PilotDeckConfig): {
+  ref: string;
+  providerId: string;
+  modelId: string;
+  catalogModel?: CatalogModel;
+  catalogProvider?: CatalogProvider;
+  multimodalInput: string[] | null;
+} | null {
+  const ref = config.agent?.model ?? '';
+  if (!ref) return null;
+  const slash = ref.indexOf('/');
+  if (slash <= 0 || slash === ref.length - 1) return null;
+  const providerId = ref.slice(0, slash);
+  const modelId = ref.slice(slash + 1);
+  const provider = config.model?.providers?.[providerId];
+  if (!provider) return null;
+  const userDef = provider.models?.[modelId];
+  const userMultimodal = userDef && typeof userDef === 'object'
+    ? (userDef as Record<string, unknown>).multimodal
+    : null;
+  let multimodalInput: string[] | null = null;
+  if (userMultimodal && typeof userMultimodal === 'object') {
+    const input = (userMultimodal as Record<string, unknown>).input;
+    if (Array.isArray(input)) multimodalInput = input.filter((s): s is string => typeof s === 'string');
+  }
+  const catalogProvider = findCatalogProviderById(providerId);
+  const catalogModel = catalogProvider?.models.find((m) => m.id === modelId);
+  return { ref, providerId, modelId, catalogModel, catalogProvider, multimodalInput };
+}
+
+function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const refOptions = buildModelRefOptions(config);
+  const mainRef = config.agent?.model ?? '';
+  const subDefault = config.agent?.subagents?.default ?? 'inherit';
+  const [showSubagents, setShowSubagents] = useState(subDefault !== 'inherit');
+
+  const mainOptions = [
+    { value: '', label: '— pick a model —' },
+    ...refOptions,
   ];
   const subOptions = [
     { value: 'inherit', label: 'inherit (use main agent\'s model)' },
-    ...entryIds.map((id) => ({ value: id, label: id })),
+    ...refOptions,
   ];
 
+  const caps = activeModelCapabilities(config);
+  // True when the *effective* config (catalog ∪ user override) supports image.
+  const supportsImageEffective = caps
+    ? caps.multimodalInput
+      ? caps.multimodalInput.includes('image')
+      : Boolean(caps.catalogModel?.supportsImage)
+    : false;
+  // True only when the user explicitly wrote a multimodal.input override.
+  const userOverrideActive = caps?.multimodalInput != null;
+
+  const setImageOverride = (enable: boolean) => {
+    if (!caps) return;
+    const { providerId, modelId } = caps;
+    const providers = config.model?.providers ?? {};
+    const provider = providers[providerId] ?? {};
+    const models = { ...(provider.models ?? {}) };
+    const existingDef = models[modelId];
+    const def: Record<string, unknown> = existingDef && typeof existingDef === 'object'
+      ? { ...(existingDef as Record<string, unknown>) }
+      : {};
+
+    if (enable === Boolean(caps.catalogModel?.supportsImage) && !userOverrideActive) {
+      // Already matches catalog default — no override needed.
+      return;
+    }
+
+    if (enable) {
+      def.multimodal = { input: ['text', 'image'] };
+    } else {
+      def.multimodal = { input: ['text'] };
+    }
+    models[modelId] = def as Record<string, unknown>;
+    onChange(patch(config, ['model', 'providers', providerId, 'models'], models));
+  };
+
+  const clearOverride = () => {
+    if (!caps) return;
+    const { providerId, modelId } = caps;
+    const providers = config.model?.providers ?? {};
+    const provider = providers[providerId] ?? {};
+    const models = { ...(provider.models ?? {}) };
+    const existingDef = models[modelId];
+    if (existingDef && typeof existingDef === 'object') {
+      const next = { ...(existingDef as Record<string, unknown>) };
+      delete next.multimodal;
+      models[modelId] = next as Record<string, unknown>;
+    }
+    onChange(patch(config, ['model', 'providers', providerId, 'models'], models));
+  };
+
   return (
-    <SettingsSection title="Agents" description="Bind agent roles to named model entries.">
+    <SettingsSection title="Agents" description="Pick which provider/model the chat agent runs on.">
       <SettingsCard divided>
-        <FormRow label="Main agent model" description="Used by the primary chat agent.">
-          <Select value={main.model} options={entryOptions} onChange={(v) => onChange(patch(config, ['agents', 'main', 'model'], v))} />
+        <FormRow label="Main agent model" description="Used by the primary chat agent. Reference an enabled provider/model from the Models section.">
+          <Select
+            value={mainRef}
+            options={mainOptions}
+            onChange={(v) => onChange(patch(config, ['agent', 'model'], v))}
+          />
         </FormRow>
-        <FormRow label="Subagents default" description="Used by tool-spawned subagents (e.g. tasks).">
-          <Select value={subagents.default} options={subOptions} onChange={(v) => onChange(patch(config, ['agents', 'subagents', 'default'], v))} />
-        </FormRow>
+
+        {caps && (
+          <div className="px-4 py-3">
+            <div className="rounded-md border border-border/60 bg-muted/30 p-3">
+              <div className="mb-2 text-xs font-medium text-foreground">
+                Active model capabilities
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <span className="inline-flex items-center gap-1.5">
+                  <ImageIcon className="h-3.5 w-3.5" />
+                  Image input
+                </span>
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={supportsImageEffective}
+                    onChange={(e) => setImageOverride(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-border"
+                  />
+                  <span className={cn(
+                    'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                    supportsImageEffective
+                      ? 'border border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300'
+                      : 'border border-border bg-muted text-muted-foreground',
+                  )}>
+                    {supportsImageEffective ? 'Enabled' : 'Disabled'}
+                  </span>
+                </label>
+                {userOverrideActive && (
+                  <button
+                    type="button"
+                    onClick={clearOverride}
+                    className="text-[10px] text-muted-foreground underline hover:text-foreground"
+                  >
+                    reset to catalog default
+                  </button>
+                )}
+              </div>
+              <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                {userOverrideActive
+                  ? 'Override active — your yaml explicitly defines this model\'s multimodal.input.'
+                  : caps.catalogModel
+                    ? `Default from catalog: ${caps.catalogModel.supportsImage ? 'supports image input.' : 'text only.'}`
+                    : 'No catalog entry — defaulting to text only. Toggle to override.'}
+                {' '}If the upstream model server doesn\'t actually accept images, enabling this will produce upstream errors at request time.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="px-4 py-2">
+          <button
+            type="button"
+            onClick={() => setShowSubagents(!showSubagents)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            {showSubagents ? 'Hide' : 'Show'} subagent settings
+          </button>
+        </div>
+        {showSubagents && (
+          <FormRow label="Subagents default" description="Used by tool-spawned subagents (e.g. tasks).">
+            <Select
+              value={subDefault}
+              options={subOptions}
+              onChange={(v) => onChange(patch(config, ['agent', 'subagents', 'default'], v))}
+            />
+          </FormRow>
+        )}
       </SettingsCard>
     </SettingsSection>
   );
@@ -954,15 +1374,19 @@ function AlwaysOnSection({
 
 function MemorySection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const m = config.memory ?? {};
-  const entryIds = Object.keys(config.models?.entries ?? {});
+  // Memory uses a "provider/model" reference, or "inherit" to fall back
+  // to agent.model. The backend treats `undefined` and `"inherit"` the
+  // same way, so we map both to the inherit option in the UI.
+  const refOptions = buildModelRefOptions(config);
   const options = [
     { value: 'inherit', label: 'inherit (use main agent\'s model)' },
-    ...entryIds.map((id) => ({ value: id, label: id })),
+    ...refOptions,
   ];
+  const selected = m.model && m.model.trim() ? m.model : 'inherit';
   return (
     <SettingsSection title="Memory" description="PilotDeck memory service — embeddings & summarisation pipelines.">
       <SettingsCard>
-        <SettingsRow label="Enabled" description="Toggles the memory service. Disabled by default.">
+        <SettingsRow label="Enabled" description="Toggles the memory service.">
           <SettingsToggle
             checked={Boolean(m.enabled)}
             ariaLabel="Toggle memory service"
@@ -970,8 +1394,12 @@ function MemorySection({ config, onChange }: { config: PilotDeckConfig; onChange
           />
         </SettingsRow>
         {m.enabled && (
-          <FormRow label="Memory model" description="Model used by the memory pipeline.">
-            <Select value={m.model ?? 'inherit'} options={options} onChange={(v) => onChange(patch(config, ['memory', 'model'], v))} />
+          <FormRow label="Memory model" description="Provider/model the memory pipeline calls.">
+            <Select
+              value={selected}
+              options={options}
+              onChange={(v) => onChange(patch(config, ['memory', 'model'], v === 'inherit' ? '' : v))}
+            />
           </FormRow>
         )}
       </SettingsCard>
@@ -1239,7 +1667,7 @@ export default function PilotDeckConfigTab({ projects = [] }: { projects?: Setti
 
   // Active form section. Keeping it local — sections aren't deep-linkable
   // since the surrounding modal already owns its own URL.
-  const [activeSection, setActiveSection] = useState<SectionId>('runtime');
+  const [activeSection, setActiveSection] = useState<SectionId>('models');
 
   // Parse `raw` into a typed config for the form. Memoised so we don't
   // reparse on every keystroke unrelated to YAML, but raw IS the source of
@@ -1376,14 +1804,14 @@ export default function PilotDeckConfigTab({ projects = [] }: { projects?: Setti
           <main className="min-w-0 space-y-6">
             {parsedConfig ? (
               <>
-                {activeSection === 'runtime' && <RuntimeSection config={parsedConfig} onChange={onFormChange} />}
-                {activeSection === 'models'  && <ModelsSection  config={parsedConfig} onChange={onFormChange} />}
-                {activeSection === 'agents'  && <AgentsSection  config={parsedConfig} onChange={onFormChange} />}
+                {activeSection === 'models'   && <ModelsSection  config={parsedConfig} onChange={onFormChange} />}
+                {activeSection === 'agents'   && <AgentsSection  config={parsedConfig} onChange={onFormChange} />}
+                {activeSection === 'memory'   && <MemorySection  config={parsedConfig} onChange={onFormChange} />}
+                {activeSection === 'router'   && <RouterSection  config={parsedConfig} onChange={onFormChange} />}
+                {activeSection === 'gateway'  && <GatewaySection config={parsedConfig} onChange={onFormChange} />}
                 {activeSection === 'customEnv' && <CustomEnvSection config={parsedConfig} onChange={onFormChange} />}
                 {activeSection === 'alwaysOn' && <AlwaysOnSection config={parsedConfig} projects={projects} onChange={onFormChange} />}
-                {activeSection === 'memory'  && <MemorySection  config={parsedConfig} onChange={onFormChange} />}
-                {activeSection === 'router'  && <RouterSection  config={parsedConfig} onChange={onFormChange} />}
-                {activeSection === 'gateway' && <GatewaySection config={parsedConfig} onChange={onFormChange} />}
+                {activeSection === 'advanced' && <AdvancedSection config={parsedConfig} onChange={onFormChange} />}
               </>
             ) : (
               <SettingsCard className="p-6 text-sm text-muted-foreground">

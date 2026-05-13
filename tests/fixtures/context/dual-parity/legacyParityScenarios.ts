@@ -73,7 +73,8 @@ export const ROUGH_TOKEN_SCENARIOS: RoughTokenScenario[] = [
   {
     id: "rough_token_empty",
     kind: "rough_token",
-    parityStatus: "compare",
+    parityStatus: "intentional_difference",
+    reason: "TokenBudgetManager now uses tiktoken (o200k_base) instead of char/N; empty string still yields 0",
     source: "third-party/claude-code-main/src/services/tokenEstimation.ts:203-207",
     bytesPerToken: 4,
     text: "",
@@ -82,7 +83,8 @@ export const ROUGH_TOKEN_SCENARIOS: RoughTokenScenario[] = [
   {
     id: "rough_token_short_text",
     kind: "rough_token",
-    parityStatus: "compare",
+    parityStatus: "intentional_difference",
+    reason: "TokenBudgetManager now uses tiktoken (o200k_base) instead of char/N",
     source: "third-party/claude-code-main/src/services/tokenEstimation.ts:203-207",
     bytesPerToken: 4,
     text: "abcd",
@@ -91,7 +93,8 @@ export const ROUGH_TOKEN_SCENARIOS: RoughTokenScenario[] = [
   {
     id: "rough_token_long_text",
     kind: "rough_token",
-    parityStatus: "compare",
+    parityStatus: "intentional_difference",
+    reason: "TokenBudgetManager now uses tiktoken (o200k_base) instead of char/N",
     source: "third-party/claude-code-main/src/services/tokenEstimation.ts:203-207",
     bytesPerToken: 4,
     text: "x".repeat(100),
@@ -100,7 +103,8 @@ export const ROUGH_TOKEN_SCENARIOS: RoughTokenScenario[] = [
   {
     id: "rough_token_json_uses_2",
     kind: "rough_token",
-    parityStatus: "compare",
+    parityStatus: "intentional_difference",
+    reason: "TokenBudgetManager now uses tiktoken (o200k_base); ext-based bytesPerToken no longer used",
     source: "third-party/claude-code-main/src/services/tokenEstimation.ts (JSON path uses bytesPerToken=2)",
     bytesPerToken: 2,
     text: '{"a":1,"b":2}',

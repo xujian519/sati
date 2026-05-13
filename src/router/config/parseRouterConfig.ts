@@ -222,28 +222,7 @@ function parseTokenSaver(
   }
 
   const enabled = typeof raw.enabled === "boolean" ? raw.enabled : false;
-  const judgeRaw = raw.judge;
-  if (!isRecord(judgeRaw)) {
-    diagnostics.push({
-      code: "ROUTER_TOKEN_SAVER_JUDGE_MISSING",
-      severity: "fatal",
-      path: "router.tokenSaver.judge",
-      message: "router.tokenSaver.judge must be an object with provider and model.",
-    });
-    return undefined;
-  }
-  const judgeProvider = typeof judgeRaw.provider === "string" ? judgeRaw.provider : undefined;
-  const judgeModel = typeof judgeRaw.model === "string" ? judgeRaw.model : undefined;
-  if (!judgeProvider || !judgeModel) {
-    diagnostics.push({
-      code: "ROUTER_TOKEN_SAVER_JUDGE_INVALID",
-      severity: "fatal",
-      path: "router.tokenSaver.judge",
-      message: "router.tokenSaver.judge requires provider and model strings.",
-    });
-    return undefined;
-  }
-  const judgeRef = consumeRef(`${judgeProvider}/${judgeModel}`, "router.tokenSaver.judge", modelConfig, diagnostics);
+  const judgeRef = consumeRef(raw.judge, "router.tokenSaver.judge", modelConfig, diagnostics);
   if (!judgeRef) {
     return undefined;
   }

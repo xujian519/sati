@@ -1,5 +1,6 @@
 import { appendFileSync, mkdirSync as mkdirSyncFs } from "node:fs";
 import { resolve, join as joinPath } from "node:path";
+import { tmpdir } from "node:os";
 import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
 import { createAgentEventBuffer, type AgentRuntimeConfig, type CreateAgentSessionOptions } from "../agent/index.js";
 import {
@@ -8,6 +9,7 @@ import {
   CompactionEngine,
   ContextOverflowRecovery,
   DefaultContextRuntime,
+  InstructionDiscovery,
   MicroCompactionEngine,
   PluginRuntimeExtensionResolver,
   SnipEngine,
@@ -153,6 +155,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   const gateway = new InProcessGateway(router, {
     now,
     serverInfo: { mode: "in_process", projectKey: projectRoot },
+    toolResultsDir: resolve(tmpdir(), "pilotdeck-tool-output", process.pid.toString()),
     cron: options.cron,
     readSessionMessages: (input) =>
       readWebSessionMessages(input, {
@@ -341,13 +344,20 @@ class ProjectRuntimeRegistry {
       events: this.buildRouterEventBus(),
     });
     const backgroundTasks = new BackgroundTaskRuntime({ now: this.options.now });
-    const tools = createBuiltinRegistry({ backgroundTasks: { runtime: backgroundTasks } });
+    const tools = createBuiltinRegistry({
+      backgroundTasks: { runtime: backgroundTasks },
+      readSkill: {
+        loader: (name) => pluginRuntime.loadSkillPrompt(name),
+        lister: () => pluginRuntime.getAllSkills(),
+      },
+    });
     for (const tool of this.options.extraTools ?? []) {
       tools.register(tool);
     }
 
     const memory = createEdgeClawMemoryProviderFromConfig({
       config: snapshot.config.memory,
+      modelConfig: snapshot.config.model,
       projectRoot,
       now: this.options.now,
     });
@@ -512,10 +522,16 @@ class ProjectRuntimeRegistry {
           runtime.snapshot.config.agent.model.provider,
           runtime.snapshot.config.agent.model.model,
         );
+        const instructionDiscovery = new InstructionDiscovery(
+          projectRoot,
+          projectRoot,
+          this.options.pilotHome,
+        );
         const contextRuntime = new DefaultContextRuntime({
           extension,
           projectRoot,
           memoryResolver,
+          instructionDiscovery,
           toolResultBudget,
           tokenBudget,
           compactionEngine,

@@ -68,13 +68,7 @@ export type PilotAgentConfig = {
  */
 export type PilotRouterConfig = RouterConfig;
 
-export type PilotMemoryLlmConfig = {
-  provider?: string;
-  model?: string;
-  baseUrl?: string;
-  apiKey?: string;
-  apiType?: "openai-responses" | "responses" | "openai-completions";
-};
+export type PilotMemoryApiType = "openai-responses" | "responses" | "openai-completions";
 
 export type PilotMemoryConfig = {
   enabled: boolean;
@@ -83,7 +77,9 @@ export type PilotMemoryConfig = {
   captureStrategy: "last_turn" | "full_session";
   includeAssistant: boolean;
   maxMessageChars?: number;
-  llm?: PilotMemoryLlmConfig;
+  /** "provider/model" string referencing model.providers, e.g. "openai/gpt-4.1-mini" */
+  model?: string;
+  apiType?: PilotMemoryApiType;
 };
 
 export type PilotGatewayConfig = {

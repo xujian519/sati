@@ -13,6 +13,7 @@ import type { SnipEngine } from "./compaction/SnipEngine.js";
 import { ensureTrailingUserMessage } from "./compaction/toolPairIntegrity.js";
 import type { ContextOverflowRecovery } from "./recovery/ContextOverflowRecovery.js";
 import { NullExtensionResolver, type ExtensionResolver } from "./extension/ExtensionResolver.js";
+import type { InstructionDiscovery, InstructionScope } from "./instructions/InstructionDiscovery.js";
 import { MemoryAttachmentBuilder } from "./memory/MemoryAttachmentBuilder.js";
 import type { MemoryResolver } from "./memory/MemoryResolver.js";
 import { PromptAssembler } from "./prompt/PromptAssembler.js";
@@ -58,6 +59,8 @@ export type DefaultContextRuntimeOptions = {
   snipEngine?: SnipEngine;
   /** Reactive overflow recovery (prompt_too_long → truncate head). */
   overflowRecovery?: ContextOverflowRecovery;
+  /** PILOTDECK.md instruction file discovery (multi-scope hierarchy). */
+  instructionDiscovery?: InstructionDiscovery;
   /** Project root forwarded to MemoryResolver.retrieve. */
   projectRoot?: string;
   /**
@@ -94,6 +97,7 @@ export class DefaultContextRuntime implements ContextRuntime {
   private readonly microCompaction?: MicroCompactionEngine;
   private readonly snipEngine?: SnipEngine;
   private readonly overflowRecovery?: ContextOverflowRecovery;
+  private readonly instructionDiscovery?: InstructionDiscovery;
   private readonly projectRoot?: string;
   private readonly maxContextTokens: number;
   private readonly truncateFirstKeepRatio: number;
@@ -116,6 +120,7 @@ export class DefaultContextRuntime implements ContextRuntime {
     this.microCompaction = options.microCompaction;
     this.snipEngine = options.snipEngine;
     this.overflowRecovery = options.overflowRecovery;
+    this.instructionDiscovery = options.instructionDiscovery;
     this.projectRoot = options.projectRoot;
     this.maxContextTokens = options.maxContextTokens ?? DEFAULT_MAX_CONTEXT_TOKENS;
     this.truncateFirstKeepRatio = options.truncateFirstKeepRatio ?? DEFAULT_TRUNCATE_FIRST_RATIO;
@@ -171,6 +176,29 @@ export class DefaultContextRuntime implements ContextRuntime {
           code: diagnostic.code,
           severity: diagnostic.severity,
           message: diagnostic.message,
+        });
+      }
+    }
+
+    if (this.instructionDiscovery) {
+      try {
+        const layers = await this.instructionDiscovery.discover();
+        if (layers.length > 0) {
+          const blocks = layers.map(l => {
+            const desc = instructionScopeDescription(l.scope);
+            return `Contents of ${l.path}${desc}:\n\n${l.content}`;
+          });
+          parts.push(
+            `<project-instructions>\nProject instructions are shown below. Adhere to these instructions. ` +
+            `IMPORTANT: These instructions OVERRIDE any default behavior.\n\n` +
+            `${blocks.join("\n\n")}\n</project-instructions>`,
+          );
+        }
+      } catch {
+        diagnostics.push({
+          code: "instruction_discovery_failed",
+          severity: "warning",
+          message: "Failed to discover PILOTDECK.md instruction files.",
         });
       }
     }
@@ -309,6 +337,21 @@ export class DefaultContextRuntime implements ContextRuntime {
       keepRatio: this.truncateFirstKeepRatio,
       reason: "ptl-first-attempt",
     };
+  }
+}
+
+function instructionScopeDescription(scope: InstructionScope): string {
+  switch (scope) {
+    case "managed":
+      return " (managed instructions, set by administrator)";
+    case "user":
+      return " (user's global instructions for all projects)";
+    case "project":
+      return " (project instructions, checked into the codebase)";
+    case "project-rules":
+      return " (project rule, checked into the codebase)";
+    case "local":
+      return " (user's private project instructions, not checked in)";
   }
 }
 

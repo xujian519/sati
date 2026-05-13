@@ -6,6 +6,25 @@ import type { PilotDeckLoadedPlugin, PilotDeckPluginSourceKind } from "../protoc
 import { parsePluginManifest } from "../config/parsePluginManifest.js";
 import { loadPluginCommands } from "./PluginCommandLoader.js";
 
+/**
+ * Loads a standalone skill directory (containing SKILL.md) as a pseudo-plugin.
+ * No plugin.json required — mirrors Claude Code's ~/.claude/skills/{name}/ layout.
+ */
+export async function loadSkillFromPath(
+  skillDir: string,
+  source: PilotDeckPluginSourceKind,
+): Promise<PilotDeckLoadedPlugin> {
+  const name = skillDir.split(/[\\/]/u).at(-1) ?? "skill";
+  const skills = await loadPluginCommands({ pluginName: name, baseDir: skillDir });
+  return {
+    name,
+    path: skillDir,
+    source,
+    manifest: { name, version: "0.0.0" },
+    skills,
+  };
+}
+
 export async function loadPluginFromPath(
   pluginPath: string,
   source: PilotDeckPluginSourceKind,

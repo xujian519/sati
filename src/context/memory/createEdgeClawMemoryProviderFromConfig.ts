@@ -18,10 +18,12 @@
 
 import { EdgeClawMemoryService } from "edgeclaw-memory-core";
 import { EdgeClawMemoryProvider } from "./EdgeClawMemoryProvider.js";
+import type { ModelConfig } from "../../model/protocol/canonical.js";
 import type { PilotMemoryConfig } from "../../pilot/config/types.js";
 
 export type CreateEdgeClawMemoryProviderOptions = {
   config: PilotMemoryConfig | undefined;
+  modelConfig?: ModelConfig;
   projectRoot: string;
   /** Optional logger forwarded to the underlying service. */
   logger?: {
@@ -43,6 +45,8 @@ export function createEdgeClawMemoryProviderFromConfig(
   const workspaceDir = options.projectRoot;
   const rootDir = cfg.rootDir;
 
+  const llm = resolveMemoryLlm(cfg, options.modelConfig);
+
   const service = new EdgeClawMemoryService({
     workspaceDir,
     rootDir,
@@ -51,15 +55,7 @@ export function createEdgeClawMemoryProviderFromConfig(
     maxMessageChars: cfg.maxMessageChars,
     source: "pilotdeck",
     logger: options.logger,
-    llm: cfg.llm
-      ? {
-          provider: cfg.llm.provider,
-          model: cfg.llm.model,
-          baseUrl: cfg.llm.baseUrl,
-          apiKey: cfg.llm.apiKey,
-          apiType: cfg.llm.apiType,
-        }
-      : undefined,
+    llm,
   });
 
   const provider = new EdgeClawMemoryProvider({
@@ -69,4 +65,26 @@ export function createEdgeClawMemoryProviderFromConfig(
   });
 
   return { provider, service };
+}
+
+function resolveMemoryLlm(
+  cfg: PilotMemoryConfig,
+  modelConfig?: ModelConfig,
+): { provider?: string; model?: string; baseUrl?: string; apiKey?: string; apiType?: string } | undefined {
+  if (!cfg.model) return undefined;
+
+  const sep = cfg.model.indexOf("/");
+  if (sep < 0) return undefined;
+
+  const providerId = cfg.model.slice(0, sep);
+  const modelId = cfg.model.slice(sep + 1);
+  const providerEntry = modelConfig?.providers[providerId];
+
+  return {
+    provider: providerId,
+    model: modelId,
+    baseUrl: providerEntry?.url,
+    apiKey: providerEntry?.apiKey,
+    apiType: cfg.apiType,
+  };
 }

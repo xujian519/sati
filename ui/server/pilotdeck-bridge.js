@@ -47,14 +47,14 @@ import fs from 'node:fs';
 import { promises as fsPromises } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
+import { installGlobalProxy } from '../../dist/src/cli/proxy.js';
+installGlobalProxy();
+
 import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from './utils/pilotPaths.js';
-// Imported from TypeScript source — requires `node --import tsx` so the
-// module is transformed at load time. Keeping the bridge off
-// `dist/src/` is what lets `ui/server` survive `src/**` edits without
-// `npm run build`; the gateway server (also tsx-launched) restarts and
-// picks up the new code, while `ui/server` keeps running as a plain
-// client.
-import { createRemoteGateway } from '../../src/gateway/index.js';
+// Use the compiled gateway client from dist/ so the UI server can run
+// without tsx (tsx 4.x es-module-lexer has a known parse bug on this
+// file). Run `npm run build` in the repo root when gateway source changes.
+import { createRemoteGateway } from '../../dist/src/gateway/index.js';
 import { createNormalizedMessage } from './pilotdeck-message.js';
 import { readPermissionSettings } from './services/permissionSettings.js';
 
@@ -86,7 +86,13 @@ const GATEWAY_CONNECT_RETRY_INTERVAL_MS = 250;
 const WEB_DEFAULT_PERMISSION_MODE =
     process.env.PILOTDECK_WEB_PERMISSION_MODE || 'default';
 
-/** @type {Promise<import('../../src/gateway/index.js').Gateway> | null} */
+// Resolves to the Gateway returned by `createRemoteGateway`. We express
+// the type via `typeof createRemoteGateway` (the symbol is already imported
+// above) instead of a JSDoc dynamic-import annotation, because some tsx 4.x
+// builds mis-parse such tokens inside JSDoc when running through
+// `node --import tsx`, producing a spurious "Parse error" at EOF during
+// ESM rewriting on fresh installs.
+/** @type {ReturnType<typeof createRemoteGateway> | null} */
 let gatewayPromise = null;
 
 async function readGatewayToken() {
@@ -599,10 +605,10 @@ export function getActiveSessionIdsViaGateway() {
  * @returns {Map<string, {aggregate: object, records: object[]}>}
  */
 /**
- * Build a sessionId→projectPath lookup from the filesystem.
- * Scans project chat directories under `~/.pilotdeck/projects/` and maps
+ * Build a sessionId->projectPath lookup from the filesystem.
+ * Scans project chat directories under ~/.pilotdeck/projects/ and maps
  * each session filename back to the actual project path (resolved via
- * the `.cwd` marker or well-known directory names).
+ * the .cwd marker or well-known directory names).
  *
  * @returns {{ sessionIndex: Map<string,string>, dirToPath: Map<string,string> }}
  */
@@ -726,7 +732,7 @@ function lookupSessionTitle(sessionId, projectKey) {
 function _readFirstPrompt(sessionId, projectKey) {
     const pilotHome = GENERAL_HOME;
     // Sessions are stored on disk under a sanitized filename (raw sessionId
-    // may contain `/`, `:`, `=` which would split into nested dirs). We try
+    // may contain /, :, = which would split into nested dirs). We try
     // both the sanitized and raw form so this also resolves any legacy files
     // that pre-date the sanitize fix.
     const safeId = sanitizeSessionIdForPath(sessionId);

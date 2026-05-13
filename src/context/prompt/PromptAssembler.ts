@@ -219,7 +219,10 @@ function formatCommands(commands: ContributedCommand[]): string {
 }
 
 function formatSkills(skills: ContributedSkill[]): string {
-  const lines = ["<available-skills>"];
+  const lines = [
+    "<available-skills>",
+    "Use the read_skill tool to load the full content of any skill listed below.",
+  ];
   for (const skill of skills) {
     const description = skill.description ? ` — ${skill.description}` : "";
     lines.push(`- ${skill.name}${description}`);

@@ -8,13 +8,26 @@ export function HelpDialog(): React.ReactNode {
       <Text color={pilotDeckDarkBlueTheme.brand} bold>
         PilotDeck commands
       </Text>
-      <Text>/new        create a new session</Text>
-      <Text>/sessions   list recent sessions</Text>
-      <Text>/mode plan  switch to plan mode</Text>
+      <Text>/new          create a new session</Text>
+      <Text>/sessions     list recent sessions</Text>
+      <Text>/mode plan    switch to plan mode</Text>
       <Text>/mode default switch to default mode</Text>
-      <Text>/clear      clear transcript</Text>
-      <Text>/help       toggle this help</Text>
-      <Text>/exit       quit</Text>
+      <Text>/view [N]     view tool output (N=index, default=last)</Text>
+      <Text>/clear        clear transcript</Text>
+      <Text>/help         toggle this help</Text>
+      <Text>/exit         quit</Text>
+      <Text> </Text>
+      <Text color={pilotDeckDarkBlueTheme.brand} bold>Navigation</Text>
+      <Text>Tab / Shift+Tab   focus prev/next tool output</Text>
+      <Text>Enter (empty)     expand focused or view last output</Text>
+      <Text>PageUp / Shift+↑  scroll up</Text>
+      <Text>PageDown / Shift+↓ scroll down</Text>
+      <Text>Esc               clear focus + close help</Text>
+      <Text> </Text>
+      <Text color={pilotDeckDarkBlueTheme.brand} bold>Viewer (full output)</Text>
+      <Text>j/k   scroll line   PgUp/Dn  scroll page</Text>
+      <Text>g/G   top/bottom     q/Esc    close viewer</Text>
+      <Text> </Text>
       <Text color={pilotDeckDarkBlueTheme.subtle}>Enter sends · Ctrl+C aborts running turns or exits</Text>
     </Box>
   );

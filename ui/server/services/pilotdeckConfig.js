@@ -4,11 +4,24 @@ import os from 'os';
 import path from 'path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
-// Source of truth: ~/.pilotdeck/pilotdeck.yaml. The gateway's `model` /
-// `agent` sections are reused so the UI's provider picker and the
-// gateway runtime agree on the active model. Web-UI-only settings live
-// under the `webui` top-level key (whitelisted in src/pilot loader so
-// no diagnostic is emitted).
+// Source of truth: ~/.pilotdeck/pilotdeck.yaml. The disk format and the
+// "internal" config object are the same V2 schema — no more adapter layer.
+//
+// Top-level shape:
+//   schemaVersion: 1
+//   agent:    { model: "provider/model", params, subagents }
+//   model:    { providers: { [pid]: { protocol, url, apiKey, models, headers, timeoutMs } } }
+//   memory:   { enabled, model, apiType?, reasoningMode, ... }
+//   webui:    { runtime: { host, serverPort, vitePort, proxyPort, ... } }
+//   router:   { enabled, stats: { enabled, modelPricing }, ... }
+//   gateway:  { enabled, home, ... }
+//   alwaysOn: { enabled, trigger, dormancy, workspace, execution, projects }
+//   customEnv:{ KEY: VALUE }    (UI-only; engine ignores)
+//
+// Everything not in this list (router/gateway/alwaysOn deep fields, etc.)
+// flows through verbatim — the gateway-side PilotConfigStore owns those
+// schemas. UI server just round-trips them.
+
 const CONFIG_VERSION = 1;
 const DEFAULT_CONFIG_PATH = path.join(os.homedir(), '.pilotdeck', 'pilotdeck.yaml');
 const MASK = '********';
@@ -28,20 +41,6 @@ function normalizeString(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function stripTrailingSlash(value) {
-  return normalizeString(value).replace(/\/+$/, '');
-}
-
-function providerEndpointForType(provider) {
-  const baseUrl = stripTrailingSlash(provider?.baseUrl);
-  const type = normalizeString(provider?.type) || 'openai-chat';
-  if (!baseUrl) return '';
-  if (type === 'openai-responses') return `${baseUrl}/responses`;
-  if (type === 'anthropic') return `${baseUrl}/v1/messages`;
-  if (type === 'openai-chat' || type === 'litellm') return `${baseUrl}/chat/completions`;
-  return `${baseUrl}/chat/completions`;
-}
-
 function deepMerge(base, override) {
   if (!isRecord(base)) return clone(override);
   const output = clone(base);
@@ -57,44 +56,21 @@ function deepMerge(base, override) {
   return output;
 }
 
-// ─── ui-internal schema ──────────────────────────────────────────────────────
-// Kept compatible with the previous EdgeClaw shape so existing consumers
-// (memoryService, routes/config, routes/memory, settings UI) stay unchanged.
-// channels / IM-gateway / CCR router segments were stripped — they had no
-// remaining consumer in the codebase after the PilotDeck migration.
+// ─── Defaults ────────────────────────────────────────────────────────────────
 
 export function buildDefaultPilotDeckConfig() {
   return {
-    version: CONFIG_VERSION,
-    runtime: {
-      host: '0.0.0.0',
-      serverPort: 3001,
-      vitePort: 5173,
-      proxyPort: 18080,
-      contextWindow: 160000,
-      apiTimeoutMs: 120000,
-      httpsProxy: '',
-      databasePath: path.join(os.homedir(), '.pilotdeck', 'auth.db'),
-      workspacesRoot: os.homedir(),
+    schemaVersion: CONFIG_VERSION,
+    agent: {
+      model: '',
+      params: {},
+      subagents: { default: 'inherit', params: {} },
     },
-    models: {
+    model: {
       providers: {},
-      entries: {},
-    },
-    agents: {
-      main: {
-        model: '',
-        params: {},
-      },
-      subagents: {
-        default: 'inherit',
-        params: {},
-      },
     },
     memory: {
       enabled: true,
-      model: 'inherit',
-      params: {},
       reasoningMode: 'answer_first',
       autoIndexIntervalMinutes: 30,
       autoDreamIntervalMinutes: 60,
@@ -103,180 +79,116 @@ export function buildDefaultPilotDeckConfig() {
       maxMessageChars: 6000,
       heartbeatBatchSize: 30,
     },
+    webui: {
+      runtime: {
+        host: '0.0.0.0',
+        serverPort: 3001,
+        vitePort: 5173,
+        proxyPort: 18080,
+        contextWindow: 160000,
+        apiTimeoutMs: 120000,
+        httpsProxy: '',
+        databasePath: path.join(os.homedir(), '.pilotdeck', 'auth.db'),
+        workspacesRoot: os.homedir(),
+      },
+    },
   };
 }
 
-// ─── pilotdeck.yaml ↔ ui-internal schema adapter ─────────────────────────────
-
-function protocolToInternalType(protocol) {
-  switch (normalizeString(protocol).toLowerCase()) {
-    case 'openai':
-    case 'openai-chat':
-    case 'chat': return 'openai-chat';
-    case 'anthropic': return 'anthropic';
-    case 'openai-responses':
-    case 'responses': return 'openai-responses';
-    case 'litellm': return 'litellm';
-    default: return 'openai-chat';
-  }
-}
-
-function internalTypeToProtocol(type) {
-  switch (normalizeString(type).toLowerCase()) {
-    case 'openai-chat': return 'openai';
-    case 'anthropic': return 'anthropic';
-    case 'openai-responses': return 'openai-responses';
-    case 'litellm': return 'litellm';
-    default: return 'openai';
-  }
-}
-
-function adaptPilotDeckYamlToInternal(rawYaml) {
-  const yaml = isRecord(rawYaml) ? rawYaml : {};
-  const internal = buildDefaultPilotDeckConfig();
-
-  if (isRecord(yaml.model?.providers)) {
-    internal.models = { providers: {}, entries: {} };
-    for (const [pid, provider] of Object.entries(yaml.model.providers)) {
-      if (!isRecord(provider)) continue;
-      internal.models.providers[pid] = {
-        type: protocolToInternalType(provider.protocol),
-        baseUrl: normalizeString(provider.url),
-        apiKey: normalizeString(provider.apiKey),
-        transformer: null,
-        headers: isRecord(provider.headers) ? clone(provider.headers) : {},
-      };
-      if (isRecord(provider.models)) {
-        for (const [mid, def] of Object.entries(provider.models)) {
-          const entryId = `${pid}/${mid}`;
-          const maxContext = isRecord(def?.capabilities)
-            ? Number(def.capabilities.maxContextTokens)
-            : Number.NaN;
-          internal.models.entries[entryId] = {
-            provider: pid,
-            name: mid,
-            contextWindow: Number.isFinite(maxContext) && maxContext > 0 ? maxContext : 160000,
-          };
-        }
-      }
-    }
-  }
-
-  if (typeof yaml.agent?.model === 'string' && yaml.agent.model.trim()) {
-    internal.agents.main.model = yaml.agent.model.trim();
-  }
-
-  if (isRecord(yaml.webui?.runtime)) {
-    internal.runtime = deepMerge(internal.runtime, yaml.webui.runtime);
-  }
-  if (isRecord(yaml.webui?.memory)) {
-    internal.memory = deepMerge(internal.memory, yaml.webui.memory);
-  }
-
-  return internal;
-}
-
-function adaptInternalToPilotDeckYaml(internal, rawYaml) {
-  // Read-modify-write: start from the raw yaml so non-UI-managed fields
-  // (model.providers.<id>.models.<id>.displayName / capabilities /
-  // multimodal, agent.fallbackModel, etc.) survive write-backs.
-  const yaml = clone(isRecord(rawYaml) ? rawYaml : {});
-  yaml.schemaVersion = CONFIG_VERSION;
-
-  yaml.agent = isRecord(yaml.agent) ? yaml.agent : {};
-  if (normalizeString(internal.agents?.main?.model)) {
-    yaml.agent.model = internal.agents.main.model;
-  }
-
-  yaml.model = isRecord(yaml.model) ? yaml.model : {};
-  yaml.model.providers = isRecord(yaml.model.providers) ? yaml.model.providers : {};
-
-  if (isRecord(internal.models?.providers)) {
-    const incomingPids = new Set(Object.keys(internal.models.providers));
-    for (const [pid, p] of Object.entries(internal.models.providers)) {
-      const existing = isRecord(yaml.model.providers[pid]) ? yaml.model.providers[pid] : {};
-      yaml.model.providers[pid] = {
-        ...existing,
-        protocol: internalTypeToProtocol(p.type) || existing.protocol || 'openai',
-        url: p.baseUrl || existing.url || '',
-        apiKey: p.apiKey || existing.apiKey || '',
-        timeoutMs: existing.timeoutMs ?? 120000,
-        headers: isRecord(p.headers) && Object.keys(p.headers).length > 0
-          ? clone(p.headers)
-          : (isRecord(existing.headers) ? existing.headers : {}),
-        models: isRecord(existing.models) ? existing.models : {},
-      };
-    }
-    for (const pid of Object.keys(yaml.model.providers)) {
-      if (!incomingPids.has(pid)) delete yaml.model.providers[pid];
-    }
-  }
-
-  if (isRecord(internal.models?.entries)) {
-    const entriesByProvider = new Map();
-    for (const entry of Object.values(internal.models.entries)) {
-      if (!entry?.provider || !entry?.name) continue;
-      if (!entriesByProvider.has(entry.provider)) entriesByProvider.set(entry.provider, new Set());
-      entriesByProvider.get(entry.provider).add(entry.name);
-    }
-    for (const [pid, provider] of Object.entries(yaml.model.providers)) {
-      const validMids = entriesByProvider.get(pid) ?? new Set();
-      provider.models = isRecord(provider.models) ? provider.models : {};
-      for (const mid of validMids) {
-        if (!isRecord(provider.models[mid])) provider.models[mid] = {};
-      }
-      for (const mid of Object.keys(provider.models)) {
-        if (!validMids.has(mid)) delete provider.models[mid];
-      }
-    }
-  }
-
-  yaml.webui = isRecord(yaml.webui) ? yaml.webui : {};
-  if (isRecord(internal.runtime)) yaml.webui.runtime = clone(internal.runtime);
-  if (isRecord(internal.memory)) yaml.webui.memory = clone(internal.memory);
-
-  return yaml;
-}
-
-// ─── public API (matches the previous edgeclawConfig surface) ────────────────
-
-export function getPilotDeckConfigPath() {
-  if (process.env.PILOTDECK_CONFIG_PATH?.trim()) {
-    return process.env.PILOTDECK_CONFIG_PATH.trim();
-  }
-  return DEFAULT_CONFIG_PATH;
-}
-
-export function readPilotDeckConfigFile() {
-  const configPath = getPilotDeckConfigPath();
-  if (!fs.existsSync(configPath)) {
-    return {
-      exists: false,
-      configPath,
-      raw: '',
-      config: buildDefaultPilotDeckConfig(),
-      rawYaml: {},
-    };
-  }
-  const raw = fs.readFileSync(configPath, 'utf8');
-  const parsed = parseYaml(raw) || {};
-  const config = normalizePilotDeckConfig(parsed);
-  return { exists: true, configPath, raw, config, rawYaml: parsed };
-}
-
-// Idempotent: callers pass either the raw pilotdeck.yaml object (has
-// `model.providers` / `agent.model`) or an already-normalized ui-internal
-// config (has `models.providers` / `agents.main.model`). The two shapes are
-// disjoint enough to distinguish by key.
+// `normalize` here means "fill in missing top-level sections with defaults"
+// — it never reshapes. Idempotent.
 export function normalizePilotDeckConfig(input) {
-  if (!isRecord(input)) return buildDefaultPilotDeckConfig();
-  const looksLikeInternal = isRecord(input.models) || isRecord(input.agents) || isRecord(input.runtime);
-  const looksLikeYaml = isRecord(input.model) || (isRecord(input.agent) && typeof input.agent.model === 'string');
-  if (looksLikeInternal && !looksLikeYaml) {
-    return deepMerge(buildDefaultPilotDeckConfig(), input);
-  }
-  return adaptPilotDeckYamlToInternal(input);
+  return deepMerge(buildDefaultPilotDeckConfig(), isRecord(input) ? input : {});
 }
+
+// ─── Model resolution ────────────────────────────────────────────────────────
+
+function splitModelRef(ref) {
+  const text = normalizeString(ref);
+  if (!text) return null;
+  // Allow nested slashes: "openrouter/anthropic/claude-sonnet-4.6" →
+  // provider="openrouter", model="anthropic/claude-sonnet-4.6"
+  const slash = text.indexOf('/');
+  if (slash <= 0 || slash === text.length - 1) return null;
+  return { providerId: text.slice(0, slash), modelId: text.slice(slash + 1) };
+}
+
+// Returns { id, providerId, provider, model, def } or null if the
+// reference doesn't resolve. `id` is the canonical "provider/model"
+// string (after inherit-resolution).
+export function resolveModel(config, ref, options = {}) {
+  const inheritFallback = normalizeString(config?.agent?.model);
+  const refText = normalizeString(ref);
+  const effective = (!refText || refText === 'inherit')
+    ? inheritFallback
+    : refText;
+  const parts = splitModelRef(effective);
+  if (!parts) {
+    if (options.allowMissing) return null;
+    throw new Error(`Invalid model reference: ${ref ?? ''}`);
+  }
+  const provider = config?.model?.providers?.[parts.providerId];
+  if (!isRecord(provider)) {
+    if (options.allowMissing) return null;
+    throw new Error(`Provider not found for model "${effective}": ${parts.providerId}`);
+  }
+  const def = isRecord(provider.models) ? provider.models[parts.modelId] : null;
+  return {
+    id: effective,
+    providerId: parts.providerId,
+    provider,
+    model: parts.modelId,
+    def: isRecord(def) ? def : {},
+  };
+}
+
+// ─── Validation ──────────────────────────────────────────────────────────────
+
+function validateProvider(id, provider, errors) {
+  if (!isRecord(provider)) {
+    errors.push(`model.providers.${id} must be an object`);
+    return;
+  }
+  const protocol = normalizeString(provider.protocol).toLowerCase();
+  if (!protocol) errors.push(`model.providers.${id}.protocol is required`);
+  else if (protocol !== 'openai' && protocol !== 'anthropic') {
+    errors.push(`model.providers.${id}.protocol must be "openai" or "anthropic"`);
+  }
+  if (!normalizeString(provider.url)) errors.push(`model.providers.${id}.url is required`);
+  if (!normalizeString(provider.apiKey)) errors.push(`model.providers.${id}.apiKey is required`);
+}
+
+export function validatePilotDeckConfig(config) {
+  const normalized = normalizePilotDeckConfig(config);
+  const errors = [];
+  const warnings = [];
+
+  const mainRef = normalizeString(normalized.agent.model);
+  if (!mainRef) {
+    warnings.push('agent.model is empty; pick a model from model.providers.');
+  } else {
+    const main = resolveModel(normalized, mainRef, { allowMissing: true });
+    if (!main) {
+      errors.push(`agent.model="${mainRef}" doesn't resolve to a configured provider/model`);
+    } else {
+      validateProvider(main.providerId, main.provider, errors);
+    }
+  }
+
+  if (normalized.memory?.enabled && normalizeString(normalized.memory.model)) {
+    const ref = normalizeString(normalized.memory.model);
+    if (ref !== 'inherit') {
+      const memory = resolveModel(normalized, ref, { allowMissing: true });
+      if (!memory) {
+        errors.push(`memory.model="${ref}" doesn't resolve to a configured provider/model`);
+      }
+    }
+  }
+
+  return { valid: errors.length === 0, errors, warnings, config: normalized };
+}
+
+// ─── Secret masking ──────────────────────────────────────────────────────────
 
 function isSecretKey(key) {
   return SECRET_EXACT_KEYS.has(key) || SECRET_KEY_RE.test(key);
@@ -313,68 +225,21 @@ export function preserveMaskedSecrets(nextValue, previousValue) {
   return nextValue;
 }
 
-export function resolveModel(config, modelId, options = {}) {
-  const effectiveId = modelId === 'inherit' || !modelId
-    ? normalizeString(config?.agents?.main?.model)
-    : normalizeString(modelId);
-  const entry = config?.models?.entries?.[effectiveId];
-  if (!isRecord(entry)) {
-    if (options.allowMissing) return null;
-    throw new Error(`Model entry not found: ${effectiveId || modelId}`);
-  }
-  const providerId = normalizeString(entry.provider);
-  const provider = config?.models?.providers?.[providerId];
-  if (!isRecord(provider)) {
-    if (options.allowMissing) return null;
-    throw new Error(`Provider not found for model "${effectiveId}": ${providerId}`);
-  }
-  return {
-    id: effectiveId,
-    providerId,
-    provider,
-    model: normalizeString(entry.name),
-    entry,
-  };
-}
+// ─── Runtime env derivation ──────────────────────────────────────────────────
 
-function validateProvider(id, provider, errors) {
-  if (!normalizeString(provider?.type)) errors.push(`models.providers.${id}.type is required`);
-  if (!normalizeString(provider?.baseUrl)) errors.push(`models.providers.${id}.baseUrl is required`);
-  if (!normalizeString(provider?.apiKey)) errors.push(`models.providers.${id}.apiKey is required`);
-}
-
-export function validatePilotDeckConfig(config) {
-  const normalized = normalizePilotDeckConfig(config);
-  const errors = [];
-  const warnings = [];
-
-  if (!normalizeString(normalized.agents.main.model)) {
-    warnings.push('agents.main.model is empty; pick a model from models.entries.');
-  } else {
-    const main = resolveModel(normalized, normalized.agents.main.model, { allowMissing: true });
-    if (!main) {
-      errors.push('agents.main.model must reference a model in models.entries');
-    } else if (!main.model) {
-      errors.push(`models.entries.${main.id}.name is required`);
-    } else {
-      validateProvider(main.providerId, main.provider, errors);
-    }
-  }
-
-  if (normalized.memory.enabled && normalized.memory.model !== 'inherit') {
-    const memory = resolveModel(normalized, normalized.memory.model, { allowMissing: true });
-    if (!memory) errors.push('memory.model must be inherit or reference a model in models.entries');
-    else if (!memory.model) errors.push(`models.entries.${memory.id}.name is required`);
-  }
-
-  return { valid: errors.length === 0, errors, warnings, config: normalized };
+function providerProtocolToMemoryApi(protocol) {
+  // V2 catalog only uses 'openai' (Chat Completions) and 'anthropic'.
+  // The /responses style is only relevant when a user manually sets
+  // memory.apiType, which they can do alongside protocol="openai".
+  return 'openai-completions';
 }
 
 export function buildRuntimeEnv(config) {
   const normalized = normalizePilotDeckConfig(config);
-  const main = resolveModel(normalized, normalized.agents.main.model, { allowMissing: true });
-  const runtime = normalized.runtime;
+  const main = resolveModel(normalized, normalized.agent.model, { allowMissing: true });
+  const runtime = normalized.webui?.runtime ?? {};
   const proxyPort = String(runtime.proxyPort ?? 18080);
+
   const env = {
     PILOTDECK_PROXY_PORT: process.env.PILOTDECK_PROXY_PORT || proxyPort,
     PROXY_PORT: process.env.PROXY_PORT || proxyPort,
@@ -384,7 +249,7 @@ export function buildRuntimeEnv(config) {
     CONTEXT_WINDOW: String(runtime.contextWindow ?? 160000),
     VITE_CONTEXT_WINDOW: String(runtime.contextWindow ?? 160000),
     API_TIMEOUT_MS: String(runtime.apiTimeoutMs ?? 120000),
-    PILOTDECK_MEMORY_ENABLED: normalized.memory.enabled ? '1' : '0',
+    PILOTDECK_MEMORY_ENABLED: normalized.memory?.enabled ? '1' : '0',
   };
 
   if (runtime.databasePath) env.DATABASE_PATH = expandTilde(runtime.databasePath);
@@ -395,22 +260,20 @@ export function buildRuntimeEnv(config) {
   }
 
   if (main) {
-    env.PILOTDECK_API_BASE_URL = main.provider.baseUrl;
-    env.PILOTDECK_API_KEY = main.provider.apiKey;
+    env.PILOTDECK_API_BASE_URL = main.provider.url || '';
+    env.PILOTDECK_API_KEY = main.provider.apiKey || '';
     env.PILOTDECK_MODEL = main.model;
-    env.OPENAI_BASE_URL = main.provider.baseUrl;
-    env.OPENAI_API_KEY = main.provider.apiKey;
+    env.OPENAI_BASE_URL = main.provider.url || '';
+    env.OPENAI_API_KEY = main.provider.apiKey || '';
     env.OPENAI_MODEL = main.model;
-    env.ANTHROPIC_API_KEY = main.provider.apiKey;
+    env.ANTHROPIC_API_KEY = main.provider.apiKey || '';
     env.ANTHROPIC_MODEL = main.model;
   }
   env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${proxyPort}`;
 
-  // Reasoning models (MiniMax-M2.7, DeepSeek-R1, etc.) emit large thinking
-  // blocks BEFORE the answer; honor a per-config override under
-  // agents.main.params.maxOutputTokens (or max_tokens) and propagate it
-  // as CLAUDE_CODE_MAX_OUTPUT_TOKENS for the claude-code-main bridge.
-  const mainParams = normalized.agents?.main?.params ?? {};
+  // Reasoning models (DeepSeek-R1, MiniMax-M2.7, etc.) need a generous
+  // output token cap; honor agent.params.maxOutputTokens / max_tokens.
+  const mainParams = normalized.agent?.params ?? {};
   const requestedMaxOutput = Number.parseInt(
     String(
       mainParams.maxOutputTokens ??
@@ -429,13 +292,23 @@ export function buildRuntimeEnv(config) {
   const tavilyKey = mainParams.tavilyApiKey ?? mainParams.tavily_api_key ?? process.env.TAVILY_API_KEY;
   if (tavilyKey) env.TAVILY_API_KEY = String(tavilyKey);
 
-  const memory = resolveModel(normalized, normalized.memory.model, { allowMissing: true });
+  // Memory uses memory.model (or inherits agent.model when blank).
+  const memoryRef = normalizeString(normalized.memory?.model) || normalized.agent.model;
+  const memory = resolveModel(normalized, memoryRef, { allowMissing: true });
   if (memory) {
     env.PILOTDECK_MEMORY_MODEL = memory.model;
     env.PILOTDECK_MEMORY_PROVIDER = memory.providerId;
-    env.PILOTDECK_MEMORY_BASE_URL = memory.provider.baseUrl;
-    env.PILOTDECK_MEMORY_API_KEY = memory.provider.apiKey;
-    env.PILOTDECK_MEMORY_API_TYPE = providerTypeToMemoryApi(memory.provider.type);
+    env.PILOTDECK_MEMORY_BASE_URL = memory.provider.url || '';
+    env.PILOTDECK_MEMORY_API_KEY = memory.provider.apiKey || '';
+    env.PILOTDECK_MEMORY_API_TYPE = normalizeString(normalized.memory?.apiType)
+      || providerProtocolToMemoryApi(memory.provider.protocol);
+  }
+
+  // Pass through customEnv (UI-managed escape hatch).
+  if (isRecord(normalized.customEnv)) {
+    for (const [key, value] of Object.entries(normalized.customEnv)) {
+      if (typeof value === 'string' && value.trim()) env[key] = value;
+    }
   }
 
   return env;
@@ -445,25 +318,26 @@ export function applyConfigToProcessEnv(config) {
   Object.assign(process.env, buildRuntimeEnv(config));
 }
 
-function providerTypeToMemoryApi(type) {
-  return type === 'openai-responses' ? 'openai-responses' : 'openai-completions';
-}
+// ─── Memory service options ──────────────────────────────────────────────────
 
 export function buildMemoryLlmOptions(config) {
-  const memory = resolveModel(normalizePilotDeckConfig(config), config.memory?.model, { allowMissing: true });
+  const normalized = normalizePilotDeckConfig(config);
+  const ref = normalizeString(normalized.memory?.model) || normalized.agent.model;
+  const memory = resolveModel(normalized, ref, { allowMissing: true });
   if (!memory) return undefined;
   return {
     provider: memory.providerId,
     model: memory.model,
-    apiType: providerTypeToMemoryApi(memory.provider.type),
-    baseUrl: memory.provider.baseUrl,
-    apiKey: memory.provider.apiKey,
-    headers: memory.provider.headers ?? {},
+    apiType: normalizeString(normalized.memory?.apiType)
+      || providerProtocolToMemoryApi(memory.provider.protocol),
+    baseUrl: memory.provider.url || '',
+    apiKey: memory.provider.apiKey || '',
+    headers: isRecord(memory.provider.headers) ? memory.provider.headers : {},
   };
 }
 
 export function buildMemoryDefaults(config) {
-  const memory = normalizePilotDeckConfig(config).memory;
+  const memory = normalizePilotDeckConfig(config).memory ?? {};
   return {
     llm: buildMemoryLlmOptions(config),
     defaultIndexingSettings: {
@@ -478,49 +352,38 @@ export function buildMemoryDefaults(config) {
   };
 }
 
-export async function writePilotDeckConfig(config) {
-  const normalized = normalizePilotDeckConfig(config);
-  const validation = validatePilotDeckConfig(normalized);
-  if (!validation.valid) {
-    const error = new Error('Invalid PilotDeck config');
-    error.validation = validation;
-    throw error;
+// ─── File I/O ────────────────────────────────────────────────────────────────
+
+export function getPilotDeckConfigPath() {
+  if (process.env.PILOTDECK_CONFIG_PATH?.trim()) {
+    return process.env.PILOTDECK_CONFIG_PATH.trim();
   }
-  const configPath = getPilotDeckConfigPath();
-  let existingRawYaml = {};
-  if (fs.existsSync(configPath)) {
-    try {
-      existingRawYaml = parseYaml(fs.readFileSync(configPath, 'utf8')) || {};
-    } catch {
-      existingRawYaml = {};
-    }
-  }
-  const yamlForDisk = adaptInternalToPilotDeckYaml(normalized, existingRawYaml);
-  await fsPromises.mkdir(path.dirname(configPath), { recursive: true });
-  const raw = stringifyYaml(yamlForDisk, { lineWidth: 0 });
-  await fsPromises.writeFile(configPath, raw, 'utf8');
-  return { configPath, raw, validation, config: normalized };
+  return DEFAULT_CONFIG_PATH;
 }
 
-// Lossless write path used by PUT /api/config when the client submits
-// `{ raw: "..." }` (Raw YAML editor). The parsed YAML object is written
-// to disk verbatim — no internal-schema round-trip — so router /
-// gateway / adapters / extension / cron / alwaysOn edits land
-// untouched.
-//
-// validatePilotDeckConfig still runs (it normalizes internally, so it
-// only enforces ui-internal-relevant checks: main model existence,
-// provider URL/key, memory model). Gateway-side schemas are validated
-// by the gateway's own PilotConfigStore on reload, which is the right
-// boundary for those fields.
-//
-// IMPORTANT: this writer is the safe counterpart to `writePilotDeckConfig`,
-// not a replacement. Structured editors (provider picker, memory
-// editor, onboarding) still post `{ config }` and need the lossy path
-// because they only know about the ui-internal slice. Removing the
-// `{ config }` PUT branch is what got 5ad9f29 reverted; keep both.
-export async function writeRawPilotDeckYaml(yamlObj) {
-  const validation = validatePilotDeckConfig(yamlObj);
+export function readPilotDeckConfigFile() {
+  const configPath = getPilotDeckConfigPath();
+  if (!fs.existsSync(configPath)) {
+    return {
+      exists: false,
+      configPath,
+      raw: '',
+      config: buildDefaultPilotDeckConfig(),
+      rawYaml: {},
+    };
+  }
+  const raw = fs.readFileSync(configPath, 'utf8');
+  const parsed = parseYaml(raw) || {};
+  const config = normalizePilotDeckConfig(parsed);
+  return { exists: true, configPath, raw, config, rawYaml: parsed };
+}
+
+// Lossless writer — config object is the V2 disk shape, written verbatim
+// after running through validation. UI-internal === disk schema, so
+// there's no read-modify-write needed anymore (the previous translation
+// layer existed only to bridge an older internal schema).
+export async function writePilotDeckConfig(config) {
+  const validation = validatePilotDeckConfig(config);
   if (!validation.valid) {
     const error = new Error('Invalid PilotDeck config');
     error.validation = validation;
@@ -528,9 +391,17 @@ export async function writeRawPilotDeckYaml(yamlObj) {
   }
   const configPath = getPilotDeckConfigPath();
   await fsPromises.mkdir(path.dirname(configPath), { recursive: true });
+  const yamlObj = validation.config;
   const raw = stringifyYaml(yamlObj, { lineWidth: 0 });
   await fsPromises.writeFile(configPath, raw, 'utf8');
-  return { configPath, raw, validation, config: validation.config };
+  return { configPath, raw, validation, config: yamlObj };
+}
+
+// Kept as a thin alias for callers that supply an already-parsed YAML
+// object (Raw YAML editor path). Behaviour is identical to
+// writePilotDeckConfig now that internal === disk.
+export async function writeRawPilotDeckYaml(yamlObj) {
+  return writePilotDeckConfig(yamlObj);
 }
 
 export function expandTilde(value) {
@@ -542,25 +413,11 @@ export function expandTilde(value) {
 
 export function configToYaml(config) {
   const normalized = normalizePilotDeckConfig(config);
-  const yamlShape = adaptInternalToPilotDeckYaml(normalized, {});
-  return stringifyYaml(yamlShape, { lineWidth: 0 });
+  return stringifyYaml(normalized, { lineWidth: 0 });
 }
 
-// Lossless masked serialization for the "Raw YAML" view.
-//
-// The internal-schema round-trip (configToYaml) silently drops every
-// top-level segment that ui-internal doesn't model — router, gateway,
-// adapters, extension, cron, alwaysOn, plus model.*.capabilities /
-// multimodal / displayName / aliases / retry, agent.fallbackModel /
-// params, etc. Gateway owns these segments and runs its own fs.watch
-// on the same file, so UI server's job is just to surface them
-// faithfully and not corrupt them on write.
-//
-// Pass the parsed disk YAML straight through maskSecrets so the Raw
-// YAML editor and watcher broadcasts see exactly what's on disk
-// (sans secrets). Callers fall back to `configToYaml` when there is
-// no disk file yet, so a fresh install still ships a sensible
-// editable template.
+// Lossless masked serialization for the "Raw YAML" view. Now that
+// internal === disk, this is just `stringifyYaml(maskSecrets(rawYaml))`.
 export function rawYamlToMaskedString(rawYaml) {
   const obj = isRecord(rawYaml) ? rawYaml : {};
   return stringifyYaml(maskSecrets(obj), { lineWidth: 0 });

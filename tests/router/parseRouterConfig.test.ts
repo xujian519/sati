@@ -86,9 +86,9 @@ test("parseRouterConfig validates fallback list", () => {
   assert.equal(result.config?.fallback?.default?.[0]?.model, "budget");
 });
 
-test("parseRouterConfig defaults zeroUsageRetry to enabled with 5 attempts", () => {
+test("parseRouterConfig defaults zeroUsageRetry to enabled with 2 attempts", () => {
   const result = parseRouterConfig({ scenarios: { default: "vendor-a/main" } }, modelConfig);
-  assert.deepEqual(result.config?.zeroUsageRetry, { enabled: true, maxAttempts: 5 });
+  assert.deepEqual(result.config?.zeroUsageRetry, { enabled: true, maxAttempts: 2 });
 });
 
 test("parseRouterConfig validates tokenSaver tiers", () => {
@@ -97,7 +97,7 @@ test("parseRouterConfig validates tokenSaver tiers", () => {
       scenarios: { default: "vendor-a/main" },
       tokenSaver: {
         enabled: true,
-        judge: { provider: "vendor-a", model: "budget" },
+        judge: "vendor-a/budget",
         defaultTier: "fast",
         tiers: {
           fast: { model: "vendor-a/budget", description: "cheap" },
@@ -118,7 +118,7 @@ test("parseRouterConfig fails when defaultTier is unknown", () => {
       scenarios: { default: "vendor-a/main" },
       tokenSaver: {
         enabled: true,
-        judge: { provider: "vendor-a", model: "budget" },
+        judge: "vendor-a/budget",
         defaultTier: "missing",
         tiers: { fast: { model: "vendor-a/budget" } },
       },

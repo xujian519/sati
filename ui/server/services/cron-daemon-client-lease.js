@@ -14,6 +14,8 @@ export function startCronDaemonClientLease({
 }) {
   let registered = false;
   let stopped = false;
+  let consecutiveFailures = 0;
+  const MAX_FAILURES_BEFORE_BACKOFF = 3;
 
   const buildPayload = () => ({
     clientId,
@@ -63,13 +65,20 @@ export function startCronDaemonClientLease({
 
   void register().catch((error) => {
     registered = false;
+    consecutiveFailures += 1;
     console.warn('[cron-daemon-client-lease] register failed:', error?.message || error);
   });
 
   const timer = setInterval(() => {
+    if (consecutiveFailures >= MAX_FAILURES_BEFORE_BACKOFF) return;
     void heartbeat().catch((error) => {
       registered = false;
-      console.warn('[cron-daemon-client-lease] heartbeat failed:', error?.message || error);
+      consecutiveFailures += 1;
+      if (consecutiveFailures === MAX_FAILURES_BEFORE_BACKOFF) {
+        console.warn('[cron-daemon-client-lease] giving up after repeated failures (claude CLI not available)');
+      } else {
+        console.warn('[cron-daemon-client-lease] heartbeat failed:', error?.message || error);
+      }
     });
   }, intervalMs);
   timer.unref?.();

@@ -1,10 +1,11 @@
+import { spawn } from "node:child_process";
 import type { Gateway } from "../../../gateway/index.js";
 import { connectRemoteGatewayIfAvailable, type ProbeGatewayServerOptions } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { applyTuiEvent, createTuiRenderState, type TuiRenderState } from "./tui-render.js";
 import React from "react";
 import { render, type Instance } from "ink";
-import { TuiApp } from "./app/TuiApp.js";
+import { TuiApp, type TuiAppProps } from "./app/TuiApp.js";
 
 export type TuiChannelOptions = {
   projectKey?: string;
@@ -29,17 +30,27 @@ export class TuiChannel implements ChannelAdapter {
     if (this.options.interactive === false) {
       return { stop: async () => this.stop() };
     }
-    this.instance = render(
-      React.createElement(TuiApp, {
-        gateway,
-        connection,
-        projectKey: this.options.projectKey,
-        sessionKey: this.options.sessionKey,
-        model: this.options.model,
-        cwd: this.options.cwd,
-        serverUrl: this.options.serverUrl ?? (connection === "remote" ? this.options.probe && typeof this.options.probe === "object" ? this.options.probe.url : undefined : undefined),
-      }),
-    );
+
+    const appProps: TuiAppProps = {
+      gateway,
+      connection,
+      projectKey: this.options.projectKey,
+      sessionKey: this.options.sessionKey,
+      model: this.options.model,
+      cwd: this.options.cwd,
+      serverUrl: this.options.serverUrl ?? (connection === "remote" ? this.options.probe && typeof this.options.probe === "object" ? this.options.probe.url : undefined : undefined),
+      onViewOutput: async (path: string) => {
+        this.instance?.unmount();
+        const pager = process.env.PAGER || "less";
+        try {
+          const child = spawn(pager, [path], { stdio: "inherit" });
+          await new Promise<void>((resolve) => child.on("exit", () => resolve()));
+        } catch { /* pager failed, continue */ }
+        this.instance = render(React.createElement(TuiApp, appProps));
+      },
+    };
+
+    this.instance = render(React.createElement(TuiApp, appProps));
     await this.instance.waitUntilExit();
     return { stop: async () => this.stop() };
   }

@@ -95,10 +95,24 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
   const model = parseModel(rawConfig.model, env, diagnostics);
   const agent = parseAgent(rawConfig.agent, model, diagnostics);
   const extension = parseExtension(rawConfig.extension, diagnostics);
-  const memory = parseMemoryConfig(rawConfig.memory, diagnostics, getPilotMemoryRootDir(pilotHome));
+  const memory = parseMemoryConfig(rawConfig.memory, diagnostics, getPilotMemoryRootDir(pilotHome), model);
   const gateway = parseGatewayConfig(rawConfig.gateway, diagnostics);
   const adapters = parseAdaptersConfig(rawConfig.adapters, diagnostics);
   const router = parseRouterSection(rawConfig.router, model, diagnostics);
+
+  if (router?.scenarios?.default && agent.model.id !== router.scenarios.default.id) {
+    diagnostics.push({
+      code: "CONFIG_MODEL_CONFLICT",
+      severity: "fatal",
+      message:
+        `agent.model (${agent.model.id}) conflicts with router.scenarios.default ` +
+        `(${router.scenarios.default.id}). Use only one: set agent.model and omit ` +
+        `the router section, or set router.scenarios.default and remove agent.model.`,
+      path: "agent.model",
+      recoverable: false,
+    });
+  }
+
   const alwaysOn = parseAlwaysOnConfig(rawConfig.alwaysOn, diagnostics);
   const cron = parseCronConfig(rawConfig.cron, diagnostics);
   throwConfigErrorIfFatal(diagnostics);

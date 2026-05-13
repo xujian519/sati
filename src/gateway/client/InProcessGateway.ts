@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { writeFile, mkdir } from "node:fs/promises";
+import { resolve } from "node:path";
+import { tmpdir } from "node:os";
 import type { AgentEvent, AgentInput, AgentTurnResult } from "../../agent/index.js";
 import type { CanonicalContentBlock, CanonicalModelEvent } from "../../model/index.js";
 import { contentToText } from "../../tool/index.js";
@@ -62,6 +65,8 @@ export type InProcessGatewayOptions = {
    */
   reloadConfig?: () => Promise<ReloadConfigResult>;
   dispatchHookForSession?: (sessionKey: string, event: string, payload: Record<string, unknown>) => void;
+  /** Directory to persist large tool outputs for TUI/Web viewing. */
+  toolResultsDir?: string;
 };
 
 export class InProcessGateway implements Gateway {
@@ -344,16 +349,40 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
         name: call.name,
         argsPreview: previewUnknown(call.input),
       }));
-    case "tool_result":
+    case "tool_result": {
+      const fullText = event.result.content.map(contentToText).join("\n");
+      const lines = fullText.split("\n");
+      const lineCount = lines.length;
+      const preview = lines.slice(0, 5).join("\n");
+      const totalBytes = Buffer.byteLength(fullText, "utf-8");
+
+      const PERSIST_THRESHOLD = 4096;
+      let resultPath: string | undefined;
+      if (totalBytes > PERSIST_THRESHOLD) {
+        const dir = resolve(tmpdir(), "pilotdeck-tool-results");
+        resultPath = resolve(dir, `${event.result.toolCallId}.txt`);
+        void (async () => {
+          try {
+            await mkdir(dir, { recursive: true });
+            await writeFile(resultPath!, fullText, { mode: 0o600 });
+          } catch { /* best-effort persistence */ }
+        })();
+      }
+
       return [
         {
           type: "tool_call_finished",
           toolCallId: event.result.toolCallId,
           ok: event.result.type === "success",
-          resultPreview: event.result.content.map(contentToText).join("\n"),
+          resultPreview: preview,
+          resultLineCount: lineCount,
+          resultBytes: totalBytes,
+          toolName: event.result.toolName,
+          resultPath,
           ...(event.result.type === "error" && { errorCode: event.result.error.code }),
         },
       ];
+    }
     case "mode_change_requested":
       return [{ type: "plan_mode_changed", mode: event.mode }];
     case "turn_completed":
@@ -376,6 +405,28 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
           recoverable: true,
         },
       ];
+    case "tool_results_projected": {
+      const events: GatewayEvent[] = [];
+      for (const block of event.message.content) {
+        if (block.type === "tool_result_reference") {
+          events.push({
+            type: "tool_result_detail_available",
+            toolCallId: block.toolCallId,
+            resultPath: block.path,
+          });
+        } else if (block.type === "tool_result") {
+          const projFullText = block.content
+            .map((b: { type: string; text: string }) => b.text)
+            .join("\n");
+          events.push({
+            type: "tool_result_detail_available",
+            toolCallId: block.toolCallId,
+            fullText: projFullText,
+          });
+        }
+      }
+      return events;
+    }
     case "session_ended":
     case "user_prompt_submitted":
     case "setup_completed":

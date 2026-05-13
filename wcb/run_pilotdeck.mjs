@@ -279,6 +279,23 @@ async function runTask(task, args) {
   process.env.PILOT_HOME = pilotHome;
   ensurePilotConfig(args.model);
 
+  // 0.5 Copy WCB skills into $PILOT_HOME/skills/ (mirrors Claude Code ~/.claude/skills/)
+  if (task.skills) {
+    for (const line of task.skills.split("\n")) {
+      const skillName = line.trim();
+      if (!skillName) continue;
+      const src = join(task.skillsPath, skillName);
+      const dst = join(pilotHome, "skills", skillName);
+      if (existsSync(src)) {
+        mkdirSync(dst, { recursive: true });
+        cpSync(src, dst, { recursive: true });
+        log(task.taskId, `Skill copied: ${skillName} -> ${dst}`);
+      } else {
+        log(task.taskId, `WARNING: Skill not found: ${src}`);
+      }
+    }
+  }
+
   // 1. Prepare workspace
   const workDir = prepareWorkspace(task, runDir);
 
@@ -306,6 +323,7 @@ async function runTask(task, args) {
   const startTime = Date.now();
   const events = [];
   let assistantText = "";
+  let assistantThinking = "";
   let usage = {};
   let finishReason = "unknown";
   let error = null;
@@ -357,6 +375,9 @@ async function runTask(task, args) {
             break;
           case "assistant_text_delta":
             assistantText += event.text;
+            break;
+          case "assistant_thinking_delta":
+            assistantThinking += event.text;
             break;
           case "tool_call_started":
             log(task.taskId, `Tool: ${event.name}`);
@@ -410,7 +431,8 @@ async function runTask(task, args) {
   };
   writeFileSync(join(runDir, "task-meta.json"), JSON.stringify(meta, null, 2));
   writeFileSync(join(runDir, "events.jsonl"), events.map((e) => JSON.stringify(e)).join("\n") + "\n");
-  if (assistantText) writeFileSync(join(runDir, "assistant.md"), assistantText);
+  const finalAssistantOutput = assistantText || assistantThinking;
+  if (finalAssistantOutput) writeFileSync(join(runDir, "assistant.md"), finalAssistantOutput);
   if (error) writeFileSync(join(runDir, "error.txt"), error);
 
   // 7. Copy workspace results to output

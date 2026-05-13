@@ -163,29 +163,43 @@ router.post('/reload', async (_req, res) => {
 router.get('/provider', (_req, res) => {
   try {
     const record = readPilotDeckConfigFile();
-    const config = record.config;
-    if (!config?.models?.providers) {
+    const providers = record.config?.model?.providers;
+    if (!providers || typeof providers !== 'object') {
       return res.json({ exists: false, provider: null });
     }
-    const providers = config.models.providers;
-    const entries = config.models?.entries || {};
-    const mainModel = config.agents?.main?.model;
-    const configuredEntry = typeof mainModel === 'string'
-      ? entries[mainModel]
-      : null;
-    const providerId = configuredEntry?.provider || Object.keys(providers)[0];
+
+    const mainRef = typeof record.config?.agent?.model === 'string'
+      ? record.config.agent.model.trim()
+      : '';
+    let providerId = '';
+    let modelId = '';
+    if (mainRef) {
+      const slash = mainRef.indexOf('/');
+      if (slash > 0 && slash < mainRef.length - 1) {
+        providerId = mainRef.slice(0, slash);
+        modelId = mainRef.slice(slash + 1);
+      }
+    }
+    if (!providerId) {
+      providerId = Object.keys(providers)[0] || '';
+      if (providerId) {
+        const firstModels = providers[providerId]?.models;
+        modelId = firstModels && typeof firstModels === 'object'
+          ? (Object.keys(firstModels)[0] || '')
+          : '';
+      }
+    }
     if (!providerId) return res.json({ exists: false, provider: null });
 
     const provider = providers[providerId] || {};
-    const defaultEntry = configuredEntry || entries[Object.keys(entries)[0]] || {};
 
     res.json({
       exists: true,
       provider: {
-        type: provider.type || '',
-        baseUrl: provider.baseUrl || '',
+        type: provider.protocol || '',
+        baseUrl: provider.url || '',
         apiKey: provider.apiKey || '',
-        model: defaultEntry.name || '',
+        model: modelId,
       },
     });
   } catch (error) {
@@ -199,7 +213,10 @@ router.post('/test-connection', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'baseUrl, apiKey, and model are required' });
   }
 
-  const type = providerType || 'anthropic';
+  // Accept V2 protocols ('openai' | 'anthropic') as well as the legacy
+  // onboarding values ('openai-chat' | 'anthropic') for compatibility.
+  const normalizedType = String(providerType || '').toLowerCase();
+  const isAnthropic = normalizedType === 'anthropic';
   const timeout = 10_000;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -208,7 +225,7 @@ router.post('/test-connection', async (req, res) => {
     let url;
     let fetchOptions;
 
-    if (type === 'anthropic') {
+    if (isAnthropic) {
       url = `${baseUrl.replace(/\/+$/, '')}/v1/messages`;
       fetchOptions = {
         method: 'POST',

@@ -6,7 +6,7 @@ export type TuiMessage =
   | { role: "system"; text: string }
   | { role: "user"; text: string }
   | { role: "assistant"; text: string; thinking?: string }
-  | { role: "tool"; text: string; ok?: boolean }
+  | { role: "tool"; text: string; ok?: boolean; toolCallId?: string; toolName?: string; lineCount?: number; resultPath?: string; fullText?: string; expanded?: boolean }
   | { role: "error"; text: string };
 
 export type TuiActivityItem = {
@@ -26,6 +26,9 @@ export type TuiAppState = {
   isRunning: boolean;
   helpOpen: boolean;
   scrollOffset: number;
+  focusedIndex: number | null;
+  viewerContent: string | null;
+  viewerTitle: string;
 };
 
 export type TuiEventReducerResult = Pick<TuiAppState, "messages" | "activity" | "mode" | "isRunning">;
@@ -59,7 +62,15 @@ export function applyGatewayEventToTuiState(state: TuiEventReducerResult, event:
       const text = preview.length > 0 ? preview : event.ok ? "ok" : "error";
       return {
         ...state,
-        messages: [...state.messages, { role: "tool", text, ok: event.ok }],
+        messages: [...state.messages, {
+          role: "tool" as const,
+          text,
+          ok: event.ok,
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          lineCount: event.resultLineCount,
+          resultPath: event.resultPath,
+        }],
         activity: state.activity.filter((item) => item.id !== event.toolCallId),
       };
     }
@@ -83,6 +94,15 @@ export function applyGatewayEventToTuiState(state: TuiEventReducerResult, event:
         isRunning: false,
         activity: [],
         messages: [...state.messages, { role: "error", text: event.message }],
+      };
+    case "tool_result_detail_available":
+      return {
+        ...state,
+        messages: state.messages.map((m) =>
+          m.role === "tool" && m.toolCallId === event.toolCallId
+            ? { ...m, resultPath: event.resultPath ?? m.resultPath, fullText: event.fullText ?? m.fullText }
+            : m,
+        ),
       };
   }
   return state;
