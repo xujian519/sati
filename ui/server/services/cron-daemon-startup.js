@@ -33,18 +33,18 @@ function getCronDaemonStartLockPath() {
  *
  * Prior to this, the daemon spawned with `stdio: 'ignore'` so all of its
  * lifecycle output, errors, and discovery-scheduler trace was silently
- * discarded — making post-mortem debugging on the PilotDeck Desktop install
- * basically impossible (`~/.pilotdeck/desktop.server.log` only captured the
+ * discarded — making post-mortem debugging on the EdgeClaw Desktop install
+ * basically impossible (`~/.edgeclaw/desktop.server.log` only captured the
  * UI server's own output, not its detached children).
  *
- * We honour an explicit override via `PILOTDECK_CRON_DAEMON_LOG`; otherwise we
- * default to `~/.pilotdeck/cron-daemon.log` (parallel to `desktop.server.log`).
+ * We honour an explicit override via `EDGECLAW_CRON_DAEMON_LOG`; otherwise we
+ * default to `~/.edgeclaw/cron-daemon.log` (parallel to `desktop.server.log`).
  * The directory is created on demand so this works pre-onboarding too.
  */
 function resolveCronDaemonLogPath() {
-  const override = process.env.PILOTDECK_CRON_DAEMON_LOG?.trim();
+  const override = process.env.EDGECLAW_CRON_DAEMON_LOG?.trim();
   if (override) return override;
-  return path.join(os.homedir(), '.pilotdeck', 'cron-daemon.log');
+  return path.join(os.homedir(), '.edgeclaw', 'cron-daemon.log');
 }
 
 function openCronDaemonLogFd() {
@@ -150,7 +150,7 @@ export function startCronDaemonDetached({
 } = {}) {
   const { command, args } = buildCronDaemonSpawnCommandFn();
   const { fd, logPath } = openLogFdFn();
-  // Detach so multiple ui servers (e.g. dev + PilotDeck Desktop side-by-side)
+  // Detach so multiple ui servers (e.g. dev + EdgeClaw Desktop side-by-side)
   // can share state through ~/.claude/cron-daemon.sock, but pipe stdout/stderr
   // into a real log file instead of /dev/null so the daemon is debuggable
   // post-mortem. Stdin stays 'ignore' (the daemon never reads input).
