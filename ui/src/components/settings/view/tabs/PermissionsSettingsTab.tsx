@@ -152,7 +152,10 @@ export default function PermissionsSettingsTab() {
   const { t } = useTranslation('settings');
   const [allowedTools, setAllowedTools] = useState<string[]>([]);
   const [disallowedTools, setDisallowedTools] = useState<string[]>([]);
-  const [skipPermissions, setSkipPermissions] = useState(false);
+  // Initial render before `reload()` reads from localStorage. Keep in
+  // sync with the chatStorage default so the toggle doesn't flicker
+  // off → on for fresh installs.
+  const [skipPermissions, setSkipPermissions] = useState(true);
   const [newAllowed, setNewAllowed] = useState('');
   const [newBlocked, setNewBlocked] = useState('');
   const [banner, setBanner] = useState<StatusBanner>(null);
