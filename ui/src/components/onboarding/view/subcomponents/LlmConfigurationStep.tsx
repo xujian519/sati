@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Check, ChevronDown, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, Loader2, Plus } from 'lucide-react';
 import { authenticatedFetch } from '../../../../utils/api';
-import { CATALOG_PROVIDERS, findCatalogProviderById, type CatalogProvider } from '../../../../shared/catalogProviders';
+import { CATALOG_PROVIDERS, findCatalogProviderByUrl, type CatalogProvider } from '../../../../shared/catalogProviders';
 
 type LlmConfigurationStepProps = {
   onSaved: () => void | Promise<void>;
@@ -9,47 +9,18 @@ type LlmConfigurationStepProps = {
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 
-const PLACEHOLDER_API_KEY = 'PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE';
+// Sentinel id for the "+" tile. When selected, the form swaps in extra inputs
+// (provider id, protocol, base URL) so the user can describe a provider that
+// isn't in the catalog.
+const CUSTOM_PROVIDER_ID = '__custom__';
 
-type ConfiguredProvider = {
-  providerId: string;
-  displayName: string;
-  models: string[];
-  activeModel?: string;
+const CUSTOM_PROVIDER: CatalogProvider = {
+  id: CUSTOM_PROVIDER_ID,
+  displayName: 'Custom',
+  protocol: 'openai',
+  defaultUrl: '',
+  models: [],
 };
-
-function summariseProviders(rawYaml: Record<string, unknown>): {
-  providers: ConfiguredProvider[];
-  agentModel: string;
-} {
-  const agentModel = typeof (rawYaml.agent as Record<string, unknown> | undefined)?.model === 'string'
-    ? ((rawYaml.agent as Record<string, unknown>).model as string)
-    : '';
-  const modelSection = (rawYaml.model as Record<string, unknown> | undefined) ?? {};
-  const providersBlock = (modelSection.providers as Record<string, unknown> | undefined) ?? {};
-  const providers: ConfiguredProvider[] = [];
-  for (const [providerId, providerRaw] of Object.entries(providersBlock)) {
-    if (!providerRaw || typeof providerRaw !== 'object') continue;
-    const provider = providerRaw as Record<string, unknown>;
-    const apiKey = typeof provider.apiKey === 'string' ? provider.apiKey.trim() : '';
-    // Skip the bootstrap placeholder entry so it doesn't look like the user has
-    // already added a provider before they actually have.
-    if (!apiKey || apiKey === PLACEHOLDER_API_KEY) continue;
-    const modelsRaw = (provider.models as Record<string, unknown> | undefined) ?? {};
-    const models = Object.keys(modelsRaw);
-    if (models.length === 0) continue;
-    const catalog = findCatalogProviderById(providerId);
-    const activeProviderId = agentModel.split('/', 1)[0];
-    const activeModelId = agentModel.slice(activeProviderId.length + 1);
-    providers.push({
-      providerId,
-      displayName: catalog?.displayName ?? providerId,
-      models,
-      activeModel: activeProviderId === providerId ? activeModelId : undefined,
-    });
-  }
-  return { providers, agentModel };
-}
 
 export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepProps) {
   const [selectedProvider, setSelectedProvider] = useState<CatalogProvider | null>(null);
@@ -62,42 +33,106 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
   const [testMessage, setTestMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  // Count of providers the user has added in this onboarding session.
+  const [addedCount, setAddedCount] = useState(0);
+  // Number of usable (non-placeholder) providers already in the YAML when the
+  // step mounted. Drives the footer so users coming back to onboarding with an
+  // existing setup can either add another or continue right away.
+  const [preExistingCount, setPreExistingCount] = useState(0);
   const [finishing, setFinishing] = useState(false);
 
-  // Snapshot of providers already written to ~/.pilotdeck/pilotdeck.yaml.
-  const [existingProviders, setExistingProviders] = useState<ConfiguredProvider[]>([]);
-  const [activeAgentModel, setActiveAgentModel] = useState('');
-  const [formMode, setFormMode] = useState<'fresh' | 'adding'>('fresh');
+  // Inputs that are only relevant when the user picks the "+" (custom) tile.
+  const [customProviderId, setCustomProviderId] = useState('');
+  const [customProtocol, setCustomProtocol] = useState<'openai' | 'anthropic'>('openai');
 
-  const refreshExisting = useCallback(async () => {
-    try {
-      const { parse: parseYaml } = await import('yaml');
-      const res = await authenticatedFetch('/api/config');
-      if (!res.ok) return;
-      const data = await res.json();
-      const parsed = data.raw ? parseYaml(data.raw) ?? {} : {};
-      const summary = summariseProviders(parsed as Record<string, unknown>);
-      setExistingProviders(summary.providers);
-      setActiveAgentModel(summary.agentModel);
-      if (summary.providers.length > 0) {
-        setFormMode('adding');
-      }
-    } catch { /* no existing config or yaml parse failed */ }
+  const isCustomMode = selectedProvider?.id === CUSTOM_PROVIDER_ID;
+
+  const resetForm = useCallback(() => {
+    setSelectedProvider(null);
+    setSelectedModelId('');
+    setCustomModelId('');
+    setApiKey('');
+    setCustomUrl('');
+    setShowAdvanced(false);
+    setTestStatus('idle');
+    setTestMessage('');
+    setCustomProviderId('');
+    setCustomProtocol('openai');
   }, []);
 
   useEffect(() => {
-    void refreshExisting();
-  }, [refreshExisting]);
+    (async () => {
+      try {
+        const res = await authenticatedFetch('/api/config/provider');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.exists || !data.provider) return;
+
+        const p = data.provider;
+        if (p.apiKey) setApiKey(p.apiKey);
+        if (p.baseUrl) {
+          const match = findCatalogProviderByUrl(p.baseUrl);
+          if (match) {
+            setSelectedProvider(match);
+            if (p.model) setSelectedModelId(p.model);
+          }
+        }
+      } catch { /* no existing config */ }
+
+      // Independently count usable providers already in the YAML so the "Add
+      // another" / "Continue" footer can appear immediately when the user
+      // re-enters onboarding with a non-empty config.
+      try {
+        const raw = await authenticatedFetch('/api/config');
+        if (!raw.ok) return;
+        const { raw: yamlText } = await raw.json();
+        if (!yamlText) return;
+        const { parse: parseYaml } = await import('yaml');
+        const parsed = parseYaml(yamlText) || {};
+        const providers = ((parsed as Record<string, unknown>).model as Record<string, unknown> | undefined)?.providers;
+        if (!providers || typeof providers !== 'object') return;
+        let count = 0;
+        for (const value of Object.values(providers)) {
+          const apiKey = (value as Record<string, unknown>)?.apiKey;
+          if (typeof apiKey !== 'string') continue;
+          if (!apiKey.trim()) continue;
+          if (apiKey.startsWith('PLACEHOLDER_')) continue;
+          count += 1;
+        }
+        if (count > 0) setPreExistingCount(count);
+      } catch { /* ignore */ }
+    })();
+  }, []);
 
   const effectiveUrl = customUrl.trim() || selectedProvider?.defaultUrl || '';
   const effectiveModelId = customModelId.trim() || selectedModelId;
-  const canTest = selectedProvider && apiKey.trim() && effectiveModelId;
+  const effectiveProtocol: 'openai' | 'anthropic' = isCustomMode
+    ? customProtocol
+    : (selectedProvider?.protocol ?? 'openai');
+  const effectiveProviderId = isCustomMode ? customProviderId.trim() : (selectedProvider?.id ?? '');
+  const canTest = Boolean(
+    selectedProvider &&
+    apiKey.trim() &&
+    effectiveModelId &&
+    effectiveProviderId &&
+    (!isCustomMode || effectiveUrl.trim()),
+  );
 
   const handleProviderSelect = useCallback((provider: CatalogProvider) => {
-    setSelectedProvider(provider);
+    setSelectedProvider((prev) => {
+      // Switching to a different provider should not carry over the API key
+      // from the previously selected one (otherwise users adding a 2nd
+      // provider re-save their Anthropic key under OpenAI).
+      if (prev?.id !== provider.id) {
+        setApiKey('');
+      }
+      return provider;
+    });
     setSelectedModelId(provider.models[0]?.id ?? '');
     setCustomModelId('');
     setCustomUrl('');
+    setCustomProviderId('');
+    setCustomProtocol('openai');
     setTestStatus('idle');
     setTestMessage('');
   }, []);
@@ -110,7 +145,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
       const res = await authenticatedFetch('/api/config/test-connection', {
         method: 'POST',
         body: JSON.stringify({
-          providerType: selectedProvider.protocol,
+          providerType: effectiveProtocol,
           baseUrl: effectiveUrl,
           apiKey: apiKey.trim(),
           model: effectiveModelId,
@@ -128,235 +163,100 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
       setTestStatus('error');
       setTestMessage(err instanceof Error ? err.message : 'Connection failed.');
     }
-  }, [canTest, selectedProvider, effectiveUrl, apiKey, effectiveModelId]);
-
-  const resetForm = useCallback(() => {
-    setSelectedProvider(null);
-    setSelectedModelId('');
-    setCustomModelId('');
-    setApiKey('');
-    setCustomUrl('');
-    setShowAdvanced(false);
-    setTestStatus('idle');
-    setTestMessage('');
-  }, []);
-
-  const persistConfig = useCallback(async (mutate: (config: Record<string, unknown>) => void) => {
-    const { stringify: stringifyYaml, parse: parseYaml } = await import('yaml');
-
-    let existingConfig: Record<string, unknown> = {};
-    try {
-      const res = await authenticatedFetch('/api/config');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.raw) existingConfig = parseYaml(data.raw) || {};
-      }
-    } catch { /* start fresh */ }
-
-    if (!existingConfig.schemaVersion) {
-      existingConfig.schemaVersion = 1;
-    }
-    if (!existingConfig.model || typeof existingConfig.model !== 'object') {
-      existingConfig.model = { providers: {} };
-    }
-    const modelSection = existingConfig.model as Record<string, unknown>;
-    if (!modelSection.providers || typeof modelSection.providers !== 'object') {
-      modelSection.providers = {};
-    }
-
-    mutate(existingConfig);
-
-    delete (existingConfig as Record<string, unknown>).models;
-    delete (existingConfig as Record<string, unknown>).agents;
-    delete (existingConfig as Record<string, unknown>).version;
-
-    const saveRes = await authenticatedFetch('/api/config', {
-      method: 'PUT',
-      body: JSON.stringify({ raw: stringifyYaml(existingConfig, { indent: 2, lineWidth: 0 }) }),
-    });
-
-    if (!saveRes.ok) {
-      const err = await saveRes.json();
-      throw new Error(err.error || 'Failed to save configuration');
-    }
-  }, []);
+  }, [canTest, selectedProvider, effectiveUrl, apiKey, effectiveModelId, effectiveProtocol]);
 
   const handleSave = useCallback(async () => {
     if (!selectedProvider) return;
     setSaving(true);
     try {
-      const providerId = selectedProvider.id;
-      const modelId = effectiveModelId;
-      await persistConfig((config) => {
-        const yamlProviders = (config.model as Record<string, unknown>).providers as Record<string, Record<string, unknown>>;
-        const existingProvider = (yamlProviders[providerId] || {}) as Record<string, unknown>;
-        const existingModels = (
-          existingProvider.models && typeof existingProvider.models === 'object'
-            ? existingProvider.models
-            : {}
-        ) as Record<string, unknown>;
+      const { stringify: stringifyYaml, parse: parseYaml } = await import('yaml');
 
-        yamlProviders[providerId] = {
-          ...existingProvider,
-          protocol: selectedProvider.protocol,
-          url: effectiveUrl,
-          apiKey: apiKey.trim(),
-          timeoutMs: typeof existingProvider.timeoutMs === 'number' ? existingProvider.timeoutMs : 120000,
-          models: {
-            ...existingModels,
-            [modelId]: existingModels[modelId] || {},
-          },
-        };
-
-        // Set this newly-added provider/model as the main agent.
-        if (!config.agent || typeof config.agent !== 'object') {
-          config.agent = {};
+      let existingConfig: Record<string, unknown> = {};
+      try {
+        const res = await authenticatedFetch('/api/config');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.raw) existingConfig = parseYaml(data.raw) || {};
         }
-        (config.agent as Record<string, unknown>).model = `${providerId}/${modelId}`;
+      } catch { /* start fresh */ }
+
+      const providerId = effectiveProviderId;
+      const modelId = effectiveModelId;
+      if (!providerId) throw new Error('Provider ID is required.');
+
+      if (!existingConfig.schemaVersion) {
+        (existingConfig as Record<string, unknown>).schemaVersion = 1;
+      }
+      if (!existingConfig.model || typeof existingConfig.model !== 'object') {
+        (existingConfig as Record<string, unknown>).model = { providers: {} };
+      }
+      const modelSection = existingConfig.model as Record<string, unknown>;
+      if (!modelSection.providers || typeof modelSection.providers !== 'object') {
+        modelSection.providers = {};
+      }
+
+      const yamlProviders = modelSection.providers as Record<string, Record<string, unknown>>;
+      const existingProvider = (yamlProviders[providerId] || {}) as Record<string, unknown>;
+      const existingModels = (
+        existingProvider.models && typeof existingProvider.models === 'object'
+          ? existingProvider.models
+          : {}
+      ) as Record<string, unknown>;
+
+      yamlProviders[providerId] = {
+        ...existingProvider,
+        protocol: effectiveProtocol,
+        url: effectiveUrl,
+        apiKey: apiKey.trim(),
+        timeoutMs: typeof existingProvider.timeoutMs === 'number' ? existingProvider.timeoutMs : 120000,
+        models: {
+          ...existingModels,
+          [modelId]: existingModels[modelId] || {},
+        },
+      };
+
+      if (!existingConfig.agent || typeof existingConfig.agent !== 'object') {
+        (existingConfig as Record<string, unknown>).agent = {};
+      }
+      (existingConfig.agent as Record<string, unknown>).model = `${providerId}/${modelId}`;
+
+      delete (existingConfig as Record<string, unknown>).models;
+      delete (existingConfig as Record<string, unknown>).agents;
+      delete (existingConfig as Record<string, unknown>).version;
+
+      const saveRes = await authenticatedFetch('/api/config', {
+        method: 'PUT',
+        body: JSON.stringify({ raw: stringifyYaml(existingConfig, { indent: 2, lineWidth: 0 }) }),
       });
 
+      if (!saveRes.ok) {
+        const err = await saveRes.json();
+        throw new Error(err.error || 'Failed to save configuration');
+      }
+
+      // Stay on this step so the user can add more providers. The footer
+      // shows a "Continue" button once at least one has been saved.
+      setAddedCount((c) => c + 1);
       resetForm();
-      await refreshExisting();
-      setFormMode('adding');
     } catch (err) {
       setTestStatus('error');
       setTestMessage(err instanceof Error ? err.message : 'Failed to save.');
     } finally {
       setSaving(false);
     }
-  }, [selectedProvider, effectiveUrl, effectiveModelId, apiKey, persistConfig, resetForm, refreshExisting]);
-
-  const handleRemoveProvider = useCallback(async (providerId: string) => {
-    try {
-      await persistConfig((config) => {
-        const yamlProviders = (config.model as Record<string, unknown>).providers as Record<string, unknown>;
-        delete yamlProviders[providerId];
-        const agent = (config.agent as Record<string, unknown> | undefined) ?? {};
-        const currentModel = typeof agent.model === 'string' ? agent.model : '';
-        if (currentModel.startsWith(`${providerId}/`)) {
-          // Promote any other configured model to main agent, otherwise clear.
-          const remaining = Object.entries(yamlProviders).find(
-            ([, p]) => p && typeof p === 'object' && Object.keys(((p as Record<string, unknown>).models as Record<string, unknown>) ?? {}).length > 0,
-          );
-          if (remaining) {
-            const [otherId, otherProvider] = remaining;
-            const otherModels = ((otherProvider as Record<string, unknown>).models as Record<string, unknown>);
-            const firstModel = Object.keys(otherModels)[0];
-            (config.agent as Record<string, unknown>) = { ...agent, model: `${otherId}/${firstModel}` };
-          } else {
-            // Fall back to a placeholder so the gateway can still boot.
-            (config.agent as Record<string, unknown>) = {
-              ...agent,
-              model: 'anthropic/claude-sonnet-4.6',
-            };
-            // Seed a placeholder anthropic provider so resolveModel doesn't fail.
-            yamlProviders.anthropic = {
-              protocol: 'anthropic',
-              url: 'https://api.anthropic.com',
-              apiKey: PLACEHOLDER_API_KEY,
-              models: { 'claude-sonnet-4.6': {} },
-            };
-          }
-        }
-      });
-      await refreshExisting();
-    } catch (err) {
-      setTestStatus('error');
-      setTestMessage(err instanceof Error ? err.message : 'Failed to remove provider.');
-    }
-  }, [persistConfig, refreshExisting]);
-
-  const handleSetActive = useCallback(async (providerId: string, modelId: string) => {
-    try {
-      await persistConfig((config) => {
-        if (!config.agent || typeof config.agent !== 'object') {
-          config.agent = {};
-        }
-        (config.agent as Record<string, unknown>).model = `${providerId}/${modelId}`;
-      });
-      await refreshExisting();
-    } catch { /* noop */ }
-  }, [persistConfig, refreshExisting]);
-
-  const handleFinish = useCallback(async () => {
-    if (existingProviders.length === 0) return;
-    setFinishing(true);
-    try {
-      await onSaved();
-    } finally {
-      setFinishing(false);
-    }
-  }, [existingProviders.length, onSaved]);
-
-  const showAddForm = formMode === 'fresh' || selectedProvider != null;
+  }, [selectedProvider, effectiveUrl, effectiveModelId, apiKey, effectiveProtocol, effectiveProviderId, resetForm]);
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-8">
       <div>
         <h2 className="text-lg font-semibold text-foreground">LLM Provider Setup</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Add one or more providers. Each Save persists to <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">~/.pilotdeck/pilotdeck.yaml</code> and the last save becomes your main agent (you can re-pick it below).
+          Select your provider and enter your API key. Model capabilities are auto-configured.
         </p>
       </div>
 
-      {existingProviders.length > 0 && (
-        <div className="rounded-lg border border-border bg-muted/30 p-4">
-          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Configured providers
-          </div>
-          <ul className="space-y-2">
-            {existingProviders.map((p) => (
-              <li key={p.providerId} className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-background px-3 py-2">
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium text-foreground">{p.displayName}</div>
-                  <div className="mt-0.5 flex flex-wrap gap-1.5">
-                    {p.models.map((modelId) => {
-                      const isActive = p.activeModel === modelId;
-                      return (
-                        <button
-                          key={modelId}
-                          type="button"
-                          onClick={() => handleSetActive(p.providerId, modelId)}
-                          className={`rounded border px-1.5 py-0.5 text-[10px] font-mono transition-colors ${
-                            isActive
-                              ? 'border-foreground bg-foreground/10 text-foreground'
-                              : 'border-border bg-background text-muted-foreground hover:border-foreground/40 hover:text-foreground'
-                          }`}
-                          title={isActive ? 'Currently the main agent' : 'Set as main agent'}
-                        >
-                          {isActive ? '★ ' : ''}{modelId}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => { void handleRemoveProvider(p.providerId); }}
-                  className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  title={`Remove ${p.displayName}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </li>
-            ))}
-          </ul>
-          {!showAddForm && (
-            <button
-              type="button"
-              onClick={() => { resetForm(); setFormMode('fresh'); }}
-              className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add another provider
-            </button>
-          )}
-        </div>
-      )}
-
       <div className="border-t border-border" />
 
-      {showAddForm && (<>
       {/* Provider grid */}
       <div>
         <div className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -383,11 +283,86 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
               )}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => handleProviderSelect(CUSTOM_PROVIDER)}
+            className={`relative flex items-center gap-2 rounded-lg border border-dashed px-4 py-3 text-left text-sm transition-colors ${
+              isCustomMode
+                ? 'border-foreground bg-muted text-foreground'
+                : 'border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground'
+            }`}
+          >
+            <Plus className="h-4 w-4" />
+            <div>
+              <div className="font-medium">Custom</div>
+              <div className="mt-0.5 text-[11px] opacity-60">Any OpenAI / Anthropic endpoint</div>
+            </div>
+            {isCustomMode && (
+              <Check className="absolute right-2 top-2 h-4 w-4 text-foreground" strokeWidth={2.5} />
+            )}
+          </button>
         </div>
       </div>
 
       {selectedProvider && (
         <>
+          {isCustomMode && (
+            <div className="space-y-3 rounded-lg border border-dashed border-border/60 bg-muted/20 p-4">
+              <div>
+                <label htmlFor="custom-provider-id" className="mb-1 block text-sm font-medium text-foreground">
+                  Provider ID
+                </label>
+                <input
+                  id="custom-provider-id"
+                  type="text"
+                  value={customProviderId}
+                  onChange={(e) => { setCustomProviderId(e.target.value); setTestStatus('idle'); setTestMessage(''); }}
+                  placeholder="e.g. my-llm"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-none"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Used as the YAML key. Lowercase, no spaces.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-1">
+                  <label htmlFor="custom-protocol" className="mb-1 block text-sm font-medium text-foreground">
+                    Protocol
+                  </label>
+                  <div className="relative">
+                    <select
+                      id="custom-protocol"
+                      value={customProtocol}
+                      onChange={(e) => { setCustomProtocol(e.target.value as 'openai' | 'anthropic'); setTestStatus('idle'); setTestMessage(''); }}
+                      className="w-full appearance-none rounded-lg border border-border bg-background px-3 py-2.5 pr-8 text-sm text-foreground focus:border-foreground/40 focus:outline-none"
+                    >
+                      <option value="openai">openai</option>
+                      <option value="anthropic">anthropic</option>
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <label htmlFor="custom-base-url" className="mb-1 block text-sm font-medium text-foreground">
+                    Base URL
+                  </label>
+                  <input
+                    id="custom-base-url"
+                    type="text"
+                    value={customUrl}
+                    onChange={(e) => { setCustomUrl(e.target.value); setTestStatus('idle'); setTestMessage(''); }}
+                    placeholder="https://api.example.com/v1"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-none"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* API Key */}
           <div>
             <label htmlFor="llm-api-key" className="mb-1 block text-sm font-medium text-foreground">
@@ -451,7 +426,8 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
             )}
           </div>
 
-          {/* Advanced */}
+          {/* Advanced (catalog providers only — custom already shows URL above) */}
+          {!isCustomMode && (
           <div>
             <button
               type="button"
@@ -483,6 +459,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
               </div>
             )}
           </div>
+          )}
 
           {/* Actions */}
           <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border pt-6">
@@ -532,32 +509,25 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
           )}
         </>
       )}
-      </>)}
 
-      {existingProviders.length > 0 && (
-        <div className="flex items-center justify-end gap-3 border-t border-border pt-6">
-          {selectedProvider && (
-            <button
-              type="button"
-              onClick={() => { resetForm(); setFormMode('adding'); }}
-              className="mr-auto text-xs text-muted-foreground hover:text-foreground"
-            >
-              Cancel
-            </button>
-          )}
+      {(addedCount > 0 || preExistingCount > 0) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-6">
+          <span className="text-xs text-muted-foreground">
+            {addedCount + preExistingCount} provider{addedCount + preExistingCount === 1 ? '' : 's'} configured. Tap a tile to add another, or:
+          </span>
           <button
             type="button"
-            onClick={handleFinish}
+            onClick={async () => { setFinishing(true); try { await onSaved(); } finally { setFinishing(false); } }}
             disabled={finishing}
             className="rounded-lg bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
           >
             {finishing ? (
               <span className="flex items-center gap-2">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Finishing...
+                Continuing...
               </span>
             ) : (
-              'Finish'
+              'Continue'
             )}
           </button>
         </div>
