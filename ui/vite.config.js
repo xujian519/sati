@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
   // URLs and proxy targets.
   const host = normalizeLoopbackHost(configuredHost)
   
-  const proxyHost = getConnectableHost(configuredHost)
+  const proxyHost = env.PROXY_HOST || getConnectableHost(configuredHost)
   // TODO: Remove support for legacy PORT variables in all locations in a future major release, leaving only SERVER_PORT.
   const serverPort = env.SERVER_PORT || env.PORT || 3001
   const localNodeModules = (...segments) =>

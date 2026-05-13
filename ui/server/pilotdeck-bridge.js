@@ -47,6 +47,9 @@ import fs from 'node:fs';
 import { promises as fsPromises } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
+import { installGlobalProxy } from '../../dist/src/cli/proxy.js';
+installGlobalProxy();
+
 import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from './utils/pilotPaths.js';
 // Use the compiled gateway client from dist/ so the UI server can run
 // without tsx (tsx 4.x es-module-lexer has a known parse bug on this

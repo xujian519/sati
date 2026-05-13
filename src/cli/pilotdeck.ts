@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
+import { installGlobalProxy } from "./proxy.js";
+installGlobalProxy();
 import { createAlwaysOnRuntime, type AlwaysOnRuntime } from "../always-on/index.js";
 import { createCronRuntime, type CronRuntime } from "../cron/index.js";
 import { connectRemoteGatewayIfAvailable, type Gateway, type GatewayEvent, type GatewaySubmitTurnInput } from "../gateway/index.js";
