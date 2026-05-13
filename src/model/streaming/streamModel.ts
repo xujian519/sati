@@ -11,6 +11,7 @@ import type {
 import { ModelProviderError } from "../protocol/errors.js";
 import { parseModelResponse } from "../response/parseModelResponse.js";
 import { createStreamNormalizerState, normalizeStreamEvent } from "./normalizeStreamEvent.js";
+import { StreamingCheckpointManager } from "./StreamingCheckpoint.js";
 
 export type ModelTransport = typeof fetch;
 
@@ -40,6 +41,8 @@ export async function complete(
   return parseModelResponse(provider.protocol, raw, provider.id);
 }
 
+const MAX_STREAM_RETRIES = 2;
+
 export async function* streamModel(
   request: CanonicalModelRequest,
   config: ModelConfig,
@@ -47,7 +50,6 @@ export async function* streamModel(
 ): AsyncIterable<CanonicalModelEvent> {
   const streamingRequest = { ...request, stream: true };
   const { provider } = validateModelRequest(streamingRequest, config);
-  const body = buildModelRequest(streamingRequest, config);
 
   yield {
     type: "request_started",
@@ -56,30 +58,118 @@ export async function* streamModel(
     metadata: streamingRequest.metadata,
   };
 
-  const response = await sendProviderRequest(provider, body, true, options.fetch ?? fetch, options.signal);
-  if (!response.ok) {
-    const raw = await safeReadJson(response);
-    yield {
-      type: "error",
-      error: normalizeModelError(provider.id, provider.protocol, raw, response.status),
-    };
-    return;
-  }
+  let currentRequest = streamingRequest;
+  const checkpoint = new StreamingCheckpointManager();
 
-  if (!response.body) {
-    yield {
-      type: "error",
-      error: normalizeModelError(provider.id, provider.protocol, new Error("Missing response body.")),
-    };
-    return;
-  }
+  for (let attempt = 0; attempt <= MAX_STREAM_RETRIES; attempt++) {
+    const body = buildModelRequest(currentRequest, config);
+    let response: Response;
+    try {
+      response = await sendProviderRequest(provider, body, true, options.fetch ?? fetch, options.signal);
+    } catch (error) {
+      if (attempt < MAX_STREAM_RETRIES && isRetryableStreamError(error)) {
+        await delay(1000 * (attempt + 1));
+        continue;
+      }
+      throw error;
+    }
 
-  const state = createStreamNormalizerState();
-  for await (const rawEvent of readServerSentEvents(response.body)) {
-    for (const event of normalizeStreamEvent(provider.protocol, rawEvent, state)) {
-      yield event;
+    if (!response.ok) {
+      const raw = await safeReadJson(response);
+      yield {
+        type: "error",
+        error: normalizeModelError(provider.id, provider.protocol, raw, response.status),
+      };
+      return;
+    }
+
+    if (!response.body) {
+      yield {
+        type: "error",
+        error: normalizeModelError(provider.id, provider.protocol, new Error("Missing response body.")),
+      };
+      return;
+    }
+
+    const state = createStreamNormalizerState();
+    let streamCompleted = false;
+
+    try {
+      for await (const rawEvent of readServerSentEvents(response.body)) {
+        for (const event of normalizeStreamEvent(provider.protocol, rawEvent, state)) {
+          checkpoint.onEvent(event);
+          yield event;
+        }
+      }
+      streamCompleted = true;
+    } catch (error) {
+      if (
+        attempt < MAX_STREAM_RETRIES &&
+        isRetryableStreamError(error) &&
+        checkpoint.hasSubstantialContent()
+      ) {
+        currentRequest = buildContinuationRequest(currentRequest, checkpoint.get().partialText);
+        checkpoint.reset();
+        await delay(1000 * (attempt + 1));
+        continue;
+      }
+
+      if (isRetryableStreamError(error) && attempt < MAX_STREAM_RETRIES) {
+        await delay(1000 * (attempt + 1));
+        continue;
+      }
+
+      throw error;
+    }
+
+    if (streamCompleted) {
+      return;
     }
   }
+}
+
+function isRetryableStreamError(error: unknown): boolean {
+  if (error instanceof ModelProviderError) {
+    return false;
+  }
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return (
+      msg.includes("network") ||
+      msg.includes("econnreset") ||
+      msg.includes("socket hang up") ||
+      msg.includes("fetch failed") ||
+      msg.includes("aborted") ||
+      msg.includes("timeout") ||
+      msg.includes("epipe") ||
+      msg.includes("econnrefused")
+    );
+  }
+  return false;
+}
+
+function buildContinuationRequest(
+  original: CanonicalModelRequest & { stream: boolean },
+  partialText: string,
+): CanonicalModelRequest & { stream: boolean } {
+  return {
+    ...original,
+    messages: [
+      ...original.messages,
+      {
+        role: "assistant" as const,
+        content: [{ type: "text" as const, text: partialText }],
+      },
+      {
+        role: "user" as const,
+        content: [{ type: "text" as const, text: "Continue from where you left off." }],
+      },
+    ],
+  };
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function sendProviderRequest(
