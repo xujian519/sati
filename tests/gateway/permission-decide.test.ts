@@ -1,10 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   InProcessGateway,
   SessionRouter,
 } from "../../src/gateway/index.js";
 import type { AgentEvent, AgentSession } from "../../src/agent/index.js";
+import { readPermissionSettings, writePermissionSettings } from "../../src/permission/index.js";
 
 test("permissionDecide round-trips an allow decision", async () => {
   const router = new SessionRouter({
@@ -99,7 +103,77 @@ test("permissionDecide rejects pending entries when turn ends", async () => {
   assert.match(rejected?.message ?? "", /turn_ended/);
 });
 
-function fakeSession(sessionId: string, events: AgentEvent[]): AgentSession {
+test("grantSessionPermission adds a non-persistent allow for only that session", async () => {
+  const previousPilotHome = process.env.PILOT_HOME;
+  process.env.PILOT_HOME = mkdtempSync(join(tmpdir(), "pilotdeck-permissions-"));
+
+  try {
+    writePermissionSettings({
+      allowedTools: [],
+      disallowedTools: ["bash:pwd:*"],
+      skipPermissions: true,
+    });
+
+    const submitOptionsBySession = new Map<string, any>();
+    const router = new SessionRouter({
+      createSession: async (context) =>
+        fakeSession(context.sessionKey, [], (_input, options) => {
+          submitOptionsBySession.set(context.sessionKey, options);
+        }),
+    });
+    const gateway = new InProcessGateway(router, { uuid: () => "run-1" });
+
+    assert.deepEqual(await gateway.grantSessionPermission({
+      sessionKey: "session-a",
+      entry: "bash:pwd:*",
+    }), {
+      granted: true,
+      entry: "bash:pwd:*",
+    });
+
+    for await (const _ of gateway.submitTurn({
+      sessionKey: "session-a",
+      channelKey: "web",
+      message: "pwd",
+    })) {
+      // drain
+    }
+    for await (const _ of gateway.submitTurn({
+      sessionKey: "session-b",
+      channelKey: "web",
+      message: "pwd",
+    })) {
+      // drain
+    }
+
+    const sessionAAllow = submitOptionsBySession.get("session-a")?.permissionRules?.allow ?? [];
+    assert.deepEqual(sessionAAllow[0], {
+      source: "session",
+      behavior: "allow",
+      toolName: "bash",
+      pattern: "pwd:*",
+    });
+
+    const sessionBAllow = submitOptionsBySession.get("session-b")?.permissionRules?.allow ?? [];
+    assert.equal(sessionBAllow.some((rule: any) => rule.source === "session"), false);
+
+    const persisted = readPermissionSettings();
+    assert.deepEqual(persisted.allowedTools, []);
+    assert.deepEqual(persisted.disallowedTools, ["bash:pwd:*"]);
+  } finally {
+    if (previousPilotHome === undefined) {
+      delete process.env.PILOT_HOME;
+    } else {
+      process.env.PILOT_HOME = previousPilotHome;
+    }
+  }
+});
+
+function fakeSession(
+  sessionId: string,
+  events: AgentEvent[],
+  onSubmit?: (input: unknown, options: unknown) => void,
+): AgentSession {
   return {
     abort: () => undefined,
     snapshot: () => ({
@@ -111,7 +185,8 @@ function fakeSession(sessionId: string, events: AgentEvent[]): AgentSession {
       abortController: new AbortController(),
     }),
     replay: async function* () {},
-    submit: async function* () {
+    submit: async function* (input: unknown, options: unknown) {
+      onSubmit?.(input, options);
       for (const event of events) {
         yield event;
       }

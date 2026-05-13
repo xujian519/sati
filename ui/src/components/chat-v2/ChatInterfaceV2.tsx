@@ -179,6 +179,7 @@ function ChatInterfaceV2({
     handleAbortSession,
     handlePermissionDecision,
     handleGrantToolPermission,
+    handleGrantSessionToolPermission,
     handleInputFocusChange,
   } = useChatComposerState({
     selectedProject,
@@ -429,7 +430,7 @@ function ChatInterfaceV2({
         createDiff={createDiff}
         onFileOpen={onFileOpen}
         onShowSettings={onShowSettings}
-        onGrantToolPermission={handleGrantToolPermission}
+        onGrantSessionToolPermission={handleGrantSessionToolPermission}
         autoExpandTools={autoExpandTools}
         showRawParameters={showRawParameters}
         showThinking={showThinking}

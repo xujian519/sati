@@ -17,15 +17,27 @@ export class PermissionRuntime {
     toolCallId: string,
   ): Promise<PermissionDecision> {
     const permissionContext = context.permissionContext;
+    const sessionAllowRule = findMatchingRule(
+      permissionContext.rules.allow.filter((rule) => rule.source === "session"),
+      tool.name,
+      input,
+    );
 
     const denyRule = findMatchingRule(permissionContext.rules.deny, tool.name, input);
     if (denyRule) {
+      if (sessionAllowRule && denyRule.source === "user") {
+        return this.allowSessionRule(tool, input, context, toolCallId, sessionAllowRule);
+      }
       return denyFromRule(denyRule);
     }
 
     const askRule = findMatchingRule(permissionContext.rules.ask, tool.name, input);
     if (askRule) {
       return finalizeAsk(askFromRule(tool, input, toolCallId, askRule), permissionContext);
+    }
+
+    if (sessionAllowRule) {
+      return this.allowSessionRule(tool, input, context, toolCallId, sessionAllowRule);
     }
 
     // Check user-configured allow rules BEFORE consulting the tool's own
@@ -86,6 +98,26 @@ export class PermissionRuntime {
 
     const modeDecision = decideByMode(tool, input, toolCallId, permissionContext);
     return modeDecision.type === "ask" ? finalizeAsk(modeDecision, permissionContext) : modeDecision;
+  }
+
+  private async allowSessionRule(
+    tool: PilotDeckToolDefinition,
+    input: unknown,
+    context: PilotDeckToolRuntimeContext,
+    toolCallId: string,
+    rule: PermissionRule,
+  ): Promise<PermissionDecision> {
+    const toolPermission = await tool.checkPermissions?.(input, context);
+    const toolDecision = normalizeToolPermission(toolPermission, tool, input, toolCallId, context.permissionContext);
+    if (toolDecision && toolDecision.type !== "ask") {
+      return toolDecision;
+    }
+    return allow({
+      type: "rule",
+      behavior: "allow",
+      rule,
+      message: `Session allow rule permits ${tool.name}.`,
+    });
   }
 }
 

@@ -141,6 +141,8 @@ export class GatewayWsConnection {
         return this.options.gateway.respondElicitation(frame.params as never);
       case "permission_decide":
         return this.options.gateway.permissionDecide(frame.params as never);
+      case "grant_session_permission":
+        return this.options.gateway.grantSessionPermission(frame.params as never);
       case "read_session_messages":
         return this.options.gateway.readSessionMessages(frame.params as never);
       case "list_projects":

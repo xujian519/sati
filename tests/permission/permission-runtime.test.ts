@@ -59,6 +59,34 @@ test("deny and ask rules take priority over allow and bypass", async () => {
   assert.equal((await runtime.decide(tool, {}, context, "call-2")).type, "ask");
 });
 
+test("session allow can temporarily override user deny only", async () => {
+  const runtime = new PermissionRuntime();
+  const tool = createPilotDeckTestTool({ name: "bash", readOnly: false, kind: "shell" });
+  const { context } = createPilotDeckToolRuntimeFixture({ permissionMode: "bypassPermissions", canPrompt: true });
+
+  context.permissionContext = createDefaultPermissionContext({
+    cwd: context.cwd,
+    mode: "bypassPermissions",
+    canPrompt: true,
+    rules: {
+      deny: [{ source: "user", behavior: "deny", toolName: "bash", pattern: "pwd:*" }],
+      allow: [{ source: "session", behavior: "allow", toolName: "bash", pattern: "pwd:*" }],
+    },
+  });
+  assert.equal((await runtime.decide(tool, { command: "pwd" }, context, "call-session")).type, "allow");
+
+  context.permissionContext = createDefaultPermissionContext({
+    cwd: context.cwd,
+    mode: "bypassPermissions",
+    canPrompt: true,
+    rules: {
+      deny: [{ source: "project", behavior: "deny", toolName: "bash", pattern: "pwd:*" }],
+      allow: [{ source: "session", behavior: "allow", toolName: "bash", pattern: "pwd:*" }],
+    },
+  });
+  assert.equal((await runtime.decide(tool, { command: "pwd" }, context, "call-project")).type, "deny");
+});
+
 test("dontAsk converts ask decisions to deny", async () => {
   const runtime = new PermissionRuntime();
   const tool = createPilotDeckTestTool({ name: "bash", readOnly: false, kind: "shell" });
@@ -80,6 +108,31 @@ test("tool safety deny is not bypassed", async () => {
     },
   });
   const { context } = createPilotDeckToolRuntimeFixture({ permissionMode: "bypassPermissions" });
+
+  assert.equal((await runtime.decide(tool, {}, context, "call-1")).type, "deny");
+});
+
+test("session allow does not bypass tool safety deny", async () => {
+  const runtime = new PermissionRuntime();
+  const tool = createPilotDeckTestTool({
+    name: "bash",
+    readOnly: false,
+    kind: "shell",
+    permissionResult: {
+      type: "deny",
+      reason: { type: "safety", message: "Dangerous command denied." },
+      message: "Dangerous command denied.",
+    },
+  });
+  const { context } = createPilotDeckToolRuntimeFixture({ permissionMode: "bypassPermissions" });
+  context.permissionContext = createDefaultPermissionContext({
+    cwd: context.cwd,
+    mode: "bypassPermissions",
+    rules: {
+      deny: [{ source: "user", behavior: "deny", toolName: "bash" }],
+      allow: [{ source: "session", behavior: "allow", toolName: "bash" }],
+    },
+  });
 
   assert.equal((await runtime.decide(tool, {}, context, "call-1")).type, "deny");
 });

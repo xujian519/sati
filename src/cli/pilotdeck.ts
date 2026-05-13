@@ -270,6 +270,7 @@ function createFallbackGateway(): Gateway {
     },
     respondElicitation: async () => ({ delivered: false }),
     permissionDecide: async () => ({ delivered: false }),
+    grantSessionPermission: async () => ({ granted: false }),
     readSessionMessages: async () => {
       throw new Error("read_session_messages is not configured.");
     },

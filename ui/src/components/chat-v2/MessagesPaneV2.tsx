@@ -33,7 +33,7 @@ type MessagesPaneV2Props = {
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
-  onGrantToolPermission?: (
+  onGrantSessionToolPermission?: (
     suggestion: PilotDeckPermissionSuggestion,
   ) => PermissionGrantResult | null | undefined;
   autoExpandTools?: boolean;
@@ -70,7 +70,7 @@ export default function MessagesPaneV2({
   createDiff,
   onFileOpen,
   onShowSettings,
-  onGrantToolPermission,
+  onGrantSessionToolPermission,
   autoExpandTools,
   showRawParameters,
   showThinking,
@@ -233,7 +233,7 @@ export default function MessagesPaneV2({
                 createDiff={createDiff}
                 onFileOpen={onFileOpen}
                 onShowSettings={onShowSettings}
-                onGrantToolPermission={onGrantToolPermission}
+                onGrantSessionToolPermission={onGrantSessionToolPermission}
                 autoExpandTools={autoExpandTools}
                 showRawParameters={showRawParameters}
                 showThinking={showThinking}

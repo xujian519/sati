@@ -82,6 +82,10 @@ export class RemoteGateway implements Gateway {
     return (await this.client.request("permission_decide", input)) as { delivered: boolean };
   }
 
+  async grantSessionPermission(input: import("../protocol/types.js").GatewaySessionPermissionGrantInput): Promise<{ granted: boolean; entry?: string }> {
+    return (await this.client.request("grant_session_permission", input)) as { granted: boolean; entry?: string };
+  }
+
   async readSessionMessages(input: WebReadSessionMessagesInput): Promise<WebReadSessionMessagesResult> {
     return (await this.client.request("read_session_messages", input)) as WebReadSessionMessagesResult;
   }

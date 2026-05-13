@@ -76,11 +76,11 @@
     "response": "JSON Response"
   },
   "permissions": {
-    "grant": "Grant permission for {{tool}}",
-    "added": "Permission added",
-    "addTo": "Adds {{entry}} to Allowed Tools.",
-    "retry": "Permission saved. Retry the request to use the tool.",
-    "error": "Unable to update permissions. Please try again.",
+    "grant": "Grant {{tool}} for this chat",
+    "added": "Granted for this chat",
+    "addTo": "Temporarily allows {{entry}} in this chat only.",
+    "retry": "Retry in this chat to use the tool.",
+    "error": "Unable to grant this chat permission. Please try again.",
     "openSettings": "Open settings"
   },
   "todo": {

@@ -93,12 +93,16 @@ export function normalizePermissionSettings(value: unknown): PermissionSettings 
   };
 }
 
-function permissionEntryToRule(entry: string, behavior: "allow" | "deny"): PermissionRule {
+export function permissionEntryToRule(
+  entry: string,
+  behavior: "allow" | "deny",
+  source: PermissionRule["source"] = "user",
+): PermissionRule {
   const normalized = normalizePermissionEntry(entry);
   const [toolName, ...patternParts] = normalized.split(":");
   const pattern = patternParts.join(":").trim();
   return {
-    source: "user",
+    source,
     behavior,
     toolName: toolName || normalized,
     pattern: pattern || undefined,

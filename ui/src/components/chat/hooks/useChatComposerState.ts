@@ -1071,6 +1071,33 @@ export function useChatComposerState({
     [],
   );
 
+  const handleGrantSessionToolPermission = useCallback(
+    (suggestion: { entry: string; toolName: string }) => {
+      if (!suggestion?.entry) {
+        return { success: false };
+      }
+
+      const sessionId = [
+        selectedSession?.id,
+        currentSessionId,
+        pendingViewSessionRef.current?.sessionId,
+      ].find((candidate) => candidate && !isTemporarySessionId(candidate));
+
+      if (!sessionId) {
+        return { success: false };
+      }
+
+      sendMessage({
+        type: 'session-permission-grant',
+        sessionId,
+        entry: suggestion.entry,
+        toolName: suggestion.toolName,
+      });
+      return { success: true };
+    },
+    [currentSessionId, pendingViewSessionRef, selectedSession?.id, sendMessage],
+  );
+
   const handlePermissionDecision = useCallback(
     (
       requestIds: string | string[],
@@ -1179,6 +1206,7 @@ export function useChatComposerState({
     handleAbortSession,
     handlePermissionDecision,
     handleGrantToolPermission,
+    handleGrantSessionToolPermission,
     handleInputFocusChange,
     isInputFocused,
   };

@@ -174,6 +174,10 @@ export class GatewayBrowserClient {
     return this.request<{ delivered: boolean }>("permission_decide", input);
   }
 
+  grantSessionPermission(input: import("./protocol.js").WebSessionPermissionGrant) {
+    return this.request<{ granted: boolean; entry?: string }>("grant_session_permission", input);
+  }
+
   elicitationRespond(input: {
     sessionKey: string;
     requestId: string;

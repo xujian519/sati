@@ -26,7 +26,7 @@ type MessageComponentProps = {
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
-  onGrantToolPermission?: (suggestion: PilotDeckPermissionSuggestion) => PermissionGrantResult | null | undefined;
+  onGrantSessionToolPermission?: (suggestion: PilotDeckPermissionSuggestion) => PermissionGrantResult | null | undefined;
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
@@ -54,7 +54,7 @@ const stringifyMessageContent = (content: unknown): string => {
   }
 };
 
-const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider, hideHeader = false }: MessageComponentProps) => {
+const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantSessionToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider, hideHeader = false }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&
     ((prevMessage.type === 'assistant') ||
@@ -277,8 +277,8 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (!onGrantToolPermission) return;
-                                  const result = onGrantToolPermission(permissionSuggestion);
+                                  if (!onGrantSessionToolPermission) return;
+                                  const result = onGrantSessionToolPermission(permissionSuggestion);
                                   if (result?.success) {
                                     setPermissionGrantState('granted');
                                   } else {

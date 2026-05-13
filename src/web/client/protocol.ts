@@ -92,6 +92,7 @@ export type WebGatewayMethod =
   | "cron_stop"
   | "elicitation_respond"
   | "permission_decide"
+  | "grant_session_permission"
   | "read_session_messages"
   | "rename_session"
   | "delete_session"
@@ -190,6 +191,11 @@ export type WebPermissionDecision = {
   decision: "allow" | "deny";
   remember?: boolean;
   reason?: string;
+};
+
+export type WebSessionPermissionGrant = {
+  sessionKey: string;
+  entry: string;
 };
 
 export type WebReadSessionMessagesInput = {

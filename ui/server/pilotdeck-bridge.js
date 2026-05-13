@@ -559,6 +559,23 @@ export async function decidePermissionViaGateway(requestId, decision, options = 
     return false;
 }
 
+export async function grantSessionPermissionViaGateway(sessionId, entry) {
+    const gw = await ensureGateway();
+    if (!isPilotDeckSessionKey(sessionId) || typeof entry !== 'string' || !entry.trim()) {
+        return false;
+    }
+    try {
+        const result = await gw.grantSessionPermission({
+            sessionKey: sessionId,
+            entry,
+        });
+        return Boolean(result?.granted);
+    } catch (error) {
+        console.warn('[pilotdeck-bridge] grantSessionPermission failed:', error);
+        return false;
+    }
+}
+
 export function isSessionActiveViaGateway(sessionId) {
     if (!isPilotDeckSessionKey(sessionId)) return false;
     return Boolean(sessionState.get(sessionId)?.active);
@@ -583,7 +600,7 @@ export function getActiveSessionIdsViaGateway() {
  */
 /**
  * Build a sessionId→projectPath lookup from the filesystem.
- * Scans `~/.pilotdeck/projects/*/chats/` for .jsonl files and maps
+ * Scans project chat directories under `~/.pilotdeck/projects/` and maps
  * each session filename back to the actual project path (resolved via
  * the `.cwd` marker or well-known directory names).
  *

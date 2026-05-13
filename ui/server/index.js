@@ -57,6 +57,7 @@ import {
     runChatViaGateway,
     abortViaGateway,
     decidePermissionViaGateway,
+    grantSessionPermissionViaGateway,
     isSessionActiveViaGateway,
     getActiveSessionIdsViaGateway,
     elicitationRespondViaGateway,
@@ -1752,6 +1753,8 @@ function handleChatConnection(ws, request) {
                         },
                     );
                 }
+            } else if (data.type === 'session-permission-grant') {
+                await grantSessionPermissionViaGateway(data.sessionId, data.entry);
             } else if (data.type === 'elicitation-response') {
                 if (data.requestId) {
                     await elicitationRespondViaGateway(data.requestId, data.answer);

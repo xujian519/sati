@@ -13,6 +13,7 @@ import type {
   GatewayElicitationResponseInput,
   GatewayEvent,
   GatewayPermissionDecisionInput,
+  GatewaySessionPermissionGrantInput,
   GatewayServerInfo,
   GatewaySubmitTurnInput,
   ListSessionsInput,
@@ -35,7 +36,8 @@ import type {
   CronStopInput,
   CronStopResult,
 } from "../../cron/protocol/types.js";
-import { permissionSettingsToRuleSet, readPermissionSettings } from "../../permission/index.js";
+import { permissionEntryToRule, permissionSettingsToRuleSet, readPermissionSettings } from "../../permission/index.js";
+import type { PermissionRule } from "../../permission/index.js";
 
 export type InProcessGatewayOptions = {
   now?: () => Date;
@@ -79,6 +81,7 @@ export class InProcessGateway implements Gateway {
    * Web confirmation register here while the host UI shows the banner.
    */
   private readonly permissionBus = new GatewayPermissionBus();
+  private readonly sessionPermissionGrants = new Map<string, PermissionRule[]>();
 
   constructor(
     private readonly router: SessionRouter,
@@ -148,6 +151,8 @@ export class InProcessGateway implements Gateway {
         });
         const permissionSettings = readPermissionSettings();
         const permissionMode = input.mode ?? (permissionSettings.skipPermissions ? "bypassPermissions" : undefined);
+        const persistedRules = permissionSettingsToRuleSet(permissionSettings);
+        const sessionAllowRules = this.sessionPermissionGrants.get(input.sessionKey) ?? [];
         // Promote a text-only turn to a multimodal blocks turn when the
         // host channel attached files/images. Without this the
         // GatewaySubmitTurnInput.attachments field was effectively dead —
@@ -165,7 +170,10 @@ export class InProcessGateway implements Gateway {
           {
             turnId: runId,
             permissionMode,
-            permissionRules: permissionSettingsToRuleSet(permissionSettings),
+            permissionRules: {
+              ...persistedRules,
+              allow: [...sessionAllowRules, ...persistedRules.allow],
+            },
           },
         )) {
           for (const gatewayEvent of mapAgentEvent(event, runId)) {
@@ -221,6 +229,7 @@ export class InProcessGateway implements Gateway {
 
   async closeSession(input: { sessionKey: string; reason?: string }): Promise<void> {
     await this.router.close(input.sessionKey);
+    this.sessionPermissionGrants.delete(input.sessionKey);
   }
 
   async describeServer(): Promise<GatewayServerInfo> {
@@ -265,6 +274,23 @@ export class InProcessGateway implements Gateway {
       reason: input.reason,
     });
     return { delivered: true };
+  }
+
+  async grantSessionPermission(input: GatewaySessionPermissionGrantInput): Promise<{ granted: boolean; entry?: string }> {
+    const rule = permissionEntryToRule(input.entry, "allow", "session");
+    if (!rule.toolName) {
+      return { granted: false };
+    }
+
+    const rules = this.sessionPermissionGrants.get(input.sessionKey) ?? [];
+    const alreadyGranted = rules.some(
+      (existing) => existing.toolName === rule.toolName && existing.pattern === rule.pattern,
+    );
+    if (!alreadyGranted) {
+      rules.push(rule);
+      this.sessionPermissionGrants.set(input.sessionKey, rules);
+    }
+    return { granted: true, entry: input.entry };
   }
 
   async readSessionMessages(input: WebReadSessionMessagesInput): Promise<WebReadSessionMessagesResult> {

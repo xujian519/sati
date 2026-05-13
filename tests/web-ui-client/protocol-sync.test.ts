@@ -33,6 +33,12 @@ test("Every Gateway WS method is a WebGatewayMethod superset", () => {
     "cron_delete",
     "cron_stop",
     "elicitation_respond",
+    "permission_decide",
+    "grant_session_permission",
+    "read_session_messages",
+    "list_projects",
+    "describe_project",
+    "reload_config",
   ];
   const webMethods: WebGatewayMethod[] = serverMethods.map((m): WebGatewayMethod => m);
   assert.equal(webMethods.length, serverMethods.length);

@@ -20,6 +20,7 @@ export {
   getPermissionSettingsPath,
   normalizePermissionEntry,
   normalizePermissionSettings,
+  permissionEntryToRule,
   permissionSettingsToRuleSet,
   readPermissionSettings,
   writePermissionSettings,

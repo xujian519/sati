@@ -123,6 +123,11 @@ export type GatewayPermissionDecisionInput = {
   reason?: string;
 };
 
+export type GatewaySessionPermissionGrantInput = {
+  sessionKey: string;
+  entry: string;
+};
+
 export type WebReadSessionMessagesInput = WebUiReadSessionMessagesInput;
 export type WebReadSessionMessagesResult = WebUiReadSessionMessagesResult;
 export type WebProjectSummary = WebUiProjectSummary;
@@ -201,6 +206,11 @@ export interface Gateway {
    * `{ delivered: false }` if the requestId is unknown.
    */
   permissionDecide(input: GatewayPermissionDecisionInput): Promise<{ delivered: boolean }>;
+  /**
+   * Grants a tool only for the current session. This is intentionally
+   * non-persistent: global Settings / permissions.json stay unchanged.
+   */
+  grantSessionPermission(input: GatewaySessionPermissionGrantInput): Promise<{ granted: boolean; entry?: string }>;
   /**
    * Web Phase 2 — read transcript history for a session and project it onto
    * the Web `WebMessage` DTO.
