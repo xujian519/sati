@@ -86,7 +86,13 @@ const GATEWAY_CONNECT_RETRY_INTERVAL_MS = 250;
 const WEB_DEFAULT_PERMISSION_MODE =
     process.env.PILOTDECK_WEB_PERMISSION_MODE || 'default';
 
-/** @type {Promise<import('../../src/gateway/index.js').Gateway> | null} */
+// Resolves to the Gateway returned by `createRemoteGateway`. We express
+// the type via `typeof createRemoteGateway` (the symbol is already imported
+// above) instead of a JSDoc dynamic-import annotation, because some tsx 4.x
+// builds mis-parse such tokens inside JSDoc when running through
+// `node --import tsx`, producing a spurious "Parse error" at EOF during
+// ESM rewriting on fresh installs.
+/** @type {ReturnType<typeof createRemoteGateway> | null} */
 let gatewayPromise = null;
 
 async function readGatewayToken() {
