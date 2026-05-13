@@ -331,7 +331,7 @@ async function runTask(task, args) {
   try {
     installGlobalProxy();
 
-    const gateway = createLocalGateway({
+    const { gateway } = createLocalGateway({
       projectRoot: workDir,
       pilotHome,
       permissionMode: "bypassPermissions",
@@ -364,6 +364,7 @@ async function runTask(task, args) {
         message: rewrittenPrompt,
         projectKey: workDir,
         mode: "bypassPermissions",
+        maxTurns: args.maxTurns,
       });
 
       for await (const event of stream) {
@@ -390,6 +391,29 @@ async function runTask(task, args) {
             finishReason = event.finishReason ?? "completed";
             log(task.taskId, `Turn completed: ${finishReason}`);
             break;
+          case "agent_status": {
+            const d = event.detail ?? {};
+            switch (event.event) {
+              case "compact_started":
+                log(task.taskId, `Compact: started (trigger=${d.trigger} pre=${d.preTokens})`);
+                break;
+              case "compact_completed":
+                log(task.taskId, `Compact: done (${d.status} ${d.preTokens}→${d.postTokens ?? "?"})`);
+                break;
+              case "turn_continued":
+                log(task.taskId, `Turn continued: ${d.reason}`);
+                break;
+              case "subagent_started":
+                log(task.taskId, `Subagent: ${d.subagentType}/${d.subagentId} started`);
+                break;
+              case "subagent_completed":
+                log(task.taskId, `Subagent: ${d.subagentType}/${d.subagentId} done (ok=${d.success} ${d.durationMs}ms)`);
+                break;
+              default:
+                log(task.taskId, `Status: ${event.event} ${JSON.stringify(d)}`);
+            }
+            break;
+          }
           case "error":
             log(task.taskId, `ERROR: [${event.code}] ${event.message}`);
             if (!event.recoverable) {

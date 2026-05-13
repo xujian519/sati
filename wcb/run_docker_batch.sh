@@ -8,7 +8,7 @@ set -euo pipefail
 #   ssh g72 bash /home/yyk/yyk03/Workspace/PilotDeck/wcb/run_docker_batch.sh
 # ═══════════════════════════════════════════════════════════════════════
 
-DOCKER_IMAGE="${DOCKER_IMAGE:-wildclawbench-pilotdeck:v1.0}"
+DOCKER_IMAGE="${DOCKER_IMAGE:-wildclawbench-pilotdeck:v1.1}"
 NFS_ROOT="/home/yyk/yyk03/Workspace"
 MODEL="${MODEL:-deepseek/deepseek-v4-flash}"
 PARALLEL="${PARALLEL:-8}"
@@ -39,6 +39,7 @@ NO_PROXY_INNER="${NO_PROXY_INNER:-localhost,127.0.0.1,11.11.26.2,11.11.16.2,api.
 
 # ── Setup output directory ─────────────────────────────────────────────
 mkdir -p "$OUTPUT_DIR"
+touch "$BUGS_FILE"
 
 echo "═══════════════════════════════════════════════════════════════"
 echo "  WCB-CC Docker Batch Runner (PilotDeck)"

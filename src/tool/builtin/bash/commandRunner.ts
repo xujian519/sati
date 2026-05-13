@@ -31,17 +31,40 @@ export class NodeShellCommandRunner implements PilotDeckCommandRunner {
         cwd: options.cwd,
         env: options.env,
         shell: true,
+        detached: true,
         stdio: ["ignore", "pipe", "pipe"],
-        signal: options.signal,
       });
 
       let stdout = "";
       let stderr = "";
       let timedOut = false;
+      let settled = false;
+
+      function killProcessGroup() {
+        const pid = child.pid;
+        if (!pid) return;
+        try { process.kill(-pid, "SIGTERM"); } catch { /* already dead */ }
+        setTimeout(() => {
+          try { process.kill(-pid, "SIGKILL"); } catch { /* already dead */ }
+        }, 3000).unref();
+      }
+
       const timeout = setTimeout(() => {
         timedOut = true;
-        child.kill("SIGTERM");
+        killProcessGroup();
       }, options.timeoutMs);
+
+      const onAbort = () => {
+        if (settled) return;
+        killProcessGroup();
+      };
+      options.signal?.addEventListener("abort", onAbort, { once: true });
+
+      function cleanup() {
+        settled = true;
+        clearTimeout(timeout);
+        options.signal?.removeEventListener("abort", onAbort);
+      }
 
       child.stdout?.setEncoding("utf8");
       child.stderr?.setEncoding("utf8");
@@ -66,11 +89,21 @@ export class NodeShellCommandRunner implements PilotDeckCommandRunner {
         }
       });
       child.on("error", (error) => {
-        clearTimeout(timeout);
+        cleanup();
+        if (options.signal?.aborted) {
+          resolve({
+            exitCode: null,
+            stdout,
+            stderr,
+            timedOut: true,
+            durationMs: Date.now() - startedAt,
+          });
+          return;
+        }
         reject(error);
       });
       child.on("close", (exitCode) => {
-        clearTimeout(timeout);
+        cleanup();
         resolve({
           exitCode,
           stdout,
