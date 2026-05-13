@@ -24,7 +24,9 @@ export function collectToolResultIds(messages: CanonicalMessage[]): Set<string> 
   for (const message of messages) {
     if (message.role !== "user") continue;
     for (const block of message.content) {
-      if (block.type === "tool_result") ids.add(block.toolCallId);
+      if (block.type === "tool_result" || block.type === "tool_result_reference") {
+        ids.add(block.toolCallId);
+      }
     }
   }
   return ids;
@@ -50,7 +52,8 @@ export function stripUnpairedToolCalls(
 }
 
 /**
- * Remove tool_result blocks from user messages whose toolCallId is NOT in `pairedIds`.
+ * Remove tool_result / tool_result_reference blocks from user messages whose
+ * toolCallId is NOT in `pairedIds`.
  * Messages that become empty after filtering are dropped entirely.
  */
 export function stripUnpairedToolResults(
@@ -60,7 +63,9 @@ export function stripUnpairedToolResults(
   return messages.map((message) => {
     if (message.role !== "user") return message;
     const filtered = message.content.filter(
-      (block) => block.type !== "tool_result" || pairedIds.has(block.toolCallId),
+      (block) =>
+        (block.type !== "tool_result" && block.type !== "tool_result_reference") ||
+        pairedIds.has(block.toolCallId),
     );
     return filtered.length === message.content.length
       ? message

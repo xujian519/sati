@@ -118,18 +118,21 @@ function repairToolResultPairing(
     const pendingSet = new Set(pendingToolCallIds);
     const seen = new Set<string>();
     for (const block of message.content) {
-      if (block.type === "tool_result") {
+      if (block.type === "tool_result" || block.type === "tool_result_reference") {
         seen.add(block.toolCallId);
       }
     }
 
-    // Strip orphaned tool_results (their tool_call was truncated away).
+    // Strip orphaned tool_results / tool_result_references (their tool_call was truncated away).
     const hasOrphans = [...seen].some((id) => !pendingSet.has(id));
     let cleanedMessage = message;
     if (hasOrphans) {
       const kept: CanonicalContentBlock[] = [];
       for (const block of message.content) {
-        if (block.type === "tool_result" && !pendingSet.has(block.toolCallId)) {
+        if (
+          (block.type === "tool_result" || block.type === "tool_result_reference") &&
+          !pendingSet.has(block.toolCallId)
+        ) {
           warnings.push({
             code: "tool_result_orphaned",
             message: `tool_result ${block.toolCallId} has no matching tool_call — removed.`,
@@ -195,5 +198,7 @@ function hasToolCalls(message: CanonicalMessage): boolean {
 }
 
 function isToolResultOnly(message: CanonicalMessage): boolean {
-  return message.content.length > 0 && message.content.every((block) => block.type === "tool_result");
+  return message.content.length > 0 && message.content.every(
+    (block) => block.type === "tool_result" || block.type === "tool_result_reference",
+  );
 }

@@ -21,7 +21,7 @@ export function filterIncompleteToolCalls(
   const completedIds = new Set<string>();
   for (const message of messages) {
     for (const block of message.content) {
-      if (block.type === "tool_result") {
+      if (block.type === "tool_result" || block.type === "tool_result_reference") {
         completedIds.add(block.toolCallId);
       }
     }

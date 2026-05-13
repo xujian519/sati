@@ -116,6 +116,50 @@ test("strips orphaned tool_result whose tool_call was dropped", () => {
   assert.ok(!orphanBlock, "orphaned tool_result should be removed");
 });
 
+test("strips orphaned tool_result_reference whose tool_call was dropped", () => {
+  const messages: CanonicalMessage[] = [
+    userText("hi"),
+    {
+      role: "user",
+      content: [{
+        type: "tool_result_reference",
+        toolCallId: "ghost-ref",
+        path: "/tmp/ghost.txt",
+        originalBytes: 60000,
+        preview: "some preview",
+        hasMore: true,
+      }],
+    },
+  ];
+  const result = projector.project({ messages });
+  assert.ok(result.warnings.some((w) => w.code === "tool_result_orphaned"));
+  const orphanBlock = result.messages.find((m) =>
+    m.content.some((b) => b.type === "tool_result_reference" && b.toolCallId === "ghost-ref"),
+  );
+  assert.ok(!orphanBlock, "orphaned tool_result_reference should be removed");
+});
+
+test("tool_result_reference counts as matched result for its tool_call", () => {
+  const messages: CanonicalMessage[] = [
+    userText("hi"),
+    assistantToolCall("call-ref", "read_file"),
+    {
+      role: "user",
+      content: [{
+        type: "tool_result_reference",
+        toolCallId: "call-ref",
+        path: "/tmp/call-ref.txt",
+        originalBytes: 100000,
+        preview: "preview...",
+        hasMore: true,
+      }],
+    },
+  ];
+  const result = projector.project({ messages });
+  assert.equal(result.warnings.length, 0, "no warnings for properly paired reference");
+  assert.equal(result.messages.length, 3);
+});
+
 // ── maxMessages: tool-pair-safe truncation ───────────────────────────
 
 test("maxMessages sliding window on plain text messages", () => {

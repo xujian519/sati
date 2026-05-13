@@ -52,6 +52,38 @@ test("C2.S4 leaves user messages untouched", () => {
   assert.deepEqual(out, messages);
 });
 
+test("C2.S4 tool_result_reference counts as completed tool_call", () => {
+  const messages: CanonicalMessage[] = [
+    {
+      role: "assistant",
+      content: [
+        { type: "tool_call", id: "ref-call", name: "read_file", input: {} },
+        { type: "tool_call", id: "orphan", name: "bash", input: {} },
+      ],
+    },
+    {
+      role: "user",
+      content: [
+        {
+          type: "tool_result_reference",
+          toolCallId: "ref-call",
+          path: "/tmp/ref-call.json",
+          originalBytes: 80000,
+          preview: "preview...",
+          hasMore: true,
+        },
+      ],
+    },
+  ];
+  const out = filterIncompleteToolCalls(messages);
+  assert.equal(out.length, 2);
+  const assistant = out[0];
+  const ids = assistant.content
+    .filter((b) => b.type === "tool_call")
+    .map((b) => (b.type === "tool_call" ? b.id : ""));
+  assert.deepEqual(ids, ["ref-call"], "orphan tool_call should be dropped, ref-call kept");
+});
+
 test("C2.S4 idempotent on already-clean messages", () => {
   const messages: CanonicalMessage[] = [
     {
