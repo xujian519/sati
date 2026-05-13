@@ -9,6 +9,7 @@ export function countMessagesTokens(messages: CanonicalMessage[]): number {
     for (const block of msg.content) {
       switch (block.type) {
         case "text":
+        case "thinking":
           chunks.push(block.text);
           break;
         case "tool_call":

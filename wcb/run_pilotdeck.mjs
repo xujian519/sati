@@ -323,6 +323,7 @@ async function runTask(task, args) {
   const startTime = Date.now();
   const events = [];
   let assistantText = "";
+  let assistantThinking = "";
   let usage = {};
   let finishReason = "unknown";
   let error = null;
@@ -374,6 +375,9 @@ async function runTask(task, args) {
             break;
           case "assistant_text_delta":
             assistantText += event.text;
+            break;
+          case "assistant_thinking_delta":
+            assistantThinking += event.text;
             break;
           case "tool_call_started":
             log(task.taskId, `Tool: ${event.name}`);
@@ -427,7 +431,8 @@ async function runTask(task, args) {
   };
   writeFileSync(join(runDir, "task-meta.json"), JSON.stringify(meta, null, 2));
   writeFileSync(join(runDir, "events.jsonl"), events.map((e) => JSON.stringify(e)).join("\n") + "\n");
-  if (assistantText) writeFileSync(join(runDir, "assistant.md"), assistantText);
+  const finalAssistantOutput = assistantText || assistantThinking;
+  if (finalAssistantOutput) writeFileSync(join(runDir, "assistant.md"), finalAssistantOutput);
   if (error) writeFileSync(join(runDir, "error.txt"), error);
 
   // 7. Copy workspace results to output

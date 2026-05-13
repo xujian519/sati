@@ -9,6 +9,7 @@ import {
   assembleAssistantMessage,
   createModelMessageAssemblerState,
 } from "../../../src/model/streaming/assembleModelMessage.js";
+import { countMessagesTokens } from "../../../src/router/utils/countTokens.js";
 
 test("OpenAI provider maps OpenRouter delta.reasoning to thinking_delta", () => {
   const state = createOpenAIStreamState();
@@ -88,4 +89,72 @@ test("Assembler folds reasoning into a thinking block alongside tool_call output
   assert.equal((result.message.content[0] as { text: string }).text, "Plan A.");
   assert.equal(result.message.content[1]?.type, "text");
   assert.equal((result.message.content[1] as { text: string }).text, "answer");
+});
+
+// ---------------------------------------------------------------------------
+// Regression: reasoning_content must NOT double-push thinking_delta
+// ---------------------------------------------------------------------------
+
+test("reasoning_content emits exactly one thinking_delta per chunk (no double push)", () => {
+  const state = createOpenAIStreamState();
+  const chunks = [
+    { choices: [{ index: 0, delta: { content: "", role: "assistant", reasoning_content: "Step A." }, finish_reason: null }] },
+    { choices: [{ index: 0, delta: { content: "", role: "assistant", reasoning_content: " Step B." }, finish_reason: null }] },
+    { choices: [{ index: 0, delta: { content: "", role: "assistant" }, finish_reason: "stop" }] },
+  ];
+  const allEvents: string[] = [];
+  for (const chunk of chunks) {
+    for (const event of normalizeOpenAIStreamEvent(chunk, state)) {
+      allEvents.push(event.type);
+    }
+  }
+  const thinkingCount = allEvents.filter((t) => t === "thinking_delta").length;
+  assert.equal(thinkingCount, 2, "expected exactly one thinking_delta per reasoning_content chunk");
+});
+
+test("when both reasoning and reasoning_content are present, reasoning wins and no duplicate", () => {
+  const state = createOpenAIStreamState();
+  const events = normalizeOpenAIStreamEvent(
+    {
+      choices: [
+        {
+          index: 0,
+          delta: { content: "", role: "assistant", reasoning: "from reasoning", reasoning_content: "from rc" },
+          finish_reason: null,
+        },
+      ],
+    },
+    state,
+  );
+  const thinking = events.filter((e) => e.type === "thinking_delta");
+  assert.equal(thinking.length, 1, "must emit exactly one thinking_delta");
+  assert.equal((thinking[0] as { text: string }).text, "from reasoning");
+});
+
+// ---------------------------------------------------------------------------
+// countMessagesTokens must include thinking blocks
+// ---------------------------------------------------------------------------
+
+test("countMessagesTokens includes thinking blocks in token estimate", () => {
+  const withThinking = countMessagesTokens([
+    {
+      role: "assistant",
+      content: [
+        { type: "thinking", text: "Let me reason about this carefully step by step." },
+        { type: "text", text: "The answer is 42." },
+      ],
+    },
+  ]);
+  const withoutThinking = countMessagesTokens([
+    {
+      role: "assistant",
+      content: [
+        { type: "text", text: "The answer is 42." },
+      ],
+    },
+  ]);
+  assert.ok(
+    withThinking > withoutThinking,
+    `thinking blocks must increase token count: ${withThinking} should be > ${withoutThinking}`,
+  );
 });
