@@ -11,19 +11,24 @@ function hasUsablePilotDeckConfig() {
   const record = readPilotDeckConfigFile();
   if (!record.exists) return false;
 
-  const providers = record.config?.models?.providers ?? {};
-  const entries = record.config?.models?.entries ?? {};
-  const mainModel = record.config?.agents?.main?.model;
-  const mainEntry = typeof mainModel === 'string' ? entries[mainModel] : null;
-  const providerId = mainEntry?.provider;
-  const provider = providerId ? providers[providerId] : null;
+  const mainRef = typeof record.config?.agent?.model === 'string'
+    ? record.config.agent.model.trim()
+    : '';
+  if (!mainRef) return false;
 
-  return Boolean(
-    provider?.baseUrl &&
-    provider?.apiKey &&
-    mainEntry?.name &&
-    mainModel,
-  );
+  const slash = mainRef.indexOf('/');
+  if (slash <= 0 || slash === mainRef.length - 1) return false;
+  const providerId = mainRef.slice(0, slash);
+  const modelId = mainRef.slice(slash + 1);
+
+  const provider = record.config?.model?.providers?.[providerId];
+  if (!provider || typeof provider !== 'object') return false;
+
+  const hasUrl = typeof provider.url === 'string' && provider.url.trim();
+  const hasKey = typeof provider.apiKey === 'string' && provider.apiKey.trim();
+  const hasModel = provider.models && typeof provider.models === 'object' && modelId in provider.models;
+
+  return Boolean(hasUrl && hasKey && hasModel);
 }
 
 function spawnAsync(command, args, options = {}) {

@@ -82,7 +82,7 @@ test("unknown model falls back to protocol defaults", () => {
   assert.deepEqual(model.multimodal.input, ["text"]);
 });
 
-test("cross-provider lookup: gemini model on yeysai proxy", () => {
+test("yeysai catalog entry: gemini-3.1-pro-preview auto-fills capabilities and multimodal", () => {
   const config = parseModelConfig({
     providers: {
       yeysai: {
@@ -95,7 +95,9 @@ test("cross-provider lookup: gemini model on yeysai proxy", () => {
   });
 
   const model = config.providers["yeysai"].models["gemini-3.1-pro-preview"];
-  assert.equal(model.displayName, "Gemini 3.1 Pro Preview");
+  // yeysai now has its own catalog entry that proxies Gemini, so the display
+  // name is suffixed; capabilities and multimodal still cover image input.
+  assert.equal(model.displayName, "Gemini 3.1 Pro Preview via THUNLP");
   assert.equal(model.capabilities.maxContextTokens, 1048576);
   assert.ok(model.multimodal.input.includes("image"));
 });
