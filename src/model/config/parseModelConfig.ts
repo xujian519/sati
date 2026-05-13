@@ -150,6 +150,13 @@ function parseCapabilities(protocol: ModelProtocol, rawCapabilities: unknown): M
     }
   }
 
+  // Accept `contextWindow` as an alias for `maxContextTokens` so that
+  // YAML configs using the friendlier name are not silently ignored.
+  const raw = rawCapabilities as Record<string, unknown>;
+  if (raw.contextWindow !== undefined && capabilities.maxContextTokens === undefined) {
+    overrides.maxContextTokens = readPositiveNumber(raw.contextWindow, "contextWindow");
+  }
+
   for (const key of ["maxContextTokens", "maxOutputTokens"] as const) {
     if (capabilities[key] !== undefined) {
       overrides[key] = readPositiveNumber(capabilities[key], key);
