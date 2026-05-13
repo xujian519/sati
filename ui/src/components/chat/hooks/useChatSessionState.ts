@@ -82,11 +82,21 @@ function chatMessageToNormalized(
   if (msg.type === 'error') {
     return { ...base, kind: 'error', content: msg.content || '' } as NormalizedMessage;
   }
+  // Carry user-attached image data URLs through the normalize round-trip
+  // so the optimistic message render and any re-derivation from the
+  // session store both show the thumbnails. NormalizedMessage.images is
+  // `string[]` of data URLs; we only attach it on user-side text frames.
+  const images = msg.type === 'user' && Array.isArray(msg.images)
+    ? msg.images
+        .filter((img) => img && typeof img.data === 'string')
+        .map((img) => img.data)
+    : undefined;
   return {
     ...base,
     kind: 'text',
     role: msg.type === 'user' ? 'user' : 'assistant',
     content: msg.content || '',
+    ...(images && images.length > 0 ? { images } : {}),
   } as NormalizedMessage;
 }
 

@@ -188,6 +188,49 @@ function ensureSessionState(sessionKey, projectKey, channelKey) {
     return state;
 }
 
+/**
+ * Convert UI-shape image attachments into Gateway-shape ChannelAttachment[].
+ *
+ * UI sends:
+ *   { name, data: 'data:image/png;base64,XXX', size, mimeType }
+ *
+ * Gateway expects ChannelAttachment:
+ *   { type: 'image', name, mimeType, content: <raw base64, no data: prefix>, bytes }
+ *
+ * The bare-base64 form matches how `CanonicalImageBlock` and the
+ * AttachmentResolver store the payload elsewhere in the codebase.
+ *
+ * Returns undefined when there's nothing to forward — so callers can
+ * spread it conditionally without injecting an empty array.
+ *
+ * @param {unknown} images
+ * @returns {Array<{type:'image',name?:string,mimeType:string,content:string,bytes?:number}>|undefined}
+ */
+function uiImagesToAttachments(images) {
+    if (!Array.isArray(images) || images.length === 0) return undefined;
+    const out = [];
+    for (const img of images) {
+        if (!img || typeof img !== 'object') continue;
+        const raw = typeof img.data === 'string' ? img.data : '';
+        if (!raw) continue;
+        // Accept both bare base64 and full data URLs. We pluck the
+        // declared mime out of the data URL when the caller did not
+        // pass one explicitly, since we can't reliably guess otherwise.
+        const dataUrlMatch = raw.match(/^data:([^;]+);base64,(.*)$/);
+        const mimeType = String(img.mimeType || dataUrlMatch?.[1] || 'image/png');
+        const base64 = dataUrlMatch ? dataUrlMatch[2] : raw;
+        if (!base64) continue;
+        out.push({
+            type: 'image',
+            name: typeof img.name === 'string' ? img.name : undefined,
+            mimeType,
+            content: base64,
+            ...(typeof img.size === 'number' ? { bytes: img.size } : {}),
+        });
+    }
+    return out.length > 0 ? out : undefined;
+}
+
 function resolvePermissionMode(options) {
     const explicit = options?.permissionMode || options?.mode;
     // A literal "default" from the chat composer is the implicit
@@ -417,6 +460,8 @@ export async function runChatViaGateway(
     state.runId = runId;
     state.active = true;
 
+    const attachments = uiImagesToAttachments(options?.images);
+
     try {
         const stream = gw.submitTurn({
             sessionKey,
@@ -425,6 +470,7 @@ export async function runChatViaGateway(
             message: command ?? '',
             mode: resolvePermissionMode(options),
             runId,
+            ...(attachments ? { attachments } : {}),
         });
         for await (const event of stream) {
             if (event && event.type === 'error') {

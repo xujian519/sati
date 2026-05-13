@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { InProcessGateway, SessionRouter } from "../../src/gateway/index.js";
-import type { AgentEvent, AgentSession } from "../../src/agent/index.js";
+import type { AgentEvent, AgentInput, AgentSession } from "../../src/agent/index.js";
 
 test("InProcessGateway maps a text turn to GatewayEvent stream", async () => {
   const router = new SessionRouter({
@@ -103,7 +103,11 @@ async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
   return values;
 }
 
-function fakeSession(sessionId: string, events: AgentEvent[]): AgentSession {
+function fakeSession(
+  sessionId: string,
+  events: AgentEvent[],
+  capturedInputs?: AgentInput[],
+): AgentSession {
   return {
     abort: () => undefined,
     snapshot: () => ({
@@ -115,10 +119,121 @@ function fakeSession(sessionId: string, events: AgentEvent[]): AgentSession {
       abortController: new AbortController(),
     }),
     replay: async function* () {},
-    submit: async function* () {
+    submit: async function* (input: AgentInput) {
+      capturedInputs?.push(input);
       for (const event of events) {
         yield event;
       }
     },
   } as unknown as AgentSession;
 }
+
+test("InProcessGateway forwards image attachments as a multimodal blocks input", async () => {
+  // Regression for the web-UI image-upload pipeline. The bridge converts
+  // UI-shape `{ name, data: 'data:image/png;base64,...' }` into
+  // ChannelAttachment[] and forwards via submitTurn. The gateway must
+  // promote the text-only turn into a blocks turn carrying the
+  // CanonicalImageBlock — otherwise the agent never sees the image even
+  // though the attachment travels through the WS frame.
+  const capturedInputs: AgentInput[] = [];
+  const router = new SessionRouter({
+    createSession: async () =>
+      fakeSession(
+        "session-1",
+        [
+          { type: "turn_started", sessionId: "session-1", turnId: "run-1" },
+          {
+            type: "turn_completed",
+            sessionId: "session-1",
+            turnId: "run-1",
+            result: {
+              type: "success",
+              sessionId: "session-1",
+              turnId: "run-1",
+              stopReason: "completed",
+              usage: {},
+              permissionDenials: [],
+              turns: 1,
+              startedAt: "2026-01-01T00:00:00.000Z",
+              completedAt: "2026-01-01T00:00:01.000Z",
+            },
+          },
+        ],
+        capturedInputs,
+      ),
+  });
+  const gateway = new InProcessGateway(router, { uuid: () => "run-1" });
+
+  for await (const _event of gateway.submitTurn({
+    sessionKey: "web:project=one:default",
+    channelKey: "web",
+    message: "Describe this",
+    attachments: [
+      {
+        type: "image",
+        name: "screenshot.png",
+        mimeType: "image/png",
+        content: "iVBORw0KG...",
+        bytes: 42,
+      },
+    ],
+  })) {
+    // drain
+    void _event;
+  }
+
+  assert.equal(capturedInputs.length, 1, "submit should be called once");
+  const input = capturedInputs[0];
+  assert.equal(input.type, "blocks", "input should be promoted to blocks");
+  if (input.type !== "blocks") return;
+  assert.equal(input.content.length, 2, "expected [text, image] blocks");
+  assert.deepEqual(input.content[0], { type: "text", text: "Describe this" });
+  assert.deepEqual(input.content[1], {
+    type: "image",
+    source: "base64",
+    data: "iVBORw0KG...",
+    mimeType: "image/png",
+    bytes: 42,
+  });
+});
+
+test("InProcessGateway keeps text-only turns as a plain text input", async () => {
+  const capturedInputs: AgentInput[] = [];
+  const router = new SessionRouter({
+    createSession: async () =>
+      fakeSession(
+        "session-1",
+        [
+          { type: "turn_started", sessionId: "session-1", turnId: "run-1" },
+          {
+            type: "turn_completed",
+            sessionId: "session-1",
+            turnId: "run-1",
+            result: {
+              type: "success",
+              sessionId: "session-1",
+              turnId: "run-1",
+              stopReason: "completed",
+              usage: {},
+              permissionDenials: [],
+              turns: 1,
+              startedAt: "2026-01-01T00:00:00.000Z",
+              completedAt: "2026-01-01T00:00:01.000Z",
+            },
+          },
+        ],
+        capturedInputs,
+      ),
+  });
+  const gateway = new InProcessGateway(router, { uuid: () => "run-1" });
+
+  for await (const _event of gateway.submitTurn({
+    sessionKey: "cli:project=one:default",
+    channelKey: "cli",
+    message: "hi",
+  })) {
+    void _event;
+  }
+
+  assert.deepEqual(capturedInputs, [{ type: "text", text: "hi" }]);
+});
