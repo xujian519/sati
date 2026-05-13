@@ -48,6 +48,17 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
     this.now = options.now ?? (() => new Date());
   }
 
+  /**
+   * Re-seed the writer's monotonic counters from a previously persisted
+   * transcript so that new entries continue with unique, ascending values.
+   * Called by the resume path after `readTranscript` has loaded the
+   * existing entries.
+   */
+  restoreState(maxSequence: number, lastEntryId: string | null): void {
+    this.sequence = maxSequence;
+    this.lastEntryId = lastEntryId;
+  }
+
   recordAcceptedInput(sessionId: string, turnId: string, messages: CanonicalMessage[]): Promise<void> {
     return this.recordEntry({
       type: "accepted_input",

@@ -77,7 +77,10 @@ export async function readTranscript(path: string, options: ReadTranscriptOption
     }
   }
 
-  entries.sort((left, right) => left.sequence - right.sequence);
+  entries.sort((left, right) => {
+    if (left.sequence !== right.sequence) return left.sequence - right.sequence;
+    return left.createdAt.localeCompare(right.createdAt);
+  });
   return { entries, diagnostics };
 }
 

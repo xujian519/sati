@@ -79,6 +79,101 @@ test("project session storage uses PilotDeck project chat directory", async () =
   }
 });
 
+test("readTranscript sorts duplicate sequences by createdAt tie-breaker", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-agent-dupseq-"));
+  try {
+    const transcriptPath = path.join(root, "session.jsonl");
+    const turnResult = (turnId: string, seq: number, time: string) =>
+      JSON.stringify({
+        type: "turn_result",
+        sessionId: "s",
+        turnId,
+        sequence: seq,
+        createdAt: time,
+        result: {
+          type: "success",
+          sessionId: "s",
+          turnId,
+          stopReason: "completed",
+          usage: {},
+          permissionDenials: [],
+          turns: 1,
+          startedAt: time,
+          completedAt: time,
+        },
+      });
+    await writeFile(
+      transcriptPath,
+      [
+        JSON.stringify({
+          type: "accepted_input",
+          sessionId: "s",
+          turnId: "t1",
+          sequence: 1,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          messages: [{ role: "user", content: [{ type: "text", text: "q1" }] }],
+        }),
+        JSON.stringify({
+          type: "assistant_message",
+          sessionId: "s",
+          turnId: "t1",
+          sequence: 2,
+          createdAt: "2026-01-01T00:00:01.000Z",
+          message: { role: "assistant", content: [{ type: "text", text: "a1" }] },
+        }),
+        turnResult("t1", 3, "2026-01-01T00:00:02.000Z"),
+        JSON.stringify({
+          type: "accepted_input",
+          sessionId: "s",
+          turnId: "t2",
+          sequence: 1,
+          createdAt: "2026-01-01T01:00:00.000Z",
+          messages: [{ role: "user", content: [{ type: "text", text: "q2" }] }],
+        }),
+        JSON.stringify({
+          type: "assistant_message",
+          sessionId: "s",
+          turnId: "t2",
+          sequence: 2,
+          createdAt: "2026-01-01T01:00:01.000Z",
+          message: { role: "assistant", content: [{ type: "text", text: "a2" }] },
+        }),
+        turnResult("t2", 3, "2026-01-01T01:00:02.000Z"),
+      ].join("\n"),
+      "utf8",
+    );
+
+    const read = await readTranscript(transcriptPath);
+
+    assert.deepEqual(
+      read.entries.map((e) => e.turnId),
+      ["t1", "t2", "t1", "t2", "t1", "t2"],
+      "within each duplicate-sequence bucket, earlier createdAt comes first",
+    );
+    assert.deepEqual(read.entries.map((e) => e.sequence), [1, 1, 2, 2, 3, 3]);
+
+    for (let i = 0; i < read.entries.length - 1; i++) {
+      const a = read.entries[i];
+      const b = read.entries[i + 1];
+      if (a.sequence === b.sequence) {
+        assert.ok(
+          a.createdAt <= b.createdAt,
+          `within seq=${a.sequence}, createdAt should be non-decreasing`,
+        );
+      }
+    }
+
+    const replay = replayTranscriptEntries(read.entries);
+    const texts = replay.messages
+      .flatMap((m) => m.content)
+      .filter((b) => b.type === "text")
+      .map((b) => (b as { text: string }).text);
+    assert.deepEqual(texts, ["q1", "q2", "a1", "a2"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("readTranscript reports malformed lines and replay skips incomplete durable messages", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-agent-bad-jsonl-"));
   try {

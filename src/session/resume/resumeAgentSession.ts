@@ -52,6 +52,13 @@ export async function resumeAgentSession(options: ResumeAgentSessionOptions): Pr
     now: options.dependencies.now,
   });
   const readResult = await readTranscript(storage.transcriptPath);
+
+  if (readResult.entries.length > 0) {
+    const maxSeq = readResult.entries.reduce((m, e) => Math.max(m, e.sequence), 0);
+    const last = readResult.entries[readResult.entries.length - 1];
+    storage.transcript.restoreState(maxSeq, last.entryId ?? null);
+  }
+
   const replay = replayTranscriptEntries(readResult.entries);
 
   const extension = options.extendDependencies?.(storage) ?? {};
