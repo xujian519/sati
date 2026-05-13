@@ -190,11 +190,17 @@ function ensureSessionState(sessionKey, projectKey, channelKey) {
 
 function resolvePermissionMode(options) {
     const explicit = options?.permissionMode || options?.mode;
-    if (explicit) return explicit;
+    // A literal "default" from the chat composer is the implicit
+    // no-special-mode position of the per-turn picker, not a real
+    // per-turn override. Let the user-level skipPermissions toggle
+    // win over it. Genuine non-default picks (plan / acceptEdits /
+    // bypassPermissions / dontAsk) still take precedence — they're a
+    // deliberate per-turn decision.
+    if (explicit && explicit !== 'default') return explicit;
     if (options?.toolsSettings?.skipPermissions === true) {
         return 'bypassPermissions';
     }
-    return WEB_DEFAULT_PERMISSION_MODE;
+    return explicit || WEB_DEFAULT_PERMISSION_MODE;
 }
 
 /**
