@@ -9,6 +9,7 @@ import {
   maskSecrets,
   parseConfigYaml,
   preserveMaskedSecrets,
+  rawYamlToMaskedString,
   readPilotDeckConfigFile,
   validatePilotDeckConfig,
   writePilotDeckConfig,
@@ -21,10 +22,17 @@ const router = express.Router();
 function serializeConfigResponse(record, reloadResult = null) {
   const validation = validatePilotDeckConfig(record.config);
   const maskedConfig = maskSecrets(record.config);
+  // Prefer the disk's actual YAML for the "raw" view so non-ui-internal
+  // top-level segments (router/gateway/adapters/extension/cron/alwaysOn)
+  // survive the trip from disk → UI. Fall back to the lossy template
+  // only when there's no disk file yet (fresh install), so the editor
+  // still has something editable to render.
+  const hasDiskYaml = record.rawYaml && typeof record.rawYaml === 'object' && Object.keys(record.rawYaml).length > 0;
+  const raw = hasDiskYaml ? rawYamlToMaskedString(record.rawYaml) : configToYaml(maskedConfig);
   return {
     exists: record.exists,
     path: record.configPath,
-    raw: configToYaml(maskedConfig),
+    raw,
     config: maskedConfig,
     validation: {
       valid: validation.valid,
@@ -73,10 +81,11 @@ router.put('/', async (req, res) => {
     suppressNextWatchEvent();
     const saved = await writePilotDeckConfig(config);
     const reloadResult = await reloadPilotDeckConfig(saved.config);
-    const response = serializeConfigResponse(
-      { exists: true, configPath: saved.configPath, raw: saved.raw, config: saved.config },
-      reloadResult,
-    );
+    // Re-read disk so the response's `raw` field comes from the actual
+    // (lossless) file rather than the lossy round-trip output, and so
+    // `serializeConfigResponse` has a `rawYaml` to render the full view.
+    const freshRecord = readPilotDeckConfigFile();
+    const response = serializeConfigResponse(freshRecord, reloadResult);
     broadcastConfigEvent({ source: 'ui-save', ...response, timestamp: new Date().toISOString() });
     res.json(response);
   } catch (error) {

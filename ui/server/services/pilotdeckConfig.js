@@ -515,6 +515,26 @@ export function configToYaml(config) {
   return stringifyYaml(yamlShape, { lineWidth: 0 });
 }
 
+// Lossless masked serialization for the "Raw YAML" view.
+//
+// The internal-schema round-trip (configToYaml) silently drops every
+// top-level segment that ui-internal doesn't model — router, gateway,
+// adapters, extension, cron, alwaysOn, plus model.*.capabilities /
+// multimodal / displayName / aliases / retry, agent.fallbackModel /
+// params, etc. Gateway owns these segments and runs its own fs.watch
+// on the same file, so UI server's job is just to surface them
+// faithfully and not corrupt them on write.
+//
+// Pass the parsed disk YAML straight through maskSecrets so the Raw
+// YAML editor and watcher broadcasts see exactly what's on disk
+// (sans secrets). Callers fall back to `configToYaml` when there is
+// no disk file yet, so a fresh install still ships a sensible
+// editable template.
+export function rawYamlToMaskedString(rawYaml) {
+  const obj = isRecord(rawYaml) ? rawYaml : {};
+  return stringifyYaml(maskSecrets(obj), { lineWidth: 0 });
+}
+
 export function parseConfigYaml(raw) {
   return normalizePilotDeckConfig(parseYaml(raw) || {});
 }
