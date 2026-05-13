@@ -141,3 +141,9 @@ export {
   createEdgeClawMemoryProviderFromConfig,
   type CreateEdgeClawMemoryProviderOptions,
 } from "./memory/createEdgeClawMemoryProviderFromConfig.js";
+export {
+  InstructionDiscovery,
+  scopeDescription,
+  type InstructionLayer,
+  type InstructionScope,
+} from "./instructions/InstructionDiscovery.js";

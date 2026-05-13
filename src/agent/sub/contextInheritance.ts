@@ -47,6 +47,7 @@ export function applySystemPromptFilters(
     next = stripXmlBlock(next, "claude-md");
     next = stripXmlBlock(next, "claudeMd");
     next = stripXmlBlock(next, "agents-md");
+    next = stripXmlBlock(next, "project-instructions");
   }
   if (definition.omitGitStatus) {
     next = stripXmlBlock(next, "git-status");
