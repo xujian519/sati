@@ -478,6 +478,7 @@ export function createRouterRuntime(
         usageCache.observe(ctx.sessionId, finalUsage);
         stats.observe({
           sessionId: ctx.sessionId,
+          projectPath: ctx.projectPath,
           scenarioType: attemptDecision.scenarioType,
           resolvedFrom: attemptDecision.resolvedFrom,
           provider: attempt.provider,
@@ -511,6 +512,7 @@ export function createRouterRuntime(
       }
       stats.observe({
         sessionId: ctx.sessionId,
+        projectPath: ctx.projectPath,
         scenarioType: lastDecision.scenarioType,
         resolvedFrom: lastDecision.resolvedFrom,
         provider: lastAttempt.provider,

@@ -147,6 +147,7 @@ export class AgentLoop {
         for await (const event of this.dependencies.router.stream(request, {
           sessionId: input.sessionId,
           turnId: input.turnId,
+          projectPath: this.config.cwd,
           abortSignal: input.abortSignal,
           isMainAgent: !this.config.isSubagent,
         })) {
@@ -526,6 +527,7 @@ export class AgentLoop {
           this.dependencies.router.stream(request, {
             sessionId: input.sessionId,
             turnId: input.turnId,
+            projectPath: this.config.cwd,
             abortSignal: signal,
             isMainAgent: false,
           }),

@@ -66,5 +66,6 @@ export type RouterDecisionInput = {
 export type RouterExecuteContext = {
   sessionId: string;
   turnId: string;
+  projectPath?: string;
   abortSignal?: AbortSignal;
 };
