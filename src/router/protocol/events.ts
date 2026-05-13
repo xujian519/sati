@@ -56,13 +56,25 @@ export type RouterExecuteFailedEvent = {
   error: CanonicalModelError;
 };
 
+export type RouterTransientRetryEvent = {
+  type: "pilotdeck_router_transient_retry";
+  sessionId: string;
+  turnId?: string;
+  attempt: number;
+  delayMs: number;
+  provider: string;
+  model: string;
+  errorCode: string;
+};
+
 export type RouterEvent =
   | RouterDecisionEvent
   | RouterFallbackEvent
   | RouterZeroUsageRetryEvent
   | RouterTokenSaverFailedEvent
   | RouterCustomFailedEvent
-  | RouterExecuteFailedEvent;
+  | RouterExecuteFailedEvent
+  | RouterTransientRetryEvent;
 
 export type RouterEventBus = {
   emit(event: RouterEvent): void;

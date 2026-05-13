@@ -329,6 +329,10 @@ export function createRouterRuntime(
     ];
     const zeroUsageMax = Math.max(1, config.zeroUsageRetry?.maxAttempts ?? 5);
     const zeroUsageEnabled = config.zeroUsageRetry?.enabled ?? true;
+    const transientRetryEnabled = config.transientRetry?.enabled ?? true;
+    const transientRetryMax = Math.max(1, config.transientRetry?.maxAttempts ?? 5);
+    const transientBaseDelayMs = config.transientRetry?.baseDelayMs ?? 1000;
+    const transientMaxDelayMs = config.transientRetry?.maxDelayMs ?? 30000;
 
     let lastBuffered: CanonicalModelEvent[] = [];
     let lastError: import("../model/index.js").CanonicalModelError | undefined;
@@ -365,6 +369,7 @@ export function createRouterRuntime(
       }
 
       let zeroUsageAttempt = 0;
+      let transientRetryCount = 0;
       while (true) {
         zeroUsageAttempt += 1;
         // Live-stream events. We track whether we've already surfaced any
@@ -429,9 +434,36 @@ export function createRouterRuntime(
               continue outer;
             }
           }
+          if (
+            !hasYieldedContent &&
+            isFallbackEligible(outcome.error) &&
+            transientRetryEnabled &&
+            transientRetryCount < transientRetryMax
+          ) {
+            const delay = Math.min(
+              transientBaseDelayMs * Math.pow(2, transientRetryCount) + Math.random() * 500,
+              transientMaxDelayMs,
+            );
+            console.warn(
+              `[PilotDeck] transientRetry: ${outcome.error.code} (attempt ${transientRetryCount + 1}/${transientRetryMax}, delay=${Math.round(delay)}ms)`,
+            );
+            events.emit({
+              type: "pilotdeck_router_transient_retry",
+              sessionId: ctx.sessionId,
+              turnId: ctx.turnId,
+              attempt: transientRetryCount + 1,
+              delayMs: Math.round(delay),
+              provider: attempt.provider,
+              model: attempt.model,
+              errorCode: outcome.error.code,
+            });
+            await new Promise((r) => setTimeout(r, delay));
+            transientRetryCount++;
+            continue;
+          }
           // Either we've already surfaced content, the error isn't eligible
-          // for fallback, or we've exhausted the attempt list. Replay any
-          // queued framing events then surface the error.
+          // for fallback/retry, or we've exhausted all retry attempts. Replay
+          // any queued framing events then surface the error.
           for (const queued of pending) {
             yield queued;
           }
@@ -622,9 +654,9 @@ async function* streamAttempt(
     providerError = fromError ?? {
       provider: request.provider,
       protocol: "anthropic",
-      code: "unknown",
+      code: classifyNetworkErrorCode(error),
       message: error instanceof Error ? error.message : String(error),
-      retryable: false,
+      retryable: isNetworkTransient(error),
     };
   }
 
@@ -637,5 +669,31 @@ async function* streamAttempt(
       shouldRetryZeroUsage: shouldRetryZeroUsage(state),
     },
   };
+}
+
+function isNetworkTransient(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const msg = error.message.toLowerCase();
+  return (
+    msg.includes("econnreset") ||
+    msg.includes("econnrefused") ||
+    msg.includes("etimedout") ||
+    msg.includes("epipe") ||
+    msg.includes("socket hang up") ||
+    msg.includes("network") ||
+    msg.includes("dns") ||
+    msg.includes("fetch failed") ||
+    msg.includes("abort") ||
+    error.name === "TimeoutError" ||
+    error.name === "AbortError"
+  );
+}
+
+function classifyNetworkErrorCode(error: unknown): string {
+  if (!(error instanceof Error)) return "unknown";
+  const msg = error.message.toLowerCase();
+  if (msg.includes("timeout") || error.name === "TimeoutError") return "timeout";
+  if (msg.includes("abort") || error.name === "AbortError") return "aborted";
+  return "network_error";
 }
 

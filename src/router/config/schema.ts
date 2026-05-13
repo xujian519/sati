@@ -65,6 +65,7 @@ export type RouterConfig = {
   scenarios: RouterScenariosConfig;
   fallback?: RouterFallbackConfig;
   zeroUsageRetry?: { enabled: boolean; maxAttempts: number };
+  transientRetry?: { enabled: boolean; maxAttempts: number; baseDelayMs: number; maxDelayMs: number };
   tokenSaver?: RouterTokenSaverConfig;
   autoOrchestrate?: RouterAutoOrchestrateConfig;
   stats?: RouterStatsConfig;
