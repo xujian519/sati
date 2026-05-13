@@ -1,74 +1,118 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Check, ChevronDown, Loader2 } from 'lucide-react';
 import { authenticatedFetch } from '../../../../utils/api';
 
 type LlmConfigurationStepProps = {
   onSaved: () => void | Promise<void>;
 };
 
-type PresetKey = 'anthropic' | 'openrouter' | 'minimax' | 'openai';
-
-const PRESETS: Record<PresetKey, { type: string; baseUrl: string; model: string }> = {
-  anthropic: { type: 'anthropic', baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-4-5-20250929' },
-  openrouter: { type: 'openai-chat', baseUrl: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-sonnet-4.5' },
-  minimax: { type: 'openai-chat', baseUrl: 'https://api.minimaxi.com/v1', model: 'MiniMax-M2.7-highspeed' },
-  openai: { type: 'openai-chat', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o' },
+type CatalogProvider = {
+  id: string;
+  displayName: string;
+  protocol: 'anthropic' | 'openai';
+  defaultUrl: string;
+  models: { id: string; displayName: string }[];
 };
 
-const PRESET_LABELS: Record<PresetKey, string> = {
-  anthropic: 'Anthropic',
-  openrouter: 'OpenRouter',
-  minimax: 'MiniMax',
-  openai: 'OpenAI',
-};
-
-const URL_TYPE_MAP: Array<{ re: RegExp; type: string }> = [
-  { re: /anthropic\.com/i, type: 'anthropic' },
-  { re: /openrouter\.ai/i, type: 'openai-chat' },
-  { re: /openai\.com/i, type: 'openai-chat' },
-  { re: /minimaxi?\.com/i, type: 'openai-chat' },
-  { re: /deepseek/i, type: 'openai-chat' },
-  { re: /together/i, type: 'openai-chat' },
+const CATALOG_PROVIDERS: CatalogProvider[] = [
+  {
+    id: 'anthropic',
+    displayName: 'Anthropic',
+    protocol: 'anthropic',
+    defaultUrl: 'https://api.anthropic.com',
+    models: [
+      { id: 'claude-sonnet-4.6', displayName: 'Claude Sonnet 4.6' },
+      { id: 'claude-opus-4-20250514', displayName: 'Claude Opus 4' },
+      { id: 'claude-sonnet-4-20250514', displayName: 'Claude Sonnet 4' },
+      { id: 'claude-sonnet-4-5-20250929', displayName: 'Claude Sonnet 4.5' },
+      { id: 'claude-haiku-3-5-20241022', displayName: 'Claude 3.5 Haiku' },
+    ],
+  },
+  {
+    id: 'openai',
+    displayName: 'OpenAI',
+    protocol: 'openai',
+    defaultUrl: 'https://api.openai.com/v1',
+    models: [
+      { id: 'gpt-4.1', displayName: 'GPT-4.1' },
+      { id: 'gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
+      { id: 'gpt-4o', displayName: 'GPT-4o' },
+      { id: 'gpt-4o-mini', displayName: 'GPT-4o Mini' },
+      { id: 'o3', displayName: 'o3' },
+      { id: 'o3-mini', displayName: 'o3 Mini' },
+    ],
+  },
+  {
+    id: 'deepseek',
+    displayName: 'DeepSeek',
+    protocol: 'openai',
+    defaultUrl: 'https://api.deepseek.com/v1',
+    models: [
+      { id: 'deepseek-v4-pro', displayName: 'DeepSeek V4 Pro' },
+      { id: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash' },
+      { id: 'deepseek-chat', displayName: 'DeepSeek Chat (V3)' },
+      { id: 'deepseek-reasoner', displayName: 'DeepSeek Reasoner' },
+    ],
+  },
+  {
+    id: 'google',
+    displayName: 'Google AI',
+    protocol: 'openai',
+    defaultUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    models: [
+      { id: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro' },
+      { id: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
+      { id: 'gemini-2.0-flash', displayName: 'Gemini 2.0 Flash' },
+    ],
+  },
+  {
+    id: 'openrouter',
+    displayName: 'OpenRouter',
+    protocol: 'openai',
+    defaultUrl: 'https://openrouter.ai/api/v1',
+    models: [
+      { id: 'anthropic/claude-sonnet-4.6', displayName: 'Claude Sonnet 4.6' },
+      { id: 'google/gemini-2.5-pro', displayName: 'Gemini 2.5 Pro' },
+      { id: 'deepseek/deepseek-v4-flash', displayName: 'DeepSeek V4 Flash' },
+      { id: 'moonshotai/kimi-k2.6', displayName: 'Kimi K2.6' },
+    ],
+  },
+  {
+    id: 'minimax',
+    displayName: 'MiniMax',
+    protocol: 'openai',
+    defaultUrl: 'https://api.minimaxi.com/v1',
+    models: [
+      { id: 'MiniMax-M2.5', displayName: 'MiniMax M2.5' },
+      { id: 'MiniMax-M2.7-highspeed', displayName: 'MiniMax M2.7 Highspeed' },
+    ],
+  },
+  {
+    id: 'yeysai',
+    displayName: 'Yeysai',
+    protocol: 'openai',
+    defaultUrl: 'https://yeysai.com/v1',
+    models: [
+      { id: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro Preview' },
+      { id: 'kimi-k2.6', displayName: 'Kimi K2.6' },
+    ],
+  },
 ];
-
-const URL_PROVIDER_MAP: Array<{ re: RegExp; id: string }> = [
-  { re: /anthropic\.com/i, id: 'anthropic' },
-  { re: /openrouter\.ai/i, id: 'openrouter' },
-  { re: /openai\.com/i, id: 'openai' },
-  { re: /minimaxi?\.com/i, id: 'minimax' },
-  { re: /deepseek/i, id: 'deepseek' },
-  { re: /together/i, id: 'together' },
-];
-
-function detectProviderType(url: string): string | null {
-  for (const { re, type } of URL_TYPE_MAP) {
-    if (re.test(url)) return type;
-  }
-  return null;
-}
-
-function detectProviderId(url: string): string {
-  for (const { re, id } of URL_PROVIDER_MAP) {
-    if (re.test(url)) return id;
-  }
-  return 'custom';
-}
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 
 export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepProps) {
-  const [baseUrl, setBaseUrl] = useState('');
+  const [selectedProvider, setSelectedProvider] = useState<CatalogProvider | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState('');
+  const [customModelId, setCustomModelId] = useState('');
   const [apiKey, setApiKey] = useState('');
-  const [model, setModel] = useState('');
-  const [providerType, setProviderType] = useState('anthropic');
-  const [autoDetected, setAutoDetected] = useState(false);
-  const [selectedPreset, setSelectedPreset] = useState<PresetKey | null>(null);
+  const [customUrl, setCustomUrl] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
   const [testMessage, setTestMessage] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Load existing config for prefill (unmasked)
   useEffect(() => {
     (async () => {
       try {
@@ -78,54 +122,46 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
         if (!data.exists || !data.provider) return;
 
         const p = data.provider;
-        if (p.baseUrl) setBaseUrl(p.baseUrl);
         if (p.apiKey) setApiKey(p.apiKey);
-        if (p.type) setProviderType(p.type);
-        if (p.model) setModel(p.model);
-      } catch { /* no existing config, fields stay empty */ }
+        if (p.baseUrl) {
+          const match = CATALOG_PROVIDERS.find(
+            (cp) => cp.defaultUrl === p.baseUrl,
+          );
+          if (match) {
+            setSelectedProvider(match);
+            if (p.model) setSelectedModelId(p.model);
+          }
+        }
+      } catch { /* no existing config */ }
     })();
   }, []);
 
-  const handleBaseUrlChange = useCallback((value: string) => {
-    setBaseUrl(value);
-    setTestStatus('idle');
-    setTestMessage('');
-    const detected = detectProviderType(value);
-    if (detected) {
-      setProviderType(detected);
-      setAutoDetected(true);
-    } else {
-      setAutoDetected(false);
-    }
-  }, []);
+  const effectiveUrl = customUrl.trim() || selectedProvider?.defaultUrl || '';
+  const effectiveModelId = customModelId.trim() || selectedModelId;
+  const canTest = selectedProvider && apiKey.trim() && effectiveModelId;
 
-  const handlePresetClick = useCallback((key: PresetKey) => {
-    const p = PRESETS[key];
-    setSelectedPreset(key);
-    setBaseUrl(p.baseUrl);
-    setApiKey('');
-    setModel(p.model);
-    setProviderType(p.type);
-    setAutoDetected(false);
+  const handleProviderSelect = useCallback((provider: CatalogProvider) => {
+    setSelectedProvider(provider);
+    setSelectedModelId(provider.models[0]?.id ?? '');
+    setCustomModelId('');
+    setCustomUrl('');
     setTestStatus('idle');
     setTestMessage('');
   }, []);
-
-  const handleFieldChange = useCallback(() => {
-    setTestStatus('idle');
-    setTestMessage('');
-  }, []);
-
-  const canTest = baseUrl.trim() && apiKey.trim() && model.trim();
 
   const handleTest = useCallback(async () => {
-    if (!canTest) return;
+    if (!canTest || !selectedProvider) return;
     setTestStatus('testing');
     setTestMessage('');
     try {
       const res = await authenticatedFetch('/api/config/test-connection', {
         method: 'POST',
-        body: JSON.stringify({ providerType, baseUrl: baseUrl.trim(), apiKey: apiKey.trim(), model: model.trim() }),
+        body: JSON.stringify({
+          providerType: selectedProvider.protocol === 'anthropic' ? 'anthropic' : 'openai-chat',
+          baseUrl: effectiveUrl,
+          apiKey: apiKey.trim(),
+          model: effectiveModelId,
+        }),
       });
       const data = await res.json();
       if (data.ok) {
@@ -139,40 +175,25 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
       setTestStatus('error');
       setTestMessage(err instanceof Error ? err.message : 'Connection failed.');
     }
-  }, [canTest, providerType, baseUrl, apiKey, model]);
+  }, [canTest, selectedProvider, effectiveUrl, apiKey, effectiveModelId]);
 
   const handleSave = useCallback(async () => {
+    if (!selectedProvider) return;
     setSaving(true);
     try {
       const { stringify: stringifyYaml, parse: parseYaml } = await import('yaml');
 
-      // Read existing config to merge
       let existingConfig: Record<string, unknown> = {};
       try {
         const res = await authenticatedFetch('/api/config');
         if (res.ok) {
           const data = await res.json();
-          if (data.raw) {
-            existingConfig = parseYaml(data.raw) || {};
-          }
+          if (data.raw) existingConfig = parseYaml(data.raw) || {};
         }
       } catch { /* start fresh */ }
 
-      // Write the gateway-native pilotdeck.yaml shape directly:
-      //   model.providers.<id>.{protocol, url, apiKey, models.<modelId>}
-      //   agent.model = "<id>/<modelId>"
-      // Mixing this with the legacy ui-internal `models` / `agents` keys
-      // would create a hybrid object that the server-side
-      // normalizePilotDeckConfig() sees as yaml-shape (because `model`
-      // exists) and silently drops the ui-internal keys, throwing away
-      // the user's onboarding input.
-      const providerId = selectedPreset || detectProviderId(baseUrl);
-      const modelId = model.trim();
-      const protocol = providerType === 'anthropic'
-        ? 'anthropic'
-        : providerType === 'openai-responses'
-          ? 'openai-responses'
-          : 'openai';
+      const providerId = selectedProvider.id;
+      const modelId = effectiveModelId;
 
       if (!existingConfig.schemaVersion) {
         (existingConfig as Record<string, unknown>).schemaVersion = 1;
@@ -184,34 +205,32 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
       if (!modelSection.providers || typeof modelSection.providers !== 'object') {
         modelSection.providers = {};
       }
+
       const yamlProviders = modelSection.providers as Record<string, Record<string, unknown>>;
       const existingProvider = (yamlProviders[providerId] || {}) as Record<string, unknown>;
-      const existingProviderModels = (existingProvider.models && typeof existingProvider.models === 'object'
-        ? existingProvider.models
-        : {}) as Record<string, unknown>;
+      const existingModels = (
+        existingProvider.models && typeof existingProvider.models === 'object'
+          ? existingProvider.models
+          : {}
+      ) as Record<string, unknown>;
+
       yamlProviders[providerId] = {
         ...existingProvider,
-        protocol,
-        url: baseUrl.trim(),
+        protocol: selectedProvider.protocol,
+        url: effectiveUrl,
         apiKey: apiKey.trim(),
         timeoutMs: typeof existingProvider.timeoutMs === 'number' ? existingProvider.timeoutMs : 120000,
-        headers: existingProvider.headers && typeof existingProvider.headers === 'object'
-          ? existingProvider.headers
-          : {},
         models: {
-          ...existingProviderModels,
-          [modelId]: existingProviderModels[modelId] || {},
+          ...existingModels,
+          [modelId]: existingModels[modelId] || {},
         },
       };
 
       if (!existingConfig.agent || typeof existingConfig.agent !== 'object') {
         (existingConfig as Record<string, unknown>).agent = {};
       }
-      const agentSection = existingConfig.agent as Record<string, unknown>;
-      agentSection.model = `${providerId}/${modelId}`;
+      (existingConfig.agent as Record<string, unknown>).model = `${providerId}/${modelId}`;
 
-      // Strip any leftover ui-internal-shape keys from older onboarding
-      // runs so the server-side parser doesn't see a hybrid object.
       delete (existingConfig as Record<string, unknown>).models;
       delete (existingConfig as Record<string, unknown>).agents;
       delete (existingConfig as Record<string, unknown>).version;
@@ -233,67 +252,50 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
     } finally {
       setSaving(false);
     }
-  }, [providerType, baseUrl, apiKey, model, selectedPreset, onSaved]);
+  }, [selectedProvider, effectiveUrl, effectiveModelId, apiKey, onSaved]);
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-8">
       <div>
         <h2 className="text-lg font-semibold text-foreground">LLM Provider Setup</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Configure your AI model provider to get started.
+          Select your provider and enter your API key. Model capabilities are auto-configured.
         </p>
       </div>
 
       <div className="border-t border-border" />
 
-      {/* QUICK PRESETS */}
+      {/* Provider grid */}
       <div>
         <div className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Quick Presets
+          Provider
         </div>
-        <div className="flex flex-wrap gap-2">
-          {(Object.keys(PRESETS) as PresetKey[]).map((key) => (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {CATALOG_PROVIDERS.map((provider) => (
             <button
-              key={key}
+              key={provider.id}
               type="button"
-              onClick={() => handlePresetClick(key)}
-              className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
-                selectedPreset === key
+              onClick={() => handleProviderSelect(provider)}
+              className={`relative rounded-lg border px-4 py-3 text-left text-sm transition-colors ${
+                selectedProvider?.id === provider.id
                   ? 'border-foreground bg-muted text-foreground'
                   : 'border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground'
               }`}
             >
-              {PRESET_LABELS[key]}
+              <div className="font-medium">{provider.displayName}</div>
+              <div className="mt-0.5 text-[11px] opacity-60">
+                {provider.models.length} model{provider.models.length === 1 ? '' : 's'}
+              </div>
+              {selectedProvider?.id === provider.id && (
+                <Check className="absolute right-2 top-2 h-4 w-4 text-foreground" strokeWidth={2.5} />
+              )}
             </button>
           ))}
         </div>
       </div>
 
-      {/* CONNECTION DETAILS */}
-      <div>
-        <div className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Connection Details
-        </div>
-
-        <div className="space-y-5">
-          {/* API Base URL */}
-          <div>
-            <label htmlFor="llm-base-url" className="mb-1 block text-sm font-medium text-foreground">
-              API Base URL
-            </label>
-            <p className="mb-2 text-xs text-muted-foreground">Your provider's API endpoint</p>
-            <input
-              id="llm-base-url"
-              type="text"
-              value={baseUrl}
-              onChange={(e) => { handleBaseUrlChange(e.target.value); handleFieldChange(); }}
-              placeholder="https://api.anthropic.com"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-none"
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </div>
-
+      {selectedProvider && (
+        <>
           {/* API Key */}
           <div>
             <label htmlFor="llm-api-key" className="mb-1 block text-sm font-medium text-foreground">
@@ -303,7 +305,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
               id="llm-api-key"
               type="password"
               value={apiKey}
-              onChange={(e) => { setApiKey(e.target.value); handleFieldChange(); }}
+              onChange={(e) => { setApiKey(e.target.value); setTestStatus('idle'); setTestMessage(''); }}
               placeholder="sk-..."
               className="w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-none"
               autoComplete="off"
@@ -311,94 +313,132 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
             />
           </div>
 
-          {/* Model ID */}
+          {/* Model picker */}
           <div>
             <label htmlFor="llm-model" className="mb-1 block text-sm font-medium text-foreground">
-              Model ID
+              Model
             </label>
-            <p className="mb-2 text-xs text-muted-foreground">The exact model identifier from your provider</p>
-            <input
-              id="llm-model"
-              type="text"
-              value={model}
-              onChange={(e) => { setModel(e.target.value); handleFieldChange(); }}
-              placeholder="claude-sonnet-4-5-20250929"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-none"
-              autoComplete="off"
-              spellCheck={false}
-            />
+            {selectedProvider.models.length > 0 ? (
+              <div className="relative">
+                <select
+                  id="llm-model"
+                  value={selectedModelId}
+                  onChange={(e) => { setSelectedModelId(e.target.value); setCustomModelId(''); setTestStatus('idle'); setTestMessage(''); }}
+                  className="w-full appearance-none rounded-lg border border-border bg-background px-3 py-2.5 pr-8 text-sm text-foreground focus:border-foreground/40 focus:outline-none"
+                >
+                  {selectedProvider.models.map((m) => (
+                    <option key={m.id} value={m.id}>{m.displayName} ({m.id})</option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              </div>
+            ) : (
+              <input
+                id="llm-model"
+                type="text"
+                value={customModelId}
+                onChange={(e) => { setCustomModelId(e.target.value); setTestStatus('idle'); setTestMessage(''); }}
+                placeholder="Enter model ID..."
+                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-none"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            )}
+            {selectedProvider.models.length > 0 && (
+              <div className="mt-2">
+                <input
+                  type="text"
+                  value={customModelId}
+                  onChange={(e) => { setCustomModelId(e.target.value); setTestStatus('idle'); setTestMessage(''); }}
+                  placeholder="Or type a custom model ID..."
+                  className="w-full rounded-lg border border-border/60 bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-foreground/40 focus:outline-none"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </div>
+            )}
           </div>
 
-          {/* Protocol Type */}
+          {/* Advanced */}
           <div>
-            <div className="mb-1 flex items-center gap-2">
-              <label htmlFor="llm-protocol" className="text-sm font-medium text-foreground">
-                Protocol Type
-              </label>
-              {autoDetected && (
-                <span className="text-xs text-muted-foreground">Auto-detected from URL</span>
-              )}
-            </div>
-            <select
-              id="llm-protocol"
-              value={providerType}
-              onChange={(e) => { setProviderType(e.target.value); setAutoDetected(false); handleFieldChange(); }}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground focus:border-foreground/40 focus:outline-none"
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="text-xs text-muted-foreground hover:text-foreground"
             >
-              <option value="anthropic">anthropic (/v1/messages)</option>
-              <option value="openai-chat">openai-chat (/chat/completions)</option>
-              <option value="openai-responses">openai-responses (/responses)</option>
-            </select>
+              {showAdvanced ? 'Hide' : 'Show'} advanced settings
+            </button>
+            {showAdvanced && (
+              <div className="mt-3 space-y-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+                <div>
+                  <label htmlFor="llm-url" className="mb-1 block text-xs font-medium text-muted-foreground">
+                    API Base URL
+                  </label>
+                  <input
+                    id="llm-url"
+                    type="text"
+                    value={customUrl}
+                    onChange={(e) => { setCustomUrl(e.target.value); setTestStatus('idle'); setTestMessage(''); }}
+                    placeholder={selectedProvider.defaultUrl}
+                    className="w-full rounded-lg border border-border/60 bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-foreground/40 focus:outline-none"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  Protocol: <span className="font-mono">{selectedProvider.protocol}</span> &middot; Default URL: <span className="font-mono">{selectedProvider.defaultUrl}</span>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      </div>
 
-      {/* Actions */}
-      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border pt-6">
-        {testStatus !== 'success' && (
-          <span className="mr-auto text-xs text-muted-foreground">Please test connection first.</span>
-        )}
-        <button
-          type="button"
-          onClick={handleTest}
-          disabled={!canTest || testStatus === 'testing'}
-          className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {testStatus === 'testing' ? (
-            <span className="flex items-center gap-2">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Testing...
-            </span>
-          ) : (
-            'Test Connection'
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={testStatus !== 'success' || saving}
-          className="rounded-lg bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
-        >
-          {saving ? (
-            <span className="flex items-center gap-2">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Saving...
-            </span>
-          ) : (
-            'Save'
-          )}
-        </button>
-      </div>
+          {/* Actions */}
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border pt-6">
+            {testStatus !== 'success' && (
+              <span className="mr-auto text-xs text-muted-foreground">Test connection first.</span>
+            )}
+            <button
+              type="button"
+              onClick={handleTest}
+              disabled={!canTest || testStatus === 'testing'}
+              className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {testStatus === 'testing' ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Testing...
+                </span>
+              ) : (
+                'Test Connection'
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={testStatus !== 'success' || saving}
+              className="rounded-lg bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              {saving ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Saving...
+                </span>
+              ) : (
+                'Save'
+              )}
+            </button>
+          </div>
 
-      {/* Test result */}
-      {testMessage && (
-        <div className={`rounded-lg border px-4 py-3 text-sm ${
-          testStatus === 'success'
-            ? 'border-green-200 bg-green-50 text-green-800 dark:border-green-800/40 dark:bg-green-900/10 dark:text-green-300'
-            : 'border-red-200 bg-red-50 text-red-800 dark:border-red-800/40 dark:bg-red-900/10 dark:text-red-300'
-        }`}>
-          {testStatus === 'success' ? '✓ ' : '✗ '}{testMessage}
-        </div>
+          {testMessage && (
+            <div className={`rounded-lg border px-4 py-3 text-sm ${
+              testStatus === 'success'
+                ? 'border-green-200 bg-green-50 text-green-800 dark:border-green-800/40 dark:bg-green-900/10 dark:text-green-300'
+                : 'border-red-200 bg-red-50 text-red-800 dark:border-red-800/40 dark:bg-red-900/10 dark:text-red-300'
+            }`}>
+              {testStatus === 'success' ? '✓ ' : '✗ '}{testMessage}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

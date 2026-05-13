@@ -350,6 +350,7 @@ class ProjectRuntimeRegistry {
 
     const memory = createEdgeClawMemoryProviderFromConfig({
       config: snapshot.config.memory,
+      modelConfig: snapshot.config.model,
       projectRoot,
       now: this.options.now,
     });

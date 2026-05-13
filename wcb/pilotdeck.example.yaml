@@ -1,44 +1,16 @@
-# WCB-CC 测试用 PilotDeck 配置示例
-# 复制到 ~/.pilotdeck/pilotdeck.yaml 并填入真实 API key
+# PilotDeck configuration — minimal format
+# Capabilities, multimodal settings, protocol, and URL are auto-filled
+# from the built-in provider catalog. Only specify what's different.
+
+schemaVersion: 1
 
 agent:
-  model:
-    provider: openai
-    model: minimax-m2.5
+  model: deepseek/deepseek-v4-pro
 
 model:
   providers:
-    openai:
-      protocol: openai
-      url: https://yeysai.com/v1
-      apiKey: ${EDGECLAW_API_KEY}
+    deepseek:
+      apiKey: ${DEEPSEEK_API_KEY}
       models:
-        minimax-m2.5:
-          id: minimax-m2.5
-          displayName: MiniMax M2.5
-          capabilities:
-            contextWindow: 1000000
-            maxOutputTokens: 16384
-            streaming: true
-            tools: true
-            vision: true
-          multimodal:
-            maxImages: 20
-            supportedMimeTypes: ["image/png", "image/jpeg", "image/webp"]
-
-    # 用于评分的 judge 模型（可选）
-    judge:
-      protocol: openai
-      url: https://yeysai.com/v1
-      apiKey: ${EDGECLAW_API_KEY}
-      models:
-        gpt-4.1-mini:
-          id: gpt-4.1-mini
-          displayName: GPT 4.1 Mini
-          capabilities:
-            contextWindow: 128000
-            maxOutputTokens: 16384
-            streaming: true
-            tools: true
-            vision: false
-          multimodal: {}
+        deepseek-v4-pro: {}
+        deepseek-v4-flash: {}

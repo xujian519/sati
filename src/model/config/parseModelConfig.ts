@@ -19,6 +19,7 @@ import {
   isInputModality,
   type MultimodalConstraints,
 } from "../protocol/multimodal.js";
+import { lookupCatalogModel, lookupCatalogProvider } from "../catalog/index.js";
 import { resolveApiKey, type CredentialEnv } from "./resolveCredentials.js";
 import {
   isModelProtocol,
@@ -62,15 +63,25 @@ function parseProvider(providerId: string, rawProvider: unknown, env?: Credentia
   }
 
   const provider = rawProvider as RawProviderConfig;
-  if (!isModelProtocol(provider.protocol)) {
+  const catalogProvider = lookupCatalogProvider(providerId);
+
+  const protocol = isModelProtocol(provider.protocol)
+    ? provider.protocol
+    : catalogProvider?.protocol;
+  if (!protocol) {
     throw new ModelConfigError("unsupported_protocol", `Provider ${providerId} has unsupported protocol.`, {
       providerId,
       protocol: provider.protocol,
     });
   }
 
-  const url = readRequiredString(provider.url, "url");
-  assertValidUrl(url, providerId);
+  const rawUrl = typeof provider.url === "string" && provider.url.length > 0
+    ? provider.url
+    : catalogProvider?.defaultUrl;
+  if (!rawUrl) {
+    throw new ModelConfigError("invalid_config_value", `Provider ${providerId} requires a url.`, { providerId });
+  }
+  assertValidUrl(rawUrl, providerId);
 
   if (!isRecord(provider.models) || Object.keys(provider.models).length === 0) {
     throw new ModelConfigError("empty_models", `Provider ${providerId} must contain at least one model.`, {
@@ -78,16 +89,15 @@ function parseProvider(providerId: string, rawProvider: unknown, env?: Credentia
     });
   }
 
-  const protocol = provider.protocol;
   const models: Record<string, ModelDefinition> = {};
   for (const [modelId, rawModel] of Object.entries(provider.models)) {
-    models[modelId] = parseModelDefinition(modelId, protocol, rawModel);
+    models[modelId] = parseModelDefinition(modelId, protocol, rawModel, providerId);
   }
 
   return {
     id: providerId,
     protocol,
-    url,
+    url: rawUrl,
     apiKey: resolveApiKey(provider.apiKey, env),
     timeoutMs: readOptionalPositiveNumber(provider.timeoutMs, "timeoutMs"),
     headers: readStringRecord(provider.headers, "headers"),
@@ -100,27 +110,39 @@ function parseModelDefinition(
   modelId: string,
   protocol: ModelProtocol,
   rawModel: unknown,
+  providerId: string,
 ): ModelDefinition {
-  if (!isRecord(rawModel)) {
+  const effectiveRaw = rawModel ?? {};
+  if (!isRecord(effectiveRaw)) {
     throw new ModelConfigError("invalid_model", `Model ${modelId} must be an object.`);
   }
 
-  const model = rawModel as RawModelDefinition;
-  const capabilities = parseCapabilities(protocol, model.capabilities);
-  const multimodal = parseMultimodal(protocol, model.multimodal);
+  const model = effectiveRaw as RawModelDefinition;
+  const catalogHit = lookupCatalogModel(providerId, modelId);
+  const catalogModel = catalogHit.model;
+
+  const capabilities = parseCapabilities(protocol, model.capabilities, catalogModel?.capabilities);
+  const multimodal = parseMultimodal(protocol, model.multimodal, catalogModel?.multimodal);
 
   return {
     id: modelId,
-    displayName: typeof model.displayName === "string" ? model.displayName : undefined,
+    displayName: typeof model.displayName === "string"
+      ? model.displayName
+      : catalogModel?.displayName,
     capabilities,
     multimodal,
     aliases: readStringArray(model.aliases, "aliases"),
   };
 }
 
-function parseCapabilities(protocol: ModelProtocol, rawCapabilities: unknown): ModelCapabilities {
-  const defaults =
+function parseCapabilities(
+  protocol: ModelProtocol,
+  rawCapabilities: unknown,
+  catalogCapabilities?: ModelCapabilities,
+): ModelCapabilities {
+  const protocolDefaults =
     protocol === "anthropic" ? ANTHROPIC_DEFAULT_CAPABILITIES : OPENAI_DEFAULT_CAPABILITIES;
+  const defaults = catalogCapabilities ?? protocolDefaults;
 
   if (rawCapabilities === undefined) {
     return defaults;
@@ -166,12 +188,17 @@ function parseCapabilities(protocol: ModelProtocol, rawCapabilities: unknown): M
   return mergeCapabilities(defaults, overrides);
 }
 
-function parseMultimodal(protocol: ModelProtocol, rawMultimodal: unknown): MultimodalConstraints {
-  const defaults =
+function parseMultimodal(
+  protocol: ModelProtocol,
+  rawMultimodal: unknown,
+  catalogMultimodal?: MultimodalConstraints,
+): MultimodalConstraints {
+  const protocolDefaults =
     protocol === "anthropic" ? ANTHROPIC_DEFAULT_MULTIMODAL : OPENAI_DEFAULT_MULTIMODAL;
+  const defaults = catalogMultimodal ?? { ...DEFAULT_MULTIMODAL_CONSTRAINTS, ...protocolDefaults };
 
   if (rawMultimodal === undefined) {
-    return { ...DEFAULT_MULTIMODAL_CONSTRAINTS, ...defaults };
+    return defaults;
   }
 
   if (!isRecord(rawMultimodal)) {

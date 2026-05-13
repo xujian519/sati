@@ -1,34 +1,17 @@
-# PilotDeck config template for DeepSeek V4 Flash via OpenRouter
-# Model ID: deepseek/deepseek-v4-flash
-# Context: 1M tokens, Max output: 384K tokens
+# PilotDeck config — DeepSeek V4 Flash via OpenRouter
 # Pricing: $0.14/M input, $0.28/M output
-#
-# This file is a reference template. The runner (run_pilotdeck.mjs) auto-generates
-# pilotdeck.yaml in PILOT_HOME from environment variables. Copy/adapt this if you
-# need to manually configure PilotDeck.
+
+schemaVersion: 1
 
 agent:
-  model: "openai/deepseek/deepseek-v4-flash"
+  model: openrouter/deepseek/deepseek-v4-flash
 
 model:
   providers:
-    openai:
-      protocol: openai
-      url: "https://openrouter.ai/api/v1"
-      apiKey: "${EDGECLAW_API_KEY}"
+    openrouter:
+      apiKey: ${OPENROUTER_API_KEY}
       models:
-        "deepseek/deepseek-v4-flash":
-          id: "deepseek/deepseek-v4-flash"
-          displayName: "DeepSeek V4 Flash"
-          capabilities:
-            contextWindow: 1048576
-            maxOutputTokens: 16384
-            streaming: true
-            tools: true
-            vision: false
-          multimodal:
-            input:
-              - text
+        deepseek/deepseek-v4-flash: {}
 
 router:
   stats:
