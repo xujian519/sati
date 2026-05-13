@@ -579,6 +579,42 @@ export function getActiveSessionIdsViaGateway() {
  *
  * @returns {Map<string, {aggregate: object, records: object[]}>}
  */
+/**
+ * Build a sessionId→projectPath lookup from the filesystem.
+ * Scans `~/.pilotdeck/projects/*/chats/` for .jsonl files and maps
+ * each session filename back to the actual project path (resolved via
+ * the `.cwd` marker or well-known directory names).
+ *
+ * @returns {{ sessionIndex: Map<string,string>, dirToPath: Map<string,string> }}
+ */
+function _buildSessionProjectIndex() {
+    const sessionIndex = new Map();
+    const dirToPath = new Map();
+    try {
+        const projectsDir = path.join(GENERAL_HOME, 'projects');
+        const dirs = fs.readdirSync(projectsDir, { withFileTypes: true });
+        for (const d of dirs) {
+            if (!d.isDirectory()) continue;
+            // Resolve actual project path from .cwd marker (handles lossy encoding)
+            const cwdFile = path.join(projectsDir, d.name, '.cwd');
+            try {
+                const realPath = fs.readFileSync(cwdFile, 'utf-8').trim();
+                if (realPath) dirToPath.set(d.name, realPath);
+            } catch { /* no .cwd — will use fallback below */ }
+
+            const chatsDir = path.join(projectsDir, d.name, 'chats');
+            let files;
+            try { files = fs.readdirSync(chatsDir); } catch { continue; }
+            for (const f of files) {
+                if (!f.endsWith('.jsonl')) continue;
+                const sessionId = f.slice(0, -6);
+                sessionIndex.set(sessionId, d.name);
+            }
+        }
+    } catch { /* projects dir may not exist yet */ }
+    return { sessionIndex, dirToPath };
+}
+
 function loadPersistedStatsFromDisk() {
     const result = new Map();
     try {
@@ -588,27 +624,69 @@ function loadPersistedStatsFromDisk() {
         if (!parsed || !parsed.sessions || typeof parsed.sessions !== 'object') {
             return result;
         }
-        const allRecords = [];
+
+        // Build a filesystem-based sessionId→projectDirName index for
+        // backward compatibility (records written before projectPath existed).
+        const { sessionIndex: fsIndex, dirToPath } = _buildSessionProjectIndex();
+        const generalProjectDirName = createProjectId(GENERAL_HOME);
+
+        // Helper: resolve a project dir name back to its real path.
+        const resolveProjectPath = (dirName) => {
+            if (dirName === generalProjectDirName) return GENERAL_HOME;
+            // Use .cwd marker if available (handles lossy encoding correctly)
+            const fromCwd = dirToPath.get(dirName);
+            if (fromCwd) return fromCwd;
+            // Fallback for well-known dirs without .cwd
+            const repoProjectDirName = createProjectId(REPO_ROOT);
+            if (dirName === repoProjectDirName) return REPO_ROOT;
+            return GENERAL_HOME;
+        };
+
+        // Collect records grouped by resolved project path.
+        const byProject = new Map();
+
         for (const sess of Object.values(parsed.sessions)) {
-            if (sess && Array.isArray(sess.requestLog)) {
-                allRecords.push(...sess.requestLog);
+            if (!sess || !Array.isArray(sess.requestLog) || sess.requestLog.length === 0) continue;
+
+            // Determine the project this session belongs to.
+            // 1) Prefer the record-level projectPath (new records have this).
+            // 2) Fall back to filesystem lookup via .cwd markers.
+            // 3) Last resort: GENERAL_HOME.
+            const firstRecord = sess.requestLog[0];
+            let projectKey = firstRecord?.projectPath;
+
+            if (!projectKey) {
+                const sessionId = sess.sessionId || firstRecord?.sessionId;
+                if (sessionId) {
+                    const safeId = sanitizeSessionIdForPath(sessionId);
+                    const dirName = fsIndex.get(safeId) || fsIndex.get(sessionId);
+                    if (dirName) {
+                        projectKey = resolveProjectPath(dirName);
+                    }
+                }
             }
-        }
-        allRecords.sort((a, b) => (a.startedAt || '').localeCompare(b.startedAt || ''));
-        if (allRecords.length > 0) {
-            const snapshot = {
-                aggregate: parsed.global || {},
-                records: allRecords.slice(-1000),
-            };
-            // Key under GENERAL_HOME so the sidebar "general" project matches,
-            // and also under REPO_ROOT for direct project matches.
-            result.set(GENERAL_HOME, snapshot);
-            if (REPO_ROOT !== GENERAL_HOME) {
-                result.set(REPO_ROOT, snapshot);
+
+            if (!projectKey) {
+                projectKey = GENERAL_HOME;
             }
+
+            if (!byProject.has(projectKey)) {
+                byProject.set(projectKey, []);
+            }
+            byProject.get(projectKey).push(...sess.requestLog);
         }
-    } catch {
-        // File doesn't exist or is malformed — return empty map
+
+        for (const [projectKey, records] of byProject.entries()) {
+            records.sort((a, b) => (a.startedAt || '').localeCompare(b.startedAt || ''));
+            result.set(projectKey, {
+                aggregate: {},
+                records: records.slice(-1000),
+            });
+        }
+    } catch (err) {
+        if (err?.code !== 'ENOENT') {
+            console.warn('[router-dashboard] failed to load router-stats.json:', err?.message || err);
+        }
     }
     return result;
 }
