@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
+import { readFile } from "node:fs/promises";
 import type { Gateway, GatewayMode, GatewaySessionInfo } from "../../../../gateway/index.js";
 import { defaultTuiSessionKey } from "../TuiChannel.js";
 import { ActivityLine } from "./ActivityLine.js";
@@ -7,7 +8,8 @@ import { Header } from "./Header.js";
 import { HelpDialog } from "./HelpDialog.js";
 import { MessageList } from "./MessageList.js";
 import { PromptInput } from "./PromptInput.js";
-import { applyGatewayEventToTuiState, type TuiAppState } from "./types.js";
+import { ToolOutputViewer } from "./ToolOutputViewer.js";
+import { applyGatewayEventToTuiState, type TuiAppState, type TuiMessage } from "./types.js";
 import { pilotDeckDarkBlueTheme } from "./theme.js";
 
 export type TuiAppProps = {
@@ -18,6 +20,8 @@ export type TuiAppProps = {
   model?: string;
   cwd?: string;
   serverUrl?: string;
+  /** Called when user requests to view a persisted tool output file. */
+  onViewOutput?: (path: string) => Promise<void>;
 };
 
 export function TuiApp(props: TuiAppProps): React.ReactNode {
@@ -36,6 +40,9 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
     isRunning: false,
     helpOpen: false,
     scrollOffset: 0,
+    focusedIndex: null,
+    viewerContent: null,
+    viewerTitle: "",
   });
 
   useEffect(() => {
@@ -46,17 +53,72 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
   }, [props.gateway, props.projectKey]);
 
   const handleInputChange = useCallback((next: string) => {
-    setState((current) => ({ ...current, input: next }));
+    setState((current) => ({ ...current, input: next, focusedIndex: null }));
   }, []);
+
+  const openViewer = useCallback((content: string, title: string) => {
+    setState((current) => ({ ...current, viewerContent: content, viewerTitle: title }));
+  }, []);
+
+  const closeViewer = useCallback(() => {
+    setState((current) => ({ ...current, viewerContent: null, viewerTitle: "" }));
+  }, []);
+
+  const openToolOutput = useCallback(
+    async (msg: Extract<TuiMessage, { role: "tool" }>) => {
+      const SCROLLBACK_LINE_THRESHOLD = 50;
+      let text = msg.fullText ?? msg.text;
+      if (msg.resultPath) {
+        try {
+          text = await readFile(msg.resultPath, "utf-8");
+        } catch {
+          // fallback to what we have
+        }
+      }
+      const lineCount = text.split("\n").length;
+      if (lineCount < SCROLLBACK_LINE_THRESHOLD && stdout) {
+        stdout.write(`\n--- ${msg.toolName ?? "tool"} output ---\n${text}\n---\n`);
+      } else {
+        openViewer(text, msg.toolName ?? "tool output");
+      }
+    },
+    [stdout, openViewer],
+  );
 
   const handleSubmit = useCallback(
     async (raw: string) => {
       const trimmed = raw.trim();
       setState((current) => ({ ...current, input: "" }));
-      if (!trimmed || state.isRunning) {
+
+      if (!trimmed) {
+        if (!state.isRunning && state.focusedIndex !== null) {
+          const focused = state.messages[state.focusedIndex];
+          if (focused?.role === "tool") {
+            setState((current) => {
+              const msgs = [...current.messages];
+              const msg = msgs[state.focusedIndex!];
+              if (msg?.role === "tool") {
+                msgs[state.focusedIndex!] = { ...msg, expanded: !msg.expanded };
+              }
+              return { ...current, messages: msgs };
+            });
+            return;
+          }
+        }
+        if (!state.isRunning) {
+          const lastTool = [...state.messages].reverse().find(
+            (m) => m.role === "tool" && ((m.lineCount ?? 0) > 4 || m.resultPath),
+          ) as Extract<TuiMessage, { role: "tool" }> | undefined;
+          if (lastTool) {
+            void openToolOutput(lastTool);
+          }
+        }
         return;
       }
-      if (await handleCommand(trimmed, props.gateway, props.projectKey, setState, exit)) {
+      if (state.isRunning) {
+        return;
+      }
+      if (await handleCommand(trimmed, props.gateway, props.projectKey, setState, exit, openViewer, openToolOutput, state.messages)) {
         return;
       }
 
@@ -65,6 +127,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
         messages: [...current.messages, { role: "user", text: trimmed }],
         isRunning: true,
         scrollOffset: 0,
+        focusedIndex: null,
       }));
 
       try {
@@ -88,12 +151,14 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
         }));
       }
     },
-    [exit, props.gateway, props.projectKey, state.activeSessionKey, state.isRunning, state.mode],
+    [exit, props.gateway, props.projectKey, openToolOutput, openViewer, state.activeSessionKey, state.isRunning, state.messages, state.mode, state.focusedIndex],
   );
 
   const scrollPage = Math.max(1, Math.floor(rows / 2));
 
   useInput((input, key) => {
+    if (state.viewerContent !== null) return;
+
     if (key.ctrl && input === "c") {
       if (state.isRunning) {
         void props.gateway.abortTurn({ sessionKey: state.activeSessionKey });
@@ -103,7 +168,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
       return;
     }
     if (key.escape) {
-      setState((current) => ({ ...current, helpOpen: false, scrollOffset: 0 }));
+      setState((current) => ({ ...current, helpOpen: false, scrollOffset: 0, focusedIndex: null }));
       return;
     }
     if (input === "?" && state.input.length === 0) {
@@ -111,7 +176,32 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
       return;
     }
 
-    // PageUp / Shift+UpArrow: scroll up (increase offset from bottom)
+    if (key.tab && state.input.length === 0) {
+      setState((current) => {
+        const toolIndices = current.messages
+          .map((m, i) => (m.role === "tool" ? i : -1))
+          .filter((i) => i >= 0);
+        if (toolIndices.length === 0) return current;
+
+        if (key.shift) {
+          if (current.focusedIndex === null) {
+            return { ...current, focusedIndex: toolIndices[toolIndices.length - 1]! };
+          }
+          const pos = toolIndices.indexOf(current.focusedIndex);
+          const next = pos <= 0 ? toolIndices[toolIndices.length - 1]! : toolIndices[pos - 1]!;
+          return { ...current, focusedIndex: next };
+        } else {
+          if (current.focusedIndex === null) {
+            return { ...current, focusedIndex: toolIndices[0]! };
+          }
+          const pos = toolIndices.indexOf(current.focusedIndex);
+          const next = pos >= toolIndices.length - 1 ? toolIndices[0]! : toolIndices[pos + 1]!;
+          return { ...current, focusedIndex: next };
+        }
+      });
+      return;
+    }
+
     if (key.pageUp || (key.shift && key.upArrow)) {
       setState((current) => {
         const maxOffset = Math.max(0, current.messages.length - 1);
@@ -120,7 +210,6 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
       return;
     }
 
-    // PageDown / Shift+DownArrow: scroll down (decrease offset toward bottom)
     if (key.pageDown || (key.shift && key.downArrow)) {
       setState((current) => ({
         ...current,
@@ -129,6 +218,16 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
       return;
     }
   });
+
+  if (state.viewerContent !== null) {
+    return (
+      <ToolOutputViewer
+        content={state.viewerContent}
+        title={state.viewerTitle}
+        onClose={closeViewer}
+      />
+    );
+  }
 
   return (
     <Box flexDirection="column" minHeight={12}>
@@ -160,6 +259,9 @@ async function handleCommand(
   projectKey: string | undefined,
   setState: React.Dispatch<React.SetStateAction<TuiAppState>>,
   exit: () => void,
+  openViewer: (content: string, title: string) => void,
+  openToolOutput: (msg: Extract<TuiMessage, { role: "tool" }>) => Promise<void>,
+  messages: TuiMessage[],
 ): Promise<boolean> {
   if (!command.startsWith("/")) {
     return false;
@@ -189,8 +291,27 @@ async function handleCommand(
       }));
       return true;
     }
+    case "/view": {
+      const n = parseInt(args[0] ?? "", 10);
+      const tools = messages.filter(
+        (m): m is Extract<TuiMessage, { role: "tool" }> =>
+          m.role === "tool" && ((m.lineCount ?? 0) > 4 || !!m.resultPath || !!m.fullText),
+      );
+      if (tools.length === 0) {
+        setState((current) => ({
+          ...current,
+          messages: [...current.messages, { role: "system", text: "No tool output to view." }],
+        }));
+        return true;
+      }
+      const target = !isNaN(n) && n >= 1 && n <= tools.length
+        ? tools[n - 1]!
+        : tools[tools.length - 1]!;
+      void openToolOutput(target);
+      return true;
+    }
     case "/clear":
-      setState((current) => ({ ...current, messages: [] }));
+      setState((current) => ({ ...current, messages: [], focusedIndex: null }));
       return true;
     case "/help":
       setState((current) => ({ ...current, helpOpen: !current.helpOpen }));

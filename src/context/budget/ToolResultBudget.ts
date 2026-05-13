@@ -106,7 +106,7 @@ export class ToolResultBudget {
       await writeFile(path, flat, { flag: "wx", mode: 0o600, encoding: "utf8" });
     }
 
-    const preview = truncateToBytes(flat, this.previewBytes);
+    const preview = headTailPreview(flat, this.previewBytes);
     const record: ToolResultReplacementRecord = {
       toolCallId: block.toolCallId,
       path,
@@ -143,12 +143,31 @@ function truncateToBytes(value: string, maxBytes: number): string {
     return value;
   }
   const buffer = Buffer.from(value, "utf8");
-  // Avoid splitting in the middle of a multi-byte char.
   let end = Math.min(buffer.length, maxBytes);
   while (end > 0 && (buffer[end] & 0b11000000) === 0b10000000) {
     end -= 1;
   }
   return buffer.subarray(0, end).toString("utf8");
+}
+
+/**
+ * Head + tail preview: first half of budget from the start,
+ * last half from the end, joined by a separator.
+ */
+function headTailPreview(value: string, budgetBytes: number): string {
+  const totalBytes = Buffer.byteLength(value, "utf8");
+  if (totalBytes <= budgetBytes) {
+    return value;
+  }
+  const halfBudget = Math.floor(budgetBytes / 2) - 20;
+  if (halfBudget <= 0) {
+    return truncateToBytes(value, budgetBytes);
+  }
+  const head = truncateToBytes(value, halfBudget);
+  const tailStart = value.length - halfBudget * 2;
+  const tail = tailStart > 0 ? value.slice(tailStart) : "";
+  const omitted = totalBytes - Buffer.byteLength(head, "utf8") - Buffer.byteLength(tail, "utf8");
+  return `${head}\n\n... [${omitted} bytes omitted] ...\n\n${tail}`;
 }
 
 /** Helper for tests / inspection. */

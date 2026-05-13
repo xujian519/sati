@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Box, Text } from "ink";
 import { MessageResponse } from "./MessageResponse.js";
 import { WelcomeCard } from "./WelcomeCard.js";
-import type { TuiAppState } from "./types.js";
+import type { TuiAppState, TuiMessage } from "./types.js";
+import { groupConsecutiveTools, type DisplayItem } from "./groupConsecutiveTools.js";
 import { pilotDeckDarkBlueTheme } from "./theme.js";
 
 export function MessageList({
@@ -22,7 +23,9 @@ export function MessageList({
     (message) => !(message.role === "assistant" && message.text.trim().length === 0 && !message.thinking),
   );
 
-  if (renderable.length === 0) {
+  const displayItems = useMemo(() => groupConsecutiveTools(renderable), [renderable]);
+
+  if (displayItems.length === 0) {
     const connection = state.connection === "remote" ? (serverUrl ? `server ${serverUrl}` : "server connected") : "local in-process";
     return (
       <Box flexDirection="column" height={rows} justifyContent="center">
@@ -31,14 +34,12 @@ export function MessageList({
     );
   }
 
-  const { scrollOffset } = state;
-  const total = renderable.length;
+  const { scrollOffset, focusedIndex } = state;
+  const total = displayItems.length;
 
-  // scrollOffset is message-count from the bottom (0 = pinned to bottom).
-  // Compute the end index (exclusive) and start index for the visible window.
   const end = Math.max(0, total - scrollOffset);
   const start = Math.max(0, end - Math.max(1, rows - 1));
-  const visible = renderable.slice(start, end);
+  const visible = displayItems.slice(start, end);
 
   const hasMore = scrollOffset > 0;
 
@@ -49,14 +50,68 @@ export function MessageList({
           ↑ {start} more message{start > 1 ? "s" : ""} above (PageUp to scroll)
         </Text>
       )}
-      {visible.map((message, index) => (
-        <MessageResponse key={start + index} message={message} />
+      {visible.map((item, vi) => (
+        <DisplayItemView key={start + vi} item={item} focusedIndex={focusedIndex} />
       ))}
       {hasMore && (
         <Text color={pilotDeckDarkBlueTheme.subtle} dimColor>
           ↓ {scrollOffset} below — PageDown to scroll back
         </Text>
       )}
+    </Box>
+  );
+}
+
+function DisplayItemView({
+  item,
+  focusedIndex,
+}: {
+  item: DisplayItem;
+  focusedIndex: number | null;
+}): React.ReactNode {
+  if (item.type === "single") {
+    return (
+      <MessageResponse
+        message={item.message}
+        focused={focusedIndex === item.index}
+      />
+    );
+  }
+
+  const isFocused =
+    focusedIndex !== null &&
+    focusedIndex >= item.startIndex &&
+    focusedIndex < item.startIndex + item.messages.length;
+
+  if (item.expanded || isFocused) {
+    return (
+      <>
+        <Text dimColor>
+          {"  "}┌ {item.toolName} × {item.messages.length}
+        </Text>
+        {item.messages.map((msg, i) => (
+          <MessageResponse
+            key={item.startIndex + i}
+            message={msg}
+            focused={focusedIndex === item.startIndex + i}
+          />
+        ))}
+        <Text dimColor>{"  "}└</Text>
+      </>
+    );
+  }
+
+  const okCount = item.messages.filter((m) => m.role === "tool" && m.ok !== false).length;
+  const errCount = item.messages.length - okCount;
+
+  return (
+    <Box flexDirection="row" flexShrink={0}>
+      <Text color={pilotDeckDarkBlueTheme.subtle}>{"  ⎿  "}</Text>
+      <Text dimColor>
+        {item.toolName} × {item.messages.length}
+        {errCount > 0 ? ` (${errCount} error${errCount > 1 ? "s" : ""})` : ""}
+        {"  "}Tab to expand
+      </Text>
     </Box>
   );
 }
