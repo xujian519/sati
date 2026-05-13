@@ -101,11 +101,9 @@ export class TurnRunner {
         permissionMode: options.permissionMode,
         permissionRules: options.permissionRules,
         abortSignal: options.abortSignal,
+        onDurableMessage: (msg) => this.transcript.recordDurableMessage(options.sessionId, options.turnId, msg),
       });
 
-      for (const message of durableMessagesAfter(messages.length, runResult.messages)) {
-        await this.transcript.recordDurableMessage(options.sessionId, options.turnId, message);
-      }
       await this.transcript.recordTurnResult(options.sessionId, options.turnId, runResult.result);
       return runResult;
     } catch (error) {
@@ -132,10 +130,6 @@ export class TurnRunner {
       errors: [error],
     };
   }
-}
-
-function durableMessagesAfter(offset: number, messages: CanonicalMessage[]): CanonicalMessage[] {
-  return messages.slice(offset);
 }
 
 function emptyUsage(): CanonicalUsage {

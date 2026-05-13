@@ -42,6 +42,7 @@ export type AgentLoopInput = {
   permissionMode?: PermissionMode;
   permissionRules?: Partial<PermissionRuleSet>;
   abortSignal?: AbortSignal;
+  onDurableMessage?: (message: CanonicalMessage) => void | Promise<void>;
 };
 
 export type AgentLoopRunResult = {
@@ -186,6 +187,7 @@ export class AgentLoop {
       finalMessage = assembled.message;
       messages.push(assembled.message);
       yield { type: "assistant_message", sessionId: input.sessionId, turnId: input.turnId, message: assembled.message };
+      await input.onDurableMessage?.(assembled.message);
 
       const toolCalls = collectToolCalls(assembled.message);
       if (assembled.error) {
@@ -195,6 +197,7 @@ export class AgentLoop {
           );
           messages.push(projected);
           yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: projected };
+          await input.onDurableMessage?.(projected);
         }
 
         if (
@@ -375,6 +378,7 @@ export class AgentLoop {
         messages.push(projected);
       }
       yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: projected };
+      await input.onDurableMessage?.(projected);
 
       const lifecycleBlock = findToolLifecycleBlock(pairedResults);
       if (lifecycleBlock) {
