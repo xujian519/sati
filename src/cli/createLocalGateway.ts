@@ -477,6 +477,7 @@ class ProjectRuntimeRegistry {
               runtime.router.stream(request, {
                 sessionId: context.sessionKey,
                 turnId: "compact",
+                projectPath: context.projectKey,
                 abortSignal: signal,
                 isMainAgent: false,
               }),

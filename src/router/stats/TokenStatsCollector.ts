@@ -7,6 +7,7 @@ import type { RouterDecision } from "../protocol/decision.js";
 
 export type RouterStatsRecord = {
   sessionId: string;
+  projectPath?: string;
   scenarioType: RouterDecision["scenarioType"];
   resolvedFrom: RouterDecision["resolvedFrom"];
   provider: string;
