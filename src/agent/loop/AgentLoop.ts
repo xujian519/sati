@@ -28,6 +28,7 @@ import type { LifecycleDispatchResult } from "../../lifecycle/index.js";
 import { NullContextRuntime } from "../../context/NullContextRuntime.js";
 import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
 import type { ContextRecoveryDecision } from "../../context/index.js";
+import type { PermissionMode, PermissionRule, PermissionRuleSet } from "../../permission/index.js";
 import { collectToolCalls } from "./collectToolCalls.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
 import { projectToolResults } from "./projectToolResults.js";
@@ -37,6 +38,8 @@ export type AgentLoopInput = {
   turnId: string;
   messages: CanonicalMessage[];
   maxTurns?: number;
+  permissionMode?: PermissionMode;
+  permissionRules?: Partial<PermissionRuleSet>;
   abortSignal?: AbortSignal;
 };
 
@@ -52,6 +55,7 @@ export class AgentLoop {
   ) {}
 
   async *run(input: AgentLoopInput): AsyncGenerator<AgentEvent, AgentLoopRunResult, unknown> {
+    this.applyPermissionOverrides(input.permissionMode, input.permissionRules);
     const startedAt = this.now().toISOString();
     let messages = [...input.messages];
     let turnCount = 1;
@@ -632,7 +636,26 @@ export class AgentLoop {
     };
   }
 
+  private applyPermissionOverrides(
+    permissionMode?: PermissionMode,
+    permissionRules?: Partial<PermissionRuleSet>,
+  ): void {
+    if (permissionMode) {
+      this.config.permissionMode = permissionMode;
+      this.config.permissionContext.mode = permissionMode;
+    }
+    if (!permissionRules) return;
+    mergeUserRules(this.config.permissionContext.rules.allow, permissionRules.allow);
+    mergeUserRules(this.config.permissionContext.rules.deny, permissionRules.deny);
+    mergeUserRules(this.config.permissionContext.rules.ask, permissionRules.ask);
+  }
+
   private readonly now = (): Date => this.dependencies.now?.() ?? new Date();
+}
+
+function mergeUserRules(target: PermissionRule[], userRules: PermissionRule[] | undefined): void {
+  const nonUserRules = target.filter((rule) => rule.source !== "user");
+  target.splice(0, target.length, ...nonUserRules, ...(userRules ?? []));
 }
 
 function findLifecycleBlock(result: LifecycleDispatchResult): { reason: string; stopReason?: string } | undefined {

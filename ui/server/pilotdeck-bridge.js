@@ -56,6 +56,7 @@ import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from './u
 // client.
 import { createRemoteGateway } from '../../src/gateway/index.js';
 import { createNormalizedMessage } from './pilotdeck-message.js';
+import { readPermissionSettings } from './services/permissionSettings.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -197,7 +198,8 @@ function resolvePermissionMode(options) {
     // bypassPermissions / dontAsk) still take precedence — they're a
     // deliberate per-turn decision.
     if (explicit && explicit !== 'default') return explicit;
-    if (options?.toolsSettings?.skipPermissions === true) {
+    const persisted = readPermissionSettings();
+    if (options?.toolsSettings?.skipPermissions === true || persisted.skipPermissions === true) {
         return 'bypassPermissions';
     }
     return explicit || WEB_DEFAULT_PERMISSION_MODE;

@@ -18,12 +18,12 @@ export class PermissionRuntime {
   ): Promise<PermissionDecision> {
     const permissionContext = context.permissionContext;
 
-    const denyRule = findMatchingRule(permissionContext.rules.deny, tool.name);
+    const denyRule = findMatchingRule(permissionContext.rules.deny, tool.name, input);
     if (denyRule) {
       return denyFromRule(denyRule);
     }
 
-    const askRule = findMatchingRule(permissionContext.rules.ask, tool.name);
+    const askRule = findMatchingRule(permissionContext.rules.ask, tool.name, input);
     if (askRule) {
       return finalizeAsk(askFromRule(tool, input, toolCallId, askRule), permissionContext);
     }
@@ -35,7 +35,7 @@ export class PermissionRuntime {
     // tool.checkPermissions returns ask → runtime surfaces another
     // permission prompt → next call repeats → infinite prompts.
     // Deny rules (checked above) still win over allow rules.
-    const allowRule = findMatchingRule(permissionContext.rules.allow, tool.name);
+    const allowRule = findMatchingRule(permissionContext.rules.allow, tool.name, input);
     if (allowRule) {
       return allow({
         type: "rule",
@@ -48,9 +48,7 @@ export class PermissionRuntime {
     const toolPermission = await tool.checkPermissions?.(input, context);
     const toolDecision = normalizeToolPermission(toolPermission, tool, input, toolCallId, permissionContext);
     if (toolDecision) {
-      if (toolDecision.type === "ask") {
-        return finalizeAsk(toolDecision, permissionContext);
-      }
+      if (toolDecision.type === "ask") return finalizeAsk(toolDecision, permissionContext);
       return toolDecision;
     }
 
@@ -147,8 +145,8 @@ function decideByMode(
   });
 }
 
-function findMatchingRule(rules: PermissionRule[], toolName: string): PermissionRule | undefined {
-  return rules.find((rule) => matchPermissionRule(rule, toolName));
+function findMatchingRule(rules: PermissionRule[], toolName: string, input: unknown): PermissionRule | undefined {
+  return rules.find((rule) => matchPermissionRule(rule, toolName, input));
 }
 
 function allow(reason: PermissionDecisionReason): PermissionDecision {
@@ -217,6 +215,17 @@ function createPermissionRequest(
 function finalizeAsk(decision: PermissionDecision, context: PermissionContext): PermissionDecision {
   if (decision.type !== "ask") {
     return decision;
+  }
+
+  if (context.mode === "bypassPermissions") {
+    return {
+      type: "allow",
+      reason: {
+        type: "mode",
+        mode: "bypassPermissions",
+        message: "bypassPermissions mode skips permission prompts.",
+      },
+    };
   }
 
   if (context.mode === "dontAsk") {

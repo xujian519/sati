@@ -1,4 +1,5 @@
 import type { PilotDeckSettings } from '../types/types';
+import { authenticatedFetch } from '../../../utils/api.js';
 
 export const PILOTDECK_SETTINGS_KEY = 'pilotdeck-settings';
 
@@ -71,4 +72,46 @@ export function getPilotDeckSettings(): PilotDeckSettings {
       projectSortOrder: 'name',
     };
   }
+}
+
+export async function fetchPilotDeckPermissionSettings(): Promise<PilotDeckSettings> {
+  const response = await authenticatedFetch('/api/settings/permissions');
+  if (!response.ok) {
+    throw new Error(`Failed to fetch permission settings: HTTP ${response.status}`);
+  }
+  const data = await response.json();
+  return mergePermissionSettings(data.permissions);
+}
+
+export async function savePilotDeckPermissionSettings(
+  updates: Partial<PilotDeckSettings>,
+): Promise<PilotDeckSettings> {
+  const response = await authenticatedFetch('/api/settings/permissions', {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to save permission settings: HTTP ${response.status}`);
+  }
+  const data = await response.json();
+  const next = mergePermissionSettings(data.permissions);
+  safeLocalStorage.setItem(PILOTDECK_SETTINGS_KEY, JSON.stringify({
+    ...getPilotDeckSettings(),
+    ...next,
+  }));
+  window.dispatchEvent(new Event('pilotdeck-settings-changed'));
+  return next;
+}
+
+function mergePermissionSettings(value: unknown): PilotDeckSettings {
+  const current = getPilotDeckSettings();
+  const parsed = value && typeof value === 'object' ? value as Partial<PilotDeckSettings> : {};
+  return {
+    ...current,
+    ...parsed,
+    allowedTools: Array.isArray(parsed.allowedTools) ? parsed.allowedTools : [],
+    disallowedTools: Array.isArray(parsed.disallowedTools) ? parsed.disallowedTools : [],
+    skipPermissions: Boolean(parsed.skipPermissions),
+    projectSortOrder: current.projectSortOrder || 'name',
+  };
 }

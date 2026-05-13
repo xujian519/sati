@@ -4,8 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { Button, Input } from '../../../../shared/view/ui';
 import {
   PILOTDECK_SETTINGS_KEY,
+  fetchPilotDeckPermissionSettings,
   getPilotDeckSettings,
   safeLocalStorage,
+  savePilotDeckPermissionSettings,
 } from '../../../chat/utils/chatStorage';
 import type { PilotDeckSettings } from '../../../chat/types/types';
 import SettingsCard from '../SettingsCard';
@@ -17,22 +19,21 @@ import SettingsToggle from '../SettingsToggle';
 // are just convenience shortcuts — the user can still type any free-form
 // pattern Anthropic's permission DSL accepts.
 const QUICK_ADD_TOOLS = [
-  'Bash(git log:*)',
-  'Bash(git diff:*)',
-  'Bash(git status:*)',
-  'Read',
-  'Write',
-  'Edit',
-  'Glob',
-  'Grep',
-  'MultiEdit',
-  'Task',
-  'TodoWrite',
-  'WebFetch',
-  'WebSearch',
+  'bash:git log:*',
+  'bash:git diff:*',
+  'bash:git status:*',
+  'read_file',
+  'write_file',
+  'edit_file',
+  'glob',
+  'grep',
+  'agent',
+  'task_create',
+  'web_fetch',
+  'web_search',
 ];
 
-const QUICK_BLOCK_TOOLS = ['Bash(rm:*)', 'Bash(sudo:*)'];
+const QUICK_BLOCK_TOOLS = ['bash:rm:*', 'bash:sudo:*'];
 
 const addUnique = (items: string[], value: string): string[] => {
   const trimmed = value.trim();
@@ -54,6 +55,9 @@ function persist(updates: Partial<PilotDeckSettings>) {
   // Tell other tabs / mounted components (notably the chat permission
   // suggestion in MessageComponent) to re-read from localStorage.
   window.dispatchEvent(new Event('pilotdeck-settings-changed'));
+  savePilotDeckPermissionSettings(updates).catch((error) => {
+    console.error('Failed to persist permission settings to backend:', error);
+  });
   return next;
 }
 
@@ -167,6 +171,16 @@ export default function PermissionsSettingsTab() {
 
   useEffect(() => {
     reload();
+    fetchPilotDeckPermissionSettings()
+      .then((settings) => {
+        safeLocalStorage.setItem(PILOTDECK_SETTINGS_KEY, JSON.stringify(settings));
+        setAllowedTools(settings.allowedTools);
+        setDisallowedTools(settings.disallowedTools);
+        setSkipPermissions(Boolean(settings.skipPermissions));
+      })
+      .catch((error) => {
+        console.error('Failed to load permission settings from backend:', error);
+      });
     // Stay in sync with grants from the chat surface (`grantClaudeToolPermission`)
     // so users can flip back and forth between the chat and this dialog
     // without seeing stale state.
@@ -430,7 +444,7 @@ export default function PermissionsSettingsTab() {
               value={newAllowed}
               onChange={(event) => setNewAllowed(event.target.value)}
               placeholder={t('permissions.allowedTools.placeholder', {
-                defaultValue: 'e.g. "Bash(git log:*)" or "Write"',
+                defaultValue: 'e.g. "bash:git log:*" or "write_file"',
               })}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
@@ -597,19 +611,19 @@ export default function PermissionsSettingsTab() {
         <SettingsCard className="p-4">
           <ul className="space-y-1.5 text-xs text-muted-foreground">
             <li>
-              <code className="rounded bg-muted px-1 py-0.5 text-foreground">Bash(git log:*)</code>{' '}
+              <code className="rounded bg-muted px-1 py-0.5 text-foreground">bash:git log:*</code>{' '}
               {t('permissions.toolExamples.bashGitLog', { defaultValue: '— allow all git log commands' })}
             </li>
             <li>
-              <code className="rounded bg-muted px-1 py-0.5 text-foreground">Bash(git diff:*)</code>{' '}
+              <code className="rounded bg-muted px-1 py-0.5 text-foreground">bash:git diff:*</code>{' '}
               {t('permissions.toolExamples.bashGitDiff', { defaultValue: '— allow all git diff commands' })}
             </li>
             <li>
-              <code className="rounded bg-muted px-1 py-0.5 text-foreground">Write</code>{' '}
+              <code className="rounded bg-muted px-1 py-0.5 text-foreground">write_file</code>{' '}
               {t('permissions.toolExamples.write', { defaultValue: '— allow all writes' })}
             </li>
             <li>
-              <code className="rounded bg-muted px-1 py-0.5 text-foreground">Bash(rm:*)</code>{' '}
+              <code className="rounded bg-muted px-1 py-0.5 text-foreground">bash:rm:*</code>{' '}
               {t('permissions.toolExamples.bashRm', { defaultValue: '— block all rm commands (dangerous)' })}
             </li>
           </ul>

@@ -760,6 +760,7 @@ export function useChatComposerState({
             model: codexModel,
             sessionSummary,
             permissionMode: permissionMode === 'plan' ? 'default' : permissionMode,
+            toolsSettings,
           },
         });
       } else if (provider === 'gemini') {

@@ -1,22 +1,27 @@
 import { safeJsonParse } from '../../../lib/utils.js';
 import type { ChatMessage, PilotDeckPermissionSuggestion, PermissionGrantResult } from '../types/types.js';
-import { PILOTDECK_SETTINGS_KEY, getPilotDeckSettings, safeLocalStorage } from './chatStorage';
+import {
+  PILOTDECK_SETTINGS_KEY,
+  getPilotDeckSettings,
+  safeLocalStorage,
+  savePilotDeckPermissionSettings,
+} from './chatStorage';
 
 export function buildClaudeToolPermissionEntry(toolName?: string, toolInput?: unknown) {
   if (!toolName) return null;
-  if (toolName !== 'Bash') return toolName;
+  if (toolName !== 'Bash' && toolName !== 'bash') return toolName;
 
   const parsed = safeJsonParse(toolInput);
   const command = typeof parsed?.command === 'string' ? parsed.command.trim() : '';
-  if (!command) return toolName;
+  if (!command) return 'bash';
 
   const tokens = command.split(/\s+/);
   if (tokens.length === 0) return toolName;
 
   if (tokens[0] === 'git' && tokens[1]) {
-    return `Bash(${tokens[0]} ${tokens[1]}:*)`;
+    return `bash:${tokens[0]} ${tokens[1]}:*`;
   }
-  return `Bash(${tokens[0]}:*)`;
+  return `bash:${tokens[0]}:*`;
 }
 
 export function formatToolInputForDisplay(input: unknown) {
@@ -82,5 +87,11 @@ export function grantClaudeToolPermission(entry: string | null): PermissionGrant
   };
 
   safeLocalStorage.setItem(PILOTDECK_SETTINGS_KEY, JSON.stringify(updatedSettings));
+  savePilotDeckPermissionSettings({
+    allowedTools: nextAllowed,
+    disallowedTools: nextDisallowed,
+  }).catch((error) => {
+    console.error('Failed to persist granted permission to backend:', error);
+  });
   return { success: true, alreadyAllowed, updatedSettings };
 }

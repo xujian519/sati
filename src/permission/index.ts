@@ -15,3 +15,13 @@ export {
 } from "./protocol/types.js";
 export { matchPermissionRule } from "./policy/matchPermissionRule.js";
 export { PermissionRuntime } from "./decision/PermissionRuntime.js";
+export {
+  DEFAULT_PERMISSION_SETTINGS,
+  getPermissionSettingsPath,
+  normalizePermissionEntry,
+  normalizePermissionSettings,
+  permissionSettingsToRuleSet,
+  readPermissionSettings,
+  writePermissionSettings,
+  type PermissionSettings,
+} from "./settings.js";

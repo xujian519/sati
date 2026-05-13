@@ -2,8 +2,35 @@ import express from 'express';
 import { apiKeysDb, credentialsDb, notificationPreferencesDb, pushSubscriptionsDb } from '../database/db.js';
 import { getPublicKey } from '../services/vapid-keys.js';
 import { createNotificationEvent, notifyUserIfEnabled } from '../services/notification-orchestrator.js';
+import {
+  readPermissionSettings,
+  writePermissionSettings,
+} from '../services/permissionSettings.js';
 
 const router = express.Router();
+
+// ===============================
+// Tool Permission Settings
+// ===============================
+
+router.get('/permissions', async (_req, res) => {
+  try {
+    res.json({ success: true, permissions: readPermissionSettings() });
+  } catch (error) {
+    console.error('Error fetching permission settings:', error);
+    res.status(500).json({ error: 'Failed to fetch permission settings' });
+  }
+});
+
+router.put('/permissions', async (req, res) => {
+  try {
+    const permissions = writePermissionSettings(req.body || {});
+    res.json({ success: true, permissions });
+  } catch (error) {
+    console.error('Error saving permission settings:', error);
+    res.status(500).json({ error: 'Failed to save permission settings' });
+  }
+});
 
 // ===============================
 // API Keys Management

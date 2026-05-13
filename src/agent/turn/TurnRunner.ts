@@ -7,6 +7,7 @@ import type { AgentTranscriptWriter } from "../../session/transcript/TranscriptW
 import { TurnInputProcessor } from "./TurnInputProcessor.js";
 import type { CanonicalMessage, CanonicalUsage } from "../../model/index.js";
 import type { LifecycleRuntime } from "../../lifecycle/index.js";
+import type { PermissionMode, PermissionRuleSet } from "../../permission/index.js";
 
 export type TurnRunnerOptions = {
   sessionId: string;
@@ -14,6 +15,8 @@ export type TurnRunnerOptions = {
   messages: CanonicalMessage[];
   input: AgentInput;
   maxTurns?: number;
+  permissionMode?: PermissionMode;
+  permissionRules?: Partial<PermissionRuleSet>;
   abortSignal?: AbortSignal;
 };
 
@@ -94,6 +97,8 @@ export class TurnRunner {
         turnId: options.turnId,
         messages,
         maxTurns: options.maxTurns,
+        permissionMode: options.permissionMode,
+        permissionRules: options.permissionRules,
         abortSignal: options.abortSignal,
       });
 

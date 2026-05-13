@@ -33,6 +33,7 @@ import type {
   CronStopInput,
   CronStopResult,
 } from "../../cron/protocol/types.js";
+import { permissionSettingsToRuleSet, readPermissionSettings } from "../../permission/index.js";
 
 export type InProcessGatewayOptions = {
   now?: () => Date;
@@ -136,7 +137,16 @@ export class InProcessGateway implements Gateway {
           projectKey: input.projectKey,
           channelKey: input.channelKey,
         });
-        for await (const event of session.submit({ type: "text", text: input.message }, { turnId: runId })) {
+        const permissionSettings = readPermissionSettings();
+        const permissionMode = input.mode ?? (permissionSettings.skipPermissions ? "bypassPermissions" : undefined);
+        for await (const event of session.submit(
+          { type: "text", text: input.message },
+          {
+            turnId: runId,
+            permissionMode,
+            permissionRules: permissionSettingsToRuleSet(permissionSettings),
+          },
+        )) {
           for (const gatewayEvent of mapAgentEvent(event, runId)) {
             queue.enqueue(gatewayEvent);
           }
