@@ -130,6 +130,10 @@ export class AgentLoop {
       }
 
       const request = await this.createModelRequest(messages, input);
+      this.dispatchLifecycle(input, "PreModelRequest", {
+        provider: request.provider,
+        model: request.model,
+      }).catch(() => {});
       yield {
         type: "model_request_started",
         sessionId: input.sessionId,

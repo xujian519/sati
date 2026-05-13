@@ -9,6 +9,7 @@ export const PILOTDECK_HOOK_EVENTS = [
    */
   "Notification",
   "UserPromptSubmit",
+  "PreModelRequest",
   "SessionStart",
   "SessionEnd",
   "Stop",
