@@ -15,6 +15,7 @@ import {
 } from "../builtin/taskTools.js";
 import { createWebFetchTool, type CreateWebFetchToolOptions } from "../builtin/webFetch.js";
 import { createWebSearchTool, type CreateWebSearchToolOptions } from "../builtin/webSearch.js";
+import { createReadSkillTool, type ReadSkillDeps } from "../builtin/readSkill.js";
 import { createWriteFileTool } from "../builtin/writeFile.js";
 import { ToolRegistry } from "./ToolRegistry.js";
 
@@ -68,6 +69,13 @@ export type CreateBuiltinRegistryOptions = {
    * skip registration in headless contexts.
    */
   askUserQuestion?: false;
+  /**
+   * `read_skill` builtin. **Opt-in** — pass `{ loader, lister }` to
+   * register; absent or `false` keeps it out of the registry. The loader
+   * fetches skill content by name; the lister enumerates available skill
+   * names for the "not found" diagnostic message.
+   */
+  readSkill?: ReadSkillDeps | false;
 };
 
 export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): ToolRegistry {
@@ -100,6 +108,9 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
   }
   if (options?.askUserQuestion !== false) {
     registry.register(createAskUserQuestionTool());
+  }
+  if (options?.readSkill) {
+    registry.register(createReadSkillTool(options.readSkill));
   }
   return registry;
 }
