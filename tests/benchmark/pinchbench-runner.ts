@@ -19,7 +19,6 @@ import { parseArgs } from "node:util";
 
 import { createLocalGateway } from "../../src/cli/createLocalGateway.js";
 import type { Gateway } from "../../src/gateway/protocol/types.js";
-import { getLocalGatewayRouterStats } from "../../src/cli/createLocalGateway.js";
 
 import { loadAllTasks, type Task } from "./taskLoader.js";
 import { prepareTaskWorkspace, type TaskWorkspace } from "./workspace.js";
@@ -302,15 +301,12 @@ async function main(): Promise<void> {
         frontmatter: task.frontmatter,
       });
 
-      // Router stats (for verbose output)
-      if (verbose) {
-        const stats = getLocalGatewayRouterStats(gateway);
-        if (stats) {
-          for (const [proj, data] of stats) {
-            log(`   Router stats [${proj}]: ${data.aggregate.totalRequests} req, ${data.aggregate.totalInputTokens} in, ${data.aggregate.totalOutputTokens} out`);
-          }
-        }
-      }
+      // Router stats verbose output is currently disabled: the in-process
+      // accessor was retired in the ui-server refactor (gateway is now
+      // remote-capable and stats live in ~/.pilotdeck/router-stats.json,
+      // owned by `TokenStatsCollector`). Re-wire from the persisted JSON
+      // if benchmark verbose mode needs this back.
+      void gateway;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       log(`   [!!] Task error: ${message}`);
