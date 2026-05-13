@@ -637,12 +637,13 @@ function CustomEnvSection({ config, onChange }: { config: PilotDeckConfig; onCha
                   value={value}
                   placeholder={isMasked ? 'Existing value kept — type to replace' : 'value'}
                   monospace
+                  className="min-w-0 flex-1"
                   onChange={(v) => setEnv(key, v)}
                 />
                 <button
                   type="button"
                   onClick={() => removeEnv(key)}
-                  className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   title="Remove"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -673,10 +674,10 @@ function CustomEnvSection({ config, onChange }: { config: PilotDeckConfig; onCha
               onChange={(e) => setNewValue(e.target.value)}
               placeholder="value"
               type="password"
-              className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+              className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
               onKeyDown={(e) => { if (e.key === 'Enter') addEntry(); }}
             />
-            <Button variant="outline" size="sm" onClick={addEntry} disabled={!newKey.trim()}>
+            <Button variant="outline" size="sm" className="shrink-0" onClick={addEntry} disabled={!newKey.trim()}>
               <Plus className="mr-1 h-3.5 w-3.5" />
               Add
             </Button>
