@@ -30,6 +30,7 @@
     "edgeclaw-memory-core": "file:edgeclaw-memory-core",
     "ink": "^7.0.2",
     "ink-text-input": "^6.0.0",
+    "js-tiktoken": "^1.0.21",
     "react": "^19.2.6",
     "slice-ansi": "^9.0.0",
     "string-width": "^8.2.1",

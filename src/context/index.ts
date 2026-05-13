@@ -54,11 +54,11 @@ export {
 export {
   IMAGE_MAX_TOKEN_SIZE,
   TokenBudgetManager,
-  bytesPerTokenForExt,
   type TokenBudgetManagerOptions,
   type TokenBudgetSnapshot,
   type TokenWarningState,
 } from "./budget/TokenBudgetManager.js";
+export { countTokens, getTokenizer } from "./budget/tokenizer.js";
 export {
   CompactionEngine,
   COMPACT_MAX_OUTPUT_TOKENS,

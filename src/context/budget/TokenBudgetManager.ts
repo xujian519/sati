@@ -1,4 +1,5 @@
 import type { CanonicalContentBlock, CanonicalMessage } from "../../model/index.js";
+import { countTokens } from "./tokenizer.js";
 
 export type TokenWarningState = "ok" | "warning" | "blocking";
 
@@ -12,27 +13,19 @@ export type TokenBudgetSnapshot = {
 };
 
 export type TokenBudgetManagerOptions = {
-  /** Decision §3.2 — char/4 estimator (legacy default, see T1 in §4.2). */
-  bytesPerToken?: number;
-  /** Image / pdf placeholder size (legacy IMAGE_MAX_TOKEN_SIZE = 2000, T6/T7). */
+  /** Fixed token count for image / pdf / audio blocks (default 2000). */
   multimediaTokens?: number;
-  /** Auto-compact / warning threshold (legacy ~80%). */
+  /** Auto-compact / warning threshold (default 0.8). */
   warningRatio?: number;
-  /** Hard blocking threshold (legacy ~95%). */
+  /** Hard blocking threshold (default 0.95). */
   blockingRatio?: number;
-  /**
-   * Per-message overhead added by `estimateForMessage` to mirror legacy
-   * `estimateMessageTokens` cost of role/wrapper boilerplate (legacy charges
-   * roughly 4 tokens). T11 in §4.2.
-   */
+  /** Per-message overhead for role/wrapper boilerplate (default 4 tokens). */
   perMessageOverhead?: number;
 };
 
-const DEFAULT_BYTES_PER_TOKEN = 4;
 /**
  * IMAGE_MAX_TOKEN_SIZE — exported so callers (compaction, projection) can
- * reason about the upper bound without instantiating a manager. Matches
- * `third-party/claude-code-main/src/services/tokenEstimation.ts:IMAGE_MAX_TOKEN_SIZE`.
+ * reason about the upper bound without instantiating a manager.
  */
 export const IMAGE_MAX_TOKEN_SIZE = 2_000;
 const DEFAULT_WARNING_RATIO = 0.8;
@@ -40,72 +33,28 @@ const DEFAULT_BLOCKING_RATIO = 0.95;
 const DEFAULT_PER_MESSAGE_OVERHEAD = 4;
 
 /**
- * Padding factor applied by `estimateForMessagesWithPadding`. Mirrors
- * legacy `roughTokenCountEstimationForMessages` which multiplies by 4/3
- * to reserve headroom for tokenizer drift between estimator and provider.
- * Source: `tokenEstimation.ts:225-227`.
+ * Padding factor applied by `estimateForMessagesWithPadding`. Multiplies
+ * by 4/3 to reserve headroom for drift between our tiktoken estimator
+ * and the provider's actual tokenizer.
  */
 const ROUGH_PADDING_NUMERATOR = 4;
 const ROUGH_PADDING_DENOMINATOR = 3;
 
 /**
- * File-extension-aware bytes-per-token. Legacy `bytesPerTokenForFileType`
- * uses 2 for JSON-shaped data (tighter encoding) and 4 for everything
- * else. Match the legacy lowercase set verbatim. Behaviour T2 in §4.2.
- */
-const JSON_LIKE_EXTENSIONS = new Set<string>([
-  "json",
-  "ndjson",
-  "geojson",
-  "jsonl",
-  "yaml",
-  "yml",
-]);
-
-export function bytesPerTokenForExt(ext: string | undefined | null): number {
-  if (!ext) return DEFAULT_BYTES_PER_TOKEN;
-  const lower = ext.replace(/^\./, "").toLowerCase();
-  return JSON_LIKE_EXTENSIONS.has(lower) ? 2 : DEFAULT_BYTES_PER_TOKEN;
-}
-
-/**
- * Char/N token estimator. Mirrors legacy `roughTokenCountEstimation`
- * (tokenEstimation.ts:203-207):
- *   text content                 → round(length / bytesPerToken)
- *   JSON-ish file content         → round(length / 2)  via bytesPerTokenForExt
- *   image / pdf / audio blocks    → fixed multimediaTokens (= 2000)
- *   tool_call                     → round((name + JSON.stringify(input)) / 4)
- *   tool_result                   → sum of inner text estimates
- *   tool_result_reference         → round(preview / 4)  (PilotDeck-only block)
- *   thinking                      → round(text / 4)
+ * Token budget estimator backed by o200k_base tiktoken encoding.
  *
- * Behaviour alignment:
- *   T1 round (not ceil) at the leaf; matches legacy.
- *   T2 ext-aware bytesPerTokenForExt for file-type-specific budgets.
- *   T3 estimateForFileType clamps and routes through the ext map.
- *   T4 estimateForBlock branches on canonical block.type (8 PilotDeck blocks).
- *   T5 thinking blocks count text only (not signature; signature is opaque
- *      provider data, billed by provider not estimator).
- *   T6 image and T7 pdf use a fixed IMAGE_MAX_TOKEN_SIZE = 2000.
- *   T8 audio mirrors image: fixed multimediaTokens (PilotDeck-specific block;
- *      legacy lacks audio so this is intentional_difference).
- *   T9 tool_call concatenates name + serialized input as one string before
- *      round (legacy: `roughTokenCountEstimationForBlock` for tool_use).
- *   T10 tool_result recurses inner CanonicalTextBlock entries.
- *   T11 estimateForMessage adds perMessageOverhead (default 4) per message.
- *   T12 estimateForMessagesWithPadding multiplies by 4/3 (round up).
- *   T13 tool_result_reference uses preview only (intentional_difference;
- *       no legacy equivalent).
+ * Text / code / tool argument blocks are measured with the real BPE
+ * tokenizer via `countTokens()` from `./tokenizer.js`. Multimedia
+ * blocks (image, pdf, audio) still use a fixed placeholder size
+ * (IMAGE_MAX_TOKEN_SIZE = 2000).
  */
 export class TokenBudgetManager {
-  private readonly bytesPerToken: number;
   private readonly multimediaTokens: number;
   private readonly warningRatio: number;
   private readonly blockingRatio: number;
   private readonly perMessageOverhead: number;
 
   constructor(options: TokenBudgetManagerOptions = {}) {
-    this.bytesPerToken = options.bytesPerToken ?? DEFAULT_BYTES_PER_TOKEN;
     this.multimediaTokens = options.multimediaTokens ?? IMAGE_MAX_TOKEN_SIZE;
     this.warningRatio = options.warningRatio ?? DEFAULT_WARNING_RATIO;
     this.blockingRatio = options.blockingRatio ?? DEFAULT_BLOCKING_RATIO;
@@ -113,22 +62,21 @@ export class TokenBudgetManager {
   }
 
   /**
-   * T1: char-count / bytesPerToken with `Math.round`. Matches legacy
-   * `roughTokenCountEstimation` exactly.
+   * Token count via o200k_base tiktoken encoding. Replaces the legacy
+   * char/4 estimator for substantially better accuracy, especially with
+   * non-ASCII content (CJK characters, code, JSON).
    */
   estimateTextTokens(text: string): number {
-    if (text.length === 0) return 0;
-    return Math.round(text.length / this.bytesPerToken);
+    return countTokens(text);
   }
 
   /**
-   * T2/T3: estimate for raw file content given a file extension or mime
-   * hint. JSON-like extensions use bytesPerToken=2.
+   * Estimate tokens for raw file content. Now delegates to tiktoken
+   * regardless of file extension (the tokenizer handles encoding
+   * density natively). The ext parameter is retained for API compat.
    */
-  estimateForFileType(content: string, ext: string | null | undefined): number {
-    if (content.length === 0) return 0;
-    const bpt = bytesPerTokenForExt(ext);
-    return Math.round(content.length / bpt);
+  estimateForFileType(content: string, _ext: string | null | undefined): number {
+    return countTokens(content);
   }
 
   /** T4: per-block estimate. Public alias retained for legacy callers. */

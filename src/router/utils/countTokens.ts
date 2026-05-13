@@ -1,34 +1,7 @@
 import type { CanonicalMessage, CanonicalModelEvent } from "../../model/index.js";
+import { countTokens } from "../../context/budget/tokenizer.js";
 
-interface TiktokenLike {
-  encode(text: string): Uint32Array | number[];
-  free(): void;
-}
-
-let _encoding: TiktokenLike | null | undefined;
-
-function getEncoding(): TiktokenLike | null {
-  if (_encoding !== undefined) return _encoding;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const tiktoken = require("tiktoken");
-    _encoding = tiktoken.get_encoding("cl100k_base") as TiktokenLike;
-    return _encoding;
-  } catch {
-    _encoding = null;
-    return null;
-  }
-}
-
-export function countTokens(text: string): number {
-  const enc = getEncoding();
-  if (enc) {
-    try {
-      return enc.encode(text).length;
-    } catch { /* fall through */ }
-  }
-  return Math.ceil(text.length / 3);
-}
+export { countTokens };
 
 export function countMessagesTokens(messages: CanonicalMessage[]): number {
   const chunks: string[] = [];
@@ -69,9 +42,5 @@ export function countResponseTokens(events: CanonicalModelEvent[]): number {
   return countTokens(chunks.join(""));
 }
 
-export function dispose(): void {
-  if (_encoding) {
-    try { _encoding.free(); } catch { /* ok */ }
-    _encoding = null;
-  }
-}
+/** No-op retained for API compatibility (js-tiktoken needs no manual free). */
+export function dispose(): void {}
