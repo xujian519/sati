@@ -444,6 +444,10 @@ export function createRouterRuntime(
           outcome.shouldRetryZeroUsage &&
           zeroUsageAttempt < zeroUsageMax
         ) {
+          console.warn(
+            `[PilotDeck] zeroUsageRetry: empty response from ${attempt.provider}/${attempt.model} ` +
+            `(attempt ${zeroUsageAttempt}/${zeroUsageMax}, session=${ctx.sessionId})`,
+          );
           events.emit({
             type: "pilotdeck_router_zero_usage_retry",
             sessionId: ctx.sessionId,
@@ -452,6 +456,7 @@ export function createRouterRuntime(
             provider: attempt.provider,
             model: attempt.model,
           });
+          await new Promise((r) => setTimeout(r, 500 * zeroUsageAttempt));
           continue;
         }
 

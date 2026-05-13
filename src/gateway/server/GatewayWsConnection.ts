@@ -1,4 +1,4 @@
-import type { Gateway } from "../protocol/types.js";
+import type { Gateway, GatewayEvent } from "../protocol/types.js";
 import type { WsHelloFrame, WsRequestFrame } from "../protocol/frames.js";
 import { PILOTDECK_GATEWAY_PROTOCOL_VERSION } from "../protocol/version.js";
 import { TextWebSocketConnection } from "./websocket.js";
@@ -68,16 +68,22 @@ export class GatewayWsConnection {
     try {
       if (frame.method === "submit_turn") {
         let seq = 0;
+        let lastCompleted: GatewayEvent | undefined;
         for await (const event of this.options.gateway.submitTurn(frame.params as never)) {
+          if (event.type === "turn_completed") {
+            lastCompleted = event;
+          }
           this.ws.sendText(JSON.stringify({ type: "event", id: frame.id, seq: seq++, final: false, event }));
         }
+        const usage = lastCompleted?.type === "turn_completed" ? lastCompleted.usage : {};
+        const finishReason = lastCompleted?.type === "turn_completed" ? lastCompleted.finishReason : "completed";
         this.ws.sendText(
           JSON.stringify({
             type: "event",
             id: frame.id,
             seq,
             final: true,
-            event: { type: "turn_completed", usage: {}, finishReason: "completed" },
+            event: { type: "turn_completed", usage, finishReason },
           }),
         );
         return;

@@ -105,6 +105,9 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       process.exitCode = 1;
       return;
     }
+    const snapshot = loadPilotConfig({ projectRoot: process.cwd() });
+    const gatewayPort = snapshot.config.gateway?.port ?? 18789;
+    const probeUrl = `http://127.0.0.1:${gatewayPort}`;
     const fallbackGateway = createFallbackGateway();
     try {
       const local = createLocalGateway({ projectRoot: process.cwd() });
@@ -112,12 +115,14 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         projectKey: process.cwd(),
         cwd: process.cwd(),
         model: "PilotDeck",
+        probe: { url: probeUrl },
       }).start({ gateway: local });
     } catch (error) {
       await new TuiChannel({
         projectKey: process.cwd(),
         cwd: process.cwd(),
         model: "PilotDeck",
+        probe: { url: probeUrl },
       }).start({ gateway: fallbackGateway });
     }
     return;

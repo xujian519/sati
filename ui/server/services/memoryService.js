@@ -14,7 +14,7 @@ import {
   readPilotDeckConfigFile,
 } from './pilotdeckConfig.js';
 
-const MEMORY_ROOT_DIR = path.join(os.homedir(), '.edgeclaw', 'memory');
+const MEMORY_ROOT_DIR = path.join(os.homedir(), '.pilotdeck', 'memory');
 const MEMORY_WORKSPACES_ROOT = path.join(MEMORY_ROOT_DIR, 'workspaces');
 const MEMORY_GLOBAL_ROOT = path.join(MEMORY_ROOT_DIR, 'global');
 const MEMORY_SCHEDULER_INTERVAL_MS = 60_000;
@@ -45,6 +45,7 @@ function buildServiceForDataDir(dataDir, workspaceDir = dataDir) {
   }
   const service = new EdgeClawMemoryService({
     workspaceDir,
+    rootDir: MEMORY_ROOT_DIR,
     dbPath: path.join(dataDir, 'control.sqlite'),
     memoryDir: path.join(dataDir, 'memory'),
     source: 'claudecodeui',

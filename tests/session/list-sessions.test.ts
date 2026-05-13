@@ -33,6 +33,28 @@ test("listProjectSessions reads lite metadata and paginates by modification time
   }
 });
 
+test("listProjectSessions finds sessions created with TUI-style sessionId containing slashes", async () => {
+  // Regression for the transcript-path bug: TUI sessionKeys embed an absolute
+  // project path (e.g. `tui:project=/Users/foo/work/repo:default`). Without
+  // sanitization, path.resolve() treats the raw `/` chars as directory
+  // separators and buries the transcript under nested subdirs, where the
+  // flat sidebar scan in listProjectSessions can never reach it.
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-tui-sanitize-"));
+  try {
+    const projectRoot = path.join(root, "repo");
+    const pilotHome = path.join(root, "home");
+    const tuiSessionId = "tui:project=/Users/foo/work/repo:default";
+
+    await writeSession({ projectRoot, pilotHome, sessionId: tuiSessionId, prompt: "TUI chat" });
+
+    const all = await listProjectSessions({ projectRoot, pilotHome });
+    assert.equal(all.length, 1);
+    assert.equal(all[0]?.firstPrompt, "TUI chat");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 async function writeSession(options: {
   projectRoot: string;
   pilotHome: string;

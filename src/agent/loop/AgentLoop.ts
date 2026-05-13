@@ -103,6 +103,28 @@ export class AgentLoop {
         return { result, messages };
       }
 
+      const ctx = this.dependencies.context;
+      if (ctx?.tryAutoCompact) {
+        try {
+          const compact = await ctx.tryAutoCompact({
+            messages,
+            abortSignal: input.abortSignal,
+          });
+          if (compact.type === "compacted") {
+            messages = compact.messages;
+            yield {
+              type: "turn_continued",
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              reason: "auto_compact",
+            };
+          }
+        } catch {
+          // Auto-compaction must never block the model call — proceed with
+          // the original messages if evaluation or summarization fails.
+        }
+      }
+
       const request = await this.createModelRequest(messages, input);
       yield {
         type: "model_request_started",

@@ -1,4 +1,11 @@
 import type { CanonicalMessage } from "../../model/index.js";
+import {
+  collectToolCallIds,
+  collectToolResultIds,
+  ensureTrailingUserMessage,
+  stripUnpairedToolCalls,
+  stripUnpairedToolResults,
+} from "./toolPairIntegrity.js";
 
 export type SnipEngineOptions = {
   /** Number of head turns to keep (default 2). */
@@ -110,7 +117,7 @@ export class SnipEngine {
     const boundary = createSnipBoundary(turnsSnipped, this.keepHeadTurns, this.keepTailTurns);
 
     return {
-      messages: [...headCleaned, boundary, ...tailCleaned],
+      messages: ensureTrailingUserMessage([...headCleaned, boundary, ...tailCleaned]),
       applied: true,
       turnsSnipped,
       danglingToolCallIds: dangling,
@@ -155,54 +162,3 @@ function isToolResultOnly(message: CanonicalMessage): boolean {
   return message.content.every((block) => block.type === "tool_result");
 }
 
-function collectToolCallIds(messages: CanonicalMessage[]): Set<string> {
-  const ids = new Set<string>();
-  for (const message of messages) {
-    if (message.role !== "assistant") continue;
-    for (const block of message.content) {
-      if (block.type === "tool_call") ids.add(block.id);
-    }
-  }
-  return ids;
-}
-
-function collectToolResultIds(messages: CanonicalMessage[]): Set<string> {
-  const ids = new Set<string>();
-  for (const message of messages) {
-    if (message.role !== "user") continue;
-    for (const block of message.content) {
-      if (block.type === "tool_result") ids.add(block.toolCallId);
-    }
-  }
-  return ids;
-}
-
-function stripUnpairedToolCalls(
-  messages: CanonicalMessage[],
-  pairedIds: Set<string>,
-): CanonicalMessage[] {
-  return messages.map((message) => {
-    if (message.role !== "assistant") return message;
-    const filtered = message.content.filter(
-      (block) => block.type !== "tool_call" || pairedIds.has(block.id),
-    );
-    return filtered.length === message.content.length
-      ? message
-      : { ...message, content: filtered };
-  }).filter((m) => m.content.length > 0);
-}
-
-function stripUnpairedToolResults(
-  messages: CanonicalMessage[],
-  pairedIds: Set<string>,
-): CanonicalMessage[] {
-  return messages.map((message) => {
-    if (message.role !== "user") return message;
-    const filtered = message.content.filter(
-      (block) => block.type !== "tool_result" || pairedIds.has(block.toolCallId),
-    );
-    return filtered.length === message.content.length
-      ? message
-      : { ...message, content: filtered };
-  }).filter((m) => m.content.length > 0);
-}

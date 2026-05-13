@@ -71,9 +71,30 @@ export type RouterConfig = {
   customRouter?: RouterCustomRouterConfig;
 };
 
-export const DEFAULT_JUDGE_TIMEOUT_MS = 5000;
-export const DEFAULT_ZERO_USAGE_MAX_ATTEMPTS = 5;
-export const DEFAULT_TRIGGER_TIERS = ["COMPLEX", "REASONING"];
+export const DEFAULT_JUDGE_TIMEOUT_MS = 15_000;
+export const DEFAULT_ZERO_USAGE_MAX_ATTEMPTS = 2;
+export const DEFAULT_TRIGGER_TIERS = ["complex"];
+
+/**
+ * Default 4-tier classification descriptions, validated against PinchBench
+ * 22-task benchmark (95%+ accuracy). COMPLEX is reserved exclusively for
+ * sub-agent orchestration; single-agent deep work goes to REASONING.
+ */
+export const DEFAULT_TIER_DESCRIPTIONS: Record<string, string> = {
+  simple: "Simple greetings, confirmations, single-step Q&A, trivial file writes, remembering rules",
+  medium: "Single tool call, short text generation, 1-2 file read/write, code generation",
+  complex: "Needs sub-agent orchestration: parallel workstreams, delegation to specialized agents",
+  reasoning: "Deep single-agent work: multi-file operations, data analysis, multi-step workflows, web research, structured reports from many sources",
+};
+
+export const DEFAULT_TIER_RULES: string[] = [
+  "complex is ONLY for tasks that need sub-agent orchestration or parallel delegation — do NOT use it for single-agent multi-step work",
+  "Multi-file operations, data analysis, and multi-step workflows without orchestration should be reasoning",
+  "Simple file creation (1-2 files) or single code generation is medium",
+  "Trivial greetings, confirmations, remembering rules, or reading one file and answering a short question is simple",
+];
+
+export const DEFAULT_TIER_NAME = "medium";
 export const DEFAULT_ALLOWED_TOOLS = [
   "Agent", "Task", "Read", "Grep", "Glob", "TodoRead", "TodoWrite",
 ];

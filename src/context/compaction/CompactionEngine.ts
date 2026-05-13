@@ -6,6 +6,13 @@ import type {
 } from "../../model/index.js";
 import { TokenBudgetManager } from "../budget/TokenBudgetManager.js";
 import type { ContextDiagnostic } from "../protocol/types.js";
+import {
+  collectToolCallIds,
+  collectToolResultIds,
+  ensureTrailingUserMessage,
+  stripUnpairedToolCalls,
+  stripUnpairedToolResults,
+} from "./toolPairIntegrity.js";
 
 export type CompactionTrigger = "manual" | "auto" | "reactive";
 
@@ -86,8 +93,18 @@ export class CompactionEngine {
     const preTokens = this.tokenBudget.estimateMessagesTokens(input.messages);
     const tailRatio = clamp(input.keepTailRatio ?? DEFAULT_KEEP_TAIL_RATIO, 0, 1);
     const keepCount = Math.max(1, Math.floor(input.messages.length * tailRatio));
-    const messagesToKeep = input.messages.slice(-keepCount);
     const messagesToSummarize = input.messages.slice(0, input.messages.length - keepCount);
+
+    // Tool pair integrity: the summarize portion will be replaced by a
+    // summary message, so any tool_result in the keep portion whose
+    // tool_call is in the summarize portion (and vice-versa) becomes
+    // dangling and must be stripped.
+    const keepToolCallIds = collectToolCallIds(input.messages.slice(-keepCount));
+    const keepToolResultIds = collectToolResultIds(input.messages.slice(-keepCount));
+    const messagesToKeep = stripUnpairedToolResults(
+      stripUnpairedToolCalls(input.messages.slice(-keepCount), keepToolResultIds),
+      keepToolCallIds,
+    );
 
     await this.options.lifecycle?.dispatch({
       event: "PreCompact",
@@ -244,7 +261,7 @@ export function buildPostCompactMessages(result: CompactionResult): CanonicalMes
   out.push(...result.messagesToKeep);
   out.push(...result.attachments);
   out.push(...result.hookResults);
-  return out;
+  return ensureTrailingUserMessage(out);
 }
 
 /**

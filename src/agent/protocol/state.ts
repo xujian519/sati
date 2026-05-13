@@ -6,7 +6,8 @@ export type AgentLoopTransitionReason =
   | "model_error"
   | "max_turns"
   | "aborted_streaming"
-  | "aborted_tools";
+  | "aborted_tools"
+  | "auto_compact";
 
 export type AgentLoopTransition = {
   reason: AgentLoopTransitionReason;

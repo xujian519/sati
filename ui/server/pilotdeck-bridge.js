@@ -47,7 +47,7 @@ import fs from 'node:fs';
 import { promises as fsPromises } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
-import { resolvePilotHome, createProjectId } from './utils/pilotPaths.js';
+import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from './utils/pilotPaths.js';
 // Imported from TypeScript source — requires `node --import tsx` so the
 // module is transformed at load time. Keeping the bridge off
 // `dist/src/` is what lets `ui/server` survive `src/**` edits without
@@ -576,18 +576,32 @@ function lookupSessionTitle(sessionId, projectKey) {
 
 function _readFirstPrompt(sessionId, projectKey) {
     const pilotHome = GENERAL_HOME;
-    const candidates = projectKey
-        ? [path.join(pilotHome, 'projects', createProjectId(projectKey), 'chats', `${sessionId}.jsonl`)]
-        : [];
-    const generalChatPath = path.join(pilotHome, 'projects', createProjectId(pilotHome), 'chats', `${sessionId}.jsonl`);
-    if (!candidates.includes(generalChatPath)) candidates.push(generalChatPath);
+    // Sessions are stored on disk under a sanitized filename (raw sessionId
+    // may contain `/`, `:`, `=` which would split into nested dirs). We try
+    // both the sanitized and raw form so this also resolves any legacy files
+    // that pre-date the sanitize fix.
+    const safeId = sanitizeSessionIdForPath(sessionId);
+    const fileVariants = safeId === sessionId ? [sessionId] : [safeId, sessionId];
+    const candidates = [];
+    if (projectKey) {
+        for (const id of fileVariants) {
+            candidates.push(path.join(pilotHome, 'projects', createProjectId(projectKey), 'chats', `${id}.jsonl`));
+        }
+    }
+    // Also check the general workspace (sessions may live there)
+    for (const id of fileVariants) {
+        const generalChatPath = path.join(pilotHome, 'projects', createProjectId(pilotHome), 'chats', `${id}.jsonl`);
+        if (!candidates.includes(generalChatPath)) candidates.push(generalChatPath);
+    }
     try {
         const projectsDir = path.join(pilotHome, 'projects');
         const dirs = fs.readdirSync(projectsDir, { withFileTypes: true });
         for (const d of dirs) {
             if (!d.isDirectory()) continue;
-            const p = path.join(projectsDir, d.name, 'chats', `${sessionId}.jsonl`);
-            if (!candidates.includes(p)) candidates.push(p);
+            for (const id of fileVariants) {
+                const p = path.join(projectsDir, d.name, 'chats', `${id}.jsonl`);
+                if (!candidates.includes(p)) candidates.push(p);
+            }
         }
     } catch { /* ignore */ }
 

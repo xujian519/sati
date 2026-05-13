@@ -3,7 +3,7 @@
 const path = require("node:path");
 const { notarize } = require("@electron/notarize");
 
-const APP_BUNDLE_ID = "cc.edgeclaw.desktop";
+const APP_BUNDLE_ID = "cc.pilotdeck.desktop";
 
 module.exports = async function notarizeAfterSign(context) {
   if (process.platform !== "darwin") {

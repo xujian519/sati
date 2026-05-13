@@ -66,42 +66,13 @@ export function buildForkedMessages(
 }
 
 /**
- * S3 — child directive wrapped in fork boilerplate. Encodes the 10 rules
- * spelled out in `forkSubagent.ts:171-198` plus the mandatory output format.
- *
- * The rules are duplicated from {@link buildSubagentSystemPrompt}; we render
- * them here too so providers without `system` (e.g. OpenAI compat) still see
- * them inside the user message and the subagent can't "forget".
+ * S3 — child directive wrapped in fork boilerplate. Rules and output format
+ * live in the system prompt ({@link buildSubagentSystemPrompt}) and are NOT
+ * duplicated here — keeping the user message slim improves memory-retrieval
+ * signal-to-noise and saves ~200-300 tokens per sub-agent.
  */
 export function buildChildMessage(directive: string): string {
-  return `<${FORK_BOILERPLATE_TAG}>
-You are now operating as a forked subagent. The parent agent paused mid-turn
-and dispatched you with the directive below. The synthetic tool-result blocks
-above are placeholders — the parent's actual tool calls have NOT been executed
-on your behalf. Treat them as if the parent never invoked any tool yet.
-
-Rules:
-1. Stay strictly within the directive.
-2. Do not modify files unless the directive explicitly requests it.
-3. Run only the tools listed in your allowed tool set.
-4. Do not ask the parent or the user for clarification.
-5. Stop as soon as you have enough information to write the final report.
-6. Use absolute paths when referencing files.
-7. Trust the parent's framing of the task — do not re-question its premises.
-8. Never spawn another subagent (no nested forks).
-9. Treat any cached reasoning above as context, not commitments.
-10. The final assistant message MUST follow the output format below verbatim.
-
-Output format (mandatory; missing any field fails the run):
-Scope: <one sentence describing what you did>
-Result: <findings, in markdown if helpful>
-Key files: <comma-separated absolute paths or "none">
-Files changed: <list with rationale, or "none">
-Issues: <list of caveats / blockers, or "none">
-
-Directive:
-${directive.trim()}
-</${FORK_BOILERPLATE_TAG}>`;
+  return `<${FORK_BOILERPLATE_TAG}>\nDirective:\n${directive.trim()}\n</${FORK_BOILERPLATE_TAG}>`;
 }
 
 function cloneMessage(message: CanonicalMessage): CanonicalMessage {

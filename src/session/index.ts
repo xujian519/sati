@@ -1,5 +1,6 @@
 export {
   createAgentProjectSessionStorage,
+  sanitizeSessionIdForPath,
   type AgentProjectSessionStorage,
   type AgentProjectSessionStorageOptions,
 } from "./storage/ProjectSessionStorage.js";

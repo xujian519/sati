@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
 # ============================================================================
-# EdgeClaw Desktop macOS One-Click Packager (release.sh)
+# PilotDeck Desktop macOS One-Click Packager (release.sh)
 # ----------------------------------------------------------------------------
-# Adapted from OpenClaw's release.sh. Differences:
-#   - Builds claudecodeui (vite build) instead of OpenClaw gateway
-#   - Two tarballs (claudecodeui-bundle.tar + claude-code-main-bundle.tar)
-#   - Bundles both Node 22 (for claudecodeui server) and Bun (for claude-code-main)
-#   - Bundle ID: cc.edgeclaw.desktop
+# 完整发版流程见 apps/desktop/RELEASING.md（如何 bump 版本号 / 何时打 tag /
+# 何时合 main / 如何写 CHANGELOG）。本脚本只负责"把当前 commit 打成 DMG"。
 #
 # Usage:
 #   bash scripts/release.sh                 # auto: signed if cert in keychain, else ad-hoc
 #   bash scripts/release.sh --ad-hoc        # force ad-hoc (local test)
 #   bash scripts/release.sh --signed        # require Developer ID; fail if missing
 #   bash scripts/release.sh --skip-notarize # signed but no notarization
-#   bash scripts/release.sh --skip-build    # reuse existing claudecodeui/dist
+#   bash scripts/release.sh --skip-build    # reuse existing pilotdeckui/dist
 #   bash scripts/release.sh --skip-verify   # skip post-build verification
+#   bash scripts/release.sh --skip-publish  # skip GitHub Release upload
+#
+# Environment overrides (escape hatches — see RELEASING.md for context):
+#   ALLOW_UNTAGGED=1         # skip "git tag must match version" pre-flight check
+#                            # (only useful with --ad-hoc; signed builds should be tagged)
+#   ALLOW_NON_MAIN_SIGNED=1  # allow --signed from a non-main branch (hotfix scenarios)
+#   SKIP_PUBLISH=1           # same as --skip-publish (env override)
 # ============================================================================
 
 set -euo pipefail
@@ -28,22 +32,28 @@ NODE_BIN="${RESOURCES}/node-bin/node"
 BUN_BIN="${RESOURCES}/bun-bin/bun"
 
 # Source tree path: this repo names the UI dir `ui/`; spike originally used
-# `claudecodeui/`. Bundle filename + extracted runtime dir name remain
-# `claudecodeui` because server-manager.ts / electron-builder.yml hardcode it.
-CLAUDECODEUI_DIR="${REPO_ROOT}/ui"
-CLAUDE_CODE_MAIN_DIR="${REPO_ROOT}/claude-code-main"
+# `pilotdeckui/`. Bundle filename + extracted runtime dir name remain
+# `pilotdeckui` because server-manager.ts / electron-builder.yml hardcode it.
+PILOTDECKUI_DIR="${REPO_ROOT}/ui"
+# After the PilotDeck refactor, the "pilotdeck-main" code lives at repo root
+# (src/, scripts/, node_modules/, package.json). The bundle tar name and runtime
+# extraction dir remain "pilotdeck-main" for server-manager.ts compatibility.
+PILOTDECK_MAIN_DIR="${REPO_ROOT}"
 MEMORY_CORE_DIR="${REPO_ROOT}/edgeclaw-memory-core"
 
-CCUI_BUNDLE="${RESOURCES}/claudecodeui-bundle.tar"
-CCM_BUNDLE="${RESOURCES}/claude-code-main-bundle.tar"
-MEM_BUNDLE="${RESOURCES}/edgeclaw-memory-core-bundle.tar"
+PDUI_BUNDLE="${RESOURCES}/pilotdeckui-bundle.tar"
+PDM_BUNDLE="${RESOURCES}/pilotdeck-main-bundle.tar"
+MEM_BUNDLE="${RESOURCES}/pilotdeck-memory-core-bundle.tar"
 
 # ─────────────── Args ───────────────
 MODE="auto"
 SKIP_BUILD=0
 SKIP_NOTARIZE=0
 SKIP_VERIFY=0
+SKIP_PUBLISH="${SKIP_PUBLISH:-0}"
 KEYCHAIN_PROFILE="${NOTARIZE_KEYCHAIN_PROFILE:-EdgeClaw}"
+KEYCHAIN_PATH="${NOTARIZE_KEYCHAIN_PATH:-$HOME/Library/Keychains/login.keychain-db}"
+KEYCHAIN_ARGS=()  # resolved in pre-flight after probing both keychains
 
 for arg in "$@"; do
   case "$arg" in
@@ -52,6 +62,7 @@ for arg in "$@"; do
     --skip-build)     SKIP_BUILD=1 ;;
     --skip-notarize)  SKIP_NOTARIZE=1 ;;
     --skip-verify)    SKIP_VERIFY=1 ;;
+    --skip-publish)   SKIP_PUBLISH=1 ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "Unknown arg: $arg (use --help)" >&2; exit 2 ;;
   esac
@@ -68,10 +79,10 @@ fail() { echo "  ${RED}✗ $*${RST}"; exit 1; }
 info() { echo "  ${DIM}$*${RST}"; }
 
 VERSION="$(node -e "console.log(require('${DESKTOP_DIR}/package.json').version)")"
-APP_OUT="${DESKTOP_DIR}/dist-electron/mac-arm64/EdgeClaw.app"
-DMG_OUT="${DESKTOP_DIR}/dist-electron/EdgeClaw-${VERSION}-arm64.dmg"
+APP_OUT="${DESKTOP_DIR}/dist-electron/mac-arm64/PilotDeck.app"
+DMG_OUT="${DESKTOP_DIR}/dist-electron/PilotDeck-${VERSION}-arm64.dmg"
 
-echo "${BLD}EdgeClaw Desktop One-Click Packager${RST}"
+echo "${BLD}PilotDeck Desktop One-Click Packager${RST}"
 echo "${DIM}Version ${VERSION} · arm64 · $(date '+%Y-%m-%d %H:%M')${RST}"
 
 # ============================================================================
@@ -97,15 +108,77 @@ if [[ "$MODE" != "adhoc" ]]; then
 fi
 [[ "$MODE" == "adhoc" ]] && ok "Mode: ad-hoc (local-test, no notarization)"
 
-if [[ "$MODE" == "signed" && "$SKIP_NOTARIZE" == "0" ]]; then
-  if xcrun notarytool history --keychain-profile "$KEYCHAIN_PROFILE" >/dev/null 2>&1; then
-    ok "Notarize profile: ${KEYCHAIN_PROFILE}"
-    info "(if a later submit reports 'No Keychain password item found' despite this,"
-    info " it is almost always Apple notary throttling — see retry diagnostic below.)"
+# ─────────────── Git provenance (tag + branch + sha) ───────────────
+# Why this lives in pre-flight: a built DMG without a corresponding git tag is
+# untraceable — when a user reports a bug, you can't reliably check out the
+# code that built their binary. We refuse to ship that by default. See
+# RELEASING.md for the full rationale and escape hatches.
+GIT_SHA="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+GIT_FULL_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
+GIT_BRANCH="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+BUILD_DATE="$(date -u +%Y-%m-%d)"
+EXPECTED_TAG="v${VERSION}"
+
+if [[ "$GIT_SHA" == "unknown" ]]; then
+  warn "Not a git checkout — skipping tag/branch checks (build-info will say 'unknown')"
+else
+  # Tag check
+  if git -C "$REPO_ROOT" rev-parse "$EXPECTED_TAG" >/dev/null 2>&1; then
+    TAG_SHA="$(git -C "$REPO_ROOT" rev-parse "${EXPECTED_TAG}^{commit}" 2>/dev/null || echo "")"
+    if [[ "$TAG_SHA" != "$GIT_FULL_SHA" ]]; then
+      if [[ "${ALLOW_UNTAGGED:-0}" != "1" ]]; then
+        fail "git tag '${EXPECTED_TAG}' points to ${TAG_SHA:0:7}, but HEAD is ${GIT_SHA}.
+    Either checkout the tagged commit, or re-tag: git tag -f ${EXPECTED_TAG}
+    Or set ALLOW_UNTAGGED=1 (only sane for --ad-hoc)."
+      fi
+      warn "tag '${EXPECTED_TAG}' points to ${TAG_SHA:0:7} ≠ HEAD ${GIT_SHA} (ALLOW_UNTAGGED=1)"
+    else
+      ok "git tag: ${EXPECTED_TAG} → HEAD (${GIT_SHA})"
+    fi
   else
-    warn "Keychain profile '${KEYCHAIN_PROFILE}' not configured → skipping notarization"
+    if [[ "${ALLOW_UNTAGGED:-0}" != "1" ]]; then
+      fail "No git tag '${EXPECTED_TAG}' for version ${VERSION}.
+    先跑: (cd apps/desktop && npm version patch -m 'release(desktop): v%s')
+    本地测试可加: ALLOW_UNTAGGED=1 bash scripts/release.sh --ad-hoc
+    完整流程见: apps/desktop/RELEASING.md"
+    fi
+    warn "No git tag '${EXPECTED_TAG}' (ALLOW_UNTAGGED=1)"
+  fi
+
+  # Branch check (signed-only): allow main, master, and release branches
+  if [[ "$MODE" == "signed" && "$GIT_BRANCH" != "main" && "$GIT_BRANCH" != "master" && "$GIT_BRANCH" != "release" ]]; then
+    if [[ "${ALLOW_NON_MAIN_SIGNED:-0}" != "1" ]]; then
+      fail "release(--signed) requires main/master/release branch (current: ${GIT_BRANCH}).
+    内部测试请用: bash scripts/release.sh --ad-hoc
+    正式发版请: git checkout release (或 main)
+    Hotfix 强制覆盖: ALLOW_NON_MAIN_SIGNED=1 bash scripts/release.sh --signed"
+    fi
+    warn "signed build from non-release branch '${GIT_BRANCH}' (ALLOW_NON_MAIN_SIGNED=1)"
+  else
+    ok "Branch: ${GIT_BRANCH}   ·   Build date: ${BUILD_DATE}"
+  fi
+fi
+
+if [[ "$MODE" == "signed" && "$SKIP_NOTARIZE" == "0" ]]; then
+  # Probe keychains: prefer login.keychain-db (stable), fallback to Data
+  # Protection Keychain (iCloud Keychain — works but locks intermittently).
+  if [[ -f "$KEYCHAIN_PATH" ]] \
+     && xcrun notarytool history --keychain-profile "$KEYCHAIN_PROFILE" \
+          --keychain "$KEYCHAIN_PATH" >/dev/null 2>&1; then
+    KEYCHAIN_ARGS=(--keychain-profile "$KEYCHAIN_PROFILE" --keychain "$KEYCHAIN_PATH")
+    ok "Notarize profile: ${KEYCHAIN_PROFILE} (login.keychain-db — stable)"
+  elif xcrun notarytool history --keychain-profile "$KEYCHAIN_PROFILE" >/dev/null 2>&1; then
+    KEYCHAIN_ARGS=(--keychain-profile "$KEYCHAIN_PROFILE")
+    ok "Notarize profile: ${KEYCHAIN_PROFILE} (Data Protection Keychain — may lock)"
+    warn "For reliability, migrate credentials to login.keychain-db:"
+    warn "  xcrun notarytool store-credentials \"${KEYCHAIN_PROFILE}\" \\"
+    warn "    --apple-id <email> --team-id ${TEAM_ID:-XXXXXXXXXX} --password <app-pwd> \\"
+    warn "    --keychain ~/Library/Keychains/login.keychain-db"
+  else
+    warn "Keychain profile '${KEYCHAIN_PROFILE}' not found in any keychain → skipping notarization"
     warn "Configure with: xcrun notarytool store-credentials \"${KEYCHAIN_PROFILE}\" \\"
-    warn "    --apple-id <email> --team-id ${TEAM_ID:-XXXXXXXXXX} --password <app-specific-pwd>"
+    warn "    --apple-id <email> --team-id ${TEAM_ID:-XXXXXXXXXX} --password <app-specific-pwd> \\"
+    warn "    --keychain ~/Library/Keychains/login.keychain-db"
     SKIP_NOTARIZE=1
   fi
 fi
@@ -113,12 +186,12 @@ fi
 [[ -f "$ENTITLEMENTS" ]] || fail "Missing entitlements: ${ENTITLEMENTS}"
 ok "Entitlements: $(basename "$ENTITLEMENTS")"
 
-[[ -d "$CLAUDECODEUI_DIR" ]] || fail "Missing claudecodeui at ${CLAUDECODEUI_DIR}"
-[[ -d "$CLAUDE_CODE_MAIN_DIR" ]] || fail "Missing claude-code-main at ${CLAUDE_CODE_MAIN_DIR}"
-[[ -d "$MEMORY_CORE_DIR" ]] || fail "Missing edgeclaw-memory-core at ${MEMORY_CORE_DIR}"
+[[ -d "$PILOTDECKUI_DIR" ]] || fail "Missing pilotdeckui at ${PILOTDECKUI_DIR}"
+[[ -d "$PILOTDECK_MAIN_DIR/src" ]] || fail "Missing src/ at ${PILOTDECK_MAIN_DIR}"
+[[ -d "$MEMORY_CORE_DIR" ]] || fail "Missing memory-core at ${MEMORY_CORE_DIR}"
 [[ -f "${MEMORY_CORE_DIR}/lib/index.js" ]] \
-  || fail "edgeclaw-memory-core/lib/index.js missing — run: (cd ${MEMORY_CORE_DIR} && npm run build)"
-ok "Source trees present (claudecodeui + claude-code-main + edgeclaw-memory-core)"
+  || fail "${MEMORY_CORE_DIR}/lib/index.js missing — run: (cd ${MEMORY_CORE_DIR} && npm run build)"
+ok "Source trees present (ui + repo-root/src + edgeclaw-memory-core)"
 
 # Bundled Node binary
 if [[ ! -x "$NODE_BIN" ]]; then
@@ -135,20 +208,39 @@ fi
 ok "Bundled Bun: $("$BUN_BIN" --version)"
 
 # ============================================================================
-step "Build claudecodeui (vite)"
+step "Emit build-info.json"
+# ============================================================================
+# Goes into apps/desktop/dist/ alongside main.js — electron-builder's
+# `files: dist/**/*` rule picks it up automatically. Read at startup by
+# main.ts and exposed to renderer via window.pilotdeck.getBuildInfo().
+mkdir -p "${DESKTOP_DIR}/dist"
+cat > "${DESKTOP_DIR}/dist/build-info.json" <<EOF
+{
+  "version": "${VERSION}",
+  "gitSha": "${GIT_SHA}",
+  "gitFullSha": "${GIT_FULL_SHA}",
+  "gitBranch": "${GIT_BRANCH}",
+  "buildDate": "${BUILD_DATE}",
+  "mode": "${MODE}"
+}
+EOF
+ok "build-info.json: v${VERSION} (${GIT_SHA}) @ ${BUILD_DATE} [${MODE}]"
+
+# ============================================================================
+step "Build pilotdeckui (vite)"
 # ============================================================================
 
 if [[ "$SKIP_BUILD" == "1" ]]; then
-  if [[ -d "${CLAUDECODEUI_DIR}/dist" ]]; then
-    warn "Skipped (--skip-build). Reusing existing claudecodeui/dist/"
+  if [[ -d "${PILOTDECKUI_DIR}/dist" ]]; then
+    warn "Skipped (--skip-build). Reusing existing pilotdeckui/dist/"
   else
-    fail "Cannot --skip-build: claudecodeui/dist/ missing."
+    fail "Cannot --skip-build: pilotdeckui/dist/ missing."
   fi
 else
   info "npm run build (vite)…"
-  (cd "$CLAUDECODEUI_DIR" && npm run build) >/tmp/edgeclaw-ccui-build.log 2>&1 \
-    || { tail -40 /tmp/edgeclaw-ccui-build.log; fail "claudecodeui build failed (see /tmp/edgeclaw-ccui-build.log)"; }
-  ok "claudecodeui built"
+  (cd "$PILOTDECKUI_DIR" && npm run build) >/tmp/pilotdeck-pdui-build.log 2>&1 \
+    || { tail -40 /tmp/pilotdeck-pdui-build.log; fail "pilotdeckui build failed (see /tmp/pilotdeck-pdui-build.log)"; }
+  ok "pilotdeckui built"
 fi
 
 # ============================================================================
@@ -164,7 +256,7 @@ if [[ "$MODE" == "signed" ]]; then
   #  - native node addons:  *.node, *.dylib, *.so, *.bare, spawn-helper
   #  - vendored ripgrep:    rg under any *darwin* path
   #    (matches arm64-darwin/, x64-darwin/, aarch64-apple-darwin/)
-  # Search roots include claude-code-main/src/ because some packages vendor
+  # Search roots include pilotdeck-main/src/ because some packages vendor
   # binaries outside node_modules (e.g. src/utils/vendor/ripgrep/arm64-darwin/rg).
   while IFS= read -r -d '' f; do
     if codesign --force --sign "$IDENTITY" --timestamp --options runtime \
@@ -174,9 +266,9 @@ if [[ "$MODE" == "signed" ]]; then
       sign_fail=$((sign_fail+1))
     fi
   done < <(find \
-    "${CLAUDECODEUI_DIR}/node_modules" \
-    "${CLAUDE_CODE_MAIN_DIR}/node_modules" \
-    "${CLAUDE_CODE_MAIN_DIR}/src" \
+    "${PILOTDECKUI_DIR}/node_modules" \
+    "${PILOTDECK_MAIN_DIR}/node_modules" \
+    "${PILOTDECK_MAIN_DIR}/src" \
     -type f \
     \( -name "*.node" -o -name "*.dylib" -o -name "*.so" \
        -o -name "*.bare" -o -name "spawn-helper" \
@@ -196,12 +288,32 @@ else
 fi
 
 # ============================================================================
-step "Create bundles (claudecodeui + claude-code-main)"
+step "Build pilotdeck-main (TypeScript → dist/)"
+# ============================================================================
+# ui/server/ imports compiled JS from ../../dist/src/ (e.g. pilot/index.js,
+# cli/createLocalGateway.js). The dist/ tree is NOT checked in — it must be
+# rebuilt before bundling so the packaged app can resolve those imports.
+
+if [[ "$SKIP_BUILD" == "1" ]]; then
+  if [[ -d "${PILOTDECK_MAIN_DIR}/dist/src" ]]; then
+    warn "Skipped (--skip-build). Reusing existing dist/src/"
+  else
+    fail "Cannot --skip-build: dist/src/ missing. Run: (cd ${PILOTDECK_MAIN_DIR} && npm run build)"
+  fi
+else
+  info "npm run build (tsc)…"
+  (cd "$PILOTDECK_MAIN_DIR" && npm run build) >/tmp/pilotdeck-main-build.log 2>&1 \
+    || { tail -40 /tmp/pilotdeck-main-build.log; fail "pilotdeck-main build failed (see /tmp/pilotdeck-main-build.log)"; }
+  ok "pilotdeck-main built (dist/src/)"
+fi
+
+# ============================================================================
+step "Create bundles (pilotdeckui + pilotdeck-main)"
 # ============================================================================
 
 # NODE_MODULES_EXCLUDES: aggressively trim node_modules — these dirs/files are
 # never imported at runtime, so safe to drop. Patterns are scoped to node_modules
-# to avoid breaking source trees that DO ship .md / examples (e.g. claude-code-main
+# to avoid breaking source trees that DO ship .md / examples (e.g. pilotdeck-main
 # bundles skill .md files via Bun text imports → see src/skills/bundled/*Content.ts).
 NODE_MODULES_EXCLUDES=(
   --exclude='*.map'
@@ -231,47 +343,55 @@ NODE_MODULES_EXCLUDES=(
   --exclude='node_modules/**/*.md'
 )
 
-# claudecodeui bundle: server/, dist/, shared/, scripts/, package.json, node_modules
-# Note: claudecodeui server source is JS, no runtime .md imports → safe to also
+# pilotdeckui bundle: server/, dist/, shared/, scripts/, package.json, node_modules
+# Note: pilotdeckui server source is JS, no runtime .md imports → safe to also
 # strip top-level test/__tests__ dirs.
-rm -f "$CCUI_BUNDLE"
-(cd "$CLAUDECODEUI_DIR" && tar cf "$CCUI_BUNDLE" \
+rm -f "$PDUI_BUNDLE"
+(cd "$PILOTDECKUI_DIR" && tar cf "$PDUI_BUNDLE" \
   "${NODE_MODULES_EXCLUDES[@]}" \
   --exclude='**/__tests__' \
   --exclude='**/*.test.js' \
   package.json server/ shared/ dist/ scripts/ node_modules/) \
-  || fail "claudecodeui tar creation failed"
-CCUI_MB=$(du -sm "$CCUI_BUNDLE" | awk '{print $1}')
-ok "claudecodeui bundle: ${CCUI_MB}MB → $(basename "$CCUI_BUNDLE")"
+  || fail "pilotdeckui tar creation failed"
+PDUI_MB=$(du -sm "$PDUI_BUNDLE" | awk '{print $1}')
+ok "pilotdeckui bundle: ${PDUI_MB}MB → $(basename "$PDUI_BUNDLE")"
 
-# claude-code-main bundle: src/, gateway/, preload.ts, proxy.ts, router.ts,
-# package.json, bunfig.toml, edgeclaw-config.ts, scripts/, node_modules
-# IMPORTANT: do NOT strip src/**/*.md or src/**/examples — many bundled skills
-# (verify/, claudeApi/, etc.) inline .md files via `import md from './*.md'`
-# at runtime through Bun's text loader (see src/skills/bundled/*Content.ts).
-rm -f "$CCM_BUNDLE"
-(cd "$CLAUDE_CODE_MAIN_DIR" && tar cf "$CCM_BUNDLE" \
+# pilotdeck-main bundle: after the PilotDeck refactor, the "main" code lives at
+# repo root. We bundle src/, dist/src/ (compiled JS — required by ui/server/
+# imports like ../../dist/src/pilot/index.js), scripts/, node_modules/, and any
+# optional top-level files. gateway/ was merged into src/gateway/ — include it
+# if it exists as a top-level dir, otherwise omit.
+rm -f "$PDM_BUNDLE"
+PDM_ITEMS=(src/ dist/src/ scripts/ node_modules/)
+[[ -d "${PILOTDECK_MAIN_DIR}/gateway" ]] && PDM_ITEMS+=(gateway/)
+for f in package.json bunfig.toml preload.ts proxy.ts router.ts \
+         pilotdeck-config.ts tsconfig.json; do
+  [[ -f "${PILOTDECK_MAIN_DIR}/$f" ]] && PDM_ITEMS+=("$f")
+done
+(cd "$PILOTDECK_MAIN_DIR" && tar cf "$PDM_BUNDLE" \
   "${NODE_MODULES_EXCLUDES[@]}" \
-  package.json bunfig.toml \
-  $(ls preload.ts proxy.ts router.ts edgeclaw-config.ts tsconfig.json 2>/dev/null) \
-  src/ gateway/ scripts/ node_modules/) \
-  || fail "claude-code-main tar creation failed"
-CCM_MB=$(du -sm "$CCM_BUNDLE" | awk '{print $1}')
-ok "claude-code-main bundle: ${CCM_MB}MB → $(basename "$CCM_BUNDLE")"
+  --exclude='apps' --exclude='ui' --exclude='old_ui' \
+  --exclude='edgeclaw-memory-core' --exclude='docs' --exclude='tests' \
+  --exclude='third-party' --exclude='dist/tests' --exclude='dist/scripts' \
+  --exclude='.git' --exclude='packages' \
+  "${PDM_ITEMS[@]}") \
+  || fail "pilotdeck-main tar creation failed"
+PDM_MB=$(du -sm "$PDM_BUNDLE" | awk '{print $1}')
+ok "pilotdeck-main bundle: ${PDM_MB}MB → $(basename "$PDM_BUNDLE")"
 
-# edgeclaw-memory-core bundle: package.json + lib/ (prebuilt JS) + ui-source/
-# (UI dashboard served by claudecodeui /memory-dashboard route — without it the
+# pilotdeck-memory-core bundle: package.json + lib/ (prebuilt JS) + ui-source/
+# (UI dashboard served by pilotdeckui /memory-dashboard route — without it the
 #  iframe falls through to the SPA index and recursively renders the whole app).
-# 注意：claudecodeui/server 和 claude-code-main 都通过 ../../../edgeclaw-memory-core 找它
+# 注意：pilotdeckui/server 和 pilotdeck-main 都通过 ../../../pilotdeck-memory-core 找它
 rm -f "$MEM_BUNDLE"
 [[ -f "${MEMORY_CORE_DIR}/ui-source/index.html" ]] \
-  || fail "edgeclaw-memory-core/ui-source/index.html missing — required for /memory-dashboard"
+  || fail "pilotdeck-memory-core/ui-source/index.html missing — required for /memory-dashboard"
 (cd "$MEMORY_CORE_DIR" && tar cf "$MEM_BUNDLE" \
   --exclude='*.map' --exclude='**/*.md' \
   package.json lib/ ui-source/) \
-  || fail "edgeclaw-memory-core tar creation failed"
+  || fail "pilotdeck-memory-core tar creation failed"
 MEM_MB=$(du -sm "$MEM_BUNDLE" | awk '{print $1}')
-ok "edgeclaw-memory-core bundle: ${MEM_MB}MB → $(basename "$MEM_BUNDLE")"
+ok "pilotdeck-memory-core bundle: ${MEM_MB}MB → $(basename "$MEM_BUNDLE")"
 
 # ============================================================================
 step "Compile TypeScript + electron-builder (--dir)"
@@ -298,8 +418,8 @@ step "Re-sign app bundle"
 if [[ "$MODE" == "adhoc" ]]; then
   info "ad-hoc deep re-sign…"
   codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" \
-    --options runtime "$APP_OUT" 2>/tmp/edgeclaw-codesign.log \
-    || { tail -30 /tmp/edgeclaw-codesign.log; fail "ad-hoc deep sign failed"; }
+    --options runtime "$APP_OUT" 2>/tmp/pilotdeck-codesign.log \
+    || { tail -30 /tmp/pilotdeck-codesign.log; fail "ad-hoc deep sign failed"; }
   codesign --verify --deep --strict "$APP_OUT" 2>/dev/null \
     || fail "ad-hoc signature verification failed"
   ok "ad-hoc signed (Team ID inconsistencies neutralized)"
@@ -315,7 +435,7 @@ if [[ "$MODE" == "signed" && "$SKIP_NOTARIZE" == "0" ]]; then
 step "Apple notarization"
 # ============================================================================
 
-  NZ_ZIP="${DESKTOP_DIR}/dist-electron/EdgeClaw-notarize.zip"
+  NZ_ZIP="${DESKTOP_DIR}/dist-electron/PilotDeck-notarize.zip"
   rm -f "$NZ_ZIP"
   ditto -c -k --keepParent "$APP_OUT" "$NZ_ZIP" \
     || fail "Failed to create notarization zip"
@@ -331,14 +451,14 @@ step "Apple notarization"
     info "Submitting (attempt ${n}/${ATTEMPTS}, may take 5-20 min)…"
     LOG="$(mktemp)"
     if xcrun notarytool submit "$NZ_ZIP" \
-        --keychain-profile "$KEYCHAIN_PROFILE" --wait 2>&1 | tee "$LOG"; then
+        "${KEYCHAIN_ARGS[@]}" --wait 2>&1 | tee "$LOG"; then
       if grep -q "status: Accepted" "$LOG"; then
         NOTARIZE_OK=1; rm -f "$LOG"; break
       elif grep -q "status: Invalid" "$LOG"; then
         SID="$(grep -o 'id: [0-9a-f-]*' "$LOG" | head -1 | awk '{print $2}')"
         rm -f "$LOG"
         warn "Apple rejected. Inspect with:"
-        echo "      xcrun notarytool log ${SID} --keychain-profile \"${KEYCHAIN_PROFILE}\""
+        echo "      xcrun notarytool log ${SID} ${KEYCHAIN_ARGS[*]}"
         break
       fi
     fi
@@ -376,15 +496,15 @@ step "Create DMG"
 # ditto step (error: "操作不被允许" / EPERM on /Volumes/<volname>/<App>.app).
 #
 # CRITICAL — volume name TCC heuristic (verified empirically on macOS 14.x):
-#   • "EdgeClaw"          → blocked (matches CFBundleName)
-#   • "EdgeClaw 0.1.0"    → blocked (CFBundleName + space + token)
-#   • "EdgeClaw Installer"→ OK
-#   • "Install EdgeClaw"  → OK   ← used here for friendlier Finder display
-#   • "EdgeClaw-0.1.0"    → OK   (hyphen instead of space)
+#   • "PilotDeck"          → blocked (matches CFBundleName)
+#   • "PilotDeck 0.1.0"    → blocked (CFBundleName + space + token)
+#   • "PilotDeck Installer"→ OK
+#   • "Install PilotDeck"  → was OK on older macOS; on darwin 25+ the form
+#     "Install PilotDeck 0.1.0" (version suffix) triggers ditto EPERM — avoid.
+#   • "PilotDeck-0.1.0" / "PilotDeck-0.1.0-Installer" → OK (hyphenated forms)
 # The pattern appears to be: TCC App Management blocks copying a notarized
-# .app into a volume whose name STARTS with `<CFBundleName><whitespace>` and
-# the next token isn't a known word like "Installer". Safer to avoid the
-# pattern entirely.
+# .app into a volume whose name matches certain "app-like" titles. Safer to
+# use a hyphenated volname that cannot be read as "<BrandName> <semver>".
 #
 # Other learned constraints:
 #   • Format ULMO/APFS combo breaks; HFS+ + UDZO is universally portable.
@@ -397,8 +517,8 @@ rm -f "$DMG_OUT"
 
 APP_MB=$(du -sm "$APP_OUT" | awk '{print $1}')
 ALLOC=$((APP_MB + 300))
-VOLNAME="Install EdgeClaw ${VERSION}"
-RW_DMG="$(mktemp -t edgeclaw-rw.XXXX).dmg"
+VOLNAME="PilotDeck-${VERSION}-Installer"
+RW_DMG="$(mktemp -t pilotdeck-rw.XXXX).dmg"
 trap 'rm -f "$RW_DMG"; mount | awk -v v="$VOLNAME" "\$0 ~ v {print \$1}" | xargs -I{} hdiutil detach {} -force >/dev/null 2>&1 || true' EXIT
 
 info "Step a: create empty UDRW image (${ALLOC}MB, HFS+, volname='${VOLNAME}')…"
@@ -413,7 +533,7 @@ MP="$(echo "$ATT_PLIST" | python3 -c "import sys, plistlib; d=plistlib.loads(sys
 [[ -n "$MP" && -d "$MP" ]] || fail "Could not parse mount point from hdiutil plist"
 
 info "Step c: ditto .app + Applications symlink…"
-ditto "$APP_OUT" "$MP/EdgeClaw.app" \
+ditto "$APP_OUT" "$MP/PilotDeck.app" \
   || { hdiutil detach "$MP" -force >/dev/null 2>&1; fail "ditto into mounted DMG failed (TCC? try a different volname)"; }
 ln -sf /Applications "$MP/Applications"
 
@@ -458,7 +578,7 @@ step "Notarize DMG (offline-friendly polish)"
   info "Submitting DMG envelope (1-3 min typically)…"
   DMG_LOG="$(mktemp)"
   if xcrun notarytool submit "$DMG_OUT" \
-      --keychain-profile "$KEYCHAIN_PROFILE" --wait 2>&1 | tee "$DMG_LOG"; then
+      "${KEYCHAIN_ARGS[@]}" --wait 2>&1 | tee "$DMG_LOG"; then
     if grep -q "status: Accepted" "$DMG_LOG"; then
       DMG_NOTARIZE_OK=1
     fi
@@ -472,11 +592,12 @@ step "Notarize DMG (offline-friendly polish)"
     fi
   else
     if grep -q "No Keychain password item found" "$DMG_LOG" 2>/dev/null; then
-      warn "DMG-level notarize hit notary throttling (.app inside still notarized)"
+      warn "DMG-level notarize hit keychain lock (.app inside still notarized)"
+      warn "  See RELEASING.md 'Apple Notarization 钥匙串问题' for permanent fix"
     else
       warn "DMG-level notarize failed (.app inside still notarized — non-fatal)"
     fi
-    info "  (Run later: xcrun notarytool submit \"$DMG_OUT\" --keychain-profile \"$KEYCHAIN_PROFILE\" --wait)"
+    info "  (Run later: xcrun notarytool submit \"$DMG_OUT\" ${KEYCHAIN_ARGS[*]} --wait)"
     info "  (Then:      xcrun stapler staple \"$DMG_OUT\")"
   fi
   rm -f "$DMG_LOG"
@@ -491,8 +612,8 @@ fi
 # rejection diagnosis, and showing "Authority + source" of an installed
 # build. See INSTALL.md for the user-facing explanation.
 DIST_DIR="$(dirname "$DMG_OUT")"
-HELPER_SRC="${SCRIPT_DIR}/install-edgeclaw.sh"
-HELPER_DST="${DIST_DIR}/install-edgeclaw.sh"
+HELPER_SRC="${SCRIPT_DIR}/install-pilotdeck.sh"
+HELPER_DST="${DIST_DIR}/install-pilotdeck.sh"
 INSTALL_MD_SRC="${DESKTOP_DIR}/INSTALL.md"
 INSTALL_MD_DST="${DIST_DIR}/INSTALL.md"
 if [[ -f "$HELPER_SRC" ]]; then
@@ -520,6 +641,7 @@ echo "  ${BLD}DMG${RST}      ${DMG_OUT}"
 [[ -f "$HELPER_DST" ]]    && echo "  ${BLD}Helper${RST}   ${HELPER_DST}"
 [[ -f "$INSTALL_MD_DST" ]] && echo "  ${BLD}Guide${RST}    ${INSTALL_MD_DST}"
 echo "  ${BLD}Version${RST}  ${VERSION}"
+echo "  ${BLD}Build${RST}    ${GIT_SHA} · ${BUILD_DATE} · branch=${GIT_BRANCH}"
 echo "  ${BLD}Size${RST}     ${DMG_MB}MB"
 echo "  ${BLD}Mode${RST}     ${MODE}"
 if [[ "$MODE" == "signed" ]]; then
@@ -537,7 +659,7 @@ if [[ "$MODE" == "signed" ]]; then
     echo "  ${BLD}${YEL}分发提示${RST}  通过飞书/微信/QQ 等沙盒 IM 发 DMG 会触发"
     echo "          macOS provenance 拒绝执行（详见 INSTALL.md 根因分析）。"
     echo "          推荐：浏览器直链 / AirDrop / GitHub Releases。"
-    echo "          兜底：把 install-edgeclaw.sh 一并发送，让收方跑一次即可。"
+    echo "          兜底：把 install-pilotdeck.sh 一并发送，让收方跑一次即可。"
   else
     echo "  ${BLD}Notarize${RST} ${YEL}Skipped/Failed${RST}"
     echo "  ${BLD}Install${RST}  拖入 Applications → 右键打开 → 允许"
@@ -547,3 +669,69 @@ else
   echo "  ${BLD}Notice${RST}   ad-hoc 包仅本机有效，分发请用 --signed"
 fi
 echo
+
+# ============================================================================
+# [12] Publish to GitHub Releases
+# ============================================================================
+GH_PUBLISH_OK=0
+if [[ "$SKIP_PUBLISH" == "1" ]]; then
+  info "GitHub Release upload skipped (--skip-publish)"
+elif [[ "$MODE" == "adhoc" ]]; then
+  info "GitHub Release upload skipped (ad-hoc builds are not published)"
+elif ! command -v gh &>/dev/null; then
+  warn "gh CLI not found — skipping GitHub Release upload"
+  warn "  Install: brew install gh && gh auth login"
+elif ! gh auth status &>/dev/null 2>&1; then
+  warn "gh CLI not authenticated — skipping GitHub Release upload"
+  warn "  Run: gh auth login"
+else
+  step "Publish to GitHub Releases"
+
+  GH_TAG="v${VERSION}"
+  CHANGELOG_FILE="${REPO_ROOT}/CHANGELOG.md"
+  GH_NOTES=""
+
+  # Extract release notes from CHANGELOG.md for this version
+  if [[ -f "$CHANGELOG_FILE" ]]; then
+    GH_NOTES="$(awk -v ver="## v${VERSION}" '
+      $0 ~ ver { found=1; next }
+      found && /^---$/ { exit }
+      found && /^## v/ { exit }
+      found { print }
+    ' "$CHANGELOG_FILE" | sed '/^$/{ N; /^\n$/d; }' | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}')"
+  fi
+
+  if [[ -z "$GH_NOTES" ]]; then
+    GH_NOTES="PilotDeck Desktop ${GH_TAG}
+
+Build: ${GIT_SHA} · ${BUILD_DATE} · branch=${GIT_BRANCH}
+Mode: ${MODE}"
+  fi
+
+  # Collect assets to upload
+  GH_ASSETS=("$DMG_OUT")
+  [[ -f "$HELPER_DST" ]]     && GH_ASSETS+=("$HELPER_DST")
+  [[ -f "$INSTALL_MD_DST" ]] && GH_ASSETS+=("$INSTALL_MD_DST")
+
+  # Create or update the release
+  if gh release view "$GH_TAG" --repo "$(git -C "$REPO_ROOT" remote get-url origin)" &>/dev/null 2>&1; then
+    info "Release ${GH_TAG} exists — uploading assets (overwrite)…"
+    gh release upload "$GH_TAG" "${GH_ASSETS[@]}" --clobber \
+      --repo "$(git -C "$REPO_ROOT" remote get-url origin)" \
+      && { ok "Assets uploaded to existing release ${GH_TAG}"; GH_PUBLISH_OK=1; } \
+      || warn "Failed to upload assets to ${GH_TAG} (non-fatal)"
+  else
+    info "Creating release ${GH_TAG}…"
+    gh release create "$GH_TAG" "${GH_ASSETS[@]}" \
+      --repo "$(git -C "$REPO_ROOT" remote get-url origin)" \
+      --title "PilotDeck Desktop ${GH_TAG}" \
+      --notes "$GH_NOTES" \
+      && { ok "Release ${GH_TAG} created with assets"; GH_PUBLISH_OK=1; } \
+      || warn "Failed to create release ${GH_TAG} (non-fatal)"
+  fi
+
+  if [[ "$GH_PUBLISH_OK" == "1" ]]; then
+    GH_URL="$(gh release view "$GH_TAG" --repo "$(git -C "$REPO_ROOT" remote get-url origin)" --json url -q .url 2>/dev/null || true)"
+    [[ -n "$GH_URL" ]] && echo "  ${BLD}Release${RST}  ${GH_URL}"
+  fi
+fi

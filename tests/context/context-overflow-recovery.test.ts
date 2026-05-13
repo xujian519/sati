@@ -21,13 +21,10 @@ test("ContextOverflowRecovery first PTL → keepRatio 0.5", () => {
   }
 });
 
-test("ContextOverflowRecovery second PTL → keepRatio 0.25", () => {
+test("ContextOverflowRecovery second PTL → give_up", () => {
   const recovery = new ContextOverflowRecovery();
   const decision = recovery.decide({ error: ptl, hasAttemptedCompact: true });
-  assert.equal(decision.type, "truncate_head_and_retry");
-  if (decision.type === "truncate_head_and_retry") {
-    assert.equal(decision.keepRatio, 0.25);
-  }
+  assert.equal(decision.type, "give_up");
 });
 
 test("ContextOverflowRecovery non-PTL → give_up", () => {

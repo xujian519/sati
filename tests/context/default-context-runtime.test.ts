@@ -124,10 +124,9 @@ test("DefaultContextRuntime.recoverFromModelError returns truncate first then ag
     messages: [],
     hasAttemptedCompact: true,
   });
-  assert.equal(second.type, "truncate_head_and_retry");
-  if (second.type === "truncate_head_and_retry") {
-    assert.equal(second.keepRatio, 0.25);
-    assert.equal(second.reason, "ptl-second-attempt-aggressive");
+  assert.equal(second.type, "give_up");
+  if (second.type === "give_up") {
+    assert.equal(second.reason, "ptl-exhausted-after-two-attempts");
   }
 });
 
