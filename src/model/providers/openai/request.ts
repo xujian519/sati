@@ -92,6 +92,16 @@ function toOpenAIMessages(message: CanonicalMessage): OpenAIMessage[] {
       content: block.content.map((content) => content.text).join("\n"),
     }));
 
+  const toolResultRefMessages = message.content
+    .filter((block) => block.type === "tool_result_reference")
+    .map((block) => ({
+      role: "tool" as const,
+      tool_call_id: block.toolCallId,
+      content: block.preview + (block.hasMore
+        ? `\n\n[Truncated: original ${block.originalBytes} bytes, file: ${block.path}]`
+        : ""),
+    }));
+
   const assistantToolCalls = message.content
     .filter((block) => block.type === "tool_call")
     .map((block) => ({
@@ -105,7 +115,11 @@ function toOpenAIMessages(message: CanonicalMessage): OpenAIMessage[] {
 
   const thinkingBlocks = message.content.filter((block) => block.type === "thinking");
   const normalContent = message.content.filter(
-    (block) => block.type !== "tool_result" && block.type !== "tool_call" && block.type !== "thinking",
+    (block) =>
+      block.type !== "tool_result" &&
+      block.type !== "tool_result_reference" &&
+      block.type !== "tool_call" &&
+      block.type !== "thinking",
   );
 
   const messages: OpenAIMessage[] = [];
@@ -123,7 +137,7 @@ function toOpenAIMessages(message: CanonicalMessage): OpenAIMessage[] {
     messages.push(msg);
   }
 
-  return [...messages, ...toolResultMessages];
+  return [...messages, ...toolResultMessages, ...toolResultRefMessages];
 }
 
 function toOpenAIContent(blocks: CanonicalContentBlock[]): string | unknown[] {
@@ -160,6 +174,8 @@ function toOpenAIContent(blocks: CanonicalContentBlock[]): string | unknown[] {
       case "tool_call":
       case "tool_result":
         return undefined;
+      case "tool_result_reference":
+        return { type: "text", text: block.preview };
     }
   }).filter(Boolean);
 }

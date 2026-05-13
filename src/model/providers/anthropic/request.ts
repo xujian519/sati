@@ -157,6 +157,18 @@ function toAnthropicContentBlock(block: CanonicalContentBlock): unknown {
         content: block.content.map((content) => ({ type: "text", text: content.text })),
         is_error: block.isError,
       };
+    case "tool_result_reference":
+      return {
+        type: "tool_result",
+        tool_use_id: block.toolCallId,
+        content: [{
+          type: "text",
+          text: block.preview + (block.hasMore
+            ? `\n\n[Truncated: original ${block.originalBytes} bytes, file: ${block.path}]`
+            : ""),
+        }],
+        is_error: false,
+      };
   }
 }
 
