@@ -279,6 +279,23 @@ async function runTask(task, args) {
   process.env.PILOT_HOME = pilotHome;
   ensurePilotConfig(args.model);
 
+  // 0.5 Copy WCB skills into $PILOT_HOME/skills/ (mirrors Claude Code ~/.claude/skills/)
+  if (task.skills) {
+    for (const line of task.skills.split("\n")) {
+      const skillName = line.trim();
+      if (!skillName) continue;
+      const src = join(task.skillsPath, skillName);
+      const dst = join(pilotHome, "skills", skillName);
+      if (existsSync(src)) {
+        mkdirSync(dst, { recursive: true });
+        cpSync(src, dst, { recursive: true });
+        log(task.taskId, `Skill copied: ${skillName} -> ${dst}`);
+      } else {
+        log(task.taskId, `WARNING: Skill not found: ${src}`);
+      }
+    }
+  }
+
   // 1. Prepare workspace
   const workDir = prepareWorkspace(task, runDir);
 
