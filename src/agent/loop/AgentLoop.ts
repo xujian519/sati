@@ -86,6 +86,8 @@ export class AgentLoop {
      * and retries; a second hit falls through to the recovery policy.
      */
     let hasAttemptedOutputRetry = false;
+    const MAX_JSON_SELF_CORRECT_RETRIES = 3;
+    let jsonSelfCorrectCount = 0;
 
     while (true) {
       if (input.abortSignal?.aborted) {
@@ -182,6 +184,29 @@ export class AgentLoop {
           );
           messages.push(projected);
           yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: projected };
+        }
+
+        if (
+          assembled.error.code === "invalid_tool_arguments" &&
+          jsonSelfCorrectCount < MAX_JSON_SELF_CORRECT_RETRIES
+        ) {
+          jsonSelfCorrectCount++;
+          messages.push({
+            role: "user",
+            content: [{
+              type: "text",
+              text: "Your previous tool call contained invalid JSON in the arguments and could not be parsed. "
+                + "Please retry with valid JSON. Common issues: missing quotes around keys/values, "
+                + "trailing commas, unescaped special characters in strings.",
+            }],
+          });
+          yield {
+            type: "turn_continued",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            reason: "model_error",
+          };
+          continue;
         }
 
         // Reactive recovery: ask context runtime if it can recover from the
