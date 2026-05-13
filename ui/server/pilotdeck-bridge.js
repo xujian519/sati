@@ -588,10 +588,10 @@ export function getActiveSessionIdsViaGateway() {
  * @returns {Map<string, {aggregate: object, records: object[]}>}
  */
 /**
- * Build a sessionId→projectPath lookup from the filesystem.
- * Scans `~/.pilotdeck/projects/*/chats/` for .jsonl files and maps
+ * Build a sessionId->projectPath lookup from the filesystem.
+ * Scans ~/.pilotdeck/projects/<star>/chats/ for .jsonl files and maps
  * each session filename back to the actual project path (resolved via
- * the `.cwd` marker or well-known directory names).
+ * the .cwd marker or well-known directory names).
  *
  * @returns {{ sessionIndex: Map<string,string>, dirToPath: Map<string,string> }}
  */
@@ -715,7 +715,7 @@ function lookupSessionTitle(sessionId, projectKey) {
 function _readFirstPrompt(sessionId, projectKey) {
     const pilotHome = GENERAL_HOME;
     // Sessions are stored on disk under a sanitized filename (raw sessionId
-    // may contain `/`, `:`, `=` which would split into nested dirs). We try
+    // may contain /, :, = which would split into nested dirs). We try
     // both the sanitized and raw form so this also resolves any legacy files
     // that pre-date the sanitize fix.
     const safeId = sanitizeSessionIdForPath(sessionId);
