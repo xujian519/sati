@@ -298,12 +298,14 @@ export function useProjectsState({
       const projectRelativeChanged = normalized.startsWith(projectPrefix)
         ? normalized.slice(projectPrefix.length)
         : '';
+      const providerMatches =
+        selectedSession.__provider === 'claude' || selectedSession.__provider === 'pilotdeck';
       const isSelectedBackgroundTranscriptChange =
-        selectedSession.__provider === 'claude' &&
+        providerMatches &&
         isBackgroundTaskSession(selectedSession) &&
         projectRelativeChanged === selectedSession.relativeTranscriptPath;
       const isMainSessionChange =
-        selectedSession.__provider === 'claude' &&
+        providerMatches &&
         !isBackgroundTaskSession(selectedSession) &&
         projectRelativeChanged === `${selectedSession.id}.jsonl`;
 

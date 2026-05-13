@@ -27,14 +27,18 @@ test("DefaultContextRuntime.prepareForModel returns ModelContext with assembled 
   assert.equal(context.diagnostics.length, 0);
 });
 
-test("DefaultContextRuntime.prepareForModel surfaces tool-pairing warning as diagnostic", async () => {
+test("DefaultContextRuntime.prepareForModel injects placeholder and surfaces diagnostic for missing tool_result", async () => {
   const runtime = new DefaultContextRuntime();
   const messages: CanonicalMessage[] = [
     { role: "assistant", content: [{ type: "tool_call", id: "call-1", name: "read_file", input: {} }] },
     { role: "user", content: [{ type: "text", text: "no tool result" }] },
   ];
   const context = await runtime.prepareForModel({ ...baseInput, messages });
-  assert.ok(context.diagnostics.some((d) => d.code === "tool_call_unmatched"));
+  assert.ok(context.diagnostics.some((d) => d.code === "tool_result_injected"));
+  const injected = context.messages.find(
+    (m) => m.content.some((b) => b.type === "tool_result" && b.toolCallId === "call-1"),
+  );
+  assert.ok(injected, "placeholder tool_result should be injected");
 });
 
 test("DefaultContextRuntime includes PluginRuntime commands and skills in the system prompt", async () => {

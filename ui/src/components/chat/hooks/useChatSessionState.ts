@@ -434,9 +434,13 @@ export function useChatSessionState({
     const provider = (selectedSession.__provider || localStorage.getItem('selected-provider') as Provider) || 'claude';
     const sessionKey = `${selectedSession.id}:${selectedProject.name}:${provider}`;
 
-    // Skip if already loaded and fresh
-    if (lastLoadedSessionKeyRef.current === sessionKey && sessionStore.has(selectedSession.id) && !sessionStore.isStale(selectedSession.id)) {
-      return;
+    // Skip if already loaded and fresh, or if stale but has live realtime
+    // content (re-fetching while streaming would prune in-flight messages).
+    if (lastLoadedSessionKeyRef.current === sessionKey && sessionStore.has(selectedSession.id)) {
+      const hasRealtimeContent = (sessionStore.getSessionSlot?.(selectedSession.id)?.realtimeMessages?.length ?? 0) > 0;
+      if (!sessionStore.isStale(selectedSession.id) || hasRealtimeContent) {
+        return;
+      }
     }
 
     const sessionChanged = currentSessionId !== null && currentSessionId !== selectedSession.id;

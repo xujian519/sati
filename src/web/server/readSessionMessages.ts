@@ -20,7 +20,8 @@ import type {
   CanonicalContentBlock,
   CanonicalMessage,
 } from "../../model/index.js";
-import { listProjectSessions, readTranscript, replayTranscriptEntries, type SessionInfo } from "../../session/index.js";
+import { listProjectSessions, readTranscript, replayTranscriptEntries, findLastCompactBoundaryIndex, type SessionInfo } from "../../session/index.js";
+import type { AgentTranscriptEntry } from "../../session/transcript/TranscriptEntry.js";
 import { resolve } from "node:path";
 import { getPilotProjectChatDir } from "../../pilot/index.js";
 import { sanitizeSessionIdForPath } from "../../session/storage/ProjectSessionStorage.js";
@@ -48,12 +49,14 @@ export async function readWebSessionMessages(
   );
   const { entries } = await readTranscript(transcriptPath);
   const replay = replayTranscriptEntries(entries);
+  const entryTimestamps = extractMessageTimestamps(entries);
   const allMessages = replay.messages.flatMap((message, index) =>
     flattenCanonicalMessage(message, {
       index,
       sessionKey: input.sessionKey,
       projectKey: input.projectKey,
       now: options.now,
+      entryTimestamp: entryTimestamps[index],
     }),
   );
 
@@ -113,6 +116,8 @@ type ProjectionContext = {
   sessionKey: string;
   projectKey?: string;
   now?: () => Date;
+  /** Actual transcript entry timestamp — preferred over now(). */
+  entryTimestamp?: string;
 };
 
 /**
@@ -123,7 +128,7 @@ export function flattenCanonicalMessage(
   message: CanonicalMessage,
   context: ProjectionContext,
 ): WebMessage[] {
-  const stamp = (context.now ?? (() => new Date()))().toISOString();
+  const stamp = context.entryTimestamp ?? (context.now ?? (() => new Date()))().toISOString();
   const out: WebMessage[] = [];
   const role: WebMessageRole = message.role === "user" ? "user" : "assistant";
   let textBuffer = "";
@@ -258,4 +263,41 @@ function flushBlock(
       });
       return;
   }
+}
+
+/**
+ * Mirror `replayTranscriptEntries` message-production order to extract
+ * the original `createdAt` timestamp for each CanonicalMessage. The
+ * returned array is parallel to `replay.messages`.
+ */
+function extractMessageTimestamps(entries: AgentTranscriptEntry[]): string[] {
+  const lastBoundaryIndex = findLastCompactBoundaryIndex(entries);
+  const completedTurnIds = new Set(
+    entries.filter((e) => e.type === "turn_result").map((e) => e.turnId),
+  );
+  const timestamps: string[] = [];
+
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    const beforeBoundary = lastBoundaryIndex !== -1 && index < lastBoundaryIndex;
+
+    switch (entry.type) {
+      case "accepted_input":
+        if (!beforeBoundary) {
+          for (let i = 0; i < entry.messages.length; i += 1) {
+            timestamps.push(entry.createdAt);
+          }
+        }
+        break;
+      case "assistant_message":
+      case "tool_result_message":
+      case "durable_message":
+        if (completedTurnIds.has(entry.turnId) && !beforeBoundary) {
+          timestamps.push(entry.createdAt);
+        }
+        break;
+    }
+  }
+
+  return timestamps;
 }
