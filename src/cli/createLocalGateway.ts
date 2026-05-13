@@ -9,6 +9,7 @@ import {
   CompactionEngine,
   ContextOverflowRecovery,
   DefaultContextRuntime,
+  InstructionDiscovery,
   MicroCompactionEngine,
   PluginRuntimeExtensionResolver,
   SnipEngine,
@@ -343,7 +344,13 @@ class ProjectRuntimeRegistry {
       events: this.buildRouterEventBus(),
     });
     const backgroundTasks = new BackgroundTaskRuntime({ now: this.options.now });
-    const tools = createBuiltinRegistry({ backgroundTasks: { runtime: backgroundTasks } });
+    const tools = createBuiltinRegistry({
+      backgroundTasks: { runtime: backgroundTasks },
+      readSkill: {
+        loader: (name) => pluginRuntime.loadSkillPrompt(name),
+        lister: () => pluginRuntime.getAllSkills(),
+      },
+    });
     for (const tool of this.options.extraTools ?? []) {
       tools.register(tool);
     }
@@ -515,10 +522,16 @@ class ProjectRuntimeRegistry {
           runtime.snapshot.config.agent.model.provider,
           runtime.snapshot.config.agent.model.model,
         );
+        const instructionDiscovery = new InstructionDiscovery(
+          projectRoot,
+          projectRoot,
+          this.options.pilotHome,
+        );
         const contextRuntime = new DefaultContextRuntime({
           extension,
           projectRoot,
           memoryResolver,
+          instructionDiscovery,
           toolResultBudget,
           tokenBudget,
           compactionEngine,
