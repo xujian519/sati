@@ -723,7 +723,9 @@ export function useChatComposerState({
         return {
           allowedTools: [],
           disallowedTools: [],
-          skipPermissions: false,
+          // Mirror chatStorage.DEFAULT_SKIP_PERMISSIONS — PilotDeck
+          // ships with permission prompts bypassed by default.
+          skipPermissions: true,
         };
       };
 
