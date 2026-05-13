@@ -47,14 +47,16 @@ import fs from 'node:fs';
 import { promises as fsPromises } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
-import { installGlobalProxy } from '../../dist/src/cli/proxy.js';
+import { installGlobalProxy } from '../../src/cli/proxy.js';
 installGlobalProxy();
 
 import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from './utils/pilotPaths.js';
-// Use the compiled gateway client from dist/ so the UI server can run
-// without tsx (tsx 4.x es-module-lexer has a known parse bug on this
-// file). Run `npm run build` in the repo root when gateway source changes.
-import { createRemoteGateway } from '../../dist/src/gateway/index.js';
+// Read the gateway client straight from TypeScript source via tsx — the UI
+// server is launched with `node --import tsx`, so no prior `npm run build`
+// is required. (A prior tsx 4.x JSDoc dynamic-import parse bug was fixed by
+// rewriting the offending @type annotation below to `ReturnType<typeof
+// createRemoteGateway>`, which is why this import can live on `src/` again.)
+import { createRemoteGateway } from '../../src/gateway/index.js';
 import { createNormalizedMessage } from './pilotdeck-message.js';
 import { readPermissionSettings } from './services/permissionSettings.js';
 
