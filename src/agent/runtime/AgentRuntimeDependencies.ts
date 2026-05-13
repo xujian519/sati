@@ -9,6 +9,7 @@ import type {
 import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
 import type { RouterRuntime } from "../../router/index.js";
+import type { AgentEvent, AgentEventEmitter } from "../protocol/events.js";
 
 /**
  * Narrow view of the router that the agent loop actually consumes. Tests can
@@ -92,6 +93,8 @@ export type AgentRuntimeDependencies = {
    * `FileHistoryStore` directly satisfies this contract.
    */
   fileHistory?: PilotDeckToolFileHistorySink;
+  eventEmitter?: AgentEventEmitter;
+  drainEvents?: () => AgentEvent[];
 };
 
 export type AgentLegacyModelRuntime = {

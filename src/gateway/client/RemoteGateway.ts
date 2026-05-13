@@ -8,6 +8,7 @@ import type {
   ListSessionsInput,
   ListSessionsResult,
   NewSessionInput,
+  ReloadConfigResult,
   WebDescribeProjectInput,
   WebListProjectsResult,
   WebProjectSummary,
@@ -91,6 +92,10 @@ export class RemoteGateway implements Gateway {
 
   async describeProject(input: WebDescribeProjectInput): Promise<WebProjectSummary> {
     return (await this.client.request("describe_project", input)) as WebProjectSummary;
+  }
+
+  async reloadConfig(): Promise<ReloadConfigResult> {
+    return (await this.client.request("reload_config", {})) as ReloadConfigResult;
   }
 }
 

@@ -28,7 +28,7 @@ export type ResumeSessionDependencyExtension = (
 ) => Partial<
   Pick<
     AgentRuntimeDependencies,
-    "context" | "fileHistory" | "subagentTranscript" | "elicitation"
+    "context" | "fileHistory" | "subagentTranscript" | "elicitation" | "eventEmitter" | "drainEvents"
   >
 >;
 
@@ -52,6 +52,13 @@ export async function resumeAgentSession(options: ResumeAgentSessionOptions): Pr
     now: options.dependencies.now,
   });
   const readResult = await readTranscript(storage.transcriptPath);
+
+  if (readResult.entries.length > 0) {
+    const maxSeq = readResult.entries.reduce((m, e) => Math.max(m, e.sequence), 0);
+    const last = readResult.entries[readResult.entries.length - 1];
+    storage.transcript.restoreState(maxSeq, last.entryId ?? null);
+  }
+
   const replay = replayTranscriptEntries(readResult.entries);
 
   const extension = options.extendDependencies?.(storage) ?? {};
@@ -61,6 +68,8 @@ export async function resumeAgentSession(options: ResumeAgentSessionOptions): Pr
     ...(extension.fileHistory ? { fileHistory: extension.fileHistory } : {}),
     ...(extension.subagentTranscript ? { subagentTranscript: extension.subagentTranscript } : {}),
     ...(extension.elicitation ? { elicitation: extension.elicitation } : {}),
+    ...(extension.eventEmitter ? { eventEmitter: extension.eventEmitter } : {}),
+    ...(extension.drainEvents ? { drainEvents: extension.drainEvents } : {}),
   };
 
   const { session } = createAgentSessionWithStorage({

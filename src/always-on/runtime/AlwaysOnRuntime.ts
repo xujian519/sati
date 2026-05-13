@@ -39,6 +39,8 @@ export type CreateAlwaysOnRuntimeOptions = {
   /** Override for tests. */
   workspaceRegistry?: WorkspaceProviderRegistry;
   toolContractOptions?: CreateAlwaysOnDiscoveryPlanToolOptions["contract"];
+  onWorktreeCreated?: (runId: string, cwd: string) => void;
+  onWorktreeRemoved?: (cwd: string) => void;
 };
 
 const NOOP_LOGGER: AlwaysOnRuntimeLogger = {
@@ -79,6 +81,8 @@ export class AlwaysOnRuntime {
   private readonly now: () => Date;
   private readonly uuid: () => string;
   private readonly tools: PilotDeckToolDefinition[];
+  private readonly onWorktreeCreated?: (runId: string, cwd: string) => void;
+  private readonly onWorktreeRemoved?: (cwd: string) => void;
 
   private gateway?: Gateway;
   private fire?: DiscoveryFire;
@@ -101,6 +105,8 @@ export class AlwaysOnRuntime {
     this.planStore = new DiscoveryPlanStore(this.paths);
     this.reportStore = new DiscoveryReportStore(this.paths);
     this.leases = new ChannelLeaseRegistry(this.now);
+    this.onWorktreeCreated = options.onWorktreeCreated;
+    this.onWorktreeRemoved = options.onWorktreeRemoved;
     this.workspaceRegistry = options.workspaceRegistry ?? this.buildDefaultWorkspaceRegistry();
 
     this.tools = [
@@ -193,6 +199,8 @@ export class AlwaysOnRuntime {
     registry.add(
       new GitWorktreeProvider({
         baseDir: this.paths.worktreesDir,
+        onWorktreeCreated: this.onWorktreeCreated,
+        onWorktreeRemoved: this.onWorktreeRemoved,
       }),
     );
     registry.add(

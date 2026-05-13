@@ -47,7 +47,7 @@ test("createLocalGateway lists sessions from the requested project only", async 
       prompt: "Second project prompt",
     });
 
-    const gateway = createLocalGateway({
+    const { gateway } = createLocalGateway({
       projectRoot: defaultProject,
       pilotHome,
       env: { ANTHROPIC_API_KEY: "anthropic-key" },
@@ -93,7 +93,7 @@ test("createLocalGateway loads project plugin hooks into submitted sessions", as
       },
     });
 
-    const gateway = createLocalGateway({
+    const { gateway } = createLocalGateway({
       projectRoot,
       pilotHome,
       env: { ANTHROPIC_API_KEY: "anthropic-key" },

@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
-import type { AgentEvent, AgentTurnResult } from "../../agent/index.js";
-import type { CanonicalModelEvent } from "../../model/index.js";
+import type { AgentEvent, AgentInput, AgentTurnResult } from "../../agent/index.js";
+import type { CanonicalContentBlock, CanonicalModelEvent } from "../../model/index.js";
 import { contentToText } from "../../tool/index.js";
 import type { SessionRouter } from "../SessionRouter.js";
 import { GatewayElicitationBus } from "../elicitation/GatewayElicitationBus.js";
 import { GatewayPermissionBus } from "../permission/GatewayPermissionBus.js";
 import { AsyncQueue } from "../util/AsyncQueue.js";
 import type {
+  ChannelAttachment,
   GatewayCronController,
   Gateway,
   GatewayElicitationResponseInput,
@@ -17,6 +18,7 @@ import type {
   ListSessionsInput,
   ListSessionsResult,
   NewSessionInput,
+  ReloadConfigResult,
   WebDescribeProjectInput,
   WebListProjectsResult,
   WebProjectSummary,
@@ -51,6 +53,13 @@ export type InProcessGatewayOptions = {
    */
   listProjects?: () => Promise<WebListProjectsResult>;
   describeProject?: (input: WebDescribeProjectInput) => Promise<WebProjectSummary>;
+  /**
+   * Pluggable config-reload handler wired by `createLocalGateway`.
+   * When set, `reloadConfig()` delegates to this callback which owns
+   * the PilotConfigStore + ProjectRuntimeRegistry lifecycle.
+   */
+  reloadConfig?: () => Promise<ReloadConfigResult>;
+  dispatchHookForSession?: (sessionKey: string, event: string, payload: Record<string, unknown>) => void;
 };
 
 export class InProcessGateway implements Gateway {
@@ -139,8 +148,20 @@ export class InProcessGateway implements Gateway {
         });
         const permissionSettings = readPermissionSettings();
         const permissionMode = input.mode ?? (permissionSettings.skipPermissions ? "bypassPermissions" : undefined);
+        // Promote a text-only turn to a multimodal blocks turn when the
+        // host channel attached files/images. Without this the
+        // GatewaySubmitTurnInput.attachments field was effectively dead —
+        // the bridge could forward UI uploads but the agent never saw
+        // them. Only `image` attachments map to a canonical block today;
+        // file/pdf/audio attachments would need their own block builders
+        // (or a tool round-trip) so they fall through and the user gets
+        // a text-only turn rather than a corrupted multipart.
+        const agentInput = buildAgentInputWithAttachments(
+          input.message,
+          input.attachments,
+        );
         for await (const event of session.submit(
-          { type: "text", text: input.message },
+          agentInput,
           {
             turnId: runId,
             permissionMode,
@@ -230,6 +251,7 @@ export class InProcessGateway implements Gateway {
     const entry = this.elicitationBus.consume(input.sessionKey, input.requestId);
     if (!entry) return { delivered: false };
     entry.resolve(input.answer);
+    this.options.dispatchHookForSession?.(input.sessionKey, "ElicitationResult", { requestId: input.requestId, delivered: true });
     return { delivered: true };
   }
 
@@ -266,6 +288,13 @@ export class InProcessGateway implements Gateway {
       throw new Error("describe_project is not configured.");
     }
     return this.options.describeProject(input);
+  }
+
+  async reloadConfig(): Promise<ReloadConfigResult> {
+    if (!this.options.reloadConfig) {
+      return { reloaded: false };
+    }
+    return this.options.reloadConfig();
   }
 
   private requireCron(): GatewayCronController {
@@ -321,6 +350,28 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
           recoverable: true,
         },
       ];
+    case "session_ended":
+    case "user_prompt_submitted":
+    case "setup_completed":
+    case "instructions_loaded":
+    case "stop_requested":
+    case "stop_failure":
+    case "compact_started":
+    case "compact_completed":
+    case "subagent_started":
+    case "subagent_completed":
+    case "elicitation_resolved":
+      return [];
+    case "pre_tool_execute":
+      return [];
+    case "post_tool_execute":
+      return [];
+    case "permission_requested":
+      return [];
+    case "permission_denied":
+      return [];
+    case "elicitation_requested":
+      return [];
     default:
       return [];
   }
@@ -364,4 +415,54 @@ function previewUnknown(value: unknown): string | undefined {
   } catch {
     return String(value);
   }
+}
+
+/**
+ * Build an `AgentInput` from the user's text plus any host-provided
+ * channel attachments. Returns a plain text input when no attachments
+ * are useful (the agent loop fast-paths text and writes a cleaner
+ * transcript entry), and a `blocks` input when at least one image is
+ * present so the model receives the multimodal payload.
+ *
+ * Today only `image` attachments map to a canonical block. Non-image
+ * attachments are dropped here (with no error event — callers that
+ * need richer surface should add their own block builders or use a
+ * tool round-trip), so the user still gets a text-only turn rather
+ * than a corrupted multipart.
+ */
+function buildAgentInputWithAttachments(
+  message: string,
+  attachments: ChannelAttachment[] | undefined,
+): AgentInput {
+  const imageBlocks = attachmentsToImageBlocks(attachments);
+  if (imageBlocks.length === 0) {
+    return { type: "text", text: message };
+  }
+  const blocks: CanonicalContentBlock[] = [];
+  if (message && message.length > 0) {
+    blocks.push({ type: "text", text: message });
+  }
+  for (const block of imageBlocks) {
+    blocks.push(block);
+  }
+  return { type: "blocks", content: blocks };
+}
+
+function attachmentsToImageBlocks(
+  attachments: ChannelAttachment[] | undefined,
+): CanonicalContentBlock[] {
+  if (!attachments || attachments.length === 0) return [];
+  const blocks: CanonicalContentBlock[] = [];
+  for (const att of attachments) {
+    if (att.type !== "image") continue;
+    if (!att.content || !att.mimeType) continue;
+    blocks.push({
+      type: "image",
+      source: "base64",
+      data: att.content,
+      mimeType: att.mimeType,
+      ...(typeof att.bytes === "number" ? { bytes: att.bytes } : {}),
+    });
+  }
+  return blocks;
 }

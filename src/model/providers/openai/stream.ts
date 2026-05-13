@@ -10,6 +10,15 @@ export type OpenAIStreamState = {
   toolCalls: Map<number, Partial<CanonicalToolCall> & { argumentsBuffer?: string }>;
   thinkFsm: ThinkFsmMode;
   tagBuffer: string;
+  /**
+   * Cumulative reasoning content seen so far in this stream. Used to
+   * tell incremental-delta providers (DeepSeek, OpenRouter, …) apart
+   * from cumulative-snapshot providers (Yeysai's Gemini wrapper, some
+   * Chinese-region Gemini proxies) — when the next chunk's reasoning
+   * field strictly extends this prefix we emit only the suffix, else
+   * we treat it as a fresh delta and append.
+   */
+  reasoningSnapshot: string;
 };
 
 export function createOpenAIStreamState(): OpenAIStreamState {
@@ -18,6 +27,7 @@ export function createOpenAIStreamState(): OpenAIStreamState {
     toolCalls: new Map(),
     thinkFsm: "NORMAL",
     tagBuffer: "",
+    reasoningSnapshot: "",
   };
 }
 
@@ -135,16 +145,41 @@ export function normalizeOpenAIStreamEvent(
     }
 
     // Reasoning-model chain-of-thought comes in two non-standard fields:
-    //   - `delta.reasoning`         — OpenRouter / DeepInfra / Parasail
+    //   - `delta.reasoning`         — OpenRouter / DeepInfra / Parasail / Yeysai-Gemini
     //   - `delta.reasoning_content` — DeepSeek native API (V4 series)
+    //
+    // Two separate footguns:
+    //
+    //   1) Earlier versions of this parser pushed `reasoning_content`
+    //      twice (once via the `??` fallback for `reasoning`, once via
+    //      its own branch). The combined `??` covers both — picking
+    //      either non-empty source, but never duplicating.
+    //
+    //   2) Providers disagree on stream semantics. Most send incremental
+    //      deltas (`"So"` then `" the"` then `" only"` …), but Yeysai's
+    //      Gemini wrapper sends cumulative snapshots (`"So"` then
+    //      `"So the"` then `"So the only"` …). Naively concatenating a
+    //      snapshot stream as if it were deltas blows the thinking
+    //      buffer up triangularly (N tokens render N×(N+1)/2 chars).
+    //
+    //      Auto-detect by checking whether the new payload extends the
+    //      prefix we've already seen: if yes, emit only the suffix
+    //      diff; if no, treat it as a real delta. Works for both
+    //      conventions without provider-specific config.
     const reasoning = delta.reasoning ?? delta.reasoning_content;
     if (typeof reasoning === "string" && reasoning.length > 0) {
-      events.push({ type: "thinking_delta", text: reasoning, raw });
-    }
-
-    // DeepSeek official API uses `reasoning_content` instead of `reasoning`.
-    if (typeof delta.reasoning_content === "string" && delta.reasoning_content.length > 0) {
-      events.push({ type: "thinking_delta", text: delta.reasoning_content, raw });
+      const prev = state.reasoningSnapshot;
+      let emit: string;
+      if (reasoning.startsWith(prev)) {
+        emit = reasoning.slice(prev.length);
+        state.reasoningSnapshot = reasoning;
+      } else {
+        emit = reasoning;
+        state.reasoningSnapshot = prev + reasoning;
+      }
+      if (emit.length > 0) {
+        events.push({ type: "thinking_delta", text: emit, raw });
+      }
     }
 
     if (Array.isArray(delta.tool_calls)) {

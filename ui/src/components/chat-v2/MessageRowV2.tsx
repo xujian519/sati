@@ -92,14 +92,30 @@ function MessageRowV2({
 
   // User: right-aligned grey bubble.
   if (isUser) {
+    const userImages = Array.isArray(message.images)
+      ? message.images.filter((img) => img && typeof img.data === 'string')
+      : [];
     return (
       <div className="flex w-full justify-end">
         <div className="min-w-0 max-w-[78%] overflow-hidden rounded-[22px] bg-neutral-100 px-4 py-2.5 text-[14px] leading-relaxed text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100">
+          {userImages.length > 0 && (
+            <div className="mb-2 grid grid-cols-2 gap-2">
+              {userImages.map((img, idx) => (
+                <img
+                  key={img.name || idx}
+                  src={img.data}
+                  alt={img.name || ''}
+                  className="h-auto max-w-full cursor-pointer rounded-lg transition-opacity hover:opacity-90"
+                  onClick={() => window.open(img.data, '_blank')}
+                />
+              ))}
+            </div>
+          )}
           {message.isStreaming && !formattedContent ? (
             <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
-          ) : (
+          ) : formattedContent ? (
             <Markdown className="min-w-0 break-words [overflow-wrap:anywhere]">{formattedContent}</Markdown>
-          )}
+          ) : null}
         </div>
       </div>
     );

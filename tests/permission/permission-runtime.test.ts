@@ -83,3 +83,61 @@ test("tool safety deny is not bypassed", async () => {
 
   assert.equal((await runtime.decide(tool, {}, context, "call-1")).type, "deny");
 });
+
+test("bypassPermissions overrides a tool's hardcoded checkPermissions ask", async () => {
+  const runtime = new PermissionRuntime();
+  // Mirrors the web_search / web_fetch / agent dispatch pattern: tool
+  // hardcodes `ask` in checkPermissions to gate network/side-effect
+  // access. Under `bypassPermissions` the user has explicitly said
+  // "approve everything" — that should win over the tool's ask, the
+  // same way an explicit allow rule does.
+  const tool = createPilotDeckTestTool({
+    name: "web_search",
+    readOnly: true,
+    kind: "network",
+    permissionResult: {
+      type: "ask",
+      reason: { type: "tool", toolName: "web_search", message: "Network search requires permission." },
+      request: {
+        toolCallId: "",
+        toolName: "web_search",
+        inputSummary: "web search",
+        reason: { type: "tool", toolName: "web_search", message: "Network search requires permission." },
+        options: [
+          { id: "allow_once", label: "Allow once" },
+          { id: "deny", label: "Deny" },
+        ],
+      },
+    },
+  });
+  const { context } = createPilotDeckToolRuntimeFixture({ permissionMode: "bypassPermissions" });
+
+  const decision = await runtime.decide(tool, {}, context, "call-1");
+  assert.equal(decision.type, "allow");
+});
+
+test("default mode still respects a tool's hardcoded checkPermissions ask", async () => {
+  const runtime = new PermissionRuntime();
+  const tool = createPilotDeckTestTool({
+    name: "web_search",
+    readOnly: true,
+    kind: "network",
+    permissionResult: {
+      type: "ask",
+      reason: { type: "tool", toolName: "web_search", message: "Network search requires permission." },
+      request: {
+        toolCallId: "",
+        toolName: "web_search",
+        inputSummary: "web search",
+        reason: { type: "tool", toolName: "web_search", message: "Network search requires permission." },
+        options: [
+          { id: "allow_once", label: "Allow once" },
+          { id: "deny", label: "Deny" },
+        ],
+      },
+    },
+  });
+  const { context } = createPilotDeckToolRuntimeFixture({ permissionMode: "default", canPrompt: true });
+
+  assert.equal((await runtime.decide(tool, {}, context, "call-1")).type, "ask");
+});

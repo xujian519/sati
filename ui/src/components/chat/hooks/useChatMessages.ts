@@ -25,11 +25,22 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
         if (!content.trim()) continue;
 
         if (msg.role === 'user') {
+          // `NormalizedMessage.images` carries data URLs as strings (see
+          // chatMessageToNormalized). MessageComponent renders these via
+          // `message.images.[].data`, so reconstruct the ChatImage shape
+          // here. Without this, optimistic user messages with attached
+          // images flicker to "no images" on re-derivation.
+          const userImages = Array.isArray(msg.images)
+            ? msg.images
+                .filter((d) => typeof d === 'string' && d.length > 0)
+                .map((d) => ({ data: d, name: '' }))
+            : undefined;
           converted.push({
             id: msg.id,
             type: 'user',
             content: unescapeWithMathProtection(decodeHtmlEntities(content)),
             timestamp: msg.timestamp,
+            ...(userImages && userImages.length > 0 ? { images: userImages } : {}),
           });
         } else {
           let text = decodeHtmlEntities(content);

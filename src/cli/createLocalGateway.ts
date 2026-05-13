@@ -1,6 +1,7 @@
-import { resolve } from "node:path";
+import { appendFileSync, mkdirSync as mkdirSyncFs } from "node:fs";
+import { resolve, join as joinPath } from "node:path";
 import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
-import type { AgentRuntimeConfig, CreateAgentSessionOptions } from "../agent/index.js";
+import { createAgentEventBuffer, type AgentRuntimeConfig, type CreateAgentSessionOptions } from "../agent/index.js";
 import {
   AutoCompactionPolicy,
   CachedMicroCompactionEngine,
@@ -41,6 +42,7 @@ import {
 import { createModelRuntime, type ModelRuntime } from "../model/index.js";
 import { createDefaultPermissionContext, type PermissionRule } from "../permission/index.js";
 import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
+import { createPilotConfigStoreSync, type PilotConfigStore } from "../pilot/config/PilotConfigStore.js";
 import type { PilotAgentModelSelection, PilotConfigSnapshot } from "../pilot/config/types.js";
 import type { RouterConfig } from "../router/config/schema.js";
 import { listProjectSessions, resumeAgentSession } from "../session/index.js";
@@ -48,8 +50,9 @@ import { readWebSessionMessages } from "../web/server/readSessionMessages.js";
 import { describeWebProject, listWebProjects } from "../web/server/listProjects.js";
 import { BackgroundTaskRuntime } from "../task/runtime/BackgroundTaskRuntime.js";
 import { createBuiltinRegistry } from "../tool/index.js";
-import type { PilotDeckToolDefinition, ToolRegistry } from "../tool/index.js";
+import type { PilotDeckToolDefinition, ToolRegistry, PilotDeckElicitationChannel } from "../tool/index.js";
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
+import type { RouterEventBus, RouterEvent } from "../router/protocol/events.js";
 import type { EdgeClawMemoryProvider } from "../context/index.js";
 import { loadBuiltinPlugins } from "../extension/plugins/builtin/loadBuiltinPlugins.js";
 
@@ -65,15 +68,34 @@ export type CreateLocalGatewayOptions = {
   /** Optional Cron runtime controller exposed through Gateway management methods. */
   cron?: GatewayCronController;
   /**
+   * Additional directories the agent is allowed to read/write outside of `projectRoot`.
+   * Passed to PermissionContext so `pathSafety` accepts paths within these roots.
+   */
+  additionalWorkingDirectories?: string[];
+  /**
    * @internal Testing hook — replaces the production `createModelRuntime`
    * call when present. Tests can return a fake `ModelRuntime` (e.g. a scripted
    * stream) so the rest of the wiring (Router, Tools, Context, AgentLoop) runs
    * end-to-end against a deterministic transport. NOT part of the public API.
    */
   __testModelFactory?: (snapshot: PilotConfigSnapshot) => ModelRuntime;
+  /**
+   * When true, `ask_user_question` tool calls are answered automatically
+   * (first option selected) instead of waiting for a human. Intended for
+   * benchmark / headless runs where no interactive user is present.
+   */
+  autoElicitation?: boolean;
 };
 
-export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gateway {
+export type CreateLocalGatewayResult = {
+  gateway: Gateway;
+  configStore: PilotConfigStore;
+  registry: ProjectRuntimeRegistry;
+  dispose: () => void;
+  bindServer: (server: { broadcastNotification(name: string, payload?: unknown): void }) => void;
+};
+
+export function createLocalGateway(options: CreateLocalGatewayOptions = {}): CreateLocalGatewayResult {
   const baseEnv = options.env ?? process.env;
   const projectRoot = resolve(options.projectRoot ?? process.cwd());
   const pilotHome = options.pilotHome ?? resolvePilotHome(baseEnv);
@@ -87,9 +109,40 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gat
     now,
     extraTools: options.extraTools,
     sessionOverrides: options.sessionOverrides,
+    additionalWorkingDirectories: options.additionalWorkingDirectories,
     modelFactory: options.__testModelFactory,
+    autoElicitation: options.autoElicitation,
   });
   const defaultRuntime = registry.resolve();
+
+  const configStore = createPilotConfigStoreSync({ projectRoot, env });
+  const stopWatching = configStore.startWatching();
+
+  let boundServer: { broadcastNotification(name: string, payload?: unknown): void } | undefined;
+  const configChangeLifecycle = new LifecycleRuntime(new HookRuntime({}));
+
+  configStore.subscribe((event) => {
+    const { changeClasses, changedPaths } = event;
+    if (changeClasses.length === 0) {
+      return;
+    }
+    if (changeClasses.every((c) => c === "restart-required")) {
+      // eslint-disable-next-line no-console
+      console.warn("[pilotdeck] Config change requires process restart:", changedPaths.join(", "));
+      return;
+    }
+    // eslint-disable-next-line no-console
+    console.log("[pilotdeck] Config reloaded, invalidating runtimes:", changedPaths.join(", "));
+    registry.invalidate();
+    configChangeLifecycle.dispatch({
+      event: "ConfigChange",
+      baseInput: { sessionId: "", transcriptPath: "", cwd: projectRoot },
+      payload: { changedPaths, changeClasses },
+      matchQuery: "ConfigChange",
+    }).catch(() => {});
+    boundServer?.broadcastNotification("config_changed", { changedPaths, changeClasses });
+  });
+
   const router = new SessionRouter({
     createSession: (ctx) => registry.createSession(ctx),
     listSessions: (input) => registry.listSessions(input),
@@ -111,12 +164,30 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Gat
       listWebProjects({ pilotHome, defaultProjectRoot: projectRoot }),
     describeProject: (input) =>
       describeWebProject(input.projectKey, { pilotHome, defaultProjectRoot: projectRoot }),
+    async reloadConfig() {
+      let changedPaths: string[] = [];
+      const unsubscribe = configStore.subscribe((event) => {
+        changedPaths = event.changedPaths;
+      });
+      try {
+        await configStore.reload("rpc");
+      } finally {
+        unsubscribe();
+      }
+      return { reloaded: true, changedPaths };
+    },
   });
   // Hand the gateway back to the registry so per-session creation can
   // build a `GatewayElicitationChannel` against this gateway's bus +
   // emit-sink (B1).
   registry.setGateway(gateway);
-  return gateway;
+  return {
+    gateway,
+    configStore,
+    registry,
+    dispose: stopWatching,
+    bindServer: (server) => { boundServer = server; },
+  };
 }
 
 type ProjectRuntimeRegistryOptions = {
@@ -127,8 +198,10 @@ type ProjectRuntimeRegistryOptions = {
   now: () => Date;
   extraTools?: PilotDeckToolDefinition[];
   sessionOverrides?: SessionConfigOverrides;
+  additionalWorkingDirectories?: string[];
   /** @internal Test hook from `CreateLocalGatewayOptions.__testModelFactory`. */
   modelFactory?: (snapshot: PilotConfigSnapshot) => ModelRuntime;
+  autoElicitation?: boolean;
 };
 
 type ProjectRuntime = {
@@ -179,6 +252,19 @@ class ProjectRuntimeRegistry {
     this.gateway = gateway;
   }
 
+  private buildRouterEventBus(): RouterEventBus {
+    const pilotHome = this.options.pilotHome;
+    const eventsPath = joinPath(pilotHome, "router-events.jsonl");
+    try { mkdirSyncFs(pilotHome, { recursive: true }); } catch { /* exists */ }
+    return {
+      emit(event: RouterEvent) {
+        try {
+          appendFileSync(eventsPath, JSON.stringify(event) + "\n");
+        } catch { /* best-effort, never crash the agent loop */ }
+      },
+    };
+  }
+
   /**
    * Resolve the live permission-rule set for a session. Prefers any
    * explicit `sessionOverrides` entry (used by `always-on` to inject a
@@ -207,6 +293,28 @@ class ProjectRuntimeRegistry {
     return auto;
   }
 
+  /**
+   * Drop cached runtimes so the next `resolve()` call rebuilds from
+   * a fresh `loadPilotConfig()` snapshot. Gracefully shuts down any
+   * active MCP connections before discarding the entry.
+   */
+  invalidate(projectRoot?: string): void {
+    if (projectRoot) {
+      const runtime = this.runtimes.get(projectRoot);
+      if (runtime?.mcpRuntime) {
+        runtime.mcpRuntime.stop().catch(() => {});
+      }
+      this.runtimes.delete(projectRoot);
+    } else {
+      for (const [, runtime] of this.runtimes) {
+        if (runtime.mcpRuntime) {
+          runtime.mcpRuntime.stop().catch(() => {});
+        }
+      }
+      this.runtimes.clear();
+    }
+  }
+
   resolve(projectKey?: string): ProjectRuntime {
     const projectRoot = resolve(projectKey ?? this.options.defaultProjectRoot);
     const cached = this.runtimes.get(projectRoot);
@@ -230,6 +338,7 @@ class ProjectRuntimeRegistry {
       now: this.options.now,
       customRouterRegistry: pluginRuntime,
       loadSkillPrompt: (extensionId) => pluginRuntime.loadSkillPrompt(extensionId),
+      events: this.buildRouterEventBus(),
     });
     const backgroundTasks = new BackgroundTaskRuntime({ now: this.options.now });
     const tools = createBuiltinRegistry({ backgroundTasks: { runtime: backgroundTasks } });
@@ -341,6 +450,7 @@ class ProjectRuntimeRegistry {
     const memoryResolver = runtime.memory;
     const now = this.options.now;
 
+    const eventBuf = createAgentEventBuffer();
     const resumed = await resumeAgentSession({
       sessionId: context.sessionKey,
       config: this.createAgentConfig(runtime, context.sessionKey),
@@ -354,6 +464,8 @@ class ProjectRuntimeRegistry {
         // the only one in scope.
         lifecycle,
         now: this.options.now,
+        eventEmitter: eventBuf.emitter,
+        drainEvents: eventBuf.drain,
       },
       projectStorage: runtime.projectStorage,
       extendDependencies: (storage) => {
@@ -388,6 +500,7 @@ class ProjectRuntimeRegistry {
           provider: runtime.snapshot.config.agent.model.provider,
           model_: runtime.snapshot.config.agent.model.model,
           now,
+          eventEmitter: eventBuf.emitter,
         });
         const autoCompactionPolicy = new AutoCompactionPolicy({ tokenBudget });
         const microcompactEngine = new CachedMicroCompactionEngine({ enabled: false });
@@ -418,13 +531,32 @@ class ProjectRuntimeRegistry {
           now: this.options.now,
         });
         const gw = this.gateway;
-        const elicitation = gw
-          ? new GatewayElicitationChannel({
-              sessionKey: context.sessionKey,
-              bus: gw.getElicitationBus(),
-              emit: (event) => gw.emitForSession(context.sessionKey, event),
-            })
-          : undefined;
+        const elicitation = this.options.autoElicitation
+          ? createAutoElicitationChannel()
+          : gw
+            ? new GatewayElicitationChannel({
+                sessionKey: context.sessionKey,
+                bus: gw.getElicitationBus(),
+                emit: (event) => gw.emitForSession(context.sessionKey, event),
+                dispatchHook: (hookEvent, payload) => {
+                  lifecycle.dispatch({
+                    event: hookEvent as import("../extension/hooks/protocol/events.js").PilotDeckHookEvent,
+                    baseInput: { sessionId: context.sessionKey, transcriptPath: "", cwd: projectRoot },
+                    payload,
+                    matchQuery: hookEvent,
+                  }).catch(() => {});
+                },
+                emitAgentEvent: (_type, payload) => {
+                  eventBuf.emitter({
+                    type: "elicitation_requested",
+                    sessionId: context.sessionKey,
+                    turnId: "",
+                    requestId: payload.requestId,
+                    toolName: payload.toolName,
+                  });
+                },
+              })
+            : undefined;
         const subagentTranscript: AgentSubagentTranscriptHooks = {
           recordSubagentStarted: (args) =>
             storage.transcript.recordSubagentStarted(args.sessionId, args.turnId, {
@@ -507,6 +639,7 @@ class ProjectRuntimeRegistry {
         mode: permissionMode,
         canPrompt: override?.canPrompt ?? false,
         bypassAvailable: override?.bypassAvailable ?? true,
+        additionalWorkingDirectories: this.options.additionalWorkingDirectories,
         rules: {
           allow: liveRuleSet.allow,
           deny: liveRuleSet.deny,
@@ -517,22 +650,39 @@ class ProjectRuntimeRegistry {
   }
 }
 
+function createAutoElicitationChannel(): PilotDeckElicitationChannel {
+  return {
+    async askUser(request) {
+      const answers: Record<string, string | string[]> = {};
+      for (const q of request.questions) {
+        if (q.options.length > 0) {
+          answers[q.question] = q.multiSelect
+            ? [q.options[0].label]
+            : q.options[0].label;
+        } else {
+          answers[q.question] = "yes";
+        }
+      }
+      return { type: "answered", answers };
+    },
+  };
+}
+
 function ensureRouterConfig(
   router: RouterConfig | undefined,
   defaultSelection: PilotAgentModelSelection,
 ): RouterConfig {
+  const defaultRef = { id: defaultSelection.id, provider: defaultSelection.provider, model: defaultSelection.model };
   if (router) {
-    // Make sure stats collection is on so the Web UI Dashboard tab can
-    // render router activity. Users can opt out via PilotDeck config.
     return {
       ...router,
+      fallback: router.fallback ?? { default: [defaultRef] },
       stats: router.stats ?? { enabled: true },
     };
   }
   return {
-    scenarios: {
-      default: { id: defaultSelection.id, provider: defaultSelection.provider, model: defaultSelection.model },
-    },
+    scenarios: { default: defaultRef },
+    fallback: { default: [defaultRef] },
     zeroUsageRetry: { enabled: true, maxAttempts: 2 },
     stats: { enabled: true },
   };

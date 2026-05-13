@@ -12,6 +12,8 @@ export type GitWorktreeProviderOptions = {
   refuseDirty?: boolean;
   /** Override `git` executable path (tests). */
   gitBin?: string;
+  onWorktreeCreated?: (runId: string, cwd: string) => void;
+  onWorktreeRemoved?: (cwd: string) => void;
 };
 
 export class GitWorktreeProvider implements WorkspaceProvider {
@@ -63,6 +65,7 @@ export class GitWorktreeProvider implements WorkspaceProvider {
       );
     }
 
+    this.options.onWorktreeCreated?.(input.runId, worktreePath);
     return {
       runId: input.runId,
       projectKey: input.projectRoot,
@@ -85,6 +88,7 @@ export class GitWorktreeProvider implements WorkspaceProvider {
 
   async dispose(handle: WorkspaceHandle, options: { keep: boolean }): Promise<void> {
     if (options.keep) return;
+    this.options.onWorktreeRemoved?.(handle.cwd);
     const repoRoot = handle.metadata.repoRoot ?? handle.cwd;
     const remove = await runGit(this.git(), [
       "-C",

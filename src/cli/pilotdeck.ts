@@ -20,6 +20,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
 
     let alwaysOn: AlwaysOnRuntime | undefined;
     let cron: CronRuntime | undefined;
+    let deferredBroadcast: ((name: string, payload?: unknown) => void) | undefined;
     if (snapshot.config.alwaysOn) {
       alwaysOn = createAlwaysOnRuntime({
         config: snapshot.config.alwaysOn,
@@ -30,6 +31,12 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
             console.log(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
           warn: (message, data) =>
             console.warn(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
+        },
+        onWorktreeCreated: (runId, cwd) => {
+          deferredBroadcast?.("worktree_created", { runId, cwd });
+        },
+        onWorktreeRemoved: (cwd) => {
+          deferredBroadcast?.("worktree_removed", { cwd });
         },
       });
     }
@@ -47,7 +54,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       });
     }
 
-    const gateway = createLocalGateway({
+    const { gateway, dispose: disposeGateway, bindServer } = createLocalGateway({
       projectRoot,
       pilotHome,
       env,
@@ -71,6 +78,8 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       staticAssetsPath: resolve(projectRoot, "ui/dist"),
       feishu: new FeishuChannel(),
     });
+    bindServer(server);
+    deferredBroadcast = (name, payload) => server.broadcastNotification(name, payload);
     console.log(`PilotDeck server listening: ${server.url}`);
     console.log(`WebSocket: ${server.wsUrl}`);
     if (server.tokenPath) {
@@ -78,6 +87,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     }
     const stop = async () => {
       try {
+        disposeGateway();
         await alwaysOn?.stop();
         await cron?.stop();
       } catch (error) {
@@ -110,7 +120,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     const probeUrl = `http://127.0.0.1:${gatewayPort}`;
     const fallbackGateway = createFallbackGateway();
     try {
-      const local = createLocalGateway({ projectRoot: process.cwd() });
+      const { gateway: local } = createLocalGateway({ projectRoot: process.cwd() });
       await new TuiChannel({
         projectKey: process.cwd(),
         cwd: process.cwd(),
@@ -128,7 +138,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
-  const fallbackGateway = createLocalGateway({ projectRoot: process.cwd() });
+  const { gateway: fallbackGateway } = createLocalGateway({ projectRoot: process.cwd() });
   await new CliChannel({ argv, projectKey: process.cwd() }).start({ gateway: fallbackGateway });
 }
 

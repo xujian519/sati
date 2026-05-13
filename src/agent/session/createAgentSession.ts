@@ -1,5 +1,5 @@
 import { PermissionRuntime } from "../../permission/index.js";
-import { SequentialToolScheduler, ToolRuntime } from "../../tool/index.js";
+import { ConcurrentToolScheduler, SequentialToolScheduler, ToolRuntime } from "../../tool/index.js";
 import { AgentLoop } from "../loop/AgentLoop.js";
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
@@ -7,7 +7,7 @@ import { InMemoryTranscriptWriter } from "../../session/transcript/InMemoryTrans
 import type { AgentTranscriptWriter } from "../../session/transcript/TranscriptWriter.js";
 import { TurnRunner } from "../turn/TurnRunner.js";
 import { AgentSession } from "./AgentSession.js";
-import type { AgentEvent } from "../protocol/events.js";
+import { createAgentEventBuffer, type AgentEvent } from "../protocol/events.js";
 import type { AgentSessionState as AgentSessionStateShape } from "../protocol/state.js";
 import {
   createAgentProjectSessionStorage,
@@ -35,14 +35,19 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
   session: AgentSession;
   storage?: AgentProjectSessionStorage;
 } {
-  const toolRuntime = new ToolRuntime(options.dependencies.tools.registry, new PermissionRuntime(), options.dependencies.lifecycle);
-  const scheduler = options.dependencies.tools.scheduler ?? new SequentialToolScheduler(toolRuntime);
+  const eventBuf = options.dependencies.drainEvents ? undefined : createAgentEventBuffer();
+  const emitter = options.dependencies.eventEmitter ?? eventBuf?.emitter;
+  const toolRuntime = new ToolRuntime(options.dependencies.tools.registry, new PermissionRuntime(), options.dependencies.lifecycle, emitter);
+  const scheduler = options.dependencies.tools.scheduler
+    ?? new ConcurrentToolScheduler(toolRuntime, options.dependencies.tools.registry);
   const dependencies: AgentRuntimeDependencies = {
     ...options.dependencies,
     tools: {
       registry: options.dependencies.tools.registry,
       scheduler,
     },
+    eventEmitter: emitter,
+    drainEvents: options.dependencies.drainEvents ?? eventBuf?.drain,
   };
   const loop = new AgentLoop(options.config, dependencies);
   const storage = options.projectStorage

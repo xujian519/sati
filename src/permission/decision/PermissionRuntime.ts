@@ -48,7 +48,28 @@ export class PermissionRuntime {
     const toolPermission = await tool.checkPermissions?.(input, context);
     const toolDecision = normalizeToolPermission(toolPermission, tool, input, toolCallId, permissionContext);
     if (toolDecision) {
-      if (toolDecision.type === "ask") return finalizeAsk(toolDecision, permissionContext);
+      if (toolDecision.type === "ask") {
+        // `bypassPermissions` mode is the user's explicit "approve
+        // everything" escape hatch. Tools that hardcode `ask` in
+        // `checkPermissions` (web_search, web_fetch, agent dispatch,
+        // mcp tools, …) would otherwise still prompt — defeating the
+        // mode's whole purpose. Treat the tool's `ask` the same way
+        // we'd treat a missing `checkPermissions` and fall through
+        // to mode-level allow. User-configured `ask` rules already
+        // short-circuited above, so they aren't affected. Tool-level
+        // `deny` (safety regex etc.) is handled below and still wins.
+        if (
+          permissionContext.mode === "bypassPermissions" ||
+          (permissionContext.mode === "plan" && permissionContext.bypassAvailable)
+        ) {
+          return allow({
+            type: "mode",
+            mode: permissionContext.mode,
+            message: `Permission mode ${permissionContext.mode} overrides ${tool.name}.checkPermissions ask.`,
+          });
+        }
+        return finalizeAsk(toolDecision, permissionContext);
+      }
       return toolDecision;
     }
 

@@ -12,12 +12,14 @@ import type { PilotDeckToolCall, PilotDeckToolRuntimeContext } from "../protocol
 import type { ToolRegistry } from "../registry/ToolRegistry.js";
 import { validateToolInput } from "./validateToolInput.js";
 import { normalizeToolError } from "../protocol/errors.js";
+import type { AgentEventEmitter } from "../../agent/protocol/events.js";
 
 export class ToolRuntime {
   constructor(
     private readonly registry: ToolRegistry,
     private readonly permissionRuntime: PermissionRuntime,
     private readonly lifecycle?: LifecycleRuntime,
+    private readonly eventEmitter?: AgentEventEmitter,
   ) {}
 
   async execute(call: PilotDeckToolCall, context: PilotDeckToolRuntimeContext): Promise<PilotDeckToolResult> {
@@ -56,6 +58,7 @@ export class ToolRuntime {
 
     let executeInput = call.input;
     const preToolResult = await this.dispatchLifecycle("PreToolUse", tool.name, call.id, executeInput, context);
+    this.eventEmitter?.({ type: "pre_tool_execute", sessionId: context.sessionId, turnId: context.turnId, toolCallId: call.id, toolName: tool.name });
     const preBlock = findEffect(preToolResult.effects, "block");
     const prePermission = findEffect(preToolResult.effects, "permission_decision");
     const preDeny = prePermission?.behavior === "deny" ? prePermission : undefined;
@@ -104,6 +107,7 @@ export class ToolRuntime {
       const permissionHookResult = await this.dispatchLifecycle("PermissionRequest", tool.name, call.id, executeInput, context, {
         permissionSuggestions: decision.request.options,
       });
+      this.eventEmitter?.({ type: "permission_requested", sessionId: context.sessionId, turnId: context.turnId, toolCallId: call.id, toolName: tool.name });
       const permissionRequestResult = findEffect(permissionHookResult.effects, "permission_request_result");
       if (permissionRequestResult?.result.behavior === "allow") {
         decision = {
@@ -135,6 +139,7 @@ export class ToolRuntime {
       await this.dispatchLifecycle("PermissionDenied", tool.name, call.id, executeInput, context, {
         reason: decision.message,
       });
+      this.eventEmitter?.({ type: "permission_denied", sessionId: context.sessionId, turnId: context.turnId, toolName: tool.name, reason: decision.message });
       const code: PilotDeckToolErrorCode =
         decision.reason.type === "runtime" && decision.reason.message.includes("prompt") ?
           "permission_required" :
@@ -175,6 +180,15 @@ export class ToolRuntime {
       const maxResultBytes = tool.maxResultBytes ?? context.maxResultBytes;
       const limited = applyResultSizeLimit(output.content, maxResultBytes);
       const completedAt = now(context).toISOString();
+      const postToolLifecycle = await this.dispatchLifecycle(
+        "PostToolUse",
+        tool.name,
+        call.id,
+        executeInput,
+        context,
+        { toolResponse: output.data ?? output.content },
+      );
+      this.eventEmitter?.({ type: "post_tool_execute", sessionId: context.sessionId, turnId: context.turnId, toolCallId: call.id, toolName: tool.name, success: true });
       const result: PilotDeckToolSuccessResult = {
         type: "success",
         toolCallId: call.id,
@@ -183,14 +197,7 @@ export class ToolRuntime {
         data: output.data,
         metadata: mergeMetadata(
           output.metadata,
-          mergeMetadata(limited.metadata, lifecycleMetadata(await this.dispatchLifecycle(
-            "PostToolUse",
-            tool.name,
-            call.id,
-            executeInput,
-            context,
-            { toolResponse: output.data ?? output.content },
-          ))),
+          mergeMetadata(limited.metadata, lifecycleMetadata(postToolLifecycle)),
         ),
         startedAt,
         completedAt,
@@ -203,6 +210,7 @@ export class ToolRuntime {
         error: normalized.message,
         isInterrupt: normalized.code === "tool_aborted",
       });
+      this.eventEmitter?.({ type: "post_tool_execute", sessionId: context.sessionId, turnId: context.turnId, toolCallId: call.id, toolName: tool.name, success: false });
       const result = this.createErrorResult(call.id, tool.name, normalized.code, normalized.message, startedAt, context, {
         details: normalized.details,
       });

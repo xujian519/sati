@@ -31,6 +31,7 @@ export type {
   ListSessionsInput,
   ListSessionsResult,
   NewSessionInput,
+  ReloadConfigResult,
   TurnUsage,
 } from "./protocol/index.js";
 export { GatewayElicitationBus } from "./elicitation/GatewayElicitationBus.js";
@@ -44,6 +45,7 @@ export type {
   WsHelloFrame,
   WsHelloOk,
   WsRequestFrame,
+  WsNotificationFrame,
   WsResponseFrame,
 } from "./protocol/index.js";
 export { PILOTDECK_GATEWAY_PROTOCOL_VERSION } from "./protocol/index.js";

@@ -91,6 +91,9 @@ export type GatewayEvent =
   | { type: "elicitation_cancelled"; requestId: string; reason?: string }
   | { type: "structured_output"; payload: unknown }
   | { type: "plan_mode_changed"; mode: GatewayMode | (string & {}) }
+  | { type: "config_changed"; changedPaths: string[]; changeClasses: string[] }
+  | { type: "worktree_created"; runId: string; cwd: string }
+  | { type: "worktree_removed"; cwd: string }
   | { type: "turn_completed"; usage: TurnUsage; finishReason: AgentTurnResult["stopReason"] | string }
   | { type: "error"; message: string; code?: string; recoverable: boolean };
 
@@ -167,6 +170,11 @@ export type GatewayCronController = {
   stopTask(input: CronStopInput): Promise<CronStopResult>;
 };
 
+export type ReloadConfigResult = {
+  reloaded: boolean;
+  changedPaths?: string[];
+};
+
 export interface Gateway {
   submitTurn(input: GatewaySubmitTurnInput): AsyncIterable<GatewayEvent>;
   abortTurn(input: { sessionKey: string; runId?: string }): Promise<void>;
@@ -207,4 +215,14 @@ export interface Gateway {
    * Web Phase 3 — load a single project summary.
    */
   describeProject(input: WebDescribeProjectInput): Promise<WebProjectSummary>;
+  /**
+   * Trigger a config reload from `~/.pilotdeck/pilotdeck.yaml` and
+   * invalidate cached runtimes. Returns the list of changed config paths
+   * so callers can decide whether further action is needed.
+   *
+   * Optional — implementations that don't own a config store (e.g. the
+   * fallback gateway or `RemoteGateway` backed by a server without the
+   * capability) may leave it undefined.
+   */
+  reloadConfig?(): Promise<ReloadConfigResult>;
 }

@@ -6,8 +6,10 @@
     "browser-use": {
       "command": "npx",
       "args": [
-        "@playwright/mcp@latest",
-        "--headless"
+        "@playwright/mcp@0.0.75",
+        "--headless",
+        "--browser",
+        "chromium"
       ]
     }
   }

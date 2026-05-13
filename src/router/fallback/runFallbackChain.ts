@@ -22,7 +22,18 @@ export function planFallback(
   return { attempts: (fallback as Record<string, RouterModelRef[] | undefined>)[scenarioType] ?? fallback.default ?? [] };
 }
 
+/**
+ * Error codes that indicate the *model output* was malformed (e.g. invalid
+ * JSON in tool arguments).  These are not retryable at the HTTP level
+ * (resending the identical request won't help), but a same-model retry with
+ * a corrective hint can let the model self-correct.
+ */
+const SELF_CORRECTABLE_CODES = new Set(["invalid_tool_arguments"]);
+
 export function isFallbackEligible(error: CanonicalModelError): boolean {
+  if (SELF_CORRECTABLE_CODES.has(error.code)) {
+    return true;
+  }
   if (!error.retryable) {
     return false;
   }

@@ -160,3 +160,9 @@ apps/desktop/resources/*.tar
 # macOS folder metadata
 .DS_Store
 **/.DS_Store
+
+# WCB benchmark output (large, per-run data)
+wcb-output/
+
+# Temporary download artifacts
+arxiv_response.xml

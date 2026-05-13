@@ -72,6 +72,9 @@ export type WebGatewayEvent =
   | { type: "elicitation_cancelled"; requestId: string; reason?: string }
   | { type: "structured_output"; payload: unknown }
   | { type: "plan_mode_changed"; mode: WebGatewayMode | (string & {}) }
+  | { type: "config_changed"; changedPaths: string[]; changeClasses: string[] }
+  | { type: "worktree_created"; runId: string; cwd: string }
+  | { type: "worktree_removed"; cwd: string }
   | { type: "turn_completed"; usage: Record<string, number>; finishReason: string }
   | { type: "error"; message: string; code?: string; recoverable: boolean };
 
@@ -93,7 +96,8 @@ export type WebGatewayMethod =
   | "rename_session"
   | "delete_session"
   | "list_projects"
-  | "describe_project";
+  | "describe_project"
+  | "reload_config";
 
 export type WebSubmitTurnInput = {
   sessionKey: string;

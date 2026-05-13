@@ -13,6 +13,7 @@ import {
   stripUnpairedToolCalls,
   stripUnpairedToolResults,
 } from "./toolPairIntegrity.js";
+import type { AgentEventEmitter } from "../../agent/protocol/events.js";
 
 export type CompactionTrigger = "manual" | "auto" | "reactive";
 
@@ -36,6 +37,7 @@ export type CompactionEngineOptions = {
   /** Max output tokens for the summary call (legacy default 20_000). */
   maxOutputTokens?: number;
   now?: () => Date;
+  eventEmitter?: AgentEventEmitter;
 };
 
 export const COMPACT_SYSTEM_PROMPT_DEFAULT =
@@ -70,6 +72,8 @@ export type CompactionInput = {
   /** Hook output messages to fold in after attachments (decision §3.1 #9 order). */
   hookResults?: CanonicalMessage[];
   signal?: AbortSignal;
+  sessionId?: string;
+  turnId?: string;
 };
 
 const DEFAULT_KEEP_TAIL_RATIO = 0.25;
@@ -114,6 +118,7 @@ export class CompactionEngine {
         messagesSummarized: messagesToSummarize.length,
       },
     });
+    this.options.eventEmitter?.({ type: "compact_started", sessionId: input.sessionId ?? "", turnId: input.turnId ?? "", trigger: input.trigger, preTokens });
 
     let summaryMessage: CanonicalMessage | undefined;
     let summaryError: string | undefined;
@@ -173,6 +178,14 @@ export class CompactionEngine {
         postTokens: result.postTokens,
         summaryUsage,
       },
+    });
+    this.options.eventEmitter?.({
+      type: "compact_completed",
+      sessionId: input.sessionId ?? "",
+      turnId: input.turnId ?? "",
+      status: summaryError ? "error" : "success",
+      preTokens,
+      postTokens: result.postTokens,
     });
 
     return result;
