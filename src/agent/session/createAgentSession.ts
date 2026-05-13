@@ -1,5 +1,5 @@
 import { PermissionRuntime } from "../../permission/index.js";
-import { SequentialToolScheduler, ToolRuntime } from "../../tool/index.js";
+import { ConcurrentToolScheduler, SequentialToolScheduler, ToolRuntime } from "../../tool/index.js";
 import { AgentLoop } from "../loop/AgentLoop.js";
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
@@ -36,7 +36,8 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
   storage?: AgentProjectSessionStorage;
 } {
   const toolRuntime = new ToolRuntime(options.dependencies.tools.registry, new PermissionRuntime(), options.dependencies.lifecycle);
-  const scheduler = options.dependencies.tools.scheduler ?? new SequentialToolScheduler(toolRuntime);
+  const scheduler = options.dependencies.tools.scheduler
+    ?? new ConcurrentToolScheduler(toolRuntime, options.dependencies.tools.registry);
   const dependencies: AgentRuntimeDependencies = {
     ...options.dependencies,
     tools: {

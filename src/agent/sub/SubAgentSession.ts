@@ -24,7 +24,7 @@ import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
 import { ToolRegistry } from "../../tool/registry/ToolRegistry.js";
 import type { PilotDeckToolDefinition } from "../../tool/index.js";
-import { SequentialToolScheduler } from "../../tool/scheduler/SequentialToolScheduler.js";
+import { ConcurrentToolScheduler } from "../../tool/scheduler/ConcurrentToolScheduler.js";
 import { ToolRuntime } from "../../tool/execution/ToolRuntime.js";
 import { PermissionRuntime } from "../../permission/index.js";
 import {
@@ -204,7 +204,7 @@ export class SubAgentSession {
       permissionRuntime,
       this.options.parentDependencies.lifecycle,
     );
-    const scheduler = new SequentialToolScheduler(toolRuntime);
+    const scheduler = new ConcurrentToolScheduler(toolRuntime, registry);
     return {
       router: this.options.parentDependencies.router,
       tools: { scheduler, registry },
