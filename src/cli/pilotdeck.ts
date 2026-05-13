@@ -1,7 +1,5 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
-import { installGlobalProxy } from "./proxy.js";
-installGlobalProxy();
 import { createAlwaysOnRuntime, type AlwaysOnRuntime } from "../always-on/index.js";
 import { createCronRuntime, type CronRuntime } from "../cron/index.js";
 import { connectRemoteGatewayIfAvailable, type Gateway, type GatewayEvent, type GatewaySubmitTurnInput } from "../gateway/index.js";
@@ -11,8 +9,9 @@ import { createLocalGateway } from "./createLocalGateway.js";
 import { startPilotDeckServer } from "./pilotdeckServer.js";
 import { installGlobalProxy } from "./proxy.js";
 
+installGlobalProxy();
+
 async function main(argv = process.argv.slice(2)): Promise<void> {
-  installGlobalProxy();
   const command = argv[0];
   if (command === "server") {
     const projectRoot = process.cwd();
@@ -74,9 +73,10 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       await cron.start();
     }
 
+    const envPort = Number.parseInt(env.PILOTDECK_GATEWAY_PORT ?? "", 10);
     const server = await startPilotDeckServer({
       gateway,
-      port: readPort(argv) ?? 18789,
+      port: readPort(argv) ?? (Number.isFinite(envPort) ? envPort : 18789),
       staticAssetsPath: resolve(projectRoot, "ui/dist"),
       feishu: new FeishuChannel(),
     });
