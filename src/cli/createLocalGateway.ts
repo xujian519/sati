@@ -103,6 +103,12 @@ export type CreateLocalGatewayResult = {
   registry: ProjectRuntimeRegistry;
   dispose: () => void;
   bindServer: (server: { broadcastNotification(name: string, payload?: unknown): void }) => void;
+  /**
+   * Returns true when at least one interactive (non-background) turn is
+   * in flight for `projectKey`.  Used by AlwaysOnManager to feed the
+   * `agent_busy` gate with real session data.
+   */
+  isProjectBusy: (projectKey: string) => boolean;
 };
 
 export function createLocalGateway(options: CreateLocalGatewayOptions = {}): CreateLocalGatewayResult {
@@ -220,6 +226,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       stopExtensionWatching();
     },
     bindServer: (server) => { boundServer = server; },
+    isProjectBusy: (projectKey: string) => router!.hasActiveUserTurn(projectKey),
   };
 }
 
