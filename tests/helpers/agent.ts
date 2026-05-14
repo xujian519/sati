@@ -114,6 +114,10 @@ export class ScriptedAgentRouter implements AgentRouterRuntime {
   observeUsage(sessionId: string, usage: CanonicalUsage | undefined): void {
     this.observedUsage.push({ sessionId, usage });
   }
+
+  invalidateSticky(_sessionId: string) {
+    return { previousTier: undefined, orchestrating: false };
+  }
 }
 
 export function createAgentLoopFixture(options: {

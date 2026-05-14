@@ -195,3 +195,50 @@ test("classifyAndRoute uses last user message from multi-turn messages", async (
   assert.ok(judgePromptText.includes("refactor everything"));
   assert.ok(!judgePromptText.includes("first question"));
 });
+
+test("classifyAndRoute forwards previousTier to judge prompt", async () => {
+  let capturedRequest: unknown;
+  const spyJudge: ModelRuntime = {
+    ...makeJudge("<tier>COMPLEX</tier>"),
+    complete: async (req) => {
+      capturedRequest = req;
+      return {
+        role: "assistant",
+        content: [{ type: "text", text: "<tier>COMPLEX</tier>" }],
+        finishReason: "stop",
+      };
+    },
+  };
+  await classifyAndRoute({
+    config: makeConfig(),
+    messages: userMessages("继续"),
+    judgeRuntime: spyJudge,
+    previousTier: "COMPLEX",
+  });
+  const req = capturedRequest as { messages: Array<{ content: Array<{ text: string }> }> };
+  const judgePromptText = req.messages[0].content[0].text;
+  assert.ok(judgePromptText.includes("Previous turn was classified as: COMPLEX"));
+});
+
+test("classifyAndRoute omits previousTier from judge prompt when not provided", async () => {
+  let capturedRequest: unknown;
+  const spyJudge: ModelRuntime = {
+    ...makeJudge("<tier>SIMPLE</tier>"),
+    complete: async (req) => {
+      capturedRequest = req;
+      return {
+        role: "assistant",
+        content: [{ type: "text", text: "<tier>SIMPLE</tier>" }],
+        finishReason: "stop",
+      };
+    },
+  };
+  await classifyAndRoute({
+    config: makeConfig(),
+    messages: userMessages("hello"),
+    judgeRuntime: spyJudge,
+  });
+  const req = capturedRequest as { messages: Array<{ content: Array<{ text: string }> }> };
+  const judgePromptText = req.messages[0].content[0].text;
+  assert.ok(!judgePromptText.includes("Previous turn"));
+});

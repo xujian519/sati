@@ -72,7 +72,7 @@ const tokenSaverConfig: RouterConfig = {
   },
 };
 
-test("TokenSaver sticky: first turn calls judge, second turn reuses sticky model", async () => {
+test("TokenSaver sticky: intra-turn tool-call loop reuses sticky model", async () => {
   const modelRuntime = makeModelRuntime([
     [...successEvents],
     [...successEvents],
@@ -148,4 +148,104 @@ test("TokenSaver subagent policy=judge classifies independently", async () => {
 
   for await (const _ of router.stream(baseRequest, { sessionId: "s1", turnId: "t2", isMainAgent: false })) { void _; }
   assert.equal(modelRuntime.received[1]?.model, "cheap");
+});
+
+// --- invalidateSticky tests ---
+
+test("invalidateSticky clears routing sticky but preserves orchestrating", async () => {
+  const modelRuntime = makeModelRuntime([[...successEvents]]);
+  const judgeRuntime = makeJudgeRuntime(["COMPLEX"]);
+  const requestWithToolsAndPrompt: CanonicalModelRequest = {
+    ...baseRequest,
+    systemPrompt: "You are an assistant that does many things in detail.",
+    tools: [
+      { name: "Agent", description: "Run a sub-agent", inputSchema: { type: "object", properties: {} } },
+      { name: "WebSearch", description: "Search", inputSchema: { type: "object", properties: {} } },
+    ],
+  };
+  const config: RouterConfig = {
+    ...tokenSaverConfig,
+    autoOrchestrate: {
+      enabled: true,
+      triggerTiers: ["COMPLEX"],
+      slimSystemPrompt: true,
+      allowedTools: ["Agent"],
+    },
+  };
+  const router = createRouterRuntime(config, { modelRuntime, judgeRuntime });
+
+  for await (const _ of router.stream(requestWithToolsAndPrompt, { sessionId: "s1", turnId: "t1", isMainAgent: true })) { void _; }
+
+  const result = router.invalidateSticky("s1");
+  assert.equal(result.previousTier, "COMPLEX");
+  assert.equal(result.orchestrating, true);
+});
+
+test("invalidateSticky returns undefined previousTier for unknown session", () => {
+  const modelRuntime = makeModelRuntime([]);
+  const judgeRuntime = makeJudgeRuntime([]);
+  const router = createRouterRuntime(tokenSaverConfig, { modelRuntime, judgeRuntime });
+
+  const result = router.invalidateSticky("nonexistent");
+  assert.equal(result.previousTier, undefined);
+  assert.equal(result.orchestrating, false);
+});
+
+test("invalidateSticky forces re-judge on next multi-turn call", async () => {
+  const modelRuntime = makeModelRuntime([
+    [...successEvents],
+    [...successEvents],
+  ]);
+  const judgeRuntime = makeJudgeRuntime(["SIMPLE", "COMPLEX"]);
+  const router = createRouterRuntime(tokenSaverConfig, { modelRuntime, judgeRuntime });
+
+  for await (const _ of router.stream(baseRequest, { sessionId: "s1", turnId: "t1", isMainAgent: true })) { void _; }
+  assert.equal(modelRuntime.received[0]?.model, "cheap");
+
+  router.invalidateSticky("s1");
+
+  const multiTurnRequest: CanonicalModelRequest = {
+    ...baseRequest,
+    messages: [
+      { role: "user", content: [{ type: "text", text: "first" }] },
+      { role: "assistant", content: [{ type: "text", text: "reply" }] },
+      { role: "user", content: [{ type: "text", text: "refactor everything" }] },
+    ],
+  };
+  for await (const _ of router.stream(multiTurnRequest, { sessionId: "s1", turnId: "t2", isMainAgent: true })) { void _; }
+  assert.equal(modelRuntime.received[1]?.model, "expensive");
+});
+
+test("stream passes previousTier to judge prompt", async () => {
+  let capturedRequest: CanonicalModelRequest | undefined;
+  const judgeRuntime: ModelRuntime = {
+    stream: async function* () { throw new Error("not used"); },
+    complete: async (req): Promise<CanonicalModelResponse> => {
+      capturedRequest = req;
+      return {
+        role: "assistant",
+        content: [{ type: "text", text: "<tier>COMPLEX</tier>" }],
+        finishReason: "stop",
+      };
+    },
+    getCapabilities: () => ({
+      supportsToolUse: false, supportsStreaming: false, supportsParallelToolCalls: false,
+      supportsThinking: false, supportsJsonSchema: false, supportsSystemPrompt: false,
+      supportsPromptCache: false, maxContextTokens: 4096, maxOutputTokens: 256,
+    }),
+  };
+  const modelRuntime = makeModelRuntime([[...successEvents]]);
+  const router = createRouterRuntime(tokenSaverConfig, { modelRuntime, judgeRuntime });
+
+  for await (const _ of router.stream(baseRequest, {
+    sessionId: "s1", turnId: "t1", isMainAgent: true,
+    previousTier: "SIMPLE",
+  })) { void _; }
+
+  assert.ok(capturedRequest);
+  const judgeText = capturedRequest.messages[0].content
+    .filter((b): b is { type: "text"; text: string } => b.type === "text")
+    .map((b) => b.text)
+    .join("");
+  assert.ok(judgeText.includes("Previous turn was classified as: SIMPLE"));
 });

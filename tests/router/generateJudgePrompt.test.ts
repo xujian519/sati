@@ -66,3 +66,30 @@ test("generateJudgePrompt embeds user message in triple-quoted block", () => {
   });
   assert.ok(prompt.includes(`"""\n${msg}\n"""`));
 });
+
+test("generateJudgePrompt includes previousTier context when provided", () => {
+  const prompt = generateJudgePrompt({
+    userMessage: "继续",
+    config: makeConfig(),
+    previousTier: "COMPLEX",
+  });
+  assert.match(prompt, /Previous turn was classified as: COMPLEX/);
+  assert.match(prompt, /prefer keeping the previous tier/);
+});
+
+test("generateJudgePrompt omits previousTier section when not provided", () => {
+  const prompt = generateJudgePrompt({
+    userMessage: "hello",
+    config: makeConfig(),
+  });
+  assert.ok(!prompt.includes("Previous turn"));
+});
+
+test("generateJudgePrompt omits previousTier section when undefined", () => {
+  const prompt = generateJudgePrompt({
+    userMessage: "hello",
+    config: makeConfig(),
+    previousTier: undefined,
+  });
+  assert.ok(!prompt.includes("Previous turn"));
+});
