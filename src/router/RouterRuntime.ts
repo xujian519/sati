@@ -244,6 +244,9 @@ export function createRouterRuntime(
     const alreadyOrchestrating = sticky?.orchestrating === true;
     const tokenSaverActive = config.tokenSaver?.enabled === true && tokenSaverTier != null;
     const orchGate = tokenSaverActive || alreadyOrchestrating;
+    console.log(
+      `[router] decision: tier=${tokenSaverTier}, model=${selection.provider}/${selection.model}, orchGate=${orchGate}, alreadyOrch=${alreadyOrchestrating}, resolvedFrom=${resolvedFrom}`,
+    );
 
     let skillPrompt: string | undefined;
     if (

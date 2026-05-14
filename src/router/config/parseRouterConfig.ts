@@ -439,6 +439,7 @@ function parseAutoOrchestrate(
 
   const slimSystemPrompt = typeof raw.slimSystemPrompt === "boolean" ? raw.slimSystemPrompt : true;
   const skillExtensionId = typeof raw.skillExtensionId === "string" ? raw.skillExtensionId : undefined;
+  const orchestrationPrompt = typeof raw.orchestrationPrompt === "string" ? raw.orchestrationPrompt : undefined;
 
   let subagentMaxTokens: number | undefined;
   if (raw.subagentMaxTokens !== undefined) {
@@ -466,6 +467,7 @@ function parseAutoOrchestrate(
     blockedTools,
     slimSystemPrompt,
     skillExtensionId,
+    orchestrationPrompt,
     subagentMaxTokens,
   };
 }

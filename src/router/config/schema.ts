@@ -37,6 +37,8 @@ export type RouterAutoOrchestrateConfig = {
   enabled: boolean;
   mainAgentModel?: RouterModelRef;
   skillExtensionId?: string;
+  /** Inline orchestration prompt injected when skillExtensionId is absent. */
+  orchestrationPrompt?: string;
   triggerTiers: string[];
   /** Whitelist — only these tools are kept for the orchestrator. Takes precedence over blockedTools. */
   allowedTools?: string[];

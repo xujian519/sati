@@ -29,6 +29,9 @@ export type OrchestrationResult = {
 
 export function applyOrchestration(input: OrchestrationInput): OrchestrationResult {
   const { config, request, skillPrompt } = input;
+  console.log(
+    `[autoOrch] input: tier=${input.tier}, isMain=${input.isMainAgent}, alreadyOrch=${input.alreadyOrchestrating}, triggerTiers=${config.triggerTiers}`,
+  );
   if (!config.enabled || !input.isMainAgent) {
     return { request, mutations: {}, applied: false };
   }
@@ -36,6 +39,7 @@ export function applyOrchestration(input: OrchestrationInput): OrchestrationResu
   if (!input.alreadyOrchestrating) {
     const triggerTiers = config.triggerTiers ?? [];
     if (triggerTiers.length > 0 && (!input.tier || !triggerTiers.includes(input.tier))) {
+      console.log(`[autoOrch] tier "${input.tier}" not in triggerTiers, skipping`);
       return { request, mutations: {}, applied: false };
     }
   }
@@ -44,11 +48,12 @@ export function applyOrchestration(input: OrchestrationInput): OrchestrationResu
   let mutations: RouterMutationsLog = {};
   let mutated = false;
 
-  if (skillPrompt && skillPrompt.length > 0) {
-    messages = injectOrchestrationPrompt(messages, skillPrompt);
+  const effectivePrompt = skillPrompt ?? config.orchestrationPrompt;
+  if (effectivePrompt && effectivePrompt.length > 0) {
+    messages = injectOrchestrationPrompt(messages, effectivePrompt);
     mutations = {
       ...mutations,
-      orchestrationPromptInjected: { tier: input.tier ?? "main", chars: skillPrompt.length },
+      orchestrationPromptInjected: { tier: input.tier ?? "main", chars: effectivePrompt.length },
     };
     mutated = true;
   }
@@ -98,9 +103,11 @@ export function applyOrchestration(input: OrchestrationInput): OrchestrationResu
   }
 
   if (!mutated) {
+    console.log("[autoOrch] no mutations applied, orchestration skipped");
     return { request, mutations: {}, applied: false };
   }
 
+  console.log(`[autoOrch] orchestration applied: promptInjected=${"orchestrationPromptInjected" in mutations}, toolsStripped=${"toolsStripped" in mutations}, sysPromptSlim=${"systemPromptSlim" in mutations}`);
   return {
     request: {
       ...request,

@@ -64,8 +64,11 @@ export async function classifyAndRoute(
   };
 
   const timeoutMs = Math.max(500, config.judgeTimeoutMs ?? 5_000);
-  const maxAttempts = 2;
+  const maxAttempts = 3;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (attempt > 1) {
+      await new Promise((r) => setTimeout(r, 1_000));
+    }
     let timeout: NodeJS.Timeout | undefined;
     try {
       const response = await Promise.race([
@@ -74,6 +77,11 @@ export async function classifyAndRoute(
           timeout = setTimeout(() => reject(new TokenSaverTimeoutError()), timeoutMs);
         }),
       ]);
+      console.log(
+        `[token-saver] Judge raw content blocks (attempt ${attempt}):`,
+        JSON.stringify(response.content).slice(0, 500),
+        `| finishReason=${response.finishReason}`,
+      );
       const text = response.content
         .filter((block) => block.type === "text")
         .map((block) => block.text)
