@@ -989,46 +989,142 @@ function _readToolSequenceFromTranscript(sessionId, projectKey) {
  * Fallback: when turnId is absent (older stats without the field), uses
  * transcript model-call counts to partition entries.
  */
+/**
+ * Extract subagent prompts from a session transcript.
+ * Returns a Map<turnId, promptPreview[]> for assigning prompts to subagent entries.
+ */
+const _subagentPromptCache = new Map();
+
+function _extractSubagentPrompts(sessionId, projectKey) {
+    const cacheKey = `${sessionId}::${projectKey || ''}::subprompts`;
+    const cached = _subagentPromptCache.get(cacheKey);
+    if (cached) {
+        const currentMtime = _getTranscriptMtime(sessionId, projectKey);
+        if (currentMtime && currentMtime === cached.mtime) return cached.result;
+    }
+    const result = _readSubagentPromptsFromTranscript(sessionId, projectKey);
+    const mtime = _getTranscriptMtime(sessionId, projectKey);
+    _subagentPromptCache.set(cacheKey, { result, mtime });
+    return result;
+}
+
+function _readSubagentPromptsFromTranscript(sessionId, projectKey) {
+    const pilotHome = GENERAL_HOME;
+    const safeId = sanitizeSessionIdForPath(sessionId);
+    const fileVariants = safeId === sessionId ? [sessionId] : [safeId, sessionId];
+    const candidates = [];
+    if (projectKey) {
+        for (const id of fileVariants) {
+            candidates.push(path.join(pilotHome, 'projects', createProjectId(projectKey), 'chats', `${id}.jsonl`));
+        }
+    }
+    for (const id of fileVariants) {
+        const generalChatPath = path.join(pilotHome, 'projects', createProjectId(pilotHome), 'chats', `${id}.jsonl`);
+        if (!candidates.includes(generalChatPath)) candidates.push(generalChatPath);
+    }
+    try {
+        const projectsDir = path.join(pilotHome, 'projects');
+        const dirs = fs.readdirSync(projectsDir, { withFileTypes: true });
+        for (const d of dirs) {
+            if (!d.isDirectory()) continue;
+            for (const id of fileVariants) {
+                const p = path.join(projectsDir, d.name, 'chats', `${id}.jsonl`);
+                if (!candidates.includes(p)) candidates.push(p);
+            }
+        }
+    } catch { /* ignore */ }
+
+    const promptsByTurn = new Map();
+    for (const filePath of candidates) {
+        try {
+            const raw = fs.readFileSync(filePath, 'utf-8');
+            for (const line of raw.split('\n')) {
+                if (!line.trim()) continue;
+                try {
+                    const entry = JSON.parse(line);
+                    if (entry.type === 'subagent_started' && entry.turnId && entry.promptPreview) {
+                        const list = promptsByTurn.get(entry.turnId) || [];
+                        const preview = entry.promptPreview.length > 80
+                            ? entry.promptPreview.slice(0, 80) + '…'
+                            : entry.promptPreview;
+                        list.push(preview);
+                        promptsByTurn.set(entry.turnId, list);
+                    }
+                } catch { /* skip */ }
+            }
+            if (promptsByTurn.size > 0) return promptsByTurn;
+        } catch { /* file not found */ }
+    }
+    return promptsByTurn;
+}
+
 function _assignQueriesToRequestLog(sessionEntry) {
     const log = sessionEntry.routing?.requestLog;
     const queries = sessionEntry.userQueries;
     if (!log || log.length === 0 || !queries || queries.length === 0) return;
 
-    const mainEntries = log.filter(e => e.role === 'main');
-    if (mainEntries.length === 0) return;
-
     const turnStructure = _extractToolSequence(sessionEntry.sessionId, sessionEntry._projectKey);
-    const hasTurnIds = mainEntries.some(e => e.turnId);
+    const subagentPrompts = _extractSubagentPrompts(sessionEntry.sessionId, sessionEntry._projectKey);
+    const hasTurnIds = log.some(e => e.turnId);
 
     if (hasTurnIds) {
-        _assignByTurnId(mainEntries, queries, turnStructure);
+        _assignByTurnId(log, queries, turnStructure, subagentPrompts);
     } else {
+        const mainEntries = log.filter(e => e.role === 'main');
+        if (mainEntries.length === 0) return;
         _assignByModelCallCount(mainEntries, queries, turnStructure);
     }
 }
 
-function _assignByTurnId(mainEntries, queries, turnStructure) {
+function _assignByTurnId(allEntries, queries, turnStructure, subagentPrompts) {
     let turnIndex = 0;
-    let continuationIdx = 0;
     let currentTurnId = null;
 
-    for (let i = 0; i < mainEntries.length; i++) {
-        const entry = mainEntries[i];
-
+    for (let i = 0; i < allEntries.length; i++) {
+        const entry = allEntries[i];
         if (entry.turnId !== currentTurnId) {
             currentTurnId = entry.turnId;
-            continuationIdx = 0;
-            entry.query = queries[Math.min(turnIndex, queries.length - 1)];
+            if (entry.role === 'main') {
+                entry.query = queries[Math.min(turnIndex, queries.length - 1)];
+            }
             turnIndex++;
         } else {
-            entry.role = 'sub';
-            delete entry.tier;
-            const turnTools = turnStructure[turnIndex - 1]?.tools;
-            if (turnTools && continuationIdx < turnTools.length) {
-                const names = turnTools[continuationIdx];
-                entry.query = '→ ' + [...new Set(names)].join(', ');
+            if (entry.role === 'main') {
+                entry.role = 'sub';
+                delete entry.tier;
             }
-            continuationIdx++;
+        }
+    }
+
+    const turnIds = [...new Set(allEntries.map(e => e.turnId).filter(Boolean))];
+    for (let tIdx = 0; tIdx < turnIds.length; tIdx++) {
+        const turnId = turnIds[tIdx];
+        const turnEntries = allEntries.filter(e => e.turnId === turnId);
+        const turnTools = turnStructure[tIdx]?.tools || [];
+        const prompts = subagentPrompts?.get(turnId);
+        let toolIdx = 0;
+        let promptIdx = 0;
+
+        for (let j = 1; j < turnEntries.length; j++) {
+            const entry = turnEntries[j];
+            if (entry.query === 'sub-agent') {
+                if (prompts && promptIdx < prompts.length) {
+                    entry.query = prompts[promptIdx];
+                    promptIdx++;
+                }
+            } else if (!entry.query) {
+                if (toolIdx < turnTools.length) {
+                    const names = turnTools[toolIdx];
+                    const isAgentCall = names.some(n => n === 'agent' || n === 'sessions_spawn' || n === 'dispatch_agent');
+                    if (isAgentCall && prompts && promptIdx < prompts.length) {
+                        entry.query = prompts[promptIdx];
+                        promptIdx++;
+                    } else {
+                        entry.query = '→ ' + [...new Set(names)].join(', ');
+                    }
+                }
+                toolIdx++;
+            }
         }
     }
 }
@@ -1081,6 +1177,7 @@ export function getRouterDashboardData() {
         const records = Array.isArray(snapshot.records) ? snapshot.records : [];
         const sessionMap = new Map();
         for (const record of records) {
+            if (record.sessionId && record.sessionId.includes('::sub::')) continue;
             let sessionEntry = sessionMap.get(record.sessionId);
             if (!sessionEntry) {
                 sessionEntry = {
@@ -1110,6 +1207,7 @@ export function getRouterDashboardData() {
                 role: logRole,
                 tier: record.tier || record.scenarioType || undefined,
                 model: `${record.provider || 'unknown'}/${record.model || 'unknown'}`,
+                ...(record.role === 'subagent' ? { query: 'sub-agent' } : {}),
                 tokens: (record.usage?.totalTokens ?? (record.usage?.inputTokens || 0) + (record.usage?.outputTokens || 0)),
                 cost: record.cost?.total || 0,
             });
