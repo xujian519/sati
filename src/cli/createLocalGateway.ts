@@ -768,6 +768,7 @@ class ProjectRuntimeRegistry {
       model: agent.model.model,
       cwd,
       permissionMode,
+      jsonSelfCorrect: true,
       permissionContext: createDefaultPermissionContext({
         cwd,
         mode: permissionMode,

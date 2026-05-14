@@ -608,7 +608,7 @@ function TierBar({ byTier }: { byTier: Record<string, { estimatedCost?: number; 
           return (
             <div
               key={tier}
-              className={cn('h-full', TIER_COLORS[tier] || 'bg-neutral-400')}
+              className={cn('h-full', TIER_COLORS[tier.toUpperCase()] || 'bg-neutral-400')}
               style={{ width: `${pct}%` }}
               title={`${tier}: ${formatCost(b?.estimatedCost ?? 0)}`}
             />
@@ -618,7 +618,7 @@ function TierBar({ byTier }: { byTier: Record<string, { estimatedCost?: number; 
       <div className="flex flex-wrap gap-x-3 gap-y-0.5">
         {entries.map(([tier, b]) => (
           <span key={tier} className="inline-flex items-center gap-1 text-[10px] text-neutral-500 dark:text-neutral-400">
-            <span className={cn('inline-block h-1.5 w-1.5 rounded-full', TIER_COLORS[tier] || 'bg-neutral-400')} />
+            <span className={cn('inline-block h-1.5 w-1.5 rounded-full', TIER_COLORS[tier.toUpperCase()] || 'bg-neutral-400')} />
             <span>{tier}</span>
             <span className="tabular-nums">{formatCost(b?.estimatedCost ?? 0)}</span>
           </span>

@@ -60,7 +60,7 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           supportedImageMimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"],
           imageDetail: "auto",
         },
-        aliases: ["claude-opus-4"],
+        aliases: ["claude-opus-4", "claude-opus-4.6"],
       },
       "claude-sonnet-4-20250514": {
         displayName: "Claude Sonnet 4",
