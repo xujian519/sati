@@ -240,17 +240,32 @@ async function getProjects(progressCallback = null) {
     // sourced from the same backend as any other project.
     const generalHome = resolvePilotHome(process.env);
     let generalSessions = [];
+    let generalTotal = 0;
     try {
         const generalGateway = await getPilotDeckGateway();
-        const generalSessionsResult = await generalGateway
-            .listSessions({ projectKey: generalHome, limit: 5 })
-            .catch(() => ({ sessions: [] }));
+        // Pair the first page query with describeProject so the General
+        // workspace gets the real session count instead of the page size.
+        // Without this, sessionMeta.hasMore was hardcoded `false` and the
+        // sidebar would silently truncate to the first 5 sessions even
+        // when dozens existed under ~/.pilotdeck/projects/<encoded>/chats/.
+        const [generalSessionsResult, generalSummary] = await Promise.all([
+            generalGateway
+                .listSessions({ projectKey: generalHome, limit: 5 })
+                .catch(() => ({ sessions: [] })),
+            generalGateway
+                .describeProject({ projectKey: generalHome })
+                .catch(() => null),
+        ]);
         generalSessions = (generalSessionsResult.sessions || []).map((session) =>
             toLegacySession(session, 'general'),
         );
         applyCustomSessionNames(generalSessions, 'claude');
+        generalTotal = typeof generalSummary?.sessionCount === 'number'
+            ? generalSummary.sessionCount
+            : generalSessions.length;
     } catch {
         generalSessions = [];
+        generalTotal = 0;
     }
     rememberProjectDirectory('general', generalHome);
     result.unshift({
@@ -263,8 +278,8 @@ async function getProjects(progressCallback = null) {
         codexSessions: [],
         geminiSessions: [],
         sessionMeta: {
-            total: generalSessions.length,
-            hasMore: false,
+            total: generalTotal,
+            hasMore: generalTotal > generalSessions.length,
         },
         taskmaster: { hasTaskmaster: false },
         alwaysOn: { enabled: false },
@@ -277,16 +292,34 @@ async function getSessions(projectName, limit = 5, offset = 0) {
     const gateway = await getPilotDeckGateway();
     const projectPath = await extractProjectDirectory(projectName);
     const cursor = offset > 0 ? String(offset) : undefined;
-    const result = await gateway
-        .listSessions({ projectKey: projectPath, limit, cursor })
-        .catch(() => ({ sessions: [] }));
-    const sessions = (result.sessions || []).map((session) =>
+    // Fan-out the page query and the project summary (for the authoritative
+    // total session count) in parallel. Without summary.sessionCount we'd
+    // have to estimate `total` as `offset + page.length + hasMoreBump`,
+    // which the UI then uses to compute `remaining = total - allLoaded`.
+    // That estimate drifts every page and ends up showing a stale
+    // "Show more (N)" that never reaches the real count — which presents
+    // to the user as a button that "doesn't react" once they've already
+    // pulled in everything that exists.
+    const [listResult, summary] = await Promise.all([
+        gateway
+            .listSessions({ projectKey: projectPath, limit, cursor })
+            .catch(() => ({ sessions: [] })),
+        gateway
+            .describeProject({ projectKey: projectPath })
+            .catch(() => null),
+    ]);
+    const sessions = (listResult.sessions || []).map((session) =>
         toLegacySession(session, projectName),
     );
+    const hasMore = Boolean(listResult.nextCursor);
+    const fallbackTotal = offset + sessions.length + (hasMore ? 1 : 0);
+    const total = typeof summary?.sessionCount === 'number'
+        ? summary.sessionCount
+        : fallbackTotal;
     return {
         sessions,
-        total: offset + sessions.length + (result.nextCursor ? 1 : 0),
-        hasMore: Boolean(result.nextCursor),
+        total,
+        hasMore,
         offset,
         limit,
     };
