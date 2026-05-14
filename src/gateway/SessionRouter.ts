@@ -142,6 +142,21 @@ export class SessionRouter {
     return this.sessions.size;
   }
 
+  /**
+   * Returns true when at least one *user* turn (not always-on / cron) is
+   * in flight for the given project.  Used by the Always-On scheduler to
+   * implement the `agent_busy` gate.
+   */
+  hasActiveUserTurn(projectKey: string): boolean {
+    for (const [sessionKey] of this.inFlightTurns) {
+      if (sessionKey.startsWith("always-on/")) continue;
+      if (sessionKey.startsWith("cron:")) continue;
+      const record = this.sessions.get(sessionKey);
+      if (record?.context.projectKey === projectKey) return true;
+    }
+    return false;
+  }
+
   private sweepIdle(): void {
     const now = this.nowMs();
     for (const [sessionKey, record] of this.sessions) {

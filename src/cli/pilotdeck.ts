@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
-import { createAlwaysOnRuntime, type AlwaysOnRuntime } from "../always-on/index.js";
+import { createAlwaysOnManager, type AlwaysOnManager } from "../always-on/index.js";
 import { createCronRuntime, type CronRuntime } from "../cron/index.js";
 import { connectRemoteGatewayIfAvailable, type Gateway, type GatewayEvent, type GatewaySubmitTurnInput } from "../gateway/index.js";
 import { CliChannel, TuiChannel, FeishuChannel } from "../adapters/index.js";
@@ -19,14 +19,13 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     const pilotHome = resolvePilotHome(env);
     const snapshot = loadPilotConfig({ projectRoot, env });
 
-    let alwaysOn: AlwaysOnRuntime | undefined;
+    let alwaysOn: AlwaysOnManager | undefined;
     let cron: CronRuntime | undefined;
     let deferredBroadcast: ((name: string, payload?: unknown) => void) | undefined;
-    if (snapshot.config.alwaysOn) {
-      alwaysOn = createAlwaysOnRuntime({
+    if (snapshot.config.alwaysOn?.enabled) {
+      alwaysOn = createAlwaysOnManager({
         config: snapshot.config.alwaysOn,
         pilotHome,
-        projectKey: projectRoot,
         logger: {
           info: (message, data) =>
             console.log(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
@@ -55,7 +54,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       });
     }
 
-    const { gateway, dispose: disposeGateway, bindServer } = createLocalGateway({
+    const { gateway, dispose: disposeGateway, bindServer, isProjectBusy } = createLocalGateway({
       projectRoot,
       pilotHome,
       env,
@@ -65,7 +64,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     });
 
     if (alwaysOn) {
-      alwaysOn.bindGateway(gateway);
+      alwaysOn.bindGateway(gateway, { isProjectBusy });
       await alwaysOn.start();
     }
     if (cron) {

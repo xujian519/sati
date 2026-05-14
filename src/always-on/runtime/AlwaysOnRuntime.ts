@@ -41,6 +41,19 @@ export type CreateAlwaysOnRuntimeOptions = {
   toolContractOptions?: CreateAlwaysOnDiscoveryPlanToolOptions["contract"];
   onWorktreeCreated?: (runId: string, cwd: string) => void;
   onWorktreeRemoved?: (cwd: string) => void;
+  /** Shared run-context registry (used by AlwaysOnManager for multi-project). */
+  runContexts?: AlwaysOnRunContextRegistry;
+  /** Shared session-config overrides (used by AlwaysOnManager for multi-project). */
+  sessionOverrides?: SessionConfigOverrides;
+  /**
+   * Project-level callback: returns true when a user session is actively
+   * running a turn for this project.  Passed through to the scheduler so
+   * the `agent_busy` gate fires from real data instead of the former
+   * hard-coded `false`.
+   */
+  isSessionInFlight?: () => boolean;
+  /** When true, the runtime skips internal tool creation (manager owns tools). */
+  skipToolCreation?: boolean;
 };
 
 const NOOP_LOGGER: AlwaysOnRuntimeLogger = {
@@ -73,14 +86,15 @@ export class AlwaysOnRuntime {
   private readonly stateStore: DiscoveryStateStore;
   private readonly planStore: DiscoveryPlanStore;
   private readonly reportStore: DiscoveryReportStore;
-  private readonly runContexts = new AlwaysOnRunContextRegistry();
+  private readonly runContexts: AlwaysOnRunContextRegistry;
   private readonly leases: ChannelLeaseRegistry;
-  private readonly sessionOverrides = new SessionConfigOverrides();
+  private readonly sessionOverrides: SessionConfigOverrides;
   private readonly workspaceRegistry: WorkspaceProviderRegistry;
   private readonly logger: AlwaysOnRuntimeLogger;
   private readonly now: () => Date;
   private readonly uuid: () => string;
   private readonly tools: PilotDeckToolDefinition[];
+  private readonly isSessionInFlight: () => boolean;
   private readonly onWorktreeCreated?: (runId: string, cwd: string) => void;
   private readonly onWorktreeRemoved?: (cwd: string) => void;
 
@@ -100,27 +114,32 @@ export class AlwaysOnRuntime {
     this.logger = options.logger ?? NOOP_LOGGER;
     this.now = options.now ?? (() => new Date());
     this.uuid = options.uuid ?? randomUUID;
+    this.isSessionInFlight = options.isSessionInFlight ?? (() => false);
 
     this.stateStore = new DiscoveryStateStore(this.paths);
     this.planStore = new DiscoveryPlanStore(this.paths);
     this.reportStore = new DiscoveryReportStore(this.paths);
+    this.runContexts = options.runContexts ?? new AlwaysOnRunContextRegistry();
     this.leases = new ChannelLeaseRegistry(this.now);
+    this.sessionOverrides = options.sessionOverrides ?? new SessionConfigOverrides();
     this.onWorktreeCreated = options.onWorktreeCreated;
     this.onWorktreeRemoved = options.onWorktreeRemoved;
     this.workspaceRegistry = options.workspaceRegistry ?? this.buildDefaultWorkspaceRegistry();
 
-    this.tools = [
-      createAlwaysOnDiscoveryPlanTool({
-        runContexts: this.runContexts,
-        contract: options.toolContractOptions,
-        now: this.now,
-        uuid: this.uuid,
-      }),
-      createAlwaysOnReportTool({
-        runContexts: this.runContexts,
-        now: this.now,
-      }),
-    ];
+    this.tools = options.skipToolCreation
+      ? []
+      : [
+          createAlwaysOnDiscoveryPlanTool({
+            runContexts: this.runContexts,
+            contract: options.toolContractOptions,
+            now: this.now,
+            uuid: this.uuid,
+          }),
+          createAlwaysOnReportTool({
+            runContexts: this.runContexts,
+            now: this.now,
+          }),
+        ];
   }
 
   getTools(): PilotDeckToolDefinition[] {
@@ -139,11 +158,15 @@ export class AlwaysOnRuntime {
     return this.runContexts;
   }
 
-  bindGateway(gateway: Gateway): void {
+  bindGateway(
+    gateway: Gateway,
+    hooks?: { isSessionInFlight?: () => boolean },
+  ): void {
     if (this.gateway) {
       throw new Error("AlwaysOnRuntime.bindGateway already called.");
     }
     this.gateway = gateway;
+    const isSessionInFlight = hooks?.isSessionInFlight ?? this.isSessionInFlight;
     this.fire = new DiscoveryFire({
       config: this.config,
       paths: this.paths,
@@ -169,7 +192,7 @@ export class AlwaysOnRuntime {
       uuid: this.uuid,
       now: this.now,
       logger: this.logger,
-      isSessionInFlight: () => false,
+      isSessionInFlight,
     });
   }
 

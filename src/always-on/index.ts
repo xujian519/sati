@@ -91,6 +91,11 @@ export {
   type CreateAlwaysOnRuntimeOptions,
 } from "./runtime/AlwaysOnRuntime.js";
 export {
+  AlwaysOnManager,
+  createAlwaysOnManager,
+  type CreateAlwaysOnManagerOptions,
+} from "./runtime/AlwaysOnManager.js";
+export {
   buildDiscoveryPrompt,
   buildExecutionPrompt,
   type BuildDiscoveryPromptInput,

@@ -277,6 +277,7 @@ export class DiscoveryFire {
           workspaceStrategy: workspace.strategy,
         }),
         mode: "bypassPermissions",
+        persistEvents: true,
       });
       executionError = pickFirstError(events);
     } finally {
@@ -364,6 +365,8 @@ export class DiscoveryFire {
     runId: string;
     message: string;
     mode: "default" | "bypassPermissions";
+    /** When true, each event is appended to the run events log on disk. */
+    persistEvents?: boolean;
   }): Promise<GatewayEvent[]> {
     const events: GatewayEvent[] = [];
     for await (const event of this.deps.gateway.submitTurn({
@@ -375,6 +378,11 @@ export class DiscoveryFire {
       projectKey: this.deps.projectKey,
     })) {
       events.push(event);
+      if (input.persistEvents) {
+        await this.deps.reportStore
+          .appendRunEvent(input.runId, event as unknown as Record<string, unknown>)
+          .catch(() => undefined);
+      }
     }
     return events;
   }

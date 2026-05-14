@@ -28,7 +28,7 @@ export type DiscoverySchedulerDependencies = {
   uuid: () => string;
   now: () => Date;
   logger: DiscoverySchedulerLogger;
-  isSessionInFlight: (sessionKey: string) => boolean;
+  isSessionInFlight: () => boolean;
 };
 
 export class DiscoveryScheduler {
@@ -102,7 +102,7 @@ export class DiscoveryScheduler {
       now,
       projectExists: existsSync(this.deps.projectKey),
       lockHeld,
-      sessionInFlight: false,
+      sessionInFlight: this.deps.isSessionInFlight(),
     });
 
     if (!evaluation.ok) {
