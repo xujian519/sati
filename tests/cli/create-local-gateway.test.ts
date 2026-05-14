@@ -309,7 +309,8 @@ test("createLocalGateway cron tasks inherit and execute with the originating pro
       const listed = await gateway.cronList({});
       assert.equal(listed.tasks.length, 1);
       assert.equal(listed.tasks[0]?.projectKey, otherProject);
-      assert.equal(listed.tasks[0]?.sessionKey, sessionKey);
+      assert.equal(listed.tasks[0]?.sessionKey, "cron:task-other");
+      assert.equal(listed.tasks[0]?.channelKey, "cron");
 
       now = new Date(listed.tasks[0]!.nextRunAt!);
       await cron.runTickOnce();
@@ -319,8 +320,15 @@ test("createLocalGateway cron tasks inherit and execute with the originating pro
       );
 
       const cronFireInput = submitInputs.find((input) => input.message === "cron-from-other-project");
-      assert.equal(cronFireInput?.sessionKey, sessionKey);
+      assert.equal(cronFireInput?.sessionKey, "cron:task-other");
+      assert.equal(cronFireInput?.channelKey, "cron");
       assert.equal(cronFireInput?.projectKey, otherProject);
+
+      const sessions = await gateway.listSessions({ projectKey: otherProject });
+      assert.ok(
+        sessions.sessions.some((entry) => entry.sessionId === "cron:task-other"),
+        "expected cron transcript to be listed as a normal session",
+      );
     } finally {
       await gateway.closeSession({ sessionKey }).catch(() => undefined);
       await cron.stop();

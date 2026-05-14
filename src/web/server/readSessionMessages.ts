@@ -42,9 +42,13 @@ export async function readWebSessionMessages(
   input: WebReadSessionMessagesInput,
   options: ReadWebSessionMessagesOptions,
 ): Promise<WebReadSessionMessagesResult> {
-  const sessionInfo = await locateSession(input.sessionKey, options);
+  const effectiveProjectRoot = input.projectKey ?? options.projectRoot;
+  const sessionInfo = await locateSession(input.sessionKey, {
+    ...options,
+    projectRoot: effectiveProjectRoot,
+  });
   const transcriptPath = resolve(
-    getPilotProjectChatDir(options.projectRoot, options.pilotHome),
+    getPilotProjectChatDir(effectiveProjectRoot, options.pilotHome),
     `${sanitizeSessionIdForPath(input.sessionKey)}.jsonl`,
   );
   const { entries } = await readTranscript(transcriptPath);

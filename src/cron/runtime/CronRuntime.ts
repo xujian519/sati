@@ -112,6 +112,7 @@ export class CronRuntime {
     if (!this.scheduler) {
       throw new Error("CronRuntime.start called before bindGateway.");
     }
+    await this.migrateLegacyTaskSessions();
     await this.scheduler.start();
     this.logger.info("cron runtime started", { projectKey: this.projectKey });
   }
@@ -123,6 +124,7 @@ export class CronRuntime {
   async createTask(input: CronCreateInput): Promise<CronCreateResult> {
     const now = this.now();
     const taskId = this.uuid();
+    const sessionKey = buildCronSessionKey(taskId);
     const schedule = normalizeSchedule(input);
     const nextRunAt = computeNextRunAt(schedule, now);
     if (!nextRunAt) {
@@ -131,18 +133,14 @@ export class CronRuntime {
     if (schedule.type === "once" && nextRunAt.getTime() < now.getTime()) {
       throw new Error("One-time Cron tasks must be scheduled in the future.");
     }
-    if (!input.sessionKey) {
-      throw new Error("cron_create requires a sessionKey or an active tool session context.");
-    }
-
     const task: CronTask = {
       schemaVersion: 1,
       taskId,
       message: input.message,
       schedule,
       status: "scheduled",
-      sessionKey: input.sessionKey,
-      channelKey: input.channelKey ?? "cron",
+      sessionKey,
+      channelKey: "cron",
       // Session-scoped callers should pass the originating project explicitly.
       // Keep the runtime root only as a compatibility fallback for direct callers.
       projectKey: input.projectKey ?? this.projectKey,
@@ -229,6 +227,27 @@ export class CronRuntime {
     }
     return undefined;
   }
+
+  private async migrateLegacyTaskSessions(): Promise<void> {
+    const tasks = await this.store.listTasks();
+    let migratedCount = 0;
+    for (const task of tasks) {
+      const nextSessionKey = buildCronSessionKey(task.taskId);
+      if (task.sessionKey === nextSessionKey && task.channelKey === "cron") {
+        continue;
+      }
+      migratedCount += 1;
+      await this.store.putTask({
+        ...task,
+        sessionKey: nextSessionKey,
+        channelKey: "cron",
+        updatedAt: this.now().toISOString(),
+      });
+    }
+    if (migratedCount > 0) {
+      this.logger.info("cron runtime migrated legacy task sessions", { migratedCount });
+    }
+  }
 }
 
 export function createCronRuntime(options: CreateCronRuntimeOptions): CronRuntime {
@@ -244,4 +263,8 @@ function normalizeSchedule(input: CronCreateInput): CronTask["schedule"] {
     expression: input.schedule.expression,
     timezone: input.schedule.timezone ?? input.timezone,
   };
+}
+
+function buildCronSessionKey(taskId: string): string {
+  return `cron:${taskId}`;
 }

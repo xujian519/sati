@@ -81,6 +81,28 @@ test("readWebSessionMessages returns user + assistant messages in order", async 
   }
 });
 
+test("readWebSessionMessages resolves transcript paths from input.projectKey when provided", async () => {
+  const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-rsm-project-key-"));
+  const defaultProjectRoot = join(pilotHome, "default-project");
+  const cronProjectRoot = join(pilotHome, "cron-project");
+  mkdirSync(defaultProjectRoot, { recursive: true });
+  mkdirSync(cronProjectRoot, { recursive: true });
+  const sessionKey = "cron:task-1";
+  try {
+    makeFixture(cronProjectRoot, pilotHome, sessionKey);
+    const result = await readWebSessionMessages(
+      { sessionKey, projectKey: cronProjectRoot },
+      { projectRoot: defaultProjectRoot, pilotHome, now: () => new Date("2026-05-09T00:00:00.000Z") },
+    );
+    assert.equal(result.messages.length, 2);
+    assert.equal(result.messages[0].text, "hello?");
+    assert.equal(result.messages[1].text, "hi there");
+    assert.equal(result.session.cwd, cronProjectRoot);
+  } finally {
+    rmSync(pilotHome, { recursive: true, force: true });
+  }
+});
+
 test("readWebSessionMessages filters out synthetic messages", async () => {
   const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-rsm-synth-"));
   const projectRoot = join(pilotHome, "fake-project");

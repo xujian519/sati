@@ -26,11 +26,8 @@ export function createCronCreateTool(runtime: CronToolRuntime): PilotDeckToolDef
     isReadOnly: () => false,
     isConcurrencySafe: () => false,
     execute: async (input, context) => {
-      const sessionKey = input.sessionKey ?? context.sessionId;
       const result = await runtime.createTask({
         ...input,
-        sessionKey,
-        channelKey: input.channelKey ?? inferChannelKey(sessionKey),
         projectKey: input.projectKey ?? context.cwd,
       });
       return {
@@ -39,9 +36,4 @@ export function createCronCreateTool(runtime: CronToolRuntime): PilotDeckToolDef
       };
     },
   };
-}
-
-function inferChannelKey(sessionKey: string): string {
-  const separator = sessionKey.indexOf(":");
-  return separator > 0 ? sessionKey.slice(0, separator) : "cron";
 }

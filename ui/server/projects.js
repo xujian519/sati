@@ -30,6 +30,7 @@ import {
     getPilotDeckGateway,
     getPilotDeckRepoRoot,
 } from './pilotdeck-bridge.js';
+import { mapLegacySessionPresentation } from '../../src/web/server/legacySessionPresentation.js';
 import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from './utils/pilotPaths.js';
 import sessionManager from './sessionManager.js';
 import { applyCustomSessionNames } from './database/db.js';
@@ -79,11 +80,12 @@ function projectDisplayName(fullPath) {
  * `src/gateway`.
  */
 function toLegacySession(session, projectName) {
+    const presentation = mapLegacySessionPresentation(session);
     return {
         id: session.sessionId,
-        title: session.summary || session.firstPrompt || session.sessionId,
-        summary: session.summary || session.firstPrompt || session.sessionId,
-        name: session.summary || session.firstPrompt || session.sessionId,
+        title: presentation.title,
+        summary: presentation.summary,
+        name: presentation.name,
         createdAt: session.createdAt
             ? new Date(session.createdAt).toISOString()
             : new Date(session.lastModified || Date.now()).toISOString(),
@@ -101,7 +103,7 @@ function toLegacySession(session, projectName) {
         customTitle: session.customTitle,
         aiTitle: session.aiTitle,
         firstPrompt: session.firstPrompt,
-        tag: session.tag,
+        tag: presentation.tag,
         __provider: 'claude',
         __projectName: projectName,
     };
