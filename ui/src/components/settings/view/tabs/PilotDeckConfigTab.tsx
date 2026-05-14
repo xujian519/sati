@@ -7,6 +7,7 @@ import {
   Code2,
   FileCog,
   FolderOpen,
+  Gauge,
   Image as ImageIcon,
   Info,
   LayoutList,
@@ -830,6 +831,7 @@ function activeModelCapabilities(config: PilotDeckConfig): {
   catalogModel?: CatalogModel;
   catalogProvider?: CatalogProvider;
   multimodalInput: string[] | null;
+  maxOutputTokensOverride: number | undefined;
 } | null {
   const ref = config.agent?.model ?? '';
   if (!ref) return null;
@@ -848,9 +850,17 @@ function activeModelCapabilities(config: PilotDeckConfig): {
     const input = (userMultimodal as Record<string, unknown>).input;
     if (Array.isArray(input)) multimodalInput = input.filter((s): s is string => typeof s === 'string');
   }
+  const userCapabilities = userDef && typeof userDef === 'object'
+    ? (userDef as Record<string, unknown>).capabilities
+    : null;
+  let maxOutputTokensOverride: number | undefined;
+  if (userCapabilities && typeof userCapabilities === 'object') {
+    const v = (userCapabilities as Record<string, unknown>).maxOutputTokens;
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) maxOutputTokensOverride = v;
+  }
   const catalogProvider = findCatalogProviderById(providerId);
   const catalogModel = catalogProvider?.models.find((m) => m.id === modelId);
-  return { ref, providerId, modelId, catalogModel, catalogProvider, multimodalInput };
+  return { ref, providerId, modelId, catalogModel, catalogProvider, multimodalInput, maxOutputTokensOverride };
 }
 
 function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
@@ -918,6 +928,33 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
     onChange(patch(config, ['model', 'providers', providerId, 'models'], models));
   };
 
+  const setMaxOutputTokens = (value: number | undefined) => {
+    if (!caps) return;
+    const { providerId, modelId } = caps;
+    const providers = config.model?.providers ?? {};
+    const provider = providers[providerId] ?? {};
+    const models = { ...(provider.models ?? {}) };
+    const existingDef = models[modelId];
+    const def: Record<string, unknown> = existingDef && typeof existingDef === 'object'
+      ? { ...(existingDef as Record<string, unknown>) }
+      : {};
+    const capabilities: Record<string, unknown> = def.capabilities && typeof def.capabilities === 'object'
+      ? { ...(def.capabilities as Record<string, unknown>) }
+      : {};
+    if (value === undefined) {
+      delete capabilities.maxOutputTokens;
+    } else {
+      capabilities.maxOutputTokens = value;
+    }
+    if (Object.keys(capabilities).length > 0) {
+      def.capabilities = capabilities;
+    } else {
+      delete def.capabilities;
+    }
+    models[modelId] = def as Record<string, unknown>;
+    onChange(patch(config, ['model', 'providers', providerId, 'models'], models));
+  };
+
   return (
     <SettingsSection title="Agents" description="Pick which provider/model the chat agent runs on.">
       <SettingsCard divided>
@@ -974,6 +1011,48 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
                     : 'No catalog entry — defaulting to text only. Toggle to override.'}
                 {' '}If the upstream model server doesn\'t actually accept images, enabling this will produce upstream errors at request time.
               </p>
+
+              <div className="mt-3 border-t border-border/60 pt-3">
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Gauge className="h-3.5 w-3.5" />
+                    Max output tokens
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={caps.maxOutputTokensOverride ?? ''}
+                    placeholder="8192"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === '') return setMaxOutputTokens(undefined);
+                      const n = Number(v);
+                      if (Number.isFinite(n) && n > 0) setMaxOutputTokens(Math.floor(n));
+                    }}
+                    className="w-28 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <span className={cn(
+                    'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                    caps.maxOutputTokensOverride !== undefined
+                      ? 'border border-foreground/30 bg-foreground/10 text-foreground'
+                      : 'border border-border bg-muted text-muted-foreground',
+                  )}>
+                    {caps.maxOutputTokensOverride !== undefined ? 'Override' : 'Default'}
+                  </span>
+                  {caps.maxOutputTokensOverride !== undefined && (
+                    <button
+                      type="button"
+                      onClick={() => setMaxOutputTokens(undefined)}
+                      className="text-[10px] text-muted-foreground underline hover:text-foreground"
+                    >
+                      reset to default
+                    </button>
+                  )}
+                </div>
+                <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                  Cap on tokens the model may generate per turn (sent as <code className="font-mono">max_tokens</code> to upstream). Leave empty to fall back to the catalog or protocol default (typically 8192 for openai). Increase this for long-form creative tasks or thinking models that burn output budget while reasoning — too small a value cuts the response off mid-stream and the UI then appears stuck.
+                </p>
+              </div>
             </div>
           </div>
         )}
