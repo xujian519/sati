@@ -80,7 +80,7 @@ function buildToolDefinition(
         if (isError === true) {
           throw new PilotDeckToolRuntimeError(
             "tool_execution_failed",
-            `MCP server ${spec.serverId}/${spec.toolName} returned isError`,
+            extractMcpErrorText(content, spec.serverId, spec.toolName),
             { content },
           );
         }
@@ -116,6 +116,26 @@ function buildToolDefinition(
       }
     },
   };
+}
+
+function extractMcpErrorText(
+  content: unknown,
+  serverId: string,
+  toolName: string,
+): string {
+  const fallback = `MCP server ${serverId}/${toolName} returned isError`;
+  if (!Array.isArray(content)) return fallback;
+  const texts = content
+    .filter(
+      (block: unknown): block is { type: string; text: string } =>
+        !!block &&
+        typeof block === "object" &&
+        (block as { type?: string }).type === "text" &&
+        typeof (block as { text?: string }).text === "string",
+    )
+    .map((block) => block.text);
+  if (texts.length === 0) return fallback;
+  return texts.join("\n");
 }
 
 function normalizeSchema(raw: unknown): PilotDeckToolInputSchema {
