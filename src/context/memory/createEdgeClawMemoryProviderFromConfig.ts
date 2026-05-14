@@ -16,7 +16,7 @@
  *     credentials to anything other than what the user supplied.
  */
 
-import { EdgeClawMemoryService } from "edgeclaw-memory-core";
+import { EdgeClawMemoryService, type EdgeClawMemoryLlmOptions } from "edgeclaw-memory-core";
 import { EdgeClawMemoryProvider } from "./EdgeClawMemoryProvider.js";
 import type { ModelConfig } from "../../model/protocol/canonical.js";
 import type { PilotMemoryConfig } from "../../pilot/config/types.js";
@@ -70,7 +70,7 @@ export function createEdgeClawMemoryProviderFromConfig(
 function resolveMemoryLlm(
   cfg: PilotMemoryConfig,
   modelConfig?: ModelConfig,
-): { provider?: string; model?: string; baseUrl?: string; apiKey?: string; apiType?: string } | undefined {
+): EdgeClawMemoryLlmOptions | undefined {
   if (!cfg.model) return undefined;
 
   const sep = cfg.model.indexOf("/");
@@ -80,11 +80,14 @@ function resolveMemoryLlm(
   const modelId = cfg.model.slice(sep + 1);
   const providerEntry = modelConfig?.providers[providerId];
 
-  return {
+  const llm: EdgeClawMemoryLlmOptions = {
     provider: providerId,
     model: modelId,
     baseUrl: providerEntry?.url,
     apiKey: providerEntry?.apiKey,
-    apiType: cfg.apiType,
   };
+  if (cfg.apiType !== undefined) {
+    llm.apiType = cfg.apiType;
+  }
+  return llm;
 }

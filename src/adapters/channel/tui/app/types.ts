@@ -29,9 +29,15 @@ export type TuiAppState = {
   focusedIndex: number | null;
   viewerContent: string | null;
   viewerTitle: string;
+  /** Queue of pending permission requests awaiting user input. */
+  pendingPermissions: Array<{
+    requestId: string;
+    toolName: string;
+    payload: unknown;
+  }>;
 };
 
-export type TuiEventReducerResult = Pick<TuiAppState, "messages" | "activity" | "mode" | "isRunning">;
+export type TuiEventReducerResult = Pick<TuiAppState, "messages" | "activity" | "mode" | "isRunning" | "pendingPermissions">;
 
 export function applyGatewayEventToTuiState(state: TuiEventReducerResult, event: GatewayEvent): TuiEventReducerResult {
   switch (event.type) {
@@ -40,6 +46,7 @@ export function applyGatewayEventToTuiState(state: TuiEventReducerResult, event:
         ...state,
         isRunning: true,
         activity: [],
+        pendingPermissions: [],
       };
     case "assistant_text_delta":
       return appendAssistantText(state, event.text);
@@ -77,6 +84,10 @@ export function applyGatewayEventToTuiState(state: TuiEventReducerResult, event:
     case "permission_request":
       return {
         ...state,
+        pendingPermissions: [
+          ...state.pendingPermissions,
+          { requestId: event.requestId, toolName: event.toolName, payload: event.payload },
+        ],
         activity: [{ id: event.requestId, text: `permission: ${event.toolName}`, status: "info" as const }, ...state.activity].slice(0, 8),
       };
     case "structured_output":
@@ -87,12 +98,13 @@ export function applyGatewayEventToTuiState(state: TuiEventReducerResult, event:
     case "plan_mode_changed":
       return { ...state, mode: event.mode as GatewayMode };
     case "turn_completed":
-      return { ...state, isRunning: false, activity: [] };
+      return { ...state, isRunning: false, activity: [], pendingPermissions: [] };
     case "error":
       return {
         ...state,
         isRunning: false,
         activity: [],
+        pendingPermissions: [],
         messages: [...state.messages, { role: "error", text: event.message }],
       };
     case "tool_result_detail_available":

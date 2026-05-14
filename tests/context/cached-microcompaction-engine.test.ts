@@ -32,25 +32,9 @@ function buildSession(numTurns: number, toolName = "read_file"): CanonicalMessag
 
 test("A4.M5 disabled by default → no breakpoints", () => {
   const e = new CachedMicroCompactionEngine();
-  const r = e.apply({ messages: buildSession(10), protocol: "anthropic" });
+  const r = e.apply({ messages: buildSession(10) });
   assert.equal(r.applied, false);
   assert.deepEqual(r.cacheBreakpoints, []);
-});
-
-test("A4.M2 non-Anthropic provider → no-op even when enabled", () => {
-  const e = new CachedMicroCompactionEngine({ enabled: true });
-  const r = e.apply({ messages: buildSession(10), protocol: "openai" });
-  assert.equal(r.applied, false);
-});
-
-test("A4.M3 subagent → no-op", () => {
-  const e = new CachedMicroCompactionEngine({ enabled: true });
-  const r = e.apply({
-    messages: buildSession(10),
-    protocol: "anthropic",
-    isSubagent: true,
-  });
-  assert.equal(r.applied, false);
 });
 
 test("A4.M1 only COMPACTABLE_TOOL_NAMES are eligible (ask_user_question is NOT)", () => {
@@ -59,16 +43,15 @@ test("A4.M1 only COMPACTABLE_TOOL_NAMES are eligible (ask_user_question is NOT)"
   assert.equal(COMPACTABLE_TOOL_NAMES.has("ask_user_question"), false);
   const r = e.apply({
     messages: buildSession(10, "ask_user_question"),
-    protocol: "anthropic",
   });
   assert.equal(r.applied, false);
   assert.equal(r.eligibleToolCallIds.length, 0);
 });
 
-test("A4 enabled + Anthropic + 10 read_file turns + threshold=4 → 6 breakpoints", () => {
+test("A4 enabled + 10 read_file turns + threshold=4 → 6 breakpoints", () => {
   const e = new CachedMicroCompactionEngine({ enabled: true, liveThreshold: 4 });
   const messages = buildSession(10, "read_file");
-  const r = e.apply({ messages, protocol: "anthropic" });
+  const r = e.apply({ messages });
   // 10 eligible user messages, keep 4 live → 6 aged.
   // M6: each breakpoint goes on the message *immediately before* the aged
   // user message → 6 unique breakpoints.
@@ -82,7 +65,7 @@ test("A4 enabled + Anthropic + 10 read_file turns + threshold=4 → 6 breakpoint
 
 test("A4 ≤ liveThreshold eligible messages → no breakpoints", () => {
   const e = new CachedMicroCompactionEngine({ enabled: true, liveThreshold: 4 });
-  const r = e.apply({ messages: buildSession(3), protocol: "anthropic" });
+  const r = e.apply({ messages: buildSession(3) });
   assert.equal(r.applied, false);
   assert.deepEqual(r.cacheBreakpoints, []);
 });
@@ -128,7 +111,7 @@ test("A4 mixed tool names → only COMPACTABLE ones contribute", () => {
       ],
     },
   ];
-  const r = e.apply({ messages, protocol: "anthropic" });
+  const r = e.apply({ messages });
   assert.equal(r.eligibleToolCallIds.length, 1);
   assert.equal(r.eligibleToolCallIds[0], "ok");
 });

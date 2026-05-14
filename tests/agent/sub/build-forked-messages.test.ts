@@ -66,14 +66,11 @@ test("C2.S2 byte-stable fork placeholder enables prompt-cache hit", () => {
   assert.equal(aBlock.content[0].text, bBlock.content[0].text);
 });
 
-test("C2.S3 buildChildMessage wraps directive in fork boilerplate with 10 rules", () => {
+test("C2.S3 buildChildMessage wraps directive in slim fork shell (rules live in system prompt)", () => {
   const text = buildChildMessage("Find usage of foo");
   assert.match(text, new RegExp(`^<${FORK_BOILERPLATE_TAG}>`));
   assert.match(text, new RegExp(`</${FORK_BOILERPLATE_TAG}>$`));
-  for (let i = 1; i <= 10; i++) {
-    assert.match(text, new RegExp(`^${i}\\. `, "m"));
-  }
-  assert.match(text, /Output format/);
+  assert.match(text, /^Directive:\n/m);
   assert.match(text, /Find usage of foo/);
 });
 

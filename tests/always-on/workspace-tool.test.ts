@@ -94,6 +94,7 @@ test(`${ALWAYS_ON_WORKSPACE_TOOL_NAME} prepares a workspace and sets handle on c
       { strategy: "auto" },
       { sessionId: sessionKey } as Parameters<typeof fx.tool.execute>[1],
     );
+    assert.ok(result.data, "tool result must include data");
     assert.ok(result.data.ok);
     assert.equal(result.data.strategy, "git-worktree");
     assert.ok(result.data.cwd.includes("run-1"));

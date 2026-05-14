@@ -10,6 +10,7 @@ function baseState(): TuiEventReducerResult {
     activity: [],
     mode: "default",
     isRunning: true,
+    pendingPermissions: [],
   };
 }
 

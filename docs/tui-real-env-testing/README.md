@@ -53,4 +53,15 @@ src/adapters/channel/tui/
 - 预期现象：屏幕上应出现或不应出现的 TUI 状态。
 - 预期输出：命令退出码、帧日志、模型答案、错误文案或会话记录。
 
+9. `[09-session-switch-and-resume.md](./09-session-switch-and-resume.md)`：会话切换与恢复测试。
+10. `[10-permission-prompt-smoke.md](./10-permission-prompt-smoke.md)`：TUI 权限弹窗冒烟测试——覆盖 12 种场景（按键响应、规则持久化、Web UI 共享等）。
+
+## 通过标准
+
+所有用例都必须写明：
+
+- 输入：终端命令、TUI 输入文本、必要环境变量。
+- 预期现象：屏幕上应出现或不应出现的 TUI 状态。
+- 预期输出：命令退出码、帧日志、模型答案、错误文案或会话记录。
+
 真实模型和真实工具用例会访问外部 provider，默认不应纳入普通 `npm test`；它们适合本地验收、nightly 或发布前 smoke test。

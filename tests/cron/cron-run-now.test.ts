@@ -16,7 +16,7 @@ import type { CronCreateInput, CronDeleteInput, CronListInput, CronRunNowInput, 
 function makeGateway(): Gateway {
   return {
     async *submitTurn(_input: GatewaySubmitTurnInput): AsyncIterable<GatewayEvent> {
-      yield { type: "turn_completed", usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, serverToolTokens: 0 }, finishReason: "end_turn" };
+      yield { type: "turn_completed", usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }, finishReason: "end_turn" };
     },
     abortTurn: async () => undefined,
     listSessions: async (_input: ListSessionsInput): Promise<ListSessionsResult> => ({ sessions: [] }),

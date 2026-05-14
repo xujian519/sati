@@ -1,0 +1,55 @@
+---
+description: "开源/产品边界规范：判断代码放 src/ 还是 products/，遵守贡献点约束"
+globs:
+  - "src/**"
+  - "products/**"
+---
+
+# 开源/产品边界规范
+
+完整规范见 `BOUNDARY.md`。以下是 AI 编码时必须遵守的规则。
+
+## 核心规则
+
+1. **`src/` 是开源核心**：不包含任何客户特定的业务逻辑、品牌资产、或行业专属功能。
+2. **`products/<customer>/` 是产品定制**：客户专属代码只能放在这里。
+3. **产品代码只能通过贡献点与核心交互**：不能直接 import `src/` 内部模块的私有实现。
+
+## 编码时的检查清单
+
+当你在 `src/` 下写代码时：
+- 不要硬编码客户名称、行业术语、或特定品牌信息
+- 如果这个功能源于某个客户需求，确认它对开源用户也有价值
+- 新增接口/类型时，考虑是否应该作为贡献点暴露给 `products/`
+
+当你在 `products/` 下写代码时：
+- 优先用 plugin.json 声明式配置（MCP servers、hooks、commands）
+- 如果需要 `src/` 中不存在的扩展点，先提议补贡献点（修改 `src/`），再在 `products/` 中使用
+- 不要复制粘贴 `src/` 的代码到 `products/`——这是需要补贡献点的信号
+
+## 目录约定
+
+```
+products/<customer>/
+  plugins/           ← 插件（遵循 PilotDeck plugin.json 规范）
+  config/            ← pilotdeck.yaml 覆盖配置
+  brand/             ← Logo、主题
+  memory/            ← 自定义 MemoryResolver（如需）
+```
+
+## 可用的贡献点
+
+产品插件可以通过以下机制扩展核心功能：
+- `plugin.json` → `mcpServers`：注册 MCP 工具服务
+- `plugin.json` → `hooks`：生命周期钩子（PreToolUse、UserPromptSubmit 等）
+- `plugin.json` → `commands` / `skills`：自定义斜杠命令和技能
+- `pilotdeck.yaml` → `memory`：记忆系统配置
+- `pilotdeck.yaml` → `model.providers`：自定义 LLM 提供商
+
+## "补贡献点"模式
+
+当 `products/` 的需求无法通过现有贡献点满足时：
+1. 在 `src/` 中新增接口定义（只加接口，不加业务逻辑）
+2. 在 `src/` 中实现注册/发现机制
+3. 在 `products/` 中通过新贡献点实现具体功能
+4. 更新 `BOUNDARY.md` 的贡献点清单

@@ -19,7 +19,7 @@ test("WCB-CC smoke: In-process Gateway runs a minimal task end-to-end", { timeou
   fs.writeFileSync(testFile, "Hello World from WCB smoke test.");
 
   try {
-    const gateway = createLocalGateway({
+    const { gateway } = createLocalGateway({
       projectRoot: tmpDir,
       permissionMode: "bypassPermissions",
     });

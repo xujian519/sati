@@ -2,11 +2,13 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 import { readFile } from "node:fs/promises";
 import type { Gateway, GatewayMode, GatewaySessionInfo } from "../../../../gateway/index.js";
+import { readPermissionSettings, writePermissionSettings } from "../../../../permission/settings.js";
 import { defaultTuiSessionKey } from "../TuiChannel.js";
 import { ActivityLine } from "./ActivityLine.js";
 import { Header } from "./Header.js";
 import { HelpDialog } from "./HelpDialog.js";
 import { MessageList } from "./MessageList.js";
+import { PermissionPrompt } from "./PermissionPrompt.js";
 import { PromptInput } from "./PromptInput.js";
 import { ToolOutputViewer } from "./ToolOutputViewer.js";
 import { applyGatewayEventToTuiState, type TuiAppState, type TuiMessage } from "./types.js";
@@ -29,20 +31,24 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
   const { stdout } = useStdout();
   const rows = Math.max(10, (stdout?.rows ?? 28) - 7);
   const initialSessionKey = props.sessionKey ?? defaultTuiSessionKey(props.projectKey);
-  const [state, setState] = useState<TuiAppState>({
-    connection: props.connection,
-    activeSessionKey: initialSessionKey,
-    sessions: [],
-    messages: [],
-    activity: [],
-    input: "",
-    mode: "default",
-    isRunning: false,
-    helpOpen: false,
-    scrollOffset: 0,
-    focusedIndex: null,
-    viewerContent: null,
-    viewerTitle: "",
+  const [state, setState] = useState<TuiAppState>(() => {
+    const perm = readPermissionSettings();
+    return {
+      connection: props.connection,
+      activeSessionKey: initialSessionKey,
+      sessions: [],
+      messages: [],
+      activity: [],
+      input: "",
+      mode: perm.skipPermissions ? "bypassPermissions" : "default",
+      isRunning: false,
+      helpOpen: false,
+      scrollOffset: 0,
+      focusedIndex: null,
+      viewerContent: null,
+      viewerTitle: "",
+      pendingPermissions: [],
+    };
   });
 
   useEffect(() => {
@@ -115,10 +121,21 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
         }
         return;
       }
-      if (state.isRunning) {
+      if (state.isRunning || state.pendingPermissions.length > 0) {
         return;
       }
-      if (await handleCommand(trimmed, props.gateway, props.projectKey, setState, exit, openViewer, openToolOutput, state.messages)) {
+      if (
+        await handleCommand(
+          trimmed,
+          props.gateway,
+          props.projectKey,
+          setState,
+          exit,
+          openViewer,
+          openToolOutput,
+          state.messages,
+        )
+      ) {
         return;
       }
 
@@ -151,13 +168,60 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
         }));
       }
     },
-    [exit, props.gateway, props.projectKey, openToolOutput, openViewer, state.activeSessionKey, state.isRunning, state.messages, state.mode, state.focusedIndex],
+    [exit, props.gateway, props.projectKey, openToolOutput, openViewer, state.activeSessionKey, state.isRunning, state.messages, state.mode, state.focusedIndex, state.pendingPermissions],
   );
 
   const scrollPage = Math.max(1, Math.floor(rows / 2));
 
   useInput((input, key) => {
     if (state.viewerContent !== null) return;
+
+    if (state.pendingPermissions.length > 0) {
+      const front = state.pendingPermissions[0]!;
+      const { requestId, toolName, payload } = front;
+      const dequeue = (c: TuiAppState) => ({ ...c, pendingPermissions: c.pendingPermissions.slice(1) });
+      if (input === "y") {
+        void props.gateway.permissionDecide({
+          sessionKey: state.activeSessionKey,
+          requestId,
+          decision: "allow",
+          remember: false,
+        });
+        setState(dequeue);
+        return;
+      }
+      if (input === "a") {
+        void props.gateway.permissionDecide({
+          sessionKey: state.activeSessionKey,
+          requestId,
+          decision: "allow",
+          remember: true,
+        });
+        const entry = buildPermissionEntry(toolName, payload);
+        const current = readPermissionSettings();
+        if (!current.allowedTools.includes(entry)) {
+          writePermissionSettings({ allowedTools: [...current.allowedTools, entry] });
+        }
+        setState(dequeue);
+        return;
+      }
+      if (input === "n") {
+        void props.gateway.permissionDecide({
+          sessionKey: state.activeSessionKey,
+          requestId,
+          decision: "deny",
+          reason: "User denied in TUI",
+        });
+        setState(dequeue);
+        return;
+      }
+      if (key.escape) {
+        void props.gateway.abortTurn({ sessionKey: state.activeSessionKey });
+        setState((c) => ({ ...c, pendingPermissions: [] }));
+        return;
+      }
+      return;
+    }
 
     if (key.ctrl && input === "c") {
       if (state.isRunning) {
@@ -241,13 +305,20 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
       />
       {state.helpOpen ? <HelpDialog /> : null}
       {state.helpOpen ? null : <SessionHint sessions={state.sessions} />}
+      {state.pendingPermissions.length > 0 ? (
+        <PermissionPrompt
+          toolName={state.pendingPermissions[0]!.toolName}
+          payload={state.pendingPermissions[0]!.payload}
+          queueLength={state.pendingPermissions.length}
+        />
+      ) : null}
       <ActivityLine state={state} />
       <PromptInput
         value={state.input}
         onChange={handleInputChange}
         onSubmit={handleSubmit}
         isRunning={state.isRunning}
-        focus={!state.helpOpen}
+        focus={!state.helpOpen && state.pendingPermissions.length === 0}
       />
     </Box>
   );
@@ -282,8 +353,75 @@ async function handleCommand(
       setState((current) => ({ ...current, sessions: result.sessions }));
       return true;
     }
+    case "/permissions": {
+      const sub = args[0];
+      const current = readPermissionSettings();
+      if (!sub) {
+        const lines = [
+          `skipPermissions: ${current.skipPermissions}`,
+          `allow: ${current.allowedTools.length === 0 ? "(none)" : current.allowedTools.join(", ")}`,
+          `deny: ${current.disallowedTools.length === 0 ? "(none)" : current.disallowedTools.join(", ")}`,
+        ];
+        setState((c) => ({ ...c, messages: [...c.messages, { role: "system", text: lines.join("\n") }] }));
+        return true;
+      }
+      const entry = args.slice(1).join(" ").trim();
+      if (!entry && sub !== "bypass") {
+        setState((c) => ({
+          ...c,
+          messages: [
+            ...c.messages,
+            {
+              role: "error",
+              text: "Usage: /permissions [allow|deny|clear <entry>|bypass]",
+            },
+          ],
+        }));
+        return true;
+      }
+      if (sub === "allow" && entry) {
+        writePermissionSettings({ allowedTools: [...current.allowedTools, entry] });
+        setState((c) => ({ ...c, messages: [...c.messages, { role: "system", text: `Added allow: ${entry}` }] }));
+        return true;
+      }
+      if (sub === "deny" && entry) {
+        writePermissionSettings({ disallowedTools: [...current.disallowedTools, entry] });
+        setState((c) => ({ ...c, messages: [...c.messages, { role: "system", text: `Added deny: ${entry}` }] }));
+        return true;
+      }
+      if (sub === "clear" && entry) {
+        writePermissionSettings({
+          allowedTools: current.allowedTools.filter((e) => e !== entry),
+          disallowedTools: current.disallowedTools.filter((e) => e !== entry),
+        });
+        setState((c) => ({ ...c, messages: [...c.messages, { role: "system", text: `Cleared: ${entry}` }] }));
+        return true;
+      }
+      if (sub === "bypass") {
+        writePermissionSettings({ skipPermissions: true });
+        setState((c) => ({
+          ...c,
+          mode: "bypassPermissions",
+          messages: [...c.messages, { role: "system", text: "Permissions bypassed globally (skipPermissions=true)." }],
+        }));
+        return true;
+      }
+      setState((c) => ({
+        ...c,
+        messages: [...c.messages, { role: "error", text: `Unknown /permissions subcommand: ${sub}` }],
+      }));
+      return true;
+    }
     case "/mode": {
       const mode = (args[0] ?? "default") as GatewayMode;
+      if (mode === "bypassPermissions") {
+        writePermissionSettings({ skipPermissions: true });
+      } else {
+        const perm = readPermissionSettings();
+        if (perm.skipPermissions) {
+          writePermissionSettings({ skipPermissions: false });
+        }
+      }
       setState((current) => ({
         ...current,
         mode,
@@ -326,6 +464,16 @@ async function handleCommand(
       }));
       return true;
   }
+}
+
+function buildPermissionEntry(toolName: string, payload: unknown): string {
+  if (toolName !== "bash") return toolName;
+  const record = typeof payload === "object" && payload ? (payload as Record<string, unknown>) : {};
+  const command = typeof record.command === "string" ? record.command.trim() : "";
+  if (!command) return "bash";
+  const tokens = command.split(/\s+/);
+  if (tokens[0] === "git" && tokens[1]) return `bash:${tokens[0]} ${tokens[1]}:*`;
+  return `bash:${tokens[0]}:*`;
 }
 
 function SessionHint({ sessions }: { sessions: GatewaySessionInfo[] }): React.ReactNode {

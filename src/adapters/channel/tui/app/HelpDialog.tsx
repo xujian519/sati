@@ -12,6 +12,10 @@ export function HelpDialog(): React.ReactNode {
       <Text>/sessions     list recent sessions</Text>
       <Text>/mode plan    switch to plan mode</Text>
       <Text>/mode default switch to default mode</Text>
+      <Text>/mode bypassPermissions  full bypass (writes skipPermissions)</Text>
+      <Text>/permissions       list global allow/deny rules</Text>
+      <Text>/permissions allow|deny|clear &lt;entry&gt;  edit rules</Text>
+      <Text>/permissions bypass  same as skipPermissions in settings</Text>
       <Text>/view [N]     view tool output (N=index, default=last)</Text>
       <Text>/clear        clear transcript</Text>
       <Text>/help         toggle this help</Text>
@@ -28,7 +32,7 @@ export function HelpDialog(): React.ReactNode {
       <Text>j/k   scroll line   PgUp/Dn  scroll page</Text>
       <Text>g/G   top/bottom     q/Esc    close viewer</Text>
       <Text> </Text>
-      <Text color={pilotDeckDarkBlueTheme.subtle}>Enter sends · Ctrl+C aborts running turns or exits</Text>
+      <Text color={pilotDeckDarkBlueTheme.subtle}>Enter sends · Ctrl+C aborts running turns or exits · y/a/n when a permission prompt is shown</Text>
     </Box>
   );
 }

@@ -26,7 +26,7 @@ test("abort-turn surfaces as an `error` event in the browser stream", async () =
   const router = new SessionRouter({
     createSession: async () =>
       ({
-        abort: () => undefined,
+        abort: () => release(),
         snapshot: () => ({
           sessionId: "s-1",
           messages: [],
