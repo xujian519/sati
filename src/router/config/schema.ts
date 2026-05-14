@@ -97,12 +97,12 @@ export const DEFAULT_TIER_RULES: string[] = [
 
 export const DEFAULT_TIER_NAME = "medium";
 export const DEFAULT_ALLOWED_TOOLS = [
-  "Agent", "Task", "Read", "Grep", "Glob", "TodoRead", "TodoWrite",
+  "agent", "read_file", "grep", "glob",
 ];
 export const DEFAULT_BLOCKED_TOOLS = [
   "mcp__browser-use__",
-  "WebSearch",
-  "WebFetch",
+  "web_search",
+  "web_fetch",
 ];
 
 export type ResolveProviderRefIssue = {
