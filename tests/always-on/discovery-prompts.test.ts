@@ -25,6 +25,21 @@ test("buildDiscoveryPrompt includes project root and plan tool name, excludes wo
   assert.ok(!prompt.includes("Workspace strategy:"));
 });
 
+test("buildDiscoveryPrompt uses workspace cwd when workspace is provided", () => {
+  const prompt = buildDiscoveryPrompt({
+    projectRoot: "/projects/foo",
+    runId: "run-2",
+    createdAt: "2026-05-10T12:00:00Z",
+    chatDir: "/chats/foo",
+    workspace: { cwd: "/worktrees/foo/run-1", strategy: "git-worktree" },
+  });
+  assert.ok(prompt.includes("/worktrees/foo/run-1"));
+  assert.ok(prompt.includes("git-worktree"));
+  assert.ok(prompt.includes("isolated snapshot"));
+  assert.ok(prompt.includes("Do NOT cd outside"));
+  assert.ok(!prompt.includes("Read the project root at"));
+});
+
 test("buildWorkspacePrompt includes project root and workspace tool name", () => {
   const prompt = buildWorkspacePrompt({
     projectRoot: "/projects/foo",

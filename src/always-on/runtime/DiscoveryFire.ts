@@ -132,6 +132,10 @@ export class DiscoveryFire {
     // ── Phase 1: Discovery (bypassPermissions) ──
     const discoverySessionKey = DiscoveryFire.deriveDiscoverySessionKey(this.deps.projectKey, runId);
 
+    const existingWorkspace = state.currentWorkspace && existsSync(state.currentWorkspace.cwd)
+      ? state.currentWorkspace
+      : undefined;
+
     const discoveryCtx: DiscoveryRunContext = {
       kind: "discovery",
       sessionKey: discoverySessionKey,
@@ -144,7 +148,7 @@ export class DiscoveryFire {
     };
     this.deps.runContexts.register(discoveryCtx);
     this.deps.sessionOverrides.set(discoverySessionKey, {
-      cwd: this.deps.projectKey,
+      cwd: existingWorkspace?.cwd ?? this.deps.projectKey,
       permissionMode: "bypassPermissions",
       bypassAvailable: true,
       canPrompt: false,
@@ -161,6 +165,9 @@ export class DiscoveryFire {
           runId,
           createdAt: startedAt.toISOString(),
           chatDir: getPilotProjectChatDir(this.deps.projectKey, this.deps.paths.pilotHome),
+          workspace: existingWorkspace
+            ? { cwd: existingWorkspace.cwd, strategy: existingWorkspace.strategy }
+            : undefined,
         }),
         mode: "bypassPermissions",
       });

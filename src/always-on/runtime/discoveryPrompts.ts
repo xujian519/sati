@@ -10,9 +10,22 @@ export type BuildDiscoveryPromptInput = {
   createdAt: string;
   /** Absolute path of the project's PilotDeck chat transcript directory. */
   chatDir: string;
+  /** When an isolated workspace from a previous run still exists on disk, discovery runs inside it. */
+  workspace?: { cwd: string; strategy: string };
 };
 
 export function buildDiscoveryPrompt(input: BuildDiscoveryPromptInput): string {
+  const codeAccessLines: string[] = input.workspace
+    ? [
+        `Isolated workspace cwd: ${input.workspace.cwd}`,
+        `Workspace strategy: ${input.workspace.strategy}.`,
+        "This workspace is an isolated snapshot of the project — read / glob / bash freely inside it.",
+        `Do NOT cd outside the workspace to the project root (${input.projectRoot}).`,
+      ]
+    : [
+        `Read the project root at ${input.projectRoot} using read_file / glob / bash freely.`,
+      ];
+
   return [
     `You are running an autonomous Always-On discovery for project: ${input.projectRoot}`,
     "",
@@ -20,7 +33,7 @@ export function buildDiscoveryPrompt(input: BuildDiscoveryPromptInput): string {
     "If nothing actionable is found, do not call any tool — just respond with a short note explaining why.",
     "",
     "Permissions: this turn runs in `bypassPermissions` mode — every tool call is auto-allowed.",
-    `Read the project root at ${input.projectRoot} using read_file / glob / bash freely.`,
+    ...codeAccessLines,
     "",
     `Project chat history (PilotDeck transcripts) lives at: ${input.chatDir}`,
     "Use read_file / glob / bash on that directory to skim recent user-agent conversations",
