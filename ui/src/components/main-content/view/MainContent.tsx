@@ -951,38 +951,38 @@ function SplitBody(props: SplitBodyProps) {
     return null;
   };
 
-  // Full-screen tools branch out before the chat surface so we don't
-  // mount ChatInterfaceV2 at all on those tabs — that drops the websocket
-  // listeners + composer from the tree, which is what makes Memory's iframe
-  // and the dashboards feel "back to legacy" full-screen.
-  if (isFullScreenTool && (activeTab !== 'tasks' || shouldShowTasksTab)) {
-    return (
-      <div className={cn('flex min-h-0 min-w-0 flex-1 overflow-hidden', editorExpanded && 'hidden')}>
-        <div className="flex h-full w-full min-w-0 flex-col overflow-hidden">
-          {renderTool()}
-        </div>
-      </div>
-    );
-  }
+  const showFullScreenTool = isFullScreenTool && (activeTab !== 'tasks' || shouldShowTasksTab);
+  const showChat = !showFullScreenTool;
 
   return (
     <div
-      ref={isFiles ? filesSplitContainerRef : undefined}
+      ref={isFiles && showChat ? filesSplitContainerRef : undefined}
       className={cn('flex min-h-0 min-w-0 flex-1 overflow-hidden', editorExpanded && 'hidden')}
     >
-      {/* Agent surface. Left half when split (files), full width otherwise.
-          With no selected session, ChatInterfaceV2 shows the welcome composer. */}
+      {/* Full-screen tool surface (Memory, Dashboard, Always-On, etc.) */}
+      {showFullScreenTool && (
+        <div className="flex h-full w-full min-w-0 flex-col overflow-hidden">
+          {renderTool()}
+        </div>
+      )}
+
+      {/* Agent surface — kept mounted even when a full-screen tool is active
+          so that the session store, WebSocket subscriptions, and streaming
+          state survive tab switches. Hidden via CSS to avoid layout cost. */}
       <div
         className={cn(
           'flex min-h-0 min-w-0 flex-col',
-          isFiles ? 'flex-shrink-0' : 'flex-1',
+          showChat
+            ? (isFiles ? 'flex-shrink-0' : 'flex-1')
+            : 'invisible absolute h-0 w-0 overflow-hidden',
         )}
-        style={isFiles
+        style={showChat && isFiles
           ? {
               minWidth: `${FILES_CHAT_MIN_WIDTH}px`,
               width: `min(${filesChatWidth}px, calc(100% - ${FILES_TREE_MIN_WIDTH}px))`,
             }
           : undefined}
+        aria-hidden={!showChat}
       >
         <ErrorBoundary showDetails>
           <ChatInterfaceV2
@@ -1016,9 +1016,8 @@ function SplitBody(props: SplitBodyProps) {
       </div>
 
       {/* Right half — only mounted when the user is on Files (chat-paired
-          file tree + editor). All other tools render in the full-screen
-          branch above. */}
-      {isFiles ? (
+          file tree + editor). */}
+      {isFiles && showChat ? (
         <>
           <div
             onMouseDown={handleFilesSplitResizeStart}
