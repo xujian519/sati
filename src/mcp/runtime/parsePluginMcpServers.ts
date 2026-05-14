@@ -41,6 +41,7 @@ export function parsePluginMcpServers(
           : undefined,
         env: isStringRecord(v.env) ? (v.env as Record<string, string>) : undefined,
         cwd: typeof v.cwd === "string" ? v.cwd : undefined,
+        perSession: v.perSession === true ? true : undefined,
       });
       continue;
     }

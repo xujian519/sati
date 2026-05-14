@@ -9,7 +9,8 @@
         "@playwright/mcp@0.0.75",
         "--headless",
         "--browser",
-        "chromium"
+        "chromium",
+        "--isolated"
       ]
     }
   }

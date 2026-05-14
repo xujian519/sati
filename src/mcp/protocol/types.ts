@@ -11,6 +11,13 @@ export type PilotDeckMcpServerSpec =
       args?: string[];
       env?: Record<string, string>;
       cwd?: string;
+      /**
+       * When true, the MCP runtime injects a unique `--user-data-dir` per
+       * spawn so multiple concurrent sessions each get their own isolated
+       * browser profile on disk.  The temp directory is cleaned up when the
+       * client closes.
+       */
+      perSession?: boolean;
     }
   | {
       id: string;

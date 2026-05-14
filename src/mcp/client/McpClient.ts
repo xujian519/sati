@@ -23,6 +23,9 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { recursivelySanitizeUnicode } from "../runtime/sanitize.js";
 import { truncateMcpToolDescription } from "../runtime/truncate.js";
 import { buildMcpToolWireName } from "../runtime/wireName.js";
@@ -75,6 +78,7 @@ export class McpClient {
   private serverInstructions = "";
   private connectPromise: Promise<void> | null = null;
   private reconnectInFlight = false;
+  private perSessionDir: string | null = null;
 
   constructor(
     public readonly spec: PilotDeckMcpServerSpec,
@@ -152,9 +156,15 @@ export class McpClient {
       return this.options.transportFactory(this.spec);
     }
     if (this.spec.transport === "stdio") {
+      let args = this.spec.args;
+      if (this.spec.perSession) {
+        const dir = mkdtempSync(join(tmpdir(), `pilotdeck-mcp-${this.spec.id}-`));
+        this.perSessionDir = dir;
+        args = [...(args ?? []), `--user-data-dir=${dir}`];
+      }
       return new StdioClientTransport({
         command: this.spec.command,
-        args: this.spec.args,
+        args,
         env: this.spec.env,
         cwd: this.spec.cwd,
       });
@@ -285,6 +295,12 @@ export class McpClient {
     this.connectPromise = null;
     this.status = "idle";
     this.listToolsCache = null;
+    if (this.perSessionDir) {
+      try {
+        rmSync(this.perSessionDir, { recursive: true, force: true });
+      } catch { /* best effort cleanup */ }
+      this.perSessionDir = null;
+    }
   }
 
   private toToolSpec(raw: unknown): PilotDeckMcpToolSpec {
