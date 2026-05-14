@@ -120,6 +120,26 @@ type PilotDeckConfig = {
   customEnv?: Record<string, string>;
   router?: {
     enabled?: boolean;
+    scenarios?: Record<string, string>;
+    fallback?: Record<string, string[]>;
+    zeroUsageRetry?: {
+      enabled?: boolean;
+      maxAttempts?: number;
+    };
+    tokenSaver?: {
+      enabled?: boolean;
+      judge?: string;
+      defaultTier?: string;
+      judgeTimeoutMs?: number;
+      tiers?: Record<string, { model?: string; description?: string }>;
+      rules?: string[];
+      subagent?: { policy?: string };
+    };
+    autoOrchestrate?: {
+      enabled?: boolean;
+      triggerTiers?: string[];
+      slimSystemPrompt?: boolean;
+    };
     stats?: {
       enabled?: boolean;
       modelPricing?: Record<string, { input?: number; output?: number; cacheRead?: number }>;
@@ -334,6 +354,40 @@ function Select({
         <option key={opt.value} value={opt.value}>{opt.label}</option>
       ))}
     </select>
+  );
+}
+
+let _datalistCounter = 0;
+
+function ModelRefInput({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: string | undefined;
+  onChange: (next: string) => void;
+  options: Array<{ value: string; label: string }>;
+  placeholder?: string;
+}) {
+  const [id] = useState(() => `model-ref-dl-${++_datalistCounter}`);
+  return (
+    <>
+      <input
+        type="text"
+        list={id}
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder ?? 'provider/model-name'}
+        spellCheck={false}
+        className="w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+      />
+      <datalist id={id}>
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </datalist>
+    </>
   );
 }
 
@@ -1689,36 +1743,547 @@ function ModelPricingEditor({ config, onChange }: { config: PilotDeckConfig; onC
   );
 }
 
+function RouterScenarioEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const scenarios = config.router?.scenarios ?? {};
+  const entries = Object.entries(scenarios);
+  const modelOpts = buildModelRefOptions(config);
+  const [newKey, setNewKey] = useState('');
+
+  const setScenario = (key: string, value: string) =>
+    onChange(patch(config, ['router', 'scenarios', key], value));
+  const removeScenario = (key: string) => {
+    const next = { ...scenarios };
+    delete next[key];
+    onChange(patch(config, ['router', 'scenarios'], next));
+  };
+  const addScenario = () => {
+    const key = newKey.trim();
+    if (!key || scenarios[key]) return;
+    onChange(patch(config, ['router', 'scenarios', key], modelOpts[0]?.value ?? ''));
+    setNewKey('');
+  };
+
+  return (
+    <SettingsCard className="space-y-3 p-4">
+      <div>
+        <div className="text-sm font-semibold text-foreground">Scenarios</div>
+        <div className="mt-0.5 text-xs text-muted-foreground">
+          Map scenario names to models. <code className="rounded bg-muted px-1 text-[11px]">default</code> is the primary route.
+        </div>
+      </div>
+      {entries.length === 0 && (
+        <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+          No scenarios configured.
+        </div>
+      )}
+      {entries.map(([key, model]) => (
+        <div key={key} className="flex items-center gap-2">
+          <code className="w-28 shrink-0 truncate rounded bg-muted px-2 py-1.5 text-xs text-foreground">{key}</code>
+          <div className="min-w-0 flex-1">
+            <ModelRefInput value={model} options={modelOpts} onChange={(v) => setScenario(key, v)} />
+          </div>
+          <button
+            type="button"
+            onClick={() => removeScenario(key)}
+            className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            title="Remove"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ))}
+      <div className="border-t border-border pt-3">
+        <div className="flex items-center gap-2">
+          <input
+            value={newKey}
+            onChange={(e) => setNewKey(e.target.value)}
+            placeholder="scenario name"
+            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+            onKeyDown={(e) => { if (e.key === 'Enter') addScenario(); }}
+          />
+          <Button variant="outline" size="sm" className="shrink-0" onClick={addScenario} disabled={!newKey.trim()}>
+            <Plus className="mr-1 h-3.5 w-3.5" />
+            Add
+          </Button>
+        </div>
+      </div>
+    </SettingsCard>
+  );
+}
+
+function RouterFallbackEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const fallback = config.router?.fallback ?? {};
+  const entries = Object.entries(fallback);
+  const modelOpts = buildModelRefOptions(config);
+  const [newKey, setNewKey] = useState('');
+
+  const setChain = (scenario: string, chain: string[]) =>
+    onChange(patch(config, ['router', 'fallback', scenario], chain));
+  const removeChain = (scenario: string) => {
+    const next = { ...fallback };
+    delete next[scenario];
+    onChange(patch(config, ['router', 'fallback'], next));
+  };
+  const addChain = () => {
+    const key = newKey.trim();
+    if (!key || fallback[key]) return;
+    onChange(patch(config, ['router', 'fallback', key], [modelOpts[0]?.value ?? '']));
+    setNewKey('');
+  };
+
+  return (
+    <SettingsCard className="space-y-3 p-4">
+      <div>
+        <div className="text-sm font-semibold text-foreground">Fallback Chains</div>
+        <div className="mt-0.5 text-xs text-muted-foreground">
+          Ordered fallback models per scenario. If the primary fails, the router tries the next.
+        </div>
+      </div>
+      {entries.length === 0 && (
+        <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+          No fallback chains configured.
+        </div>
+      )}
+      {entries.map(([scenario, chain]) => (
+        <div key={scenario} className="space-y-2 rounded-lg border border-border bg-background/50 p-3">
+          <div className="flex items-center gap-2">
+            <code className="flex-1 truncate rounded bg-muted px-2 py-1 text-xs text-foreground">{scenario}</code>
+            <button
+              type="button"
+              onClick={() => removeChain(scenario)}
+              className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              title="Remove"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            {(chain ?? []).map((model, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <span className="w-5 shrink-0 text-right text-[10px] font-semibold text-muted-foreground">{idx + 1}</span>
+                <div className="min-w-0 flex-1">
+                  <ModelRefInput
+                    value={model}
+                    options={modelOpts}
+                    onChange={(v) => {
+                      const next = [...chain];
+                      next[idx] = v;
+                      setChain(scenario, next);
+                    }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setChain(scenario, chain.filter((_, i) => i !== idx))}
+                  className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  title="Remove model"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setChain(scenario, [...(chain ?? []), modelOpts[0]?.value ?? ''])}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+            >
+              <Plus className="h-3 w-3" />
+              Add fallback model
+            </button>
+          </div>
+        </div>
+      ))}
+      <div className="border-t border-border pt-3">
+        <div className="flex items-center gap-2">
+          <input
+            value={newKey}
+            onChange={(e) => setNewKey(e.target.value)}
+            placeholder="scenario name (e.g. default)"
+            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+            onKeyDown={(e) => { if (e.key === 'Enter') addChain(); }}
+          />
+          <Button variant="outline" size="sm" className="shrink-0" onClick={addChain} disabled={!newKey.trim()}>
+            <Plus className="mr-1 h-3.5 w-3.5" />
+            Add
+          </Button>
+        </div>
+      </div>
+    </SettingsCard>
+  );
+}
+
+const DEFAULT_TIERS: Record<string, { description: string }> = {
+  simple: { description: 'Simple greetings, confirmations, single-step Q&A, trivial file writes, remembering rules' },
+  medium: { description: 'Single tool call, short text generation, 1-2 file read/write, code generation' },
+  complex: { description: 'Needs sub-agent orchestration: parallel workstreams, delegation to specialized agents' },
+  reasoning: { description: 'Deep single-agent work: multi-file operations, data analysis, multi-step workflows, web research, structured reports from many sources' },
+};
+
+const DEFAULT_RULES: string[] = [
+  'complex is ONLY for tasks that need sub-agent orchestration or parallel delegation — do NOT use it for single-agent multi-step work',
+  'Multi-file operations, data analysis, and multi-step workflows without orchestration should be reasoning',
+  'Simple file creation (1-2 files) or single code generation is medium',
+  'Trivial greetings, confirmations, remembering rules, or reading one file and answering a short question is simple',
+];
+
+function TokenSaverTierEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const tiers = config.router?.tokenSaver?.tiers ?? {};
+  const entries = Object.entries(tiers);
+  const modelOpts = buildModelRefOptions(config);
+  const [newKey, setNewKey] = useState('');
+
+  const setTier = (key: string, field: 'model' | 'description', value: string) =>
+    onChange(patch(config, ['router', 'tokenSaver', 'tiers', key, field], value));
+  const removeTier = (key: string) => {
+    const next = { ...tiers };
+    delete next[key];
+    onChange(patch(config, ['router', 'tokenSaver', 'tiers'], next));
+  };
+  const addTier = () => {
+    const key = newKey.trim();
+    if (!key || tiers[key]) return;
+    const preset = DEFAULT_TIERS[key];
+    onChange(patch(config, ['router', 'tokenSaver', 'tiers', key], {
+      model: modelOpts[0]?.value ?? '',
+      description: preset?.description ?? '',
+    }));
+    setNewKey('');
+  };
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="text-xs font-semibold text-foreground">Tiers</div>
+        <div className="mt-0.5 text-[11px] text-muted-foreground">
+          Complexity tiers the judge can route to. Pick a model for each — descriptions are pre-filled.
+        </div>
+      </div>
+      {entries.map(([key, tier]) => (
+        <div key={key} className="space-y-2 rounded-lg border border-border bg-background/50 p-3">
+          <div className="flex items-center gap-2">
+            <code className="shrink-0 rounded bg-muted px-2 py-1 text-xs font-semibold text-foreground">{key}</code>
+            <div className="min-w-0 flex-1">
+              <ModelRefInput value={tier.model ?? ''} options={modelOpts} onChange={(v) => setTier(key, 'model', v)} />
+            </div>
+            <button
+              type="button"
+              onClick={() => removeTier(key)}
+              className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              title="Remove"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <textarea
+            value={tier.description ?? ''}
+            onChange={(e) => setTier(key, 'description', e.target.value)}
+            placeholder="Describe when the judge should pick this tier…"
+            rows={2}
+            className="w-full resize-y rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
+      ))}
+      <div className="border-t border-border pt-3">
+        <div className="flex items-center gap-2">
+          <input
+            value={newKey}
+            onChange={(e) => setNewKey(e.target.value)}
+            placeholder="tier name (e.g. simple, medium, complex)"
+            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+            onKeyDown={(e) => { if (e.key === 'Enter') addTier(); }}
+          />
+          <Button variant="outline" size="sm" className="shrink-0" onClick={addTier} disabled={!newKey.trim()}>
+            <Plus className="mr-1 h-3.5 w-3.5" />
+            Add
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TokenSaverRulesEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const rules = config.router?.tokenSaver?.rules ?? [];
+  const [newRule, setNewRule] = useState('');
+
+  const setRule = (idx: number, value: string) => {
+    const next = [...rules];
+    next[idx] = value;
+    onChange(patch(config, ['router', 'tokenSaver', 'rules'], next));
+  };
+  const removeRule = (idx: number) =>
+    onChange(patch(config, ['router', 'tokenSaver', 'rules'], rules.filter((_, i) => i !== idx)));
+  const addRule = () => {
+    const r = newRule.trim();
+    if (!r) return;
+    onChange(patch(config, ['router', 'tokenSaver', 'rules'], [...rules, r]));
+    setNewRule('');
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold text-foreground">Judge Rules</div>
+      {rules.length === 0 && (
+        <div className="rounded-md border border-dashed border-border px-3 py-3 text-center text-xs text-muted-foreground">
+          No custom rules. The judge uses tier descriptions only.
+        </div>
+      )}
+      {rules.map((rule, idx) => (
+        <div key={idx} className="flex items-start gap-2">
+          <textarea
+            value={rule}
+            onChange={(e) => setRule(idx, e.target.value)}
+            rows={2}
+            className="min-w-0 flex-1 resize-y rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+          />
+          <button
+            type="button"
+            onClick={() => removeRule(idx)}
+            className="mt-1 shrink-0 rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            title="Remove"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ))}
+      <div className="flex items-center gap-2">
+        <input
+          value={newRule}
+          onChange={(e) => setNewRule(e.target.value)}
+          placeholder="Add a rule for the judge…"
+          className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+          onKeyDown={(e) => { if (e.key === 'Enter') addRule(); }}
+        />
+        <Button variant="outline" size="sm" className="shrink-0" onClick={addRule} disabled={!newRule.trim()}>
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          Add
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const r = config.router ?? {};
+  const enabled = Boolean(r.enabled);
   const statsEnabled = r.stats?.enabled !== false;
+  const modelOpts = buildModelRefOptions(config);
+
+  const ts = r.tokenSaver ?? {};
+  const ao = r.autoOrchestrate ?? {};
+  const zr = r.zeroUsageRetry ?? {};
+
+  const TIER_PRESETS = ['simple', 'medium', 'complex', 'reasoning'] as const;
+  const availableTierNames = Object.keys(ts.tiers ?? {});
+
   return (
     <SettingsSection title="Router" description="Embedded Claude Code Router (CCR) for fan-out across providers.">
       <div className="space-y-4">
+        {/* ── Master toggle ─────────────────────────────────────────── */}
         <SettingsCard divided>
           <SettingsRow
             label="Enabled"
-            description="When on, agents use the router instead of the configured provider directly. Detailed routes still live in the YAML — toggle this and use the Raw YAML tab to fine-tune."
+            description="When on, agents use the router instead of the configured provider directly."
           >
             <SettingsToggle
-              checked={Boolean(r.enabled)}
+              checked={enabled}
               ariaLabel="Toggle router"
               onChange={(v) => onChange(patch(config, ['router', 'enabled'], v))}
             />
           </SettingsRow>
-          <SettingsRow
-            label="Stats collection"
-            description="Track token usage and cost per session. Powers the Dashboard tab."
-          >
-            <SettingsToggle
-              checked={statsEnabled}
-              ariaLabel="Toggle stats"
-              onChange={(v) => onChange(patch(config, ['router', 'stats', 'enabled'], v))}
-            />
-          </SettingsRow>
         </SettingsCard>
 
-        {r.enabled && statsEnabled && <ModelPricingEditor config={config} onChange={onChange} />}
+        {enabled && (
+          <>
+            {/* ── Scenarios ──────────────────────────────────────────── */}
+            <RouterScenarioEditor config={config} onChange={onChange} />
+
+            {/* ── Fallback chains ────────────────────────────────────── */}
+            <RouterFallbackEditor config={config} onChange={onChange} />
+
+            {/* ── Zero-usage retry ───────────────────────────────────── */}
+            <SettingsCard divided>
+              <SettingsRow
+                label="Zero-usage retry"
+                description="Automatically retry when the upstream returns a response with zero tokens used."
+              >
+                <SettingsToggle
+                  checked={Boolean(zr.enabled)}
+                  ariaLabel="Toggle zero-usage retry"
+                  onChange={(v) => onChange(patch(config, ['router', 'zeroUsageRetry', 'enabled'], v))}
+                />
+              </SettingsRow>
+              {zr.enabled && (
+                <FormRow label="Max attempts" description="Maximum retry attempts before giving up.">
+                  <NumberInput
+                    value={zr.maxAttempts}
+                    placeholder="5"
+                    onChange={(v) => onChange(patch(config, ['router', 'zeroUsageRetry', 'maxAttempts'], v))}
+                  />
+                </FormRow>
+              )}
+            </SettingsCard>
+
+            {/* ── TokenSaver ─────────────────────────────────────────── */}
+            <SettingsCard className="space-y-4 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Token Saver</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    A lightweight judge classifies each turn into a tier and routes it to a cost-appropriate model.
+                  </div>
+                </div>
+                <SettingsToggle
+                  checked={Boolean(ts.enabled)}
+                  ariaLabel="Toggle token saver"
+                  onChange={(v) => {
+                    let next = patch(config, ['router', 'tokenSaver', 'enabled'], v);
+                    if (v && Object.keys(next.router?.tokenSaver?.tiers ?? {}).length === 0) {
+                      const defaultModel = modelOpts[0]?.value ?? '';
+                      const seeded: Record<string, { model: string; description: string }> = {};
+                      for (const [k, def] of Object.entries(DEFAULT_TIERS)) {
+                        seeded[k] = { model: defaultModel, description: def.description };
+                      }
+                      next = patch(next, ['router', 'tokenSaver', 'tiers'], seeded);
+                      if ((next.router?.tokenSaver?.rules ?? []).length === 0) {
+                        next = patch(next, ['router', 'tokenSaver', 'rules'], [...DEFAULT_RULES]);
+                      }
+                      if (!next.router?.tokenSaver?.defaultTier) {
+                        next = patch(next, ['router', 'tokenSaver', 'defaultTier'], 'medium');
+                      }
+                      if (!next.router?.tokenSaver?.judgeTimeoutMs) {
+                        next = patch(next, ['router', 'tokenSaver', 'judgeTimeoutMs'], 15000);
+                      }
+                    }
+                    onChange(next);
+                  }}
+                />
+              </div>
+
+              {ts.enabled && (
+                <div className="space-y-4 border-t border-border pt-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-foreground">Judge model</label>
+                      <ModelRefInput
+                        value={ts.judge ?? ''}
+                        options={modelOpts}
+                        onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'judge'], v))}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-foreground">Default tier</label>
+                      <Select
+                        value={ts.defaultTier ?? 'medium'}
+                        options={
+                          availableTierNames.length > 0
+                            ? availableTierNames.map((t) => ({ value: t, label: t }))
+                            : TIER_PRESETS.map((t) => ({ value: t, label: t }))
+                        }
+                        onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'defaultTier'], v))}
+                      />
+                    </div>
+                  </div>
+                  <FormRow label="Judge timeout (ms)" description="Maximum time to wait for the judge decision.">
+                    <NumberInput
+                      value={ts.judgeTimeoutMs}
+                      placeholder="15000"
+                      onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'judgeTimeoutMs'], v))}
+                    />
+                  </FormRow>
+                  <FormRow label="Sub-agent policy" description="How sub-agents are routed: 'judge' re-evaluates each sub-agent turn, 'inherit' reuses the parent tier.">
+                    <Select
+                      value={ts.subagent?.policy ?? 'judge'}
+                      options={[
+                        { value: 'judge', label: 'judge' },
+                        { value: 'inherit', label: 'inherit' },
+                      ]}
+                      onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'subagent', 'policy'], v))}
+                    />
+                  </FormRow>
+
+                  <TokenSaverTierEditor config={config} onChange={onChange} />
+                  <TokenSaverRulesEditor config={config} onChange={onChange} />
+                </div>
+              )}
+            </SettingsCard>
+
+            {/* ── Auto-orchestrate ───────────────────────────────────── */}
+            <SettingsCard className="space-y-4 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Auto Orchestrate</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    Automatically fan out complex turns into parallel sub-agents when the judge assigns certain tiers.
+                  </div>
+                </div>
+                <SettingsToggle
+                  checked={Boolean(ao.enabled)}
+                  ariaLabel="Toggle auto orchestrate"
+                  onChange={(v) => onChange(patch(config, ['router', 'autoOrchestrate', 'enabled'], v))}
+                />
+              </div>
+
+              {ao.enabled && (
+                <div className="space-y-3 border-t border-border pt-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-foreground">Trigger tiers</label>
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {(availableTierNames.length > 0 ? availableTierNames : [...TIER_PRESETS]).map((tier) => {
+                        const active = (ao.triggerTiers ?? []).includes(tier);
+                        return (
+                          <button
+                            key={tier}
+                            type="button"
+                            className={cn(
+                              'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                              active
+                                ? 'border-primary bg-primary/10 text-primary'
+                                : 'border-border bg-background text-muted-foreground hover:bg-muted',
+                            )}
+                            onClick={() => {
+                              const prev = ao.triggerTiers ?? [];
+                              const next = active ? prev.filter((t) => t !== tier) : [...prev, tier];
+                              onChange(patch(config, ['router', 'autoOrchestrate', 'triggerTiers'], next));
+                            }}
+                          >
+                            {tier}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <SettingsRow
+                    label="Slim system prompt"
+                    description="Use a shorter system prompt for orchestrated sub-agents to save tokens."
+                  >
+                    <SettingsToggle
+                      checked={Boolean(ao.slimSystemPrompt)}
+                      ariaLabel="Toggle slim system prompt"
+                      onChange={(v) => onChange(patch(config, ['router', 'autoOrchestrate', 'slimSystemPrompt'], v))}
+                    />
+                  </SettingsRow>
+                </div>
+              )}
+            </SettingsCard>
+
+            {/* ── Stats ──────────────────────────────────────────────── */}
+            <SettingsCard divided>
+              <SettingsRow
+                label="Stats collection"
+                description="Track token usage and cost per session. Powers the Dashboard tab."
+              >
+                <SettingsToggle
+                  checked={statsEnabled}
+                  ariaLabel="Toggle stats"
+                  onChange={(v) => onChange(patch(config, ['router', 'stats', 'enabled'], v))}
+                />
+              </SettingsRow>
+            </SettingsCard>
+
+            {statsEnabled && <ModelPricingEditor config={config} onChange={onChange} />}
+          </>
+        )}
       </div>
     </SettingsSection>
   );
