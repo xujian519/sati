@@ -37,8 +37,10 @@
     "items": "No active plans or cron jobs. Completed runs are available in Run History."
   },
   "tabs": {
+    "dashboard": "Dashboard",
     "plansCron": "Plans & Cron Jobs",
-    "runHistory": "Run History"
+    "runHistory": "Run History",
+    "ariaLabel": "Always-On sections"
   },
   "table": {
     "title": "Title",
@@ -140,5 +142,33 @@
     "hours": "{{count}}h ago",
     "days": "{{count}}d ago"
   },
-  "updatedAt": "Updated {{relative}}"
+  "updatedAt": "Updated {{relative}}",
+  "dashboard": {
+    "title": "Always-On Dashboard",
+    "subtitle": "Activity feed across all workspaces.",
+    "loading": "Loading events…",
+    "empty": "No Always-On events recorded yet.",
+    "stats": {
+      "todayEvents": "Today's Events",
+      "activeProjects": "Active Projects",
+      "running": "Running Now"
+    },
+    "eventList": {
+      "title": "Recent Events"
+    },
+    "phase": {
+      "discoveryStarted": "Discovery Started",
+      "planProduced": "Plan Produced",
+      "noPlan": "No Plan",
+      "workspaceReady": "Workspace Ready",
+      "executionStarted": "Execution Started",
+      "executionCompleted": "Execution Completed",
+      "reportProduced": "Report Produced",
+      "runCompleted": "Run Completed",
+      "runFailed": "Run Failed",
+      "cronStarted": "Cron Started",
+      "cronCompleted": "Cron Completed",
+      "cronFailed": "Cron Failed"
+    }
+  }
 }

@@ -4,6 +4,8 @@ export type {
   AlwaysOnDiscoveryState,
   AlwaysOnDormantState,
   AlwaysOnChannelLease,
+  AlwaysOnEventPhase,
+  AlwaysOnPhaseEvent,
   DiscoveryPlanIndex,
   DiscoveryPlanRecord,
   DiscoveryPlanStatus,
@@ -37,6 +39,7 @@ export {
 export { DiscoveryStateStore, defaultDiscoveryState, getDayKey } from "./storage/DiscoveryStateStore.js";
 export { DiscoveryPlanStore } from "./storage/DiscoveryPlanStore.js";
 export { DiscoveryReportStore } from "./storage/DiscoveryReportStore.js";
+export { AlwaysOnEventStore } from "./storage/AlwaysOnEventStore.js";
 export {
   parsePlanMarkdown,
   PLAN_REQUIRED_SECTIONS,

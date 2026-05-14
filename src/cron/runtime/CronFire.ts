@@ -11,6 +11,16 @@ export type CronActiveRun = {
   stopRequested: boolean;
 };
 
+export type CronPhaseEventCallback = (event: {
+  phase: "cron_started" | "cron_completed" | "cron_failed";
+  runId: string;
+  taskId: string;
+  projectKey?: string;
+  timestamp: string;
+  title?: string;
+  error?: { code: string; message: string };
+}) => void;
+
 export type CronFireDependencies = {
   gateway: Gateway;
   store: CronTaskStore;
@@ -21,6 +31,7 @@ export type CronFireDependencies = {
   logger?: {
     warn: (message: string, data?: Record<string, unknown>) => void;
   };
+  onPhaseEvent?: CronPhaseEventCallback;
 };
 
 export class CronFire {
@@ -41,6 +52,14 @@ export class CronFire {
       status: "running",
       lastRunId: runId,
       updatedAt: startedAt.toISOString(),
+    });
+    this.deps.onPhaseEvent?.({
+      phase: "cron_started",
+      runId,
+      taskId: task.taskId,
+      projectKey: task.projectKey,
+      timestamp: startedAt.toISOString(),
+      title: task.message.trimStart().split(/\r?\n/, 1)[0]?.trim().slice(0, 120),
     });
 
     let outcome: CronRunOutcome = "completed";
@@ -82,6 +101,15 @@ export class CronFire {
         startedAt: startedAt.toISOString(),
         finishedAt: finishedAt.toISOString(),
         outcome,
+        error,
+      });
+      this.deps.onPhaseEvent?.({
+        phase: outcome === "completed" ? "cron_completed" : "cron_failed",
+        runId,
+        taskId: task.taskId,
+        projectKey: task.projectKey,
+        timestamp: finishedAt.toISOString(),
+        title: task.message.trimStart().split(/\r?\n/, 1)[0]?.trim().slice(0, 120),
         error,
       });
       await this.updateTaskAfterRun(task, finishedAt, outcome).catch((updateError: unknown) => {

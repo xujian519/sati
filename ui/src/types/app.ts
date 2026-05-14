@@ -113,6 +113,38 @@ export interface AlwaysOnRunLogResponse {
   source: AlwaysOnRunLogSource;
 }
 
+export type AlwaysOnDashboardEventPhase =
+  | 'discovery_started'
+  | 'plan_produced'
+  | 'no_plan'
+  | 'workspace_ready'
+  | 'execution_started'
+  | 'execution_completed'
+  | 'report_produced'
+  | 'run_completed'
+  | 'run_failed'
+  | 'cron_started'
+  | 'cron_completed'
+  | 'cron_failed';
+
+export interface AlwaysOnDashboardEvent {
+  eventId: string;
+  runId: string;
+  projectKey: string;
+  projectName: string;
+  projectDisplayName: string;
+  phase: AlwaysOnDashboardEventPhase;
+  timestamp: string;
+  title?: string;
+  planId?: string;
+  outcome?: string;
+  error?: { code: string; message: string };
+}
+
+export interface AlwaysOnDashboardEventsResponse {
+  events: AlwaysOnDashboardEvent[];
+}
+
 export type DiscoveryPlanApprovalMode = 'auto' | 'manual';
 export type DiscoveryPlanStatus =
   | 'draft'

@@ -6,6 +6,7 @@ import {
   AlertCircle,
   ArrowLeft,
   Eye,
+  LayoutDashboard,
   Loader2,
   Pause,
   Play,
@@ -30,6 +31,7 @@ import type {
 import { MarkdownContent } from '../chat/tools/components/ContentRenderers/MarkdownContent';
 import { api } from '../../utils/api';
 import { cn } from '../../lib/utils.js';
+import AlwaysOnDashboard from './AlwaysOnDashboard';
 
 type AlwaysOnV2Props = {
   selectedProject: Project | null;
@@ -47,7 +49,7 @@ const TABLE_GRID_COLUMNS =
 const HISTORY_TABLE_GRID_COLUMNS =
   'grid-cols-[minmax(280px,1.8fr)_96px_96px_128px_minmax(160px,0.8fr)_112px]';
 
-type AlwaysOnSubTab = 'items' | 'history';
+type AlwaysOnSubTab = 'dashboard' | 'items' | 'history';
 
 type AlwaysOnRow =
   | {
@@ -376,7 +378,7 @@ export default function AlwaysOnV2({
   onOpenSession,
 }: AlwaysOnV2Props) {
   const { t } = useTranslation('alwaysOn');
-  const [activeSubTab, setActiveSubTab] = useState<AlwaysOnSubTab>('items');
+  const [activeSubTab, setActiveSubTab] = useState<AlwaysOnSubTab>('dashboard');
   const [plans, setPlans] = useState<DiscoveryPlanOverview[]>([]);
   const [cronJobs, setCronJobs] = useState<CronJobOverview[]>([]);
   const [runHistory, setRunHistory] = useState<AlwaysOnRunHistoryEntry[]>([]);
@@ -1114,21 +1116,173 @@ export default function AlwaysOnV2({
     return detailRow.kind === 'plan' ? renderPlanDetail(detailRow) : renderCronDetail(detailRow);
   };
 
+  const SUB_TABS: { id: AlwaysOnSubTab; labelKey: string; defaultLabel: string }[] = [
+    { id: 'dashboard', labelKey: 'tabs.dashboard', defaultLabel: 'Dashboard' },
+    { id: 'items', labelKey: 'tabs.plansCron', defaultLabel: 'Plans & Cron Jobs' },
+    { id: 'history', labelKey: 'tabs.runHistory', defaultLabel: 'Run History' },
+  ];
+
   return (
     <div className="h-full bg-white dark:bg-neutral-950">
-      <div className="h-full overflow-y-auto">
-        <div className="w-full space-y-4 px-8 py-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-[20px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
-                {t('title', { defaultValue: 'Always-On' })}
-              </h2>
-              <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">
-                {t('subtitle', { defaultValue: 'Background discovery agent for this project.' })}
-              </p>
+      <div
+        role="tablist"
+        aria-label={t('tabs.ariaLabel', { defaultValue: 'Always-On sections' })}
+        className="scrollbar-thin flex h-9 items-center gap-1 overflow-x-auto border-b border-neutral-200 px-4 dark:border-neutral-800"
+      >
+        {SUB_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeSubTab === tab.id}
+            onClick={() => setActiveSubTab(tab.id)}
+            className={cn(
+              'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[13px] transition-colors',
+              activeSubTab === tab.id
+                ? 'bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'
+                : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100',
+            )}
+          >
+            {tab.id === 'dashboard' ? <LayoutDashboard className="h-3.5 w-3.5" strokeWidth={1.75} /> : null}
+            {t(tab.labelKey, { defaultValue: tab.defaultLabel })}
+          </button>
+        ))}
+      </div>
+
+      <div className="h-[calc(100%-2.25rem)] overflow-y-auto">
+        {activeSubTab === 'dashboard' ? (
+          <AlwaysOnDashboard />
+        ) : (
+          <div className="w-full space-y-4 px-8 py-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-[20px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
+                  {t('title', { defaultValue: 'Always-On' })}
+                </h2>
+                <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">
+                  {t('subtitle', { defaultValue: 'Background discovery agent for this project.' })}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void refresh()}
+                  disabled={loading}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 px-2.5 text-xxs text-neutral-600 transition hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                >
+                  <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} strokeWidth={1.75} />
+                  <span>{t('actions.refresh', { defaultValue: 'Refresh' })}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleLaunchDiscovery()}
+                  disabled={launching}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 px-2.5 text-xxs text-neutral-700 transition hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                >
+                  {launching ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
+                  ) : isRunning ? (
+                    <Pause className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  ) : (
+                    <Play className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  )}
+                  <span>
+                    {isRunning
+                      ? t('status.running', { defaultValue: 'Running' })
+                      : t('actions.discover', { defaultValue: 'Discover' })}
+                  </span>
+                </button>
+              </div>
             </div>
+
+            <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-950">
+              {error ? (
+                <div className="mb-4 flex items-center gap-2 text-xxs text-red-500">
+                  <AlertCircle className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  <span>{error}</span>
+                </div>
+              ) : null}
+
+              {activeSubTab === 'history' ? (
+                renderHistory()
+              ) : detailRowId ? (
+                renderDetail()
+              ) : loading && rows.length === 0 ? (
+                <div className="flex items-center gap-2 text-[13px] text-neutral-500 dark:text-neutral-400">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
+                  <span>{t('loading.items', { defaultValue: 'Loading items…' })}</span>
+                </div>
+              ) : rows.length === 0 ? (
+                <div className="text-[13px] text-neutral-500 dark:text-neutral-400">
+                  {t('empty.items', {
+                    defaultValue: 'No active plans or cron jobs. Completed runs are available in Run History.',
+                  })}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <div className="min-w-[980px] text-[13px]">
+                    <div
+                      className={cn(
+                        'text-xxs grid gap-3 border-b border-neutral-200 pb-2 font-medium text-neutral-500 dark:border-neutral-800 dark:text-neutral-400',
+                        TABLE_GRID_COLUMNS,
+                      )}
+                    >
+                      <span>{t('table.title', { defaultValue: 'Title' })}</span>
+                      <span>{t('table.type', { defaultValue: 'Type' })}</span>
+                      <span>{t('table.status', { defaultValue: 'Status' })}</span>
+                      <span>{t('table.created', { defaultValue: 'Created' })}</span>
+                      <span>{t('table.triggered', { defaultValue: 'Triggered' })}</span>
+                      <span>{t('table.completed', { defaultValue: 'Completed' })}</span>
+                      <span aria-hidden="true" />
+                    </div>
+                    <div className="divide-y divide-neutral-100 dark:divide-neutral-900">
+                      {rows.map((row) => (
+                        <div key={row.id} className={cn('grid gap-3 py-3', TABLE_GRID_COLUMNS)}>
+                          <div className="min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => setDetailRowId(row.id)}
+                              className="block max-w-full truncate rounded-sm text-left font-medium text-blue-600 outline-none transition hover:text-blue-700 hover:underline focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+                            >
+                              {row.title}
+                            </button>
+                          </div>
+                          <div className="self-center text-xxs text-neutral-600 dark:text-neutral-300">
+                            {row.typeLabel}
+                          </div>
+                          <div className="self-center text-xxs text-neutral-600 dark:text-neutral-300">
+                            {row.statusLabel}
+                          </div>
+                          <div className="self-center font-mono text-xxs text-neutral-500 dark:text-neutral-400">
+                            {formatTime(row.createdAt)}
+                          </div>
+                          <div className="self-center font-mono text-xxs text-neutral-500 dark:text-neutral-400">
+                            {formatTime(row.triggeredAt)}
+                          </div>
+                          <div className="self-center font-mono text-xxs text-neutral-500 dark:text-neutral-400">
+                            {formatTime(row.completedAt)}
+                          </div>
+                          <div className="flex items-center justify-end gap-1.5">
+                            {renderRowActions(row)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {plans.length > 0 ? (
+              <p className="text-center text-xxs text-neutral-500 dark:text-neutral-500">
+                {t('updatedAt', {
+                  relative: formatRelative(plans[0]?.updatedAt, t),
+                  defaultValue: `Updated ${formatRelative(plans[0]?.updatedAt, t)}`,
+                })}
+              </p>
+            ) : null}
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

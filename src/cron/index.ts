@@ -5,6 +5,7 @@ export {
   type CreateCronRuntimeOptions,
   type CronRuntimeLogger,
 } from "./runtime/CronRuntime.js";
+export type { CronPhaseEventCallback } from "./runtime/CronFire.js";
 export { computeNextCronRunAt, computeNextRunAt } from "./runtime/CronSchedule.js";
 export { resolveCronPaths, cronRunEventsPath, type CronPaths } from "./storage/CronPaths.js";
 export { CronTaskStore } from "./storage/CronTaskStore.js";

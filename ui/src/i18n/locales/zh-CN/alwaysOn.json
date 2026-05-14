@@ -37,8 +37,10 @@
     "items": "没有活跃的计划或定时任务。已完成的运行可在运行历史中查看。"
   },
   "tabs": {
+    "dashboard": "仪表盘",
     "plansCron": "计划与定时任务",
-    "runHistory": "运行历史"
+    "runHistory": "运行历史",
+    "ariaLabel": "Always-On 分区"
   },
   "table": {
     "title": "标题",
@@ -140,5 +142,33 @@
     "hours": "{{count}} 小时前",
     "days": "{{count}} 天前"
   },
-  "updatedAt": "更新于 {{relative}}"
+  "updatedAt": "更新于 {{relative}}",
+  "dashboard": {
+    "title": "Always-On 仪表盘",
+    "subtitle": "所有工作区的活动动态。",
+    "loading": "正在加载事件…",
+    "empty": "暂无 Always-On 事件记录。",
+    "stats": {
+      "todayEvents": "今日事件",
+      "activeProjects": "活跃项目",
+      "running": "正在运行"
+    },
+    "eventList": {
+      "title": "近期事件"
+    },
+    "phase": {
+      "discoveryStarted": "发现已启动",
+      "planProduced": "已产出计划",
+      "noPlan": "未产出计划",
+      "workspaceReady": "工作区就绪",
+      "executionStarted": "开始执行",
+      "executionCompleted": "执行完成",
+      "reportProduced": "已产出报告",
+      "runCompleted": "运行完成",
+      "runFailed": "运行失败",
+      "cronStarted": "定时任务已启动",
+      "cronCompleted": "定时任务完成",
+      "cronFailed": "定时任务失败"
+    }
+  }
 }

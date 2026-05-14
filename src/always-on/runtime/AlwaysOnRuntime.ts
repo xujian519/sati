@@ -5,6 +5,7 @@ import type { PilotDeckToolDefinition } from "../../tool/index.js";
 import type { AlwaysOnConfig } from "../config/parseAlwaysOnConfig.js";
 import { resolveAlwaysOnPaths, type AlwaysOnPaths } from "../storage/AlwaysOnPaths.js";
 import { DiscoveryPlanStore } from "../storage/DiscoveryPlanStore.js";
+import { AlwaysOnEventStore } from "../storage/AlwaysOnEventStore.js";
 import { DiscoveryReportStore } from "../storage/DiscoveryReportStore.js";
 import { DiscoveryStateStore } from "../storage/DiscoveryStateStore.js";
 import {
@@ -89,6 +90,7 @@ export class AlwaysOnRuntime {
   private readonly stateStore: DiscoveryStateStore;
   private readonly planStore: DiscoveryPlanStore;
   private readonly reportStore: DiscoveryReportStore;
+  private readonly eventStore: AlwaysOnEventStore;
   private readonly runContexts: AlwaysOnRunContextRegistry;
   private readonly leases: ChannelLeaseRegistry;
   private readonly sessionOverrides: SessionConfigOverrides;
@@ -122,6 +124,7 @@ export class AlwaysOnRuntime {
     this.stateStore = new DiscoveryStateStore(this.paths);
     this.planStore = new DiscoveryPlanStore(this.paths);
     this.reportStore = new DiscoveryReportStore(this.paths);
+    this.eventStore = new AlwaysOnEventStore(this.paths);
     this.runContexts = options.runContexts ?? new AlwaysOnRunContextRegistry();
     this.leases = new ChannelLeaseRegistry(this.now);
     this.sessionOverrides = options.sessionOverrides ?? new SessionConfigOverrides();
@@ -184,6 +187,7 @@ export class AlwaysOnRuntime {
       stateStore: this.stateStore,
       planStore: this.planStore,
       reportStore: this.reportStore,
+      eventStore: this.eventStore,
       uuid: this.uuid,
       now: this.now,
       logger: this.logger,

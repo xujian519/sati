@@ -9,12 +9,14 @@ import { AlwaysOnError } from "../protocol/errors.js";
 import type {
   AlwaysOnDiscoveryOutcome,
   AlwaysOnDiscoveryState,
+  AlwaysOnEventPhase,
   DiscoveryFireResult,
   DiscoveryPlanRecord,
   DiscoveryRunHistoryEvent,
   WorkspaceHandle,
 } from "../protocol/types.js";
 import type { AlwaysOnPaths } from "../storage/AlwaysOnPaths.js";
+import { AlwaysOnEventStore } from "../storage/AlwaysOnEventStore.js";
 import { DiscoveryPlanStore } from "../storage/DiscoveryPlanStore.js";
 import { DiscoveryReportStore } from "../storage/DiscoveryReportStore.js";
 import { DiscoveryStateStore } from "../storage/DiscoveryStateStore.js";
@@ -34,6 +36,7 @@ export type DiscoveryFireDependencies = {
   stateStore: DiscoveryStateStore;
   planStore: DiscoveryPlanStore;
   reportStore: DiscoveryReportStore;
+  eventStore: AlwaysOnEventStore;
   uuid: () => string;
   now: () => Date;
   logger?: { info: (msg: string, data?: Record<string, unknown>) => void; warn: (msg: string, data?: Record<string, unknown>) => void };
@@ -101,6 +104,24 @@ export async function ensureAlwaysOnWorkspace(
 export class DiscoveryFire {
   constructor(private readonly deps: DiscoveryFireDependencies) {}
 
+  private emitEvent(
+    runId: string,
+    phase: AlwaysOnEventPhase,
+    extra?: { title?: string; planId?: string; outcome?: AlwaysOnDiscoveryOutcome; error?: { code: string; message: string } },
+  ): void {
+    this.deps.eventStore
+      .appendEvent({
+        schemaVersion: 1,
+        eventId: this.deps.uuid(),
+        runId,
+        projectKey: this.deps.projectKey,
+        phase,
+        timestamp: this.deps.now().toISOString(),
+        ...extra,
+      })
+      .catch(() => undefined);
+  }
+
   static deriveDiscoverySessionKey(projectKey: string, runId: string): string {
     return `always-on/discovery:project=${projectKey}:run=${runId}`;
   }
@@ -130,6 +151,7 @@ export class DiscoveryFire {
     };
 
     // ── Phase 1: Discovery (bypassPermissions) ──
+    this.emitEvent(runId, "discovery_started");
     const discoverySessionKey = DiscoveryFire.deriveDiscoverySessionKey(this.deps.projectKey, runId);
 
     const existingWorkspace = state.currentWorkspace && existsSync(state.currentWorkspace.cwd)
@@ -182,6 +204,10 @@ export class DiscoveryFire {
     const discoveryError = pickFirstError(discoveryEvents);
     if (discoveryError && !discoveryCtx.plan) {
       const finishedAt = this.deps.now();
+      this.emitEvent(runId, "run_failed", {
+        error: { code: discoveryError.code ?? "discovery_failed", message: discoveryError.message },
+        outcome: "failed",
+      });
       await this.markFailedNoPlan(runId, discoveryError, finishedAt, baseHistory);
       return {
         outcome: "failed",
@@ -194,6 +220,7 @@ export class DiscoveryFire {
     }
 
     if (!discoveryCtx.plan) {
+      this.emitEvent(runId, "no_plan", { outcome: "no_plan" });
       const finishedAt = this.deps.now();
       await this.deps.stateStore.markFireCompleted({
         outcome: "no_plan",
@@ -217,6 +244,7 @@ export class DiscoveryFire {
     }
 
     const planRecord = discoveryCtx.plan.record;
+    this.emitEvent(runId, "plan_produced", { title: planRecord.title, planId: planRecord.id });
 
     // ── Phase 2: Workspace (bypassPermissions, agent-driven) ──
     let workspace: WorkspaceHandle;
@@ -226,6 +254,11 @@ export class DiscoveryFire {
       const finishedAt = this.deps.now();
       const code = error instanceof AlwaysOnError ? error.code : "workspace_prepare_failed";
       const message = error instanceof Error ? error.message : String(error);
+      this.emitEvent(runId, "run_failed", {
+        planId: planRecord.id,
+        error: { code, message },
+        outcome: "failed",
+      });
       await this.deps.stateStore.markFireCompleted({
         outcome: "failed",
         runId,
@@ -251,6 +284,7 @@ export class DiscoveryFire {
 
     this.assertWorkspaceCwdSafe(workspace);
     workspace.metadata.startedAt = startedAt.toISOString();
+    this.emitEvent(runId, "workspace_ready", { planId: planRecord.id });
 
     // ── Phase 3: Execution (bypassPermissions, plan only) ──
     const executionSessionKey = DiscoveryFire.deriveExecutionSessionKey(this.deps.projectKey, runId);
@@ -275,6 +309,7 @@ export class DiscoveryFire {
       status: "executing",
       workspace: { strategy: workspace.strategy, handle: workspace.cwd, cwd: workspace.cwd },
     });
+    this.emitEvent(runId, "execution_started", { planId: planRecord.id, title: planRecord.title });
 
     let executionError: { code?: string; message: string } | undefined;
     try {
@@ -301,6 +336,11 @@ export class DiscoveryFire {
     }
 
     if (executionError) {
+      this.emitEvent(runId, "run_failed", {
+        planId: planRecord.id,
+        error: { code: executionError.code ?? "execution_failed", message: executionError.message },
+        outcome: "failed",
+      });
       const finishedAt = this.deps.now();
       const reportFilePath = await this.writeFallbackReport({
         runId,
@@ -336,6 +376,8 @@ export class DiscoveryFire {
         error: { code: executionError.code ?? "execution_failed", message: executionError.message },
       };
     }
+
+    this.emitEvent(runId, "execution_completed", { planId: planRecord.id, title: planRecord.title });
 
     // ── Phase 4: Report (bypassPermissions, independent agent loop) ──
     const reportSessionKey = DiscoveryFire.deriveReportSessionKey(this.deps.projectKey, runId);
@@ -385,6 +427,19 @@ export class DiscoveryFire {
 
     const finishedAt = this.deps.now();
     const outcome: AlwaysOnDiscoveryOutcome = reportCtx.report && !reportError ? "executed" : "failed";
+
+    if (reportCtx.report && !reportError) {
+      this.emitEvent(runId, "report_produced", { planId: planRecord.id, title: planRecord.title, outcome });
+      this.emitEvent(runId, "run_completed", { planId: planRecord.id, title: planRecord.title, outcome });
+    } else {
+      this.emitEvent(runId, "run_failed", {
+        planId: planRecord.id,
+        error: reportError
+          ? { code: reportError.code ?? "report_failed", message: reportError.message }
+          : { code: "report_tool_not_invoked", message: "Report tool was not invoked" },
+        outcome,
+      });
+    }
 
     let reportFilePath = reportCtx.report?.filePath;
     if (!reportCtx.report) {

@@ -77,6 +77,7 @@ import skillsRoutes from './routes/skills.js';
 import settingsRoutes from './routes/settings.js';
 import configRoutes from './routes/config.js';
 import { startPilotDeckConfigWatcher, stopPilotDeckConfigWatcher } from './services/pilotdeckConfigWatcher.js';
+import { getAlwaysOnDashboardEvents } from './services/always-on-events.js';
 import agentRoutes from './routes/agent.js';
 import projectsRoutes, { WORKSPACES_ROOT, validateWorkspacePath } from './routes/projects.js';
 import userRoutes from './routes/user.js';
@@ -589,6 +590,21 @@ app.get('/api/ccr/dashboard', authenticateToken, (_req, res) => {
     } catch (error) {
         console.error('[router-dashboard] failed:', error);
         res.status(500).json({ error: error?.message || 'router-dashboard failed' });
+    }
+});
+
+app.get('/api/always-on/events', authenticateToken, async (req, res) => {
+    try {
+        const limit = Number.parseInt(req.query?.limit || '', 10);
+        const since = req.query?.since || undefined;
+        const result = await getAlwaysOnDashboardEvents({
+            limit: Number.isFinite(limit) ? limit : 200,
+            since: typeof since === 'string' ? since : undefined,
+        });
+        res.json(result);
+    } catch (error) {
+        console.error('[always-on-events] failed:', error);
+        res.status(500).json({ error: error?.message || 'always-on-events failed' });
     }
 });
 

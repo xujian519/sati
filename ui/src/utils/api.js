@@ -52,6 +52,8 @@ export const api = {
   // Protected endpoints
   // config endpoint removed - no longer needed (frontend uses window.location)
   projects: () => authenticatedFetch('/api/projects'),
+  alwaysOnDashboardEvents: (limit = 200, since) =>
+    authenticatedFetch(`/api/always-on/events?limit=${encodeURIComponent(limit)}${since ? `&since=${encodeURIComponent(since)}` : ''}`),
   projectCronJobs: (projectName) =>
     authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/cron-jobs`),
   projectAlwaysOnRunHistory: (projectName, limit = 500) =>

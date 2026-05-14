@@ -117,6 +117,30 @@ export type GateResult =
   | { ok: true; lease?: AlwaysOnChannelLease }
   | { ok: false; reason: GateBlockReason };
 
+export type AlwaysOnEventPhase =
+  | "discovery_started"
+  | "plan_produced"
+  | "no_plan"
+  | "workspace_ready"
+  | "execution_started"
+  | "execution_completed"
+  | "report_produced"
+  | "run_completed"
+  | "run_failed";
+
+export type AlwaysOnPhaseEvent = {
+  schemaVersion: 1;
+  eventId: string;
+  runId: string;
+  projectKey: string;
+  phase: AlwaysOnEventPhase;
+  timestamp: string;
+  title?: string;
+  planId?: string;
+  outcome?: AlwaysOnDiscoveryOutcome;
+  error?: { code: string; message: string };
+};
+
 export type DiscoveryFireResult =
   | {
       outcome: "no_plan";

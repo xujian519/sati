@@ -15,6 +15,7 @@ export type AlwaysOnPaths = {
   reportsDir: string;
   runsDir: string;
   runHistoryFile: string;
+  eventsFile: string;
   locksDir: string;
   discoveryLockFile: string;
   worktreesDir: string;
@@ -47,6 +48,7 @@ export function resolveAlwaysOnPaths(input: {
     reportsDir: resolve(projectDir, "reports"),
     runsDir: resolve(projectDir, "runs"),
     runHistoryFile: resolve(projectDir, "run-history.jsonl"),
+    eventsFile: resolve(projectDir, "events.jsonl"),
     locksDir: resolve(projectDir, "locks"),
     discoveryLockFile: resolve(projectDir, "locks", "discovery.lock"),
     worktreesDir,
