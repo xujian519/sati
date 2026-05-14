@@ -124,31 +124,47 @@ function injectOrchestrationPrompt(
   return [reminder, ...messages];
 }
 
-const SLIM_HEADER = "You are an orchestration agent. Use the Agent tool to delegate all work to sub-agents.";
+const SLIM_HEADER = "You are an orchestration agent. Use the agent tool to delegate all work to sub-agents.";
 const MEMORY_KEYWORDS = [
   "memory_search", "memory_overview", "memory_get",
   "memory_list", "memory_flush", "memory_dream",
   "ClawXMemory", "cache_control",
 ];
 
+const PRESERVED_TAGS: { open: string; close: string }[] = [
+  { open: "<user-context", close: "</user-context>" },
+  { open: "<project-instructions", close: "</project-instructions>" },
+  { open: "<memory-context", close: "</memory-context>" },
+];
+
 function trimSystemPrompt(prompt: string): { text: string; preservedKeywords: string[] } {
   const lines = prompt.split("\n");
   const preservedKeywords: string[] = [];
-  const memoryLines: string[] = [];
+  const preserved: string[] = [];
+  let activeTag: (typeof PRESERVED_TAGS)[number] | null = null;
   let inMemoryBlock = false;
-  let inTagBlock = false;
 
   for (const line of lines) {
     const lower = line.toLowerCase();
 
-    if (lower.includes("<memory-context")) {
-      inTagBlock = true;
+    if (!activeTag) {
+      const match = PRESERVED_TAGS.find(tag => lower.includes(tag.open));
+      if (match) {
+        activeTag = match;
+        preserved.push(line);
+        if (lower.includes(match.close)) {
+          preservedKeywords.push(match.open.slice(1));
+          activeTag = null;
+        }
+        continue;
+      }
     }
-    if (inTagBlock) {
-      memoryLines.push(line);
-      if (lower.includes("</memory-context>")) {
-        inTagBlock = false;
-        preservedKeywords.push("memory-context-block");
+
+    if (activeTag) {
+      preserved.push(line);
+      if (lower.includes(activeTag.close)) {
+        preservedKeywords.push(activeTag.open.slice(1));
+        activeTag = null;
       }
       continue;
     }
@@ -156,17 +172,17 @@ function trimSystemPrompt(prompt: string): { text: string; preservedKeywords: st
     const isMemory = MEMORY_KEYWORDS.some(kw => lower.includes(kw.toLowerCase()));
     if (isMemory) {
       inMemoryBlock = true;
-      memoryLines.push(line);
+      preserved.push(line);
       preservedKeywords.push(line.trim().slice(0, 40));
     } else if (inMemoryBlock && line.trim().length > 0) {
-      memoryLines.push(line);
+      preserved.push(line);
     } else {
       inMemoryBlock = false;
     }
   }
 
-  const text = memoryLines.length > 0
-    ? SLIM_HEADER + "\n\n" + memoryLines.join("\n")
+  const text = preserved.length > 0
+    ? SLIM_HEADER + "\n\n" + preserved.join("\n")
     : SLIM_HEADER;
   return { text, preservedKeywords };
 }

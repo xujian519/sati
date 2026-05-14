@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { applyOrchestration } from "../../src/router/orchestrate/applyOrchestration.js";
-import type { RouterAutoOrchestrateConfig } from "../../src/router/config/schema.js";
+import { DEFAULT_ALLOWED_TOOLS, DEFAULT_BLOCKED_TOOLS, type RouterAutoOrchestrateConfig } from "../../src/router/config/schema.js";
 import type { CanonicalModelRequest, CanonicalToolSchema } from "../../src/model/index.js";
+import { createBuiltinRegistry } from "../../src/tool/registry/createBuiltinRegistry.js";
 
 function makeConfig(overrides?: Partial<RouterAutoOrchestrateConfig>): RouterAutoOrchestrateConfig {
   return {
@@ -140,4 +141,60 @@ test("applyOrchestration trims tools even without skill prompt", () => {
   assert.equal(result.request.tools!.length, 1);
   assert.ok(!result.mutations.orchestrationPromptInjected);
   assert.ok(result.mutations.toolsStripped);
+});
+
+test("DEFAULT_ALLOWED_TOOLS entries all match builtin canonical tool names", () => {
+  const registry = createBuiltinRegistry();
+  const canonicalNames = new Set(registry.toCanonicalSchemas().map(s => s.name));
+  for (const name of DEFAULT_ALLOWED_TOOLS) {
+    assert.ok(canonicalNames.has(name), `DEFAULT_ALLOWED_TOOLS entry "${name}" is not a canonical tool name. Available: ${[...canonicalNames].join(", ")}`);
+  }
+});
+
+test("DEFAULT_BLOCKED_TOOLS entries use canonical names (not aliases)", () => {
+  const registry = createBuiltinRegistry();
+  const canonicalNames = new Set(registry.toCanonicalSchemas().map(s => s.name));
+  for (const name of DEFAULT_BLOCKED_TOOLS) {
+    if (name.startsWith("mcp__")) continue;
+    assert.ok(canonicalNames.has(name), `DEFAULT_BLOCKED_TOOLS entry "${name}" is not a canonical tool name. Available: ${[...canonicalNames].join(", ")}`);
+  }
+});
+
+test("trimSystemPrompt preserves user-context block", () => {
+  const prompt = `You are PilotDeck.
+Do things well.
+<user-context>
+cwd: /Users/test/project
+model: gpt-4
+</user-context>
+Use tools wisely.`;
+  const result = applyOrchestration({
+    request: makeRequest({ systemPrompt: prompt }),
+    config: makeConfig({ slimSystemPrompt: true, triggerTiers: [] }),
+    isMainAgent: true,
+    alreadyOrchestrating: true,
+  });
+  assert.ok(result.request.systemPrompt!.includes("orchestration agent"));
+  assert.ok(result.request.systemPrompt!.includes("<user-context>"));
+  assert.ok(result.request.systemPrompt!.includes("cwd: /Users/test/project"));
+  assert.ok(result.request.systemPrompt!.includes("</user-context>"));
+  assert.ok(!result.request.systemPrompt!.includes("Do things well"));
+});
+
+test("trimSystemPrompt preserves project-instructions block", () => {
+  const prompt = `You are PilotDeck.
+Random noise.
+<project-instructions>
+Always use TypeScript strict mode.
+</project-instructions>
+More noise.`;
+  const result = applyOrchestration({
+    request: makeRequest({ systemPrompt: prompt }),
+    config: makeConfig({ slimSystemPrompt: true, triggerTiers: [] }),
+    isMainAgent: true,
+    alreadyOrchestrating: true,
+  });
+  assert.ok(result.request.systemPrompt!.includes("<project-instructions>"));
+  assert.ok(result.request.systemPrompt!.includes("Always use TypeScript strict mode"));
+  assert.ok(!result.request.systemPrompt!.includes("Random noise"));
 });
