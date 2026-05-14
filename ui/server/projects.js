@@ -141,21 +141,49 @@ async function getProjects(progressCallback = null) {
     const gateway = await getPilotDeckGateway();
     const { projects: webProjects } = await gateway.listProjects();
     const markedProjects = await readMarkedProjectPaths();
-    const seenByPath = new Set(
-        webProjects.map((p) => p.fullPath || p.projectKey).filter(Boolean),
-    );
-    // Backfill any project whose `.cwd` marker exists but listProjects()
-    // failed to surface (typically because the path contains '-').
-    for (const [, markedCwd] of markedProjects) {
-        if (seenByPath.has(markedCwd)) continue;
-        webProjects.push({ fullPath: markedCwd, projectKey: markedCwd, sessionCount: 0 });
-        seenByPath.add(markedCwd);
+
+    // Dedupe by `createProjectId(fullPath)` rather than raw path string.
+    // The gateway's heuristic decoder for project ids (which collapses
+    // `-` back into `/`) may produce a path that differs from the
+    // verbatim path stored in `.cwd`, yet both encode to the same id —
+    // and the SidebarV2 keys rows by that id. A raw-path Set would let
+    // both rows through and produce a visible duplicate that share an
+    // expand-state.
+    //
+    // Strategy: build a Map<projectId, entry> from the gateway list,
+    // then for each `.cwd` marker either backfill a missing project or
+    // override the existing entry's path with the marker (the marker is
+    // the user-typed verbatim path, so it wins over the heuristic
+    // decode). Session counts from the gateway are preserved.
+    const byId = new Map();
+    for (const project of webProjects) {
+        const fullPath = project.fullPath || project.projectKey;
+        if (!fullPath) continue;
+        const id = createProjectId(fullPath);
+        if (!byId.has(id)) {
+            byId.set(id, project);
+        }
     }
-    const total = webProjects.length;
+    for (const [, markedCwd] of markedProjects) {
+        const id = createProjectId(markedCwd);
+        const existing = byId.get(id);
+        if (existing) {
+            existing.fullPath = markedCwd;
+            existing.projectKey = markedCwd;
+        } else {
+            byId.set(id, {
+                fullPath: markedCwd,
+                projectKey: markedCwd,
+                sessionCount: 0,
+            });
+        }
+    }
+    const dedupedProjects = [...byId.values()];
+    const total = dedupedProjects.length;
 
     const result = [];
-    for (let index = 0; index < webProjects.length; index += 1) {
-        const project = webProjects[index];
+    for (let index = 0; index < dedupedProjects.length; index += 1) {
+        const project = dedupedProjects[index];
         const fullPath = project.fullPath || project.projectKey;
         const name = createProjectId(fullPath);
         rememberProjectDirectory(name, fullPath);
