@@ -102,10 +102,12 @@ test("CronRuntime creates recurring task that fires into the original session", 
       channelKey: "cli",
       projectKey: "/tmp/projects/sample",
     });
+    assert.equal(created.task.projectKey, "/tmp/projects/sample");
     now = new Date(created.task.nextRunAt!);
     await runtime.runTickOnce();
     await gateway.waitForSubmit();
     assert.equal(gateway.submitted[0].sessionKey, "cli:s_original");
+    assert.equal(gateway.submitted[0].projectKey, "/tmp/projects/sample");
     assert.equal(gateway.submitted[0].message, "Run status check");
     await runtime.stopTask({ taskId: created.task.taskId });
   } finally {

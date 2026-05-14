@@ -166,6 +166,6 @@ function mergeSessionContext(
   return {
     sessionKey: next.sessionKey,
     channelKey: next.channelKey || current.channelKey,
-    projectKey: next.projectKey ?? current.projectKey,
+    projectKey: current.projectKey ?? next.projectKey,
   };
 }

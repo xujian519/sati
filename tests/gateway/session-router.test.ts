@@ -95,6 +95,26 @@ test("SessionRouter keeps the current cached object until a later getOrCreate tr
   assert.deepEqual(recreated, ["session-1"]);
 });
 
+test("SessionRouter preserves the original projectKey for cached sessions", async () => {
+  const recreated: Array<string | undefined> = [];
+  const router = new SessionRouter({
+    createSession: async ({ sessionKey }) => fakeSession(`initial:${sessionKey}`),
+    recreateSession: async ({ sessionKey, projectKey }) => {
+      recreated.push(projectKey);
+      return fakeSession(`reloaded:${sessionKey}`);
+    },
+  });
+
+  await router.getOrCreate({ sessionKey: "session-1", projectKey: "/repo/a", channelKey: "cli" });
+  await router.getOrCreate({ sessionKey: "session-1", projectKey: "/repo/b", channelKey: "cli" });
+
+  assert.equal(router.markProjectDirty("/repo/b", "config_changed"), 0);
+  assert.equal(router.markProjectDirty("/repo/a", "config_changed"), 1);
+
+  await router.getOrCreate({ sessionKey: "session-1", projectKey: "/repo/b", channelKey: "cli" });
+  assert.deepEqual(recreated, ["/repo/a"]);
+});
+
 function fakeSession(sessionId: string): AgentSession {
   return {
     abort: () => undefined,

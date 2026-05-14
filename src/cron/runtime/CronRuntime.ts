@@ -143,6 +143,8 @@ export class CronRuntime {
       status: "scheduled",
       sessionKey: input.sessionKey,
       channelKey: input.channelKey ?? "cron",
+      // Session-scoped callers should pass the originating project explicitly.
+      // Keep the runtime root only as a compatibility fallback for direct callers.
       projectKey: input.projectKey ?? this.projectKey,
       mode: input.mode,
       timezone: input.timezone ?? (schedule.type === "cron" ? schedule.timezone : undefined) ?? this.config.timezone,

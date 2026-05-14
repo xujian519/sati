@@ -31,6 +31,7 @@ export function createCronCreateTool(runtime: CronToolRuntime): PilotDeckToolDef
         ...input,
         sessionKey,
         channelKey: input.channelKey ?? inferChannelKey(sessionKey),
+        projectKey: input.projectKey ?? context.cwd,
       });
       return {
         content: [{ type: "json", value: result.task }],

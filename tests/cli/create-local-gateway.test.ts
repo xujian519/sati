@@ -4,7 +4,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createLocalGateway } from "../../src/cli/createLocalGateway.js";
-import type { GatewayEvent } from "../../src/gateway/index.js";
+import { createCronRuntime, defaultCronConfig } from "../../src/cron/index.js";
+import type { GatewayEvent, GatewaySubmitTurnInput } from "../../src/gateway/index.js";
 import { getPilotConfigFilePath } from "../../src/pilot/index.js";
 import {
   createAgentProjectSessionStorage,
@@ -258,6 +259,78 @@ test("createLocalGateway only reloads cached sessions for the project whose plug
   }
 });
 
+test("createLocalGateway cron tasks inherit and execute with the originating project runtime", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-local-gateway-cron-project-"));
+  let now = new Date("2026-05-09T12:00:00.000Z");
+  try {
+    const pilotHome = path.join(root, "home");
+    const defaultProject = path.join(root, "default-project");
+    const otherProject = path.join(root, "other-project");
+    const submitInputs: GatewaySubmitTurnInput[] = [];
+    let ids = ["task-other", "run-other"].values();
+
+    await writeJson(getPilotConfigFilePath(pilotHome), makeGlobalConfig("anthropic-main/claude-sonnet-4-5"));
+
+    const cron = createCronRuntime({
+      config: defaultCronConfig(),
+      pilotHome,
+      projectKey: defaultProject,
+      now: () => now,
+      uuid: () => ids.next().value ?? `generated-${Date.now()}`,
+    });
+    const { gateway, dispose } = createLocalGateway({
+      projectRoot: defaultProject,
+      pilotHome,
+      env: {
+        ANTHROPIC_API_KEY: "anthropic-key",
+        OPENAI_API_KEY: "openai-key",
+      },
+      extraTools: cron.getTools(),
+      cron,
+      __testModelFactory: () => createCronProjectBindingModel(),
+    });
+    cron.bindGateway(gateway);
+    const sessionKey = "cli:s_other_project";
+    try {
+      const originalSubmitTurn = gateway.submitTurn.bind(gateway);
+      gateway.submitTurn = (input) => {
+        submitInputs.push({ ...input });
+        return originalSubmitTurn(input);
+      };
+
+      const events = await collectGatewayEvents(gateway.submitTurn({
+        sessionKey,
+        channelKey: "cli",
+        projectKey: otherProject,
+        message: "schedule cron in this project",
+      }));
+      assert.ok(events.some((event) => event.type === "turn_completed" && event.finishReason === "completed"));
+
+      const listed = await gateway.cronList({});
+      assert.equal(listed.tasks.length, 1);
+      assert.equal(listed.tasks[0]?.projectKey, otherProject);
+      assert.equal(listed.tasks[0]?.sessionKey, sessionKey);
+
+      now = new Date(listed.tasks[0]!.nextRunAt!);
+      await cron.runTickOnce();
+      await waitForCondition(
+        async () => Boolean((await gateway.cronList({ includeHistory: true })).recentRuns?.length),
+        "cron fire completion",
+      );
+
+      const cronFireInput = submitInputs.find((input) => input.message === "cron-from-other-project");
+      assert.equal(cronFireInput?.sessionKey, sessionKey);
+      assert.equal(cronFireInput?.projectKey, otherProject);
+    } finally {
+      await gateway.closeSession({ sessionKey }).catch(() => undefined);
+      await cron.stop();
+      dispose();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 async function writeSession(options: {
   projectRoot: string;
   pilotHome: string;
@@ -328,6 +401,55 @@ function createRecordingModel(
   };
 }
 
+function createCronProjectBindingModel(): ModelRuntime {
+  return {
+    async *stream(request: CanonicalModelRequest): AsyncIterable<CanonicalModelEvent> {
+      const userText = messageText(request.messages[request.messages.length - 1] ?? { role: "user", content: [] });
+      const hasCronToolResult = request.messages.some((message) =>
+        message.content.some((block) => block.type === "tool_result" && block.toolCallId === "cron-create"),
+      );
+
+      yield { type: "request_started", provider: request.provider, model: request.model };
+      yield { type: "message_start", role: "assistant" };
+
+      if (userText === "schedule cron in this project" && !hasCronToolResult) {
+        yield {
+          type: "tool_call_end",
+          toolCall: {
+            id: "cron-create",
+            name: "cron_create",
+            input: {
+              message: "cron-from-other-project",
+              schedule: { type: "once", runAt: "2026-05-09T12:01:00.000Z" },
+            },
+          },
+        };
+        yield { type: "message_end", finishReason: "tool_call" };
+        return;
+      }
+
+      yield { type: "text_delta", text: "ok" };
+      yield { type: "message_end", finishReason: "stop" };
+    },
+    async complete(): Promise<CanonicalModelResponse> {
+      throw new Error("complete() not used in create-local-gateway cron tests");
+    },
+    getCapabilities(): ModelCapabilities {
+      return {
+        supportsToolUse: true,
+        supportsStreaming: true,
+        supportsParallelToolCalls: true,
+        supportsThinking: false,
+        supportsJsonSchema: true,
+        supportsSystemPrompt: true,
+        supportsPromptCache: false,
+        maxContextTokens: 200_000,
+        maxOutputTokens: 8_192,
+      };
+    },
+  };
+}
+
 function messageText(message: CanonicalModelRequest["messages"][number]): string {
   return message.content
     .filter((block) => block.type === "text")
@@ -337,4 +459,18 @@ function messageText(message: CanonicalModelRequest["messages"][number]): string
 
 async function waitForWatchDebounce(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 750));
+}
+
+async function waitForCondition(
+  condition: () => boolean | Promise<boolean>,
+  description: string,
+  timeoutMs = 2_000,
+): Promise<void> {
+  const startedAt = Date.now();
+  while (!(await condition())) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error(`Timed out waiting for ${description}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
 }
