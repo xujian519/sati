@@ -32,7 +32,7 @@ export class MicroCompactionEngine {
   constructor(private readonly options: { keepLatest?: number; trimToBytes?: number } = {}) {}
 
   apply(input: MicroCompactionInput): MicroCompactionResult {
-    const trimToBytes = input.trimToBytes ?? this.options.trimToBytes ?? 512;
+    const trimToBytes = input.trimToBytes ?? this.options.trimToBytes ?? 1536;
     const keepLatest = this.options.keepLatest ?? 1;
     const toolResultIndices = this.collectToolResultMessageIndices(input.messages);
     if (toolResultIndices.length <= keepLatest) {

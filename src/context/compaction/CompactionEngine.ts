@@ -41,7 +41,9 @@ export type CompactionEngineOptions = {
 };
 
 export const COMPACT_SYSTEM_PROMPT_DEFAULT =
-  "You are a helpful AI assistant tasked with summarizing conversations.";
+  "You are a conversation summarizer for a coding agent. Your summary will replace " +
+  "the early conversation history, so it MUST preserve all information the agent " +
+  "needs to continue working without repeating past steps.";
 export const COMPACT_MAX_OUTPUT_TOKENS = 20_000;
 
 export type CompactionResult = {
@@ -76,7 +78,7 @@ export type CompactionInput = {
   turnId?: string;
 };
 
-const DEFAULT_KEEP_TAIL_RATIO = 0.25;
+const DEFAULT_KEEP_TAIL_RATIO = 0.35;
 
 /**
  * Owned by `AgentLoop`, not by `ContextRuntime`. Performs the second model
@@ -202,8 +204,15 @@ export class CompactionEngine {
         {
           type: "text",
           text: userInstruction
-            ? `Summarize the conversation so far concisely. ${userInstruction}`
-            : "Summarize the conversation so far concisely.",
+            ? `Summarize the conversation so far. ${userInstruction}`
+            : "Summarize the conversation so far. You MUST include:\n" +
+              "1. The original task/goal the user requested\n" +
+              "2. A checklist of completed steps vs remaining steps\n" +
+              "3. Key file paths, URLs, data values, and intermediate results discovered\n" +
+              "4. Any errors encountered and how they were resolved\n" +
+              "5. The current state and what the agent should do next\n" +
+              "Be concise but preserve ALL actionable details. Do NOT omit search results, " +
+              "computed values, or file contents that the agent will need.",
         },
       ],
     };

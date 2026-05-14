@@ -44,7 +44,7 @@ test("CompactionEngine.run summarizes via stream and emits boundary marker", asy
   assert.match((result.boundaryMarker.content[0] as { text: string }).text, /<compact-boundary/);
   assert.ok(result.preTokens > 0);
   assert.equal(model.requests.length, 1);
-  assert.equal(model.requests[0]?.systemPrompt?.includes("summarizing conversations"), true);
+  assert.equal(model.requests[0]?.systemPrompt?.includes("conversation summarizer"), true);
 });
 
 test("buildPostCompactMessages preserves legacy ordering", () => {
