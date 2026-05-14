@@ -11,7 +11,7 @@ export type AnthropicRequestBody = {
   model: string;
   max_tokens: number;
   messages: AnthropicMessage[];
-  system?: string;
+  system?: string | unknown[];
   tools?: AnthropicTool[];
   tool_choice?: Record<string, unknown>;
   temperature?: number;
@@ -72,7 +72,11 @@ export function buildAnthropicRequest(
     messages: request.messages.map((message, index) =>
       toAnthropicMessage(message, cacheBreakpoints?.has(index) ?? false),
     ),
-    system: request.systemPrompt,
+    system: request.systemPrompt
+      ? cacheBreakpoints
+        ? [{ type: "text", text: request.systemPrompt, cache_control: { type: "ephemeral" } }]
+        : request.systemPrompt
+      : undefined,
     tools: tools.length > 0 ? tools : undefined,
     tool_choice: toolChoice,
     temperature: request.temperature,

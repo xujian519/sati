@@ -205,6 +205,10 @@ export class DefaultContextRuntime implements ContextRuntime {
 
     const joined = parts.join("\n\n");
 
+    const microcompactResult = this.microcompactEngine?.apply({
+      messages: projection.messages,
+    });
+
     return {
       messages: projection.messages,
       systemPrompt: joined,
@@ -216,6 +220,7 @@ export class DefaultContextRuntime implements ContextRuntime {
         droppedCount: projection.droppedCount,
         toolCount: input.tools.length,
       },
+      cacheBreakpoints: microcompactResult?.cacheBreakpoints,
     };
   }
 
