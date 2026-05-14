@@ -30,4 +30,6 @@ export type AgentRuntimeConfig = {
    * but no nested forks). Increase only when intentional.
    */
   maxSubagentDepth?: number;
+  /** Enable automatic JSON self-correction retry on invalid_tool_arguments. Default false. */
+  jsonSelfCorrect?: boolean;
 };

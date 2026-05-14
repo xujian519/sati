@@ -201,6 +201,7 @@ export class AgentLoop {
         }
 
         if (
+          this.config.jsonSelfCorrect &&
           assembled.error.code === "invalid_tool_arguments" &&
           jsonSelfCorrectCount < MAX_JSON_SELF_CORRECT_RETRIES
         ) {
@@ -213,6 +214,7 @@ export class AgentLoop {
                 + "Please retry with valid JSON. Common issues: missing quotes around keys/values, "
                 + "trailing commas, unescaped special characters in strings.",
             }],
+            metadata: { synthetic: true, purpose: "json_self_correct" },
           });
           yield {
             type: "turn_continued",

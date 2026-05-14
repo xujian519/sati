@@ -55,7 +55,7 @@ test("AgentLoop completes a no-tool turn", async () => {
   assert.equal(result.result.usage.totalTokens, 3);
   assert.deepEqual(
     values.map((event) => event.type),
-    ["model_request_started", "model_event", "model_event", "model_event", "model_event", "assistant_message", "turn_completed"],
+    ["model_request_started", "model_event", "model_event", "model_event", "model_event", "assistant_message", "stop_requested", "turn_completed"],
   );
 });
 
@@ -210,6 +210,81 @@ test("AgentLoop captures structured output and can stop after the tool result", 
 
   assert.deepEqual(result.result.structuredOutput, { ok: true });
   assert.equal(result.result.type, "success");
+});
+
+test("AgentLoop does not self-correct invalid_tool_arguments when jsonSelfCorrect is false", async () => {
+  const { loop, model } = createAgentLoopFixture({
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        {
+          type: "error",
+          error: {
+            provider: "test",
+            protocol: "openai",
+            code: "invalid_tool_arguments",
+            message: "Bad JSON",
+            retryable: false,
+          },
+        },
+      ],
+    ],
+    config: { jsonSelfCorrect: false },
+  });
+
+  const { result } = await collectAsyncGenerator(
+    loop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "user", content: [{ type: "text", text: "use a tool" }] }],
+    }),
+  );
+
+  assert.equal(model.requests.length, 1, "should NOT retry with a self-correct message");
+  assert.equal(result.result.type, "error");
+});
+
+test("AgentLoop self-corrects invalid_tool_arguments when jsonSelfCorrect is true", async () => {
+  const { loop, model } = createAgentLoopFixture({
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        {
+          type: "error",
+          error: {
+            provider: "test",
+            protocol: "openai",
+            code: "invalid_tool_arguments",
+            message: "Bad JSON",
+            retryable: false,
+          },
+        },
+      ],
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "text_delta", text: "Fixed." },
+        { type: "usage", usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 } },
+        { type: "message_end", finishReason: "stop" },
+      ],
+    ],
+    config: { jsonSelfCorrect: true },
+  });
+
+  const { result } = await collectAsyncGenerator(
+    loop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "user", content: [{ type: "text", text: "use a tool" }] }],
+    }),
+  );
+
+  assert.equal(model.requests.length, 2, "should retry after injecting self-correct message");
+  assert.equal(result.result.type, "success");
+  const lastReqMessages = model.requests[1].messages;
+  const syntheticMsg = lastReqMessages.find(
+    (m: any) => m.metadata?.synthetic === true,
+  );
+  assert.ok(syntheticMsg, "should have a synthetic self-correct message in the retry request");
 });
 
 test("AgentLoop consumes requested plan mode changes from plan tools", async () => {

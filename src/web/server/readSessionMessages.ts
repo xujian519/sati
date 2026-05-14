@@ -50,15 +50,17 @@ export async function readWebSessionMessages(
   const { entries } = await readTranscript(transcriptPath);
   const replay = replayTranscriptEntries(entries);
   const entryTimestamps = extractMessageTimestamps(entries);
-  const allMessages = replay.messages.flatMap((message, index) =>
-    flattenCanonicalMessage(message, {
-      index,
-      sessionKey: input.sessionKey,
-      projectKey: input.projectKey,
-      now: options.now,
-      entryTimestamp: entryTimestamps[index],
-    }),
-  );
+  const allMessages = replay.messages
+    .filter((message) => !message.metadata?.synthetic)
+    .flatMap((message, index) =>
+      flattenCanonicalMessage(message, {
+        index,
+        sessionKey: input.sessionKey,
+        projectKey: input.projectKey,
+        now: options.now,
+        entryTimestamp: entryTimestamps[index],
+      }),
+    );
 
   const offset = parseCursor(input.cursor);
   const limit = input.limit ?? allMessages.length;
