@@ -311,9 +311,6 @@ export function useChatRealtimeHandlers({
       }
 
       case 'complete': {
-        // #region agent log
-        fetch('http://127.0.0.1:7450/ingest/6d23a73d-7d80-486b-b66d-c1253f9689d3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ad403'},body:JSON.stringify({sessionId:'5ad403',location:'useChatRealtimeHandlers.ts:complete',message:'complete event clears all pending permissions',data:{sid,currentSessionId,selectedSessionId:selectedSession?.id},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
         // Flush any remaining thinking state
         if (thinkingTimerRef.current) {
           clearTimeout(thinkingTimerRef.current);
@@ -390,9 +387,6 @@ export function useChatRealtimeHandlers({
           permSid === currentSessionId ||
           permSid === selectedSession?.id ||
           permSid === activeViewSessionId;
-        // #region agent log
-        fetch('http://127.0.0.1:7450/ingest/6d23a73d-7d80-486b-b66d-c1253f9689d3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ad403'},body:JSON.stringify({sessionId:'5ad403',location:'useChatRealtimeHandlers.ts:permission_request',message:'permission_request received',data:{msgSessionId:msg.sessionId,permSid,activeViewSessionId,currentSessionId,selectedSessionId:selectedSession?.id,requestId:msg.requestId,toolName:msg.toolName,isForCurrentSession},timestamp:Date.now(),hypothesisId:'A,B,E'})}).catch(()=>{});
-        // #endregion
         if (!isForCurrentSession) break;
         setPendingPermissionRequests((prev) => {
           if (prev.some((r: PendingPermissionRequest) => r.requestId === msg.requestId)) return prev;
