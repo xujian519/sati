@@ -137,8 +137,9 @@ export class PromptAssembler {
   private buildSystemContext(input: PromptAssemblerInput): string[] {
     const sections: string[] = [];
     const now = (input.now ?? (() => new Date()))();
+    const dayOnly = now.toISOString().slice(0, 10);
 
-    const envLines = [`<environment>`, `now: ${now.toISOString()}`, `</environment>`];
+    const envLines = [`<environment>`, `now: ${dayOnly}`, `</environment>`];
     sections.push(envLines.join("\n"));
 
     const commands = this.extension.listCommands();

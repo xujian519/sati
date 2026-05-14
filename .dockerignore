@@ -1,0 +1,6 @@
+wcb-output/
+test-results/
+node_modules/
+.git/
+Auto-Research-Skills/
+*.png

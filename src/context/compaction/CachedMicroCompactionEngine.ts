@@ -34,10 +34,6 @@ export const COMPACTABLE_TOOL_NAMES: ReadonlySet<string> = new Set([
 
 export type CachedMicroCompactionInput = {
   messages: CanonicalMessage[];
-  /** Provider protocol; engine no-ops for non-Anthropic providers (M2). */
-  protocol: "anthropic" | "openai";
-  /** True when running inside a forked subagent — engine no-ops (M3). */
-  isSubagent?: boolean;
   /**
    * Max number of tool_results to keep "live" (i.e. unmarked) per turn. Older
    * results above this threshold are eligible for cache breakpoint marking.
@@ -100,8 +96,6 @@ export class CachedMicroCompactionEngine {
     };
 
     if (!this.enabled) return empty;
-    if (input.protocol !== "anthropic") return empty; // M2
-    if (input.isSubagent) return empty; // M3
 
     const liveThreshold = input.liveThreshold ?? this.liveThreshold;
 

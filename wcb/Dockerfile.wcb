@@ -16,6 +16,16 @@ RUN rm -rf /root/miniconda3/envs/eval && \
     /root/miniconda3/envs/eval/bin/pip install --no-cache-dir \
       numpy==1.26.4 opencv-python-headless==4.9.0.80
 
+# Pre-install pip packages needed by 0510 task warmups and grade functions
+# to avoid repeated runtime pip installs (saves 2-5 min per task).
+RUN pip install --no-cache-dir \
+      openai pandas matplotlib weasyprint pymupdf beautifulsoup4 \
+      requests arxiv Pillow playwright sentence-transformers
+
+# ffmpeg is needed by task_1 (podcast) and task_7 (video dubbing)
+RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install Playwright system deps (fonts, shared libs) and the
 # chrome-for-testing binary that @playwright/mcp@0.0.75 expects at runtime.
 RUN npx playwright install-deps chromium

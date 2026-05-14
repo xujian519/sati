@@ -34,6 +34,8 @@ export type ModelContext = {
   diagnostics: ContextDiagnostic[];
   boundaries: ContextBoundary[];
   metadata?: Record<string, unknown>;
+  /** A4: message indices for `cache_control` breakpoints (Anthropic only). */
+  cacheBreakpoints?: number[];
 };
 
 export type ContextPrepareInput = {

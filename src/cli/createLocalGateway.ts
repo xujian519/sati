@@ -628,7 +628,7 @@ class ProjectRuntimeRegistry {
         eventEmitter: eventBuf.emitter,
       });
       const autoCompactionPolicy = new AutoCompactionPolicy({ tokenBudget });
-      const microcompactEngine = new CachedMicroCompactionEngine({ enabled: false });
+      const microcompactEngine = new CachedMicroCompactionEngine({ enabled: true });
       const microCompaction = new MicroCompactionEngine();
       const snipEngine = new SnipEngine();
       const overflowRecovery = new ContextOverflowRecovery();

@@ -567,6 +567,7 @@ export class AgentLoop {
       thinking: this.config.thinking,
       stream: true,
       metadata: this.config.metadata,
+      cacheBreakpoints: prepared.cacheBreakpoints,
     };
   }
 
