@@ -14,6 +14,7 @@ import {
   Plus,
   RefreshCw,
   Save,
+  Settings2,
   Star,
   Trash2,
   XCircle,
@@ -417,8 +418,64 @@ function ProviderCard({
   const enabledModels = Object.keys(provider.models ?? {});
   const [newModelId, setNewModelId] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // Auto-open the overrides section on first mount when at least one model
+  // already has a capability override on disk — otherwise users wouldn't
+  // see what's already set. After mount the toggle is fully user-driven.
+  const [showModelOverrides, setShowModelOverrides] = useState(() => {
+    const models = provider.models ?? {};
+    return Object.values(models).some((def) => {
+      if (!def || typeof def !== 'object') return false;
+      const caps = (def as Record<string, unknown>).capabilities;
+      if (!caps || typeof caps !== 'object') return false;
+      const v = (caps as Record<string, unknown>).maxOutputTokens;
+      return typeof v === 'number' && Number.isFinite(v) && v > 0;
+    });
+  });
 
   const update = (patch: Partial<V2Provider>) => onChange({ ...provider, ...patch });
+
+  // Read `models.<modelId>.capabilities.maxOutputTokens` if set as a positive
+  // number. Anything else (missing, null, non-numeric) reads as undefined so
+  // the input shows blank and the model falls back to catalog/protocol default.
+  const getModelMaxOutputTokens = (modelId: string): number | undefined => {
+    const def = provider.models?.[modelId];
+    if (!def || typeof def !== 'object') return undefined;
+    const caps = (def as Record<string, unknown>).capabilities;
+    if (!caps || typeof caps !== 'object') return undefined;
+    const v = (caps as Record<string, unknown>).maxOutputTokens;
+    return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined;
+  };
+
+  // Patch `models.<modelId>.capabilities.maxOutputTokens` immutably. Passing
+  // undefined removes the key (and removes the empty `capabilities` block) so
+  // the YAML stays minimal — matches the round-trip behaviour the rest of
+  // this form already uses.
+  const setModelMaxOutputTokens = (modelId: string, value: number | undefined) => {
+    const models = { ...(provider.models ?? {}) };
+    const existing = models[modelId];
+    const def: Record<string, unknown> = existing && typeof existing === 'object'
+      ? { ...(existing as Record<string, unknown>) }
+      : {};
+    const capabilities: Record<string, unknown> = def.capabilities && typeof def.capabilities === 'object'
+      ? { ...(def.capabilities as Record<string, unknown>) }
+      : {};
+    if (value === undefined) {
+      delete capabilities.maxOutputTokens;
+    } else {
+      capabilities.maxOutputTokens = value;
+    }
+    if (Object.keys(capabilities).length > 0) {
+      def.capabilities = capabilities;
+    } else {
+      delete def.capabilities;
+    }
+    models[modelId] = def as Record<string, unknown>;
+    update({ models });
+  };
+
+  // Used purely to badge the collapsed toggle when overrides exist but the
+  // user has hidden the panel — no UX surprise that values are silently set.
+  const hasAnyOverride = enabledModels.some((mid) => getModelMaxOutputTokens(mid) !== undefined);
 
   const addModel = (mid: string) => {
     const id = mid.trim();
@@ -613,6 +670,97 @@ function ProviderCard({
           </Button>
         </div>
       </div>
+
+      {/* Per-model overrides — currently just maxOutputTokens. Sits beneath
+          the chip grid so the model picker stays visually clean while
+          per-model knobs are still one click away. Maps directly to
+          `models.<modelId>.capabilities.maxOutputTokens` in the yaml. */}
+      {enabledModels.length > 0 && (
+        <div className="border-t border-border/60 pt-2">
+          <button
+            type="button"
+            onClick={() => setShowModelOverrides(!showModelOverrides)}
+            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+          >
+            <Settings2 className="h-3 w-3" />
+            {showModelOverrides ? 'Hide' : 'Show'} per-model overrides
+            {hasAnyOverride && !showModelOverrides && (
+              <span className="ml-1 rounded-full border border-foreground/30 bg-foreground/10 px-1.5 py-0.5 text-[9px] font-medium text-foreground">
+                active
+              </span>
+            )}
+          </button>
+          {showModelOverrides && (
+            <div className="mt-2 space-y-1.5">
+              <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-2 gap-y-1 px-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                <span>Model</span>
+                <span className="inline-flex items-center gap-1">
+                  <Gauge className="h-2.5 w-2.5" />
+                  Max output tokens
+                </span>
+                <span className="sr-only">Reset</span>
+              </div>
+              {enabledModels.map((mid) => {
+                const ref = `${providerId}/${mid}`;
+                const isActive = ref === activeModelRef;
+                const current = getModelMaxOutputTokens(mid);
+                const catalogModel = catalogEntry?.models.find((m) => m.id === mid);
+                const label = catalogModel?.displayName || mid;
+                return (
+                  <div key={mid} className={cn(
+                    'grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-md border px-2 py-1.5',
+                    current !== undefined
+                      ? 'border-foreground/30 bg-foreground/5'
+                      : 'border-border bg-background/40',
+                  )}>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-[11px] font-medium text-foreground">{label}</span>
+                        {isActive && (
+                          <Star className="h-2.5 w-2.5 fill-current text-foreground" strokeWidth={0} />
+                        )}
+                      </div>
+                      {label !== mid && (
+                        <code className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">{mid}</code>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      min={1}
+                      value={current ?? ''}
+                      placeholder="default"
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === '') return setModelMaxOutputTokens(mid, undefined);
+                        const n = Number(v);
+                        if (Number.isFinite(n) && n > 0) setModelMaxOutputTokens(mid, Math.floor(n));
+                      }}
+                      className="w-24 rounded-md border border-border bg-background px-2 py-1 text-right text-[11px] text-foreground outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setModelMaxOutputTokens(mid, undefined)}
+                      disabled={current === undefined}
+                      className={cn(
+                        'rounded p-1 text-muted-foreground transition-colors',
+                        current === undefined
+                          ? 'opacity-30'
+                          : 'hover:bg-muted hover:text-foreground',
+                      )}
+                      title={current === undefined ? 'Already using default' : 'Reset to catalog/protocol default'}
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
+              <p className="mt-1 px-1 text-[10px] leading-relaxed text-muted-foreground">
+                Cap on tokens the model may generate per turn (sent as <code className="font-mono">max_tokens</code>). Leave blank to fall back to the catalog or protocol default (typically 8192 for openai). Increase for long-form / thinking models — too small a value cuts the response off mid-stream.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Advanced — protocol + URL (filled from catalog by default) */}
       <div className="border-t border-border/60 pt-2">
