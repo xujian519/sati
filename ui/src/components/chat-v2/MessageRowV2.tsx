@@ -114,7 +114,9 @@ function MessageRowV2({
           {message.isStreaming && !formattedContent ? (
             <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
           ) : formattedContent ? (
-            <Markdown className="min-w-0 break-words [overflow-wrap:anywhere]">{formattedContent}</Markdown>
+            <div className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+              {formattedContent}
+            </div>
           ) : null}
         </div>
       </div>
