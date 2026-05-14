@@ -10,6 +10,7 @@
     "pilotdeck": "./dist/src/cli/pilotdeck.js"
   },
   "scripts": {
+    "postinstall": "npx @playwright/mcp install-browser chrome-for-testing 2>/dev/null || true",
     "build": "rm -rf dist && tsc -p tsconfig.json; cp -a src/extension/plugins/builtin/. dist/src/extension/plugins/builtin/",
     "server": "tsx src/cli/pilotdeck.ts server",
     "server:built": "node dist/src/cli/pilotdeck.js server",

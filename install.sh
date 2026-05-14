@@ -116,6 +116,13 @@ npm prune --omit=dev --no-audit --no-fund --loglevel=error
 ok "UI dev dependencies cleaned"
 echo ""
 
+echo "Installing Playwright browser for browser-use plugin..."
+cd "$INSTALL_DIR"
+npx @playwright/mcp install-browser chrome-for-testing 2>/dev/null && \
+  ok "Chrome for Testing installed" || \
+  warn "Chrome for Testing install failed (browser-use plugin may not work)"
+echo ""
+
 echo "Setting up CLI command..."
 CLI_TARGET="$INSTALL_DIR/ui/server/cli.js"
 chmod +x "$CLI_TARGET"
