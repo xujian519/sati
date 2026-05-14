@@ -163,6 +163,20 @@ export class AgentLoop {
           }
         }
       } catch (error) {
+        if (input.abortSignal?.aborted) {
+          const result = this.createTurnResult(input, {
+            type: "aborted",
+            stopReason: "aborted_streaming",
+            usage,
+            permissionDenials,
+            turns: turnCount,
+            startedAt,
+            finalMessage,
+          });
+          await captureTurn(result.type === "error");
+          yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+          return { result, messages };
+        }
         const stopFailureMsg = error instanceof Error ? error.message : String(error);
         await this.dispatchLifecycle(input, "StopFailure", { error: stopFailureMsg });
         yield { type: "stop_failure", sessionId: input.sessionId, turnId: input.turnId, error: stopFailureMsg };
@@ -177,6 +191,21 @@ export class AgentLoop {
           errors: [agentError("agent_model_error", stopFailureMsg)],
         });
         yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
+        await captureTurn(result.type === "error");
+        yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+        return { result, messages };
+      }
+
+      if (input.abortSignal?.aborted) {
+        const result = this.createTurnResult(input, {
+          type: "aborted",
+          stopReason: "aborted_streaming",
+          usage,
+          permissionDenials,
+          turns: turnCount,
+          startedAt,
+          finalMessage,
+        });
         await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
@@ -330,6 +359,20 @@ export class AgentLoop {
       }
 
       yield { type: "tool_calls_detected", sessionId: input.sessionId, turnId: input.turnId, calls: toolCalls };
+      if (input.abortSignal?.aborted) {
+        const result = this.createTurnResult(input, {
+          type: "aborted",
+          stopReason: "aborted_streaming",
+          usage,
+          permissionDenials,
+          turns: turnCount,
+          startedAt,
+          finalMessage,
+        });
+        await captureTurn(result.type === "error");
+        yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+        return { result, messages };
+      }
       let results: PilotDeckToolResult[];
       try {
         results = await this.dependencies.tools.scheduler.executeAll(
@@ -340,6 +383,20 @@ export class AgentLoop {
         results = toolCalls.map((call) =>
           createMissingToolResult(call, this.now, error instanceof Error ? error.message : String(error)),
         );
+      }
+      if (input.abortSignal?.aborted) {
+        const result = this.createTurnResult(input, {
+          type: "aborted",
+          stopReason: "aborted_streaming",
+          usage,
+          permissionDenials,
+          turns: turnCount,
+          startedAt,
+          finalMessage,
+        });
+        await captureTurn(result.type === "error");
+        yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+        return { result, messages };
       }
       yield* this.drainEventBuffer();
 

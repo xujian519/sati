@@ -9,8 +9,8 @@ import { ModelRequestError } from "./protocol/errors.js";
 import { complete, streamModel, type ModelRuntimeOptions } from "./streaming/streamModel.js";
 
 export interface ModelRuntime {
-  stream(request: CanonicalModelRequest): AsyncIterable<CanonicalModelEvent>;
-  complete(request: CanonicalModelRequest): Promise<CanonicalModelResponse>;
+  stream(request: CanonicalModelRequest, options?: ModelRuntimeOptions): AsyncIterable<CanonicalModelEvent>;
+  complete(request: CanonicalModelRequest, options?: ModelRuntimeOptions): Promise<CanonicalModelResponse>;
   getCapabilities(providerId: string, modelId: string): ModelCapabilities;
 }
 
@@ -36,8 +36,8 @@ export function createModelRuntime(
   };
 
   return {
-    stream: (request) => streamModel(request, config, options),
-    complete: (request) => complete(request, config, options),
+    stream: (request, callOptions) => streamModel(request, config, { ...options, ...callOptions }),
+    complete: (request, callOptions) => complete(request, config, { ...options, ...callOptions }),
     getCapabilities: (providerId, modelId) => getModel(providerId, modelId).capabilities,
   };
 }

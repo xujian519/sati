@@ -62,6 +62,7 @@ export async function* streamModel(
   const checkpoint = new StreamingCheckpointManager();
 
   for (let attempt = 0; attempt <= MAX_STREAM_RETRIES; attempt++) {
+    throwIfAborted(options.signal);
     const body = buildModelRequest(currentRequest, config);
     let response: Response;
     try {
@@ -95,7 +96,7 @@ export async function* streamModel(
     let streamCompleted = false;
 
     try {
-      for await (const rawEvent of readServerSentEvents(response.body)) {
+      for await (const rawEvent of readServerSentEvents(response.body, options.signal)) {
         for (const event of normalizeStreamEvent(provider.protocol, rawEvent, state)) {
           checkpoint.onEvent(event);
           yield event;
@@ -110,12 +111,12 @@ export async function* streamModel(
       ) {
         currentRequest = buildContinuationRequest(currentRequest, checkpoint.get().partialText);
         checkpoint.reset();
-        await delay(1000 * (attempt + 1));
+        await delay(1000 * (attempt + 1), options.signal);
         continue;
       }
 
       if (isRetryableStreamError(error) && attempt < MAX_STREAM_RETRIES) {
-        await delay(1000 * (attempt + 1));
+        await delay(1000 * (attempt + 1), options.signal);
         continue;
       }
 
@@ -129,6 +130,9 @@ export async function* streamModel(
 }
 
 function isRetryableStreamError(error: unknown): boolean {
+  if (isAbortError(error)) {
+    return false;
+  }
   if (error instanceof ModelProviderError) {
     return false;
   }
@@ -168,8 +172,22 @@ function buildContinuationRequest(
   };
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  throwIfAborted(signal);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(createAbortError(signal.reason));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 async function sendProviderRequest(
@@ -193,6 +211,9 @@ async function sendProviderRequest(
       signal: controller.signal,
     });
   } catch (error) {
+    if (signal?.aborted) {
+      throw createAbortError(signal.reason);
+    }
     throw new ModelProviderError(normalizeModelError(provider.id, provider.protocol, error));
   } finally {
     if (timeout) {
@@ -246,36 +267,70 @@ async function safeReadJson(response: Response): Promise<unknown> {
   }
 }
 
-async function* readServerSentEvents(body: ReadableStream<Uint8Array>): AsyncIterable<unknown> {
+async function* readServerSentEvents(
+  body: ReadableStream<Uint8Array>,
+  signal?: AbortSignal,
+): AsyncIterable<unknown> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  const cancelReader = () => {
+    reader.cancel(signal?.reason).catch(() => undefined);
+  };
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) {
-      buffer += decoder.decode();
-      break;
-    }
+  if (signal?.aborted) {
+    cancelReader();
+    throw createAbortError(signal.reason);
+  }
+  signal?.addEventListener("abort", cancelReader, { once: true });
 
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split(/\n\n/);
-    buffer = chunks.pop() ?? "";
+  try {
+    while (true) {
+      throwIfAborted(signal);
+      const { value, done } = await reader.read();
+      throwIfAborted(signal);
+      if (done) {
+        buffer += decoder.decode();
+        break;
+      }
 
-    for (const chunk of chunks) {
-      const dataLines = chunk
-        .split(/\n/)
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice("data:".length).trim());
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split(/\n\n/);
+      buffer = chunks.pop() ?? "";
 
-      for (const data of dataLines) {
-        if (!data || data === "[DONE]") {
-          continue;
+      for (const chunk of chunks) {
+        const dataLines = chunk
+          .split(/\n/)
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice("data:".length).trim());
+
+        for (const data of dataLines) {
+          if (!data || data === "[DONE]") {
+            continue;
+          }
+          yield JSON.parse(data);
         }
-        yield JSON.parse(data);
       }
     }
+  } finally {
+    signal?.removeEventListener("abort", cancelReader);
   }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw createAbortError(signal.reason);
+  }
+}
+
+function createAbortError(reason?: unknown): Error {
+  if (reason instanceof Error) return reason;
+  const message = typeof reason === "string" && reason ? reason : "Operation aborted.";
+  return new DOMException(message, "AbortError");
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && (error.name === "AbortError" || error.message.toLowerCase().includes("aborted"));
 }
 
 function joinUrl(base: string, path: string): string {

@@ -20,7 +20,7 @@ import type {
   CanonicalContentBlock,
   CanonicalMessage,
 } from "../../model/index.js";
-import { listProjectSessions, readTranscript, replayTranscriptEntries, findLastCompactBoundaryIndex, type SessionInfo } from "../../session/index.js";
+import { listProjectSessions, readTranscript, findLastCompactBoundaryIndex, type SessionInfo } from "../../session/index.js";
 import type { AgentTranscriptEntry } from "../../session/transcript/TranscriptEntry.js";
 import { resolve } from "node:path";
 import { getPilotProjectChatDir } from "../../pilot/index.js";
@@ -52,9 +52,10 @@ export async function readWebSessionMessages(
     `${sanitizeSessionIdForPath(input.sessionKey)}.jsonl`,
   );
   const { entries } = await readTranscript(transcriptPath);
-  const replay = replayTranscriptEntries(entries);
-  const entryTimestamps = extractMessageTimestamps(entries);
-  const allMessages = replay.messages
+  const webReplay = extractWebVisibleMessages(entries);
+  const entryTimestamps = webReplay.timestamps;
+  const incompleteTurnIds = extractIncompleteTurnIds(entries);
+  const allMessages = webReplay.messages
     .filter((message) => !message.metadata?.synthetic)
     .flatMap((message, index) =>
       flattenCanonicalMessage(message, {
@@ -65,6 +66,9 @@ export async function readWebSessionMessages(
         entryTimestamp: entryTimestamps[index],
       }),
     );
+  if (incompleteTurnIds.length > 0) {
+    allMessages.push(createIncompleteTurnStatusMessage(input, incompleteTurnIds, options));
+  }
 
   const offset = parseCursor(input.cursor);
   const limit = input.limit ?? allMessages.length;
@@ -92,6 +96,44 @@ export async function readWebSessionMessages(
       createdAt: sessionInfo?.createdAt,
     },
   };
+}
+
+function createIncompleteTurnStatusMessage(
+  input: WebReadSessionMessagesInput,
+  turnIds: string[],
+  options: ReadWebSessionMessagesOptions,
+): WebMessage {
+  const stamp = (options.now ?? (() => new Date()))().toISOString();
+  return {
+    id: `${input.sessionKey}-incomplete-turn-status-${turnIds.join("-")}`,
+    sessionKey: input.sessionKey,
+    projectKey: input.projectKey,
+    createdAt: stamp,
+    provider: "pilotdeck",
+    role: "system",
+    kind: "status",
+    text: "上次运行未正常结束或已中断，已恢复当时产生的工具调用和输出。",
+    payload: { incompleteTurnIds: turnIds },
+    source: "history",
+  };
+}
+
+function extractIncompleteTurnIds(entries: AgentTranscriptEntry[]): string[] {
+  const completedTurnIds = new Set(
+    entries.filter((entry) => entry.type === "turn_result").map((entry) => entry.turnId),
+  );
+  const incompleteTurnIds = new Set<string>();
+  for (const entry of entries) {
+    if (
+      (entry.type === "assistant_message" ||
+        entry.type === "tool_result_message" ||
+        entry.type === "durable_message") &&
+      !completedTurnIds.has(entry.turnId)
+    ) {
+      incompleteTurnIds.add(entry.turnId);
+    }
+  }
+  return [...incompleteTurnIds];
 }
 
 async function locateSession(
@@ -272,15 +314,18 @@ function flushBlock(
 }
 
 /**
- * Mirror `replayTranscriptEntries` message-production order to extract
- * the original `createdAt` timestamp for each CanonicalMessage. The
- * returned array is parallel to `replay.messages`.
+ * Web history is allowed to show persisted messages from incomplete turns so
+ * users do not lose tool calls they already saw live. Keep this projection
+ * local to the web reader: the core transcript replay still skips incomplete
+ * durable messages so agent resume never feeds half-finished tool histories
+ * back to the model.
  */
-function extractMessageTimestamps(entries: AgentTranscriptEntry[]): string[] {
+function extractWebVisibleMessages(entries: AgentTranscriptEntry[]): {
+  messages: CanonicalMessage[];
+  timestamps: string[];
+} {
   const lastBoundaryIndex = findLastCompactBoundaryIndex(entries);
-  const completedTurnIds = new Set(
-    entries.filter((e) => e.type === "turn_result").map((e) => e.turnId),
-  );
+  const messages: CanonicalMessage[] = [];
   const timestamps: string[] = [];
 
   for (let index = 0; index < entries.length; index += 1) {
@@ -290,7 +335,8 @@ function extractMessageTimestamps(entries: AgentTranscriptEntry[]): string[] {
     switch (entry.type) {
       case "accepted_input":
         if (!beforeBoundary) {
-          for (let i = 0; i < entry.messages.length; i += 1) {
+          for (const message of entry.messages) {
+            messages.push(cloneMessage(message));
             timestamps.push(entry.createdAt);
           }
         }
@@ -298,12 +344,17 @@ function extractMessageTimestamps(entries: AgentTranscriptEntry[]): string[] {
       case "assistant_message":
       case "tool_result_message":
       case "durable_message":
-        if (completedTurnIds.has(entry.turnId) && !beforeBoundary) {
+        if (!beforeBoundary) {
+          messages.push(cloneMessage(entry.message));
           timestamps.push(entry.createdAt);
         }
         break;
     }
   }
 
-  return timestamps;
+  return { messages, timestamps };
+}
+
+function cloneMessage(message: CanonicalMessage): CanonicalMessage {
+  return JSON.parse(JSON.stringify(message)) as CanonicalMessage;
 }

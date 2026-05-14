@@ -13,11 +13,16 @@ import { PluginRuntime } from "../../src/extension/index.js";
 
 class ScriptedModelRuntime implements ModelRuntime {
   readonly received: CanonicalModelRequest[] = [];
+  readonly signals: Array<AbortSignal | undefined> = [];
 
   constructor(private readonly scripts: CanonicalModelEvent[][]) {}
 
-  async *stream(request: CanonicalModelRequest): AsyncIterable<CanonicalModelEvent> {
+  async *stream(
+    request: CanonicalModelRequest,
+    options: { signal?: AbortSignal } = {},
+  ): AsyncIterable<CanonicalModelEvent> {
     this.received.push(request);
+    this.signals.push(options.signal);
     const script = this.scripts.shift() ?? [
       { type: "message_start", role: "assistant" },
       { type: "message_end", finishReason: "stop" },
@@ -94,6 +99,28 @@ test("RouterRuntime execute streams successful events and applies decision provi
   assert.equal(modelRuntime.received[0]?.model, "main");
   assert.ok(events.some((event) => event.type === "text_delta"));
   assert.ok(events.some((event) => event.type === "message_end"));
+});
+
+test("RouterRuntime forwards turn abort signal into the model runtime stream", async () => {
+  const modelRuntime = new ScriptedModelRuntime([
+    [
+      { type: "message_start", role: "assistant" },
+      { type: "message_end", finishReason: "stop" },
+    ],
+  ]);
+  const router = createRouterRuntime(baseConfig, { modelRuntime });
+  const controller = new AbortController();
+
+  for await (const _event of router.stream(baseRequest, {
+    sessionId: "s1",
+    turnId: "t1",
+    isMainAgent: true,
+    abortSignal: controller.signal,
+  })) {
+    void _event;
+  }
+
+  assert.equal(modelRuntime.signals[0], controller.signal);
 });
 
 test("RouterRuntime falls back to next provider on retryable error and suppresses failed attempt events", async () => {

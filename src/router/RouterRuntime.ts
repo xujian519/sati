@@ -380,7 +380,7 @@ export function createRouterRuntime(
         const pending: CanonicalModelEvent[] = [];
         let outcome: AttemptOutcome | undefined;
 
-        for await (const item of streamAttempt(attemptRequest, deps.modelRuntime)) {
+        for await (const item of streamAttempt(attemptRequest, deps.modelRuntime, ctx.abortSignal)) {
           if (item.kind === "outcome") {
             outcome = item.outcome;
             break;
@@ -459,7 +459,7 @@ export function createRouterRuntime(
               model: attempt.model,
               errorCode: outcome.error.code,
             });
-            await new Promise((r) => setTimeout(r, delay));
+            await abortableDelay(delay, ctx.abortSignal);
             transientRetryCount++;
             continue;
           }
@@ -491,7 +491,7 @@ export function createRouterRuntime(
             provider: attempt.provider,
             model: attempt.model,
           });
-          await new Promise((r) => setTimeout(r, 500 * zeroUsageAttempt));
+          await abortableDelay(500 * zeroUsageAttempt, ctx.abortSignal);
           continue;
         }
 
@@ -637,6 +637,7 @@ function isContentEvent(event: CanonicalModelEvent): boolean {
 async function* streamAttempt(
   request: CanonicalModelRequest,
   modelRuntime: ModelRuntime,
+  abortSignal?: AbortSignal,
 ): AsyncGenerator<
   | { kind: "event"; event: CanonicalModelEvent }
   | { kind: "outcome"; outcome: AttemptOutcome }
@@ -646,7 +647,10 @@ async function* streamAttempt(
   let providerError: import("../model/index.js").CanonicalModelError | undefined;
 
   try {
-    for await (const event of modelRuntime.stream(request)) {
+    for await (const event of modelRuntime.stream(request, { signal: abortSignal })) {
+      if (abortSignal?.aborted) {
+        throwAbortError(abortSignal.reason);
+      }
       observeEventForZeroUsage(state, event);
       buffered.push(event);
       if (event.type === "error") {
@@ -655,6 +659,9 @@ async function* streamAttempt(
       yield { kind: "event", event };
     }
   } catch (error) {
+    if (abortSignal?.aborted) {
+      throw error;
+    }
     const fromError = (error as { error?: import("../model/index.js").CanonicalModelError })?.error;
     providerError = fromError ?? {
       provider: request.provider,
@@ -674,6 +681,36 @@ async function* streamAttempt(
       shouldRetryZeroUsage: shouldRetryZeroUsage(state),
     },
   };
+}
+
+function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  if (signal.aborted) {
+    throwAbortError(signal.reason);
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(createAbortError(signal.reason));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function throwAbortError(reason?: unknown): never {
+  throw createAbortError(reason);
+}
+
+function createAbortError(reason?: unknown): Error {
+  if (reason instanceof Error) return reason;
+  const message = typeof reason === "string" && reason ? reason : "Operation aborted.";
+  return new DOMException(message, "AbortError");
 }
 
 function isNetworkTransient(error: unknown): boolean {

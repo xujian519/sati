@@ -195,6 +195,125 @@ test("readWebSessionMessages filters out synthetic messages", async () => {
   }
 });
 
+test("readWebSessionMessages restores incomplete turns with continuous tool calls", async () => {
+  const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-rsm-incomplete-tools-"));
+  const projectRoot = join(pilotHome, "fake-project");
+  mkdirSync(projectRoot, { recursive: true });
+  const sessionKey = "web:incomplete-tools";
+  try {
+    const projectId = createProjectId(projectRoot);
+    const chatDir = join(pilotHome, "projects", projectId, "chats");
+    mkdirSync(chatDir, { recursive: true });
+    const path = join(chatDir, `${sessionKey}.jsonl`);
+    const lines = [
+      {
+        type: "accepted_input",
+        sessionId: sessionKey,
+        turnId: "turn-incomplete",
+        sequence: 1,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        messages: [
+          { role: "user", content: [{ type: "text", text: "查一下最近新闻，连续用工具" }] },
+        ],
+      },
+      {
+        type: "assistant_message",
+        sessionId: sessionKey,
+        turnId: "turn-incomplete",
+        sequence: 2,
+        createdAt: "2026-01-01T00:00:01.000Z",
+        message: {
+          role: "assistant",
+          content: [
+            { type: "text", text: "我先搜索。" },
+            {
+              type: "tool_call",
+              id: "tool-search",
+              name: "web_search",
+              input: { query: "中美会谈", gl: "CN" },
+            },
+          ],
+        },
+      },
+      {
+        type: "tool_result_message",
+        sessionId: sessionKey,
+        turnId: "turn-incomplete",
+        sequence: 3,
+        createdAt: "2026-01-01T00:00:02.000Z",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              toolCallId: "tool-search",
+              content: [{ type: "text", text: "搜索结果摘要" }],
+              isError: false,
+            },
+          ],
+        },
+      },
+      {
+        type: "assistant_message",
+        sessionId: sessionKey,
+        turnId: "turn-incomplete",
+        sequence: 4,
+        createdAt: "2026-01-01T00:00:03.000Z",
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_call",
+              id: "tool-fetch",
+              name: "web_fetch",
+              input: { url: "https://example.com/news", prompt: "提取要点" },
+            },
+          ],
+        },
+      },
+      {
+        type: "tool_result_message",
+        sessionId: sessionKey,
+        turnId: "turn-incomplete",
+        sequence: 5,
+        createdAt: "2026-01-01T00:00:04.000Z",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              toolCallId: "tool-fetch",
+              content: [{ type: "text", text: "网页提取结果" }],
+              isError: false,
+            },
+          ],
+        },
+      },
+      // Intentionally no turn_result: this is the exact shape users hit
+      // when a running turn is interrupted or the page reconnects mid-run.
+    ];
+    writeFileSync(path, lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+
+    const result = await readWebSessionMessages(
+      { sessionKey },
+      { projectRoot, pilotHome, now: () => new Date("2026-05-09T00:00:00.000Z") },
+    );
+
+    assert.deepEqual(
+      result.messages.map((message) => message.kind),
+      ["text", "text", "tool_use", "tool_result", "tool_use", "tool_result", "status"],
+    );
+    assert.equal(result.messages[2].toolName, "web_search");
+    assert.deepEqual(result.messages[2].payload, { query: "中美会谈", gl: "CN" });
+    assert.equal(result.messages[3].text, "搜索结果摘要");
+    assert.equal(result.messages[4].toolName, "web_fetch");
+    assert.equal(result.messages[5].text, "网页提取结果");
+    assert.match(result.messages[6].text ?? "", /未正常结束|中断/);
+  } finally {
+    rmSync(pilotHome, { recursive: true, force: true });
+  }
+});
+
 test("readWebSessionMessages paginates with cursor + limit", async () => {
   const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-rsm-page-"));
   const projectRoot = join(pilotHome, "fake-project");

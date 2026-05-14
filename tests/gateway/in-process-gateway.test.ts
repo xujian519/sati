@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { InProcessGateway, SessionRouter } from "../../src/gateway/index.js";
+import { InProcessGateway, SessionRouter, mapAgentEvent } from "../../src/gateway/index.js";
 import type { AgentEvent, AgentInput, AgentSession } from "../../src/agent/index.js";
 
 test("InProcessGateway maps a text turn to GatewayEvent stream", async () => {
@@ -160,6 +160,47 @@ test("InProcessGateway.abortTurn waits for the in-flight turn to fully unwind", 
   );
 
   await firstDrain;
+});
+
+test("mapAgentEvent does not surface transient model errors before turn_failed", () => {
+  const frames = mapAgentEvent({
+    type: "model_event",
+    sessionId: "session-1",
+    turnId: "run-1",
+    event: {
+      type: "error",
+      error: {
+        provider: "p",
+        protocol: "openai",
+        code: "provider_error",
+        message: "Provider returned error",
+        retryable: true,
+      },
+    },
+  }, "run-1");
+
+  assert.deepEqual(frames, []);
+});
+
+test("mapAgentEvent surfaces terminal turn_failed once", () => {
+  const frames = mapAgentEvent({
+    type: "turn_failed",
+    sessionId: "session-1",
+    turnId: "run-1",
+    error: {
+      code: "agent_model_error",
+      message: "Provider returned error",
+    },
+  }, "run-1");
+
+  assert.deepEqual(frames, [
+    {
+      type: "error",
+      code: "agent_model_error",
+      message: "Provider returned error",
+      recoverable: false,
+    },
+  ]);
 });
 
 async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {

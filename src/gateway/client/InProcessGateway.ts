@@ -97,13 +97,6 @@ export class InProcessGateway implements Gateway {
    * while `inFlightTurns` was still populated, racing the next submit.
    */
   private readonly turnCompletions = new Map<string, Promise<void>>();
-  /**
-   * Max time {@link abortTurn} will wait for the in-flight turn to unwind
-   * before resolving. Aborts should be near-instant; the cap is defensive
-   * so a wedged pump cannot stall the host UI's stop button.
-   */
-  private static readonly ABORT_WAIT_TIMEOUT_MS = 5000;
-
   constructor(
     private readonly router: SessionRouter,
     private readonly options: InProcessGatewayOptions = {},
@@ -254,15 +247,7 @@ export class InProcessGateway implements Gateway {
     // `session_busy`.
     const pending = this.turnCompletions.get(input.sessionKey);
     if (!pending) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<void>((resolve) => {
-      timer = setTimeout(resolve, InProcessGateway.ABORT_WAIT_TIMEOUT_MS);
-    });
-    try {
-      await Promise.race([pending, timeout]);
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
+    await pending;
   }
 
   async listSessions(input: ListSessionsInput): Promise<ListSessionsResult> {
@@ -534,14 +519,10 @@ function mapModelEvent(event: CanonicalModelEvent): GatewayEvent[] {
     case "thinking_delta":
       return [{ type: "assistant_thinking_delta", text: event.text }];
     case "error":
-      return [
-        {
-          type: "error",
-          code: event.error.code,
-          message: event.error.message,
-          recoverable: true,
-        },
-      ];
+      // Model-level errors are internal control flow until AgentLoop decides
+      // whether they are recoverable. Surfacing them here duplicates the final
+      // turn_failed frame and also shows self-correction retries as red errors.
+      return [];
     default:
       return [];
   }

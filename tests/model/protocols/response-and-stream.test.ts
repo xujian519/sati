@@ -223,7 +223,7 @@ test("assembles canonical stream events into an assistant message", () => {
   assert.deepEqual(assembled.toolCalls[0], { id: "call-1", name: "lookup", input: { id: "123" } });
 });
 
-test("streamModel forwards external abort signal to the transport", async () => {
+test("streamModel stops before provider transport when the external signal is already aborted", async () => {
   const raw = validModelConfig();
   const config = parseModelConfig(raw, {
     env: { ANTHROPIC_API_KEY: "anthropic-key" },
@@ -235,13 +235,13 @@ test("streamModel forwards external abort signal to the transport", async () => 
   };
   const controller = new AbortController();
   controller.abort("test abort");
-  let transportSawAbortedSignal = false;
+  let transportCalled = false;
 
-  const events = [];
-  for await (const event of streamModel(request, config, {
+  const iterator = streamModel(request, config, {
     signal: controller.signal,
     fetch: async (_url, init) => {
-      transportSawAbortedSignal = init?.signal instanceof AbortSignal && init.signal.aborted;
+      void init;
+      transportCalled = true;
       return new Response(
         new ReadableStream({
           start(streamController) {
@@ -251,10 +251,53 @@ test("streamModel forwards external abort signal to the transport", async () => 
         { status: 200 },
       );
     },
-  })) {
-    events.push(event);
-  }
+  })[Symbol.asyncIterator]();
 
-  assert.equal(transportSawAbortedSignal, true);
-  assert.equal(events[0]?.type, "request_started");
+  assert.equal((await iterator.next()).value?.type, "request_started");
+  await assert.rejects(iterator.next(), /abort/i);
+  assert.equal(transportCalled, false);
+});
+
+test("streamModel cancels an in-flight SSE body when the external signal aborts", async () => {
+  const raw = validModelConfig();
+  const config = parseModelConfig(raw, {
+    env: { ANTHROPIC_API_KEY: "anthropic-key" },
+  });
+  const request: CanonicalModelRequest = {
+    provider: "anthropic-main",
+    model: "claude-sonnet-4-5",
+    messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+  };
+  const controller = new AbortController();
+  let bodyCancelled = false;
+
+  const iterator = streamModel(request, config, {
+    signal: controller.signal,
+    fetch: async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          cancel() {
+            bodyCancelled = true;
+          },
+        }),
+        { status: 200 },
+      ),
+  })[Symbol.asyncIterator]();
+
+  assert.deepEqual(await iterator.next(), {
+    done: false,
+    value: {
+      type: "request_started",
+      provider: "anthropic-main",
+      model: "claude-sonnet-4-5",
+      metadata: undefined,
+    },
+  });
+
+  const pendingRead = iterator.next();
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort("user requested stop");
+
+  await assert.rejects(pendingRead, /abort|stop|cancel/i);
+  assert.equal(bodyCancelled, true);
 });

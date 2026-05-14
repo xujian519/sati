@@ -1052,7 +1052,12 @@ export function useChatComposerState({
 
     setCanAbortSession(false);
     setIsAborting(true);
-  }, [canAbortSession, currentSessionId, pendingViewSessionRef, provider, selectedSession?.id, sendMessage, setCanAbortSession, setIsAborting]);
+    setClaudeStatus({
+      text: 'Stopping',
+      tokens: 0,
+      can_interrupt: false,
+    });
+  }, [canAbortSession, currentSessionId, pendingViewSessionRef, provider, selectedSession?.id, sendMessage, setCanAbortSession, setClaudeStatus, setIsAborting]);
 
   const handleGrantToolPermission = useCallback(
     (suggestion: { entry: string; toolName: string }) => {
