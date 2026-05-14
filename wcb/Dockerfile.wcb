@@ -16,5 +16,7 @@ RUN rm -rf /root/miniconda3/envs/eval && \
     /root/miniconda3/envs/eval/bin/pip install --no-cache-dir \
       numpy==1.26.4 opencv-python-headless==4.9.0.80
 
-# Install Playwright chromium + system deps for browser-use MCP
-RUN npx playwright install --with-deps chromium
+# Install Playwright system deps (fonts, shared libs) and the
+# chrome-for-testing binary that @playwright/mcp@0.0.75 expects at runtime.
+RUN npx playwright install-deps chromium
+RUN npx @playwright/mcp@0.0.75 install-browser chrome-for-testing

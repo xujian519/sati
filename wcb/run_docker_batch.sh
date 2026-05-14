@@ -8,7 +8,7 @@ set -euo pipefail
 #   ssh g72 bash /home/yyk/yyk03/Workspace/PilotDeck/wcb/run_docker_batch.sh
 # ═══════════════════════════════════════════════════════════════════════
 
-DOCKER_IMAGE="${DOCKER_IMAGE:-wildclawbench-pilotdeck:v1.1}"
+DOCKER_IMAGE="${DOCKER_IMAGE:-wildclawbench-pilotdeck:v1.2}"
 NFS_ROOT="/home/yyk/yyk03/Workspace"
 MODEL="${MODEL:-deepseek/deepseek-v4-flash}"
 PARALLEL="${PARALLEL:-8}"
