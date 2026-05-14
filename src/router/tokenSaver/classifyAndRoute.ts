@@ -62,49 +62,82 @@ export async function classifyAndRoute(
   };
 
   const timeoutMs = Math.max(500, config.judgeTimeoutMs ?? 5_000);
-  let timeout: NodeJS.Timeout | undefined;
-  try {
-    const response = await Promise.race([
-      input.judgeRuntime.complete(judgeRequest),
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => reject(new TokenSaverTimeoutError()), timeoutMs);
-      }),
-    ]);
-    const text = response.content
-      .filter((block) => block.type === "text")
-      .map((block) => block.text)
-      .join("");
-    const tier = parseTier(text, knownTiers);
-    if (!tier) {
+  const maxAttempts = 2;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let timeout: NodeJS.Timeout | undefined;
+    try {
+      const response = await Promise.race([
+        input.judgeRuntime.complete(judgeRequest),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => reject(new TokenSaverTimeoutError()), timeoutMs);
+        }),
+      ]);
+      const text = response.content
+        .filter((block) => block.type === "text")
+        .map((block) => block.text)
+        .join("");
+
+      if (!text) {
+        if (attempt < maxAttempts) {
+          continue;
+        }
+        console.warn("[token-saver] Judge returned empty after retries");
+        return {
+          tier: config.defaultTier,
+          selection: defaultTier.model,
+          resolvedFrom: "fallback",
+          failureReason: "parse_error",
+        };
+      }
+
+      const tier = parseTier(text, knownTiers);
+      if (!tier) {
+        if (attempt < maxAttempts) {
+          continue;
+        }
+        console.warn(
+          "[token-saver] parseTier failed. Judge text:",
+          JSON.stringify(text).slice(0, 300),
+        );
+        return {
+          tier: config.defaultTier,
+          selection: defaultTier.model,
+          resolvedFrom: "fallback",
+          failureReason: "parse_error",
+        };
+      }
+      const selection = config.tiers[tier]?.model;
+      if (!selection) {
+        return {
+          tier: config.defaultTier,
+          selection: defaultTier.model,
+          resolvedFrom: "fallback",
+          failureReason: "parse_error",
+        };
+      }
+      return { tier, selection, resolvedFrom: "judge" };
+    } catch (error) {
+      if (attempt < maxAttempts && !(error instanceof TokenSaverTimeoutError)) {
+        continue;
+      }
       return {
         tier: config.defaultTier,
         selection: defaultTier.model,
         resolvedFrom: "fallback",
-        failureReason: "parse_error",
+        failureReason: error instanceof TokenSaverTimeoutError ? "timeout" : "model_error",
       };
-    }
-    const selection = config.tiers[tier]?.model;
-    if (!selection) {
-      return {
-        tier: config.defaultTier,
-        selection: defaultTier.model,
-        resolvedFrom: "fallback",
-        failureReason: "parse_error",
-      };
-    }
-    return { tier, selection, resolvedFrom: "judge" };
-  } catch (error) {
-    return {
-      tier: config.defaultTier,
-      selection: defaultTier.model,
-      resolvedFrom: "fallback",
-      failureReason: error instanceof TokenSaverTimeoutError ? "timeout" : "model_error",
-    };
-  } finally {
-    if (timeout) {
-      clearTimeout(timeout);
+    } finally {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
     }
   }
+  return {
+    tier: config.defaultTier,
+    selection: defaultTier.model,
+    resolvedFrom: "fallback",
+    failureReason: "parse_error",
+  };
 }
 
 class TokenSaverTimeoutError extends Error {

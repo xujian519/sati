@@ -45,3 +45,15 @@ test("parseTier returns undefined for empty string", () => {
   const result = parseTier("", ["SIMPLE", "COMPLEX"]);
   assert.equal(result, undefined);
 });
+
+test("parseTier strips markdown code fences before parsing tag", () => {
+  const input = "```xml\n<tier>simple</tier>\n```";
+  const result = parseTier(input, ["simple", "complex"]);
+  assert.equal(result, "simple");
+});
+
+test("parseTier strips code fences for substring fallback path", () => {
+  const input = "```\nI think this is COMPLEX\n```";
+  const result = parseTier(input, ["SIMPLE", "COMPLEX"]);
+  assert.equal(result, "COMPLEX");
+});

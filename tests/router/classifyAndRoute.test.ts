@@ -123,6 +123,51 @@ test("classifyAndRoute returns undefined when disabled", async () => {
   assert.equal(result, undefined);
 });
 
+test("classifyAndRoute retries once when judge returns empty then succeeds", async () => {
+  let callCount = 0;
+  const retryJudge: ModelRuntime = {
+    ...makeJudge(""),
+    complete: async (): Promise<CanonicalModelResponse> => {
+      callCount++;
+      return {
+        role: "assistant",
+        content: callCount === 1
+          ? [{ type: "text", text: "" }]
+          : [{ type: "text", text: "<tier>COMPLEX</tier>" }],
+        finishReason: "stop",
+      };
+    },
+  };
+  const result = await classifyAndRoute({
+    config: makeConfig(),
+    messages: userMessages("refactor the whole project"),
+    judgeRuntime: retryJudge,
+  });
+  assert.ok(result);
+  assert.equal(callCount, 2);
+  assert.equal(result.tier, "COMPLEX");
+  assert.equal(result.resolvedFrom, "judge");
+});
+
+test("classifyAndRoute falls back after both retry attempts return empty", async () => {
+  const emptyJudge: ModelRuntime = {
+    ...makeJudge(""),
+    complete: async (): Promise<CanonicalModelResponse> => ({
+      role: "assistant",
+      content: [{ type: "text", text: "" }],
+      finishReason: "stop",
+    }),
+  };
+  const result = await classifyAndRoute({
+    config: makeConfig(),
+    messages: userMessages("hello"),
+    judgeRuntime: emptyJudge,
+  });
+  assert.ok(result);
+  assert.equal(result.resolvedFrom, "fallback");
+  assert.equal(result.failureReason, "parse_error");
+});
+
 test("classifyAndRoute uses last user message from multi-turn messages", async () => {
   let capturedRequest: unknown;
   const spyJudge: ModelRuntime = {

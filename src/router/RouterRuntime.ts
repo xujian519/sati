@@ -339,6 +339,7 @@ export function createRouterRuntime(
     let lastUsage: import("../model/index.js").CanonicalUsage | undefined;
     let lastAttempt: RouterModelRef | undefined;
     let lastDecision: RouterDecision = decision;
+    let lastHasYieldedContent = false;
 
     outer: for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex += 1) {
       if (ctx.abortSignal?.aborted) {
@@ -406,6 +407,7 @@ export function createRouterRuntime(
         }
 
         if (!outcome) {
+          lastHasYieldedContent = hasYieldedContent;
           break outer;
         }
 
@@ -467,6 +469,7 @@ export function createRouterRuntime(
           for (const queued of pending) {
             yield queued;
           }
+          lastHasYieldedContent = hasYieldedContent;
           break outer;
         }
 
@@ -555,9 +558,11 @@ export function createRouterRuntime(
         startedAt,
         endedAt,
       });
-      for (const event of lastBuffered) {
-        if (event.type !== "error") {
-          yield event;
+      if (!lastHasYieldedContent) {
+        for (const event of lastBuffered) {
+          if (event.type !== "error") {
+            yield event;
+          }
         }
       }
       yield { type: "error", error: lastError };
