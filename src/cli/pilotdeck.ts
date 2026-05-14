@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
-import { createAlwaysOnManager, type AlwaysOnManager } from "../always-on/index.js";
-import { createCronRuntime, type CronRuntime } from "../cron/index.js";
+import { createAlwaysOnManager, type AlwaysOnManager, type AlwaysOnConfig } from "../always-on/index.js";
+import { createCronRuntime, type CronRuntime, type CronConfig } from "../cron/index.js";
 import { connectRemoteGatewayIfAvailable, type Gateway, type GatewayEvent, type GatewaySubmitTurnInput } from "../gateway/index.js";
 import { CliChannel, TuiChannel, FeishuChannel } from "../adapters/index.js";
 import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
@@ -22,16 +22,26 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     let alwaysOn: AlwaysOnManager | undefined;
     let cron: CronRuntime | undefined;
     let deferredBroadcast: ((name: string, payload?: unknown) => void) | undefined;
-    if (snapshot.config.alwaysOn?.enabled) {
-      alwaysOn = createAlwaysOnManager({
-        config: snapshot.config.alwaysOn,
+
+    const alwaysOnLogger = {
+      info: (message: string, data?: Record<string, unknown>) =>
+        console.log(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
+      warn: (message: string, data?: Record<string, unknown>) =>
+        console.warn(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
+    };
+    const cronLogger = {
+      info: (message: string, data?: Record<string, unknown>) =>
+        console.log(`[cron] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
+      warn: (message: string, data?: Record<string, unknown>) =>
+        console.warn(`[cron] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
+    };
+
+    function buildAlwaysOn(config: AlwaysOnConfig | undefined): AlwaysOnManager | undefined {
+      if (!config?.enabled) return undefined;
+      return createAlwaysOnManager({
+        config,
         pilotHome,
-        logger: {
-          info: (message, data) =>
-            console.log(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
-          warn: (message, data) =>
-            console.warn(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
-        },
+        logger: alwaysOnLogger,
         onWorktreeCreated: (runId, cwd) => {
           deferredBroadcast?.("worktree_created", { runId, cwd });
         },
@@ -40,21 +50,24 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         },
       });
     }
-    if (snapshot.config.cron) {
-      cron = createCronRuntime({
-        config: snapshot.config.cron,
+
+    function buildCron(config: CronConfig | undefined): CronRuntime | undefined {
+      if (!config) return undefined;
+      return createCronRuntime({
+        config,
         pilotHome,
         projectKey: projectRoot,
-        logger: {
-          info: (message, data) =>
-            console.log(`[cron] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
-          warn: (message, data) =>
-            console.warn(`[cron] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
-        },
+        logger: cronLogger,
       });
     }
 
-    const { gateway, dispose: disposeGateway, bindServer, isProjectBusy } = createLocalGateway({
+    alwaysOn = buildAlwaysOn(snapshot.config.alwaysOn);
+    cron = buildCron(snapshot.config.cron);
+
+    const {
+      gateway, configStore, dispose: disposeGateway,
+      bindServer, isProjectBusy, updateSubsystems,
+    } = createLocalGateway({
       projectRoot,
       pilotHome,
       env,
@@ -71,6 +84,64 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       cron.bindGateway(gateway);
       await cron.start();
     }
+
+    // --- Subsystem hot-reload on config change ---
+
+    let reloadChain = Promise.resolve();
+
+    configStore.subscribe((event) => {
+      const aoChanged = event.changedPaths.some((p) => p.startsWith("alwaysOn."));
+      const cronChanged = event.changedPaths.some((p) => p.startsWith("cron."));
+      if (!aoChanged && !cronChanged) return;
+
+      reloadChain = reloadChain
+        .then(() => handleSubsystemReload(aoChanged, cronChanged, event.nextSnapshot.config))
+        .catch((err) =>
+          console.warn(
+            `[pilotdeck] subsystem reload failed: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
+    });
+
+    async function handleSubsystemReload(
+      aoChanged: boolean,
+      cronChanged: boolean,
+      config: (typeof snapshot)["config"],
+    ): Promise<void> {
+      if (aoChanged) {
+        await alwaysOn?.stop();
+        alwaysOn = undefined;
+      }
+      if (cronChanged) {
+        await cron?.stop();
+        cron = undefined;
+      }
+
+      if (aoChanged) alwaysOn = buildAlwaysOn(config.alwaysOn);
+      if (cronChanged) cron = buildCron(config.cron);
+
+      updateSubsystems({
+        extraTools: [...(alwaysOn?.getTools() ?? []), ...(cron?.getTools() ?? [])],
+        sessionOverrides: alwaysOn?.getSessionOverrides(),
+        cron,
+      });
+
+      if (aoChanged && alwaysOn) {
+        alwaysOn.bindGateway(gateway, { isProjectBusy });
+        await alwaysOn.start();
+      }
+      if (cronChanged && cron) {
+        cron.bindGateway(gateway);
+        await cron.start();
+      }
+
+      const parts: string[] = [];
+      if (aoChanged) parts.push(`always-on=${alwaysOn ? "started" : "stopped"}`);
+      if (cronChanged) parts.push(`cron=${cron ? "started" : "stopped"}`);
+      console.log(`[pilotdeck] Subsystem hot-reload complete: ${parts.join(", ")}`);
+    }
+
+    // --- Server startup ---
 
     const envPort = Number.parseInt(env.PILOTDECK_GATEWAY_PORT ?? "", 10);
     const server = await startPilotDeckServer({

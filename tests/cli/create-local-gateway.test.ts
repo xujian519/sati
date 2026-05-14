@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createLocalGateway } from "../../src/cli/createLocalGateway.js";
+import { createAlwaysOnManager, defaultAlwaysOnConfig } from "../../src/always-on/index.js";
 import { createCronRuntime, defaultCronConfig } from "../../src/cron/index.js";
 import type { GatewayEvent, GatewaySubmitTurnInput } from "../../src/gateway/index.js";
 import { getPilotConfigFilePath } from "../../src/pilot/index.js";
@@ -332,6 +333,178 @@ test("createLocalGateway cron tasks inherit and execute with the originating pro
     } finally {
       await gateway.closeSession({ sessionKey }).catch(() => undefined);
       await cron.stop();
+      dispose();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("updateSubsystems replaces extraTools and sessionOverrides for new sessions", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-subsystem-update-"));
+  try {
+    const pilotHome = path.join(root, "home");
+    const projectRoot = path.join(root, "project");
+
+    await writeJson(getPilotConfigFilePath(pilotHome), {
+      schemaVersion: 1,
+      agent: validAgentConfig(),
+      model: validModelConfig(),
+    });
+
+    const cron1 = createCronRuntime({
+      config: defaultCronConfig(),
+      pilotHome,
+      projectKey: projectRoot,
+    });
+
+    const { gateway, dispose, updateSubsystems } = createLocalGateway({
+      projectRoot,
+      pilotHome,
+      env: { ANTHROPIC_API_KEY: "anthropic-key" },
+      extraTools: cron1.getTools(),
+      cron: cron1,
+      __testModelFactory: (snapshot) => createRecordingModel(snapshot, []),
+    });
+    try {
+      const result1 = await gateway.cronList({});
+      assert.deepEqual(result1.tasks, []);
+
+      const cron2 = createCronRuntime({
+        config: defaultCronConfig(),
+        pilotHome,
+        projectKey: projectRoot,
+      });
+
+      updateSubsystems({
+        extraTools: cron2.getTools(),
+        cron: cron2,
+      });
+
+      const result2 = await gateway.cronList({});
+      assert.deepEqual(result2.tasks, []);
+    } finally {
+      dispose();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("updateSubsystems swaps cron controller on gateway", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-subsystem-cron-swap-"));
+  try {
+    const pilotHome = path.join(root, "home");
+    const projectRoot = path.join(root, "project");
+
+    await writeJson(getPilotConfigFilePath(pilotHome), {
+      schemaVersion: 1,
+      agent: validAgentConfig(),
+      model: validModelConfig(),
+    });
+
+    const { gateway, dispose, updateSubsystems } = createLocalGateway({
+      projectRoot,
+      pilotHome,
+      env: { ANTHROPIC_API_KEY: "anthropic-key" },
+      __testModelFactory: (snapshot) => createRecordingModel(snapshot, []),
+    });
+    try {
+      await assert.rejects(
+        () => gateway.cronList({}),
+        /Cron runtime is not configured/,
+      );
+
+      const cron = createCronRuntime({
+        config: defaultCronConfig(),
+        pilotHome,
+        projectKey: projectRoot,
+      });
+
+      updateSubsystems({
+        extraTools: cron.getTools(),
+        cron,
+      });
+
+      const result = await gateway.cronList({});
+      assert.deepEqual(result.tasks, []);
+
+      updateSubsystems({
+        extraTools: [],
+        cron: undefined,
+      });
+
+      await assert.rejects(
+        () => gateway.cronList({}),
+        /Cron runtime is not configured/,
+      );
+    } finally {
+      dispose();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("updateSubsystems with always-on tools makes them available in new sessions", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-subsystem-ao-tools-"));
+  try {
+    const pilotHome = path.join(root, "home");
+    const projectRoot = path.join(root, "project");
+
+    await writeJson(getPilotConfigFilePath(pilotHome), {
+      schemaVersion: 1,
+      agent: validAgentConfig(),
+      model: validModelConfig(),
+    });
+
+    const { gateway, dispose, updateSubsystems } = createLocalGateway({
+      projectRoot,
+      pilotHome,
+      env: { ANTHROPIC_API_KEY: "anthropic-key" },
+      __testModelFactory: (snapshot) => createRecordingModel(snapshot, []),
+    });
+    try {
+      const firstEvents = await collectGatewayEvents(
+        gateway.submitTurn({
+          sessionKey: "cli:project=test:ao-before",
+          channelKey: "cli",
+          projectKey: projectRoot,
+          message: "before always-on tools",
+        }),
+      );
+      assert.ok(
+        firstEvents.some(
+          (event) => event.type === "turn_completed" && event.finishReason === "completed",
+        ),
+      );
+
+      const aoConfig = defaultAlwaysOnConfig();
+      aoConfig.enabled = true;
+      aoConfig.projects = {
+        [projectRoot]: { enabled: true },
+      };
+      const ao = createAlwaysOnManager({ config: aoConfig, pilotHome });
+
+      updateSubsystems({
+        extraTools: ao.getTools(),
+        sessionOverrides: ao.getSessionOverrides(),
+      });
+
+      const secondEvents = await collectGatewayEvents(
+        gateway.submitTurn({
+          sessionKey: "cli:project=test:ao-after",
+          channelKey: "cli",
+          projectKey: projectRoot,
+          message: "after always-on tools added",
+        }),
+      );
+      assert.ok(
+        secondEvents.some(
+          (event) => event.type === "turn_completed" && event.finishReason === "completed",
+        ),
+      );
+    } finally {
       dispose();
     }
   } finally {

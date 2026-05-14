@@ -30,8 +30,11 @@ function classifyPath(path: string): PilotConfigChangeClass {
   if (path.startsWith("router.")) {
     return classifyRouterPath(path);
   }
+  if (path.startsWith("alwaysOn.")) {
+    return "next-runtime";
+  }
   if (path.startsWith("cron.")) {
-    return "restart-required";
+    return "next-runtime";
   }
   return "next-runtime";
 }

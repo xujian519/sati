@@ -97,6 +97,12 @@ export type CreateLocalGatewayOptions = {
   autoElicitation?: boolean;
 };
 
+export type SubsystemUpdate = {
+  extraTools: PilotDeckToolDefinition[];
+  sessionOverrides?: SessionConfigOverrides;
+  cron?: GatewayCronController;
+};
+
 export type CreateLocalGatewayResult = {
   gateway: Gateway;
   configStore: PilotConfigStore;
@@ -109,6 +115,12 @@ export type CreateLocalGatewayResult = {
    * `agent_busy` gate with real session data.
    */
   isProjectBusy: (projectKey: string) => boolean;
+  /**
+   * Replace subsystem-owned tools, session overrides, and cron controller.
+   * Called by the server command after tearing down and rebuilding
+   * AlwaysOnManager / CronRuntime in response to a config change.
+   */
+  updateSubsystems: (update: SubsystemUpdate) => void;
 };
 
 export function createLocalGateway(options: CreateLocalGatewayOptions = {}): CreateLocalGatewayResult {
@@ -228,6 +240,13 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     },
     bindServer: (server) => { boundServer = server; },
     isProjectBusy: (projectKey: string) => router!.hasActiveUserTurn(projectKey),
+    updateSubsystems: (update: SubsystemUpdate) => {
+      registry.updateSubsystems({
+        extraTools: update.extraTools,
+        sessionOverrides: update.sessionOverrides,
+      });
+      gateway.setCronController(update.cron);
+    },
   };
 }
 
@@ -288,7 +307,13 @@ class ProjectRuntimeRegistry {
     { allow: PermissionRule[]; deny: PermissionRule[]; ask: PermissionRule[] }
   >();
 
-  constructor(private readonly options: ProjectRuntimeRegistryOptions) {}
+  private _extraTools: PilotDeckToolDefinition[];
+  private _sessionOverrides: SessionConfigOverrides | undefined;
+
+  constructor(private readonly options: ProjectRuntimeRegistryOptions) {
+    this._extraTools = options.extraTools ? [...options.extraTools] : [];
+    this._sessionOverrides = options.sessionOverrides;
+  }
 
   setGateway(gateway: InProcessGateway): void {
     this.gateway = gateway;
@@ -319,7 +344,7 @@ class ProjectRuntimeRegistry {
     deny: PermissionRule[];
     ask: PermissionRule[];
   } {
-    const explicit = this.options.sessionOverrides?.get(sessionKey)?.permissionRules;
+    const explicit = this._sessionOverrides?.get(sessionKey)?.permissionRules;
     if (explicit) {
       return {
         allow: explicit.allow ?? [],
@@ -359,6 +384,21 @@ class ProjectRuntimeRegistry {
     }
   }
 
+  /**
+   * Replace subsystem-owned tools and session overrides (Always-On / Cron).
+   * Called after the subsystem lifecycle is torn down and rebuilt so that
+   * future session creations pick up the new tool definitions and override
+   * map. Also invalidates cached runtimes.
+   */
+  updateSubsystems(config: {
+    extraTools: PilotDeckToolDefinition[];
+    sessionOverrides?: SessionConfigOverrides;
+  }): void {
+    this._extraTools = config.extraTools;
+    this._sessionOverrides = config.sessionOverrides;
+    this.invalidate();
+  }
+
   resolve(projectKey?: string): ProjectRuntime {
     const projectRoot = resolve(projectKey ?? this.options.defaultProjectRoot);
     this.options.onProjectActivated?.(projectRoot);
@@ -393,7 +433,7 @@ class ProjectRuntimeRegistry {
         lister: () => pluginRuntime.getAllSkills(),
       },
     });
-    for (const tool of this.options.extraTools ?? []) {
+    for (const tool of this._extraTools) {
       tools.register(tool);
     }
 
@@ -710,7 +750,7 @@ class ProjectRuntimeRegistry {
     sessionKey: string,
   ): CreateAgentSessionOptions["config"] {
     const agent = runtime.snapshot.config.agent;
-    const override = this.options.sessionOverrides?.get(sessionKey);
+    const override = this._sessionOverrides?.get(sessionKey);
     const permissionMode = override?.permissionMode ?? this.options.permissionMode;
     const cwd = override?.cwd ?? runtime.projectRoot;
     // Hand `PermissionContext` the same live rule-set reference the

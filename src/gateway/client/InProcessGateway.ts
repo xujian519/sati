@@ -360,6 +360,10 @@ export class InProcessGateway implements Gateway {
     return this.options.reloadConfig();
   }
 
+  setCronController(cron: GatewayCronController | undefined): void {
+    (this.options as { cron?: GatewayCronController }).cron = cron;
+  }
+
   private requireCron(): GatewayCronController {
     if (!this.options.cron) {
       throw new Error("Cron runtime is not configured.");
