@@ -47,6 +47,11 @@ export type RouterRuntimeDeps = {
   now?: () => Date;
 };
 
+export type InvalidateStickyResult = {
+  previousTier?: string;
+  orchestrating: boolean;
+};
+
 export type RouterRuntime = {
   decide(input: RouterDecisionInput): Promise<RouterDecision>;
   execute(
@@ -57,8 +62,14 @@ export type RouterRuntime = {
   /** Convenience helper used by agent loop: decide + execute in one call. */
   stream(
     request: CanonicalModelRequest,
-    ctx: RouterExecuteContext & { sessionId: string; isMainAgent: boolean },
+    ctx: RouterExecuteContext & { sessionId: string; isMainAgent: boolean; previousTier?: string },
   ): AsyncIterable<CanonicalModelEvent>;
+  /**
+   * Clear routing sticky (provider/model/tier) for a session while preserving
+   * orchestration state.  Call at the start of each new user turn so the
+   * judge re-classifies the fresh message instead of reusing a stale tier.
+   */
+  invalidateSticky(sessionId: string): InvalidateStickyResult;
   observeUsage(sessionId: string, usage: import("../model/index.js").CanonicalUsage | undefined): void;
   stats: TokenStatsCollector;
   shutdown(): Promise<void>;
@@ -182,6 +193,7 @@ export function createRouterRuntime(
           config: config.tokenSaver,
           messages: input.request.messages,
           judgeRuntime,
+          previousTier: input.metadata?.previousTier,
         });
         if (tokenSaver) {
           if (tokenSaver.failureReason) {
@@ -513,6 +525,7 @@ export function createRouterRuntime(
         usageCache.observe(ctx.sessionId, finalUsage);
         stats.observe({
           sessionId: ctx.sessionId,
+          turnId: ctx.turnId,
           projectPath: ctx.projectPath,
           scenarioType: attemptDecision.scenarioType,
           resolvedFrom: attemptDecision.resolvedFrom,
@@ -547,6 +560,7 @@ export function createRouterRuntime(
       }
       stats.observe({
         sessionId: ctx.sessionId,
+        turnId: ctx.turnId,
         projectPath: ctx.projectPath,
         scenarioType: lastDecision.scenarioType,
         resolvedFrom: lastDecision.resolvedFrom,
@@ -571,20 +585,35 @@ export function createRouterRuntime(
 
   async function* stream(
     request: CanonicalModelRequest,
-    ctx: RouterExecuteContext & { sessionId: string; isMainAgent: boolean },
+    ctx: RouterExecuteContext & { sessionId: string; isMainAgent: boolean; previousTier?: string },
   ): AsyncIterable<CanonicalModelEvent> {
     const decision = await decide({
       request,
       sessionId: ctx.sessionId,
       isMainAgent: ctx.isMainAgent,
+      metadata: ctx.previousTier ? { previousTier: ctx.previousTier } : undefined,
     });
     yield* execute(decision, request, ctx);
+  }
+
+  function invalidateSticky(sessionId: string): InvalidateStickyResult {
+    const current = sessionStore.get(sessionId, false);
+    const previousTier = current?.tokenSaverTier;
+    const orchestrating = current?.orchestrating ?? false;
+    sessionStore.set({
+      sessionId,
+      isSubagent: false,
+      orchestrating,
+      updatedAt: (deps.now?.() ?? new Date()).getTime(),
+    });
+    return { previousTier, orchestrating };
   }
 
   return {
     decide,
     execute,
     stream,
+    invalidateSticky,
     observeUsage(sessionId, usage) {
       usageCache.observe(sessionId, usage);
     },

@@ -60,6 +60,8 @@ export type RouterDecisionInput = {
     lastUsage?: RouterDecisionInputUsageHint;
     explicitProvider?: string;
     explicitModel?: string;
+    /** Tier from the previous turn; fed to the judge for context-aware classification. */
+    previousTier?: string;
   };
 };
 

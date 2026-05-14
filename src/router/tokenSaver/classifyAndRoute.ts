@@ -20,6 +20,8 @@ export type ClassifyAndRouteInput = {
   messages: CanonicalMessage[];
   judgeRuntime: ModelRuntime;
   abortSignal?: AbortSignal;
+  /** Tier from the previous turn; passed to the judge for context-aware classification. */
+  previousTier?: string;
 };
 
 export async function classifyAndRoute(
@@ -45,7 +47,7 @@ export async function classifyAndRoute(
   }
 
   const knownTiers = Object.keys(config.tiers);
-  const prompt = generateJudgePrompt({ userMessage, config });
+  const prompt = generateJudgePrompt({ userMessage, config, previousTier: input.previousTier });
   const judgeRequest: CanonicalModelRequest = {
     provider: config.judge.provider,
     model: config.judge.model,

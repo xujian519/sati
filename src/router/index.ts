@@ -1,5 +1,6 @@
 export {
   createRouterRuntime,
+  type InvalidateStickyResult,
   type RouterRuntime,
   type RouterRuntimeDeps,
 } from "./RouterRuntime.js";
