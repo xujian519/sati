@@ -126,7 +126,9 @@ function toOpenAIMessages(message: CanonicalMessage): OpenAIMessage[] {
   if (normalContent.length > 0 || assistantToolCalls.length > 0 || thinkingBlocks.length > 0) {
     const msg: OpenAIMessage = {
       role: message.role,
-      content: normalContent.length > 0 ? toOpenAIContent(normalContent) : undefined,
+      content: normalContent.length > 0
+        ? toOpenAIContent(normalContent)
+        : (message.role === "assistant" && thinkingBlocks.length > 0 ? "" : undefined),
       tool_calls: assistantToolCalls.length > 0 ? assistantToolCalls : undefined,
     };
     // DeepSeek V4 requires reasoning_content to be passed back on assistant

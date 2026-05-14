@@ -16,6 +16,13 @@ export function parseOpenAIResponse(raw: unknown, provider = "openai"): Canonica
 
   if (typeof message.content === "string" && message.content.length > 0) {
     content.push({ type: "text", text: message.content });
+  } else if (Array.isArray(message.content)) {
+    for (const part of message.content) {
+      const p = asRecord(part);
+      if (p.type === "text" && typeof p.text === "string" && p.text.length > 0) {
+        content.push({ type: "text", text: p.text });
+      }
+    }
   }
 
   if (Array.isArray(message.tool_calls)) {

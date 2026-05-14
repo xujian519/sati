@@ -140,6 +140,32 @@ test("tool_result_reference is excluded from normalContent (not duplicated)", ()
   }
 });
 
+test("thinking-only assistant message serializes content as empty string for DeepSeek", () => {
+  const config = parseModelConfig(validModelConfig(), {
+    env: { ANTHROPIC_API_KEY: "anthropic-key" },
+  });
+  const messages: CanonicalMessage[] = [
+    { role: "user", content: [{ type: "text", text: "think about this" }] },
+    {
+      role: "assistant",
+      content: [
+        { type: "thinking", text: "Let me reason through this..." },
+      ],
+    },
+    { role: "user", content: [{ type: "text", text: "what did you conclude?" }] },
+  ];
+
+  const body = buildModelRequest(
+    { provider: "openai-main", model: "gpt-5.1", messages },
+    config,
+  ) as Record<string, any>;
+
+  const assistantMsg = body.messages.find((m: any) => m.role === "assistant");
+  assert.ok(assistantMsg, "should have an assistant message");
+  assert.equal(assistantMsg.content, "", "thinking-only assistant should have empty string content");
+  assert.equal(assistantMsg.reasoning_content, "Let me reason through this...");
+});
+
 test("rejects unsupported multimodal input before provider request", () => {
   const raw = validModelConfig();
   const config = parseModelConfig(raw, {

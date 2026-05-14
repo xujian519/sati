@@ -54,6 +54,28 @@ test("parses OpenAI tool_call response into canonical tool call", () => {
   assert.equal(response.content[0].type, "tool_call");
 });
 
+test("parses OpenAI response with array content into canonical text", () => {
+  const response = parseModelResponse("openai", {
+    choices: [
+      {
+        finish_reason: "stop",
+        message: {
+          content: [
+            { type: "text", text: "Hello " },
+            { type: "text", text: "world" },
+          ],
+        },
+      },
+    ],
+    usage: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+  });
+
+  assert.equal(response.content.length, 2);
+  assert.equal(response.content[0].type, "text");
+  assert.equal((response.content[0] as { type: "text"; text: string }).text, "Hello ");
+  assert.equal((response.content[1] as { type: "text"; text: string }).text, "world");
+});
+
 test("normalizes OpenAI streaming deltas and assembles tool arguments", () => {
   const state = createStreamNormalizerState();
   const first = normalizeStreamEvent(

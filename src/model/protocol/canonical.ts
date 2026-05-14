@@ -102,9 +102,16 @@ export type CanonicalContentBlock =
   | CanonicalToolResultBlock
   | CanonicalToolResultReferenceBlock;
 
+export type CanonicalMessageMetadata = {
+  /** True for messages injected by the system (e.g. JSON self-correct prompts). */
+  synthetic?: boolean;
+  purpose?: string;
+};
+
 export type CanonicalMessage = {
   role: CanonicalRole;
   content: CanonicalContentBlock[];
+  metadata?: CanonicalMessageMetadata;
 };
 
 export type CanonicalToolSchema = {

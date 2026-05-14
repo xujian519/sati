@@ -26,6 +26,7 @@ export type {
   CanonicalFinishReason,
   CanonicalImageBlock,
   CanonicalMessage,
+  CanonicalMessageMetadata,
   CanonicalModelEvent,
   CanonicalModelRequest,
   CanonicalModelResponse,
