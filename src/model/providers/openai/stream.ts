@@ -253,7 +253,14 @@ function finishToolCalls(state: OpenAIStreamState, raw: unknown): CanonicalModel
     let input: unknown;
     try {
       input = JSON.parse(rawArguments);
-    } catch {
+    } catch (parseError) {
+      const preview = rawArguments.length > 500
+        ? rawArguments.slice(0, 250) + "\n…[truncated]…\n" + rawArguments.slice(-250)
+        : rawArguments;
+      console.error(
+        `[openai-stream] invalid_tool_arguments for tool "${toolCall.name ?? "?"}" (index=${index}, `
+        + `buf_len=${rawArguments.length}):\n${preview}`,
+      );
       throw new ModelProviderError({
         provider: "openai",
         protocol: "openai",
