@@ -222,6 +222,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     configStore,
     registry,
     dispose: () => {
+      registry.invalidate();
       stopConfigWatching();
       stopExtensionWatching();
     },
@@ -345,12 +346,14 @@ class ProjectRuntimeRegistry {
       if (runtime?.mcpRuntime) {
         runtime.mcpRuntime.stop().catch(() => {});
       }
+      runtime?.router?.shutdown().catch(() => {});
       this.runtimes.delete(projectRoot);
     } else {
       for (const [, runtime] of this.runtimes) {
         if (runtime.mcpRuntime) {
           runtime.mcpRuntime.stop().catch(() => {});
         }
+        runtime.router?.shutdown().catch(() => {});
       }
       this.runtimes.clear();
     }

@@ -95,6 +95,9 @@ export class AgentLoop {
     const MAX_JSON_SELF_CORRECT_RETRIES = 3;
     let jsonSelfCorrectCount = 0;
 
+    const stickyInfo = this.dependencies.router.invalidateSticky?.(input.sessionId);
+    let previousTier: string | undefined = stickyInfo?.previousTier;
+
     while (true) {
       if (input.abortSignal?.aborted) {
         const result = this.createTurnResult(input, {
@@ -155,6 +158,7 @@ export class AgentLoop {
           projectPath: this.config.cwd,
           abortSignal: input.abortSignal,
           isMainAgent: !this.config.isSubagent,
+          previousTier,
         })) {
           yield { type: "model_event", sessionId: input.sessionId, turnId: input.turnId, event };
           applyModelEventToAssembler(assembler, event);
@@ -162,6 +166,7 @@ export class AgentLoop {
             break;
           }
         }
+        previousTier = undefined;
       } catch (error) {
         if (input.abortSignal?.aborted) {
           const result = this.createTurnResult(input, {

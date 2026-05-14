@@ -18,6 +18,7 @@ import type { AgentEvent, AgentEventEmitter } from "../protocol/events.js";
  */
 export type AgentRouterRuntime = Pick<RouterRuntime, "stream"> & {
   observeUsage?: RouterRuntime["observeUsage"];
+  invalidateSticky?: RouterRuntime["invalidateSticky"];
 };
 
 /**
