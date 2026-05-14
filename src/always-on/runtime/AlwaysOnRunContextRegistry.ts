@@ -1,7 +1,9 @@
 import type { DiscoveryPlanRecord, WorkspaceHandle } from "../protocol/types.js";
 import type { DiscoveryPlanStore } from "../storage/DiscoveryPlanStore.js";
 import type { DiscoveryReportStore } from "../storage/DiscoveryReportStore.js";
+import type { DiscoveryStateStore } from "../storage/DiscoveryStateStore.js";
 import type { AlwaysOnPaths } from "../storage/AlwaysOnPaths.js";
+import type { WorkspaceProviderRegistry } from "../workspace/WorkspaceProviderRegistry.js";
 
 export type DiscoveryRunContext = {
   kind: "discovery";
@@ -17,8 +19,31 @@ export type DiscoveryRunContext = {
   planCallCount: number;
 };
 
+export type WorkspaceRunContext = {
+  kind: "workspace";
+  sessionKey: string;
+  runId: string;
+  projectKey: string;
+  paths: AlwaysOnPaths;
+  workspaceRegistry: WorkspaceProviderRegistry;
+  stateStore: DiscoveryStateStore;
+  now: () => Date;
+  /** Set after the workspace tool succeeds. */
+  handle?: WorkspaceHandle;
+};
+
 export type ExecutionRunContext = {
   kind: "execution";
+  sessionKey: string;
+  runId: string;
+  projectKey: string;
+  paths: AlwaysOnPaths;
+  workspace: WorkspaceHandle;
+  plan: DiscoveryPlanRecord;
+};
+
+export type ReportRunContext = {
+  kind: "report";
   sessionKey: string;
   runId: string;
   projectKey: string;
@@ -31,7 +56,11 @@ export type ExecutionRunContext = {
   report?: { markdown: string; filePath: string; finishedAt: Date };
 };
 
-export type AlwaysOnRunContext = DiscoveryRunContext | ExecutionRunContext;
+export type AlwaysOnRunContext =
+  | DiscoveryRunContext
+  | WorkspaceRunContext
+  | ExecutionRunContext
+  | ReportRunContext;
 
 /**
  * Single-process, mutable registry that maps `sessionKey` -> in-flight
@@ -62,9 +91,19 @@ export class AlwaysOnRunContextRegistry {
     return ctx && ctx.kind === "discovery" ? ctx : undefined;
   }
 
+  getWorkspace(sessionKey: string): WorkspaceRunContext | undefined {
+    const ctx = this.contexts.get(sessionKey);
+    return ctx && ctx.kind === "workspace" ? ctx : undefined;
+  }
+
   getExecution(sessionKey: string): ExecutionRunContext | undefined {
     const ctx = this.contexts.get(sessionKey);
     return ctx && ctx.kind === "execution" ? ctx : undefined;
+  }
+
+  getReport(sessionKey: string): ReportRunContext | undefined {
+    const ctx = this.contexts.get(sessionKey);
+    return ctx && ctx.kind === "report" ? ctx : undefined;
   }
 
   list(): AlwaysOnRunContext[] {

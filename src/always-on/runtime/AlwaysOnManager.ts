@@ -4,6 +4,7 @@ import type { AlwaysOnConfig } from "../config/parseAlwaysOnConfig.js";
 import type { CreateAlwaysOnDiscoveryPlanToolOptions } from "../tool/AlwaysOnDiscoveryPlanTool.js";
 import { createAlwaysOnDiscoveryPlanTool } from "../tool/AlwaysOnDiscoveryPlanTool.js";
 import { createAlwaysOnReportTool } from "../tool/AlwaysOnReportTool.js";
+import { createAlwaysOnWorkspaceTool } from "../tool/AlwaysOnWorkspaceTool.js";
 import { AlwaysOnRunContextRegistry } from "./AlwaysOnRunContextRegistry.js";
 import {
   AlwaysOnRuntime,
@@ -52,6 +53,9 @@ export class AlwaysOnManager {
       createAlwaysOnReportTool({
         runContexts: this.runContexts,
         now,
+      }),
+      createAlwaysOnWorkspaceTool({
+        runContexts: this.runContexts,
       }),
     ];
 

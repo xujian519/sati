@@ -14,6 +14,9 @@ import {
 import {
   createAlwaysOnReportTool,
 } from "../tool/AlwaysOnReportTool.js";
+import {
+  createAlwaysOnWorkspaceTool,
+} from "../tool/AlwaysOnWorkspaceTool.js";
 import { GitWorktreeProvider } from "../workspace/GitWorktreeProvider.js";
 import { SnapshotCopyProvider } from "../workspace/SnapshotCopyProvider.js";
 import { WorkspaceProviderRegistry } from "../workspace/WorkspaceProviderRegistry.js";
@@ -138,6 +141,9 @@ export class AlwaysOnRuntime {
           createAlwaysOnReportTool({
             runContexts: this.runContexts,
             now: this.now,
+          }),
+          createAlwaysOnWorkspaceTool({
+            runContexts: this.runContexts,
           }),
         ];
   }

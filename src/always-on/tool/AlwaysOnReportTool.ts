@@ -42,13 +42,23 @@ export function createAlwaysOnReportTool(
     isReadOnly: () => false,
     isConcurrencySafe: () => false,
     execute: async (input, context) => {
-      const ctx = options.runContexts.getExecution(context.sessionId);
+      const reportCtx = options.runContexts.getReport(context.sessionId);
+      const execCtx = options.runContexts.getExecution(context.sessionId);
+      const ctx = reportCtx ?? execCtx;
       if (!ctx) {
         throw new PilotDeckToolRuntimeError(
           "tool_execution_failed",
-          `${ALWAYS_ON_REPORT_TOOL_NAME} called outside of an Always-On execution turn.`,
+          `${ALWAYS_ON_REPORT_TOOL_NAME} called outside of an Always-On report or execution turn.`,
         );
       }
+
+      if (!("reportStore" in ctx)) {
+        throw new PilotDeckToolRuntimeError(
+          "tool_execution_failed",
+          `${ALWAYS_ON_REPORT_TOOL_NAME} called in a context without a reportStore.`,
+        );
+      }
+
       ctx.reportCallCount += 1;
       const finishedAt = now();
       const metadata: ReportMetadata = {

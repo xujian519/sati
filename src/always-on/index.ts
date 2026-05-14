@@ -66,7 +66,9 @@ export {
   AlwaysOnRunContextRegistry,
   type AlwaysOnRunContext,
   type DiscoveryRunContext,
+  type WorkspaceRunContext,
   type ExecutionRunContext,
+  type ReportRunContext,
 } from "./runtime/AlwaysOnRunContextRegistry.js";
 export { SessionConfigOverrides, type SessionConfigOverride } from "./runtime/SessionConfigOverrides.js";
 export {
@@ -98,8 +100,12 @@ export {
 export {
   buildDiscoveryPrompt,
   buildExecutionPrompt,
+  buildWorkspacePrompt,
+  buildReportPrompt,
   type BuildDiscoveryPromptInput,
+  type BuildWorkspacePromptInput,
   type BuildExecutionPromptInput,
+  type BuildReportPromptInput,
 } from "./runtime/discoveryPrompts.js";
 export {
   createAlwaysOnDiscoveryPlanTool,
@@ -115,6 +121,13 @@ export {
   type AlwaysOnReportOutput,
   type CreateAlwaysOnReportToolOptions,
 } from "./tool/AlwaysOnReportTool.js";
+export {
+  createAlwaysOnWorkspaceTool,
+  ALWAYS_ON_WORKSPACE_TOOL_NAME,
+  type AlwaysOnWorkspaceInput,
+  type AlwaysOnWorkspaceOutput,
+  type CreateAlwaysOnWorkspaceToolOptions,
+} from "./tool/AlwaysOnWorkspaceTool.js";
 export type { WorkspaceProvider, WorkspaceProviderId, WorkspacePrepareInput, WorkspacePublishOutput } from "./workspace/WorkspaceProvider.js";
 export { GitWorktreeProvider, type GitWorktreeProviderOptions } from "./workspace/GitWorktreeProvider.js";
 export { SnapshotCopyProvider, type SnapshotCopyProviderOptions } from "./workspace/SnapshotCopyProvider.js";
