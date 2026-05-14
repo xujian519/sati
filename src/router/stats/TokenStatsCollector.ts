@@ -7,6 +7,7 @@ import type { RouterDecision } from "../protocol/decision.js";
 
 export type RouterStatsRecord = {
   sessionId: string;
+  turnId?: string;
   projectPath?: string;
   scenarioType: RouterDecision["scenarioType"];
   resolvedFrom: RouterDecision["resolvedFrom"];
@@ -48,7 +49,7 @@ type PersistedData = {
 
 const MAX_HOURLY_BUCKETS = 72;
 const MAX_SESSIONS = 200;
-const AUTO_FLUSH_INTERVAL_MS = 5 * 60 * 1000;
+const AUTO_FLUSH_INTERVAL_MS = 30_000;
 
 export class TokenStatsCollector {
   private readonly enabled: boolean;
