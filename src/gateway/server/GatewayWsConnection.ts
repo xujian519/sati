@@ -172,6 +172,8 @@ export class GatewayWsConnection {
         return this.options.gateway.cronDelete(frame.params as never);
       case "cron_stop":
         return this.options.gateway.cronStop(frame.params as never);
+      case "cron_run_now":
+        return this.options.gateway.cronRunNow(frame.params as never);
       case "elicitation_respond":
         return this.options.gateway.respondElicitation(frame.params as never);
       case "permission_decide":

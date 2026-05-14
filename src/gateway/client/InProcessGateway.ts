@@ -36,6 +36,8 @@ import type {
   CronDeleteResult,
   CronListInput,
   CronListResult,
+  CronRunNowInput,
+  CronRunNowResult,
   CronStopInput,
   CronStopResult,
 } from "../../cron/protocol/types.js";
@@ -316,6 +318,10 @@ export class InProcessGateway implements Gateway {
 
   async cronStop(input: CronStopInput): Promise<CronStopResult> {
     return this.requireCron().stopTask(input);
+  }
+
+  async cronRunNow(input: CronRunNowInput): Promise<CronRunNowResult> {
+    return this.requireCron().runTaskNow(input);
   }
 
   async respondElicitation(input: GatewayElicitationResponseInput): Promise<{ delivered: boolean }> {

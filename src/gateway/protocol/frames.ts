@@ -29,6 +29,7 @@ export type WsGatewayMethod =
   | "cron_list"
   | "cron_delete"
   | "cron_stop"
+  | "cron_run_now"
   | "elicitation_respond"
   | "permission_decide"
   | "grant_session_permission"

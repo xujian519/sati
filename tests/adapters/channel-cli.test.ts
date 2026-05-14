@@ -69,6 +69,9 @@ function fakeGateway(calls: GatewaySubmitTurnInput[], events: GatewayEvent[]): G
     cronStop: async () => {
       throw new Error("not configured");
     },
+    cronRunNow: async () => {
+      throw new Error("not configured");
+    },
     respondElicitation: async () => ({ delivered: false }),
     permissionDecide: async () => ({ delivered: false }),
     grantSessionPermission: async () => ({ granted: false }),

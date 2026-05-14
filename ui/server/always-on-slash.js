@@ -6,7 +6,7 @@ import {
   getProjectDiscoveryPlansOverview,
   queueDiscoveryPlanExecution,
 } from './discovery-plans.js';
-import { sendCronDaemonRequest } from './services/cron-daemon-owner.js';
+import { getPilotDeckGateway } from './pilotdeck-bridge.js';
 
 const TARGET_ALIASES = new Map([
   ['cron', 'cron'],
@@ -410,30 +410,14 @@ export async function executeAlwaysOnSlashCommand(args = [], context = {}) {
     }
 
     if (parsed.action === 'run' && parsed.target === 'cron') {
-      const projectRoot = await extractProjectDirectory(project.projectName);
-      const response = await sendCronDaemonRequest({
-        type: 'run_task_now',
-        projectRoot,
-        taskId: parsed.id,
-      });
+      const gateway = await getPilotDeckGateway();
+      const result = await gateway.cronRunNow({ taskId: parsed.id });
 
-      if (!response?.ok) {
-        return buildResponse(
-          buildErrorMarkdown(response?.error || 'Failed to start cron job.'),
-        );
-      }
-
-      if (response.data?.type !== 'run_task_now') {
-        return buildResponse(
-          buildErrorMarkdown('Received an unexpected Cron daemon response.'),
-        );
-      }
-
-      if (response.data.reason === 'not_found') {
+      if (result.reason === 'not_found') {
         return buildResponse(buildNotFoundMarkdown('cron job', parsed.id));
       }
 
-      return buildResponse(buildCronRunMarkdown(parsed.id, response.data));
+      return buildResponse(buildCronRunMarkdown(parsed.id, result));
     }
 
     if (parsed.action === 'run' && parsed.target === 'plan') {

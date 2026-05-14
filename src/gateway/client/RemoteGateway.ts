@@ -40,6 +40,8 @@ import type {
   CronDeleteResult,
   CronListInput,
   CronListResult,
+  CronRunNowInput,
+  CronRunNowResult,
   CronStopInput,
   CronStopResult,
 } from "../../cron/protocol/types.js";
@@ -90,6 +92,10 @@ export class RemoteGateway implements Gateway {
 
   async cronStop(input: CronStopInput): Promise<CronStopResult> {
     return (await this.client.request("cron_stop", input)) as CronStopResult;
+  }
+
+  async cronRunNow(input: CronRunNowInput): Promise<CronRunNowResult> {
+    return (await this.client.request("cron_run_now", input)) as CronRunNowResult;
   }
 
   async respondElicitation(input: GatewayElicitationResponseInput): Promise<{ delivered: boolean }> {

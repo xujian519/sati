@@ -21,15 +21,6 @@ function getCronDaemonSocketPath() {
   return path.join(getClaudeConfigHomeDir(), 'cron-daemon.sock');
 }
 
-export function initializeCronDaemonOwnerEnv() {
-  if (!process.env[CRON_DAEMON_OWNER_TOKEN_ENV]) {
-    process.env[CRON_DAEMON_OWNER_TOKEN_ENV] = crypto.randomUUID();
-  }
-  process.env[CRON_DAEMON_OWNER_KIND_ENV] = CRON_DAEMON_OWNER_KIND;
-  process.env[CRON_DAEMON_OWNER_PROCESS_PID_ENV] = String(process.pid);
-  return process.env[CRON_DAEMON_OWNER_TOKEN_ENV];
-}
-
 async function readCronDaemonOwner() {
   try {
     const raw = await fs.readFile(getCronDaemonOwnerPath(), 'utf-8');

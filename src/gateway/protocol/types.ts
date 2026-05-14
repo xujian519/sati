@@ -6,6 +6,8 @@ import type {
   CronDeleteResult,
   CronListInput,
   CronListResult,
+  CronRunNowInput,
+  CronRunNowResult,
   CronStopInput,
   CronStopResult,
 } from "../../cron/protocol/types.js";
@@ -198,6 +200,7 @@ export type GatewayCronController = {
   listTasks(input: CronListInput): Promise<CronListResult>;
   deleteTask(input: CronDeleteInput): Promise<CronDeleteResult>;
   stopTask(input: CronStopInput): Promise<CronStopResult>;
+  runTaskNow(input: CronRunNowInput): Promise<CronRunNowResult>;
 };
 
 export type ReloadConfigResult = {
@@ -217,6 +220,7 @@ export interface Gateway {
   cronList(input: CronListInput): Promise<CronListResult>;
   cronDelete(input: CronDeleteInput): Promise<CronDeleteResult>;
   cronStop(input: CronStopInput): Promise<CronStopResult>;
+  cronRunNow(input: CronRunNowInput): Promise<CronRunNowResult>;
   /**
    * B1 — host responds to an `elicitation_request` event surfaced through
    * `submitTurn`. Resolves the waiting tool's `askUser()` promise. Returns

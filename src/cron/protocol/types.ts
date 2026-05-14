@@ -92,3 +92,30 @@ export type CronStopResult = {
   runId?: string;
   deletedOneTimeTask?: boolean;
 };
+
+export type CronRunNowInput = {
+  taskId: string;
+};
+
+export type CronRunNowResult = {
+  started: boolean;
+  reason?: "not_found" | "already_running";
+  taskId?: string;
+};
+
+export type CronRunOutcomeStatus = "completed" | "failed" | "running";
+
+/**
+ * Map a gateway `CronRunOutcome` (+ finishedAt presence) to a
+ * UI-facing status. Centralised here so all clients share the same
+ * mapping instead of reimplementing it.
+ */
+export function mapCronRunOutcome(
+  outcome: CronRunOutcome | undefined | null,
+  finishedAt: string | undefined | null,
+): CronRunOutcomeStatus {
+  if (!outcome) return finishedAt ? "completed" : "running";
+  if (outcome === "completed") return "completed";
+  if (outcome === "failed" || outcome === "aborted" || outcome === "stopped") return "failed";
+  return "completed";
+}

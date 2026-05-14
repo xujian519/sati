@@ -32,6 +32,7 @@ import {
 } from './pilotdeck-bridge.js';
 import { mapLegacySessionPresentation } from '../../src/web/server/legacySessionPresentation.js';
 import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from './utils/pilotPaths.js';
+import { mapCronRunOutcome } from '../../src/cron/protocol/types.js';
 import sessionManager from './sessionManager.js';
 import { applyCustomSessionNames } from './database/db.js';
 
@@ -483,13 +484,6 @@ async function getProjectCronJobsOverview(_projectName) {
         console.warn('[projects] cronList via gateway failed, returning empty:', error?.message);
         return { jobs: [] };
     }
-}
-
-function mapCronRunOutcome(outcome, finishedAt) {
-    if (!outcome) return finishedAt ? 'completed' : 'running';
-    if (outcome === 'completed') return 'completed';
-    if (outcome === 'failed' || outcome === 'aborted' || outcome === 'stopped') return 'failed';
-    return 'completed';
 }
 
 async function searchConversations(query, limit = 50, onProjectResult = null, signal = null) {

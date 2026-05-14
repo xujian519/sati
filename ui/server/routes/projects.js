@@ -355,22 +355,11 @@ export async function handleRunProjectCronJobNow(req, res) {
     }
 
     const gateway = await getPilotDeckGateway();
-    const listResult = await gateway.cronList({});
-    const task = (listResult.tasks || []).find((t) => t.taskId === taskId);
-    if (!task) {
+    const result = await gateway.cronRunNow({ taskId });
+    if (result.reason === 'not_found') {
       return res.status(404).json({ error: 'Scheduled task not found' });
     }
-    if (task.status === 'running') {
-      return res.json({ started: false, reason: 'already_running' });
-    }
-
-    await gateway.cronCreate({
-      message: task.message,
-      schedule: { type: 'once', runAt: new Date().toISOString() },
-      projectKey: task.projectKey,
-      mode: task.mode,
-    });
-    return res.json({ started: true });
+    return res.json(result);
   } catch (error) {
     return res.status(500).json({
       error: getCronRequestErrorMessage(error, 'Failed to run cron job now')

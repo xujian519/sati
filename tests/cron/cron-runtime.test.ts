@@ -66,6 +66,9 @@ function makeGateway(): Gateway & {
     cronStop: async (_input: CronStopInput) => {
       throw new Error("not used");
     },
+    cronRunNow: async () => {
+      throw new Error("not used");
+    },
     respondElicitation: async () => ({ delivered: false }),
     permissionDecide: async () => ({ delivered: false }),
     grantSessionPermission: async () => ({ granted: false }),

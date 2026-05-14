@@ -10,6 +10,8 @@ import type {
   CronDeleteResult,
   CronListInput,
   CronListResult,
+  CronRunNowInput,
+  CronRunNowResult,
   CronStopInput,
   CronStopResult,
   CronTask,
@@ -193,6 +195,21 @@ export class CronRuntime {
       runId: active.runId,
       deletedOneTimeTask,
     };
+  }
+
+  async runTaskNow(input: CronRunNowInput): Promise<CronRunNowResult> {
+    const tasks = await this.store.listTasks();
+    const task = tasks.find((t) => t.taskId === input.taskId);
+    if (!task) return { started: false, reason: "not_found" };
+    if (task.status === "running") return { started: false, reason: "already_running", taskId: task.taskId };
+
+    await this.createTask({
+      message: task.message,
+      schedule: { type: "once", runAt: new Date().toISOString() },
+      projectKey: task.projectKey,
+      mode: task.mode,
+    });
+    return { started: true, taskId: task.taskId };
   }
 
   runTickOnce(): Promise<void> {
