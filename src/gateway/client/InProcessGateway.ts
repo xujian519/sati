@@ -87,6 +87,22 @@ export class InProcessGateway implements Gateway {
    */
   private readonly permissionBus = new GatewayPermissionBus();
   private readonly sessionPermissionGrants = new Map<string, PermissionRule[]>();
+  /**
+   * Per-session "turn ended" deferreds. Set when `submitTurn`'s consumer
+   * loop starts and resolved in its `finally` after `router.endTurn` has
+   * cleared `inFlightTurns`. `abortTurn` awaits this so callers see a
+   * consistent contract: once `abortTurn` resolves, a fresh `submitTurn`
+   * for the same session is guaranteed not to be rejected with
+   * `session_busy`. Without it the gateway's `abort_turn` RPC could return
+   * while `inFlightTurns` was still populated, racing the next submit.
+   */
+  private readonly turnCompletions = new Map<string, Promise<void>>();
+  /**
+   * Max time {@link abortTurn} will wait for the in-flight turn to unwind
+   * before resolving. Aborts should be near-instant; the cap is defensive
+   * so a wedged pump cannot stall the host UI's stop button.
+   */
+  private static readonly ABORT_WAIT_TIMEOUT_MS = 5000;
 
   constructor(
     private readonly router: SessionRouter,
@@ -142,6 +158,12 @@ export class InProcessGateway implements Gateway {
       };
       return;
     }
+
+    let resolveTurnDone!: () => void;
+    const turnDone = new Promise<void>((resolve) => {
+      resolveTurnDone = resolve;
+    });
+    this.turnCompletions.set(input.sessionKey, turnDone);
 
     const queue = new AsyncQueue<GatewayEvent>();
     this.emitSinks.set(input.sessionKey, (event) => queue.enqueue(event));
@@ -212,11 +234,35 @@ export class InProcessGateway implements Gateway {
       this.router.endTurn(input.sessionKey, runId);
       // Defensive — make sure the pump promise is settled before we resolve.
       await pump.catch(() => undefined);
+      // Signal any in-flight `abortTurn` awaiters that the session slot
+      // has been released. Drop our deferred only if we still own it —
+      // a later turn for the same session may have already installed
+      // its own.
+      if (this.turnCompletions.get(input.sessionKey) === turnDone) {
+        this.turnCompletions.delete(input.sessionKey);
+      }
+      resolveTurnDone();
     }
   }
 
   async abortTurn(input: { sessionKey: string; runId?: string }): Promise<void> {
     await this.router.abort(input.sessionKey, input.runId ? `aborted:${input.runId}` : "aborted");
+    // Wait for the in-flight `submitTurn` (if any) to fully unwind so
+    // `inFlightTurns` has been cleared by the time the RPC response is
+    // sent. Otherwise a fast "stop → re-send" from a client races the
+    // gateway's own cleanup and the next submit is rejected with
+    // `session_busy`.
+    const pending = this.turnCompletions.get(input.sessionKey);
+    if (!pending) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, InProcessGateway.ABORT_WAIT_TIMEOUT_MS);
+    });
+    try {
+      await Promise.race([pending, timeout]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   async listSessions(input: ListSessionsInput): Promise<ListSessionsResult> {

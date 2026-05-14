@@ -95,6 +95,73 @@ test("InProcessGateway rejects a busy session", async () => {
   await iterator.next();
 });
 
+test("InProcessGateway.abortTurn waits for the in-flight turn to fully unwind", async () => {
+  // Regression for the "Session ... already has an active turn." race:
+  // before this fix, abort_turn returned as soon as router.abort() had
+  // notified the agent session, but inFlightTurns was only cleared in
+  // submitTurn's finally — so a client that called `submit -> abort ->
+  // submit` on a hot WS connection could race the cleanup and see
+  // `session_busy` on the resubmit. The contract is now: when abortTurn
+  // resolves, a fresh submitTurn for the same session is accepted.
+  let release!: () => void;
+  const blocker = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const router = new SessionRouter({
+    createSession: async () =>
+      ({
+        abort: () => release(),
+        snapshot: () => ({
+          sessionId: "session-1",
+          messages: [],
+          usage: {},
+          permissionDenials: [],
+          status: "idle",
+          abortController: new AbortController(),
+        }),
+        replay: async function* () {},
+        submit: async function* () {
+          yield { type: "turn_started", sessionId: "session-1", turnId: "run-1" } satisfies AgentEvent;
+          await blocker;
+        },
+      }) as unknown as AgentSession,
+  });
+  const gateway = new InProcessGateway(router, { uuid: () => "run-2" });
+
+  const first = gateway.submitTurn({
+    sessionKey: "session-1",
+    channelKey: "cli",
+    message: "one",
+    runId: "run-1",
+  });
+  const firstDrain = (async () => {
+    for await (const _event of first) {
+      void _event;
+    }
+  })();
+  // Yield once so the consumer's pump installs the inFlight slot and
+  // turn-completion deferred before we abort.
+  await new Promise((r) => setImmediate(r));
+
+  await gateway.abortTurn({ sessionKey: "session-1", runId: "run-1" });
+
+  const secondEvents = await collect(
+    gateway.submitTurn({
+      sessionKey: "session-1",
+      channelKey: "cli",
+      message: "two",
+      runId: "run-2",
+    }),
+  );
+  assert.equal(
+    secondEvents.some((e) => e.type === "error" && e.code === "session_busy"),
+    false,
+    "second submit must not be rejected as busy",
+  );
+
+  await firstDrain;
+});
+
 async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
   const values: T[] = [];
   for await (const value of iterable) {
