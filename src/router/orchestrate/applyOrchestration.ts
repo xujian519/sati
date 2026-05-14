@@ -3,7 +3,7 @@ import type {
   CanonicalModelRequest,
   CanonicalToolSchema,
 } from "../../model/index.js";
-import type { RouterAutoOrchestrateConfig } from "../config/schema.js";
+import { DEFAULT_ORCHESTRATION_PROMPT, type RouterAutoOrchestrateConfig } from "../config/schema.js";
 import type { RouterMutationsLog } from "../protocol/decision.js";
 
 export type OrchestrationInput = {
@@ -48,7 +48,7 @@ export function applyOrchestration(input: OrchestrationInput): OrchestrationResu
   let mutations: RouterMutationsLog = {};
   let mutated = false;
 
-  const effectivePrompt = skillPrompt ?? config.orchestrationPrompt;
+  const effectivePrompt = skillPrompt ?? config.orchestrationPrompt ?? DEFAULT_ORCHESTRATION_PROMPT;
   if (effectivePrompt && effectivePrompt.length > 0) {
     messages = injectOrchestrationPrompt(messages, effectivePrompt);
     mutations = {
