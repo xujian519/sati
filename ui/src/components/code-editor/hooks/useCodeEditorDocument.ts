@@ -17,26 +17,34 @@ const getErrorMessage = (error: unknown) => {
 };
 
 export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocumentParams) => {
+  // `content` is the editor's authoritative buffer. We never put an error
+  // placeholder in here — if a load fails, the surface is hidden and the
+  // user sees an error panel instead. Otherwise a stray Ctrl+S would
+  // persist the placeholder text and overwrite the user's real file.
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isBinary, setIsBinary] = useState(false);
   const fileProjectName = file.projectName ?? projectPath;
   const filePath = file.path;
-  const fileName = file.name;
   const fileDiffNewString = file.diffInfo?.new_string;
   const fileDiffOldString = file.diffInfo?.old_string;
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadFileContent = async () => {
       try {
         setLoading(true);
+        setLoadError(null);
         setIsBinary(false);
 
-        // Check if file is binary by extension
         if (isBinaryFile(file.name)) {
+          if (cancelled) return;
           setIsBinary(true);
           setLoading(false);
           return;
@@ -44,6 +52,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
 
         // Diff payload may already include full old/new snapshots, so avoid disk read.
         if (file.diffInfo && fileDiffNewString !== undefined && fileDiffOldString !== undefined) {
+          if (cancelled) return;
           setContent(fileDiffNewString);
           setLoading(false);
           return;
@@ -59,20 +68,48 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         }
 
         const data = await response.json();
-        setContent(data.content);
+        if (cancelled) return;
+        setContent(data.content ?? '');
       } catch (error) {
+        if (cancelled) return;
         const message = getErrorMessage(error);
         console.error('Error loading file:', error);
-        setContent(`// Error loading file: ${message}\n// File: ${fileName}\n// Path: ${filePath}`);
+        // IMPORTANT: do not pour the error message into `content`. A previous
+        // version of this code did `setContent('// Error loading file: ...')`
+        // which silently became user-editable buffer content and got persisted
+        // back to disk on the next save, destroying the real file.
+        setLoadError(message);
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     loadFileContent();
-  }, [file.diffInfo, file.name, fileDiffNewString, fileDiffOldString, fileName, filePath, fileProjectName]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [file.diffInfo, file.name, fileDiffNewString, fileDiffOldString, filePath, fileProjectName, reloadToken]);
+
+  const reload = useCallback(() => {
+    setReloadToken((token) => token + 1);
+  }, []);
 
   const handleSave = useCallback(async () => {
+    // Guard against persisting a buffer that was never successfully loaded.
+    // Without this, a transient read failure followed by Ctrl+S would write
+    // empty/stale content to disk.
+    if (loading) {
+      setSaveError('File is still loading');
+      return;
+    }
+    if (loadError) {
+      setSaveError('Cannot save: file failed to load. Reload first.');
+      return;
+    }
+
     setSaving(true);
     setSaveError(null);
 
@@ -106,7 +143,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     } finally {
       setSaving(false);
     }
-  }, [content, filePath, fileProjectName]);
+  }, [content, filePath, fileProjectName, loadError, loading]);
 
   const handleDownload = useCallback(() => {
     const blob = new Blob([content], { type: 'text/plain' });
@@ -127,6 +164,8 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     content,
     setContent,
     loading,
+    loadError,
+    reload,
     saving,
     saveSuccess,
     saveError,

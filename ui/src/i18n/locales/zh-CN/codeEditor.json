@@ -10,6 +10,11 @@
     "expand": "展开编辑器到全宽"
   },
   "loading": "正在加载 {{fileName}}...",
+  "loadError": {
+    "title": "无法加载该文件",
+    "description": "未能从磁盘读取 \"{{fileName}}\"。在文件成功重新加载之前，保存已被禁用，以避免把错误内容写回磁盘覆盖你的真实文件。",
+    "retry": "重试"
+  },
   "header": {
     "showingChanges": "显示更改"
   },

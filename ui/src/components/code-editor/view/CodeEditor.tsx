@@ -10,11 +10,12 @@ import type { CodeEditorFile } from '../types/types';
 import { createMinimapExtension, createScrollToFirstChunkExtension, getLanguageExtensions } from '../utils/editorExtensions';
 import { getEditorStyles } from '../utils/editorStyles';
 import { createEditorToolbarPanelExtension } from '../utils/editorToolbarPanel';
+import CodeEditorBinaryFile from './subcomponents/CodeEditorBinaryFile';
 import CodeEditorFooter from './subcomponents/CodeEditorFooter';
 import CodeEditorHeader from './subcomponents/CodeEditorHeader';
+import CodeEditorLoadError from './subcomponents/CodeEditorLoadError';
 import CodeEditorLoadingState from './subcomponents/CodeEditorLoadingState';
 import CodeEditorSurface from './subcomponents/CodeEditorSurface';
-import CodeEditorBinaryFile from './subcomponents/CodeEditorBinaryFile';
 
 type CodeEditorProps = {
   file: CodeEditorFile;
@@ -52,6 +53,8 @@ export default function CodeEditor({
     content,
     setContent,
     loading,
+    loadError,
+    reload,
     saving,
     saveSuccess,
     saveError,
@@ -161,7 +164,25 @@ export default function CodeEditor({
     );
   }
 
-  // Binary file display
+  if (loadError) {
+    return (
+      <CodeEditorLoadError
+        file={file}
+        isDarkMode={isDarkMode}
+        isSidebar={isSidebar}
+        errorMessage={loadError}
+        onRetry={reload}
+        onClose={onClose}
+        labels={{
+          title: t('loadError.title'),
+          description: t('loadError.description', { fileName: file.name }),
+          retry: t('loadError.retry'),
+          close: t('actions.close'),
+        }}
+      />
+    );
+  }
+
   if (isBinary) {
     return (
       <CodeEditorBinaryFile

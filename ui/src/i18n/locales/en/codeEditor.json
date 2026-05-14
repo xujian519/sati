@@ -10,6 +10,11 @@
     "expand": "Expand editor to full width"
   },
   "loading": "Loading {{fileName}}...",
+  "loadError": {
+    "title": "Could not load this file",
+    "description": "We couldn't read \"{{fileName}}\" from disk. Saving is disabled until the file loads successfully, so we don't overwrite your real content.",
+    "retry": "Retry"
+  },
   "header": {
     "showingChanges": "Showing changes"
   },
