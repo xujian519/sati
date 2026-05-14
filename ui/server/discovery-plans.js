@@ -16,6 +16,7 @@ import {
   appendAlwaysOnRunLogEvent,
   formatAlwaysOnPlanLogLine
 } from './services/always-on-run-logs.js';
+import { resolvePilotHome, createProjectId } from './utils/pilotPaths.js';
 
 const ALWAYS_ON_DISCOVERY_INDEX_VERSION = 1;
 const ALWAYS_ON_DISCOVERY_STRUCTURE_VERSION = 1;
@@ -35,20 +36,22 @@ const EMPTY_DISCOVERY_PLAN_STORE = {
   plans: []
 };
 
-function getAlwaysOnRoot(projectRoot) {
-  return path.join(projectRoot, '.claude', 'always-on');
+function resolveGatewayProjectDir(projectRoot) {
+  const pilotHome = resolvePilotHome();
+  const projectId = createProjectId(path.resolve(projectRoot));
+  return path.join(pilotHome, 'always-on', 'projects', projectId);
 }
 
 function getDiscoveryPlansIndexPath(projectRoot) {
-  return path.join(getAlwaysOnRoot(projectRoot), 'discovery-plans.json');
+  return path.join(resolveGatewayProjectDir(projectRoot), 'plans', 'index.json');
 }
 
 function getDiscoveryPlanMarkdownDirectory(projectRoot) {
-  return path.join(getAlwaysOnRoot(projectRoot), 'plans');
+  return path.join(resolveGatewayProjectDir(projectRoot), 'plans');
 }
 
 function getRelativePlanMarkdownPath(planId) {
-  return path.join('.claude', 'always-on', 'plans', `${planId}.md`);
+  return path.join('plans', `${planId}.md`);
 }
 
 function toTimestampValue(value) {
@@ -133,18 +136,24 @@ function normalizeDiscoveryPlanRecord(record) {
 
   const fallbackId = `plan-${randomUUID().slice(0, 8)}`;
   const id = normalizeString(record?.id, fallbackId);
+  const sourceId = normalizeString(
+    record?.sourceDiscoverySessionId || record?.sourceRunId
+  );
+
+  const gatewayStatus = normalizeString(record?.status, 'ready');
+  const mappedStatus = gatewayStatus === 'executing' ? 'running' : gatewayStatus;
 
   return {
     id,
     title: normalizeString(record?.title, 'Untitled discovery plan'),
     createdAt: toIsoTimestamp(record?.createdAt) || now,
-    updatedAt: toIsoTimestamp(record?.updatedAt) || now,
-    approvalMode: record?.approvalMode === 'auto' ? 'auto' : 'manual',
-    status: normalizeString(record?.status, 'ready'),
+    updatedAt: toIsoTimestamp(record?.updatedAt || record?.createdAt) || now,
+    approvalMode: record?.approvalMode === 'manual' ? 'manual' : 'auto',
+    status: mappedStatus,
     summary: normalizeString(record?.summary),
     rationale: normalizeString(record?.rationale),
     dedupeKey: normalizeString(record?.dedupeKey, id),
-    sourceDiscoverySessionId: normalizeString(record?.sourceDiscoverySessionId),
+    sourceDiscoverySessionId: sourceId,
     executionSessionId: normalizeString(record?.executionSessionId),
     executionStartedAt: toIsoTimestamp(record?.executionStartedAt),
     executionLastActivityAt: toIsoTimestamp(record?.executionLastActivityAt),
@@ -170,11 +179,11 @@ async function readDiscoveryPlanStore(projectRoot) {
     if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.plans)) {
       return { ...EMPTY_DISCOVERY_PLAN_STORE };
     }
+    const version = typeof parsed.schemaVersion === 'number'
+      ? parsed.schemaVersion
+      : (typeof parsed.version === 'number' ? parsed.version : ALWAYS_ON_DISCOVERY_INDEX_VERSION);
     return {
-      version:
-        typeof parsed.version === 'number'
-          ? parsed.version
-          : ALWAYS_ON_DISCOVERY_INDEX_VERSION,
+      version,
       plans: parsed.plans.map(normalizeDiscoveryPlanRecord)
     };
   } catch (error) {
@@ -190,7 +199,7 @@ async function writeDiscoveryPlanStore(projectRoot, store) {
   await fs.writeFile(
     getDiscoveryPlansIndexPath(projectRoot),
     `${JSON.stringify({
-      version: ALWAYS_ON_DISCOVERY_INDEX_VERSION,
+      schemaVersion: ALWAYS_ON_DISCOVERY_INDEX_VERSION,
       plans: store.plans
     }, null, 2)}\n`,
     'utf8'
@@ -198,7 +207,10 @@ async function writeDiscoveryPlanStore(projectRoot, store) {
 }
 
 async function readDiscoveryPlanBody(projectRoot, planFilePath) {
-  const absolutePath = path.resolve(projectRoot, planFilePath);
+  const gatewayDir = resolveGatewayProjectDir(projectRoot);
+  const absolutePath = path.isAbsolute(planFilePath)
+    ? planFilePath
+    : path.resolve(gatewayDir, planFilePath);
   try {
     return await fs.readFile(absolutePath, 'utf8');
   } catch (error) {

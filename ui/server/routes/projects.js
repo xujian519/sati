@@ -20,7 +20,7 @@ import {
   getAlwaysOnRunHistoryDetail
 } from '../services/always-on-run-history.js';
 import { getAlwaysOnRunLog } from '../services/always-on-run-logs.js';
-import { sendCronDaemonRequest } from '../services/cron-daemon-owner.js';
+import { getPilotDeckGateway } from '../pilotdeck-bridge.js';
 
 const router = express.Router();
 
@@ -189,18 +189,6 @@ function getCronRequestErrorMessage(error, fallback) {
   return fallback;
 }
 
-function isCronDaemonUnavailableError(error) {
-  return Boolean(
-    error instanceof Error &&
-    (('code' in error && (error.code === 'ENOENT' || error.code === 'ECONNREFUSED')) ||
-      error.message.includes('Timed out waiting for Cron daemon response'))
-  );
-}
-
-function getCronDaemonErrorStatus(error) {
-  return isCronDaemonUnavailableError(error) ? 503 : 500;
-}
-
 function getDiscoveryPlanErrorMessage(error, fallback) {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
@@ -246,24 +234,14 @@ export async function handleDeleteProjectCronJob(req, res) {
       return res.status(400).json({ error: 'taskId is required' });
     }
 
-    const projectRoot = await extractProjectDirectory(projectName);
-    const response = await sendCronDaemonRequest({
-      type: 'delete_task',
-      projectRoot,
-      taskId
-    });
-    if (!response?.ok) {
-      throw new Error(response?.error || 'Cron daemon delete request failed');
-    }
-    if (response.data.type !== 'delete_task') {
-      throw new Error('Unexpected Cron daemon delete response');
-    }
-    if (!response.data.deleted) {
+    const gateway = await getPilotDeckGateway();
+    const result = await gateway.cronDelete({ taskId, stopRunning: true });
+    if (!result.deleted) {
       return res.status(404).json({ error: 'Scheduled task not found' });
     }
     return res.json({ deleted: true });
   } catch (error) {
-    return res.status(getCronDaemonErrorStatus(error)).json({
+    return res.status(500).json({
       error: getCronRequestErrorMessage(error, 'Failed to delete cron job')
     });
   }
@@ -376,27 +354,25 @@ export async function handleRunProjectCronJobNow(req, res) {
       return res.status(400).json({ error: 'taskId is required' });
     }
 
-    const projectRoot = await extractProjectDirectory(projectName);
-    const response = await sendCronDaemonRequest({
-      type: 'run_task_now',
-      projectRoot,
-      taskId
-    });
-    if (!response?.ok) {
-      throw new Error(response?.error || 'Cron daemon run-now request failed');
-    }
-    if (response.data.type !== 'run_task_now') {
-      throw new Error('Unexpected Cron daemon run-now response');
-    }
-    if (response.data.reason === 'not_found') {
+    const gateway = await getPilotDeckGateway();
+    const listResult = await gateway.cronList({});
+    const task = (listResult.tasks || []).find((t) => t.taskId === taskId);
+    if (!task) {
       return res.status(404).json({ error: 'Scheduled task not found' });
     }
-    return res.json({
-      started: response.data.started,
-      ...(response.data.reason ? { reason: response.data.reason } : {})
+    if (task.status === 'running') {
+      return res.json({ started: false, reason: 'already_running' });
+    }
+
+    await gateway.cronCreate({
+      message: task.message,
+      schedule: { type: 'once', runAt: new Date().toISOString() },
+      projectKey: task.projectKey,
+      mode: task.mode,
     });
+    return res.json({ started: true });
   } catch (error) {
-    return res.status(getCronDaemonErrorStatus(error)).json({
+    return res.status(500).json({
       error: getCronRequestErrorMessage(error, 'Failed to run cron job now')
     });
   }

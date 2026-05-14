@@ -443,10 +443,53 @@ async function deleteProject(projectName, force = false) {
 }
 
 async function getProjectCronJobsOverview(_projectName) {
-    // Cron run-now / per-project history landed-on-disk surfaces are
-    // deferred under the PilotDeck-only migration. The Cron tab in the
-    // frontend already renders gracefully with an empty list.
-    return { jobs: [] };
+    try {
+        const gateway = await getPilotDeckGateway();
+        const result = await gateway.cronList({ includeHistory: true, limit: 50 });
+        const runsByTaskId = new Map();
+        if (Array.isArray(result.recentRuns)) {
+            for (const run of result.recentRuns) {
+                if (!run.taskId) continue;
+                const existing = runsByTaskId.get(run.taskId);
+                if (!existing || run.startedAt > existing.startedAt) {
+                    runsByTaskId.set(run.taskId, run);
+                }
+            }
+        }
+        const jobs = (result.tasks || []).map((task) => {
+            const latestRun = runsByTaskId.get(task.taskId) || null;
+            const isCron = task.schedule?.type === 'cron';
+            return {
+                id: task.taskId,
+                cron: isCron ? task.schedule.expression : '',
+                prompt: task.message || '',
+                createdAt: new Date(task.createdAt).getTime() || 0,
+                recurring: isCron,
+                permanent: isCron,
+                manualOnly: false,
+                status: task.status === 'running' ? 'running' : 'scheduled',
+                lastFiredAt: latestRun?.startedAt ? new Date(latestRun.startedAt).getTime() : undefined,
+                latestRun: latestRun ? {
+                    status: mapCronRunOutcome(latestRun.outcome, latestRun.finishedAt),
+                    runId: latestRun.runId,
+                    startedAt: latestRun.startedAt,
+                    taskId: latestRun.taskId,
+                    sessionId: latestRun.sessionKey,
+                } : null,
+            };
+        });
+        return { jobs };
+    } catch (error) {
+        console.warn('[projects] cronList via gateway failed, returning empty:', error?.message);
+        return { jobs: [] };
+    }
+}
+
+function mapCronRunOutcome(outcome, finishedAt) {
+    if (!outcome) return finishedAt ? 'completed' : 'running';
+    if (outcome === 'completed') return 'completed';
+    if (outcome === 'failed' || outcome === 'aborted' || outcome === 'stopped') return 'failed';
+    return 'completed';
 }
 
 async function searchConversations(query, limit = 50, onProjectResult = null, signal = null) {
