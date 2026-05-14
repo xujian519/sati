@@ -1,3 +1,4 @@
+import { jsonrepair } from "jsonrepair";
 import type { CanonicalModelEvent, CanonicalToolCall } from "../../protocol/canonical.js";
 import { ModelProviderError } from "../../protocol/errors.js";
 import { normalizeAnthropicFinishReason } from "../../response/normalizeFinishReason.js";
@@ -149,14 +150,29 @@ function contentBlockStopEvents(
   try {
     input = rawInput.length > 0 ? JSON.parse(rawInput) : {};
   } catch {
-    throw new ModelProviderError({
-      provider: "anthropic",
-      protocol: "anthropic",
-      code: "invalid_tool_arguments",
-      message: "Anthropic stream tool call arguments are not valid JSON.",
-      retryable: false,
-      raw,
-    });
+    try {
+      const repaired = jsonrepair(rawInput);
+      input = JSON.parse(repaired);
+      console.warn(
+        `[anthropic-stream] repaired invalid JSON for tool "${toolCall.name ?? "?"}" (buf_len=${rawInput.length})`,
+      );
+    } catch {
+      const preview = rawInput.length > 500
+        ? rawInput.slice(0, 250) + "\n…[truncated]…\n" + rawInput.slice(-250)
+        : rawInput;
+      console.error(
+        `[anthropic-stream] invalid_tool_arguments for tool "${toolCall.name ?? "?"}" (index=${index}, `
+        + `buf_len=${rawInput.length}):\n${preview}`,
+      );
+      throw new ModelProviderError({
+        provider: "anthropic",
+        protocol: "anthropic",
+        code: "invalid_tool_arguments",
+        message: "Anthropic stream tool call arguments are not valid JSON.",
+        retryable: true,
+        raw,
+      });
+    }
   }
 
   state.toolCalls.delete(index);
