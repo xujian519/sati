@@ -2,6 +2,7 @@ import type { Gateway, GatewayEvent } from "../protocol/types.js";
 import type { WsHelloFrame, WsRequestFrame } from "../protocol/frames.js";
 import { PILOTDECK_GATEWAY_PROTOCOL_VERSION } from "../protocol/version.js";
 import { TextWebSocketConnection } from "./websocket.js";
+import { SkillManagerError, SkillValidationError } from "../../extension/skills/index.js";
 
 export type GatewayWsConnectionOptions = {
   gateway: Gateway;
@@ -101,6 +102,40 @@ export class GatewayWsConnection {
       const result = await this.dispatchRequest(frame);
       this.ws.sendText(JSON.stringify({ type: "response", id: frame.id, ok: true, result }));
     } catch (error) {
+      // SkillManagerError carries a structured `code` we want to round-
+      // trip to the client (so the UI can surface "conflict", "not_found",
+      // "invalid_slug", etc. as actionable messages instead of a generic
+      // 500). SkillValidationError additionally carries the structured
+      // validation payload that powers the compliance panel.
+      if (error instanceof SkillValidationError) {
+        this.ws.sendText(
+          JSON.stringify({
+            type: "response",
+            id: frame.id,
+            ok: false,
+            error: {
+              code: error.code,
+              message: error.message,
+              validation: error.validation,
+            },
+          }),
+        );
+        return;
+      }
+      if (error instanceof SkillManagerError) {
+        this.ws.sendText(
+          JSON.stringify({
+            type: "response",
+            id: frame.id,
+            ok: false,
+            error: {
+              code: error.code,
+              message: error.message,
+            },
+          }),
+        );
+        return;
+      }
       this.ws.sendText(
         JSON.stringify({
           type: "response",
@@ -154,10 +189,47 @@ export class GatewayWsConnection {
           return this.options.gateway.reloadConfig();
         }
         return Promise.resolve({ reloaded: false });
+      case "skill_list":
+        return requireSkillMethod(this.options.gateway.skillsList, this.options.gateway)(frame.params as never);
+      case "skill_read":
+        return requireSkillMethod(this.options.gateway.skillRead, this.options.gateway)(frame.params as never);
+      case "skill_write":
+        return requireSkillMethod(this.options.gateway.skillWrite, this.options.gateway)(frame.params as never);
+      case "skill_create":
+        return requireSkillMethod(this.options.gateway.skillCreate, this.options.gateway)(frame.params as never);
+      case "skill_delete":
+        return requireSkillMethod(this.options.gateway.skillDelete, this.options.gateway)(frame.params as never);
+      case "skill_import":
+        return requireSkillMethod(this.options.gateway.skillImport, this.options.gateway)(frame.params as never);
+      case "skill_validate":
+        return requireSkillMethod(this.options.gateway.skillValidate, this.options.gateway)(frame.params as never);
+      case "skill_scan":
+        return requireSkillMethod(this.options.gateway.skillScan, this.options.gateway)(frame.params as never);
       default:
         throw new Error(`Unknown gateway method ${(frame as { method?: string }).method}.`);
     }
   }
+}
+
+/**
+ * Guard for optional Skill RPC methods on the Gateway. The Gateway
+ * interface marks every `skill*` method as optional so older
+ * RemoteGateway-backed servers don't break the type contract. When a
+ * client invokes a method this server's gateway doesn't implement, we
+ * fail with a structured `not_configured` error instead of crashing
+ * the dispatcher.
+ */
+function requireSkillMethod<TArg, TRet>(
+  method: ((arg: TArg) => Promise<TRet>) | undefined,
+  gateway: Gateway,
+): (arg: TArg) => Promise<TRet> {
+  if (!method) {
+    throw new SkillManagerError(
+      "not_configured",
+      "Skill management is not enabled on this gateway.",
+    );
+  }
+  return method.bind(gateway);
 }
 
 function isHelloFrame(value: unknown): value is WsHelloFrame {

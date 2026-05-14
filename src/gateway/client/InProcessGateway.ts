@@ -41,6 +41,25 @@ import type {
 } from "../../cron/protocol/types.js";
 import { permissionEntryToRule, permissionSettingsToRuleSet, readPermissionSettings } from "../../permission/index.js";
 import type { PermissionRule } from "../../permission/index.js";
+import { SkillManagerError, type SkillManager } from "../../extension/skills/index.js";
+import type {
+  SkillAddressInput,
+  SkillCreateInput,
+  SkillCreateResult,
+  SkillDeleteInput,
+  SkillDeleteResult,
+  SkillImportInput,
+  SkillImportResult,
+  SkillReadResult,
+  SkillScanInput,
+  SkillScanResult,
+  SkillValidateInput,
+  SkillValidationResult,
+  SkillWriteInput,
+  SkillWriteResult,
+  SkillsListInput,
+  SkillsListResult,
+} from "../../extension/skills/types.js";
 
 export type InProcessGatewayOptions = {
   now?: () => Date;
@@ -64,6 +83,12 @@ export type InProcessGatewayOptions = {
    * the PilotConfigStore + ProjectRuntimeRegistry lifecycle.
    */
   reloadConfig?: () => Promise<ReloadConfigResult>;
+  /**
+   * Authoritative skill CRUD manager backed by `~/.pilotdeck/skills/`.
+   * Wired by `createLocalGateway` so every host (CLI, TUI, Web UI bridge,
+   * SDK) reads and writes the same skill directory the agent loads from.
+   */
+  skillManager?: SkillManager;
   dispatchHookForSession?: (sessionKey: string, event: string, payload: Record<string, unknown>) => void;
   /** Directory to persist large tool outputs for TUI/Web viewing. */
   toolResultsDir?: string;
@@ -362,6 +387,56 @@ export class InProcessGateway implements Gateway {
 
   setCronController(cron: GatewayCronController | undefined): void {
     (this.options as { cron?: GatewayCronController }).cron = cron;
+  }
+
+  // -------------------------------------------------------------------
+  // Skill management — see `SkillManager` for the actual disk ops. The
+  // gateway methods just guard "skill manager configured" and translate
+  // domain errors into structured failures the WS dispatcher and host
+  // bridges can render. `SkillValidationError` is preserved as a special
+  // case so the UI can surface the `validation` payload to the user.
+  // -------------------------------------------------------------------
+
+  async skillsList(input: SkillsListInput): Promise<SkillsListResult> {
+    return this.requireSkills().list(input);
+  }
+
+  async skillRead(input: SkillAddressInput): Promise<SkillReadResult> {
+    return this.requireSkills().read(input);
+  }
+
+  async skillWrite(input: SkillWriteInput): Promise<SkillWriteResult> {
+    return this.requireSkills().write(input);
+  }
+
+  async skillCreate(input: SkillCreateInput): Promise<SkillCreateResult> {
+    return this.requireSkills().create(input);
+  }
+
+  async skillDelete(input: SkillDeleteInput): Promise<SkillDeleteResult> {
+    return this.requireSkills().delete(input);
+  }
+
+  async skillImport(input: SkillImportInput): Promise<SkillImportResult> {
+    return this.requireSkills().import(input);
+  }
+
+  async skillValidate(input: SkillValidateInput): Promise<SkillValidationResult> {
+    return this.requireSkills().validate(input);
+  }
+
+  async skillScan(input: SkillScanInput): Promise<SkillScanResult> {
+    return this.requireSkills().scan(input);
+  }
+
+  private requireSkills(): SkillManager {
+    if (!this.options.skillManager) {
+      throw new SkillManagerError(
+        "not_configured",
+        "Skill manager is not configured on this gateway.",
+      );
+    }
+    return this.options.skillManager;
   }
 
   private requireCron(): GatewayCronController {

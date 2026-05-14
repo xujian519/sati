@@ -98,7 +98,15 @@ export type WebGatewayMethod =
   | "delete_session"
   | "list_projects"
   | "describe_project"
-  | "reload_config";
+  | "reload_config"
+  | "skill_list"
+  | "skill_read"
+  | "skill_write"
+  | "skill_create"
+  | "skill_delete"
+  | "skill_import"
+  | "skill_validate"
+  | "skill_scan";
 
 export type WebSubmitTurnInput = {
   sessionKey: string;

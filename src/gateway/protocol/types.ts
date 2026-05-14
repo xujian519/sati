@@ -21,6 +21,24 @@ import type {
   WebReadSessionMessagesInput as WebUiReadSessionMessagesInput,
   WebReadSessionMessagesResult as WebUiReadSessionMessagesResult,
 } from "../../web/client/protocol.js";
+import type {
+  SkillCreateInput,
+  SkillCreateResult,
+  SkillDeleteInput,
+  SkillDeleteResult,
+  SkillImportInput,
+  SkillImportResult,
+  SkillAddressInput,
+  SkillReadResult,
+  SkillScanInput,
+  SkillScanResult,
+  SkillValidateInput,
+  SkillValidationResult,
+  SkillWriteInput,
+  SkillWriteResult,
+  SkillsListInput,
+  SkillsListResult,
+} from "../../extension/skills/types.js";
 
 export type GatewayChannelKey = "cli" | "tui" | "feishu" | "web" | "test" | (string & {});
 
@@ -242,4 +260,23 @@ export interface Gateway {
    * capability) may leave it undefined.
    */
   reloadConfig?(): Promise<ReloadConfigResult>;
+
+  /**
+   * Skill-management RPCs. The gateway is the authoritative owner of
+   * `~/.pilotdeck/skills/` (user scope) and `<project>/.pilotdeck/skills/`
+   * (project scope). The Web UI's REST endpoints under `/api/skills/*`
+   * are now thin shims that forward here, so a skill the agent loads
+   * and a skill the UI shows always come from the same place.
+   *
+   * Optional — a `RemoteGateway` backed by an older server without
+   * these methods leaves them undefined; hosts should feature-detect.
+   */
+  skillsList?(input: SkillsListInput): Promise<SkillsListResult>;
+  skillRead?(input: SkillAddressInput): Promise<SkillReadResult>;
+  skillWrite?(input: SkillWriteInput): Promise<SkillWriteResult>;
+  skillCreate?(input: SkillCreateInput): Promise<SkillCreateResult>;
+  skillDelete?(input: SkillDeleteInput): Promise<SkillDeleteResult>;
+  skillImport?(input: SkillImportInput): Promise<SkillImportResult>;
+  skillValidate?(input: SkillValidateInput): Promise<SkillValidationResult>;
+  skillScan?(input: SkillScanInput): Promise<SkillScanResult>;
 }

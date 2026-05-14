@@ -64,6 +64,7 @@ import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
 import type { RouterEventBus, RouterEvent } from "../router/protocol/events.js";
 import type { EdgeClawMemoryProvider } from "../context/index.js";
 import { loadBuiltinPlugins } from "../extension/plugins/builtin/loadBuiltinPlugins.js";
+import { SkillManager } from "../extension/skills/index.js";
 import { ExtensionWatchManager, type ExtensionWatchEvent } from "./ExtensionWatchManager.js";
 
 export type CreateLocalGatewayOptions = {
@@ -197,11 +198,13 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       (defaultRuntime.snapshot.config.gateway?.idleSessionTimeoutMinutes ?? 30) * 60_000,
     now,
   });
+  const skillManager = new SkillManager({ pilotHome });
   const gateway = new InProcessGateway(router, {
     now,
     serverInfo: { mode: "in_process", projectKey: projectRoot },
     toolResultsDir: resolve(tmpdir(), "pilotdeck-tool-output", process.pid.toString()),
     cron: options.cron,
+    skillManager,
     readSessionMessages: (input) =>
       readWebSessionMessages(input, {
         projectRoot: input.projectKey ? input.projectKey : projectRoot,

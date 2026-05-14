@@ -16,6 +16,24 @@ import type {
   WebReadSessionMessagesResult,
 } from "../protocol/types.js";
 import type {
+  SkillAddressInput,
+  SkillCreateInput,
+  SkillCreateResult,
+  SkillDeleteInput,
+  SkillDeleteResult,
+  SkillImportInput,
+  SkillImportResult,
+  SkillReadResult,
+  SkillScanInput,
+  SkillScanResult,
+  SkillValidateInput,
+  SkillValidationResult,
+  SkillWriteInput,
+  SkillWriteResult,
+  SkillsListInput,
+  SkillsListResult,
+} from "../../extension/skills/types.js";
+import type {
   CronCreateInput,
   CronCreateResult,
   CronDeleteInput,
@@ -100,6 +118,38 @@ export class RemoteGateway implements Gateway {
 
   async reloadConfig(): Promise<ReloadConfigResult> {
     return (await this.client.request("reload_config", {})) as ReloadConfigResult;
+  }
+
+  async skillsList(input: SkillsListInput): Promise<SkillsListResult> {
+    return (await this.client.request("skill_list", input)) as SkillsListResult;
+  }
+
+  async skillRead(input: SkillAddressInput): Promise<SkillReadResult> {
+    return (await this.client.request("skill_read", input)) as SkillReadResult;
+  }
+
+  async skillWrite(input: SkillWriteInput): Promise<SkillWriteResult> {
+    return (await this.client.request("skill_write", input)) as SkillWriteResult;
+  }
+
+  async skillCreate(input: SkillCreateInput): Promise<SkillCreateResult> {
+    return (await this.client.request("skill_create", input)) as SkillCreateResult;
+  }
+
+  async skillDelete(input: SkillDeleteInput): Promise<SkillDeleteResult> {
+    return (await this.client.request("skill_delete", input)) as SkillDeleteResult;
+  }
+
+  async skillImport(input: SkillImportInput): Promise<SkillImportResult> {
+    return (await this.client.request("skill_import", input)) as SkillImportResult;
+  }
+
+  async skillValidate(input: SkillValidateInput): Promise<SkillValidationResult> {
+    return (await this.client.request("skill_validate", input)) as SkillValidationResult;
+  }
+
+  async skillScan(input: SkillScanInput): Promise<SkillScanResult> {
+    return (await this.client.request("skill_scan", input)) as SkillScanResult;
   }
 }
 

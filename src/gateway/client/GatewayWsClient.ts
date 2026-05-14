@@ -5,6 +5,28 @@ import { PILOTDECK_GATEWAY_PROTOCOL_VERSION } from "../protocol/version.js";
 
 export type GatewayWsNotificationHandler = (name: string, payload: unknown) => void;
 
+/**
+ * Structured error preserving the server-side `code` (e.g.
+ * `conflict`, `invalid_slug`, `not_found`, `validation_failed`) and
+ * any extra payload like the validation report. Hosts use the `code`
+ * to map back to UI affordances (HTTP status codes, retry hints,
+ * etc.) instead of pattern-matching on the human-readable `message`.
+ *
+ * Plain `Error` is still thrown for transport-level failures (WS
+ * closed, hello timeout, etc.) so callers can distinguish "the
+ * gateway said no" from "the gateway is unreachable".
+ */
+export class GatewayRequestError extends Error {
+  public readonly validation?: unknown;
+  constructor(public readonly code: string, message: string, extra?: { validation?: unknown }) {
+    super(message);
+    this.name = "GatewayRequestError";
+    if (extra?.validation !== undefined) {
+      this.validation = extra.validation;
+    }
+  }
+}
+
 export type GatewayWsClientOptions = {
   url: string;
   token: string;
@@ -111,7 +133,19 @@ export class GatewayWsClient {
       if (frame.ok) {
         pending.resolve(frame.result);
       } else {
-        pending.reject(new Error(frame.error.message));
+        // Preserve the structured error envelope. The legacy contract
+        // was `Error(message)`; we now also carry `code` and any extra
+        // payload (e.g. `validation` for SkillValidationError) so
+        // hosts can route on a stable identifier instead of parsing
+        // the message string.
+        const envelope = frame.error as { code?: string; message?: string; validation?: unknown };
+        pending.reject(
+          new GatewayRequestError(
+            envelope.code ?? "gateway_request_failed",
+            envelope.message ?? "Gateway request failed.",
+            envelope.validation !== undefined ? { validation: envelope.validation } : undefined,
+          ),
+        );
       }
       return;
     }
