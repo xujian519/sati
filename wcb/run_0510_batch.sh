@@ -10,7 +10,7 @@ set -euo pipefail
 #   MODEL=openai/gpt-5.4 PARALLEL=4 bash wcb/run_0510_batch.sh
 # ═══════════════════════════════════════════════════════════════════════
 
-DOCKER_IMAGE="${DOCKER_IMAGE:-wildclawbench-pilotdeck:v1.5}"
+DOCKER_IMAGE="${DOCKER_IMAGE:-wildclawbench-pilotdeck:v1.6}"
 NFS_ROOT="/home/yyk/yyk03/Workspace"
 MODEL="${MODEL:-minimax/minimax-m2.7}"
 ORCH_MODEL="${ORCH_MODEL:-}"

@@ -87,6 +87,11 @@ model:
       protocol: ${provider}
       url: "${baseUrl}"
       apiKey: "${apiKey}"
+      extraBody:
+        provider:
+          order:
+            - "MiniMax"
+          allow_fallbacks: false
       models:
         "${modelId}":
           id: "${modelId}"
@@ -116,6 +121,13 @@ model:
       protocol: anthropic
       url: "${orchBaseUrl}"
       apiKey: "${apiKey}"
+      headers:
+        anthropic-beta: "prompt-caching-2024-07-31"
+      extraBody:
+        provider:
+          order:
+            - "Anthropic"
+          allow_fallbacks: false
       models:
         "${orchModel}":
           id: "${orchModel}"
@@ -126,6 +138,7 @@ model:
             streaming: true
             tools: true
             vision: false
+            supportsPromptCache: true
           multimodal:
             input:
               - text
