@@ -7,10 +7,12 @@ import type { AgentTranscriptReplayResult } from "../../session/transcript/Trans
 import type { TurnRunner } from "../turn/TurnRunner.js";
 import {
   appendPermissionDenials,
+  cloneSessionStateForRuntimeReload,
   createInitialAgentSessionState,
   mergeSessionUsage,
   snapshotAgentSessionState,
 } from "./AgentSessionState.js";
+import type { AgentTranscriptWriterState } from "../../session/transcript/TranscriptWriter.js";
 
 export type AgentSessionOptions = {
   sessionId: string;
@@ -21,6 +23,13 @@ export type AgentSessionOptions = {
   initialState?: AgentSessionStateShape;
   replayEvents?: AgentEvent[];
   lifecycle?: LifecycleRuntime;
+};
+
+export type AgentSessionRuntimeReloadSnapshot = {
+  state: AgentSessionStateShape;
+  cwd: string;
+  transcriptPath: string;
+  transcriptWriterState?: AgentTranscriptWriterState;
 };
 
 export class AgentSession {
@@ -101,6 +110,16 @@ export class AgentSession {
 
   snapshot(): AgentSessionStateShape {
     return snapshotAgentSessionState(this.state);
+  }
+
+  snapshotForRuntimeReload(): AgentSessionRuntimeReloadSnapshot {
+    const runtime = this.options.turnRunner.snapshotForRuntimeReload();
+    return {
+      state: cloneSessionStateForRuntimeReload(this.state),
+      cwd: runtime.runtimeContext.cwd,
+      transcriptPath: runtime.runtimeContext.transcriptPath,
+      transcriptWriterState: runtime.transcriptWriterState,
+    };
   }
 
   async *replay(): AsyncGenerator<AgentEvent, void, unknown> {

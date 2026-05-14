@@ -48,7 +48,7 @@ export {
   SUBAGENT_SUMMARY_PREVIEW_BYTES,
   truncatePreview,
 } from "./transcript/TranscriptEntry.js";
-export type { AgentTranscriptWriter } from "./transcript/TranscriptWriter.js";
+export type { AgentTranscriptWriter, AgentTranscriptWriterState } from "./transcript/TranscriptWriter.js";
 export {
   findCanonicalProjectRoot,
   findGitRoot,

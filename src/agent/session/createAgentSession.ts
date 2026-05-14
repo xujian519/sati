@@ -22,6 +22,7 @@ export type CreateAgentSessionOptions = {
     tools: Partial<AgentRuntimeDependencies["tools"]> & Pick<AgentRuntimeDependencies["tools"], "registry">;
   };
   transcript?: AgentTranscriptWriter;
+  storage?: AgentProjectSessionStorage;
   projectStorage?: Omit<AgentProjectSessionStorageOptions, "sessionId" | "now">;
   initialState?: AgentSessionStateShape;
   replayEvents?: AgentEvent[];
@@ -50,13 +51,15 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
     drainEvents: options.dependencies.drainEvents ?? eventBuf?.drain,
   };
   const loop = new AgentLoop(options.config, dependencies);
-  const storage = options.projectStorage
-    ? createAgentProjectSessionStorage({
-        ...options.projectStorage,
-        sessionId: options.sessionId,
-        now: dependencies.now,
-      })
-    : undefined;
+  const storage = options.storage ?? (
+    options.projectStorage
+      ? createAgentProjectSessionStorage({
+          ...options.projectStorage,
+          sessionId: options.sessionId,
+          now: dependencies.now,
+        })
+      : undefined
+  );
   const transcript = options.transcript ?? storage?.transcript ?? new InMemoryTranscriptWriter();
   const runtimeContext = {
     cwd: options.config.cwd,

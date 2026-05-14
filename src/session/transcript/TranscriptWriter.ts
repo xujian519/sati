@@ -6,6 +6,11 @@ import type {
   SessionMetadataValue,
 } from "./TranscriptEntry.js";
 
+export type AgentTranscriptWriterState = {
+  sequence: number;
+  lastEntryId: string | null;
+};
+
 export type AgentTranscriptWriter = {
   recordAcceptedInput(sessionId: string, turnId: string, messages: CanonicalMessage[]): void | Promise<void>;
   recordDurableMessage(sessionId: string, turnId: string, message: CanonicalMessage): void | Promise<void>;
@@ -17,4 +22,5 @@ export type AgentTranscriptWriter = {
     boundary: AgentControlBoundaryTranscriptEntry["boundary"],
   ): void | Promise<void>;
   recordEntry?(entry: AgentTranscriptEntry): void | Promise<void>;
+  snapshotState?(): AgentTranscriptWriterState;
 };

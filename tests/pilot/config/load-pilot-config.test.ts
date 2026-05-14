@@ -44,19 +44,20 @@ test("loads default config from PilotHome and resolves model env credentials", (
   }
 });
 
-test("merges default, project and env sources by priority", () => {
+test("ignores project config and applies env overrides on top of global config", () => {
   const pilotHome = makeTempDir();
   const projectRoot = makeTempDir();
   try {
+    const modelConfig = validModelConfig() as { providers: Record<string, Record<string, unknown>> };
+    const anthropicProvider = modelConfig.providers["anthropic-main"];
     writeJson(getPilotConfigFilePath(pilotHome), {
       schemaVersion: 1,
       agent: validAgentConfig(),
-      model: validModelConfig(),
-    });
-    writeJson(join(projectRoot, ".pilotdeck.yaml"), {
       model: {
         providers: {
+          ...modelConfig.providers,
           "anthropic-main": {
+            ...anthropicProvider,
             timeoutMs: 2000,
           },
         },
@@ -84,15 +85,44 @@ test("merges default, project and env sources by priority", () => {
 
     assert.equal(snapshot.config.agent.model.provider, "openai-main");
     assert.equal(snapshot.config.agent.model.model, "gpt-5.1");
-    assert.equal(snapshot.config.model.providers["anthropic-main"].timeoutMs, 1000);
-    assert.ok(snapshot.sources.some((source) => source.path === projectConfigPath));
-    assert.ok(!snapshot.sources.some((source) => source.path === join(projectRoot, ".pilotdeck.yaml")));
+    assert.equal(snapshot.config.model.providers["anthropic-main"].timeoutMs, 2000);
+    assert.ok(!snapshot.sources.some((source) => source.path === projectConfigPath));
     assert.deepEqual(snapshot.sources.map((source) => source.kind), [
       "env",
       "default",
-      "project",
       "env",
     ]);
+  } finally {
+    rmSync(pilotHome, { recursive: true, force: true });
+    rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("ignores invalid project config YAML entirely", () => {
+  const pilotHome = makeTempDir();
+  const projectRoot = makeTempDir();
+  try {
+    writeJson(getPilotConfigFilePath(pilotHome), {
+      schemaVersion: 1,
+      agent: validAgentConfig(),
+      model: validModelConfig(),
+    });
+    const projectConfigPath = getPilotProjectConfigFilePath(projectRoot);
+    mkdirSync(dirname(projectConfigPath), { recursive: true });
+    writeFileSync(projectConfigPath, "agent:\n  model: [", "utf8");
+
+    const snapshot = loadPilotConfig({
+      projectRoot,
+      env: {
+        PILOT_HOME: pilotHome,
+        ANTHROPIC_API_KEY: "anthropic-key",
+      },
+    });
+
+    assert.equal(snapshot.config.agent.model.provider, "anthropic-main");
+    assert.equal(snapshot.config.agent.model.model, "claude-sonnet-4-5");
+    assert.ok(snapshot.diagnostics.every((diagnostic) => diagnostic.code !== "CONFIG_YAML_INVALID"));
+    assert.ok(snapshot.sources.every((source) => source.path !== projectConfigPath));
   } finally {
     rmSync(pilotHome, { recursive: true, force: true });
     rmSync(projectRoot, { recursive: true, force: true });

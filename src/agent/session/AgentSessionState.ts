@@ -22,6 +22,15 @@ export function snapshotAgentSessionState(state: AgentSessionStateShape): AgentS
   };
 }
 
+export function cloneSessionStateForRuntimeReload(state: AgentSessionStateShape): AgentSessionStateShape {
+  return {
+    ...snapshotAgentSessionState(state),
+    status: "idle",
+    currentTurnId: undefined,
+    abortController: new AbortController(),
+  };
+}
+
 export function mergeSessionUsage(first: CanonicalUsage, second: CanonicalUsage): CanonicalUsage {
   return {
     inputTokens: add(first.inputTokens, second.inputTokens),

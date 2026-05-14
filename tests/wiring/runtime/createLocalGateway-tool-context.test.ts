@@ -41,11 +41,10 @@ function scrubProcessEnv(): Record<string, string | undefined> {
 function makeProjectRoot(): { projectRoot: string; pilotHome: string; cleanup: () => void } {
   const projectRoot = mkdtempSync(path.join(tmpdir(), "pilotdeck-wiring-runtime-"));
   const pilotHome = mkdtempSync(path.join(tmpdir(), "pilotdeck-wiring-home-"));
-  // Minimal pilotdeck.yaml so loadPilotConfig doesn't barf. Lives at
-  // `<projectRoot>/.pilotdeck/pilotdeck.yaml` per `getPilotProjectConfigFilePath`.
-  mkdirSync(path.join(projectRoot, ".pilotdeck"), { recursive: true });
+  // Minimal global pilotdeck.yaml so loadPilotConfig doesn't barf.
+  mkdirSync(pilotHome, { recursive: true });
   writeFileSync(
-    path.join(projectRoot, ".pilotdeck", "pilotdeck.yaml"),
+    path.join(pilotHome, "pilotdeck.yaml"),
     [
       "schemaVersion: 1",
       "agent:",
@@ -131,43 +130,46 @@ test("WIRING runtime: createLocalGateway can run a turn end-to-end with __testMo
   const env = makeProjectRoot();
   try {
     const { model, lastRequest } = makeRecordingModel();
-    const { gateway } = createLocalGateway({
+    const { gateway, dispose } = createLocalGateway({
       projectRoot: env.projectRoot,
       pilotHome: env.pilotHome,
       env: scrubProcessEnv(),
       __testModelFactory: () => model,
     });
+    try {
+      const sessionKey = `cli:project=${env.projectRoot}:s_runtime`;
+      const events: string[] = [];
+      for await (const event of gateway.submitTurn({
+        sessionKey,
+        channelKey: "cli",
+        message: "hello",
+      })) {
+        events.push(event.type);
+      }
 
-    const sessionKey = `cli:project=${env.projectRoot}:s_runtime`;
-    const events: string[] = [];
-    for await (const event of gateway.submitTurn({
-      sessionKey,
-      channelKey: "cli",
-      message: "hello",
-    })) {
-      events.push(event.type);
+      assert.ok(events.includes("turn_started"), `expected turn_started, got: ${events.join(",")}`);
+      assert.ok(events.includes("turn_completed"), `expected turn_completed, got: ${events.join(",")}`);
+      assert.ok(lastRequest.value, "model.stream was never called — wiring is broken end-to-end");
+      assert.ok(
+        Array.isArray(lastRequest.value!.tools),
+        "request.tools was not threaded in",
+      );
+      const toolNames = (lastRequest.value!.tools ?? []).map((t) => t.name);
+      // Verifies R1: structured_output + ask_user_question are in the registry
+      // and reach the model request via DefaultContextRuntime.prepareForModel.
+      assert.ok(
+        toolNames.includes("structured_output"),
+        `structured_output missing from wire. got: ${toolNames.join(",")}`,
+      );
+      assert.ok(
+        toolNames.includes("ask_user_question"),
+        `ask_user_question missing from wire. got: ${toolNames.join(",")}`,
+      );
+
+      await gateway.closeSession({ sessionKey });
+    } finally {
+      dispose();
     }
-
-    assert.ok(events.includes("turn_started"), `expected turn_started, got: ${events.join(",")}`);
-    assert.ok(events.includes("turn_completed"), `expected turn_completed, got: ${events.join(",")}`);
-    assert.ok(lastRequest.value, "model.stream was never called — wiring is broken end-to-end");
-    assert.ok(
-      Array.isArray(lastRequest.value!.tools),
-      "request.tools was not threaded in",
-    );
-    const toolNames = (lastRequest.value!.tools ?? []).map((t) => t.name);
-    // Verifies R1: structured_output + ask_user_question are in the registry
-    // and reach the model request via DefaultContextRuntime.prepareForModel.
-    assert.ok(
-      toolNames.includes("structured_output"),
-      `structured_output missing from wire. got: ${toolNames.join(",")}`,
-    );
-    assert.ok(
-      toolNames.includes("ask_user_question"),
-      `ask_user_question missing from wire. got: ${toolNames.join(",")}`,
-    );
-
-    await gateway.closeSession({ sessionKey });
   } finally {
     env.cleanup();
   }
@@ -177,18 +179,22 @@ test("WIRING runtime: respondElicitation returns delivered=false for an unknown 
   const env = makeProjectRoot();
   try {
     const { model } = makeRecordingModel();
-    const { gateway } = createLocalGateway({
+    const { gateway, dispose } = createLocalGateway({
       projectRoot: env.projectRoot,
       pilotHome: env.pilotHome,
       env: scrubProcessEnv(),
       __testModelFactory: () => model,
     });
-    const result = await gateway.respondElicitation({
-      sessionKey: "no-such-session",
-      requestId: "no-such-request",
-      answer: { type: "answered", answers: {} },
-    });
-    assert.deepEqual(result, { delivered: false });
+    try {
+      const result = await gateway.respondElicitation({
+        sessionKey: "no-such-session",
+        requestId: "no-such-request",
+        answer: { type: "answered", answers: {} },
+      });
+      assert.deepEqual(result, { delivered: false });
+    } finally {
+      dispose();
+    }
   } finally {
     env.cleanup();
   }

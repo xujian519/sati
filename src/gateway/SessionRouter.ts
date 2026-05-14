@@ -8,9 +8,14 @@ export type GatewaySessionContext = {
 };
 
 export type GatewaySessionFactory = (context: GatewaySessionContext) => AgentSession | Promise<AgentSession>;
+export type GatewaySessionRecreator = (
+  context: GatewaySessionContext,
+  previousSession: AgentSession,
+) => AgentSession | Promise<AgentSession>;
 
 export type SessionRouterOptions = {
   createSession: GatewaySessionFactory;
+  recreateSession?: GatewaySessionRecreator;
   listSessions?: (input: ListSessionsInput) => Promise<ListSessionsResult>;
   idleSessionTimeoutMs?: number;
   now?: () => Date;
@@ -19,6 +24,8 @@ export type SessionRouterOptions = {
 type SessionRecord = {
   session: AgentSession;
   lastUsedAt: number;
+  context: GatewaySessionContext;
+  dirtyReason?: string;
 };
 
 const DEFAULT_IDLE_SESSION_TIMEOUT_MS = 30 * 60 * 1000;
@@ -38,6 +45,11 @@ export class SessionRouter {
     this.sweepIdle();
     const cached = this.sessions.get(context.sessionKey);
     if (cached) {
+      cached.context = mergeSessionContext(cached.context, context);
+      if (cached.dirtyReason && this.options.recreateSession) {
+        cached.session = await this.options.recreateSession(cached.context, cached.session);
+        cached.dirtyReason = undefined;
+      }
       cached.lastUsedAt = this.nowMs();
       return cached.session;
     }
@@ -46,6 +58,7 @@ export class SessionRouter {
     this.sessions.set(context.sessionKey, {
       session,
       lastUsedAt: this.nowMs(),
+      context,
     });
     return session;
   }
@@ -80,6 +93,27 @@ export class SessionRouter {
 
   async close(sessionKey: string): Promise<void> {
     this.sessions.delete(sessionKey);
+  }
+
+  markAllDirty(reason = "runtime_changed"): number {
+    let count = 0;
+    for (const record of this.sessions.values()) {
+      record.dirtyReason = reason;
+      count += 1;
+    }
+    return count;
+  }
+
+  markProjectDirty(projectKey: string, reason = "runtime_changed"): number {
+    let count = 0;
+    for (const record of this.sessions.values()) {
+      if (record.context.projectKey !== projectKey) {
+        continue;
+      }
+      record.dirtyReason = reason;
+      count += 1;
+    }
+    return count;
   }
 
   async list(input: ListSessionsInput = {}): Promise<ListSessionsResult> {
@@ -123,4 +157,15 @@ export class SessionRouter {
   private nowMs(): number {
     return this.now().getTime();
   }
+}
+
+function mergeSessionContext(
+  current: GatewaySessionContext,
+  next: GatewaySessionContext,
+): GatewaySessionContext {
+  return {
+    sessionKey: next.sessionKey,
+    channelKey: next.channelKey || current.channelKey,
+    projectKey: next.projectKey ?? current.projectKey,
+  };
 }

@@ -20,6 +20,8 @@ ${PilotHome}/pilotdeck.yaml
 <project>/.pilotdeck/pilotdeck.yaml
 ```
 
+该路径目前只是保留约定。当前实现**暂时忽略**项目级 YAML：不读取、不校验、不参与 merge，也不进入 watcher。
+
 聊天记录保存在 `PilotHome` 下，按 project 区分：
 
 ```text
@@ -34,17 +36,16 @@ ${PilotHome}/projects/<project-id>/chats
 
 ```text
 default config: ${PilotHome}/pilotdeck.yaml
-  < project config: <workspace>/.pilotdeck/pilotdeck.yaml
   < env overrides
 ```
 
 说明：
 
 - `default config` 是默认 YAML 配置文件，由 `PilotHome` 决定位置。
-- `project config` 只描述工作区相关覆盖，不应保存用户 secret。
+- `project config` 路径仍保留，但当前实现已暂时禁用该来源。
 - `env overrides` 当前支持 `PILOT_AGENT_MODEL` 覆盖 `agent.model`。API key 通过配置中的 `${ENV_NAME}` 引用解析，不作为独立配置覆盖项。
 
-所有实际参与加载或覆盖的来源都会记录在 `PilotConfigSnapshot.sources` 中；不存在的默认/项目文件不会产生 source 记录。
+所有实际参与加载或覆盖的来源都会记录在 `PilotConfigSnapshot.sources` 中；不存在的默认文件不会产生 source 记录。项目级 YAML 当前被完全忽略，因此也不会产生 source 记录或诊断。
 
 当前阶段 `PilotConfigSource.kind` 只允许：
 
@@ -53,6 +54,8 @@ default
 project
 env
 ```
+
+其中 `project` 目前仅保留给未来恢复项目级覆盖时使用。
 
 抽象上仍保留 `priority`、`path`、`contentHash`、`loadedAt` 和可选 `phase` 等字段，未来可扩展 remote config、managed profile 或 adapter override，但当前实现不读取这些来源。
 

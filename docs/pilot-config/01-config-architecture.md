@@ -12,7 +12,6 @@
 
 - 解析 `PilotHome`。
 - 从 `PilotHome` 目录加载默认 YAML 配置。
-- 读取项目级配置。
 - 合并配置来源。
 - 解析环境变量和 secret 引用。
 - 校验总配置结构。
@@ -97,6 +96,8 @@ project
 env
 ```
 
+其中 `project` 目前只是保留的来源类型。当前实现会保留项目级配置路径约定，但**暂时不读取** `<project>/.pilotdeck/pilotdeck.yaml`，也不会把它记录进 `PilotConfigSnapshot.sources`。
+
 建议结构：
 
 ```text
@@ -110,7 +111,7 @@ contentHash?: string
 说明：
 
 - `default`：来自 `${PilotHome}/pilotdeck.yaml` 的默认 YAML 配置。
-- `project`：来自当前项目目录 `.pilotdeck/pilotdeck.yaml` 的项目级 YAML 配置。
+- `project`：保留给未来恢复项目级 YAML 时使用；当前实现不加载该来源。
 - `env`：来自环境变量的覆盖项，包括 `PILOT_HOME` 和 model 相关覆盖。
 
 `source` 用于诊断。用户看到配置冲突、无效字段或热重载失败时，必须能知道问题来自哪一层配置。
@@ -189,7 +190,6 @@ PilotConfigSnapshot
 ```text
 resolve PilotHome from default and env
   -> load ${PilotHome}/pilotdeck.yaml
-  -> load project config
   -> collect supported env overrides
   -> parse YAML
   -> merge
@@ -232,7 +232,7 @@ getPilotProjectChatDir(projectRoot) -> ${PilotHome}/projects/<project-id>/chats
 --provider
 ```
 
-当前阶段不实现额外覆盖来源。调用方如需影响默认模型选择，只能使用项目级配置或已实现的环境变量覆盖项来覆盖 `agent.model`；fallback 应写入 `router.fallback`，不应绕过 config store 直接修改 `model` 或 `router` 模块。
+当前阶段不实现额外覆盖来源。调用方如需影响默认模型选择，只能修改全局 `~/.pilotdeck/pilotdeck.yaml` 或使用已实现的环境变量覆盖项来覆盖 `agent.model`；fallback 应写入 `router.fallback`，不应绕过 config store 直接修改 `model` 或 `router` 模块。
 
 ### 与业务模块
 
@@ -254,7 +254,7 @@ context consumes runtime wiring until a context schema exists
 session consumes pilot/paths derived paths until a session schema exists
 ```
 
-这些模块不能绕过 `pilot/config` 自行读取 `.pilotdeck/pilotdeck.yaml`，也不能把运行中产生的用户选择、permission prompt 结果或 transcript 事实写回配置对象。
+这些模块不能绕过 `pilot/config` 自行读取任何项目级 YAML，也不能把运行中产生的用户选择、permission prompt 结果或 transcript 事实写回配置对象。
 
 ## 生命周期
 

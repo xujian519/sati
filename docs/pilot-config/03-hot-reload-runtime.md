@@ -75,7 +75,8 @@ reload promise rejects
 `startWatching()` 当前监听：
 
 - `${PilotHome}/pilotdeck.yaml`。
-- 当前 workspace 的项目级配置。
+
+项目级 YAML 路径 `<project>/.pilotdeck/pilotdeck.yaml` 目前被暂时禁用，因此不进入 config watcher。
 
 实现要求：
 
@@ -254,6 +255,8 @@ listener 要求：
 - 不能修改 snapshot。
 - 需要异步重建资源时，应创建自己的后台任务。
 
+当前 gateway 侧的实现还会在配置或扩展目录变化后把受影响的缓存 session 标记为 dirty；下一个 turn 开始前再用新的 runtime 依赖惰性重建 session，同时复用内存中的消息状态，不重新读取 transcript 文件。
+
 ## 模块响应热重载
 
 ### Model
@@ -286,6 +289,15 @@ listener 要求：
 
 tool、permission、context、session/transcript 等模块当前仍由 runtime wiring 或 session state 管理，不在当前 `pilot/config` schema 中展开字段。`gateway`、`router`、`alwaysOn`、`cron` 等已接入段如果发生变化，默认按后续请求或后续 runtime 重建生效；未来如果把更多模块纳入 YAML，应先新增独立 schema 文档并补充字段级变更分类。
 
+`extension` 相关内容虽然不属于 `pilot/config` watcher 本身，但当前 gateway 会额外监听：
+
+- `~/.pilotdeck/plugins`
+- `~/.pilotdeck/skills`
+- 所有已激活 `projectKey` 的 `<project>/.pilotdeck/plugins`
+- 所有已激活 `projectKey` 的 `<project>/.pilotdeck/skills`
+
+这些目录变化不会直接重读 transcript；它们只会让受影响 session 在下一次请求前切换到新的插件/skills 快照。
+
 ## 并发与竞态
 
 必须处理：
@@ -308,7 +320,7 @@ tool、permission、context、session/transcript 等模块当前仍由 runtime w
 如果用户删除 `${PilotHome}/pilotdeck.yaml`：
 
 - watcher 应触发 reload。
-- loader 应继续尝试项目级配置和 env overrides。
+- loader 应继续尝试 env overrides。
 - 如果缺失必需 `model` 配置导致无法构造有效 snapshot，保留旧 snapshot。
 - 诊断会保存在 `lastReloadDiagnostics` 中；当前缺失文件本身不会单独记录 source，最终通常表现为 `CONFIG_MODEL_MISSING`。
 

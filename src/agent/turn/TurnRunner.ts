@@ -8,6 +8,7 @@ import { TurnInputProcessor } from "./TurnInputProcessor.js";
 import type { CanonicalMessage, CanonicalUsage } from "../../model/index.js";
 import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { PermissionMode, PermissionRuleSet } from "../../permission/index.js";
+import type { AgentTranscriptWriterState } from "../../session/transcript/TranscriptWriter.js";
 
 export type TurnRunnerOptions = {
   sessionId: string;
@@ -28,6 +29,11 @@ export type TurnRunnerResult = {
 export type TurnRunnerRuntimeContext = {
   cwd: string;
   transcriptPath: string;
+};
+
+export type TurnRunnerRuntimeReloadSnapshot = {
+  runtimeContext: TurnRunnerRuntimeContext;
+  transcriptWriterState?: AgentTranscriptWriterState;
 };
 
 export class TurnRunner {
@@ -113,6 +119,13 @@ export class TurnRunner {
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
       return { result, messages };
     }
+  }
+
+  snapshotForRuntimeReload(): TurnRunnerRuntimeReloadSnapshot {
+    return {
+      runtimeContext: { ...this.runtimeContext },
+      transcriptWriterState: this.transcript.snapshotState?.(),
+    };
   }
 
   private createErrorResult(options: TurnRunnerOptions, error: ReturnType<typeof agentError>): AgentTurnResult {

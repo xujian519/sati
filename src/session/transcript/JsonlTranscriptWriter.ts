@@ -15,7 +15,7 @@ import {
   type AgentTranscriptEntry,
   type SessionMetadataValue,
 } from "./TranscriptEntry.js";
-import type { AgentTranscriptWriter } from "./TranscriptWriter.js";
+import type { AgentTranscriptWriter, AgentTranscriptWriterState } from "./TranscriptWriter.js";
 
 export type SubagentTranscriptHandle = {
   /** UUID v4 of the subagent (matches sidechain filename). */
@@ -57,6 +57,13 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
   restoreState(maxSequence: number, lastEntryId: string | null): void {
     this.sequence = maxSequence;
     this.lastEntryId = lastEntryId;
+  }
+
+  snapshotState(): AgentTranscriptWriterState {
+    return {
+      sequence: this.sequence,
+      lastEntryId: this.lastEntryId,
+    };
   }
 
   recordAcceptedInput(sessionId: string, turnId: string, messages: CanonicalMessage[]): Promise<void> {

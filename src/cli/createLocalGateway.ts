@@ -2,7 +2,14 @@ import { appendFileSync, mkdirSync as mkdirSyncFs } from "node:fs";
 import { resolve, join as joinPath } from "node:path";
 import { tmpdir } from "node:os";
 import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
-import { createAgentEventBuffer, type AgentRuntimeConfig, type CreateAgentSessionOptions } from "../agent/index.js";
+import {
+  createAgentEventBuffer,
+  createAgentSessionWithStorage,
+  type AgentRuntimeConfig,
+  type AgentRuntimeDependencies,
+  type AgentSession,
+  type CreateAgentSessionOptions,
+} from "../agent/index.js";
 import {
   AutoCompactionPolicy,
   CachedMicroCompactionEngine,
@@ -47,7 +54,7 @@ import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
 import { createPilotConfigStoreSync, type PilotConfigStore } from "../pilot/config/PilotConfigStore.js";
 import type { PilotAgentModelSelection, PilotConfigSnapshot } from "../pilot/config/types.js";
 import type { RouterConfig } from "../router/config/schema.js";
-import { listProjectSessions, resumeAgentSession } from "../session/index.js";
+import { createAgentProjectSessionStorage, listProjectSessions, resumeAgentSession } from "../session/index.js";
 import { readWebSessionMessages } from "../web/server/readSessionMessages.js";
 import { describeWebProject, listWebProjects } from "../web/server/listProjects.js";
 import { BackgroundTaskRuntime } from "../task/runtime/BackgroundTaskRuntime.js";
@@ -57,6 +64,7 @@ import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
 import type { RouterEventBus, RouterEvent } from "../router/protocol/events.js";
 import type { EdgeClawMemoryProvider } from "../context/index.js";
 import { loadBuiltinPlugins } from "../extension/plugins/builtin/loadBuiltinPlugins.js";
+import { ExtensionWatchManager, type ExtensionWatchEvent } from "./ExtensionWatchManager.js";
 
 export type CreateLocalGatewayOptions = {
   projectRoot?: string;
@@ -103,7 +111,22 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   const pilotHome = options.pilotHome ?? resolvePilotHome(baseEnv);
   const env = options.pilotHome ? { ...baseEnv, PILOT_HOME: pilotHome } : baseEnv;
   const now = () => new Date();
-  const registry = new ProjectRuntimeRegistry({
+  let registry!: ProjectRuntimeRegistry;
+  let router: SessionRouter | undefined;
+  const extensionWatchManager = new ExtensionWatchManager({
+    pilotHome,
+    onChange: (event) => {
+      handleExtensionWatchEvent(event, registry, router);
+    },
+    onError: (scope, error) => {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[pilotdeck] Extension watcher failed for ${describeExtensionScope(scope)}:`,
+        error.message,
+      );
+    },
+  });
+  registry = new ProjectRuntimeRegistry({
     defaultProjectRoot: projectRoot,
     pilotHome,
     env,
@@ -114,11 +137,13 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     additionalWorkingDirectories: options.additionalWorkingDirectories,
     modelFactory: options.__testModelFactory,
     autoElicitation: options.autoElicitation,
+    onProjectActivated: (activeProjectRoot) => extensionWatchManager.watchProject(activeProjectRoot),
   });
   const defaultRuntime = registry.resolve();
 
   const configStore = createPilotConfigStoreSync({ projectRoot, env });
-  const stopWatching = configStore.startWatching();
+  const stopConfigWatching = configStore.startWatching();
+  const stopExtensionWatching = extensionWatchManager.start();
 
   let boundServer: { broadcastNotification(name: string, payload?: unknown): void } | undefined;
   const configChangeLifecycle = new LifecycleRuntime(new HookRuntime({}));
@@ -136,6 +161,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     // eslint-disable-next-line no-console
     console.log("[pilotdeck] Config reloaded, invalidating runtimes:", changedPaths.join(", "));
     registry.invalidate();
+    router?.markAllDirty("config_changed");
     configChangeLifecycle.dispatch({
       event: "ConfigChange",
       baseInput: { sessionId: "", transcriptPath: "", cwd: projectRoot },
@@ -145,8 +171,9 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     boundServer?.broadcastNotification("config_changed", { changedPaths, changeClasses });
   });
 
-  const router = new SessionRouter({
+  router = new SessionRouter({
     createSession: (ctx) => registry.createSession(ctx),
+    recreateSession: (ctx, session) => registry.recreateSession(ctx, session),
     listSessions: (input) => registry.listSessions(input),
     idleSessionTimeoutMs:
       (defaultRuntime.snapshot.config.gateway?.idleSessionTimeoutMinutes ?? 30) * 60_000,
@@ -188,7 +215,10 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     gateway,
     configStore,
     registry,
-    dispose: stopWatching,
+    dispose: () => {
+      stopConfigWatching();
+      stopExtensionWatching();
+    },
     bindServer: (server) => { boundServer = server; },
   };
 }
@@ -205,6 +235,7 @@ type ProjectRuntimeRegistryOptions = {
   /** @internal Test hook from `CreateLocalGatewayOptions.__testModelFactory`. */
   modelFactory?: (snapshot: PilotConfigSnapshot) => ModelRuntime;
   autoElicitation?: boolean;
+  onProjectActivated?: (projectRoot: string) => void;
 };
 
 type ProjectRuntime = {
@@ -320,6 +351,7 @@ class ProjectRuntimeRegistry {
 
   resolve(projectKey?: string): ProjectRuntime {
     const projectRoot = resolve(projectKey ?? this.options.defaultProjectRoot);
+    this.options.onProjectActivated?.(projectRoot);
     const cached = this.runtimes.get(projectRoot);
     if (cached) {
       return cached;
@@ -411,6 +443,44 @@ class ProjectRuntimeRegistry {
   }
 
   async createSession(context: GatewaySessionContext) {
+    const prepared = await this.prepareSessionRuntime(context);
+    const resumed = await resumeAgentSession({
+      sessionId: context.sessionKey,
+      config: this.createAgentConfig(prepared.runtime, context.sessionKey),
+      dependencies: prepared.baseDependencies,
+      projectStorage: prepared.runtime.projectStorage,
+      extendDependencies: prepared.extendDependencies,
+    });
+    return resumed.session;
+  }
+
+  async recreateSession(context: GatewaySessionContext, previousSession: AgentSession) {
+    const prepared = await this.prepareSessionRuntime(context);
+    const previous = previousSession.snapshotForRuntimeReload();
+    const storage = createAgentProjectSessionStorage({
+      ...prepared.runtime.projectStorage,
+      sessionId: context.sessionKey,
+      now: prepared.baseDependencies.now,
+    });
+    if (previous.transcriptWriterState) {
+      storage.transcript.restoreState(
+        previous.transcriptWriterState.sequence,
+        previous.transcriptWriterState.lastEntryId,
+      );
+    }
+    const extensionDependencies = prepared.extendDependencies(storage);
+    const { session } = createAgentSessionWithStorage({
+      sessionId: context.sessionKey,
+      config: this.createAgentConfig(prepared.runtime, context.sessionKey),
+      dependencies: mergeSessionDependencies(prepared.baseDependencies, extensionDependencies),
+      storage,
+      transcript: storage.transcript,
+      initialState: previous.state,
+    });
+    return session;
+  }
+
+  private async prepareSessionRuntime(context: GatewaySessionContext) {
     const runtime = this.resolve(context.projectKey);
     await runtime.pluginRuntime.refresh();
     await this.ensureMcpReady(runtime);
@@ -459,160 +529,154 @@ class ProjectRuntimeRegistry {
     const projectRoot = runtime.projectRoot;
     const memoryResolver = runtime.memory;
     const now = this.options.now;
-
     const eventBuf = createAgentEventBuffer();
-    const resumed = await resumeAgentSession({
-      sessionId: context.sessionKey,
-      config: this.createAgentConfig(runtime, context.sessionKey),
-      dependencies: {
-        router: runtime.router,
-        tools: { registry: runtime.tools },
-        // The real context runtime is constructed inside
-        // `extendDependencies` once we know the per-session
-        // `toolResultsDir` for ToolResultBudget. Leave it undefined here
-        // so the per-session wire (with budget + compaction engines) is
-        // the only one in scope.
-        lifecycle,
-        now: this.options.now,
-        eventEmitter: eventBuf.emitter,
-        drainEvents: eventBuf.drain,
-      },
-      projectStorage: runtime.projectStorage,
-      extendDependencies: (storage) => {
-        const toolResultBudget = new ToolResultBudget({ toolResultsDir: storage.toolResultsDir });
-        const tokenBudget = new TokenBudgetManager();
-        const compactionEngine = new CompactionEngine({
-          model: {
-            stream: (request, signal) =>
-              runtime.router.stream(request, {
+
+    const baseDependencies: CreateAgentSessionOptions["dependencies"] = {
+      router: runtime.router,
+      tools: { registry: runtime.tools },
+      lifecycle,
+      now: this.options.now,
+      eventEmitter: eventBuf.emitter,
+      drainEvents: eventBuf.drain,
+    };
+    const extendDependencies = (storage: ReturnType<typeof createAgentProjectSessionStorage>) => {
+      const toolResultBudget = new ToolResultBudget({ toolResultsDir: storage.toolResultsDir });
+      const tokenBudget = new TokenBudgetManager();
+      const compactionEngine = new CompactionEngine({
+        model: {
+          stream: (request, signal) =>
+            runtime.router.stream(request, {
+              sessionId: context.sessionKey,
+              turnId: "compact",
+              projectPath: context.projectKey,
+              abortSignal: signal,
+              isMainAgent: false,
+            }),
+        },
+        tokenBudget,
+        lifecycle: {
+          async dispatch(input) {
+            await lifecycle.dispatch({
+              event: input.event,
+              baseInput: {
                 sessionId: context.sessionKey,
-                turnId: "compact",
-                projectPath: context.projectKey,
-                abortSignal: signal,
-                isMainAgent: false,
-              }),
+                transcriptPath: "",
+                cwd: projectRoot,
+                permissionMode: "default",
+              },
+              payload: input.payload,
+              matchQuery: input.event,
+            });
           },
-          tokenBudget,
-          lifecycle: {
-            async dispatch(input) {
-              await lifecycle.dispatch({
-                event: input.event,
-                baseInput: {
+        },
+        provider: runtime.snapshot.config.agent.model.provider,
+        model_: runtime.snapshot.config.agent.model.model,
+        now,
+        eventEmitter: eventBuf.emitter,
+      });
+      const autoCompactionPolicy = new AutoCompactionPolicy({ tokenBudget });
+      const microcompactEngine = new CachedMicroCompactionEngine({ enabled: false });
+      const microCompaction = new MicroCompactionEngine();
+      const snipEngine = new SnipEngine();
+      const overflowRecovery = new ContextOverflowRecovery();
+      const caps = runtime.model.getCapabilities(
+        runtime.snapshot.config.agent.model.provider,
+        runtime.snapshot.config.agent.model.model,
+      );
+      const instructionDiscovery = new InstructionDiscovery(
+        projectRoot,
+        projectRoot,
+        this.options.pilotHome,
+      );
+      const contextRuntime = new DefaultContextRuntime({
+        extension,
+        projectRoot,
+        memoryResolver,
+        instructionDiscovery,
+        toolResultBudget,
+        tokenBudget,
+        compactionEngine,
+        autoCompactionPolicy,
+        microcompactEngine,
+        microCompaction,
+        snipEngine,
+        overflowRecovery,
+        maxContextTokens: caps.maxContextTokens,
+        now,
+      });
+      const fileHistory = new FileHistoryStore({
+        backupDir: storage.fileHistoryDir,
+        now: this.options.now,
+      });
+      const gw = this.gateway;
+      const elicitation = this.options.autoElicitation
+        ? createAutoElicitationChannel()
+        : gw
+          ? new GatewayElicitationChannel({
+              sessionKey: context.sessionKey,
+              bus: gw.getElicitationBus(),
+              emit: (event) => gw.emitForSession(context.sessionKey, event),
+              dispatchHook: (hookEvent, payload) => {
+                lifecycle.dispatch({
+                  event: hookEvent as import("../extension/hooks/protocol/events.js").PilotDeckHookEvent,
+                  baseInput: { sessionId: context.sessionKey, transcriptPath: "", cwd: projectRoot },
+                  payload,
+                  matchQuery: hookEvent,
+                }).catch(() => {});
+              },
+              emitAgentEvent: (_type, payload) => {
+                eventBuf.emitter({
+                  type: "elicitation_requested",
                   sessionId: context.sessionKey,
-                  transcriptPath: "",
-                  cwd: projectRoot,
-                  permissionMode: "default",
-                },
-                payload: input.payload,
-                matchQuery: input.event,
-              });
-            },
-          },
-          provider: runtime.snapshot.config.agent.model.provider,
-          model_: runtime.snapshot.config.agent.model.model,
-          now,
-          eventEmitter: eventBuf.emitter,
-        });
-        const autoCompactionPolicy = new AutoCompactionPolicy({ tokenBudget });
-        const microcompactEngine = new CachedMicroCompactionEngine({ enabled: false });
-        const microCompaction = new MicroCompactionEngine();
-        const snipEngine = new SnipEngine();
-        const overflowRecovery = new ContextOverflowRecovery();
-        const caps = runtime.model.getCapabilities(
-          runtime.snapshot.config.agent.model.provider,
-          runtime.snapshot.config.agent.model.model,
-        );
-        const instructionDiscovery = new InstructionDiscovery(
-          projectRoot,
-          projectRoot,
-          this.options.pilotHome,
-        );
-        const contextRuntime = new DefaultContextRuntime({
-          extension,
-          projectRoot,
-          memoryResolver,
-          instructionDiscovery,
-          toolResultBudget,
-          tokenBudget,
-          compactionEngine,
-          autoCompactionPolicy,
-          microcompactEngine,
-          microCompaction,
-          snipEngine,
-          overflowRecovery,
-          maxContextTokens: caps.maxContextTokens,
-          now,
-        });
-        const fileHistory = new FileHistoryStore({
-          backupDir: storage.fileHistoryDir,
-          now: this.options.now,
-        });
-        const gw = this.gateway;
-        const elicitation = this.options.autoElicitation
-          ? createAutoElicitationChannel()
-          : gw
-            ? new GatewayElicitationChannel({
-                sessionKey: context.sessionKey,
-                bus: gw.getElicitationBus(),
-                emit: (event) => gw.emitForSession(context.sessionKey, event),
-                dispatchHook: (hookEvent, payload) => {
-                  lifecycle.dispatch({
-                    event: hookEvent as import("../extension/hooks/protocol/events.js").PilotDeckHookEvent,
-                    baseInput: { sessionId: context.sessionKey, transcriptPath: "", cwd: projectRoot },
-                    payload,
-                    matchQuery: hookEvent,
-                  }).catch(() => {});
-                },
-                emitAgentEvent: (_type, payload) => {
-                  eventBuf.emitter({
-                    type: "elicitation_requested",
-                    sessionId: context.sessionKey,
-                    turnId: "",
-                    requestId: payload.requestId,
-                    toolName: payload.toolName,
-                  });
-                },
-              })
-            : undefined;
-        const subagentTranscript: AgentSubagentTranscriptHooks = {
-          recordSubagentStarted: (args) =>
-            storage.transcript.recordSubagentStarted(args.sessionId, args.turnId, {
-              subagentId: args.subagentId,
-              subagentType: args.subagentType,
-              prompt: args.prompt,
-              transcriptRelativePath: args.transcriptRelativePath,
-              subagentSessionId: args.subagentSessionId,
-            }),
-          recordSubagentCompleted: (args) =>
-            storage.transcript.recordSubagentCompleted(args.sessionId, args.turnId, {
-              subagentId: args.subagentId,
-              subagentType: args.subagentType,
-              summary: args.summary,
-              usage: args.usage,
-              turns: args.turns,
-              durationMs: args.durationMs,
-              errored: args.errored,
-            }),
-          subagentTranscriptResolver: (subagentId) => {
-            const handle = storage.transcript.forSubagent(subagentId, this.options.now);
-            return {
-              recordAcceptedInput: (sessionId, turnId, messages) =>
-                handle.writer.recordAcceptedInput(sessionId, turnId, messages),
-              recordDurableMessage: (sessionId, turnId, message) =>
-                handle.writer.recordDurableMessage(sessionId, turnId, message),
-              transcriptRelativePath: storage.transcript.relativeSubagentPath(subagentId),
-            };
-          },
-        };
-        return {
-          context: contextRuntime,
-          fileHistory,
-          subagentTranscript,
-          elicitation,
-        };
-      },
-    });
-    return resumed.session;
+                  turnId: "",
+                  requestId: payload.requestId,
+                  toolName: payload.toolName,
+                });
+              },
+            })
+          : undefined;
+      const subagentTranscript: AgentSubagentTranscriptHooks = {
+        recordSubagentStarted: (args) =>
+          storage.transcript.recordSubagentStarted(args.sessionId, args.turnId, {
+            subagentId: args.subagentId,
+            subagentType: args.subagentType,
+            prompt: args.prompt,
+            transcriptRelativePath: args.transcriptRelativePath,
+            subagentSessionId: args.subagentSessionId,
+          }),
+        recordSubagentCompleted: (args) =>
+          storage.transcript.recordSubagentCompleted(args.sessionId, args.turnId, {
+            subagentId: args.subagentId,
+            subagentType: args.subagentType,
+            summary: args.summary,
+            usage: args.usage,
+            turns: args.turns,
+            durationMs: args.durationMs,
+            errored: args.errored,
+          }),
+        subagentTranscriptResolver: (subagentId) => {
+          const handle = storage.transcript.forSubagent(subagentId, this.options.now);
+          return {
+            recordAcceptedInput: (sessionId, turnId, messages) =>
+              handle.writer.recordAcceptedInput(sessionId, turnId, messages),
+            recordDurableMessage: (sessionId, turnId, message) =>
+              handle.writer.recordDurableMessage(sessionId, turnId, message),
+            transcriptRelativePath: storage.transcript.relativeSubagentPath(subagentId),
+          };
+        },
+      };
+      return {
+        context: contextRuntime,
+        fileHistory,
+        subagentTranscript,
+        elicitation,
+      };
+    };
+    return {
+      runtime,
+      baseDependencies,
+      extendDependencies,
+    };
   }
 
   async listSessions(input: ListSessionsInput): Promise<ListSessionsResult> {
@@ -665,6 +729,52 @@ class ProjectRuntimeRegistry {
       }),
     };
   }
+}
+
+function mergeSessionDependencies(
+  base: CreateAgentSessionOptions["dependencies"],
+  extension: Partial<
+    Pick<
+      AgentRuntimeDependencies,
+      "context" | "fileHistory" | "subagentTranscript" | "elicitation" | "eventEmitter" | "drainEvents"
+    >
+  >,
+): CreateAgentSessionOptions["dependencies"] {
+  return {
+    ...base,
+    ...(extension.context ? { context: extension.context } : {}),
+    ...(extension.fileHistory ? { fileHistory: extension.fileHistory } : {}),
+    ...(extension.subagentTranscript ? { subagentTranscript: extension.subagentTranscript } : {}),
+    ...(extension.elicitation ? { elicitation: extension.elicitation } : {}),
+    ...(extension.eventEmitter ? { eventEmitter: extension.eventEmitter } : {}),
+    ...(extension.drainEvents ? { drainEvents: extension.drainEvents } : {}),
+  };
+}
+
+function handleExtensionWatchEvent(
+  event: ExtensionWatchEvent,
+  registry: ProjectRuntimeRegistry,
+  router: SessionRouter | undefined,
+): void {
+  const changed = event.changedPaths.join(", ");
+  if (event.scope.kind === "global") {
+    // eslint-disable-next-line no-console
+    console.log("[pilotdeck] Extensions changed, invalidating all runtimes:", changed);
+    registry.invalidate();
+    router?.markAllDirty("extension_changed");
+    return;
+  }
+  // eslint-disable-next-line no-console
+  console.log(
+    `[pilotdeck] Extensions changed for project ${event.scope.projectRoot}, invalidating runtime:`,
+    changed,
+  );
+  registry.invalidate(event.scope.projectRoot);
+  router?.markProjectDirty(event.scope.projectRoot, "extension_changed");
+}
+
+function describeExtensionScope(scope: ExtensionWatchEvent["scope"]): string {
+  return scope.kind === "global" ? "global extensions" : `project extensions (${scope.projectRoot})`;
 }
 
 function createAutoElicitationChannel(): PilotDeckElicitationChannel {

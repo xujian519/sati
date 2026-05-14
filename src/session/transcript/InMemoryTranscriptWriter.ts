@@ -1,7 +1,7 @@
 import type { CanonicalMessage } from "../../model/index.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
 import type { AgentControlBoundaryTranscriptEntry, SessionMetadataValue } from "./TranscriptEntry.js";
-import type { AgentTranscriptWriter } from "./TranscriptWriter.js";
+import type { AgentTranscriptWriter, AgentTranscriptWriterState } from "./TranscriptWriter.js";
 
 export type InMemoryTranscriptEntry =
   | { type: "accepted_input"; sessionId: string; turnId: string; messages: CanonicalMessage[] }
@@ -40,5 +40,12 @@ export class InMemoryTranscriptWriter implements AgentTranscriptWriter {
     boundary: AgentControlBoundaryTranscriptEntry["boundary"],
   ): void {
     this.entries.push({ type: "control_boundary", sessionId, turnId, boundary });
+  }
+
+  snapshotState(): AgentTranscriptWriterState {
+    return {
+      sequence: this.entries.length,
+      lastEntryId: null,
+    };
   }
 }
