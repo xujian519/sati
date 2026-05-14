@@ -695,30 +695,33 @@ function filterUserQueries(queries: string[]): string[] {
   });
 }
 
-function RequestLogRow({ entry, variant }: { entry: RequestLogEntry; variant: 'main' | 'sub' }) {
+function RequestLogRow({ entry, variant }: { entry: RequestLogEntry; variant: 'main' | 'sub' | 'tool' }) {
   const isSub = variant === 'sub';
+  const isTool = variant === 'tool';
+  const bgClass = isTool
+    ? 'bg-amber-50/40 dark:bg-amber-900/10'
+    : isSub
+      ? 'bg-violet-50/40 dark:bg-violet-900/10'
+      : 'bg-neutral-50 dark:bg-neutral-900/30';
+  const tierClass = isTool
+    ? 'bg-amber-100 text-amber-600 dark:bg-amber-800/40 dark:text-amber-400'
+    : isSub
+      ? 'bg-violet-100 text-violet-600 dark:bg-violet-800/40 dark:text-violet-400'
+      : 'bg-neutral-200/70 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-400';
+  const badgeClass = isTool
+    ? 'bg-amber-50 text-amber-500 dark:bg-amber-900/20 dark:text-amber-400'
+    : isSub
+      ? 'bg-violet-50 text-violet-500 dark:bg-violet-900/20 dark:text-violet-400'
+      : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-500';
+  const badgeLabel = isTool ? 'tool' : isSub ? 'sub' : 'main';
+
   return (
-    <div className={cn(
-      'flex items-start gap-2 rounded-md px-2.5 py-1.5 text-[12px]',
-      isSub
-        ? 'bg-violet-50/40 dark:bg-violet-900/10'
-        : 'bg-neutral-50 dark:bg-neutral-900/30',
-    )}>
-      <span className={cn(
-        'text-xxs mt-0.5 shrink-0 rounded px-1.5 py-0.5 font-medium',
-        isSub
-          ? 'bg-violet-100 text-violet-600 dark:bg-violet-800/40 dark:text-violet-400'
-          : 'bg-neutral-200/70 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-400',
-      )}>
+    <div className={cn('flex items-start gap-2 rounded-md px-2.5 py-1.5 text-[12px]', bgClass)}>
+      <span className={cn('text-xxs mt-0.5 shrink-0 rounded px-1.5 py-0.5 font-medium', tierClass)}>
         {entry.tier || '—'}
       </span>
-      <span className={cn(
-        'text-xxs mt-0.5 shrink-0 rounded px-1 py-0.5',
-        isSub
-          ? 'bg-violet-50 text-violet-500 dark:bg-violet-900/20 dark:text-violet-400'
-          : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-500',
-      )}>
-        {isSub ? 'sub' : 'main'}
+      <span className={cn('text-xxs mt-0.5 shrink-0 rounded px-1 py-0.5', badgeClass)}>
+        {badgeLabel}
       </span>
       <div className="min-w-0 flex-1">
         <div className="truncate text-neutral-700 dark:text-neutral-300">
@@ -837,15 +840,15 @@ function SessionRow({ session }: { session: DashboardSession }) {
                 </div>
               )}
 
-              {/* Grouped: main request → its sub-agent requests */}
+              {/* Grouped: main request → its tool continuations / sub-agent requests */}
               <div className="space-y-2">
                 {groupedLog.map((group, gi) => (
                   <div key={gi}>
                     <RequestLogRow entry={group.main} variant="main" />
                     {group.subs.length > 0 && (
-                      <div className="ml-5 mt-1 space-y-1 border-l-2 border-violet-200/60 pl-3 dark:border-violet-700/30">
+                      <div className="ml-5 mt-1 space-y-1 border-l-2 border-amber-200/60 pl-3 dark:border-amber-700/30">
                         {group.subs.map((sub, si) => (
-                          <RequestLogRow key={si} entry={sub} variant="sub" />
+                          <RequestLogRow key={si} entry={sub} variant={sub.tier ? 'sub' : 'tool'} />
                         ))}
                       </div>
                     )}

@@ -482,6 +482,7 @@ export async function runChatViaGateway(
             runId,
             ...(attachments ? { attachments } : {}),
         });
+
         for await (const event of stream) {
             if (event && event.type === 'error') {
                 console.error(
@@ -504,6 +505,7 @@ export async function runChatViaGateway(
                 writer.send(frame);
             }
         }
+
         writer.send(
             createNormalizedMessage({
                 provider,
@@ -514,6 +516,7 @@ export async function runChatViaGateway(
             }),
         );
     } catch (error) {
+
         console.error(
             '[pilotdeck-bridge] runChatViaGateway threw:',
             error instanceof Error ? (error.stack || error.message) : error,
@@ -789,6 +792,278 @@ function _readFirstPrompt(sessionId, projectKey) {
 }
 
 /**
+ * Extract all user queries from a session's transcript JSONL file.
+ * Returns up to `limit` trimmed strings (truncated at 120 chars).
+ * Cache is invalidated when the transcript file changes (mtime check).
+ */
+const _userQueriesCache = new Map();
+
+function extractUserQueries(sessionId, projectKey, limit = 20) {
+    const cacheKey = `${sessionId}::${projectKey || ''}`;
+    const cached = _userQueriesCache.get(cacheKey);
+    if (cached) {
+        const currentMtime = _getTranscriptMtime(sessionId, projectKey);
+        if (currentMtime && currentMtime === cached.mtime) return cached.queries;
+    }
+
+    const queries = _readUserQueriesFromTranscript(sessionId, projectKey, limit);
+    const mtime = _getTranscriptMtime(sessionId, projectKey);
+    _userQueriesCache.set(cacheKey, { queries, mtime });
+    return queries;
+}
+
+function _getTranscriptMtime(sessionId, projectKey) {
+    const pilotHome = GENERAL_HOME;
+    const safeId = sanitizeSessionIdForPath(sessionId);
+    const fileVariants = safeId === sessionId ? [sessionId] : [safeId, sessionId];
+    const candidates = [];
+    if (projectKey) {
+        for (const id of fileVariants) {
+            candidates.push(path.join(pilotHome, 'projects', createProjectId(projectKey), 'chats', `${id}.jsonl`));
+        }
+    }
+    try {
+        const projectsDir = path.join(pilotHome, 'projects');
+        const dirs = fs.readdirSync(projectsDir, { withFileTypes: true });
+        for (const d of dirs) {
+            if (!d.isDirectory()) continue;
+            for (const id of fileVariants) {
+                const p = path.join(projectsDir, d.name, 'chats', `${id}.jsonl`);
+                if (!candidates.includes(p)) candidates.push(p);
+            }
+        }
+    } catch { /* ignore */ }
+    for (const filePath of candidates) {
+        try {
+            return fs.statSync(filePath).mtimeMs;
+        } catch { /* next */ }
+    }
+    return null;
+}
+
+function _readUserQueriesFromTranscript(sessionId, projectKey, limit) {
+    const pilotHome = GENERAL_HOME;
+    const safeId = sanitizeSessionIdForPath(sessionId);
+    const fileVariants = safeId === sessionId ? [sessionId] : [safeId, sessionId];
+    const candidates = [];
+    if (projectKey) {
+        for (const id of fileVariants) {
+            candidates.push(path.join(pilotHome, 'projects', createProjectId(projectKey), 'chats', `${id}.jsonl`));
+        }
+    }
+    for (const id of fileVariants) {
+        const generalChatPath = path.join(pilotHome, 'projects', createProjectId(pilotHome), 'chats', `${id}.jsonl`);
+        if (!candidates.includes(generalChatPath)) candidates.push(generalChatPath);
+    }
+    try {
+        const projectsDir = path.join(pilotHome, 'projects');
+        const dirs = fs.readdirSync(projectsDir, { withFileTypes: true });
+        for (const d of dirs) {
+            if (!d.isDirectory()) continue;
+            for (const id of fileVariants) {
+                const p = path.join(projectsDir, d.name, 'chats', `${id}.jsonl`);
+                if (!candidates.includes(p)) candidates.push(p);
+            }
+        }
+    } catch { /* ignore */ }
+
+    for (const filePath of candidates) {
+        try {
+            const raw = fs.readFileSync(filePath, 'utf-8');
+            const queries = [];
+            for (const line of raw.split('\n')) {
+                if (!line.trim()) continue;
+                try {
+                    const entry = JSON.parse(line);
+                    if (entry.type !== 'accepted_input') continue;
+                    const text = entry.messages
+                        ?.flatMap(m => m.content ?? [])
+                        .find(b => b.type === 'text')?.text;
+                    if (!text?.trim()) continue;
+                    const trimmed = text.trim();
+                    if (trimmed.length < 2) continue;
+                    queries.push(trimmed.length > 120 ? trimmed.slice(0, 117) + '…' : trimmed);
+                    if (queries.length >= limit) break;
+                } catch { /* skip malformed lines */ }
+            }
+            if (queries.length > 0) return queries;
+        } catch { /* file not found — try next */ }
+    }
+    return [];
+}
+
+/**
+ * Extract per-turn structure from a session transcript.
+ * Returns an array of turn objects:
+ *   { tools: string[][], modelCalls: number }
+ *
+ * - tools: one entry per assistant_message that has tool_call blocks
+ *   e.g. [["glob"], ["read_file", "read_file"], ["edit_file"]]
+ * - modelCalls: total assistant_messages in the turn (including the
+ *   final text-only response)
+ *
+ * Continuation #N shows the tools from model call #N-1 that triggered it.
+ */
+const _toolSequenceCache = new Map();
+
+function _extractToolSequence(sessionId, projectKey) {
+    const cacheKey = `${sessionId}::${projectKey || ''}::tools`;
+    const cached = _toolSequenceCache.get(cacheKey);
+    if (cached) {
+        const currentMtime = _getTranscriptMtime(sessionId, projectKey);
+        if (currentMtime && currentMtime === cached.mtime) return cached.result;
+    }
+
+    const result = _readToolSequenceFromTranscript(sessionId, projectKey);
+    const mtime = _getTranscriptMtime(sessionId, projectKey);
+    _toolSequenceCache.set(cacheKey, { result, mtime });
+    return result;
+}
+
+function _readToolSequenceFromTranscript(sessionId, projectKey) {
+    const pilotHome = GENERAL_HOME;
+    const safeId = sanitizeSessionIdForPath(sessionId);
+    const fileVariants = safeId === sessionId ? [sessionId] : [safeId, sessionId];
+    const candidates = [];
+    if (projectKey) {
+        for (const id of fileVariants) {
+            candidates.push(path.join(pilotHome, 'projects', createProjectId(projectKey), 'chats', `${id}.jsonl`));
+        }
+    }
+    for (const id of fileVariants) {
+        const generalChatPath = path.join(pilotHome, 'projects', createProjectId(pilotHome), 'chats', `${id}.jsonl`);
+        if (!candidates.includes(generalChatPath)) candidates.push(generalChatPath);
+    }
+    try {
+        const projectsDir = path.join(pilotHome, 'projects');
+        const dirs = fs.readdirSync(projectsDir, { withFileTypes: true });
+        for (const d of dirs) {
+            if (!d.isDirectory()) continue;
+            for (const id of fileVariants) {
+                const p = path.join(projectsDir, d.name, 'chats', `${id}.jsonl`);
+                if (!candidates.includes(p)) candidates.push(p);
+            }
+        }
+    } catch { /* ignore */ }
+
+    for (const filePath of candidates) {
+        try {
+            const raw = fs.readFileSync(filePath, 'utf-8');
+            const turns = [];
+            let currentTurn = null;
+
+            for (const line of raw.split('\n')) {
+                if (!line.trim()) continue;
+                try {
+                    const entry = JSON.parse(line);
+                    if (entry.type === 'accepted_input') {
+                        currentTurn = { tools: [], modelCalls: 0 };
+                        turns.push(currentTurn);
+                    } else if (entry.type === 'assistant_message' && currentTurn) {
+                        currentTurn.modelCalls++;
+                        const content = entry.message?.content ?? [];
+                        const toolNames = content
+                            .filter(b => b.type === 'tool_call' || b.type === 'tool_use')
+                            .map(b => b.name)
+                            .filter(Boolean);
+                        if (toolNames.length > 0) {
+                            currentTurn.tools.push(toolNames);
+                        }
+                    }
+                } catch { /* skip */ }
+            }
+            if (turns.length > 0) return turns;
+        } catch { /* file not found */ }
+    }
+    return [];
+}
+
+/**
+ * Assign user queries and tool names to requestLog entries.
+ *
+ * Primary method: group by `turnId` from router stats (each user turn
+ * shares one turnId; all continuations within that turn have the same
+ * turnId). The first request per turnId gets the user query; subsequent
+ * requests become tool continuations with tool names from the transcript.
+ *
+ * Fallback: when turnId is absent (older stats without the field), uses
+ * transcript model-call counts to partition entries.
+ */
+function _assignQueriesToRequestLog(sessionEntry) {
+    const log = sessionEntry.routing?.requestLog;
+    const queries = sessionEntry.userQueries;
+    if (!log || log.length === 0 || !queries || queries.length === 0) return;
+
+    const mainEntries = log.filter(e => e.role === 'main');
+    if (mainEntries.length === 0) return;
+
+    const turnStructure = _extractToolSequence(sessionEntry.sessionId, sessionEntry._projectKey);
+    const hasTurnIds = mainEntries.some(e => e.turnId);
+
+    if (hasTurnIds) {
+        _assignByTurnId(mainEntries, queries, turnStructure);
+    } else {
+        _assignByModelCallCount(mainEntries, queries, turnStructure);
+    }
+}
+
+function _assignByTurnId(mainEntries, queries, turnStructure) {
+    let turnIndex = 0;
+    let continuationIdx = 0;
+    let currentTurnId = null;
+
+    for (let i = 0; i < mainEntries.length; i++) {
+        const entry = mainEntries[i];
+
+        if (entry.turnId !== currentTurnId) {
+            currentTurnId = entry.turnId;
+            continuationIdx = 0;
+            entry.query = queries[Math.min(turnIndex, queries.length - 1)];
+            turnIndex++;
+        } else {
+            entry.role = 'sub';
+            delete entry.tier;
+            const turnTools = turnStructure[turnIndex - 1]?.tools;
+            if (turnTools && continuationIdx < turnTools.length) {
+                const names = turnTools[continuationIdx];
+                entry.query = '→ ' + [...new Set(names)].join(', ');
+            }
+            continuationIdx++;
+        }
+    }
+}
+
+function _assignByModelCallCount(mainEntries, queries, turnStructure) {
+    let turnIndex = 0;
+    let posInTurn = 0;
+
+    for (let i = 0; i < mainEntries.length; i++) {
+        const turnInfo = turnStructure[turnIndex];
+        const turnModelCalls = turnInfo ? turnInfo.modelCalls : 0;
+
+        if (posInTurn === 0) {
+            mainEntries[i].query = queries[Math.min(turnIndex, queries.length - 1)];
+            posInTurn++;
+        } else {
+            mainEntries[i].role = 'sub';
+            delete mainEntries[i].tier;
+            const continuationIdx = posInTurn - 1;
+            const turnTools = turnInfo?.tools;
+            if (turnTools && continuationIdx < turnTools.length) {
+                const names = turnTools[continuationIdx];
+                mainEntries[i].query = '→ ' + [...new Set(names)].join(', ');
+            }
+            posInTurn++;
+        }
+
+        if (turnModelCalls > 0 && posInTurn >= turnModelCalls) {
+            turnIndex++;
+            posInTurn = 0;
+        }
+    }
+}
+
+/**
  * Build a `DashboardData` payload from persisted router stats. Shape
  * mirrors what `ui/src/hooks/useRoutingDashboard.ts` expects so the V2
  * Dashboard tab renders without changing any frontend code.
@@ -810,27 +1085,45 @@ export function getRouterDashboardData() {
             if (!sessionEntry) {
                 sessionEntry = {
                     sessionId: record.sessionId,
+                    _projectKey: projectKey,
                     title: lookupSessionTitle(record.sessionId, projectKey) || record.sessionId,
                     provider: record.provider || 'pilotdeck',
                     lastActivity: record.endedAt,
+                    userQueries: extractUserQueries(record.sessionId, projectKey),
                     routing: {
                         total: makeBucket(),
                         byTier: {},
                         byScenario: {},
                         byRole: {},
                         byModel: {},
+                        requestLog: [],
                         firstSeenAt: Date.parse(record.startedAt) || 0,
                         lastActiveAt: Date.parse(record.endedAt) || 0,
                     },
                 };
                 sessionMap.set(record.sessionId, sessionEntry);
             }
+            const logRole = record.role === 'subagent' ? 'sub' : 'main';
+            sessionEntry.routing.requestLog.push({
+                ts: Date.parse(record.startedAt) || 0,
+                turnId: record.turnId || undefined,
+                role: logRole,
+                tier: record.tier || record.scenarioType || undefined,
+                model: `${record.provider || 'unknown'}/${record.model || 'unknown'}`,
+                tokens: (record.usage?.totalTokens ?? (record.usage?.inputTokens || 0) + (record.usage?.outputTokens || 0)),
+                cost: record.cost?.total || 0,
+            });
             mergeRecordIntoSession(sessionEntry.routing, record);
             const ended = Date.parse(record.endedAt) || 0;
             if (ended > (sessionEntry.routing.lastActiveAt || 0)) {
                 sessionEntry.routing.lastActiveAt = ended;
                 sessionEntry.lastActivity = record.endedAt;
             }
+        }
+
+        for (const sessionEntry of sessionMap.values()) {
+            _assignQueriesToRequestLog(sessionEntry);
+            delete sessionEntry._projectKey;
         }
 
         const sessions = [...sessionMap.values()];
