@@ -203,11 +203,15 @@ async function sendProviderRequest(
     ? setTimeout(() => controller.abort(), provider.timeoutMs)
     : undefined;
 
+  const finalBody = provider.extraBody
+    ? { ...(body as Record<string, unknown>), ...provider.extraBody }
+    : body;
+
   try {
     return await transport(buildEndpoint(provider, stream), {
       method: "POST",
       headers: buildHeaders(provider),
-      body: JSON.stringify(body),
+      body: JSON.stringify(finalBody),
       signal: controller.signal,
     });
   } catch (error) {

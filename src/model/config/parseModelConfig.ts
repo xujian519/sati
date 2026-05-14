@@ -101,6 +101,7 @@ function parseProvider(providerId: string, rawProvider: unknown, env?: Credentia
     apiKey: resolveApiKey(provider.apiKey, env),
     timeoutMs: readOptionalPositiveNumber(provider.timeoutMs, "timeoutMs"),
     headers: readStringRecord(provider.headers, "headers"),
+    extraBody: isRecord(provider.extraBody) ? (provider.extraBody as Record<string, unknown>) : undefined,
     retry: isRecord(provider.retry) ? provider.retry : undefined,
     models,
   };

@@ -237,6 +237,8 @@ export type ProviderConfig = {
   apiKey: string;
   timeoutMs?: number;
   headers: Record<string, string>;
+  /** Arbitrary fields merged into every request body (e.g. OpenRouter provider preferences). */
+  extraBody?: Record<string, unknown>;
   retry?: Record<string, unknown>;
   models: Record<string, ModelDefinition>;
 };
