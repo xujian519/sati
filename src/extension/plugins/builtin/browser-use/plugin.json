@@ -7,10 +7,11 @@
       "command": "npx",
       "args": [
         "@playwright/mcp@0.0.75",
-        "--headless",
         "--browser",
         "chromium",
-        "--isolated"
+        "--user-data-dir",
+        "~/.pilotdeck/browser-data",
+        "--allow-unrestricted-file-access"
       ]
     }
   }

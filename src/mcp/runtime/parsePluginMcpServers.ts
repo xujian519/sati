@@ -10,7 +10,15 @@
  *     a single misconfigured plugin entry can't take down the gateway.
  */
 
+import { homedir } from "node:os";
 import type { PilotDeckMcpServerSpec } from "../protocol/types.js";
+
+function expandHome(s: string): string {
+  if (s.startsWith("~/")) return homedir() + s.slice(1);
+  if (s.startsWith("~\\")) return homedir() + s.slice(1);
+  if (s === "~") return homedir();
+  return s;
+}
 
 export type ParsePluginMcpServersResult = {
   servers: PilotDeckMcpServerSpec[];
@@ -37,7 +45,7 @@ export function parsePluginMcpServers(
         transport: "stdio",
         command: v.command,
         args: Array.isArray(v.args)
-          ? (v.args.filter((a): a is string => typeof a === "string"))
+          ? (v.args.filter((a): a is string => typeof a === "string").map(expandHome))
           : undefined,
         env: isStringRecord(v.env) ? (v.env as Record<string, string>) : undefined,
         cwd: typeof v.cwd === "string" ? v.cwd : undefined,
