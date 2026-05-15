@@ -198,31 +198,88 @@ cancel(reason)
 
 ## 运行时事件规范
 
-新项目应把事件流作为产品 API：
+新项目把事件流作为产品 API。事件按职责分为三层：
+
+### 内部 Agent 事件 (`AgentEvent`)
+
+`AgentEvent` 是 agent session / turn / tool / model 内部的完整事件流，用于 transcript、调试、子系统通信和 Gateway 投影。当前实现定义于 `src/agent/protocol/events.ts`：
 
 ```text
-session.started
-turn.started
-input.accepted
-context.prepared
-model.request.started
-model.message.delta
-model.message.completed
-tool.call.detected
-permission.requested
-permission.resolved
-tool.started
-tool.progress
-tool.completed
-tool.failed
-context.compacted
-turn.completed
-turn.failed
-turn.interrupted
-session.persisted
+session_started          会话创建
+session_ended            会话结束（含 reason）
+session_aborted          会话被 abort
+
+turn_started             turn 开始
+input_accepted           用户输入已被接受
+user_prompt_submitted    用户 prompt 提交
+setup_completed          Setup 生命周期完成
+
+model_request_started    模型请求开始（含 model、provider）
+model_event              模型流式子事件（CanonicalModelEvent）
+instructions_loaded      系统提示/指令加载完成
+
+assistant_message        助手消息完整块
+tool_calls_detected      模型产出工具调用
+pre_tool_execute         工具执行前
+post_tool_execute        工具执行后（含 success）
+permission_requested     工具权限请求
+permission_denied        工具权限拒绝（含 reason）
+tool_result              工具结果
+tool_results_projected   工具结果投影进上下文
+
+mode_change_requested    权限模式切换请求
+stop_requested           模型停止请求
+stop_failure             Stop hook 失败
+
+compact_started          上下文压缩开始（含 trigger、preTokens）
+compact_completed        上下文压缩完成（含 status、postTokens）
+
+subagent_started         子 agent 启动
+subagent_completed       子 agent 完成（含 durationMs）
+
+elicitation_requested    工具向用户提问（Elicitation）
+elicitation_resolved     Elicitation 已回答或取消
+
+turn_continued           turn 内继续下一轮循环（含 reason）
+turn_completed           turn 完成
+turn_failed              turn 失败
 ```
 
-所有 UI、CLI、SDK、日志、测试都应消费同一套事件。
+### 客户端 Gateway 事件 (`GatewayEvent`)
+
+`GatewayEvent` 是面向外部消费者（Web UI、CLI、TUI、SDK）的精简事件流。`InProcessGateway.mapAgentEvent` 从 `AgentEvent` 投影到 `GatewayEvent`，部分内部事件投影为 `agent_status`，部分被丢弃。当前定义于 `src/gateway/protocol/types.ts`：
+
+```text
+turn_started                 turn 开始（含 runId）
+assistant_text_delta         助手文本流
+assistant_thinking_delta     助手 thinking 流
+tool_call_started            工具调用开始
+tool_call_finished           工具调用完成（含 resultPreview、errorCode）
+tool_result_detail_available 工具结果详情可用
+permission_request           权限请求（等待 host 决定）
+elicitation_request          Elicitation 问题推送
+elicitation_cancelled        Elicitation 被取消
+structured_output            结构化输出
+plan_mode_changed            权限模式变更
+config_changed               配置热更新（含 changedPaths、changeClasses）
+worktree_created             Worktree 创建
+worktree_removed             Worktree 移除
+turn_completed               turn 完成（含 usage、finishReason）
+agent_status                 内部状态透传（event + detail）
+error                        错误（含 code、recoverable）
+```
+
+### 跨会话 / 进程级事件
+
+以下事件不绑定单个 agent session，而是作用于整个 Gateway 进程或项目：
+
+- **`config_changed`**：通过 `WsNotificationFrame` 广播给所有连接的客户端，`ConfigChange` 生命周期 hook 使用 `sessionId: ""` dispatch，不绑定具体会话。
+- **`RouterEvent`**：路由决策、fallback、重试等审计事件，写入 `router-events.jsonl`，不回流到 agent loop。
+- **`AlwaysOnPhaseEvent`**：Always-On 任务的发现/规划/执行/报告阶段事件，跨多个合成 sessionKey 编排。
+- **`PilotConfigReloadEvent`**：配置文件变化通知，由 `PilotConfigStore.subscribe` 分发给监听者。
+- **`ExtensionWatchEvent`**：扩展目录文件变化事件，触发插件/hook 热重载。
+
+所有 UI、CLI、SDK、日志、测试都应消费同一套 Gateway 事件；内部子系统可订阅更细粒度的 `AgentEvent`。
 
 ## 非功能要求
 
