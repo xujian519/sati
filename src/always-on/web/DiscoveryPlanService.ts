@@ -259,6 +259,17 @@ async function readPlanBody(projectDir: string, planFilePath: string): Promise<s
   }
 }
 
+async function readRawPlanRecord(projectDir: string, planId: string): Promise<Record<string, unknown> | null> {
+  try {
+    const raw = await fs.readFile(indexPath(projectDir), "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.plans)) return null;
+    return (parsed.plans as Record<string, unknown>[]).find((p) => p.id === planId) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Overview building
 // ---------------------------------------------------------------------------
@@ -712,6 +723,24 @@ export class DiscoveryPlanService {
       command: buildApplyPrompt(updated, projectName, projectRoot, diff),
       executionToken,
     };
+  }
+
+  /**
+   * Read a plan's report markdown by planId.
+   * Returns the raw markdown string (empty if no report exists yet).
+   */
+  async readReport(projectName: string, planId: string): Promise<{ content: string }> {
+    const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
+    const projectDir = this.projectDir(projectRoot);
+
+    const rawRecord = await readRawPlanRecord(projectDir, planId);
+    if (!rawRecord) throw makeError("Discovery plan not found", "NOT_FOUND");
+
+    const reportPath = typeof rawRecord.reportFilePath === "string" ? rawRecord.reportFilePath : "";
+    if (!reportPath) return { content: "" };
+
+    const content = await readPlanBody(projectDir, reportPath);
+    return { content };
   }
 
   /**

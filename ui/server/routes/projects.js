@@ -10,6 +10,7 @@ import {
 import {
   getProjectDiscoveryContext,
   getProjectDiscoveryPlansOverview,
+  getProjectDiscoveryPlanReport,
   queueDiscoveryPlanExecution,
   updateProjectDiscoveryPlanExecution,
   applyProjectDiscoveryPlan,
@@ -279,6 +280,22 @@ router.get('/:projectName/discovery-context', handleGetProjectDiscoveryContext);
 router.get('/:projectName/discovery-plans', handleGetProjectDiscoveryPlans);
 router.post('/:projectName/discovery-plans/:planId/execute', handleExecuteProjectDiscoveryPlan);
 router.patch('/:projectName/discovery-plans/:planId/execution', handleUpdateProjectDiscoveryPlanExecution);
+
+router.get('/:projectName/discovery-plans/:planId/report', async (req, res) => {
+  try {
+    const projectName = getTrimmedParam(req.params?.projectName);
+    const planId = getTrimmedParam(req.params?.planId);
+    if (!projectName) return res.status(400).json({ error: 'projectName is required' });
+    if (!planId) return res.status(400).json({ error: 'planId is required' });
+
+    const result = await getProjectDiscoveryPlanReport(projectName, planId);
+    return res.json(result);
+  } catch (error) {
+    return res.status(getDiscoveryPlanErrorStatus(error)).json({
+      error: getDiscoveryPlanErrorMessage(error, 'Failed to read discovery plan report')
+    });
+  }
+});
 
 router.post('/:projectName/discovery-plans/:planId/apply', async (req, res) => {
   try {

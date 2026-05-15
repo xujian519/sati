@@ -24,6 +24,21 @@
       "back": "Back to events",
       "placeholder": "Details coming soon."
     },
+    "runDetail": {
+      "back": "Back to events",
+      "loading": "Loading…",
+      "untitled": "Untitled Plan",
+      "workspaceStrategy": "Workspace",
+      "executionSession": "Execution Session",
+      "openSession": "Open Session",
+      "outcome": "Outcome",
+      "plan": "Plan",
+      "report": "Report",
+      "noPlanContent": "No plan content available.",
+      "noReportContent": "No report available yet.",
+      "apply": "Apply to Main",
+      "archive": "Archive"
+    },
     "phase": {
       "discoveryStarted": "Discovery Started",
       "planProduced": "Plan Produced",

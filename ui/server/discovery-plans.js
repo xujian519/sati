@@ -83,6 +83,10 @@ export async function archiveProjectDiscoveryPlan(projectName, planId) {
   return getService().archive(projectName, planId);
 }
 
+export async function getProjectDiscoveryPlanReport(projectName, planId) {
+  return getService().readReport(projectName, planId);
+}
+
 export async function applyProjectDiscoveryPlan(projectName, planId) {
   return getService().queueApply(projectName, planId);
 }
