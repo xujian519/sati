@@ -26,6 +26,7 @@
     },
     "runDetail": {
       "back": "Back to events",
+      "backToPlans": "Back to Plans & Cron Jobs",
       "loading": "Loading…",
       "untitled": "Untitled Plan",
       "workspaceStrategy": "Workspace",

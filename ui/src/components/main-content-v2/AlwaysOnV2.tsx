@@ -22,7 +22,7 @@ type AlwaysOnV2Props = {
   selectedProject: Project | null;
   onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
   onApplyPlan?: (projectName: string, planId: string) => Promise<void>;
-  onOpenExecutionSession?: (projectKey: string, runId: string) => void;
+  onOpenExecutionSession?: (projectKey: string, runId: string, projectName?: string) => void;
 };
 
 export default function AlwaysOnV2({ selectedProject, onExecutePlan, onApplyPlan, onOpenExecutionSession }: AlwaysOnV2Props) {
@@ -78,6 +78,7 @@ export default function AlwaysOnV2({ selectedProject, onExecutePlan, onApplyPlan
             planId={planDetail.planId}
             projectName={planDetail.projectName}
             projectDisplayName={planDetail.projectDisplayName}
+            backLabel={t('dashboard.runDetail.backToPlans', { defaultValue: 'Back to Plans & Cron Jobs' })}
             onBack={() => setPlanDetail(null)}
             onOpenExecutionSession={onOpenExecutionSession}
           />

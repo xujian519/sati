@@ -26,6 +26,7 @@
     },
     "runDetail": {
       "back": "返回事件列表",
+      "backToPlans": "返回计划列表",
       "loading": "加载中…",
       "untitled": "未命名计划",
       "workspaceStrategy": "工作区",

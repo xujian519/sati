@@ -162,7 +162,7 @@ function getEventClickAction(phase: AlwaysOnDashboardEventPhase): EventClickActi
 }
 
 type AlwaysOnDashboardProps = {
-  onOpenExecutionSession?: (projectKey: string, runId: string) => void;
+  onOpenExecutionSession?: (projectKey: string, runId: string, projectName?: string) => void;
 };
 
 export default function AlwaysOnDashboard({ onOpenExecutionSession }: AlwaysOnDashboardProps) {
@@ -245,7 +245,7 @@ export default function AlwaysOnDashboard({ onOpenExecutionSession }: AlwaysOnDa
       if (action === 'detail') {
         setSelectedRunId(event.runId);
       } else if (action === 'session') {
-        onOpenExecutionSession?.(event.projectKey, event.runId);
+        onOpenExecutionSession?.(event.projectKey, event.runId, event.projectName);
       }
     },
     [onOpenExecutionSession],

@@ -18,8 +18,9 @@ type RunDetailProps = {
   planId?: string;
   projectName?: string;
   projectDisplayName?: string;
+  backLabel?: string;
   onBack: () => void;
-  onOpenExecutionSession?: (projectKey: string, runId: string) => void;
+  onOpenExecutionSession?: (projectKey: string, runId: string, projectName?: string) => void;
 };
 
 type PlanData = {
@@ -47,6 +48,7 @@ export default function RunDetail(props: RunDetailProps) {
     planId: directPlanId,
     projectName: directProjectName,
     projectDisplayName: directProjectDisplayName,
+    backLabel,
     onBack,
     onOpenExecutionSession,
   } = props;
@@ -179,7 +181,7 @@ export default function RunDetail(props: RunDetailProps) {
         className="inline-flex items-center gap-1.5 text-[13px] text-neutral-500 transition hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
       >
         <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
-        {t('dashboard.runDetail.back', { defaultValue: 'Back to events' })}
+        {backLabel ?? t('dashboard.runDetail.back', { defaultValue: 'Back to events' })}
       </button>
 
       {/* Header card */}
@@ -237,7 +239,7 @@ export default function RunDetail(props: RunDetailProps) {
               {projectKey && runId ? (
                 <button
                   type="button"
-                  onClick={() => onOpenExecutionSession?.(projectKey, runId)}
+                  onClick={() => onOpenExecutionSession?.(projectKey, runId, projectName)}
                   className="inline-flex items-center gap-1 text-[13px] font-medium text-blue-600 transition hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                 >
                   {t('dashboard.runDetail.openSession', { defaultValue: 'Open Session' })}
