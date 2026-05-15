@@ -51,6 +51,7 @@ import { spawn, exec } from 'child_process';
 import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
+import JSZip from 'jszip';
 
 import { getProjects, getProjectCronJobsOverview, getSessions, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
 import {
@@ -923,6 +924,62 @@ const expandWorkspacePath = (inputPath) => {
     return inputPath;
 };
 
+function resolvePathInProject(projectRoot, targetPath = '') {
+    const resolved = path.isAbsolute(targetPath)
+        ? path.resolve(targetPath)
+        : path.resolve(projectRoot, targetPath);
+    const normalizedRoot = path.resolve(projectRoot);
+
+    if (resolved !== normalizedRoot && !resolved.startsWith(normalizedRoot + path.sep)) {
+        return { valid: false, error: 'Path must be under project root' };
+    }
+
+    return { valid: true, resolved };
+}
+
+function setPreviewContentType(res, filePath) {
+    const mimeType = mime.lookup(filePath) || 'application/octet-stream';
+    const charset = mimeType.startsWith('text/') || mimeType === 'application/javascript' || mimeType === 'application/json'
+        ? '; charset=utf-8'
+        : '';
+    res.setHeader('Content-Type', `${mimeType}${charset}`);
+}
+
+async function addDirectoryToZip(zip, directoryPath, rootPath) {
+    const entries = await fsPromises.readdir(directoryPath, { withFileTypes: true });
+
+    for (const entry of entries) {
+        const absolutePath = path.join(directoryPath, entry.name);
+        const relativePath = path.relative(rootPath, absolutePath).split(path.sep).join('/');
+
+        if (!relativePath) {
+            continue;
+        }
+
+        if (entry.isDirectory()) {
+            zip.folder(relativePath);
+            await addDirectoryToZip(zip, absolutePath, rootPath);
+            continue;
+        }
+
+        if (entry.isFile()) {
+            const [content, stats] = await Promise.all([
+                fsPromises.readFile(absolutePath),
+                fsPromises.stat(absolutePath),
+            ]);
+            zip.file(relativePath, content, { date: stats.mtime });
+        }
+    }
+}
+
+function getSafeZipFilename(projectName) {
+    const safeName = String(projectName || 'project')
+        .replace(/[\\/:*?"<>|\x00-\x1f]/g, '-')
+        .replace(/^\.+$/, 'project')
+        .trim() || 'project';
+    return `${safeName}.zip`;
+}
+
 // Browse filesystem endpoint for project suggestions - uses existing getFileTree
 app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
     try {
@@ -1135,6 +1192,90 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
 
     } catch (error) {
         console.error('Error serving binary file:', error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+});
+
+// Serve project files through a stable project-root URL so generated HTML can
+// load sibling CSS, JS and image assets with normal relative paths.
+app.get('/api/projects/:projectName/preview/*', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        const relativeFilePath = req.params[0] || 'index.html';
+
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const resolvedResult = resolvePathInProject(projectRoot, relativeFilePath);
+        if (!resolvedResult.valid) {
+            return res.status(403).json({ error: resolvedResult.error });
+        }
+
+        let resolved = resolvedResult.resolved;
+        let stats = await fsPromises.stat(resolved).catch(() => null);
+        if (stats?.isDirectory()) {
+            resolved = path.join(resolved, 'index.html');
+            stats = await fsPromises.stat(resolved).catch(() => null);
+        }
+
+        if (!stats || !stats.isFile()) {
+            return res.status(404).type('text/plain').send('Preview file not found.');
+        }
+
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        setPreviewContentType(res, resolved);
+        fs.createReadStream(resolved).pipe(res);
+    } catch (error) {
+        console.error('Error serving project preview:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Download the complete project as a zip archive.
+app.get('/api/projects/:projectName/download', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const rootStats = await fsPromises.stat(projectRoot).catch(() => null);
+        if (!rootStats?.isDirectory()) {
+            return res.status(404).json({ error: 'Project directory not found' });
+        }
+
+        const zip = new JSZip();
+        await addDirectoryToZip(zip, projectRoot, projectRoot);
+
+        const filename = getSafeZipFilename(projectName);
+        const asciiFilename = filename.replace(/[^\x20-\x7e]/g, '_');
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader(
+            'Content-Disposition',
+            `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+        );
+
+        const zipStream = zip.generateNodeStream({
+            type: 'nodebuffer',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 6 },
+        });
+        zipStream.on('error', (error) => {
+            console.error('Error streaming project zip:', error);
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Failed to generate project archive' });
+            } else {
+                res.end();
+            }
+        });
+        zipStream.pipe(res);
+    } catch (error) {
+        console.error('Error downloading project archive:', error);
         if (!res.headersSent) {
             res.status(500).json({ error: error.message });
         }

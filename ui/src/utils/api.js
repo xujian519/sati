@@ -1,5 +1,36 @@
 import { DISABLE_LOCAL_AUTH, IS_PLATFORM } from "../constants/config";
 
+const normalizePathForUrl = (value) => String(value || '').replace(/\\/g, '/');
+
+const getProjectRelativePath = (filePath, projectRoot) => {
+  const normalizedFilePath = normalizePathForUrl(filePath);
+  const normalizedRoot = normalizePathForUrl(projectRoot).replace(/\/+$/, '');
+
+  if (normalizedRoot && normalizedFilePath === normalizedRoot) {
+    return '';
+  }
+
+  if (normalizedRoot && normalizedFilePath.startsWith(normalizedRoot + '/')) {
+    return normalizedFilePath.slice(normalizedRoot.length + 1);
+  }
+
+  return normalizedFilePath.replace(/^\/+/, '');
+};
+
+const encodePathSegments = (relativePath) =>
+  String(relativePath || '')
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+
+const appendAuthToken = (url) => {
+  const token = localStorage.getItem('auth-token');
+  if (!token) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}token=${encodeURIComponent(token)}`;
+};
+
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
   const token = localStorage.getItem('auth-token');
@@ -192,8 +223,19 @@ export const api = {
     authenticatedFetch(`/api/projects/${projectName}/files/upload`, {
       method: 'POST',
       body: formData,
-      headers: {}, // Let browser set Content-Type for FormData
+      headers: {},
     }),
+
+  projectPreviewUrl: (projectName, filePath, projectRoot) => {
+    const relativePath = getProjectRelativePath(filePath, projectRoot);
+    const encoded = encodePathSegments(relativePath);
+    return appendAuthToken(
+      `/api/projects/${encodeURIComponent(projectName)}/preview/${encoded}`,
+    );
+  },
+
+  downloadProjectZip: (projectName) =>
+    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/download`),
 
   // TaskMaster endpoints
   taskmaster: {

@@ -6,6 +6,8 @@ import {
   ChevronRight,
   ChevronsDownUp,
   ClipboardCopy,
+  Download,
+  Eye,
   FilePlus,
   Folder,
   FolderOpen,
@@ -14,6 +16,7 @@ import {
   Pencil,
   RefreshCw,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react';
 import type { Project } from '../../types/app';
@@ -81,15 +84,26 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
   const [activePath, setActivePath] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<FileContextMenu | null>(null);
   const [inlineEdit, setInlineEdit] = useState<InlineEdit | null>(null);
+  const [uploadingProject, setUploadingProject] = useState(false);
+  const [downloadingProject, setDownloadingProject] = useState(false);
+  const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
   const inlineInputRef = useRef<HTMLInputElement>(null);
   const escapePressedRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setExpanded(new Set());
     setActivePath(null);
     setContextMenu(null);
     setInlineEdit(null);
+    setUploadMenuOpen(false);
   }, [selectedProject?.name]);
+
+  useEffect(() => {
+    folderInputRef.current?.setAttribute('webkitdirectory', '');
+    folderInputRef.current?.setAttribute('directory', '');
+  }, []);
 
   const flat = useMemo(() => flatten(files, expanded), [files, expanded]);
 
@@ -323,6 +337,88 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
     [closeContextMenu, onFileOpen],
   );
 
+  // --- Upload / Download / Preview ---
+
+  const projectRoot = selectedProject?.fullPath || selectedProject?.path || '';
+
+  const uploadSelectedFiles = useCallback(
+    async (fileList: FileList | null) => {
+      if (!selectedProject?.name || !fileList || fileList.length === 0) return;
+
+      const fileArray = Array.from(fileList);
+      const relativePaths = fileArray.map((file) => {
+        const withDir = file as File & { webkitRelativePath?: string };
+        return withDir.webkitRelativePath || file.name;
+      });
+
+      const formData = new FormData();
+      formData.append('targetPath', '');
+      formData.append('relativePaths', JSON.stringify(relativePaths));
+      for (const file of fileArray) {
+        formData.append('files', file);
+      }
+
+      try {
+        setUploadingProject(true);
+        setUploadMenuOpen(false);
+        const response = await api.uploadFiles(selectedProject.name, formData);
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => '');
+          throw new Error(errorText || `Upload failed: ${response.status}`);
+        }
+        await refreshFiles();
+      } catch (error) {
+        console.error('Failed to upload files:', error);
+      } finally {
+        setUploadingProject(false);
+      }
+    },
+    [refreshFiles, selectedProject?.name],
+  );
+
+  const handleDownloadProject = useCallback(async () => {
+    if (!selectedProject?.name || downloadingProject) return;
+
+    try {
+      setDownloadingProject(true);
+      const response = await api.downloadProjectZip(selectedProject.name);
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${selectedProject.displayName || selectedProject.name}.zip`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download project archive:', error);
+    } finally {
+      setDownloadingProject(false);
+    }
+  }, [downloadingProject, selectedProject?.displayName, selectedProject?.name]);
+
+  const handleOpenHtmlPreview = useCallback(
+    (event: ReactMouseEvent<HTMLButtonElement>, node: FileTreeNode) => {
+      event.stopPropagation();
+      if (!selectedProject?.name) return;
+
+      const previewUrl = api.projectPreviewUrl(selectedProject.name, node.path, projectRoot);
+      window.open(previewUrl, '_blank', 'noopener');
+    },
+    [projectRoot, selectedProject?.name],
+  );
+
+  const handleDeleteActive = useCallback(() => {
+    if (!activePath) return;
+    const activeNode = flat.find((f) => f.node.path === activePath);
+    if (activeNode) handleDelete(activeNode.node);
+  }, [activePath, flat, handleDelete]);
+
   // --- Depth lookup for context menu target ---
 
   const depthByPath = useMemo(() => {
@@ -413,6 +509,84 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
           >
             <FolderPlus className="h-3.5 w-3.5" strokeWidth={1.75} />
           </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setUploadMenuOpen((open) => !open)}
+              disabled={uploadingProject}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-50 dark:text-neutral-300 dark:hover:bg-neutral-900"
+              title={t('fileTree.upload', { defaultValue: 'Upload files or folder' }) as string}
+              aria-label={t('fileTree.upload', { defaultValue: 'Upload files or folder' }) as string}
+            >
+              {uploadingProject ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
+              ) : (
+                <Upload className="h-3.5 w-3.5" strokeWidth={1.75} />
+              )}
+            </button>
+            {uploadMenuOpen ? (
+              <div className="absolute right-0 top-8 z-20 w-36 overflow-hidden rounded-md border border-neutral-200 bg-white py-1 text-[12px] shadow-lg dark:border-neutral-800 dark:bg-neutral-950">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="block w-full px-3 py-1.5 text-left text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                >
+                  {t('fileTree.uploadFiles', { defaultValue: 'Upload files' })}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => folderInputRef.current?.click()}
+                  className="block w-full px-3 py-1.5 text-left text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                >
+                  {t('fileTree.uploadFolder', { defaultValue: 'Upload folder' })}
+                </button>
+              </div>
+            ) : null}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                void uploadSelectedFiles(event.currentTarget.files);
+                event.currentTarget.value = '';
+              }}
+            />
+            <input
+              ref={folderInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                void uploadSelectedFiles(event.currentTarget.files);
+                event.currentTarget.value = '';
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleDownloadProject}
+            disabled={downloadingProject}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-50 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            title={t('fileTree.downloadProject', { defaultValue: 'Download project as zip' }) as string}
+            aria-label={t('fileTree.downloadProject', { defaultValue: 'Download project as zip' }) as string}
+          >
+            {downloadingProject ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
+            ) : (
+              <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={handleDeleteActive}
+            disabled={!activePath}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            title={t('fileTree.deleteSelected', { defaultValue: 'Delete selected' }) as string}
+            aria-label={t('fileTree.deleteSelected', { defaultValue: 'Delete selected' }) as string}
+          >
+            <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+          </button>
           <button
             type="button"
             onClick={refreshFiles}
@@ -467,6 +641,7 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
               const isOpen = isDir && expanded.has(node.path);
               const isActive = activePath === node.path;
               const isRenaming = inlineEdit?.kind === 'rename' && inlineEdit.path === node.path;
+              const isHtmlFile = !isDir && /\.html?$/i.test(node.name);
 
               let Icon = Folder;
               let color = 'text-neutral-500 dark:text-neutral-400';
@@ -539,7 +714,7 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
                       <Icon className={cn('h-3.5 w-3.5 shrink-0', color)} strokeWidth={1.75} />
                       <span
                         className={cn(
-                          'truncate',
+                          'min-w-0 flex-1 truncate',
                           isActive
                             ? 'font-medium text-neutral-900 dark:text-neutral-100'
                             : 'text-neutral-700 dark:text-neutral-300',
@@ -547,6 +722,17 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
                       >
                         {node.name}
                       </span>
+                      {isHtmlFile ? (
+                        <button
+                          type="button"
+                          onClick={(event) => handleOpenHtmlPreview(event, node)}
+                          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-200 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                          title={t('fileTree.openHtmlPreview', { defaultValue: 'Open HTML preview in new tab' }) as string}
+                          aria-label={t('fileTree.openHtmlPreview', { defaultValue: 'Open HTML preview in new tab' }) as string}
+                        >
+                          <Eye className="h-3.5 w-3.5" strokeWidth={1.75} />
+                        </button>
+                      ) : null}
                     </div>
                   )}
                   {showCreateAfter ? renderInlineInput(inlineEdit.depth) : null}
