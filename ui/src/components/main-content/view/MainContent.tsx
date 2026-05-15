@@ -346,41 +346,19 @@ function MainContent({
     projectName: string,
     planId: string,
   ) => {
-    const project = projects.find((p) => p.name === projectName);
-    if (!project) {
-      throw new Error(`Project "${projectName}" not found`);
-    }
-
     const response = await api.applyProjectDiscoveryPlan(projectName, planId);
-    const payload = await readJsonPayload<ExecuteDiscoveryPlanResponse & { error?: string }>(response);
+    const payload = await readJsonPayload<{ plan?: { id: string }; sessionKey?: string; executionToken?: string; error?: { code: string; message: string } | string }>(response);
     if (!response.ok || !payload) {
-      throw new Error(payload?.error || 'Failed to queue discovery plan apply');
+      const errMsg = typeof payload?.error === 'string' ? payload.error : payload?.error?.message;
+      throw new Error(errMsg || 'Failed to queue discovery plan apply');
     }
-
-    const resolvedPlanId = payload.plan?.id;
-    if (!resolvedPlanId) {
-      throw new Error('Missing discovery plan id in apply payload');
+    if (payload.error) {
+      const errMsg = typeof payload.error === 'string' ? payload.error : payload.error.message;
+      throw new Error(errMsg);
     }
-
-    pendingDiscoveryExecutionsRef.current.set(payload.executionToken, {
-      projectName,
-      planId: resolvedPlanId,
-      executionToken: payload.executionToken,
-    });
-
-    startClaudeSessionCommand({
-      sendMessage: trackedSendMessage,
-      selectedProject: project,
-      command: payload.command,
-      permissionMode: 'default',
-      sessionSummary: payload.sessionSummary,
-      toolsSettings: buildAlwaysOnExecutionToolsSettings(),
-      alwaysOnPlanId: resolvedPlanId,
-      alwaysOnExecutionToken: payload.executionToken,
-    });
 
     refreshProjectsSilently();
-  }, [projects, refreshProjectsSilently, trackedSendMessage]);
+  }, [refreshProjectsSilently]);
 
   const flashToast = useCallback((toastValue: MainContentToast, ms = 2400) => {
     setToast(toastValue);
@@ -489,7 +467,8 @@ function MainContent({
 
   const handleOpenExecutionSession = useCallback(
     (projectKey: string, runId: string) => {
-      const sessionId = `always-on/execute:project=${projectKey}:run=${runId}`;
+      const rawId = `always-on/execute:project=${projectKey}:run=${runId}`;
+      const sessionId = rawId.replace(/[\\/]+/g, '-').replace(/^-+|-+$/g, '') || 'session';
       void handleOpenAlwaysOnSession({ kind: 'origin', sessionId });
     },
     [handleOpenAlwaysOnSession],

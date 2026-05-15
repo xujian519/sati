@@ -48,6 +48,9 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         onWorktreeRemoved: (cwd) => {
           deferredBroadcast?.("worktree_removed", { cwd });
         },
+        onTurnEvent: (sessionKey, channelKey, event) => {
+          deferredBroadcast?.("always-on:turn-event", { sessionKey, channelKey, event });
+        },
       });
     }
 
@@ -79,6 +82,12 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     if (alwaysOn) {
       alwaysOn.bindGateway(gateway, { isProjectBusy });
       await alwaysOn.start();
+      updateSubsystems({
+        extraTools: [...(alwaysOn?.getTools() ?? []), ...(cron?.getTools() ?? [])],
+        sessionOverrides: alwaysOn?.getSessionOverrides(),
+        cron,
+        alwaysOnApply: (input) => alwaysOn!.applyPlan(input),
+      });
     }
     if (cron) {
       cron.bindGateway(gateway);
@@ -120,16 +129,17 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       if (aoChanged) alwaysOn = buildAlwaysOn(config.alwaysOn);
       if (cronChanged) cron = buildCron(config.cron);
 
-      updateSubsystems({
-        extraTools: [...(alwaysOn?.getTools() ?? []), ...(cron?.getTools() ?? [])],
-        sessionOverrides: alwaysOn?.getSessionOverrides(),
-        cron,
-      });
-
       if (aoChanged && alwaysOn) {
         alwaysOn.bindGateway(gateway, { isProjectBusy });
         await alwaysOn.start();
       }
+
+      updateSubsystems({
+        extraTools: [...(alwaysOn?.getTools() ?? []), ...(cron?.getTools() ?? [])],
+        sessionOverrides: alwaysOn?.getSessionOverrides(),
+        cron,
+        alwaysOnApply: alwaysOn ? (input) => alwaysOn!.applyPlan(input) : undefined,
+      });
       if (cronChanged && cron) {
         cron.bindGateway(gateway);
         await cron.start();

@@ -1,4 +1,5 @@
 import type { AlwaysOnCurrentWorkspaceRef, DiscoveryPlanRecord } from "../protocol/types.js";
+import type { WorkspaceDiff } from "../workspace/WorkspaceApply.js";
 import { ALWAYS_ON_PLAN_TOOL_NAME } from "../tool/AlwaysOnDiscoveryPlanTool.js";
 import { ALWAYS_ON_REPORT_TOOL_NAME } from "../tool/AlwaysOnReportTool.js";
 import { ALWAYS_ON_WORKSPACE_TOOL_NAME } from "../tool/AlwaysOnWorkspaceTool.js";
@@ -155,4 +156,60 @@ export function buildReportPrompt(input: BuildReportPromptInput): string {
     "Required report sections in order: Plan Reference, Steps Performed, Files Changed, Command Output, Verification Results, Follow-ups, Notes.",
     "Missing sections will be filled by the runtime fallback.",
   ].join("\n");
+}
+
+export type BuildApplyPromptInput = {
+  plan: { title: string; id: string; workspace?: { cwd: string; strategy: string } };
+  projectName: string;
+  projectRoot: string;
+  diff: WorkspaceDiff;
+};
+
+export function buildApplyPrompt(input: BuildApplyPromptInput): string {
+  const { plan, projectName, projectRoot, diff } = input;
+  const header = [
+    `Always-On apply for project "${projectName}".`,
+    "",
+    "Your job is to merge changes from the isolated workspace into the project root.",
+    "Apply each change carefully using Edit or Write tools.",
+    "If a file in the project root has been modified since the plan was executed,",
+    "merge both sets of changes intelligently — do not blindly overwrite.",
+    "If you cannot resolve a conflict, leave standard conflict markers (<<<< / ==== / >>>>).",
+    "",
+    "Do not enter Plan Mode.",
+    "Do not create a new plan — apply the existing changes directly.",
+    "",
+    `Plan: "${plan.title}" (${plan.id})`,
+    `Project root: ${projectRoot}`,
+  ];
+
+  if (plan.workspace?.cwd) {
+    header.push(`Isolated workspace: ${plan.workspace.cwd} (${plan.workspace.strategy})`);
+  }
+
+  header.push("");
+
+  if (!diff.diff.trim()) {
+    header.push("No differences detected in the workspace. Nothing to apply.");
+    return header.join("\n");
+  }
+
+  if (diff.truncated) {
+    header.push(
+      `The diff is large (${diff.fileCount} files) and has been truncated.`,
+      "Read the relevant files from the workspace directory to compare and apply.",
+      "",
+      "Truncated diff (first portion):",
+      "",
+      diff.diff,
+    );
+  } else {
+    header.push(
+      `Changes (${diff.fileCount} file${diff.fileCount === 1 ? "" : "s"}):`,
+      "",
+      diff.diff,
+    );
+  }
+
+  return header.join("\n");
 }

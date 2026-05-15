@@ -137,9 +137,10 @@ const COL = {
 type PlansAndCronJobsProps = {
   onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
   onApplyPlan?: (projectName: string, planId: string) => Promise<void>;
+  onOpenPlanDetail?: (planId: string, projectName: string, projectDisplayName: string) => void;
 };
 
-export default function PlansAndCronJobs({ onExecutePlan, onApplyPlan }: PlansAndCronJobsProps) {
+export default function PlansAndCronJobs({ onExecutePlan, onApplyPlan, onOpenPlanDetail }: PlansAndCronJobsProps) {
   const { t } = useTranslation('alwaysOn');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -382,6 +383,7 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyPlan }: PlansAn
                           onRefresh={refresh}
                           onExecutePlan={onExecutePlan}
                           onApplyPlan={onApplyPlan}
+                          onOpenPlanDetail={onOpenPlanDetail}
                         />
                       ))}
                     </div>
@@ -406,12 +408,14 @@ function ItemRow({
   onRefresh,
   onExecutePlan,
   onApplyPlan,
+  onOpenPlanDetail,
 }: {
   item: UnifiedItem;
   t: (key: string, opts?: Record<string, string>) => string;
   onRefresh: () => Promise<void>;
   onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
   onApplyPlan?: (projectName: string, planId: string) => Promise<void>;
+  onOpenPlanDetail?: (planId: string, projectName: string, projectDisplayName: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -559,7 +563,17 @@ function ItemRow({
     <div className="flex items-center gap-4 px-5 py-2.5 transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/40">
       {/* Title */}
       <div className={cn(COL.title, 'truncate text-[13px] text-neutral-900 dark:text-neutral-100')} title={fullTitle}>
-        {title}
+        {isPlan && onOpenPlanDetail ? (
+          <button
+            type="button"
+            onClick={() => onOpenPlanDetail(plan!.id, item.projectName, item.projectDisplayName)}
+            className="truncate text-left hover:underline"
+          >
+            {title}
+          </button>
+        ) : (
+          title
+        )}
       </div>
 
       {/* Type */}

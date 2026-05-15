@@ -24,6 +24,21 @@
       "back": "返回事件列表",
       "placeholder": "详细内容即将推出。"
     },
+    "runDetail": {
+      "back": "返回事件列表",
+      "loading": "加载中…",
+      "untitled": "未命名计划",
+      "workspaceStrategy": "工作区",
+      "executionSession": "执行会话",
+      "openSession": "打开会话",
+      "outcome": "结果",
+      "plan": "计划",
+      "report": "报告",
+      "noPlanContent": "暂无计划内容。",
+      "noReportContent": "暂无报告。",
+      "apply": "应用到主分支",
+      "archive": "归档"
+    },
     "phase": {
       "discoveryStarted": "发现已启动",
       "planProduced": "已产出计划",

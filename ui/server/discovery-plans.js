@@ -7,7 +7,7 @@
  * commands.
  */
 
-import { isSessionActiveViaGateway as isClaudeSDKSessionActive } from './pilotdeck-bridge.js';
+import { isSessionActiveViaGateway as isClaudeSDKSessionActive, getPilotDeckGateway } from './pilotdeck-bridge.js';
 import {
   extractProjectDirectory,
   getProjectCronJobsOverview,
@@ -83,6 +83,27 @@ export async function archiveProjectDiscoveryPlan(projectName, planId) {
   return getService().archive(projectName, planId);
 }
 
+export async function getProjectDiscoveryPlanReport(projectName, planId) {
+  return getService().readReport(projectName, planId);
+}
+
 export async function applyProjectDiscoveryPlan(projectName, planId) {
-  return getService().queueApply(projectName, planId);
+  const result = await getService().queueApply(projectName, planId);
+
+  const gw = await getPilotDeckGateway();
+  if (gw.alwaysOnApply) {
+    const applyResult = await gw.alwaysOnApply({
+      projectKey: result.projectRoot,
+      planId,
+      projectName,
+    });
+    return {
+      plan: result.plan,
+      sessionKey: applyResult.sessionKey,
+      executionToken: result.executionToken,
+      error: applyResult.error,
+    };
+  }
+
+  return result;
 }

@@ -6,6 +6,7 @@ import { createAlwaysOnDiscoveryPlanTool } from "../tool/AlwaysOnDiscoveryPlanTo
 import { createAlwaysOnReportTool } from "../tool/AlwaysOnReportTool.js";
 import { createAlwaysOnWorkspaceTool } from "../tool/AlwaysOnWorkspaceTool.js";
 import { AlwaysOnRunContextRegistry } from "./AlwaysOnRunContextRegistry.js";
+import type { DiscoveryFireDependencies } from "./DiscoveryFire.js";
 import {
   AlwaysOnRuntime,
   type AlwaysOnRuntimeLogger,
@@ -21,6 +22,7 @@ export type CreateAlwaysOnManagerOptions = {
   toolContractOptions?: CreateAlwaysOnDiscoveryPlanToolOptions["contract"];
   onWorktreeCreated?: (runId: string, cwd: string) => void;
   onWorktreeRemoved?: (cwd: string) => void;
+  onTurnEvent?: DiscoveryFireDependencies["onTurnEvent"];
 };
 
 /**
@@ -71,6 +73,7 @@ export class AlwaysOnManager {
           logger: options.logger,
           onWorktreeCreated: options.onWorktreeCreated,
           onWorktreeRemoved: options.onWorktreeRemoved,
+          onTurnEvent: options.onTurnEvent,
           runContexts: this.runContexts,
           sessionOverrides: this.sessionOverrides,
           skipToolCreation: true,
@@ -119,6 +122,22 @@ export class AlwaysOnManager {
     for (const runtime of this.runtimes) {
       await runtime.stop();
     }
+  }
+
+  async applyPlan(input: {
+    projectKey: string;
+    planId: string;
+    projectName: string;
+  }): Promise<{ sessionKey: string; error?: { code: string; message: string } }> {
+    const runtime = this.runtimes.find((r) => r.projectKey === input.projectKey);
+    if (!runtime) {
+      return { sessionKey: "", error: { code: "project_not_found", message: `No Always-On runtime for project ${input.projectKey}` } };
+    }
+    return runtime.applyPlan({
+      planId: input.planId,
+      projectRoot: input.projectKey,
+      projectName: input.projectName,
+    });
   }
 }
 

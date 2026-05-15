@@ -31,6 +31,7 @@ import { LifecycleRuntime } from "../lifecycle/index.js";
 import {
   GatewayElicitationChannel,
   InProcessGateway,
+  type InProcessGatewayOptions,
   SessionRouter,
   type Gateway,
   type GatewayCronController,
@@ -102,6 +103,7 @@ export type SubsystemUpdate = {
   extraTools: PilotDeckToolDefinition[];
   sessionOverrides?: SessionConfigOverrides;
   cron?: GatewayCronController;
+  alwaysOnApply?: InProcessGatewayOptions["alwaysOnApply"];
 };
 
 export type CreateLocalGatewayResult = {
@@ -259,6 +261,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
         sessionOverrides: update.sessionOverrides,
       });
       gateway.setCronController(update.cron);
+      gateway.setAlwaysOnApply(update.alwaysOnApply);
     },
   };
 }

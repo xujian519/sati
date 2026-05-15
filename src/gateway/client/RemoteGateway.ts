@@ -1,4 +1,6 @@
 import type {
+  AlwaysOnApplyInput,
+  AlwaysOnApplyResult,
   Gateway,
   GatewayElicitationResponseInput,
   GatewayEvent,
@@ -45,10 +47,14 @@ import type {
   CronStopInput,
   CronStopResult,
 } from "../../cron/protocol/types.js";
-import { GatewayWsClient } from "./GatewayWsClient.js";
+import { GatewayWsClient, type GatewayWsNotificationHandler } from "./GatewayWsClient.js";
 
 export class RemoteGateway implements Gateway {
   constructor(private readonly client: GatewayWsClient) {}
+
+  onNotification(handler: GatewayWsNotificationHandler): void {
+    this.client.onNotification(handler);
+  }
 
   submitTurn(input: GatewaySubmitTurnInput): AsyncIterable<GatewayEvent> {
     return this.client.stream("submit_turn", input);
@@ -156,6 +162,10 @@ export class RemoteGateway implements Gateway {
 
   async skillScan(input: SkillScanInput): Promise<SkillScanResult> {
     return (await this.client.request("skill_scan", input)) as SkillScanResult;
+  }
+
+  async alwaysOnApply(input: AlwaysOnApplyInput): Promise<AlwaysOnApplyResult> {
+    return (await this.client.request("always_on_apply", input)) as AlwaysOnApplyResult;
   }
 }
 

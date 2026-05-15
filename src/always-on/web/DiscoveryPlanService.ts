@@ -13,7 +13,6 @@
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import { resolve, isAbsolute, join } from "node:path";
-import { generateWorkspaceDiff, type WorkspaceDiff } from "../workspace/WorkspaceApply.js";
 import {
   computeExecutionStatus,
   computePlanStatus,
@@ -259,6 +258,17 @@ async function readPlanBody(projectDir: string, planFilePath: string): Promise<s
   }
 }
 
+async function readRawPlanRecord(projectDir: string, planId: string): Promise<Record<string, unknown> | null> {
+  try {
+    const raw = await fs.readFile(indexPath(projectDir), "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.plans)) return null;
+    return (parsed.plans as Record<string, unknown>[]).find((p) => p.id === planId) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Overview building
 // ---------------------------------------------------------------------------
@@ -305,58 +315,6 @@ function buildExecutionPrompt(plan: WebPlanRecord, planContent: string, projectN
   ].join("\n");
 }
 
-function buildApplyPrompt(
-  plan: WebPlanRecord,
-  projectName: string,
-  projectRoot: string,
-  diff: WorkspaceDiff,
-): string {
-  const header = [
-    `Always-On apply for project "${projectName}".`,
-    "",
-    "Your job is to merge changes from the isolated workspace into the project root.",
-    "Apply each change carefully using Edit or Write tools.",
-    "If a file in the project root has been modified since the plan was executed,",
-    "merge both sets of changes intelligently — do not blindly overwrite.",
-    "If you cannot resolve a conflict, leave standard conflict markers (<<<< / ==== / >>>>).",
-    "",
-    "Do not enter Plan Mode.",
-    "Do not create a new plan — apply the existing changes directly.",
-    "",
-    `Plan: "${plan.title}" (${plan.id})`,
-    `Project root: ${projectRoot}`,
-  ];
-
-  if (plan.workspace?.cwd) {
-    header.push(`Isolated workspace: ${plan.workspace.cwd} (${plan.workspace.strategy})`);
-  }
-
-  header.push("");
-
-  if (!diff.diff.trim()) {
-    header.push("No differences detected in the workspace. Nothing to apply.");
-    return header.join("\n");
-  }
-
-  if (diff.truncated) {
-    header.push(
-      `The diff is large (${diff.fileCount} files) and has been truncated.`,
-      "Read the relevant files from the workspace directory to compare and apply.",
-      "",
-      "Truncated diff (first portion):",
-      "",
-      diff.diff,
-    );
-  } else {
-    header.push(
-      `Changes (${diff.fileCount} file${diff.fileCount === 1 ? "" : "s"}):`,
-      "",
-      diff.diff,
-    );
-  }
-
-  return header.join("\n");
-}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -642,9 +600,9 @@ export class DiscoveryPlanService {
   }
 
   /**
-   * Queue an apply session: generate the workspace diff, build a prompt
-   * for the agent to merge changes into the project root, and return a
-   * payload the frontend can use to launch a visible agent session.
+   * Mark a plan as "applying" and return its metadata. The actual apply
+   * agent loop is triggered via `gateway.alwaysOnApply` — the caller
+   * (discovery-plans.js) fires that RPC after this method returns.
    */
   async queueApply(projectName: string, planId: string) {
     const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
@@ -670,12 +628,6 @@ export class DiscoveryPlanService {
         "MISSING_WORKSPACE",
       );
     }
-
-    const diff = await generateWorkspaceDiff(
-      plan.workspace.strategy,
-      plan.workspace.cwd,
-      projectRoot,
-    );
 
     const now = new Date().toISOString();
     const executionToken = randomUUID();
@@ -708,10 +660,27 @@ export class DiscoveryPlanService {
 
     return {
       plan: buildOverview(updated, content, null, isActive),
-      sessionSummary: `Apply: ${updated.title}`,
-      command: buildApplyPrompt(updated, projectName, projectRoot, diff),
+      projectRoot,
       executionToken,
     };
+  }
+
+  /**
+   * Read a plan's report markdown by planId.
+   * Returns the raw markdown string (empty if no report exists yet).
+   */
+  async readReport(projectName: string, planId: string): Promise<{ content: string }> {
+    const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
+    const projectDir = this.projectDir(projectRoot);
+
+    const rawRecord = await readRawPlanRecord(projectDir, planId);
+    if (!rawRecord) throw makeError("Discovery plan not found", "NOT_FOUND");
+
+    const reportPath = typeof rawRecord.reportFilePath === "string" ? rawRecord.reportFilePath : "";
+    if (!reportPath) return { content: "" };
+
+    const content = await readPlanBody(projectDir, reportPath);
+    return { content };
   }
 
   /**

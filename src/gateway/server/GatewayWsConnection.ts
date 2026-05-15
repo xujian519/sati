@@ -207,6 +207,11 @@ export class GatewayWsConnection {
         return requireSkillMethod(this.options.gateway.skillValidate, this.options.gateway)(frame.params as never);
       case "skill_scan":
         return requireSkillMethod(this.options.gateway.skillScan, this.options.gateway)(frame.params as never);
+      case "always_on_apply":
+        if (this.options.gateway.alwaysOnApply) {
+          return this.options.gateway.alwaysOnApply(frame.params as never);
+        }
+        return Promise.resolve({ sessionKey: "", error: { code: "not_configured", message: "Always-On apply not available" } });
       default:
         throw new Error(`Unknown gateway method ${(frame as { method?: string }).method}.`);
     }
