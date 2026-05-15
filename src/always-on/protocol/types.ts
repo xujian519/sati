@@ -54,7 +54,10 @@ export type DiscoveryPlanStatus =
   | "ready"
   | "executing"
   | "completed"
-  | "failed";
+  | "failed"
+  | "applying"
+  | "applied"
+  | "archived";
 
 export type WorkspaceStrategyId = "git-worktree" | "snapshot-copy";
 

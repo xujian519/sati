@@ -13,7 +13,7 @@ import {
   queueDiscoveryPlanExecution,
   updateProjectDiscoveryPlanExecution,
   applyProjectDiscoveryPlan,
-  archiveAndCleanupProjectDiscoveryPlan,
+  archiveProjectDiscoveryPlan,
 } from '../discovery-plans.js';
 
 const router = express.Router();
@@ -187,7 +187,10 @@ function getDiscoveryPlanErrorStatus(error) {
   if (error?.code === 'NOT_FOUND') {
     return 404;
   }
-  if (error?.code === 'INVALID_STATE' || error?.code === 'MISSING_PLAN_BODY') {
+  if (error?.code === 'UNSUPPORTED_STRATEGY') {
+    return 400;
+  }
+  if (error?.code === 'INVALID_STATE' || error?.code === 'MISSING_PLAN_BODY' || error?.code === 'MISSING_WORKSPACE') {
     return 409;
   }
   if (error?.code === 'ALREADY_RUNNING') {
@@ -300,7 +303,7 @@ router.post('/:projectName/discovery-plans/:planId/archive', async (req, res) =>
     if (!projectName) return res.status(400).json({ error: 'projectName is required' });
     if (!planId) return res.status(400).json({ error: 'planId is required' });
 
-    const result = await archiveAndCleanupProjectDiscoveryPlan(projectName, planId);
+    const result = await archiveProjectDiscoveryPlan(projectName, planId);
     return res.json(result);
   } catch (error) {
     return res.status(getDiscoveryPlanErrorStatus(error)).json({

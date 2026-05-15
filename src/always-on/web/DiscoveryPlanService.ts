@@ -171,7 +171,10 @@ export function normalizeDiscoveryPlanRecord(record: Record<string, unknown> | n
     (record?.sourceDiscoverySessionId as string) || (record?.sourceRunId as string),
   );
   const gatewayStatus = normalizeString(record?.status, "ready");
-  const mappedStatus = gatewayStatus === "executing" ? "running" : gatewayStatus;
+  const mappedStatus =
+    gatewayStatus === "executing" ? "running" :
+    gatewayStatus === "superseded" ? "archived" :
+    gatewayStatus;
 
   return {
     id,
@@ -409,8 +412,8 @@ export class DiscoveryPlanService {
     if (index === -1) throw makeError("Discovery plan not found", "NOT_FOUND");
 
     const plan = store.plans[index]!;
-    if (plan.status === "superseded") {
-      throw makeError("Superseded discovery plans cannot be executed", "INVALID_STATE");
+    if (plan.status === "archived" || plan.status === "applied") {
+      throw makeError("Archived or applied discovery plans cannot be executed", "INVALID_STATE");
     }
     const isActive = (id: string) => this.deps.activity.isSessionActive(id);
     const execStatus = computeExecutionStatus(plan, null, isActive);
@@ -599,6 +602,9 @@ export class DiscoveryPlanService {
     return buildOverview(nextPlan, content, null, isActive);
   }
 
+  /**
+   * Archive a plan and dispose its isolated workspace (if any).
+   */
   async archive(projectName: string, planId: string) {
     const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
     const projectDir = this.projectDir(projectRoot);
@@ -613,29 +619,6 @@ export class DiscoveryPlanService {
       throw makeError("Running discovery plans cannot be archived", "INVALID_STATE");
     }
 
-    store.plans[index] = { ...plan, status: "superseded", updatedAt: new Date().toISOString() };
-    await writePlanStore(projectDir, store);
-    return { archived: true };
-  }
-
-  /**
-   * Archive a plan and dispose its isolated workspace (if any).
-   */
-  async archiveAndCleanup(projectName: string, planId: string) {
-    const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
-    const projectDir = this.projectDir(projectRoot);
-    const store = await readPlanStore(projectDir);
-    const index = store.plans.findIndex((p) => p.id === planId);
-    if (index === -1) throw makeError("Discovery plan not found", "NOT_FOUND");
-
-    const plan = store.plans[index]!;
-    const isActive = (id: string) => this.deps.activity.isSessionActive(id);
-    const execStatus = computeExecutionStatus(plan, null, isActive);
-    if (execStatus === "running" || execStatus === "queued") {
-      throw makeError("Running discovery plans cannot be archived", "INVALID_STATE");
-    }
-
-    // Dispose workspace if present and manager is available.
     if (plan.workspace?.cwd && this.deps.workspace) {
       try {
         await this.deps.workspace.disposeWorkspace(
@@ -650,7 +633,7 @@ export class DiscoveryPlanService {
 
     store.plans[index] = {
       ...plan,
-      status: "superseded",
+      status: "archived",
       workspace: undefined,
       updatedAt: new Date().toISOString(),
     };

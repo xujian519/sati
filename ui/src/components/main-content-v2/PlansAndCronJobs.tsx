@@ -34,13 +34,12 @@ type PlanDisplayStatus =
   | 'executing'
   | 'completedWaiting'
   | 'failed'
-  | 'superseded'
   | 'applying'
-  | 'applied';
+  | 'applied'
+  | 'archived';
 
 function mapPlanStatus(status: DiscoveryPlanStatus): PlanDisplayStatus {
   switch (status) {
-    case 'draft':
     case 'ready':
       return 'created';
     case 'queued':
@@ -51,12 +50,12 @@ function mapPlanStatus(status: DiscoveryPlanStatus): PlanDisplayStatus {
       return 'completedWaiting';
     case 'failed':
       return 'failed';
-    case 'superseded':
-      return 'superseded';
     case 'applying':
       return 'applying';
     case 'applied':
       return 'applied';
+    case 'archived':
+      return 'archived';
     default:
       return 'created';
   }
@@ -68,7 +67,7 @@ const PLAN_STATUS_STYLE: Record<PlanDisplayStatus, string> = {
   executing: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
   completedWaiting: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
   failed: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-  superseded: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400',
+  archived: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400',
   applying: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
   applied: 'bg-teal-100 text-teal-600 dark:bg-teal-900/40 dark:text-teal-400',
 };
@@ -79,7 +78,7 @@ const PLAN_STATUS_LABEL: Record<PlanDisplayStatus, { key: string; defaultValue: 
   executing: { key: 'plansCron.status.executing', defaultValue: 'Executing' },
   completedWaiting: { key: 'plansCron.status.completedWaiting', defaultValue: 'Completed' },
   failed: { key: 'plansCron.status.failed', defaultValue: 'Failed' },
-  superseded: { key: 'plansCron.status.superseded', defaultValue: 'Superseded' },
+  archived: { key: 'plansCron.status.archived', defaultValue: 'Archived' },
   applying: { key: 'plansCron.status.applying', defaultValue: 'Applying' },
   applied: { key: 'plansCron.status.applied', defaultValue: 'Applied' },
 };

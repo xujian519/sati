@@ -91,11 +91,11 @@ test("queueExecution throws NOT_FOUND for missing plan", async () => {
   }
 });
 
-test("queueExecution throws INVALID_STATE for superseded plan", async () => {
+test("queueExecution throws INVALID_STATE for archived plan", async () => {
   const env = makeTestEnv();
   try {
     writePlanIndex(env.plansDir, [
-      { id: "p1", title: "Old plan", status: "superseded", planFilePath: "plans/p1.md" },
+      { id: "p1", title: "Old plan", status: "archived", planFilePath: "plans/p1.md" },
     ]);
     writePlanBody(env.plansDir, "p1", "body");
     await assert.rejects(
@@ -157,7 +157,7 @@ test("archive throws INVALID_STATE for running plan", async () => {
   }
 });
 
-test("archive marks a plan as superseded", async () => {
+test("archive marks a plan as archived", async () => {
   const env = makeTestEnv();
   try {
     writePlanIndex(env.plansDir, [
@@ -168,7 +168,7 @@ test("archive marks a plan as superseded", async () => {
 
     const raw = readFileSync(join(env.plansDir, "index.json"), "utf8");
     const stored = JSON.parse(raw);
-    assert.equal(stored.plans[0].status, "superseded");
+    assert.equal(stored.plans[0].status, "archived");
   } finally {
     env.cleanup();
   }

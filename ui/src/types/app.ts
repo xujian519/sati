@@ -56,16 +56,14 @@ export interface AlwaysOnDashboardEventsResponse {
 
 export type DiscoveryPlanApprovalMode = 'auto' | 'manual';
 export type DiscoveryPlanStatus =
-  | 'draft'
   | 'ready'
   | 'queued'
   | 'running'
   | 'completed'
   | 'failed'
-  | 'superseded'
   | 'applying'
-  | 'applied';
-export type DiscoveryPlanExecutionStatus = 'queued' | 'running' | 'completed' | 'failed';
+  | 'applied'
+  | 'archived';
 
 export interface DiscoveryPlanContextRefs {
   workingDirectory: string[];
@@ -89,7 +87,7 @@ export interface DiscoveryPlanOverview {
   executionSessionId?: string;
   executionStartedAt?: string;
   executionLastActivityAt?: string;
-  executionStatus?: DiscoveryPlanExecutionStatus;
+  executionStatus?: string;
   latestSummary?: string;
   contextRefs: DiscoveryPlanContextRefs;
   planFilePath: string;

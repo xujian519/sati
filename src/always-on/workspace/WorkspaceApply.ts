@@ -15,10 +15,10 @@ export type WorkspaceDiff = {
   truncated: boolean;
 };
 
-type GitResult = { exitCode: number; stdout: string; stderr: string };
+type ProcessResult = { exitCode: number; stdout: string; stderr: string };
 
-async function runGit(bin: string, args: string[]): Promise<GitResult> {
-  return new Promise<GitResult>((resolve) => {
+async function runProcess(bin: string, args: string[]): Promise<ProcessResult> {
+  return new Promise<ProcessResult>((resolve) => {
     const child = spawn(bin, args, { stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
@@ -61,19 +61,19 @@ async function generateGitWorktreeDiff(
   workspaceCwd: string,
   gitBin: string,
 ): Promise<WorkspaceDiff> {
-  const addAll = await runGit(gitBin, ["-C", workspaceCwd, "add", "-A"]);
+  const addAll = await runProcess(gitBin, ["-C", workspaceCwd, "add", "-A"]);
   if (addAll.exitCode !== 0) {
     return { diff: "", fileCount: 0, truncated: false };
   }
 
-  const statResult = await runGit(gitBin, [
+  const statResult = await runProcess(gitBin, [
     "-C", workspaceCwd, "diff", "--cached", "HEAD", "--stat",
   ]);
   const fileCount = statResult.exitCode === 0
     ? (statResult.stdout.match(/\n/g) || []).length - 1
     : 0;
 
-  const diffResult = await runGit(gitBin, [
+  const diffResult = await runProcess(gitBin, [
     "-C", workspaceCwd, "diff", "--cached", "HEAD",
   ]);
   if (diffResult.exitCode !== 0 || !diffResult.stdout.trim()) {
@@ -95,7 +95,7 @@ async function generateSnapshotCopyDiff(
   workspaceCwd: string,
   projectRoot: string,
 ): Promise<WorkspaceDiff> {
-  const result = await runCommand("diff", [
+  const result = await runProcess("diff", [
     "-ruN",
     "--exclude=.git",
     "--exclude=node_modules",
@@ -124,27 +124,6 @@ async function generateSnapshotCopyDiff(
   return { diff: fullDiff, fileCount, truncated: false };
 }
 
-async function runCommand(bin: string, args: string[]): Promise<GitResult> {
-  return new Promise<GitResult>((resolve) => {
-    const child = spawn(bin, args, { stdio: ["pipe", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    child.stdin?.end();
-    child.stdout?.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf-8");
-    });
-    child.stderr?.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf-8");
-    });
-    child.on("error", (error) => {
-      resolve({ exitCode: -1, stdout, stderr: error.message });
-    });
-    child.on("close", (code) => {
-      resolve({ exitCode: code ?? -1, stdout, stderr });
-    });
-  });
-}
-
 /**
  * Apply uncommitted changes from a git worktree back to the original
  * project root using `git diff` + `git apply --3way`.
@@ -155,12 +134,12 @@ export async function applyWorktreeToProject(
   gitBin = "git",
 ): Promise<{ applied: boolean; diff?: string; error?: string }> {
   // Stage everything in the worktree so `diff HEAD` captures new files too.
-  const addAll = await runGit(gitBin, ["-C", worktreeCwd, "add", "-A"]);
+  const addAll = await runProcess(gitBin, ["-C", worktreeCwd, "add", "-A"]);
   if (addAll.exitCode !== 0) {
     return { applied: false, error: `git add -A failed: ${addAll.stderr}` };
   }
 
-  const diffResult = await runGit(gitBin, [
+  const diffResult = await runProcess(gitBin, [
     "-C", worktreeCwd,
     "diff", "--cached", "HEAD",
     "--binary",
@@ -175,7 +154,7 @@ export async function applyWorktreeToProject(
   }
 
   // Pipe the diff into `git apply --3way` in the original project root.
-  const applyResult = await new Promise<GitResult>((resolve) => {
+  const applyResult = await new Promise<ProcessResult>((resolve) => {
     const child = spawn(gitBin, ["-C", projectRoot, "apply", "--3way"], {
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -221,14 +200,14 @@ export async function disposeWorkspace(
   gitBin = "git",
 ): Promise<void> {
   if (strategy === "git-worktree") {
-    const remove = await runGit(gitBin, [
+    const remove = await runProcess(gitBin, [
       "-C", projectRoot,
       "worktree", "remove", "--force", cwd,
     ]).catch(() => undefined);
 
     if (!remove || remove.exitCode !== 0) {
       await rm(cwd, { recursive: true, force: true });
-      await runGit(gitBin, ["-C", projectRoot, "worktree", "prune"]).catch(
+      await runProcess(gitBin, ["-C", projectRoot, "worktree", "prune"]).catch(
         () => undefined,
       );
     }
