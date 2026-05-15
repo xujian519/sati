@@ -205,6 +205,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     toolResultsDir: resolve(tmpdir(), "pilotdeck-tool-output", process.pid.toString()),
     cron: options.cron,
     skillManager,
+    setSessionCwd: (sessionKey, cwd) => registry.setSessionCwd(sessionKey, cwd),
     readSessionMessages: (input) =>
       readWebSessionMessages(input, {
         projectRoot: input.projectKey ? input.projectKey : projectRoot,
@@ -226,6 +227,15 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
         unsubscribe();
       }
       return { reloaded: true, changedPaths };
+    },
+    // Defensive: re-check the on-disk config at the start of every
+    // turn so an apiKey/url edit applied between two messages takes
+    // effect on the next one, even if the fs watcher missed it.
+    // Singleton-deduped inside PilotConfigStore.reload — concurrent
+    // turns share a single in-flight read, and unchanged config is a
+    // no-op (no invalidation, no session recreation).
+    async refreshConfigBeforeTurn() {
+      await configStore.reload("turn-start");
     },
   });
   // Hand the gateway back to the registry so per-session creation can
@@ -400,6 +410,18 @@ class ProjectRuntimeRegistry {
     this._extraTools = config.extraTools;
     this._sessionOverrides = config.sessionOverrides;
     this.invalidate();
+  }
+
+  /**
+   * Set the working directory override for a specific session.
+   * Used by the Web UI execution path to point an agent session at
+   * an isolated workspace (git-worktree / snapshot-copy) without
+   * going through DiscoveryFire.
+   */
+  setSessionCwd(sessionKey: string, cwd: string): void {
+    if (!this._sessionOverrides) return;
+    const existing = this._sessionOverrides.get(sessionKey);
+    this._sessionOverrides.set(sessionKey, { ...existing, cwd });
   }
 
   resolve(projectKey?: string): ProjectRuntime {

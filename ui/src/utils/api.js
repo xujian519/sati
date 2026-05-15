@@ -54,14 +54,14 @@ export const api = {
   projects: () => authenticatedFetch('/api/projects'),
   alwaysOnDashboardEvents: (limit = 200, since) =>
     authenticatedFetch(`/api/always-on/events?limit=${encodeURIComponent(limit)}${since ? `&since=${encodeURIComponent(since)}` : ''}`),
-  projectCronJobs: (projectName) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/cron-jobs`),
-  projectAlwaysOnRunHistory: (projectName, limit = 500) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/always-on/run-history?limit=${encodeURIComponent(limit)}`),
-  projectAlwaysOnRunHistoryDetail: (projectName, runId) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/always-on/run-history/${encodeURIComponent(runId)}`),
-  projectAlwaysOnRunLog: (projectName, runId, tailBytes = 60000) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/always-on/run-history/${encodeURIComponent(runId)}/log?tailBytes=${encodeURIComponent(tailBytes)}`),
+  allCronJobs: () =>
+    authenticatedFetch('/api/always-on/cron-jobs'),
+  cronRunNow: (taskId) =>
+    authenticatedFetch(`/api/always-on/cron-jobs/${encodeURIComponent(taskId)}/run-now`, { method: 'POST' }),
+  cronStop: (taskId) =>
+    authenticatedFetch(`/api/always-on/cron-jobs/${encodeURIComponent(taskId)}/stop`, { method: 'POST' }),
+  cronDelete: (taskId) =>
+    authenticatedFetch(`/api/always-on/cron-jobs/${encodeURIComponent(taskId)}`, { method: 'DELETE' }),
   projectDiscoveryContext: (projectName) =>
     authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-context`),
   projectDiscoveryPlans: (projectName) =>
@@ -76,16 +76,12 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
-  archiveProjectDiscoveryPlan: (projectName, planId) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-plans/${encodeURIComponent(planId)}/archive`, {
+  applyProjectDiscoveryPlan: (projectName, planId) =>
+    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-plans/${encodeURIComponent(planId)}/apply`, {
       method: 'POST',
     }),
-  deleteProjectCronJob: (projectName, taskId) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/cron-jobs/${encodeURIComponent(taskId)}`, {
-      method: 'DELETE',
-    }),
-  runProjectCronJobNow: (projectName, taskId) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/cron-jobs/${encodeURIComponent(taskId)}/run-now`, {
+  archiveProjectDiscoveryPlan: (projectName, planId) =>
+    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-plans/${encodeURIComponent(planId)}/archive`, {
       method: 'POST',
     }),
   sessions: (projectName, limit = 5, offset = 0) =>

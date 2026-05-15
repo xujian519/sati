@@ -3,39 +3,6 @@ export type ProjectSessionKind = 'background_task';
 
 export type AppTab = 'home' | 'chat' | 'always-on' | 'files' | 'shell' | 'git' | 'tasks' | 'memory' | 'skills' | 'preview' | 'dashboard' | `plugin:${string}`;
 
-export type CronJobOverviewStatus = 'scheduled' | 'running' | 'completed' | 'failed';
-export type CronJobLatestRunStatus = 'queued' | 'running' | 'completed' | 'failed';
-
-export interface CronJobLatestRun {
-  status?: CronJobLatestRunStatus;
-  runId?: string;
-  startedAt?: string;
-  sessionId?: string;
-  summary?: string;
-  lastActivity?: string;
-  taskId?: string;
-  outputFile?: string;
-  parentSessionId?: string;
-  relativeTranscriptPath?: string;
-  transcriptKey?: string;
-}
-
-export interface CronJobOverview {
-  id: string;
-  cron: string;
-  prompt: string;
-  createdAt: number;
-  durable?: boolean;
-  lastFiredAt?: number;
-  recurring?: boolean;
-  permanent?: boolean;
-  manualOnly?: boolean;
-  originSessionId?: string;
-  transcriptKey?: string;
-  status: CronJobOverviewStatus;
-  latestRun?: CronJobLatestRun | null;
-}
-
 export type AlwaysOnSessionTarget =
   | {
       kind: 'origin';
@@ -54,64 +21,6 @@ export type AlwaysOnSessionTarget =
       taskStatus?: string;
       outputFile?: string;
     };
-
-export interface ProjectCronJobsResponse {
-  jobs: CronJobOverview[];
-}
-
-export interface DeleteProjectCronJobResponse {
-  deleted: boolean;
-}
-
-export type CronJobRunNowReason = 'already_running' | 'not_found';
-
-export interface RunProjectCronJobNowResponse {
-  started: boolean;
-  reason?: CronJobRunNowReason;
-}
-
-export type AlwaysOnRunHistoryStatus = 'queued' | 'running' | 'completed' | 'failed' | 'unknown';
-export type AlwaysOnRunHistoryKind = 'plan' | 'cron';
-
-export interface AlwaysOnRunHistorySession {
-  sessionId?: string;
-  parentSessionId?: string;
-  relativeTranscriptPath?: string;
-}
-
-export interface AlwaysOnRunHistoryEntry {
-  runId: string;
-  title: string;
-  kind: AlwaysOnRunHistoryKind;
-  status: AlwaysOnRunHistoryStatus;
-  startedAt?: string;
-  sourceId: string;
-  session?: AlwaysOnRunHistorySession;
-}
-
-export interface AlwaysOnRunHistoryDetail extends AlwaysOnRunHistoryEntry {
-  outputLog: string;
-  metadata: Record<string, unknown>;
-}
-
-export interface ProjectAlwaysOnRunHistoryResponse {
-  runs: AlwaysOnRunHistoryEntry[];
-}
-
-export interface ProjectAlwaysOnRunHistoryDetailResponse {
-  run: AlwaysOnRunHistoryDetail;
-}
-
-export type AlwaysOnRunLogSource = 'log-file' | 'session' | 'history';
-
-export interface AlwaysOnRunLogResponse {
-  runId: string;
-  content: string;
-  truncated: boolean;
-  updatedAt?: string;
-  size: number;
-  source: AlwaysOnRunLogSource;
-}
 
 export type AlwaysOnDashboardEventPhase =
   | 'discovery_started'
@@ -147,22 +56,14 @@ export interface AlwaysOnDashboardEventsResponse {
 
 export type DiscoveryPlanApprovalMode = 'auto' | 'manual';
 export type DiscoveryPlanStatus =
-  | 'draft'
   | 'ready'
   | 'queued'
   | 'running'
   | 'completed'
   | 'failed'
-  | 'superseded';
-export type DiscoveryPlanExecutionStatus = 'queued' | 'running' | 'completed' | 'failed';
-
-export interface DiscoveryPlanContextRefs {
-  workingDirectory: string[];
-  memory: string[];
-  existingPlans: string[];
-  cronJobs: string[];
-  recentChats: string[];
-}
+  | 'applying'
+  | 'applied'
+  | 'archived';
 
 export interface DiscoveryPlanOverview {
   id: string;
@@ -171,19 +72,7 @@ export interface DiscoveryPlanOverview {
   updatedAt: string;
   approvalMode: DiscoveryPlanApprovalMode;
   status: DiscoveryPlanStatus;
-  summary: string;
-  rationale: string;
-  dedupeKey: string;
-  sourceDiscoverySessionId: string;
   executionSessionId?: string;
-  executionStartedAt?: string;
-  executionLastActivityAt?: string;
-  executionStatus?: DiscoveryPlanExecutionStatus;
-  latestSummary?: string;
-  contextRefs: DiscoveryPlanContextRefs;
-  planFilePath: string;
-  structureVersion: number;
-  content: string;
 }
 
 export interface ProjectDiscoveryPlansResponse {
@@ -204,6 +93,26 @@ export interface DiscoveryContextPlanItem {
   updatedAt: string;
   summary: string;
 }
+
+export type CronJobOverviewStatus = 'scheduled' | 'running' | 'completed' | 'failed';
+
+export interface CronJobOverview {
+  id: string;
+  projectKey: string | null;
+  cron: string;
+  prompt: string;
+  createdAt: string;
+  recurring: boolean;
+  manualOnly: boolean;
+  status: CronJobOverviewStatus;
+  lastFiredAt?: number;
+}
+
+export interface CronJobsOverviewResponse {
+  jobs: CronJobOverview[];
+}
+
+export type AlwaysOnSubTab = 'dashboard' | 'plans-cron';
 
 export interface DiscoveryContextCronItem {
   id: string;
@@ -242,14 +151,11 @@ export interface ExecuteDiscoveryPlanResponse {
   sessionSummary: string;
   command: string;
   executionToken: string;
+  workspaceCwd?: string;
 }
 
 export interface UpdateDiscoveryPlanExecutionResponse {
   plan: DiscoveryPlanOverview;
-}
-
-export interface ArchiveDiscoveryPlanResponse {
-  archived: boolean;
 }
 
 export interface ProjectSession {

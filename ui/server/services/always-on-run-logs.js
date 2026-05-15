@@ -3,32 +3,21 @@ import path from 'node:path';
 
 import { getAlwaysOnRoot } from './always-on-paths.js';
 
-const DEFAULT_TAIL_BYTES = 60_000;
-const MAX_TAIL_BYTES = 512_000;
-
 function normalizeRunId(runId) {
   return typeof runId === 'string'
     ? runId.trim().replace(/[^a-zA-Z0-9._:-]/g, '-')
     : '';
 }
 
-function normalizeTailBytes(value) {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return DEFAULT_TAIL_BYTES;
-  }
-  return Math.min(parsed, MAX_TAIL_BYTES);
-}
-
 function ensureTrailingNewline(value) {
   return value.endsWith('\n') ? value : `${value}\n`;
 }
 
-export function getAlwaysOnRunsDir(projectRoot) {
+function getAlwaysOnRunsDir(projectRoot) {
   return path.join(getAlwaysOnRoot(projectRoot), 'runs');
 }
 
-export function getRunLogPath(projectRoot, runId) {
+function getRunLogPath(projectRoot, runId) {
   const safeRunId = normalizeRunId(runId);
   if (!safeRunId) {
     throw new Error('runId is required');
@@ -36,7 +25,7 @@ export function getRunLogPath(projectRoot, runId) {
   return path.join(getAlwaysOnRunsDir(projectRoot), `${safeRunId}.log`);
 }
 
-export function getRunEventsPath(projectRoot, runId) {
+function getRunEventsPath(projectRoot, runId) {
   const safeRunId = normalizeRunId(runId);
   if (!safeRunId) {
     throw new Error('runId is required');
@@ -83,47 +72,4 @@ export async function appendAlwaysOnRunLogEvent(projectRoot, runId, event) {
     })}\n`,
     'utf8',
   );
-}
-
-export async function getAlwaysOnRunLog(projectRoot, runId, { tailBytes = DEFAULT_TAIL_BYTES } = {}) {
-  const safeTailBytes = normalizeTailBytes(tailBytes);
-  let stats;
-  try {
-    stats = await fs.stat(getRunLogPath(projectRoot, runId));
-  } catch (error) {
-    if (error?.code === 'ENOENT') {
-      return {
-        content: '',
-        truncated: false,
-        updatedAt: undefined,
-        size: 0,
-      };
-    }
-    throw error;
-  }
-
-  if (stats.size === 0) {
-    return {
-      content: '',
-      truncated: false,
-      updatedAt: stats.mtime.toISOString(),
-      size: 0,
-    };
-  }
-
-  const start = Math.max(0, stats.size - safeTailBytes);
-  const length = stats.size - start;
-  const handle = await fs.open(getRunLogPath(projectRoot, runId), 'r');
-  try {
-    const buffer = Buffer.alloc(length);
-    await handle.read(buffer, 0, length, start);
-    return {
-      content: buffer.toString('utf8'),
-      truncated: start > 0,
-      updatedAt: stats.mtime.toISOString(),
-      size: stats.size,
-    };
-  } finally {
-    await handle.close();
-  }
 }

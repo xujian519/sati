@@ -23,7 +23,6 @@ import EditorSidebar from '../../code-editor/view/EditorSidebar';
 import type { CodeEditorDiffInfo } from '../../code-editor/types/types';
 import type {
   AlwaysOnSessionTarget,
-  CronJobOverview,
   ExecuteDiscoveryPlanResponse,
   Project,
   ProjectDiscoveryContextResponse,
@@ -276,6 +275,7 @@ function MainContent({
       toolsSettings: buildAlwaysOnExecutionToolsSettings(),
       alwaysOnPlanId: planId,
       alwaysOnExecutionToken: payload.executionToken,
+      workspaceCwd: payload.workspaceCwd,
     });
 
     refreshProjectsSilently();
@@ -300,6 +300,87 @@ function MainContent({
 
     await launchQueuedDiscoveryPlanExecution(payload);
   }, [launchQueuedDiscoveryPlanExecution, selectedProject]);
+
+  const executeAndLaunchPlan = useCallback(async (
+    projectName: string,
+    planId: string,
+  ) => {
+    const project = projects.find((p) => p.name === projectName);
+    if (!project) {
+      throw new Error(`Project "${projectName}" not found`);
+    }
+
+    const response = await api.executeProjectDiscoveryPlan(projectName, planId, { source: 'manual' });
+    const payload = await readJsonPayload<ExecuteDiscoveryPlanResponse & { error?: string }>(response);
+    if (!response.ok || !payload) {
+      throw new Error(payload?.error || 'Failed to queue discovery plan execution');
+    }
+
+    const resolvedPlanId = payload.plan?.id;
+    if (!resolvedPlanId) {
+      throw new Error('Missing discovery plan id in execution payload');
+    }
+
+    pendingDiscoveryExecutionsRef.current.set(payload.executionToken, {
+      projectName,
+      planId: resolvedPlanId,
+      executionToken: payload.executionToken,
+    });
+
+    startClaudeSessionCommand({
+      sendMessage: trackedSendMessage,
+      selectedProject: project,
+      command: payload.command,
+      permissionMode: 'default',
+      sessionSummary: payload.sessionSummary,
+      toolsSettings: buildAlwaysOnExecutionToolsSettings(),
+      alwaysOnPlanId: resolvedPlanId,
+      alwaysOnExecutionToken: payload.executionToken,
+      workspaceCwd: payload.workspaceCwd,
+    });
+
+    refreshProjectsSilently();
+  }, [projects, refreshProjectsSilently, trackedSendMessage]);
+
+  const applyAndLaunchPlan = useCallback(async (
+    projectName: string,
+    planId: string,
+  ) => {
+    const project = projects.find((p) => p.name === projectName);
+    if (!project) {
+      throw new Error(`Project "${projectName}" not found`);
+    }
+
+    const response = await api.applyProjectDiscoveryPlan(projectName, planId);
+    const payload = await readJsonPayload<ExecuteDiscoveryPlanResponse & { error?: string }>(response);
+    if (!response.ok || !payload) {
+      throw new Error(payload?.error || 'Failed to queue discovery plan apply');
+    }
+
+    const resolvedPlanId = payload.plan?.id;
+    if (!resolvedPlanId) {
+      throw new Error('Missing discovery plan id in apply payload');
+    }
+
+    pendingDiscoveryExecutionsRef.current.set(payload.executionToken, {
+      projectName,
+      planId: resolvedPlanId,
+      executionToken: payload.executionToken,
+    });
+
+    startClaudeSessionCommand({
+      sendMessage: trackedSendMessage,
+      selectedProject: project,
+      command: payload.command,
+      permissionMode: 'default',
+      sessionSummary: payload.sessionSummary,
+      toolsSettings: buildAlwaysOnExecutionToolsSettings(),
+      alwaysOnPlanId: resolvedPlanId,
+      alwaysOnExecutionToken: payload.executionToken,
+    });
+
+    refreshProjectsSilently();
+  }, [projects, refreshProjectsSilently, trackedSendMessage]);
 
   const flashToast = useCallback((toastValue: MainContentToast, ms = 2400) => {
     setToast(toastValue);
@@ -406,30 +487,13 @@ function MainContent({
     setActiveTab,
   ]);
 
-  const handleOpenCronSession = useCallback((job: CronJobOverview) => {
-    const latestRun = job.latestRun;
-    if (
-      !latestRun?.sessionId ||
-      !latestRun.parentSessionId ||
-      !latestRun.relativeTranscriptPath
-    ) {
-      return;
-    }
-
-    void handleOpenAlwaysOnSession({
-      kind: 'background',
-      sessionId: latestRun.sessionId,
-      parentSessionId: latestRun.parentSessionId,
-      relativeTranscriptPath: latestRun.relativeTranscriptPath,
-      title: latestRun.summary || job.prompt || job.cron,
-      summary: latestRun.summary || job.prompt || job.cron,
-      lastActivity: latestRun.lastActivity,
-      transcriptKey: latestRun.transcriptKey || job.transcriptKey,
-      taskId: latestRun.taskId,
-      taskStatus: job.status,
-      outputFile: latestRun.outputFile,
-    });
-  }, [handleOpenAlwaysOnSession]);
+  const handleOpenExecutionSession = useCallback(
+    (projectKey: string, runId: string) => {
+      const sessionId = `always-on/execute:project=${projectKey}:run=${runId}`;
+      void handleOpenAlwaysOnSession({ kind: 'origin', sessionId });
+    },
+    [handleOpenAlwaysOnSession],
+  );
 
   useEffect(() => {
     const message = latestMessage as {
@@ -720,8 +784,9 @@ function MainContent({
           launchQueuedDiscoveryPlanExecution={launchQueuedDiscoveryPlanExecution}
           handleStartDiscoverySession={handleStartDiscoverySession}
           handleExecuteDiscoveryPlan={handleExecuteDiscoveryPlan}
-          handleOpenCronSession={handleOpenCronSession}
-          handleOpenAlwaysOnSession={handleOpenAlwaysOnSession}
+          executeAndLaunchPlan={executeAndLaunchPlan}
+          applyAndLaunchPlan={applyAndLaunchPlan}
+          handleOpenExecutionSession={handleOpenExecutionSession}
           editorExpanded={editorExpanded}
           onDeselectProject={onDeselectProject}
           onSelectProjectByName={onSelectProjectByName}
@@ -790,8 +855,9 @@ type SplitBodyProps = {
   launchQueuedDiscoveryPlanExecution: any;
   handleStartDiscoverySession: any;
   handleExecuteDiscoveryPlan: any;
-  handleOpenCronSession: (job: CronJobOverview) => void;
-  handleOpenAlwaysOnSession: (target: AlwaysOnSessionTarget) => void | Promise<void>;
+  executeAndLaunchPlan: (projectName: string, planId: string) => Promise<void>;
+  applyAndLaunchPlan: (projectName: string, planId: string) => Promise<void>;
+  handleOpenExecutionSession: (projectKey: string, runId: string) => void;
   editorExpanded: boolean;
   onDeselectProject?: () => void;
   onSelectProjectByName?: (projectName: string) => void;
@@ -827,8 +893,9 @@ function SplitBody(props: SplitBodyProps) {
     launchQueuedDiscoveryPlanExecution,
     handleStartDiscoverySession,
     handleExecuteDiscoveryPlan,
-    handleOpenCronSession,
-    handleOpenAlwaysOnSession,
+    executeAndLaunchPlan,
+    applyAndLaunchPlan,
+    handleOpenExecutionSession,
     editorExpanded,
     onDeselectProject,
     onSelectProjectByName,
@@ -928,10 +995,9 @@ function SplitBody(props: SplitBodyProps) {
       return (
         <AlwaysOnV2
           selectedProject={selectedProject}
-          onStartDiscoverySession={handleStartDiscoverySession}
-          onExecuteDiscoveryPlan={handleExecuteDiscoveryPlan}
-          onOpenCronSession={handleOpenCronSession}
-          onOpenSession={handleOpenAlwaysOnSession}
+          onExecutePlan={executeAndLaunchPlan}
+          onApplyPlan={applyAndLaunchPlan}
+          onOpenExecutionSession={handleOpenExecutionSession}
         />
       );
     }

@@ -75,9 +75,8 @@ function parseProvider(providerId: string, rawProvider: unknown, env?: Credentia
     });
   }
 
-  const rawUrl = typeof provider.url === "string" && provider.url.length > 0
-    ? provider.url
-    : catalogProvider?.defaultUrl;
+  const trimmedUrl = typeof provider.url === "string" ? provider.url.trim() : "";
+  const rawUrl = trimmedUrl.length > 0 ? trimmedUrl : catalogProvider?.defaultUrl;
   if (!rawUrl) {
     throw new ModelConfigError("invalid_config_value", `Provider ${providerId} requires a url.`, { providerId });
   }

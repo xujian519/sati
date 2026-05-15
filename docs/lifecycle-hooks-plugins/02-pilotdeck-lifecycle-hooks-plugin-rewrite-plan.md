@@ -141,6 +141,7 @@ PostToolUse
 PostToolUseFailure
 Notification
 UserPromptSubmit
+PreModelRequest
 SessionStart
 SessionEnd
 Stop
@@ -231,12 +232,13 @@ export type PilotDeckHookEffect =
   | { type: "additional_context"; content: string; source: string }
   | { type: "system_message"; content: string }
   | { type: "block"; reason: string; stopReason?: string }
-  | { type: "permission_decision"; behavior: "allow" | "deny" | "ask" | "passthrough"; reason?: string }
+  | { type: "permission_decision"; behavior: PilotDeckHookPermissionBehavior; reason?: string }
   | { type: "updated_tool_input"; input: Record<string, unknown> }
   | { type: "updated_mcp_tool_output"; output: unknown }
-  | { type: "permission_request_result"; result: PermissionRequestResult }
+  | { type: "permission_request_result"; result: PilotDeckPermissionRequestResult }
   | { type: "initial_user_message"; message: string }
   | { type: "watch_paths"; paths: string[] }
+  | { type: "worktree_path"; path: string }
   | { type: "retry_permission_denied" };
 ```
 
@@ -246,49 +248,67 @@ export type PilotDeckHookEffect =
 export type LifecycleDispatchResult = {
   effects: PilotDeckHookEffect[];
   messages: CanonicalMessage[];
-  events: PilotDeckHookExecutionEvent[];
+  events: unknown[];
   blockingErrors: PilotDeckLifecycleError[];
+  nonBlockingErrors: PilotDeckLifecycleError[];
 };
 ```
 
 ## 5. Agent 集成点
 
-当前 `AgentLoop.run()` 已发出：
+当前 `AgentEvent` 已定义的完整事件流（`src/agent/protocol/events.ts`）：
 
 ```text
-model_request_started
-model_event
-assistant_message
-tool_calls_detected
-tool_result
-tool_results_projected
-turn_continued
-turn_completed
-turn_failed
+session_started / session_ended / session_aborted
+turn_started / turn_continued / turn_completed / turn_failed
+input_accepted / user_prompt_submitted / setup_completed
+model_request_started / model_event / instructions_loaded
+assistant_message / tool_calls_detected
+pre_tool_execute / post_tool_execute
+permission_requested / permission_denied
+tool_result / tool_results_projected
+mode_change_requested / stop_requested / stop_failure
+compact_started / compact_completed
+subagent_started / subagent_completed
+elicitation_requested / elicitation_resolved
 ```
 
-第一阶段集成点：
+当前已接入的 lifecycle dispatch 点：
 
-| Agent/Turn 点 | Hook event | 行为 |
-| --- | --- | --- |
-| session 创建后 | `SessionStart` | 收集 additional context、initial user message、watch paths |
-| resume 后 | `SessionStart(source=resume)` | 与 startup 同协议，source 不同 |
-| input accepted 后 | `UserPromptSubmit` | 追加 additional context；blocking 则不调用 model |
-| model 无 tool 且将完成时 | `Stop` | 可阻止 continuation 或追加 stop hook summary |
-| turn error | `StopFailure` | 可观察模型/loop 错误 |
-| session abort/end | `SessionEnd` | 并发执行，强超时 |
+| Agent/Turn 点 | Hook event | 调用位置 | 行为 |
+| --- | --- | --- | --- |
+| session 创建后 | `SessionStart` | `AgentSession` | 收集 additional context、initial user message、watch paths |
+| resume 后 | `SessionStart(source=resume)` | `AgentSession` | 与 startup 同协议，source 不同 |
+| session 初始化 | `Setup` | `AgentSession` | 可添加 additional context；bare mode 跳过 |
+| input accepted 后 | `UserPromptSubmit` | `TurnRunner` | 追加 additional context；blocking 则不调用 model |
+| 模型请求前 | `PreModelRequest` | `AgentLoop` | 可注入 context 或阻止模型请求 |
+| 系统指令加载后 | `InstructionsLoaded` | `AgentLoop` | 可追加 context |
+| model 无 tool 且将完成时 | `Stop` | `AgentLoop` | 可阻止 continuation 或追加 stop hook summary |
+| turn error | `StopFailure` | `AgentLoop` | 可观察模型/loop 错误 |
+| 子 agent 启动 | `SubagentStart` | `AgentLoop` | 可追加 context |
+| 子 agent 停止 | `SubagentStop` | `AgentLoop` | 可追加 context |
+| 工具执行前 | `PreToolUse` | `ToolRuntime` | 修改 input、决定权限、追加 context |
+| 权限请求 ask | `PermissionRequest` | `ToolRuntime` | hook 自动 allow/deny |
+| 工具成功后 | `PostToolUse` | `ToolRuntime` | 追加 context、更新 MCP 输出 |
+| 工具失败后 | `PostToolUseFailure` | `ToolRuntime` | 观察 error |
+| 权限拒绝后 | `PermissionDenied` | `ToolRuntime` | 可要求 retry |
+| 压缩前 | `PreCompact` | `CompactionEngine` | 可改写 custom instructions |
+| 压缩后 | `PostCompact` | `CompactionEngine` | 可追加 context |
+| 配置变化 | `ConfigChange` | `createLocalGateway` | sessionId 为空，进程/项目级 |
+| Elicitation 请求 | `Elicitation` | `GatewayElicitationChannel` | MCP server 请求用户输入 |
+| Elicitation 回应 | `ElicitationResult` | `GatewayElicitationChannel` | 用户回应 |
+| session abort/end | `SessionEnd` | `AgentSession` | 并发执行，强超时 |
 
-`AgentSession`/`TurnRunner` 应注入：
+`AgentSession`/`TurnRunner`/`AgentLoop` 通过 `AgentRuntimeDependencies` 注入 lifecycle：
 
 ```ts
 type AgentRuntimeDependencies = {
   lifecycle?: LifecycleRuntime;
-  extensions?: ExtensionRuntime;
   ...
 };
 ```
 
-不建议 `AgentLoop` 自己加载插件。它只调用已注入的 lifecycle runtime。
+不建议 `AgentLoop` 自己加载插件。它只调用已注入的 lifecycle runtime。Gateway 层通过 `createGatewayPermissionHook`（callback hook）和 `GatewayElicitationChannel` 桥接 host 交互回 lifecycle dispatch。
 
 ## 6. Tool 与 Permission 集成点
 
@@ -548,11 +568,15 @@ Hook 失败行为不通过 `hookFailurePolicy` 配置控制，而是按 hook 输
 
 当前落地状态：
 
-- `AgentSession` 已接 `SessionStart` 和 `SessionEnd`。
+- `AgentSession` 已接 `SessionStart`、`Setup` 和 `SessionEnd`。
 - `TurnRunner` 已接 `UserPromptSubmit`。
-- `AgentLoop` 已接无工具完成前的 `Stop` 和 terminal model error 的 `StopFailure`。
+- `AgentLoop` 已接 `PreModelRequest`、`Stop`、`StopFailure`、`InstructionsLoaded`、`SubagentStart`、`SubagentStop`。
 - `ToolRuntime` 已接 `PreToolUse`、`PermissionRequest`、`PermissionDenied`、`PostToolUse`、`PostToolUseFailure`。
-- `PostToolUse` blocking 目前作为 `tool_result.metadata.lifecycle` 进入 AgentLoop，并可停止后续模型请求。
+- `CompactionEngine` 已接 `PreCompact`、`PostCompact`。
+- `PostToolUse` blocking 作为 `tool_result.metadata.lifecycle` 进入 AgentLoop，可停止后续模型请求。
+- `createLocalGateway` 已接 `ConfigChange`（进程级，sessionId 为空）。
+- `GatewayElicitationChannel` 已桥接 `Elicitation`/`ElicitationResult` 到 lifecycle dispatch。
+- `createGatewayPermissionHook` 已通过 callback hook 注册桥接 Gateway permission_request 事件。
 
 完成标准：
 
@@ -613,8 +637,10 @@ Hook 失败行为不通过 `hookFailurePolicy` 配置控制，而是按 hook 输
 - MCP server contributions 已从插件 manifest 读取，并可通过 `PluginRuntime.mcpServers()` 汇总当前 snapshot。
 - LSP server contributions 已从插件 manifest 读取，并可通过 `PluginRuntime.lspServers()` 汇总当前 snapshot。
 - output style markdown 已按插件命名规则读取。
-- WorktreeCreate 与 SubagentStop 已可通过 lifecycle runtime dispatch。
+- `WorktreeCreate` 与 `WorktreeRemove` 已可通过 lifecycle runtime dispatch，hook effect 支持 `worktree_path`。
+- `SubagentStart` 与 `SubagentStop` 已在 `AgentLoop` 中 dispatch。
 - marketplace reference 已能解析并区分 local metadata 与 Git/zip/MCPB installer deferred 状态。
+- 技能管理已提供完整 CRUD：`skillsList`/`skillRead`/`skillWrite`/`skillCreate`/`skillDelete`/`skillImport`/`skillValidate`/`skillScan`，通过 Gateway 接口暴露。
 - Git/zip/MCPB 真实下载安装、任务队列 asyncRewake 和完整 Subagent runtime 仍未实现。
 
 完成标准：
@@ -634,24 +660,32 @@ Hook 失败行为不通过 `hookFailurePolicy` 配置控制，而是按 hook 输
 | prompt hook | `PromptHookExecutor` | 5 | compare |
 | http hook | `HttpHookExecutor` | 5 | compare |
 | agent hook | `AgentHookExecutor` | 5 | compare |
-| callback/function hook | SDK adapter | 5 | compare |
+| callback/function hook | `CallbackHookExecutor` + gateway bridge | 5 | compare |
 | sync JSON output | `parseHookOutput.ts` | 2 | compare |
 | async hook response registry | `AsyncHookRegistry.ts` | 5 | compare |
 | async hook background polling | `AsyncHookRegistry.ts` | 5 | deferred |
-| asyncRewake marker | `AsyncHookRegistry.ts` | 6 | compare |
+| asyncRewake marker | `AsyncHookRegistry.ts` | 5 | compare |
 | asyncRewake task queue | notification/task runtime | 6 | deferred |
 | SessionStart | `AgentSession` + lifecycle | 3 | compare |
-| Setup | adapter/init lifecycle | 3 | compare |
+| Setup | `AgentSession` + lifecycle | 3 | compare |
 | UserPromptSubmit | `TurnRunner` + lifecycle | 3 | compare |
+| PreModelRequest | `AgentLoop` + lifecycle | 3 | compare |
+| InstructionsLoaded | `AgentLoop` + lifecycle | 3 | compare |
 | PreToolUse | `ToolRuntime` + lifecycle | 3 | compare |
-| PermissionRequest | `ToolRuntime`/`PermissionRuntime` + lifecycle | 3 | compare |
+| PermissionRequest | `ToolRuntime` + lifecycle | 3 | compare |
 | PostToolUse | `ToolRuntime` + lifecycle | 3 | compare |
 | PostToolUseFailure | `ToolRuntime` + lifecycle | 3 | compare |
 | PermissionDenied retry | `ToolRuntime` + lifecycle | 3 | compare |
-| Stop | `AgentLoop` | 3 | compare |
-| SubagentStop dispatch | lifecycle runtime | 6 | compare |
+| Stop | `AgentLoop` + lifecycle | 3 | compare |
+| StopFailure | `AgentLoop` + lifecycle | 3 | compare |
+| SubagentStart dispatch | `AgentLoop` + lifecycle | 3 | compare |
+| SubagentStop dispatch | `AgentLoop` + lifecycle | 3 | compare |
 | Subagent runtime | subagent runtime | 6 | deferred |
-| PreCompact/PostCompact | context runtime | 6 | deferred |
+| PreCompact/PostCompact | `CompactionEngine` + lifecycle | 3 | compare |
+| ConfigChange (process-level) | `createLocalGateway` + lifecycle | 3 | compare |
+| Elicitation / ElicitationResult | `GatewayElicitationChannel` + lifecycle | 3 | compare |
+| WorktreeCreate / WorktreeRemove dispatch | lifecycle runtime | 6 | compare |
+| worktree_path hook effect | `effects.ts` | 6 | compare |
 | Plugin global/project/builtin loading | `PluginLoader` | 4 | compare |
 | Plugin marketplace reference | plugin marketplace | 6 | compare |
 | Plugin marketplace installers | plugin marketplace | 6 | deferred |
@@ -660,9 +694,15 @@ Hook 失败行为不通过 `hookFailurePolicy` 配置控制，而是按 hook 输
 | Plugin MCP server contributions | `PluginRuntime.mcpServers()` | 6 | compare |
 | Plugin LSP server contributions | `PluginRuntime.lspServers()` | 6 | compare |
 | Plugin output styles | `PluginCommandLoader` | 6 | compare |
-| WorktreeCreate dispatch | lifecycle runtime | 6 | compare |
+| Skill CRUD (create/read/write/delete/import/scan) | `extension/skills` + Gateway | 6 | compare |
+| Gateway permission callback hook | `createGatewayPermissionHook` | 3 | compare |
+| HookExecutionEventBus | `extension/hooks/events` | 2 | compare |
+| nonBlockingErrors in dispatch result | `lifecycle/protocol/payloads.ts` | 1 | compare |
 | session-only / inline session plugin | 不迁移 | - | not_applicable |
 | TeammateIdle / TaskCreated / TaskCompleted | 不迁移 | - | not_applicable |
+| CwdChanged | 待 Always-On workspace 切换支持 | - | deferred |
+| FileChanged | 待 ToolRuntime dispatch 接入 | - | deferred |
+| Notification (user-facing) | 待 Always-On/Feishu 成熟 | - | deferred |
 | Legacy telemetry names | audit/event adapter | 2 | intentional_difference |
 | `~/.claude` plugin path | `src/pilot/paths` | 4 | intentional_difference |
 
@@ -674,23 +714,35 @@ Hook 失败行为不通过 `hookFailurePolicy` 配置控制，而是按 hook 输
 - 插件 hot reload 的“清 cache 不清注册表”是重要行为，若重写成简单 reset，会导致 Stop hooks 消失。
 - command/prompt/http/agent hook 都可能运行不可信代码，必须使用代码常量 timeout、env 插值白名单和 plugin source policy。
 
-## 13. 第一批代码入口建议
+## 13. 代码入口（当前实现）
 
-实现时优先从这些最小接口开始：
+以下是已落地的核心接口：
 
 ```ts
-export interface LifecycleRuntime {
-  dispatch(input: LifecycleDispatchInput): Promise<LifecycleDispatchResult>;
+// src/lifecycle/runtime/LifecycleRuntime.ts
+export class LifecycleRuntime {
+  constructor(private readonly hooks = new HookRuntime());
+  async dispatch(input: LifecycleDispatchInput): Promise<LifecycleDispatchResult>;
 }
 
-export interface HookRuntime {
-  run(event: PilotDeckHookEvent, input: PilotDeckHookInput): AsyncIterable<PilotDeckHookRuntimeEvent>;
-}
+// src/extension/hooks/execution/HookRuntime.ts
+// HookRuntime 接收 PilotDeckHooksSettings，执行匹配的 hooks，
+// 通过 CommandHookExecutor / PromptHookExecutor / HttpHookExecutor /
+// AgentHookExecutor / CallbackHookExecutor 运行，返回 effects + errors。
+// 内部持有 HookExecutionEventBus 和 AsyncHookRegistry。
 
-export interface ExtensionRuntime {
-  snapshot(): ExtensionSnapshot;
-  refresh(reason: ExtensionRefreshReason): Promise<ExtensionSnapshot>;
-}
+// src/extension/plugins/runtime/PluginRuntime.ts
+// PluginRuntime.refresh() 发现 builtin/global/project 插件，
+// 返回 ExtensionSnapshot（hooks + commands + skills + mcpServers + lspServers）。
+// PluginRuntime.refreshWithReport() 返回 added/removed 报告。
+// PluginRuntime.snapshotContributions() 返回当前快照的聚合贡献。
+
+// src/extension/hooks/execution/CallbackHookExecutor.ts
+// 注册/注销内部 callback hook handler。
+// 典型用途：createGatewayPermissionHook 桥接 host permission 回 lifecycle。
+
+// src/extension/hooks/events/HookExecutionEventBus.ts
+// subscribe / emit hook 执行事件（started / response）。
 ```
 
-随后只把接口注入现有 `AgentRuntimeDependencies` 和 `ToolRuntime`，不要让 agent/tool 直接读取 plugin registry。
+lifecycle 通过 `AgentRuntimeDependencies` 注入 `AgentSession`/`TurnRunner`/`AgentLoop`/`ToolRuntime`/`CompactionEngine`。agent/tool 不直接读取 plugin registry。Gateway 层通过 callback hook 和 elicitation channel 桥接 host 交互。

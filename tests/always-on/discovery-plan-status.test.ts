@@ -43,8 +43,8 @@ function makePlan(overrides: Partial<WebPlanRecord> = {}): WebPlanRecord {
 
 // ---- computeExecutionStatus ------------------------------------------------
 
-test("computeExecutionStatus returns empty for superseded plans", () => {
-  const plan = makePlan({ status: "superseded" });
+test("computeExecutionStatus returns empty for archived plans", () => {
+  const plan = makePlan({ status: "archived" });
   assert.equal(computeExecutionStatus(plan, null, NEVER_ACTIVE), "");
 });
 
@@ -88,9 +88,9 @@ test("computeExecutionStatus returns empty for unknown status and no session", (
 
 // ---- computePlanStatus -----------------------------------------------------
 
-test("computePlanStatus returns superseded for superseded plans", () => {
-  const plan = makePlan({ status: "superseded" });
-  assert.equal(computePlanStatus(plan, null, NEVER_ACTIVE), "superseded");
+test("computePlanStatus returns archived for archived plans", () => {
+  const plan = makePlan({ status: "archived" });
+  assert.equal(computePlanStatus(plan, null, NEVER_ACTIVE), "archived");
 });
 
 test("computePlanStatus delegates to executionStatus when non-empty", () => {

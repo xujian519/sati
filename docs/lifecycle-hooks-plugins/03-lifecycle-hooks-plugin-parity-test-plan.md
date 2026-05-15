@@ -228,7 +228,7 @@ root parity test 必须：
 
 必须覆盖：
 
-- hook event enum。
+- hook event enum（含 `PreModelRequest`）。
 - base input fields。
 - tool hook input fields。
 - session hook input fields。
@@ -237,11 +237,16 @@ root parity test 必须：
 - sync hook output。
 - async hook output。
 - command hook schema。
-- prompt/http/agent hook schema。
+- prompt/http/agent/callback hook schema。
+- hook effect types（含 `worktree_path`）。
+- `LifecycleDispatchResult` 字段（含 `nonBlockingErrors`）。
 - plugin manifest contributions。
 - plugin marketplace source policy。
 - plugin hook reload/prune policy。
 - plugin command/skill naming。
+- Gateway permission callback hook registration。
+- Elicitation/ElicitationResult lifecycle dispatch 桥接。
+- ConfigChange process-level dispatch（sessionId 为空）。
 
 ### 6.2 Execution Scenarios
 
@@ -252,13 +257,23 @@ root parity test 必须：
 - command hook exit 1 is non-blocking error。
 - async hook returns pending then later sync response。该场景仍 deferred；第一批实现只识别 async 输出，不执行后台轮询。
 - PreToolUse updates input before permission and execution。
+- PreModelRequest injects additional context or blocks model request。
 - PermissionRequest auto allow with updated permissions。
 - PostToolUse blocks continuation after successful tool run。
 - PostToolUse updates MCP output。
 - SessionStart returns initial user message once。
 - Stop hook blocks continuation with stop reason。
+- StopFailure observes terminal model error。
+- InstructionsLoaded appends context after system prompt loaded。
+- SubagentStart/SubagentStop dispatch with correct payload。
+- PreCompact/PostCompact lifecycle integration with CompactionEngine。
+- ConfigChange dispatches with empty sessionId (process-level)。
+- Elicitation/ElicitationResult bridge through GatewayElicitationChannel。
+- Gateway permission callback hook bridges permission_request event。
+- WorktreeCreate/WorktreeRemove dispatch returns worktree_path effect。
 - disabled plugin hook pruned immediately。
 - new plugin hook waits for reload before activation。
+- nonBlockingErrors correctly classified vs blockingErrors。
 
 ## 7. Legacy Probe 触发建议
 
@@ -288,7 +303,15 @@ bun run src/pilotdeck-lifecycle-hooks-plugin-legacy-execution-report.ts
 
 - 文档列出测试分层、场景清单、归一化规则和通过标准。
 - 文档列出所有 deferred 与 intentional difference。
-- PilotDeck 新实现的基础协议、command/prompt/http/agent/callback hook runtime、async response registry 和 rewake marker、agent lifecycle integration、tool integration、本地插件加载、commands/skills/output-style 读取、MCP/LSP contribution 汇总、SubagentStop/WorktreeCreate dispatch、marketplace reference 解析和 refresh/prune 报告测试通过。
+- PilotDeck 新实现的以下能力测试通过：
+  - 基础协议：`PilotDeckHookEvent`（含 `PreModelRequest`）、`PilotDeckHookEffect`（含 `worktree_path`）、`LifecycleDispatchResult`（含 `nonBlockingErrors`）。
+  - Hook runtime：command/prompt/http/agent/callback 五种执行器、`HookExecutionEventBus`、`AsyncHookRegistry`（含 `asyncRewake` marker）。
+  - Agent 生命周期集成：`AgentSession`（SessionStart/Setup/SessionEnd）、`TurnRunner`（UserPromptSubmit）、`AgentLoop`（PreModelRequest/Stop/StopFailure/InstructionsLoaded/SubagentStart/SubagentStop）。
+  - Tool 生命周期集成：`ToolRuntime`（PreToolUse/PermissionRequest/PermissionDenied/PostToolUse/PostToolUseFailure）。
+  - Compaction 生命周期集成：`CompactionEngine`（PreCompact/PostCompact）。
+  - Gateway 桥接：`createGatewayPermissionHook`（callback hook → permission_request）、`GatewayElicitationChannel`（Elicitation/ElicitationResult → lifecycle dispatch）、ConfigChange 进程级 dispatch。
+  - 插件系统：本地插件加载、commands/skills/output-style 读取、MCP/LSP contribution 汇总、SubagentStart/SubagentStop/WorktreeCreate/WorktreeRemove dispatch、marketplace reference 解析和 refresh/prune 报告。
+  - 技能管理：CRUD 接口通过 Gateway 暴露。
 
 结论只能写：
 
@@ -318,8 +341,12 @@ Contract/execution parity is not claimed yet.
 ## 9. 维护规则
 
 - 新增 hook event、plugin contribution 或 lifecycle trigger 时，必须先更新本文档中的场景清单。
+- 新增 hook effect 类型时，必须同时更新 effects 列表和相关 execution scenario。
+- 修改 `LifecycleDispatchResult` 结构时，必须更新 contract scenario 和归一化规则。
 - 实现从 deferred 变 compare 时，必须补 runner 和 parity test。
 - 修改 output parser 时，必须更新 sync/async/blocking/non-blocking 场景说明。
 - 修改 plugin reload 策略时，必须覆盖 plugin hook reload/prune 场景。
 - 修改 permission runtime 时，必须覆盖 PreToolUse、PermissionRequest、PermissionDenied 场景。
+- 修改 Gateway 桥接逻辑（permission callback hook、elicitation channel）时，必须更新相关集成场景。
+- 修改 `AgentEvent` 或 `GatewayEvent` 映射（`mapAgentEvent`）时，必须同步检查本文档和 `docs/rewrite-plan/01-product-specification.md` 的事件规范。
 - 等测试代码落地后，文档、fixture、runner 和实现必须同步更新。

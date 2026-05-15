@@ -305,6 +305,127 @@ test("InProcessGateway forwards image attachments as a multimodal blocks input",
   });
 });
 
+test("InProcessGateway awaits refreshConfigBeforeTurn before beginning a turn", async () => {
+  // Defensive hook: when wired, the gateway should re-read on-disk
+  // config before each turn so a credential edit applied between two
+  // messages takes effect on the very next one — even if the fs
+  // watcher missed the change. Order matters: refresh must complete
+  // *before* the session is resolved (otherwise it would be operating
+  // on the stale snapshot).
+  const observedOrder: string[] = [];
+  const refreshes: { resolve: () => void }[] = [];
+  const router = new SessionRouter({
+    createSession: async () => {
+      observedOrder.push("createSession");
+      return fakeSession("session-1", [
+        { type: "turn_started", sessionId: "session-1", turnId: "run-1" },
+        {
+          type: "turn_completed",
+          sessionId: "session-1",
+          turnId: "run-1",
+          result: {
+            type: "success",
+            sessionId: "session-1",
+            turnId: "run-1",
+            stopReason: "completed",
+            usage: {},
+            permissionDenials: [],
+            turns: 1,
+            startedAt: "2026-01-01T00:00:00.000Z",
+            completedAt: "2026-01-01T00:00:01.000Z",
+          },
+        },
+      ]);
+    },
+  });
+  let refreshCallCount = 0;
+  const gateway = new InProcessGateway(router, {
+    uuid: () => "run-1",
+    refreshConfigBeforeTurn: async () => {
+      refreshCallCount += 1;
+      observedOrder.push("refresh-start");
+      // Force createSession to wait by holding an unresolved promise.
+      await new Promise<void>((resolve) => {
+        refreshes.push({ resolve });
+      });
+      observedOrder.push("refresh-end");
+    },
+  });
+
+  const turn = (async () => {
+    for await (const _event of gateway.submitTurn({
+      sessionKey: "cli:project=one:default",
+      channelKey: "cli",
+      message: "hi",
+    })) {
+      void _event;
+    }
+  })();
+
+  // Yield to let submitTurn schedule the refresh hook.
+  await new Promise((r) => setImmediate(r));
+  assert.equal(refreshCallCount, 1, "refresh must run exactly once per turn");
+  assert.deepEqual(observedOrder, ["refresh-start"], "createSession must not run while refresh is pending");
+
+  refreshes[0].resolve();
+  await turn;
+
+  assert.deepEqual(
+    observedOrder,
+    ["refresh-start", "refresh-end", "createSession"],
+    "createSession must run only after refresh resolves",
+  );
+});
+
+test("InProcessGateway swallows refreshConfigBeforeTurn errors so chats keep flowing", async () => {
+  // Refresh failures (transient yaml read error, fs blip) must not
+  // turn into a user-visible turn failure: keep streaming on the
+  // previous snapshot and let the next refresh recover.
+  let createSessionCalls = 0;
+  const router = new SessionRouter({
+    createSession: async () => {
+      createSessionCalls += 1;
+      return fakeSession("session-1", [
+        { type: "turn_started", sessionId: "session-1", turnId: "run-1" },
+        {
+          type: "turn_completed",
+          sessionId: "session-1",
+          turnId: "run-1",
+          result: {
+            type: "success",
+            sessionId: "session-1",
+            turnId: "run-1",
+            stopReason: "completed",
+            usage: {},
+            permissionDenials: [],
+            turns: 1,
+            startedAt: "2026-01-01T00:00:00.000Z",
+            completedAt: "2026-01-01T00:00:01.000Z",
+          },
+        },
+      ]);
+    },
+  });
+  const gateway = new InProcessGateway(router, {
+    uuid: () => "run-1",
+    refreshConfigBeforeTurn: async () => {
+      throw new Error("transient yaml read error");
+    },
+  });
+
+  const events = await collect(
+    gateway.submitTurn({
+      sessionKey: "cli:project=one:default",
+      channelKey: "cli",
+      message: "hi",
+    }),
+  );
+
+  assert.equal(createSessionCalls, 1, "turn must still proceed after refresh failure");
+  assert.equal(events[0].type, "turn_started");
+  assert.equal(events[events.length - 1].type, "turn_completed");
+});
+
 test("InProcessGateway keeps text-only turns as a plain text input", async () => {
   const capturedInputs: AgentInput[] = [];
   const router = new SessionRouter({

@@ -63,6 +63,8 @@ export type GatewaySubmitTurnInput = {
   channelKey: GatewayChannelKey;
   message: string;
   projectKey?: string;
+  /** Override the agent session's working directory for this session. */
+  workspaceCwd?: string;
   attachments?: ChannelAttachment[];
   mode?: GatewayMode;
   runId?: string;

@@ -33,87 +33,208 @@
 ```text
 src/
   pilot/
-    paths/
-    config/
-    runtime/
+    config/              配置加载、合并、热更新分类、PilotConfigStore
 
   agent/
-    session/
-    turn/
-    loop/
-    events/
-    errors/
+    session/             AgentSession
+    turn/                TurnRunner
+    loop/                AgentLoop 状态机
+    sub/                 子 agent 委派
+    protocol/            AgentEvent、AgentTurnResult、AgentLoopTransition、errors
+    runtime/             AgentRuntimeDependencies
 
   model/
-    config/
-    protocol/
-    providers/
-    request/
-    response/
-    streaming/
-    errors/
+    catalog/             模型目录
+    config/              模型配置
+    protocol/            CanonicalMessage、CanonicalModelEvent、CanonicalToolCall
+    providers/           Anthropic / OpenAI-compatible adapter
+    request/             请求构造
+    response/            响应解析
+    streaming/           流式事件归一化
+    structuredOutput/    结构化输出
+    errors/              错误分类
 
   context/
-    prompt/
-    memory/  替换为edgeclaw memory core
-    attachments/
-    compaction/
-    budget/
+    prompt/              系统提示词组合
+    memory/              Memory 解析
+    attachments/         附件处理
+    compaction/          CompactionEngine（PreCompact/PostCompact lifecycle）
+    budget/              Token 预算
+    input/               输入处理
+    instructions/        Instructions 加载
+    projection/          上下文投影
+    extension/           扩展上下文注入
+    recovery/            上下文溢出恢复
+    protocol/            上下文协议类型
 
   tool/
-    registry/
-    scheduler/
-    execution/
-    builtin/
-    mcp/
+    registry/            ToolRegistry
+    scheduler/           ToolScheduler
+    execution/           ToolRuntime（PreToolUse/PostToolUse lifecycle 集成）
+    builtin/             内置工具
+    elicitation/         Elicitation 通道
+    audit/               工具审计
+    protocol/            PilotDeckToolResult、PilotDeckToolProgressEvent
 
   permission/
-    policy/
-    decision/
-    interaction/
-    audit/
+    policy/              PermissionPolicy
+    decision/            PermissionDecision runtime
+    protocol/            权限协议类型
+
+  lifecycle/
+    protocol/            PilotDeckLifecycleHookEvent、LifecycleDispatchInput/Result、effects、errors
+    runtime/             LifecycleRuntime、LifecycleDispatcher、LifecycleObserver
 
   extension/
-    plugins/
-    skills/
     hooks/
-    contributions/
+      protocol/          PilotDeckHookEvent、input、output、settings
+      config/            parseHooksConfig、matchHook、matchHookCondition
+      execution/         HookRuntime、Command/Prompt/Http/Agent/Callback HookExecutor、AsyncHookRegistry
+      events/            HookExecutionEventBus
+    plugins/
+      protocol/          manifest、plugin、marketplace、errors
+      loading/           PluginLoader、PluginHookLoader、PluginCommandLoader
+      runtime/           PluginRuntime、PluginReloadPolicy
+    skills/              技能管理 CRUD
+    contributions/       HookContribution、PromptContribution、RouterContribution
+    protocol/            contribution、source、errors
 
   session/
-    transcript/
-    resume/
-    replay/
-    storage/
+    transcript/          TranscriptReplay
+    resume/              会话恢复
+    storage/             会话存储
+    filesystem/          文件系统后端
+    metadata/            会话元数据
+    worktree/            Worktree 管理
 
   gateway/
+    protocol/            GatewayEvent、Gateway 接口、WsFrame
+    client/              InProcessGateway、GatewayWsClient、RemoteGateway
+    server/              GatewayWsConnection
+    elicitation/         GatewayElicitationChannel
+    permission/          createGatewayPermissionHook（callback hook 桥接）
 
+  router/
+    protocol/            RouterEvent、RouterDecision
+    config/              路由配置
+    scenario/            场景匹配
+    fallback/            Fallback 链
+    orchestrate/         编排
+    retry/               重试策略
+    tokenSaver/          Token 节省
+    customRouter/        自定义路由
+    session/             会话级路由状态
+    stats/               统计
+
+  mcp/
+    client/              MCP 客户端
+    protocol/            MCP 协议类型
+    runtime/             MCP 运行时
+
+  always-on/
+    protocol/            AlwaysOnEventPhase、AlwaysOnPhaseEvent
+    runtime/             DiscoveryFire
+    storage/             AlwaysOnEventStore
+    config/              Always-On 配置
+    workspace/           工作区管理
+    tool/                Always-On 工具
+    web/                 AlwaysOnRunHistoryService
+    contracts/           Always-On 契约
+
+  cron/
+    protocol/            CronTask 类型
+    runtime/             CronRuntime
+    storage/             CronTaskStore（appendRunEvent）
+    config/              Cron 配置
+    tool/                Cron 工具
+
+  task/
+    protocol/            任务类型
+    runtime/             TaskRuntime
+    storage/             任务存储
+
+  cli/                   pilotdeck CLI、createLocalGateway、ExtensionWatchManager
+
+  web/
+    client/              WebGatewayEvent、GatewayBrowserClient
+    server/              Web 服务端
 
   adapters/
-    platform/
-    cli/
-    tui/
-    <!-- sdk/ -->
-    web/
-    <!-- remote/ -->
-
+    channel/
+      cli/               CLI 渲染
+      tui/               TUI 渲染（Ink）
+      feishu/            飞书渲染
+    web/                 Web adapter
 ```
 
 依赖方向：
 
 ```text
-adapters
-  -> agent
-    -> model
-    -> context
-    -> tool
-    -> permission
-    -> session
-    -> extension
+adapters/channel (cli, tui, feishu)
+  -> gateway
+    -> agent
+      -> model
+      -> context
+      -> tool
+      -> permission
+      -> session
+      -> lifecycle -> extension/hooks
+      -> extension/plugins
+    -> router -> model
+    -> extension (snapshot contributions)
+
+cli (pilotdeck server)
+  -> gateway
+  -> pilot/config (PilotConfigStore)
+  -> extension (ExtensionWatchManager)
+  -> lifecycle
+
+web (browser UI)
+  -> gateway (via WS client)
+
+always-on / cron
+  -> gateway (submitTurn)
+  -> session (transcript/storage)
 ```
 
-`agent` 可以依赖抽象接口，但不应依赖具体 CLI、React/Ink、文件系统实现、MCP transport 或 telemetry SDK。
+`agent` 可以依赖抽象接口，但不应依赖具体 CLI、React/Ink、文件系统实现、MCP transport 或 telemetry SDK。`gateway` 是所有外部消费者的统一入口。
 
 ## 核心模块设计
+
+### Gateway
+
+`Gateway` 是所有外部消费者（CLI、TUI、Web、SDK）的统一入口接口。
+
+职责：
+
+- 接收 turn 请求，分发给内部 `AgentSession`。
+- 将 `AgentEvent` 投影为 `GatewayEvent` 流式返回。
+- 管理会话列表、新建、恢复、关闭。
+- 桥接 Elicitation（工具问用户）和 Permission（权限请求）的 host 回调。
+- 代理配置重载、Cron 调度、技能管理等 RPC。
+- 通过 `WsNotificationFrame` 广播跨会话通知（如 `config_changed`）。
+
+当前实现：
+
+- `InProcessGateway`：进程内嵌入，直接持有 session factory、lifecycle runtime、router。
+- `GatewayWsClient` + `GatewayWsConnection`：通过 WebSocket 连接远端 Gateway server。
+- `RemoteGateway`：远端 Gateway 的客户端封装。
+
+接口定义于 `src/gateway/protocol/types.ts`：
+
+```text
+Gateway.submitTurn(input) -> AsyncIterable<GatewayEvent>
+Gateway.abortTurn({ sessionKey, runId? })
+Gateway.listSessions(input) -> ListSessionsResult
+Gateway.resumeSession({ sessionKey }) -> { sessionKey }
+Gateway.newSession(input) -> { sessionKey }
+Gateway.closeSession({ sessionKey, reason? })
+Gateway.respondElicitation(input) -> { delivered }
+Gateway.permissionDecide(input) -> { delivered }
+Gateway.reloadConfig?() -> ReloadConfigResult
+Gateway.skillsList?(input) -> SkillsListResult
+...cron RPCs
+```
 
 ### AgentSession
 
@@ -124,19 +245,20 @@ adapters
 - 创建 turn。
 - 保存 session state。
 - 管理 transcript。
-- 暴露事件流。
+- 暴露 `AgentEvent` 流。
 - 管理 abort。
 - 支持 resume。
-- 注入工具、模型、权限、上下文和扩展运行时。
+- 在 session 生命周期触发 lifecycle dispatch（`SessionStart`、`Setup`、`SessionEnd`）。
+- 注入工具、模型、权限、上下文、lifecycle 和扩展运行时。
 
-建议接口：
+当前接口：
 
 ```text
 AgentSession.submit(input, options) -> AsyncIterable<AgentEvent>
 AgentSession.abort(reason)
-AgentSession.resume(sessionId) -> AgentSession
-AgentSession.snapshot() -> SessionSnapshot
 ```
+
+`resume` 由 `createAgentSession` 工厂和 `TranscriptReplay` 协同完成，不在 `AgentSession` 实例方法上。
 
 ### TurnRunner
 
@@ -288,15 +410,21 @@ AgentSession.submit(input)
 | `query.ts`               | `AgentLoop`                             |
 | `services/tools/*`       | `tool`                                  |
 | `Tool.ts`                | `ToolDefinition` + `ToolRuntimeContext` |
-| `useCanUseTool.tsx`      | `permission` + UI interaction adapter   |
-| `services/compact/*`     | `context.compaction`                    |
-| `sessionStorage.ts`      | `session.transcript`                    |
-| `processUserInput`       | `InputProcessor`                        |
-| `commands.ts`            | `CommandRegistry` contribution          |
-| `tools.ts`               | `ToolRegistry` contribution             |
-| `services/mcp/*`         | `MCP adapter`                           |
-| `skills/*` / `plugins/*` | `extension`                             |
-| `screens` / `components` | `adapters/tui`                          |
+| `useCanUseTool.tsx`      | `permission` + Gateway permission hook  |
+| `services/compact/*`     | `context/compaction`                    |
+| `sessionStorage.ts`      | `session/transcript`                    |
+| `processUserInput`       | `context/input`                         |
+| `commands.ts`            | `extension/contributions`               |
+| `tools.ts`               | `tool/registry`                         |
+| `services/mcp/*`         | `mcp/`                                  |
+| `skills/*` / `plugins/*` | `extension/plugins` + `extension/skills` |
+| `screens` / `components` | `adapters/channel/tui`                  |
+| `utils/hooks.ts`         | `extension/hooks/execution`             |
+| `utils/hooks/hookEvents` | `extension/hooks/events`                |
+| `utils/hooks/AsyncHookRegistry` | `extension/hooks/execution/AsyncHookRegistry` |
+| `utils/plugins/*`        | `extension/plugins/loading`             |
+| Gateway / submission     | `gateway/` + `cli/createLocalGateway`   |
+| Router / fallback        | `router/`                               |
 
 
 ## 关键设计原则
@@ -408,16 +536,19 @@ Agent loop 底座选择改为自研。新项目不依赖 Claude Agent SDK、pi-a
 自研范围包括：
 
 ```text
-AgentSession
-TurnRunner
-AgentLoop
-Model
-Tool
-Permission
-Context
-Session
-Extension
-LifecycleManager
+AgentSession / TurnRunner / AgentLoop
+Gateway（InProcessGateway / GatewayWsClient / RemoteGateway）
+Router（场景路由、fallback、重试、token saver）
+Model（provider adapter、canonical protocol、streaming）
+Tool（registry、scheduler、execution、elicitation）
+Permission（policy、decision）
+Context（prompt、memory、compaction、budget、recovery）
+Session（transcript、resume、worktree）
+Lifecycle（LifecycleRuntime、LifecycleDispatcher）
+Extension（hooks、plugins、skills、contributions）
+MCP（client、runtime）
+Always-On / Cron（发现、编排、存储）
+CLI / Web / TUI / Feishu adapters
 ```
 
 Claude Agent SDK、pi-agent 或其他 SDK 的定位应调整为：
@@ -471,41 +602,48 @@ Model 模块的详细设计见 `[../model/](../model/)`。
 
 ### Hooks 与生命周期
 
-新项目应提供系统化生命周期，而不是只提供工具前后 hook。
-
-建议覆盖：
+新项目已实现系统化生命周期，基于 `PilotDeckHookEvent` 定义于 `src/extension/hooks/protocol/events.ts`。实际 hook 事件列表：
 
 ```text
-onSessionStart
-onSessionResume
-onSessionEnd
-beforeTurn
-afterInputAccepted
-beforeContextBuild
-afterContextBuild
-beforeModelRequest
-onModelRequestStart
-onModelEvent
-afterModelResponse
-onModelError
-onToolCallDetected
-beforeToolPermission
-afterToolPermission
-beforeToolExecution
-onToolProgress
-afterToolExecution
-onToolError
-beforeContextCompact
-afterContextCompact
-onContextOverflow
-beforeTranscriptWrite
-afterTranscriptWrite
-onTurnComplete
-onTurnError
-onTurnInterrupt
+PreToolUse             工具执行前（可修改 input、决定权限、追加 context）
+PostToolUse            工具成功后（可追加 context、更新 MCP 输出、阻止继续）
+PostToolUseFailure     工具失败后（可观察 error）
+Notification           通知（infrastructure-only，待 Always-On/Feishu 成熟后接入）
+UserPromptSubmit       用户 prompt 提交后（可追加 context 或阻止模型请求）
+PreModelRequest        模型请求前（可注入 context 或阻止请求）
+SessionStart           会话创建/恢复（可追加 context、initial user message、watch paths）
+SessionEnd             会话结束（并发执行，短超时）
+Stop                   模型停止后（可阻止 continuation、产生 stop reason）
+StopFailure            Stop hook 失败
+SubagentStart          子 agent 启动
+SubagentStop           子 agent 停止
+PreCompact             上下文压缩前
+PostCompact            上下文压缩后
+PermissionRequest      权限请求 ask 场景（hook 可自动 allow/deny）
+PermissionDenied       权限拒绝后（可要求 retry）
+Setup                  初始化/维护入口
+ConfigChange           配置热更新（sessionId 为空，进程/项目级）
+InstructionsLoaded     系统指令加载完成
+CwdChanged             工作目录变化（@todo，待 Always-On workspace 切换支持）
+FileChanged            文件变化（@todo，待 ToolRuntime dispatch 接入）
+WorktreeCreate         Worktree 创建
+WorktreeRemove         Worktree 移除
+Elicitation            MCP server 请求用户输入
+ElicitationResult      MCP elicitation 用户回应
 ```
 
-hook 需要明确运行语义：串行或并行、是否允许修改 payload、是否允许阻断执行、超时策略、失败策略、是否进入 transcript、是否对模型可见、是否可被扩展注册。
+不迁移的 legacy 事件：`TeammateIdle`、`TaskCreated`、`TaskCompleted`（标记为 `not_applicable`）。
+
+hook 运行语义已明确实现：
+
+- 执行器类型：`command`、`prompt`、`http`、`agent`、`callback`（内部注册）。
+- 匹配：`matcher` + `if` 条件过滤。
+- hook 不直接修改内部状态，返回 `PilotDeckHookEffect`（additional_context / block / permission_decision / updated_tool_input / worktree_path 等）。
+- `LifecycleRuntime.dispatch()` 返回 effects + messages + blockingErrors + nonBlockingErrors。
+- 超时策略：代码常量 `PILOTDECK_HOOK_TIMEOUT_MS`（10 min）/ `PILOTDECK_SESSION_END_HOOK_TIMEOUT_MS`（1.5s）。
+- hook 失败按 exit code 分类：0=成功、2=blocking、其他=non-blocking error。
+- async hook 支持 `AsyncHookRegistry` 注册和 `asyncRewake` marker。
+- `HookExecutionEventBus` 广播 hook 执行事件（started/response），受 `includeHookEvents` 配置影响。
 
 ### 存储
 

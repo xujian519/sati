@@ -23,6 +23,10 @@ import { resolvePilotHome, createProjectId } from './utils/pilotPaths.js';
 
 import { DiscoveryPlanService } from '../../src/always-on/web/DiscoveryPlanService.js';
 import { buildDiscoveryContext } from '../../src/always-on/web/DiscoveryPlanContext.js';
+import {
+  applyWorktreeToProject,
+  disposeWorkspace as disposeWorkspaceImpl,
+} from '../../src/always-on/workspace/WorkspaceApply.js';
 
 // ---------------------------------------------------------------------------
 // Wire dependencies for the service
@@ -41,11 +45,15 @@ function getService() {
       appendRunLogEvent: appendAlwaysOnRunLogEvent,
       formatLogLine: formatAlwaysOnPlanLogLine,
     },
+    workspace: {
+      applyWorktreeChanges: applyWorktreeToProject,
+      disposeWorkspace: disposeWorkspaceImpl,
+    },
   });
 }
 
 // ---------------------------------------------------------------------------
-// Public API — same signatures as the old module
+// Public API
 // ---------------------------------------------------------------------------
 
 export async function getProjectDiscoveryContext(projectName) {
@@ -75,29 +83,6 @@ export async function archiveProjectDiscoveryPlan(projectName, planId) {
   return getService().archive(projectName, planId);
 }
 
-export async function readDiscoveryPlanStore(projectRoot) {
-  const service = getService();
-  const pilotHome = resolvePilotHome();
-  const projectId = createProjectId(projectRoot);
-  // Use the internal store reader via a minimal shim — projectName
-  // is not available here, but we can pass the root directly through
-  // the path resolver.
-  const shimService = new DiscoveryPlanService({
-    pilotHome,
-    createProjectId,
-    paths: { extractProjectDirectory: async () => projectRoot },
-    sessions: { getSessions: async () => ({ sessions: [] }) },
-    activity: { isSessionActive: () => false },
-    events: {
-      appendRunEvent: appendAlwaysOnRunEvent,
-      appendRunLog: appendAlwaysOnRunLog,
-      appendRunLogEvent: appendAlwaysOnRunLogEvent,
-      formatLogLine: formatAlwaysOnPlanLogLine,
-    },
-  });
-  return shimService.readStore('_unused_');
+export async function applyProjectDiscoveryPlan(projectName, planId) {
+  return getService().queueApply(projectName, planId);
 }
-
-export {
-  readDiscoveryPlanStore as _readDiscoveryPlanStore,
-};

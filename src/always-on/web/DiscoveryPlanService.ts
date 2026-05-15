@@ -13,6 +13,7 @@
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import { resolve, isAbsolute, join } from "node:path";
+import { generateWorkspaceDiff, type WorkspaceDiff } from "../workspace/WorkspaceApply.js";
 import {
   computeExecutionStatus,
   computePlanStatus,
@@ -91,6 +92,18 @@ export type SessionLister = {
   ): Promise<{ sessions: Array<Record<string, unknown>> }>;
 };
 
+export type WorkspaceManager = {
+  applyWorktreeChanges(
+    workspaceCwd: string,
+    projectRoot: string,
+  ): Promise<{ applied: boolean; diff?: string; error?: string }>;
+  disposeWorkspace(
+    strategy: string,
+    cwd: string,
+    projectRoot: string,
+  ): Promise<void>;
+};
+
 export type DiscoveryPlanServiceDeps = {
   pilotHome: string;
   createProjectId: (projectRoot: string) => string;
@@ -98,6 +111,7 @@ export type DiscoveryPlanServiceDeps = {
   sessions: SessionLister;
   activity: SessionActivityChecker;
   events: RunEventSink;
+  workspace?: WorkspaceManager;
 };
 
 // ---------------------------------------------------------------------------
@@ -157,7 +171,10 @@ export function normalizeDiscoveryPlanRecord(record: Record<string, unknown> | n
     (record?.sourceDiscoverySessionId as string) || (record?.sourceRunId as string),
   );
   const gatewayStatus = normalizeString(record?.status, "ready");
-  const mappedStatus = gatewayStatus === "executing" ? "running" : gatewayStatus;
+  const mappedStatus =
+    gatewayStatus === "executing" ? "running" :
+    gatewayStatus === "superseded" ? "archived" :
+    gatewayStatus;
 
   return {
     id,
@@ -179,7 +196,19 @@ export function normalizeDiscoveryPlanRecord(record: Record<string, unknown> | n
     planFilePath: normalizeString(record?.planFilePath, relativePlanPath(id)),
     structureVersion:
       typeof record?.structureVersion === "number" ? record.structureVersion : STRUCTURE_VERSION,
+    workspace: normalizeWorkspaceRef(record?.workspace),
   };
+}
+
+function normalizeWorkspaceRef(
+  raw: unknown,
+): { strategy: string; cwd: string } | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const obj = raw as Record<string, unknown>;
+  const strategy = typeof obj.strategy === "string" ? obj.strategy : "";
+  const cwd = typeof obj.cwd === "string" ? obj.cwd : "";
+  if (!strategy || !cwd) return undefined;
+  return { strategy, cwd };
 }
 
 // ---------------------------------------------------------------------------
@@ -253,6 +282,7 @@ function buildOverview(
     executionLastActivityAt:
       pickLatestIsoTimestamp(plan.executionLastActivityAt, session?.lastActivity, session?.updated_at) || undefined,
     latestSummary: latestSummary || undefined,
+    workspace: plan.workspace,
     content: content.trim(),
   };
 }
@@ -273,6 +303,59 @@ function buildExecutionPrompt(plan: WebPlanRecord, planContent: string, projectN
     "",
     planContent.trim(),
   ].join("\n");
+}
+
+function buildApplyPrompt(
+  plan: WebPlanRecord,
+  projectName: string,
+  projectRoot: string,
+  diff: WorkspaceDiff,
+): string {
+  const header = [
+    `Always-On apply for project "${projectName}".`,
+    "",
+    "Your job is to merge changes from the isolated workspace into the project root.",
+    "Apply each change carefully using Edit or Write tools.",
+    "If a file in the project root has been modified since the plan was executed,",
+    "merge both sets of changes intelligently — do not blindly overwrite.",
+    "If you cannot resolve a conflict, leave standard conflict markers (<<<< / ==== / >>>>).",
+    "",
+    "Do not enter Plan Mode.",
+    "Do not create a new plan — apply the existing changes directly.",
+    "",
+    `Plan: "${plan.title}" (${plan.id})`,
+    `Project root: ${projectRoot}`,
+  ];
+
+  if (plan.workspace?.cwd) {
+    header.push(`Isolated workspace: ${plan.workspace.cwd} (${plan.workspace.strategy})`);
+  }
+
+  header.push("");
+
+  if (!diff.diff.trim()) {
+    header.push("No differences detected in the workspace. Nothing to apply.");
+    return header.join("\n");
+  }
+
+  if (diff.truncated) {
+    header.push(
+      `The diff is large (${diff.fileCount} files) and has been truncated.`,
+      "Read the relevant files from the workspace directory to compare and apply.",
+      "",
+      "Truncated diff (first portion):",
+      "",
+      diff.diff,
+    );
+  } else {
+    header.push(
+      `Changes (${diff.fileCount} file${diff.fileCount === 1 ? "" : "s"}):`,
+      "",
+      diff.diff,
+    );
+  }
+
+  return header.join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -329,8 +412,8 @@ export class DiscoveryPlanService {
     if (index === -1) throw makeError("Discovery plan not found", "NOT_FOUND");
 
     const plan = store.plans[index]!;
-    if (plan.status === "superseded") {
-      throw makeError("Superseded discovery plans cannot be executed", "INVALID_STATE");
+    if (plan.status === "archived" || plan.status === "applied") {
+      throw makeError("Archived or applied discovery plans cannot be executed", "INVALID_STATE");
     }
     const isActive = (id: string) => this.deps.activity.isSessionActive(id);
     const execStatus = computeExecutionStatus(plan, null, isActive);
@@ -398,6 +481,7 @@ export class DiscoveryPlanService {
       sessionSummary: `Always-On: ${updated.title}`,
       command: buildExecutionPrompt(updated, content, projectName),
       executionToken,
+      workspaceCwd: plan.workspace?.cwd,
     };
   }
 
@@ -479,11 +563,48 @@ export class DiscoveryPlanService {
       });
     }
 
+    // When an apply session completes, finalize the plan status and
+    // dispose the workspace.
+    if (
+      plan.status === "applying" &&
+      (normalizedStatus === "completed" || normalizedStatus === "failed")
+    ) {
+      const finalStatus = normalizedStatus === "completed" ? "applied" : "failed";
+
+      if (finalStatus === "applied" && nextPlan.workspace?.cwd && this.deps.workspace) {
+        try {
+          await this.deps.workspace.disposeWorkspace(
+            nextPlan.workspace.strategy,
+            nextPlan.workspace.cwd,
+            projectRoot,
+          );
+        } catch {
+          // Best effort cleanup.
+        }
+      }
+
+      const finalPlan: WebPlanRecord = {
+        ...nextPlan,
+        status: finalStatus,
+        ...(finalStatus === "applied" ? { workspace: undefined } : {}),
+        updatedAt: new Date().toISOString(),
+      };
+      store.plans[index] = finalPlan;
+      await writePlanStore(projectDir, store);
+
+      const isActive = (id: string) => this.deps.activity.isSessionActive(id);
+      const content = await readPlanBody(projectDir, finalPlan.planFilePath);
+      return buildOverview(finalPlan, content, null, isActive);
+    }
+
     const isActive = (id: string) => this.deps.activity.isSessionActive(id);
     const content = await readPlanBody(projectDir, nextPlan.planFilePath);
     return buildOverview(nextPlan, content, null, isActive);
   }
 
+  /**
+   * Archive a plan and dispose its isolated workspace (if any).
+   */
   async archive(projectName: string, planId: string) {
     const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
     const projectDir = this.projectDir(projectRoot);
@@ -498,9 +619,99 @@ export class DiscoveryPlanService {
       throw makeError("Running discovery plans cannot be archived", "INVALID_STATE");
     }
 
-    store.plans[index] = { ...plan, status: "superseded", updatedAt: new Date().toISOString() };
+    if (plan.workspace?.cwd && this.deps.workspace) {
+      try {
+        await this.deps.workspace.disposeWorkspace(
+          plan.workspace.strategy,
+          plan.workspace.cwd,
+          projectRoot,
+        );
+      } catch {
+        // Best effort — workspace may already be gone.
+      }
+    }
+
+    store.plans[index] = {
+      ...plan,
+      status: "archived",
+      workspace: undefined,
+      updatedAt: new Date().toISOString(),
+    };
     await writePlanStore(projectDir, store);
     return { archived: true };
+  }
+
+  /**
+   * Queue an apply session: generate the workspace diff, build a prompt
+   * for the agent to merge changes into the project root, and return a
+   * payload the frontend can use to launch a visible agent session.
+   */
+  async queueApply(projectName: string, planId: string) {
+    const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
+    const projectDir = this.projectDir(projectRoot);
+    const store = await readPlanStore(projectDir);
+    const index = store.plans.findIndex((p) => p.id === planId);
+    if (index === -1) throw makeError("Discovery plan not found", "NOT_FOUND");
+
+    const plan = store.plans[index]!;
+    const isActive = (id: string) => this.deps.activity.isSessionActive(id);
+    const planStatus = computePlanStatus(plan, null, isActive);
+
+    if (planStatus !== "completed") {
+      throw makeError(
+        `Plan must be in completed status to apply (current: ${planStatus})`,
+        "INVALID_STATE",
+      );
+    }
+
+    if (!plan.workspace?.cwd) {
+      throw makeError(
+        "Plan has no associated workspace to apply",
+        "MISSING_WORKSPACE",
+      );
+    }
+
+    const diff = await generateWorkspaceDiff(
+      plan.workspace.strategy,
+      plan.workspace.cwd,
+      projectRoot,
+    );
+
+    const now = new Date().toISOString();
+    const executionToken = randomUUID();
+    const content = await readPlanBody(projectDir, plan.planFilePath);
+
+    const updated: WebPlanRecord = {
+      ...plan,
+      status: "applying",
+      executionStatus: "queued",
+      executionSessionId: "",
+      executionStartedAt: "",
+      executionLastActivityAt: "",
+      latestSummary: "",
+      updatedAt: now,
+      lastExecutionSource: "apply",
+    };
+    store.plans[index] = updated;
+    await writePlanStore(projectDir, store);
+
+    await this.deps.events.appendRunEvent(projectRoot, {
+      runId: executionToken,
+      kind: "plan-apply",
+      sourceId: updated.id,
+      title: `Apply: ${updated.title}`,
+      status: "queued",
+      timestamp: now,
+      startedAt: now,
+      metadata: { planId: updated.id, source: "apply" },
+    });
+
+    return {
+      plan: buildOverview(updated, content, null, isActive),
+      sessionSummary: `Apply: ${updated.title}`,
+      command: buildApplyPrompt(updated, projectName, projectRoot, diff),
+      executionToken,
+    };
   }
 
   /**
