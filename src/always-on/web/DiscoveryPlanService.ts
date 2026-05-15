@@ -13,6 +13,7 @@
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import { resolve, isAbsolute, join } from "node:path";
+import { generateWorkspaceDiff, type WorkspaceDiff } from "../workspace/WorkspaceApply.js";
 import {
   computeExecutionStatus,
   computePlanStatus,
@@ -301,6 +302,59 @@ function buildExecutionPrompt(plan: WebPlanRecord, planContent: string, projectN
   ].join("\n");
 }
 
+function buildApplyPrompt(
+  plan: WebPlanRecord,
+  projectName: string,
+  projectRoot: string,
+  diff: WorkspaceDiff,
+): string {
+  const header = [
+    `Always-On apply for project "${projectName}".`,
+    "",
+    "Your job is to merge changes from the isolated workspace into the project root.",
+    "Apply each change carefully using Edit or Write tools.",
+    "If a file in the project root has been modified since the plan was executed,",
+    "merge both sets of changes intelligently — do not blindly overwrite.",
+    "If you cannot resolve a conflict, leave standard conflict markers (<<<< / ==== / >>>>).",
+    "",
+    "Do not enter Plan Mode.",
+    "Do not create a new plan — apply the existing changes directly.",
+    "",
+    `Plan: "${plan.title}" (${plan.id})`,
+    `Project root: ${projectRoot}`,
+  ];
+
+  if (plan.workspace?.cwd) {
+    header.push(`Isolated workspace: ${plan.workspace.cwd} (${plan.workspace.strategy})`);
+  }
+
+  header.push("");
+
+  if (!diff.diff.trim()) {
+    header.push("No differences detected in the workspace. Nothing to apply.");
+    return header.join("\n");
+  }
+
+  if (diff.truncated) {
+    header.push(
+      `The diff is large (${diff.fileCount} files) and has been truncated.`,
+      "Read the relevant files from the workspace directory to compare and apply.",
+      "",
+      "Truncated diff (first portion):",
+      "",
+      diff.diff,
+    );
+  } else {
+    header.push(
+      `Changes (${diff.fileCount} file${diff.fileCount === 1 ? "" : "s"}):`,
+      "",
+      diff.diff,
+    );
+  }
+
+  return header.join("\n");
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -506,6 +560,40 @@ export class DiscoveryPlanService {
       });
     }
 
+    // When an apply session completes, finalize the plan status and
+    // dispose the workspace.
+    if (
+      plan.status === "applying" &&
+      (normalizedStatus === "completed" || normalizedStatus === "failed")
+    ) {
+      const finalStatus = normalizedStatus === "completed" ? "applied" : "failed";
+
+      if (finalStatus === "applied" && nextPlan.workspace?.cwd && this.deps.workspace) {
+        try {
+          await this.deps.workspace.disposeWorkspace(
+            nextPlan.workspace.strategy,
+            nextPlan.workspace.cwd,
+            projectRoot,
+          );
+        } catch {
+          // Best effort cleanup.
+        }
+      }
+
+      const finalPlan: WebPlanRecord = {
+        ...nextPlan,
+        status: finalStatus,
+        ...(finalStatus === "applied" ? { workspace: undefined } : {}),
+        updatedAt: new Date().toISOString(),
+      };
+      store.plans[index] = finalPlan;
+      await writePlanStore(projectDir, store);
+
+      const isActive = (id: string) => this.deps.activity.isSessionActive(id);
+      const content = await readPlanBody(projectDir, finalPlan.planFilePath);
+      return buildOverview(finalPlan, content, null, isActive);
+    }
+
     const isActive = (id: string) => this.deps.activity.isSessionActive(id);
     const content = await readPlanBody(projectDir, nextPlan.planFilePath);
     return buildOverview(nextPlan, content, null, isActive);
@@ -571,10 +659,11 @@ export class DiscoveryPlanService {
   }
 
   /**
-   * Apply a completed plan's isolated workspace changes back to the
-   * original project, then dispose the workspace and supersede the plan.
+   * Queue an apply session: generate the workspace diff, build a prompt
+   * for the agent to merge changes into the project root, and return a
+   * payload the frontend can use to launch a visible agent session.
    */
-  async applyPlan(projectName: string, planId: string) {
+  async queueApply(projectName: string, planId: string) {
     const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
     const projectDir = this.projectDir(projectRoot);
     const store = await readPlanStore(projectDir);
@@ -599,52 +688,47 @@ export class DiscoveryPlanService {
       );
     }
 
-    if (!this.deps.workspace) {
-      throw makeError(
-        "Workspace manager is not configured",
-        "WORKSPACE_UNAVAILABLE",
-      );
-    }
-
-    if (plan.workspace.strategy !== "git-worktree") {
-      throw makeError(
-        `Apply is only supported for git-worktree strategy (got: ${plan.workspace.strategy})`,
-        "UNSUPPORTED_STRATEGY",
-      );
-    }
-
-    const result = await this.deps.workspace.applyWorktreeChanges(
+    const diff = await generateWorkspaceDiff(
+      plan.workspace.strategy,
       plan.workspace.cwd,
       projectRoot,
     );
 
-    if (!result.applied) {
-      throw makeError(
-        result.error || "Failed to apply workspace changes",
-        "APPLY_FAILED",
-      );
-    }
+    const now = new Date().toISOString();
+    const executionToken = randomUUID();
+    const content = await readPlanBody(projectDir, plan.planFilePath);
 
-    // Dispose the workspace after successful apply.
-    try {
-      await this.deps.workspace.disposeWorkspace(
-        plan.workspace.strategy,
-        plan.workspace.cwd,
-        projectRoot,
-      );
-    } catch {
-      // Best effort cleanup.
-    }
-
-    store.plans[index] = {
+    const updated: WebPlanRecord = {
       ...plan,
-      status: "superseded",
-      workspace: undefined,
-      updatedAt: new Date().toISOString(),
+      status: "applying",
+      executionStatus: "queued",
+      executionSessionId: "",
+      executionStartedAt: "",
+      executionLastActivityAt: "",
+      latestSummary: "",
+      updatedAt: now,
+      lastExecutionSource: "apply",
     };
+    store.plans[index] = updated;
     await writePlanStore(projectDir, store);
 
-    return { applied: true, diff: result.diff };
+    await this.deps.events.appendRunEvent(projectRoot, {
+      runId: executionToken,
+      kind: "plan-apply",
+      sourceId: updated.id,
+      title: `Apply: ${updated.title}`,
+      status: "queued",
+      timestamp: now,
+      startedAt: now,
+      metadata: { planId: updated.id, source: "apply" },
+    });
+
+    return {
+      plan: buildOverview(updated, content, null, isActive),
+      sessionSummary: `Apply: ${updated.title}`,
+      command: buildApplyPrompt(updated, projectName, projectRoot, diff),
+      executionToken,
+    };
   }
 
   /**

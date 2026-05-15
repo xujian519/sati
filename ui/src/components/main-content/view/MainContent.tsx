@@ -342,6 +342,46 @@ function MainContent({
     refreshProjectsSilently();
   }, [projects, refreshProjectsSilently, trackedSendMessage]);
 
+  const applyAndLaunchPlan = useCallback(async (
+    projectName: string,
+    planId: string,
+  ) => {
+    const project = projects.find((p) => p.name === projectName);
+    if (!project) {
+      throw new Error(`Project "${projectName}" not found`);
+    }
+
+    const response = await api.applyProjectDiscoveryPlan(projectName, planId);
+    const payload = await readJsonPayload<ExecuteDiscoveryPlanResponse & { error?: string }>(response);
+    if (!response.ok || !payload) {
+      throw new Error(payload?.error || 'Failed to queue discovery plan apply');
+    }
+
+    const resolvedPlanId = payload.plan?.id;
+    if (!resolvedPlanId) {
+      throw new Error('Missing discovery plan id in apply payload');
+    }
+
+    pendingDiscoveryExecutionsRef.current.set(payload.executionToken, {
+      projectName,
+      planId: resolvedPlanId,
+      executionToken: payload.executionToken,
+    });
+
+    startClaudeSessionCommand({
+      sendMessage: trackedSendMessage,
+      selectedProject: project,
+      command: payload.command,
+      permissionMode: 'default',
+      sessionSummary: payload.sessionSummary,
+      toolsSettings: buildAlwaysOnExecutionToolsSettings(),
+      alwaysOnPlanId: resolvedPlanId,
+      alwaysOnExecutionToken: payload.executionToken,
+    });
+
+    refreshProjectsSilently();
+  }, [projects, refreshProjectsSilently, trackedSendMessage]);
+
   const flashToast = useCallback((toastValue: MainContentToast, ms = 2400) => {
     setToast(toastValue);
     if (toastValue) {
@@ -736,6 +776,8 @@ function MainContent({
           launchQueuedDiscoveryPlanExecution={launchQueuedDiscoveryPlanExecution}
           handleStartDiscoverySession={handleStartDiscoverySession}
           handleExecuteDiscoveryPlan={handleExecuteDiscoveryPlan}
+          executeAndLaunchPlan={executeAndLaunchPlan}
+          applyAndLaunchPlan={applyAndLaunchPlan}
           editorExpanded={editorExpanded}
           onDeselectProject={onDeselectProject}
           onSelectProjectByName={onSelectProjectByName}
@@ -804,6 +846,8 @@ type SplitBodyProps = {
   launchQueuedDiscoveryPlanExecution: any;
   handleStartDiscoverySession: any;
   handleExecuteDiscoveryPlan: any;
+  executeAndLaunchPlan: (projectName: string, planId: string) => Promise<void>;
+  applyAndLaunchPlan: (projectName: string, planId: string) => Promise<void>;
   editorExpanded: boolean;
   onDeselectProject?: () => void;
   onSelectProjectByName?: (projectName: string) => void;
@@ -839,6 +883,8 @@ function SplitBody(props: SplitBodyProps) {
     launchQueuedDiscoveryPlanExecution,
     handleStartDiscoverySession,
     handleExecuteDiscoveryPlan,
+    executeAndLaunchPlan,
+    applyAndLaunchPlan,
     editorExpanded,
     onDeselectProject,
     onSelectProjectByName,
@@ -939,6 +985,7 @@ function SplitBody(props: SplitBodyProps) {
         <AlwaysOnV2
           selectedProject={selectedProject}
           onExecutePlan={executeAndLaunchPlan}
+          onApplyPlan={applyAndLaunchPlan}
         />
       );
     }

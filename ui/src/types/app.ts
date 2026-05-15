@@ -62,7 +62,9 @@ export type DiscoveryPlanStatus =
   | 'running'
   | 'completed'
   | 'failed'
-  | 'superseded';
+  | 'superseded'
+  | 'applying'
+  | 'applied';
 export type DiscoveryPlanExecutionStatus = 'queued' | 'running' | 'completed' | 'failed';
 
 export interface DiscoveryPlanContextRefs {

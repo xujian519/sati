@@ -8,7 +8,12 @@
 
 import { spawn } from "node:child_process";
 import { rm } from "node:fs/promises";
-import { AlwaysOnError } from "../protocol/errors.js";
+
+export type WorkspaceDiff = {
+  diff: string;
+  fileCount: number;
+  truncated: boolean;
+};
 
 type GitResult = { exitCode: number; stdout: string; stderr: string };
 
@@ -22,6 +27,113 @@ async function runGit(bin: string, args: string[]): Promise<GitResult> {
       stdout += chunk.toString("utf-8");
     });
     child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString("utf-8");
+    });
+    child.on("error", (error) => {
+      resolve({ exitCode: -1, stdout, stderr: error.message });
+    });
+    child.on("close", (code) => {
+      resolve({ exitCode: code ?? -1, stdout, stderr });
+    });
+  });
+}
+
+const MAX_INLINE_DIFF_CHARS = 80_000;
+
+/**
+ * Generate a diff of the changes in an isolated workspace relative to
+ * its baseline. Works for both git-worktree (via `git diff`) and
+ * snapshot-copy (via POSIX `diff -ruN`).
+ */
+export async function generateWorkspaceDiff(
+  strategy: string,
+  workspaceCwd: string,
+  projectRoot: string,
+  gitBin = "git",
+): Promise<WorkspaceDiff> {
+  if (strategy === "git-worktree") {
+    return generateGitWorktreeDiff(workspaceCwd, gitBin);
+  }
+  return generateSnapshotCopyDiff(workspaceCwd, projectRoot);
+}
+
+async function generateGitWorktreeDiff(
+  workspaceCwd: string,
+  gitBin: string,
+): Promise<WorkspaceDiff> {
+  const addAll = await runGit(gitBin, ["-C", workspaceCwd, "add", "-A"]);
+  if (addAll.exitCode !== 0) {
+    return { diff: "", fileCount: 0, truncated: false };
+  }
+
+  const statResult = await runGit(gitBin, [
+    "-C", workspaceCwd, "diff", "--cached", "HEAD", "--stat",
+  ]);
+  const fileCount = statResult.exitCode === 0
+    ? (statResult.stdout.match(/\n/g) || []).length - 1
+    : 0;
+
+  const diffResult = await runGit(gitBin, [
+    "-C", workspaceCwd, "diff", "--cached", "HEAD",
+  ]);
+  if (diffResult.exitCode !== 0 || !diffResult.stdout.trim()) {
+    return { diff: "", fileCount: Math.max(fileCount, 0), truncated: false };
+  }
+
+  const fullDiff = diffResult.stdout;
+  if (fullDiff.length > MAX_INLINE_DIFF_CHARS) {
+    return {
+      diff: fullDiff.slice(0, MAX_INLINE_DIFF_CHARS),
+      fileCount: Math.max(fileCount, 0),
+      truncated: true,
+    };
+  }
+  return { diff: fullDiff, fileCount: Math.max(fileCount, 0), truncated: false };
+}
+
+async function generateSnapshotCopyDiff(
+  workspaceCwd: string,
+  projectRoot: string,
+): Promise<WorkspaceDiff> {
+  const result = await runCommand("diff", [
+    "-ruN",
+    "--exclude=.git",
+    "--exclude=node_modules",
+    "--exclude=dist",
+    "--exclude=.pilotdeck",
+    "--exclude=.pilotdeck-always-on",
+    projectRoot,
+    workspaceCwd,
+  ]);
+
+  // diff exits 1 when differences found, 0 when identical, >1 on error
+  if (result.exitCode > 1) {
+    return { diff: "", fileCount: 0, truncated: false };
+  }
+
+  const fullDiff = result.stdout;
+  const fileCount = (fullDiff.match(/^diff /gm) || []).length;
+
+  if (fullDiff.length > MAX_INLINE_DIFF_CHARS) {
+    return {
+      diff: fullDiff.slice(0, MAX_INLINE_DIFF_CHARS),
+      fileCount,
+      truncated: true,
+    };
+  }
+  return { diff: fullDiff, fileCount, truncated: false };
+}
+
+async function runCommand(bin: string, args: string[]): Promise<GitResult> {
+  return new Promise<GitResult>((resolve) => {
+    const child = spawn(bin, args, { stdio: ["pipe", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdin?.end();
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf-8");
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
       stderr += chunk.toString("utf-8");
     });
     child.on("error", (error) => {

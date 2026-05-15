@@ -17,7 +17,9 @@ export type WebPlanStatus =
   | "failed"
   | "completed"
   | "draft"
-  | "superseded";
+  | "superseded"
+  | "applying"
+  | "applied";
 
 export type WebPlanRecord = {
   id: string;
@@ -66,12 +68,14 @@ export type WebPlanSession = {
 
 export const PLAN_STATUS_ORDER: Record<string, number> = {
   running: 0,
-  queued: 1,
-  ready: 2,
-  failed: 3,
-  completed: 4,
-  draft: 5,
-  superseded: 6,
+  applying: 1,
+  queued: 2,
+  ready: 3,
+  failed: 4,
+  completed: 5,
+  draft: 6,
+  applied: 7,
+  superseded: 8,
 };
 
 export function computeExecutionStatus(
@@ -79,7 +83,15 @@ export function computeExecutionStatus(
   session: WebPlanSession,
   isSessionActive: (sessionId: string) => boolean,
 ): string {
-  if (plan.status === "superseded") return "";
+  if (plan.status === "superseded" || plan.status === "applied") return "";
+
+  // "applying" is an active session — check if still running.
+  if (plan.status === "applying") {
+    if (plan.executionSessionId && isSessionActive(plan.executionSessionId)) {
+      return "applying";
+    }
+    return "applying";
+  }
 
   if (plan.executionSessionId && isSessionActive(plan.executionSessionId)) {
     return "running";
@@ -116,6 +128,7 @@ export function computePlanStatus(
   isSessionActive: (sessionId: string) => boolean,
 ): string {
   if (plan.status === "superseded") return "superseded";
+  if (plan.status === "applied") return "applied";
   const execStatus = computeExecutionStatus(plan, session, isSessionActive);
   if (execStatus) return execStatus;
   return normalizeString(plan.status, "ready");

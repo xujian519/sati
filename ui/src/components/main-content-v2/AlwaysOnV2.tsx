@@ -14,9 +14,10 @@ const SUB_TABS: { id: AlwaysOnSubTab; labelKey: string; defaultLabel: string; ic
 type AlwaysOnV2Props = {
   selectedProject: Project | null;
   onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
+  onApplyPlan?: (projectName: string, planId: string) => Promise<void>;
 };
 
-export default function AlwaysOnV2({ selectedProject, onExecutePlan }: AlwaysOnV2Props) {
+export default function AlwaysOnV2({ selectedProject, onExecutePlan, onApplyPlan }: AlwaysOnV2Props) {
   const { t } = useTranslation('alwaysOn');
   const [subTab, setSubTab] = useState<AlwaysOnSubTab>('dashboard');
 
@@ -56,7 +57,7 @@ export default function AlwaysOnV2({ selectedProject, onExecutePlan }: AlwaysOnV
 
       {/* Sub-tab content */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {subTab === 'dashboard' ? <AlwaysOnDashboard /> : <PlansAndCronJobs onExecutePlan={onExecutePlan} />}
+        {subTab === 'dashboard' ? <AlwaysOnDashboard /> : <PlansAndCronJobs onExecutePlan={onExecutePlan} onApplyPlan={onApplyPlan} />}
       </div>
     </div>
   );

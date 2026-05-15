@@ -67,6 +67,8 @@
       "completedWaiting": "执行完成",
       "failed": "执行失败",
       "superseded": "已被替代",
+      "applying": "正在应用",
+      "applied": "已应用",
       "scheduled": "已安排",
       "running": "运行中"
     }

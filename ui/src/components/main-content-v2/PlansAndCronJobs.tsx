@@ -32,7 +32,9 @@ type PlanDisplayStatus =
   | 'executing'
   | 'completedWaiting'
   | 'failed'
-  | 'superseded';
+  | 'superseded'
+  | 'applying'
+  | 'applied';
 
 function mapPlanStatus(status: DiscoveryPlanStatus): PlanDisplayStatus {
   switch (status) {
@@ -49,6 +51,10 @@ function mapPlanStatus(status: DiscoveryPlanStatus): PlanDisplayStatus {
       return 'failed';
     case 'superseded':
       return 'superseded';
+    case 'applying':
+      return 'applying';
+    case 'applied':
+      return 'applied';
     default:
       return 'created';
   }
@@ -61,6 +67,8 @@ const PLAN_STATUS_STYLE: Record<PlanDisplayStatus, string> = {
   completedWaiting: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
   failed: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
   superseded: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400',
+  applying: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+  applied: 'bg-teal-100 text-teal-600 dark:bg-teal-900/40 dark:text-teal-400',
 };
 
 const PLAN_STATUS_LABEL: Record<PlanDisplayStatus, { key: string; defaultValue: string }> = {
@@ -70,6 +78,8 @@ const PLAN_STATUS_LABEL: Record<PlanDisplayStatus, { key: string; defaultValue: 
   completedWaiting: { key: 'plansCron.status.completedWaiting', defaultValue: 'Completed' },
   failed: { key: 'plansCron.status.failed', defaultValue: 'Failed' },
   superseded: { key: 'plansCron.status.superseded', defaultValue: 'Superseded' },
+  applying: { key: 'plansCron.status.applying', defaultValue: 'Applying' },
+  applied: { key: 'plansCron.status.applied', defaultValue: 'Applied' },
 };
 
 const CRON_STATUS_STYLE: Record<'scheduled' | 'running', string> = {
@@ -125,9 +135,10 @@ const COL = {
 
 type PlansAndCronJobsProps = {
   onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
+  onApplyPlan?: (projectName: string, planId: string) => Promise<void>;
 };
 
-export default function PlansAndCronJobs({ onExecutePlan }: PlansAndCronJobsProps) {
+export default function PlansAndCronJobs({ onExecutePlan, onApplyPlan }: PlansAndCronJobsProps) {
   const { t } = useTranslation('alwaysOn');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -369,6 +380,7 @@ export default function PlansAndCronJobs({ onExecutePlan }: PlansAndCronJobsProp
                           t={t}
                           onRefresh={refresh}
                           onExecutePlan={onExecutePlan}
+                          onApplyPlan={onApplyPlan}
                         />
                       ))}
                     </div>
@@ -392,11 +404,13 @@ function ItemRow({
   t,
   onRefresh,
   onExecutePlan,
+  onApplyPlan,
 }: {
   item: UnifiedItem;
   t: (key: string, opts?: Record<string, string>) => string;
   onRefresh: () => Promise<void>;
   onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
+  onApplyPlan?: (projectName: string, planId: string) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -435,16 +449,20 @@ function ItemRow({
 
   const showApply = isPlan && displayStatus === 'completedWaiting';
   const showRetry = isPlan && displayStatus === 'failed';
-  const canDelete = isPlan && displayStatus !== 'executing' && displayStatus !== 'preparingWorkspace';
+  const canDelete = isPlan && displayStatus !== 'executing' && displayStatus !== 'preparingWorkspace' && displayStatus !== 'applying';
 
   const handleApply = async () => {
     if (!plan || busy) return;
     setBusy(true);
     try {
-      const res = await api.applyProjectDiscoveryPlan(item.projectName, plan.id);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(body?.error || `HTTP ${res.status}`);
+      if (onApplyPlan) {
+        await onApplyPlan(item.projectName, plan.id);
+      } else {
+        const res = await api.applyProjectDiscoveryPlan(item.projectName, plan.id);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({})) as { error?: string };
+          throw new Error(body?.error || `HTTP ${res.status}`);
+        }
       }
       await onRefresh();
     } catch {

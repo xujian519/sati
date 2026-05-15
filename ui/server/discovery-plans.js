@@ -88,7 +88,7 @@ export async function archiveAndCleanupProjectDiscoveryPlan(projectName, planId)
 }
 
 export async function applyProjectDiscoveryPlan(projectName, planId) {
-  return getService().applyPlan(projectName, planId);
+  return getService().queueApply(projectName, planId);
 }
 
 export async function readDiscoveryPlanStore(projectRoot) {

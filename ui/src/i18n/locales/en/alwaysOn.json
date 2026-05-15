@@ -67,6 +67,8 @@
       "completedWaiting": "Completed",
       "failed": "Failed",
       "superseded": "Superseded",
+      "applying": "Applying",
+      "applied": "Applied",
       "scheduled": "Scheduled",
       "running": "Running"
     }
