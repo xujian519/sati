@@ -54,14 +54,6 @@ export const api = {
   projects: () => authenticatedFetch('/api/projects'),
   alwaysOnDashboardEvents: (limit = 200, since) =>
     authenticatedFetch(`/api/always-on/events?limit=${encodeURIComponent(limit)}${since ? `&since=${encodeURIComponent(since)}` : ''}`),
-  projectCronJobs: (projectName) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/cron-jobs`),
-  projectAlwaysOnRunHistory: (projectName, limit = 500) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/always-on/run-history?limit=${encodeURIComponent(limit)}`),
-  projectAlwaysOnRunHistoryDetail: (projectName, runId) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/always-on/run-history/${encodeURIComponent(runId)}`),
-  projectAlwaysOnRunLog: (projectName, runId, tailBytes = 60000) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/always-on/run-history/${encodeURIComponent(runId)}/log?tailBytes=${encodeURIComponent(tailBytes)}`),
   projectDiscoveryContext: (projectName) =>
     authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-context`),
   projectDiscoveryPlans: (projectName) =>
@@ -75,18 +67,6 @@ export const api = {
     authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-plans/${encodeURIComponent(planId)}/execution`, {
       method: 'PATCH',
       body: JSON.stringify(body),
-    }),
-  archiveProjectDiscoveryPlan: (projectName, planId) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-plans/${encodeURIComponent(planId)}/archive`, {
-      method: 'POST',
-    }),
-  deleteProjectCronJob: (projectName, taskId) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/cron-jobs/${encodeURIComponent(taskId)}`, {
-      method: 'DELETE',
-    }),
-  runProjectCronJobNow: (projectName, taskId) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/cron-jobs/${encodeURIComponent(taskId)}/run-now`, {
-      method: 'POST',
     }),
   sessions: (projectName, limit = 5, offset = 0) =>
     authenticatedFetch(`/api/projects/${projectName}/sessions?limit=${limit}&offset=${offset}`),

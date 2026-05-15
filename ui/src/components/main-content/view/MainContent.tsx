@@ -23,7 +23,6 @@ import EditorSidebar from '../../code-editor/view/EditorSidebar';
 import type { CodeEditorDiffInfo } from '../../code-editor/types/types';
 import type {
   AlwaysOnSessionTarget,
-  CronJobOverview,
   ExecuteDiscoveryPlanResponse,
   Project,
   ProjectDiscoveryContextResponse,
@@ -406,31 +405,6 @@ function MainContent({
     setActiveTab,
   ]);
 
-  const handleOpenCronSession = useCallback((job: CronJobOverview) => {
-    const latestRun = job.latestRun;
-    if (
-      !latestRun?.sessionId ||
-      !latestRun.parentSessionId ||
-      !latestRun.relativeTranscriptPath
-    ) {
-      return;
-    }
-
-    void handleOpenAlwaysOnSession({
-      kind: 'background',
-      sessionId: latestRun.sessionId,
-      parentSessionId: latestRun.parentSessionId,
-      relativeTranscriptPath: latestRun.relativeTranscriptPath,
-      title: latestRun.summary || job.prompt || job.cron,
-      summary: latestRun.summary || job.prompt || job.cron,
-      lastActivity: latestRun.lastActivity,
-      transcriptKey: latestRun.transcriptKey || job.transcriptKey,
-      taskId: latestRun.taskId,
-      taskStatus: job.status,
-      outputFile: latestRun.outputFile,
-    });
-  }, [handleOpenAlwaysOnSession]);
-
   useEffect(() => {
     const message = latestMessage as {
       kind?: string;
@@ -720,8 +694,6 @@ function MainContent({
           launchQueuedDiscoveryPlanExecution={launchQueuedDiscoveryPlanExecution}
           handleStartDiscoverySession={handleStartDiscoverySession}
           handleExecuteDiscoveryPlan={handleExecuteDiscoveryPlan}
-          handleOpenCronSession={handleOpenCronSession}
-          handleOpenAlwaysOnSession={handleOpenAlwaysOnSession}
           editorExpanded={editorExpanded}
           onDeselectProject={onDeselectProject}
           onSelectProjectByName={onSelectProjectByName}
@@ -790,8 +762,6 @@ type SplitBodyProps = {
   launchQueuedDiscoveryPlanExecution: any;
   handleStartDiscoverySession: any;
   handleExecuteDiscoveryPlan: any;
-  handleOpenCronSession: (job: CronJobOverview) => void;
-  handleOpenAlwaysOnSession: (target: AlwaysOnSessionTarget) => void | Promise<void>;
   editorExpanded: boolean;
   onDeselectProject?: () => void;
   onSelectProjectByName?: (projectName: string) => void;
@@ -827,8 +797,6 @@ function SplitBody(props: SplitBodyProps) {
     launchQueuedDiscoveryPlanExecution,
     handleStartDiscoverySession,
     handleExecuteDiscoveryPlan,
-    handleOpenCronSession,
-    handleOpenAlwaysOnSession,
     editorExpanded,
     onDeselectProject,
     onSelectProjectByName,
@@ -928,10 +896,6 @@ function SplitBody(props: SplitBodyProps) {
       return (
         <AlwaysOnV2
           selectedProject={selectedProject}
-          onStartDiscoverySession={handleStartDiscoverySession}
-          onExecuteDiscoveryPlan={handleExecuteDiscoveryPlan}
-          onOpenCronSession={handleOpenCronSession}
-          onOpenSession={handleOpenAlwaysOnSession}
         />
       );
     }

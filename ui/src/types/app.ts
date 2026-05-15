@@ -3,39 +3,6 @@ export type ProjectSessionKind = 'background_task';
 
 export type AppTab = 'home' | 'chat' | 'always-on' | 'files' | 'shell' | 'git' | 'tasks' | 'memory' | 'skills' | 'preview' | 'dashboard' | `plugin:${string}`;
 
-export type CronJobOverviewStatus = 'scheduled' | 'running' | 'completed' | 'failed';
-export type CronJobLatestRunStatus = 'queued' | 'running' | 'completed' | 'failed';
-
-export interface CronJobLatestRun {
-  status?: CronJobLatestRunStatus;
-  runId?: string;
-  startedAt?: string;
-  sessionId?: string;
-  summary?: string;
-  lastActivity?: string;
-  taskId?: string;
-  outputFile?: string;
-  parentSessionId?: string;
-  relativeTranscriptPath?: string;
-  transcriptKey?: string;
-}
-
-export interface CronJobOverview {
-  id: string;
-  cron: string;
-  prompt: string;
-  createdAt: number;
-  durable?: boolean;
-  lastFiredAt?: number;
-  recurring?: boolean;
-  permanent?: boolean;
-  manualOnly?: boolean;
-  originSessionId?: string;
-  transcriptKey?: string;
-  status: CronJobOverviewStatus;
-  latestRun?: CronJobLatestRun | null;
-}
-
 export type AlwaysOnSessionTarget =
   | {
       kind: 'origin';
@@ -54,64 +21,6 @@ export type AlwaysOnSessionTarget =
       taskStatus?: string;
       outputFile?: string;
     };
-
-export interface ProjectCronJobsResponse {
-  jobs: CronJobOverview[];
-}
-
-export interface DeleteProjectCronJobResponse {
-  deleted: boolean;
-}
-
-export type CronJobRunNowReason = 'already_running' | 'not_found';
-
-export interface RunProjectCronJobNowResponse {
-  started: boolean;
-  reason?: CronJobRunNowReason;
-}
-
-export type AlwaysOnRunHistoryStatus = 'queued' | 'running' | 'completed' | 'failed' | 'unknown';
-export type AlwaysOnRunHistoryKind = 'plan' | 'cron';
-
-export interface AlwaysOnRunHistorySession {
-  sessionId?: string;
-  parentSessionId?: string;
-  relativeTranscriptPath?: string;
-}
-
-export interface AlwaysOnRunHistoryEntry {
-  runId: string;
-  title: string;
-  kind: AlwaysOnRunHistoryKind;
-  status: AlwaysOnRunHistoryStatus;
-  startedAt?: string;
-  sourceId: string;
-  session?: AlwaysOnRunHistorySession;
-}
-
-export interface AlwaysOnRunHistoryDetail extends AlwaysOnRunHistoryEntry {
-  outputLog: string;
-  metadata: Record<string, unknown>;
-}
-
-export interface ProjectAlwaysOnRunHistoryResponse {
-  runs: AlwaysOnRunHistoryEntry[];
-}
-
-export interface ProjectAlwaysOnRunHistoryDetailResponse {
-  run: AlwaysOnRunHistoryDetail;
-}
-
-export type AlwaysOnRunLogSource = 'log-file' | 'session' | 'history';
-
-export interface AlwaysOnRunLogResponse {
-  runId: string;
-  content: string;
-  truncated: boolean;
-  updatedAt?: string;
-  size: number;
-  source: AlwaysOnRunLogSource;
-}
 
 export type AlwaysOnDashboardEventPhase =
   | 'discovery_started'
@@ -246,10 +155,6 @@ export interface ExecuteDiscoveryPlanResponse {
 
 export interface UpdateDiscoveryPlanExecutionResponse {
   plan: DiscoveryPlanOverview;
-}
-
-export interface ArchiveDiscoveryPlanResponse {
-  archived: boolean;
 }
 
 export interface ProjectSession {

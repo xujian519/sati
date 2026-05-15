@@ -6,21 +6,13 @@ import os from 'os';
 import {
   addProjectManually,
   extractProjectDirectory,
-  getProjectCronJobsOverview
 } from '../projects.js';
 import {
-  archiveProjectDiscoveryPlan,
   getProjectDiscoveryContext,
   getProjectDiscoveryPlansOverview,
   queueDiscoveryPlanExecution,
   updateProjectDiscoveryPlanExecution
 } from '../discovery-plans.js';
-import {
-  getAlwaysOnRunHistory,
-  getAlwaysOnRunHistoryDetail
-} from '../services/always-on-run-history.js';
-import { getAlwaysOnRunLog } from '../services/always-on-run-logs.js';
-import { getPilotDeckGateway } from '../pilotdeck-bridge.js';
 
 const router = express.Router();
 
@@ -182,13 +174,6 @@ function getTrimmedParam(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function getCronRequestErrorMessage(error, fallback) {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
-  }
-  return fallback;
-}
-
 function getDiscoveryPlanErrorMessage(error, fallback) {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
@@ -207,44 +192,6 @@ function getDiscoveryPlanErrorStatus(error) {
     return 409;
   }
   return 500;
-}
-
-export async function handleGetProjectCronJobs(req, res) {
-  try {
-    const projectName = getTrimmedParam(req.params?.projectName);
-    if (!projectName) {
-      return res.status(400).json({ error: 'projectName is required' });
-    }
-
-    const overview = await getProjectCronJobsOverview(projectName);
-    return res.json(overview);
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
-}
-
-export async function handleDeleteProjectCronJob(req, res) {
-  try {
-    const projectName = getTrimmedParam(req.params?.projectName);
-    const taskId = getTrimmedParam(req.params?.taskId);
-    if (!projectName) {
-      return res.status(400).json({ error: 'projectName is required' });
-    }
-    if (!taskId) {
-      return res.status(400).json({ error: 'taskId is required' });
-    }
-
-    const gateway = await getPilotDeckGateway();
-    const result = await gateway.cronDelete({ taskId, stopRunning: true });
-    if (!result.deleted) {
-      return res.status(404).json({ error: 'Scheduled task not found' });
-    }
-    return res.json({ deleted: true });
-  } catch (error) {
-    return res.status(500).json({
-      error: getCronRequestErrorMessage(error, 'Failed to delete cron job')
-    });
-  }
 }
 
 export async function handleGetProjectDiscoveryPlans(req, res) {
@@ -323,126 +270,10 @@ export async function handleUpdateProjectDiscoveryPlanExecution(req, res) {
   }
 }
 
-export async function handleArchiveProjectDiscoveryPlan(req, res) {
-  try {
-    const projectName = getTrimmedParam(req.params?.projectName);
-    const planId = getTrimmedParam(req.params?.planId);
-    if (!projectName) {
-      return res.status(400).json({ error: 'projectName is required' });
-    }
-    if (!planId) {
-      return res.status(400).json({ error: 'planId is required' });
-    }
-
-    const result = await archiveProjectDiscoveryPlan(projectName, planId);
-    return res.json(result);
-  } catch (error) {
-    return res.status(getDiscoveryPlanErrorStatus(error)).json({
-      error: getDiscoveryPlanErrorMessage(error, 'Failed to archive discovery plan')
-    });
-  }
-}
-
-export async function handleRunProjectCronJobNow(req, res) {
-  try {
-    const projectName = getTrimmedParam(req.params?.projectName);
-    const taskId = getTrimmedParam(req.params?.taskId);
-    if (!projectName) {
-      return res.status(400).json({ error: 'projectName is required' });
-    }
-    if (!taskId) {
-      return res.status(400).json({ error: 'taskId is required' });
-    }
-
-    const gateway = await getPilotDeckGateway();
-    const result = await gateway.cronRunNow({ taskId });
-    if (result.reason === 'not_found') {
-      return res.status(404).json({ error: 'Scheduled task not found' });
-    }
-    return res.json(result);
-  } catch (error) {
-    return res.status(500).json({
-      error: getCronRequestErrorMessage(error, 'Failed to run cron job now')
-    });
-  }
-}
-
-export async function handleGetProjectAlwaysOnRunHistory(req, res) {
-  try {
-    const projectName = getTrimmedParam(req.params?.projectName);
-    if (!projectName) {
-      return res.status(400).json({ error: 'projectName is required' });
-    }
-
-    const projectRoot = await extractProjectDirectory(projectName);
-    const limit = Number.parseInt(req.query?.limit || '', 10);
-    const history = await getAlwaysOnRunHistory(projectRoot, {
-      limit: Number.isFinite(limit) ? limit : undefined,
-      projectName
-    });
-    return res.json(history);
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
-}
-
-export async function handleGetProjectAlwaysOnRunHistoryDetail(req, res) {
-  try {
-    const projectName = getTrimmedParam(req.params?.projectName);
-    const runId = getTrimmedParam(req.params?.runId);
-    if (!projectName) {
-      return res.status(400).json({ error: 'projectName is required' });
-    }
-    if (!runId) {
-      return res.status(400).json({ error: 'runId is required' });
-    }
-
-    const projectRoot = await extractProjectDirectory(projectName);
-    const detail = await getAlwaysOnRunHistoryDetail(projectRoot, runId, { projectName });
-    return res.json({ run: detail });
-  } catch (error) {
-    const status = error?.code === 'NOT_FOUND' ? 404 : 500;
-    return res.status(status).json({ error: error.message });
-  }
-}
-
-export async function handleGetProjectAlwaysOnRunLog(req, res) {
-  try {
-    const projectName = getTrimmedParam(req.params?.projectName);
-    const runId = getTrimmedParam(req.params?.runId);
-    if (!projectName) {
-      return res.status(400).json({ error: 'projectName is required' });
-    }
-    if (!runId) {
-      return res.status(400).json({ error: 'runId is required' });
-    }
-
-    const projectRoot = await extractProjectDirectory(projectName);
-    const tailBytes = Number.parseInt(req.query?.tailBytes || '', 10);
-    const log = await getAlwaysOnRunLog(projectRoot, runId, {
-      tailBytes: Number.isFinite(tailBytes) ? tailBytes : undefined
-    });
-    return res.json({
-      runId,
-      ...log,
-      source: log.content ? 'log-file' : 'history'
-    });
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
-}
-
-router.get('/:projectName/always-on/run-history', handleGetProjectAlwaysOnRunHistory);
-router.get('/:projectName/always-on/run-history/:runId/log', handleGetProjectAlwaysOnRunLog);
-router.get('/:projectName/always-on/run-history/:runId', handleGetProjectAlwaysOnRunHistoryDetail);
-router.get('/:projectName/cron-jobs', handleGetProjectCronJobs);
-router.delete('/:projectName/cron-jobs/:taskId', handleDeleteProjectCronJob);
-router.post('/:projectName/cron-jobs/:taskId/run-now', handleRunProjectCronJobNow);
 router.get('/:projectName/discovery-context', handleGetProjectDiscoveryContext);
 router.get('/:projectName/discovery-plans', handleGetProjectDiscoveryPlans);
 router.post('/:projectName/discovery-plans/:planId/execute', handleExecuteProjectDiscoveryPlan);
 router.patch('/:projectName/discovery-plans/:planId/execution', handleUpdateProjectDiscoveryPlanExecution);
-router.post('/:projectName/discovery-plans/:planId/archive', handleArchiveProjectDiscoveryPlan);
 
 /**
  * Create a new workspace
