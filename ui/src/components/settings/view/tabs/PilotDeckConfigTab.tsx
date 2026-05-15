@@ -2636,12 +2636,12 @@ export default function PilotDeckConfigTab({ projects = [] }: { projects?: Setti
       {/* Sticky save bar. Save & Reload routes through the same PUT endpoint
           regardless of which view edited `raw` — that's how form edits and
           textarea edits both pick up the unified hot-reload. */}
-      <div className="sticky bottom-0 flex items-center justify-end gap-2 rounded-xl border border-border bg-card/90 p-3 backdrop-blur">
-        <Button variant="outline" size="sm" onClick={reloadConfig} disabled={saving}>
+      <div className="pointer-events-none sticky bottom-0 flex items-center justify-end gap-2 rounded-xl border border-border bg-card/90 p-3 backdrop-blur">
+        <Button className="pointer-events-auto" variant="outline" size="sm" onClick={reloadConfig} disabled={saving}>
           <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
           Reload current
         </Button>
-        <Button size="sm" onClick={save} disabled={saving || !isDirty}>
+        <Button className="pointer-events-auto" size="sm" onClick={save} disabled={saving || !isDirty}>
           <Save className="mr-1.5 h-3.5 w-3.5" />
           {saving ? 'Saving...' : 'Save & reload'}
         </Button>
