@@ -145,6 +145,12 @@ export class SubAgentSession {
     if (!last) {
       throw new Error("SubAgentSession: AgentLoop returned no result");
     }
+    if (last.result.type === "error") {
+      const details = last.result.errors?.map((error) => error.message).join("; ");
+      throw new Error(
+        `SubAgentSession: subagent turn failed (${last.result.stopReason})${details ? `: ${details}` : ""}`,
+      );
+    }
     const text = extractFinalAssistantText(last.messages);
     const parsed = parseSummary(text);
     return {

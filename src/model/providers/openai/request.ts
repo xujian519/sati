@@ -84,23 +84,17 @@ export function buildOpenAIRequest(
 }
 
 function toOpenAIMessages(message: CanonicalMessage): OpenAIMessage[] {
+  if (message.role === "user") {
+    return toOpenAIUserMessages(message);
+  }
+
   const toolResultMessages = message.content
     .filter((block) => block.type === "tool_result")
-    .map((block) => ({
-      role: "tool" as const,
-      tool_call_id: block.toolCallId,
-      content: block.content.map((content) => content.text).join("\n"),
-    }));
+    .map(toOpenAIToolResultMessage);
 
   const toolResultRefMessages = message.content
     .filter((block) => block.type === "tool_result_reference")
-    .map((block) => ({
-      role: "tool" as const,
-      tool_call_id: block.toolCallId,
-      content: block.preview + (block.hasMore
-        ? `\n\n[Truncated: original ${block.originalBytes} bytes, file: ${block.path}]`
-        : ""),
-    }));
+    .map(toOpenAIToolResultReferenceMessage);
 
   const assistantToolCalls = message.content
     .filter((block) => block.type === "tool_call")
@@ -140,6 +134,59 @@ function toOpenAIMessages(message: CanonicalMessage): OpenAIMessage[] {
   }
 
   return [...messages, ...toolResultMessages, ...toolResultRefMessages];
+}
+
+function toOpenAIUserMessages(message: CanonicalMessage): OpenAIMessage[] {
+  const messages: OpenAIMessage[] = [];
+  let normalContent: CanonicalContentBlock[] = [];
+
+  const flushNormalContent = () => {
+    if (normalContent.length === 0) return;
+    messages.push({
+      role: "user",
+      content: toOpenAIContent(normalContent),
+    });
+    normalContent = [];
+  };
+
+  for (const block of message.content) {
+    if (block.type === "tool_result") {
+      flushNormalContent();
+      messages.push(toOpenAIToolResultMessage(block));
+      continue;
+    }
+    if (block.type === "tool_result_reference") {
+      flushNormalContent();
+      messages.push(toOpenAIToolResultReferenceMessage(block));
+      continue;
+    }
+    normalContent.push(block);
+  }
+
+  flushNormalContent();
+  return messages;
+}
+
+function toOpenAIToolResultMessage(
+  block: Extract<CanonicalContentBlock, { type: "tool_result" }>,
+): OpenAIMessage {
+  return {
+    role: "tool",
+    tool_call_id: block.toolCallId,
+    content: block.content.map((content) => content.text).join("\n"),
+  };
+}
+
+function toOpenAIToolResultReferenceMessage(
+  block: Extract<CanonicalContentBlock, { type: "tool_result_reference" }>,
+): OpenAIMessage {
+  return {
+    role: "tool",
+    tool_call_id: block.toolCallId,
+    content: block.preview + (block.hasMore
+      ? `\n\n[Truncated: original ${block.originalBytes} bytes, file: ${block.path}]`
+      : ""),
+  };
 }
 
 function toOpenAIContent(blocks: CanonicalContentBlock[]): string | unknown[] {

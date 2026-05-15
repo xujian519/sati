@@ -140,6 +140,51 @@ test("tool_result_reference is excluded from normalContent (not duplicated)", ()
   }
 });
 
+test("user message with tool_result before directive serializes tool result before user text", () => {
+  const config = parseModelConfig(validModelConfig(), {
+    env: { ANTHROPIC_API_KEY: "anthropic-key" },
+  });
+  const messages: CanonicalMessage[] = [
+    {
+      role: "assistant",
+      content: [
+        { type: "text", text: "forking" },
+        { type: "tool_call", id: "call-1", name: "agent", input: { prompt: "work" } },
+      ],
+    },
+    {
+      role: "user",
+      content: [
+        {
+          type: "tool_result",
+          toolCallId: "call-1",
+          content: [{ type: "text", text: "<pilotdeck-fork-placeholder />" }],
+        },
+        { type: "text", text: "<pilotdeck-fork>\nDirective:\nwork\n</pilotdeck-fork>" },
+      ],
+    },
+  ];
+
+  const body = buildModelRequest(
+    { provider: "openai-main", model: "gpt-5.1", messages },
+    config,
+  ) as Record<string, any>;
+
+  assert.deepEqual(
+    body.messages.map((m: any) => [m.role, m.tool_call_id ?? null, m.content]),
+    [
+      ["assistant", null, "forking"],
+      ["tool", "call-1", "<pilotdeck-fork-placeholder />"],
+      ["user", null, "<pilotdeck-fork>\nDirective:\nwork\n</pilotdeck-fork>"],
+    ],
+  );
+  assert.equal(
+    body.messages.filter((m: any) => m.role === "tool" && m.tool_call_id === "call-1").length,
+    1,
+    "should not inject a duplicate placeholder tool result",
+  );
+});
+
 test("thinking-only assistant message serializes content as empty string for DeepSeek", () => {
   const config = parseModelConfig(validModelConfig(), {
     env: { ANTHROPIC_API_KEY: "anthropic-key" },
