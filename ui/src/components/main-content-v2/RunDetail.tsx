@@ -20,7 +20,7 @@ type RunDetailProps = {
   projectDisplayName?: string;
   backLabel?: string;
   onBack: () => void;
-  onOpenExecutionSession?: (projectKey: string, runId: string) => void;
+  onOpenExecutionSession?: (projectKey: string, runId: string, projectName?: string) => void;
 };
 
 type PlanData = {
@@ -239,7 +239,7 @@ export default function RunDetail(props: RunDetailProps) {
               {projectKey && runId ? (
                 <button
                   type="button"
-                  onClick={() => onOpenExecutionSession?.(projectKey, runId)}
+                  onClick={() => onOpenExecutionSession?.(projectKey, runId, projectName)}
                   className="inline-flex items-center gap-1 text-[13px] font-medium text-blue-600 transition hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                 >
                   {t('dashboard.runDetail.openSession', { defaultValue: 'Open Session' })}

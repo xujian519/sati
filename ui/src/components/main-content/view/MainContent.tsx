@@ -397,9 +397,15 @@ function MainContent({
     });
 
     if (target.kind === 'origin') {
+      const lookupProjectName = target.projectName || selectedProject.name;
+      const targetProject =
+        target.projectName && target.projectName !== selectedProject.name
+          ? projects.find((p) => p.name === target.projectName) ?? selectedProject
+          : selectedProject;
+
       const existingSession =
-        findSessionInProject(selectedProject, target.sessionId) ??
-        await loadClaudeSession(selectedProject.name, target.sessionId);
+        findSessionInProject(targetProject, target.sessionId) ??
+        await loadClaudeSession(lookupProjectName, target.sessionId);
 
       if (!existingSession) {
         flashToast({ kind: 'error', text: missingMessage });
@@ -409,12 +415,12 @@ function MainContent({
       const fallbackSession: ProjectSession = {
         ...existingSession,
         __provider: existingSession.__provider ?? 'claude',
-        __projectName: selectedProject.name,
+        __projectName: lookupProjectName,
       };
 
       setActiveTab('chat');
       if (onSelectSession) {
-        onSelectSession(selectedProject, target.sessionId, fallbackSession);
+        onSelectSession(targetProject, target.sessionId, fallbackSession);
         return;
       }
       onNavigateToSession(target.sessionId);
@@ -461,15 +467,16 @@ function MainContent({
     loadClaudeSession,
     onNavigateToSession,
     onSelectSession,
+    projects,
     selectedProject,
     setActiveTab,
   ]);
 
   const handleOpenExecutionSession = useCallback(
-    (projectKey: string, runId: string) => {
+    (projectKey: string, runId: string, projectName?: string) => {
       const rawId = `always-on/execute:project=${projectKey}:run=${runId}`;
       const sessionId = rawId.replace(/[\\/]+/g, '-').replace(/^-+|-+$/g, '') || 'session';
-      void handleOpenAlwaysOnSession({ kind: 'origin', sessionId });
+      void handleOpenAlwaysOnSession({ kind: 'origin', sessionId, projectName });
     },
     [handleOpenAlwaysOnSession],
   );
@@ -836,7 +843,7 @@ type SplitBodyProps = {
   handleExecuteDiscoveryPlan: any;
   executeAndLaunchPlan: (projectName: string, planId: string) => Promise<void>;
   applyAndLaunchPlan: (projectName: string, planId: string) => Promise<void>;
-  handleOpenExecutionSession: (projectKey: string, runId: string) => void;
+  handleOpenExecutionSession: (projectKey: string, runId: string, projectName?: string) => void;
   editorExpanded: boolean;
   onDeselectProject?: () => void;
   onSelectProjectByName?: (projectName: string) => void;

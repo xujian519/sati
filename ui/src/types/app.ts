@@ -7,6 +7,7 @@ export type AlwaysOnSessionTarget =
   | {
       kind: 'origin';
       sessionId: string;
+      projectName?: string;
     }
   | {
       kind: 'background';
