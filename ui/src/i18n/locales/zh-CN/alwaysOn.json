@@ -45,7 +45,16 @@
       "title": "标题",
       "type": "类型",
       "createdAt": "创建时间",
-      "status": "状态"
+      "status": "状态",
+      "actions": "操作"
+    },
+    "actions": {
+      "apply": "应用",
+      "retry": "重新执行",
+      "delete": "删除",
+      "confirmDelete": "确定要删除此计划吗？隔离环境将被清理。",
+      "applySuccess": "变更已成功应用。",
+      "applyError": "应用变更失败。"
     },
     "type": {
       "plan": "计划",

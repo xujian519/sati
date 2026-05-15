@@ -23,6 +23,10 @@ import { resolvePilotHome, createProjectId } from './utils/pilotPaths.js';
 
 import { DiscoveryPlanService } from '../../src/always-on/web/DiscoveryPlanService.js';
 import { buildDiscoveryContext } from '../../src/always-on/web/DiscoveryPlanContext.js';
+import {
+  applyWorktreeToProject,
+  disposeWorkspace as disposeWorkspaceImpl,
+} from '../../src/always-on/workspace/WorkspaceApply.js';
 
 // ---------------------------------------------------------------------------
 // Wire dependencies for the service
@@ -40,6 +44,10 @@ function getService() {
       appendRunLog: appendAlwaysOnRunLog,
       appendRunLogEvent: appendAlwaysOnRunLogEvent,
       formatLogLine: formatAlwaysOnPlanLogLine,
+    },
+    workspace: {
+      applyWorktreeChanges: applyWorktreeToProject,
+      disposeWorkspace: disposeWorkspaceImpl,
     },
   });
 }
@@ -73,6 +81,14 @@ export async function updateProjectDiscoveryPlanExecution(projectName, planId, u
 
 export async function archiveProjectDiscoveryPlan(projectName, planId) {
   return getService().archive(projectName, planId);
+}
+
+export async function archiveAndCleanupProjectDiscoveryPlan(projectName, planId) {
+  return getService().archiveAndCleanup(projectName, planId);
+}
+
+export async function applyProjectDiscoveryPlan(projectName, planId) {
+  return getService().applyPlan(projectName, planId);
 }
 
 export async function readDiscoveryPlanStore(projectRoot) {

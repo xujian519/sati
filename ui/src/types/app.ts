@@ -93,6 +93,10 @@ export interface DiscoveryPlanOverview {
   planFilePath: string;
   structureVersion: number;
   content: string;
+  workspace?: {
+    strategy: string;
+    cwd: string;
+  };
 }
 
 export interface ProjectDiscoveryPlansResponse {

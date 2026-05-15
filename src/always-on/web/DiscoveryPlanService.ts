@@ -91,6 +91,18 @@ export type SessionLister = {
   ): Promise<{ sessions: Array<Record<string, unknown>> }>;
 };
 
+export type WorkspaceManager = {
+  applyWorktreeChanges(
+    workspaceCwd: string,
+    projectRoot: string,
+  ): Promise<{ applied: boolean; diff?: string; error?: string }>;
+  disposeWorkspace(
+    strategy: string,
+    cwd: string,
+    projectRoot: string,
+  ): Promise<void>;
+};
+
 export type DiscoveryPlanServiceDeps = {
   pilotHome: string;
   createProjectId: (projectRoot: string) => string;
@@ -98,6 +110,7 @@ export type DiscoveryPlanServiceDeps = {
   sessions: SessionLister;
   activity: SessionActivityChecker;
   events: RunEventSink;
+  workspace?: WorkspaceManager;
 };
 
 // ---------------------------------------------------------------------------
@@ -179,7 +192,19 @@ export function normalizeDiscoveryPlanRecord(record: Record<string, unknown> | n
     planFilePath: normalizeString(record?.planFilePath, relativePlanPath(id)),
     structureVersion:
       typeof record?.structureVersion === "number" ? record.structureVersion : STRUCTURE_VERSION,
+    workspace: normalizeWorkspaceRef(record?.workspace),
   };
+}
+
+function normalizeWorkspaceRef(
+  raw: unknown,
+): { strategy: string; cwd: string } | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const obj = raw as Record<string, unknown>;
+  const strategy = typeof obj.strategy === "string" ? obj.strategy : "";
+  const cwd = typeof obj.cwd === "string" ? obj.cwd : "";
+  if (!strategy || !cwd) return undefined;
+  return { strategy, cwd };
 }
 
 // ---------------------------------------------------------------------------
@@ -253,6 +278,7 @@ function buildOverview(
     executionLastActivityAt:
       pickLatestIsoTimestamp(plan.executionLastActivityAt, session?.lastActivity, session?.updated_at) || undefined,
     latestSummary: latestSummary || undefined,
+    workspace: plan.workspace,
     content: content.trim(),
   };
 }
@@ -501,6 +527,123 @@ export class DiscoveryPlanService {
     store.plans[index] = { ...plan, status: "superseded", updatedAt: new Date().toISOString() };
     await writePlanStore(projectDir, store);
     return { archived: true };
+  }
+
+  /**
+   * Archive a plan and dispose its isolated workspace (if any).
+   */
+  async archiveAndCleanup(projectName: string, planId: string) {
+    const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
+    const projectDir = this.projectDir(projectRoot);
+    const store = await readPlanStore(projectDir);
+    const index = store.plans.findIndex((p) => p.id === planId);
+    if (index === -1) throw makeError("Discovery plan not found", "NOT_FOUND");
+
+    const plan = store.plans[index]!;
+    const isActive = (id: string) => this.deps.activity.isSessionActive(id);
+    const execStatus = computeExecutionStatus(plan, null, isActive);
+    if (execStatus === "running" || execStatus === "queued") {
+      throw makeError("Running discovery plans cannot be archived", "INVALID_STATE");
+    }
+
+    // Dispose workspace if present and manager is available.
+    if (plan.workspace?.cwd && this.deps.workspace) {
+      try {
+        await this.deps.workspace.disposeWorkspace(
+          plan.workspace.strategy,
+          plan.workspace.cwd,
+          projectRoot,
+        );
+      } catch {
+        // Best effort — workspace may already be gone.
+      }
+    }
+
+    store.plans[index] = {
+      ...plan,
+      status: "superseded",
+      workspace: undefined,
+      updatedAt: new Date().toISOString(),
+    };
+    await writePlanStore(projectDir, store);
+    return { archived: true };
+  }
+
+  /**
+   * Apply a completed plan's isolated workspace changes back to the
+   * original project, then dispose the workspace and supersede the plan.
+   */
+  async applyPlan(projectName: string, planId: string) {
+    const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
+    const projectDir = this.projectDir(projectRoot);
+    const store = await readPlanStore(projectDir);
+    const index = store.plans.findIndex((p) => p.id === planId);
+    if (index === -1) throw makeError("Discovery plan not found", "NOT_FOUND");
+
+    const plan = store.plans[index]!;
+    const isActive = (id: string) => this.deps.activity.isSessionActive(id);
+    const planStatus = computePlanStatus(plan, null, isActive);
+
+    if (planStatus !== "completed") {
+      throw makeError(
+        `Plan must be in completed status to apply (current: ${planStatus})`,
+        "INVALID_STATE",
+      );
+    }
+
+    if (!plan.workspace?.cwd) {
+      throw makeError(
+        "Plan has no associated workspace to apply",
+        "MISSING_WORKSPACE",
+      );
+    }
+
+    if (!this.deps.workspace) {
+      throw makeError(
+        "Workspace manager is not configured",
+        "WORKSPACE_UNAVAILABLE",
+      );
+    }
+
+    if (plan.workspace.strategy !== "git-worktree") {
+      throw makeError(
+        `Apply is only supported for git-worktree strategy (got: ${plan.workspace.strategy})`,
+        "UNSUPPORTED_STRATEGY",
+      );
+    }
+
+    const result = await this.deps.workspace.applyWorktreeChanges(
+      plan.workspace.cwd,
+      projectRoot,
+    );
+
+    if (!result.applied) {
+      throw makeError(
+        result.error || "Failed to apply workspace changes",
+        "APPLY_FAILED",
+      );
+    }
+
+    // Dispose the workspace after successful apply.
+    try {
+      await this.deps.workspace.disposeWorkspace(
+        plan.workspace.strategy,
+        plan.workspace.cwd,
+        projectRoot,
+      );
+    } catch {
+      // Best effort cleanup.
+    }
+
+    store.plans[index] = {
+      ...plan,
+      status: "superseded",
+      workspace: undefined,
+      updatedAt: new Date().toISOString(),
+    };
+    await writePlanStore(projectDir, store);
+
+    return { applied: true, diff: result.diff };
   }
 
   /**

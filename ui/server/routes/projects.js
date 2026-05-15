@@ -11,7 +11,9 @@ import {
   getProjectDiscoveryContext,
   getProjectDiscoveryPlansOverview,
   queueDiscoveryPlanExecution,
-  updateProjectDiscoveryPlanExecution
+  updateProjectDiscoveryPlanExecution,
+  applyProjectDiscoveryPlan,
+  archiveAndCleanupProjectDiscoveryPlan,
 } from '../discovery-plans.js';
 
 const router = express.Router();
@@ -274,6 +276,38 @@ router.get('/:projectName/discovery-context', handleGetProjectDiscoveryContext);
 router.get('/:projectName/discovery-plans', handleGetProjectDiscoveryPlans);
 router.post('/:projectName/discovery-plans/:planId/execute', handleExecuteProjectDiscoveryPlan);
 router.patch('/:projectName/discovery-plans/:planId/execution', handleUpdateProjectDiscoveryPlanExecution);
+
+router.post('/:projectName/discovery-plans/:planId/apply', async (req, res) => {
+  try {
+    const projectName = getTrimmedParam(req.params?.projectName);
+    const planId = getTrimmedParam(req.params?.planId);
+    if (!projectName) return res.status(400).json({ error: 'projectName is required' });
+    if (!planId) return res.status(400).json({ error: 'planId is required' });
+
+    const result = await applyProjectDiscoveryPlan(projectName, planId);
+    return res.json(result);
+  } catch (error) {
+    return res.status(getDiscoveryPlanErrorStatus(error)).json({
+      error: getDiscoveryPlanErrorMessage(error, 'Failed to apply discovery plan')
+    });
+  }
+});
+
+router.post('/:projectName/discovery-plans/:planId/archive', async (req, res) => {
+  try {
+    const projectName = getTrimmedParam(req.params?.projectName);
+    const planId = getTrimmedParam(req.params?.planId);
+    if (!projectName) return res.status(400).json({ error: 'projectName is required' });
+    if (!planId) return res.status(400).json({ error: 'planId is required' });
+
+    const result = await archiveAndCleanupProjectDiscoveryPlan(projectName, planId);
+    return res.json(result);
+  } catch (error) {
+    return res.status(getDiscoveryPlanErrorStatus(error)).json({
+      error: getDiscoveryPlanErrorMessage(error, 'Failed to archive discovery plan')
+    });
+  }
+});
 
 /**
  * Create a new workspace

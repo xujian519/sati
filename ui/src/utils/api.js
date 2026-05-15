@@ -70,6 +70,14 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
+  applyProjectDiscoveryPlan: (projectName, planId) =>
+    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-plans/${encodeURIComponent(planId)}/apply`, {
+      method: 'POST',
+    }),
+  archiveProjectDiscoveryPlan: (projectName, planId) =>
+    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-plans/${encodeURIComponent(planId)}/archive`, {
+      method: 'POST',
+    }),
   sessions: (projectName, limit = 5, offset = 0) =>
     authenticatedFetch(`/api/projects/${projectName}/sessions?limit=${limit}&offset=${offset}`),
   // Unified endpoint — all providers through one URL

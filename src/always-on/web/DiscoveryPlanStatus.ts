@@ -39,6 +39,10 @@ export type WebPlanRecord = {
   planFilePath: string;
   structureVersion: number;
   lastExecutionSource?: string;
+  workspace?: {
+    strategy: string;
+    cwd: string;
+  };
 };
 
 export type WebPlanContextRefs = {

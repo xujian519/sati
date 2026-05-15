@@ -45,7 +45,16 @@
       "title": "Title",
       "type": "Type",
       "createdAt": "Created",
-      "status": "Status"
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "actions": {
+      "apply": "Apply",
+      "retry": "Retry",
+      "delete": "Delete",
+      "confirmDelete": "Are you sure you want to delete this plan? The workspace will be cleaned up.",
+      "applySuccess": "Changes applied successfully.",
+      "applyError": "Failed to apply changes."
     },
     "type": {
       "plan": "Plan",

@@ -7,6 +7,7 @@ import {
   FileText,
   Loader2,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import type {
   CronJobOverview,
@@ -115,6 +116,7 @@ const COL = {
   type: 'w-[90px] shrink-0',
   createdAt: 'w-[150px] shrink-0',
   status: 'w-[160px] shrink-0',
+  actions: 'w-[140px] shrink-0',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -347,6 +349,11 @@ export default function PlansAndCronJobs() {
                           {t('plansCron.columns.status', { defaultValue: 'Status' })}
                         </span>
                       </div>
+                      <div className={COL.actions}>
+                        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                          {t('plansCron.columns.actions', { defaultValue: 'Actions' })}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Rows */}
@@ -356,6 +363,7 @@ export default function PlansAndCronJobs() {
                           key={`${item.kind}-${item.data.id}`}
                           item={item}
                           t={t}
+                          onRefresh={refresh}
                         />
                       ))}
                     </div>
@@ -377,20 +385,23 @@ export default function PlansAndCronJobs() {
 function ItemRow({
   item,
   t,
+  onRefresh,
 }: {
   item: UnifiedItem;
   t: (key: string, opts?: Record<string, string>) => string;
+  onRefresh: () => Promise<void>;
 }) {
+  const [busy, setBusy] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
   const isPlan = item.kind === 'plan';
   const plan = isPlan ? item.data : null;
   const job = isPlan ? null : item.data;
 
-  // Title
   const title = isPlan
     ? (plan!.title || '—')
     : (job!.prompt.length > 15 ? `${job!.prompt.slice(0, 15)}…` : (job!.prompt || '—'));
 
-  // Type
   const typeLabel = isPlan
     ? t('plansCron.type.plan', { defaultValue: 'Plan' })
     : t('plansCron.type.cronJob', { defaultValue: 'Cron Job' });
@@ -398,23 +409,78 @@ function ItemRow({
     ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
     : 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300';
 
-  // Created
   const createdAt = isPlan ? plan!.createdAt : job!.createdAt;
 
-  // Status
   let statusLabel: string;
   let statusStyle: string;
+  let displayStatus: PlanDisplayStatus | null = null;
   if (isPlan) {
-    const ds = mapPlanStatus(plan!.status);
-    const meta = PLAN_STATUS_LABEL[ds];
+    displayStatus = mapPlanStatus(plan!.status);
+    const meta = PLAN_STATUS_LABEL[displayStatus];
     statusLabel = t(meta.key, { defaultValue: meta.defaultValue });
-    statusStyle = PLAN_STATUS_STYLE[ds];
+    statusStyle = PLAN_STATUS_STYLE[displayStatus];
   } else {
     const cs: 'scheduled' | 'running' = job!.status === 'running' ? 'running' : 'scheduled';
     const meta = CRON_STATUS_LABEL[cs];
     statusLabel = t(meta.key, { defaultValue: meta.defaultValue });
     statusStyle = CRON_STATUS_STYLE[cs];
   }
+
+  const showApply = isPlan && displayStatus === 'completedWaiting';
+  const showRetry = isPlan && displayStatus === 'failed';
+  const canDelete = isPlan && displayStatus !== 'executing' && displayStatus !== 'preparingWorkspace';
+
+  const handleApply = async () => {
+    if (!plan || busy) return;
+    setBusy(true);
+    try {
+      const res = await api.applyProjectDiscoveryPlan(item.projectName, plan.id);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body?.error || `HTTP ${res.status}`);
+      }
+      await onRefresh();
+    } catch {
+      // Errors are visible via the global refresh.
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRetry = async () => {
+    if (!plan || busy) return;
+    setBusy(true);
+    try {
+      const res = await api.executeProjectDiscoveryPlan(item.projectName, plan.id, { source: 'manual' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body?.error || `HTTP ${res.status}`);
+      }
+      await onRefresh();
+    } catch {
+      // Errors are visible via the global refresh.
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!plan || busy) return;
+    setBusy(true);
+    try {
+      const res = await api.archiveProjectDiscoveryPlan(item.projectName, plan.id);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body?.error || `HTTP ${res.status}`);
+      }
+      await onRefresh();
+    } catch {
+      // Errors are visible via the global refresh.
+    } finally {
+      setBusy(false);
+      setConfirmingDelete(false);
+    }
+  };
 
   return (
     <div className="flex items-center gap-4 px-5 py-2.5 transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/40">
@@ -440,6 +506,76 @@ function ItemRow({
         <span className={cn('inline-block rounded-full px-2 py-0.5 text-[11px] font-medium', statusStyle)}>
           {statusLabel}
         </span>
+      </div>
+
+      {/* Actions */}
+      <div className={cn(COL.actions, 'flex items-center gap-1.5')}>
+        {isPlan && (
+          <>
+            {showApply && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleApply()}
+                className="inline-flex h-7 items-center rounded-md bg-emerald-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50 dark:bg-emerald-700 dark:hover:bg-emerald-600"
+              >
+                {busy ? (
+                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
+                ) : (
+                  t('plansCron.actions.apply', { defaultValue: 'Apply' })
+                )}
+              </button>
+            )}
+            {showRetry && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleRetry()}
+                className="inline-flex h-7 items-center rounded-md bg-blue-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-700 dark:hover:bg-blue-600"
+              >
+                {busy ? (
+                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
+                ) : (
+                  t('plansCron.actions.retry', { defaultValue: 'Retry' })
+                )}
+              </button>
+            )}
+            {canDelete && !confirmingDelete && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setConfirmingDelete(true)}
+                className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-neutral-500 transition hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-red-700 dark:hover:text-red-400"
+                title={t('plansCron.actions.delete', { defaultValue: 'Delete' })}
+              >
+                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+              </button>
+            )}
+            {confirmingDelete && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void handleDelete()}
+                  className="inline-flex h-7 items-center rounded-md bg-red-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-red-700 disabled:opacity-50"
+                >
+                  {busy ? (
+                    <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
+                  ) : (
+                    t('plansCron.actions.delete', { defaultValue: 'Delete' })
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDelete(false)}
+                  className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-[11px] text-neutral-500 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
