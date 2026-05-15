@@ -1,10 +1,17 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart3, ListChecks } from 'lucide-react';
 import type { AlwaysOnSubTab, Project } from '../../types/app';
 import { cn } from '../../lib/utils.js';
 import AlwaysOnDashboard from './AlwaysOnDashboard';
 import PlansAndCronJobs from './PlansAndCronJobs';
+import RunDetail from './RunDetail';
+
+type PlanDetailTarget = {
+  planId: string;
+  projectName: string;
+  projectDisplayName: string;
+};
 
 const SUB_TABS: { id: AlwaysOnSubTab; labelKey: string; defaultLabel: string; icon: typeof BarChart3 }[] = [
   { id: 'dashboard', labelKey: 'tabs.dashboard', defaultLabel: 'Dashboard', icon: BarChart3 },
@@ -21,6 +28,14 @@ type AlwaysOnV2Props = {
 export default function AlwaysOnV2({ selectedProject, onExecutePlan, onApplyPlan, onOpenExecutionSession }: AlwaysOnV2Props) {
   const { t } = useTranslation('alwaysOn');
   const [subTab, setSubTab] = useState<AlwaysOnSubTab>('dashboard');
+  const [planDetail, setPlanDetail] = useState<PlanDetailTarget | null>(null);
+
+  const handleOpenPlanDetail = useCallback(
+    (planId: string, projectName: string, projectDisplayName: string) => {
+      setPlanDetail({ planId, projectName, projectDisplayName });
+    },
+    [],
+  );
 
   if (!selectedProject) {
     return (
@@ -58,7 +73,19 @@ export default function AlwaysOnV2({ selectedProject, onExecutePlan, onApplyPlan
 
       {/* Sub-tab content */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {subTab === 'dashboard' ? <AlwaysOnDashboard onOpenExecutionSession={onOpenExecutionSession} /> : <PlansAndCronJobs onExecutePlan={onExecutePlan} onApplyPlan={onApplyPlan} />}
+        {planDetail ? (
+          <RunDetail
+            planId={planDetail.planId}
+            projectName={planDetail.projectName}
+            projectDisplayName={planDetail.projectDisplayName}
+            onBack={() => setPlanDetail(null)}
+            onOpenExecutionSession={onOpenExecutionSession}
+          />
+        ) : subTab === 'dashboard' ? (
+          <AlwaysOnDashboard onOpenExecutionSession={onOpenExecutionSession} />
+        ) : (
+          <PlansAndCronJobs onExecutePlan={onExecutePlan} onApplyPlan={onApplyPlan} onOpenPlanDetail={handleOpenPlanDetail} />
+        )}
       </div>
     </div>
   );

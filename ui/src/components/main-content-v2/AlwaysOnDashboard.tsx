@@ -356,7 +356,7 @@ export default function AlwaysOnDashboard({ onOpenExecutionSession }: AlwaysOnDa
                   className={cn(
                     'flex items-start gap-3 px-5 py-3 transition-colors',
                     isErrorPhase(event.phase) && 'bg-red-50/40 dark:bg-red-950/10',
-                    isClickable && 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900',
+                    isClickable && 'group cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900',
                   )}
                 >
                   {/* Phase icon */}
@@ -368,7 +368,7 @@ export default function AlwaysOnDashboard({ onOpenExecutionSession }: AlwaysOnDa
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       {/* Phase label */}
-                      <span className={cn('text-[13px] font-medium', meta.color)}>
+                      <span className={cn('text-[13px] font-medium', meta.color, isClickable && 'group-hover:underline')}>
                         {t(meta.labelKey, { defaultValue: meta.defaultLabel })}
                       </span>
 

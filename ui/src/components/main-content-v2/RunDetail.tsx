@@ -13,8 +13,11 @@ import { cn } from '../../lib/utils.js';
 import { Markdown } from '../chat/view/subcomponents/Markdown';
 
 type RunDetailProps = {
-  runId: string;
-  events: AlwaysOnDashboardEvent[];
+  runId?: string;
+  events?: AlwaysOnDashboardEvent[];
+  planId?: string;
+  projectName?: string;
+  projectDisplayName?: string;
   onBack: () => void;
   onOpenExecutionSession?: (projectKey: string, runId: string) => void;
 };
@@ -37,20 +40,33 @@ const STATUS_COLORS: Record<string, string> = {
   archived: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400',
 };
 
-export default function RunDetail({
-  runId,
-  events,
-  onBack,
-  onOpenExecutionSession,
-}: RunDetailProps) {
+export default function RunDetail(props: RunDetailProps) {
+  const {
+    runId,
+    events = [],
+    planId: directPlanId,
+    projectName: directProjectName,
+    projectDisplayName: directProjectDisplayName,
+    onBack,
+    onOpenExecutionSession,
+  } = props;
   const { t } = useTranslation('alwaysOn');
 
   const runEvents = useMemo(
-    () => events.filter((e) => e.runId === runId),
+    () => (runId ? events.filter((e) => e.runId === runId) : []),
     [events, runId],
   );
 
   const { planId, projectKey, projectName, projectDisplayName, outcome } = useMemo(() => {
+    if (directPlanId && directProjectName) {
+      return {
+        planId: directPlanId,
+        projectKey: '',
+        projectName: directProjectName,
+        projectDisplayName: directProjectDisplayName || '',
+        outcome: '',
+      };
+    }
     let planId = '';
     let projectKey = '';
     let projectName = '';
@@ -64,7 +80,7 @@ export default function RunDetail({
       if (e.outcome && !outcome) outcome = e.outcome;
     }
     return { planId, projectKey, projectName, projectDisplayName, outcome };
-  }, [runEvents]);
+  }, [runEvents, directPlanId, directProjectName, directProjectDisplayName]);
 
   const [plan, setPlan] = useState<PlanData | null>(null);
   const [reportMarkdown, setReportMarkdown] = useState('');
