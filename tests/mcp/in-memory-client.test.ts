@@ -106,6 +106,120 @@ test("C1.M3 timeout maps to mcp_call_timeout", async () => {
   }
 });
 
+test("C1.M5b callTool timeout recycles transport for next call", async () => {
+  let factoryCalls = 0;
+  const servers: McpServer[] = [];
+
+  const transportFactory: McpClientOptions["transportFactory"] = () => {
+    factoryCalls++;
+    const pair = InMemoryTransport.createLinkedPair();
+    const s = new McpServer({ name: `slow-${factoryCalls}`, version: "0.0.1" });
+    let nextDuration = 500;
+    s.tool(
+      "sleep_or_pong",
+      { fast: z.boolean().optional() },
+      async ({ fast }) => {
+        if (fast) {
+          return { content: [{ type: "text", text: "pong" }] };
+        }
+        await new Promise((r) => setTimeout(r, nextDuration));
+        return { content: [{ type: "text", text: "done" }] };
+      },
+    );
+    void s.connect(pair[1]);
+    servers.push(s);
+    void nextDuration;
+    return pair[0];
+  };
+
+  const client = new McpClient(makeSpec("slow"), {
+    transportFactory,
+    callTimeoutMs: 40,
+  });
+
+  try {
+    await assert.rejects(
+      () => client.callTool("sleep_or_pong", {}, { timeoutMs: 40 }),
+      (err: Error & { code?: string }) => err.code === "mcp_call_timeout",
+    );
+    assert.equal(factoryCalls, 1, "first call uses one transport");
+
+    const res = await client.callTool(
+      "sleep_or_pong",
+      { fast: true },
+      { timeoutMs: 1000 },
+    );
+    assert.equal(factoryCalls, 2, "next call after timeout spawns a fresh transport");
+    const content = res.content as Array<{ type: string; text: string }>;
+    assert.equal(content[0].text, "pong");
+  } finally {
+    await client.close();
+    for (const s of servers) {
+      await s.close().catch(() => {});
+    }
+  }
+});
+
+test("C1.M5b listTools timeout also recycles transport", async () => {
+  let factoryCalls = 0;
+  const servers: McpServer[] = [];
+
+  const transportFactory: McpClientOptions["transportFactory"] = () => {
+    factoryCalls++;
+    const pair = InMemoryTransport.createLinkedPair();
+    const s = new McpServer({ name: `srv-${factoryCalls}`, version: "0.0.1" });
+    s.tool(
+      "ping",
+      { msg: z.string() },
+      async ({ msg }) => ({ content: [{ type: "text", text: msg }] }),
+    );
+    // Block the first server's tools/list response by intercepting the
+    // transport's outbound send — simulates a wedged subprocess.
+    const transport = pair[0];
+    if (factoryCalls === 1) {
+      const realSend = (transport as { send?: (m: unknown) => unknown }).send?.bind(
+        transport,
+      );
+      (transport as { send: (m: unknown) => Promise<void> }).send = async (
+        m: unknown,
+      ) => {
+        const msg = m as { method?: string };
+        if (msg?.method === "tools/list") {
+          // Drop on the floor — server never sees it.
+          return;
+        }
+        if (realSend) await (realSend(m) as Promise<void>);
+      };
+    }
+    void s.connect(pair[1]);
+    servers.push(s);
+    return transport;
+  };
+
+  const client = new McpClient(makeSpec("srv"), {
+    transportFactory,
+    callTimeoutMs: 40,
+  });
+
+  try {
+    await assert.rejects(
+      () => client.listTools(),
+      (err: Error & { code?: string }) => err.code === "mcp_call_timeout",
+    );
+    assert.equal(factoryCalls, 1);
+
+    const tools = await client.listTools();
+    assert.equal(factoryCalls, 2, "listTools after timeout spawns a fresh transport");
+    assert.equal(tools.length, 1);
+    assert.equal(tools[0].toolName, "ping");
+  } finally {
+    await client.close();
+    for (const s of servers) {
+      await s.close().catch(() => {});
+    }
+  }
+});
+
 test("C1 listTools surfaces description truncation marker for huge tools", async () => {
   const huge = "x".repeat(5000);
   const { serverPair, server } = await buildLinked(() => {

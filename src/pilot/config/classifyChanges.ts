@@ -36,6 +36,9 @@ function classifyPath(path: string): PilotConfigChangeClass {
   if (path.startsWith("cron.")) {
     return "next-runtime";
   }
+  if (path.startsWith("tools.")) {
+    return "next-runtime";
+  }
   return "next-runtime";
 }
 

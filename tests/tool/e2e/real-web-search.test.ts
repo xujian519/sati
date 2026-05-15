@@ -4,15 +4,16 @@ import { createWebSearchTool, type WebSearchOutput } from "../../../src/tool/bui
 import { createDefaultPermissionContext } from "../../../src/permission/index.js";
 
 const RUN = process.env.PILOTDECK_RUN_REAL_WEB_SEARCH_E2E === "1";
-const REGION = (process.env.PILOTDECK_E2E_WEB_SEARCH_REGION ?? "cn") as "cn" | "global";
+// Optional override — point at a SerpAPI-compatible proxy when needed.
+const ENDPOINT = process.env.PILOTDECK_E2E_WEB_SEARCH_ENDPOINT?.trim() || undefined;
 
 test(
-  "web_search hits the real serp.hk API and returns organic results",
+  "web_search hits the real SerpAPI and returns organic results",
   { timeout: 60_000 },
   async (t) => {
     if (!RUN) {
       t.skip(
-        "Set PILOTDECK_RUN_REAL_WEB_SEARCH_E2E=1 (with SERP_API_KEY in env) to run the real serp.hk e2e test.",
+        "Set PILOTDECK_RUN_REAL_WEB_SEARCH_E2E=1 (with SERP_API_KEY in env) to run the real SerpAPI e2e test.",
       );
       return;
     }
@@ -21,7 +22,7 @@ test(
       throw new Error("SERP_API_KEY env var is required for the real web_search e2e test.");
     }
 
-    const tool = createWebSearchTool({ apiKey, region: REGION });
+    const tool = createWebSearchTool({ apiKey, endpoint: ENDPOINT });
     const cwd = process.cwd();
     const result = await tool.execute(
       { query: "PilotDeck", gl: "US" },

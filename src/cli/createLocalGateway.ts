@@ -454,12 +454,26 @@ class ProjectRuntimeRegistry {
       events: this.buildRouterEventBus(),
     });
     const backgroundTasks = new BackgroundTaskRuntime({ now: this.options.now });
+    const webSearchConfig = snapshot.config.tools?.webSearch;
     const tools = createBuiltinRegistry({
       backgroundTasks: { runtime: backgroundTasks },
       readSkill: {
         loader: (name) => pluginRuntime.loadSkillPrompt(name),
         lister: () => pluginRuntime.getAllSkills(),
       },
+      // Pass the YAML-configured SerpAPI key (and optional endpoint
+      // override for compatible proxies) through to the built-in
+      // `web_search` tool. When the section is absent the tool keeps its
+      // legacy behaviour and reads `SERP_API_KEY` from the environment at
+      // execution time.
+      ...(webSearchConfig
+        ? {
+            webSearch: {
+              ...(webSearchConfig.apiKey ? { apiKey: webSearchConfig.apiKey } : {}),
+              ...(webSearchConfig.endpoint ? { endpoint: webSearchConfig.endpoint } : {}),
+            },
+          }
+        : {}),
     });
     for (const tool of this._extraTools) {
       tools.register(tool);
@@ -880,8 +894,14 @@ function ensureRouterConfig(
 ): RouterConfig {
   const defaultRef = { id: defaultSelection.id, provider: defaultSelection.provider, model: defaultSelection.model };
   if (router) {
+    // Scenarios is optional at the parse boundary (see schema.ts) — the UI
+    // can persist a partial `router:` block, e.g. user toggled `enabled`
+    // and seeded `tokenSaver.*` without ever opening the Scenarios editor.
+    // Fill `scenarios.default` from `agent.model` so RouterRuntime always
+    // sees a valid map.
     return {
       ...router,
+      scenarios: router.scenarios ?? { default: defaultRef },
       fallback: router.fallback ?? { default: [defaultRef] },
       stats: router.stats ?? { enabled: true },
     };

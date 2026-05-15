@@ -69,9 +69,49 @@ test("parseRouterConfig flags unknown provider in default scenario", () => {
     { scenarios: { default: "missing/main" } },
     modelConfig,
   );
-  assert.equal(result.config, undefined);
+  // We still surface the malformed ref as a fatal diagnostic — the
+  // top-level `loadPilotConfig` runs `throwConfigErrorIfFatal` on the
+  // accumulated diagnostics, so the gateway never sees this partial config.
+  // We *don't* require `result.config === undefined` anymore: missing /
+  // invalid scenarios are also the "user has partial yaml" path and that
+  // path returns a populated config so `ensureRouterConfig` can fill
+  // `scenarios.default` from `agent.model` for soft failures.
+  assert.equal(result.config?.scenarios, undefined);
   assert.ok(
-    result.diagnostics.some((diagnostic) => diagnostic.code === "ROUTER_REF_PROVIDER_NOT_FOUND"),
+    result.diagnostics.some(
+      (diagnostic) =>
+        diagnostic.code === "ROUTER_REF_PROVIDER_NOT_FOUND" && diagnostic.severity === "fatal",
+    ),
+  );
+});
+
+test("parseRouterConfig allows partial router (missing scenarios) for ensureRouterConfig to fill in", () => {
+  // Mirrors the real-world UI persistence pattern that revealed the bug:
+  // user toggles `router.enabled=true` and seeds tokenSaver tiers but
+  // never opens the Scenarios editor. We must keep the rest of the config
+  // (no fatal) so createLocalGateway's `ensureRouterConfig` can derive
+  // `scenarios.default` from `agent.model`.
+  const result = parseRouterConfig(
+    {
+      enabled: true,
+      tokenSaver: {
+        enabled: true,
+        judge: "vendor-a/main",
+        defaultTier: "medium",
+        tiers: { medium: { model: "vendor-a/main", description: "default tier" } },
+        rules: [],
+        judgeTimeoutMs: 15000,
+      },
+    },
+    modelConfig,
+  );
+  assert.ok(result.config, "config should not be dropped just because scenarios is absent");
+  assert.equal(result.config?.scenarios, undefined);
+  assert.ok(result.config?.tokenSaver, "tokenSaver should survive missing scenarios");
+  assert.equal(
+    result.diagnostics.filter((d) => d.severity === "fatal").length,
+    0,
+    "no fatal diagnostic for the partial-router-from-UI case",
   );
 });
 

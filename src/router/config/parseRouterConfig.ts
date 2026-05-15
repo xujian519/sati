@@ -63,9 +63,11 @@ export function parseRouterConfig(
   }
 
   const scenarios = parseScenarios(raw.scenarios, modelConfig, diagnostics);
-  if (!scenarios) {
-    return { diagnostics };
-  }
+  // Don't early-return on `scenarios === undefined`: that's the legitimate
+  // "user only filled in tokenSaver / fallback" case. `ensureRouterConfig`
+  // in createLocalGateway.ts derives `scenarios.default` from `agent.model`
+  // for us. Only the malformed-but-present case (handled inside
+  // parseScenarios via a `fatal` diagnostic) actually aborts the load.
 
   const fallback = parseFallback(raw.fallback, modelConfig, diagnostics);
   const zeroUsageRetry = parseZeroUsageRetry(raw.zeroUsageRetry, diagnostics);
@@ -76,7 +78,7 @@ export function parseRouterConfig(
 
   return {
     config: {
-      scenarios,
+      ...(scenarios ? { scenarios } : {}),
       fallback,
       zeroUsageRetry,
       tokenSaver,
@@ -93,6 +95,13 @@ function parseScenarios(
   modelConfig: ModelConfig,
   diagnostics: RouterConfigDiagnostic[],
 ): RouterScenariosConfig | undefined {
+  // Missing entirely → no diagnostic. The UI today can persist a partial
+  // `router:` block (e.g. user enabled the master toggle, seeded tokenSaver
+  // tiers, never opened the Scenarios editor). `ensureRouterConfig` will
+  // fill `scenarios.default` from `agent.model` downstream.
+  if (raw === undefined) {
+    return undefined;
+  }
   if (!isRecord(raw)) {
     diagnostics.push({
       code: "ROUTER_SCENARIOS_INVALID",

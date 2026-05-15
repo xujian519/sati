@@ -7,45 +7,68 @@ import type {
 } from "../protocol/types.js";
 
 /**
- * Provider design follows the openclaw `serp-search` plugin
- * (`/Users/miwi/edgeclaw-opc/openclaw/extensions/serp-search/index.ts`):
- * delegate the actual crawling / ranking / locale handling to the serp.hk
- * commercial proxy, which exposes a Google-search-as-an-API endpoint that
- * works inside China without a VPN.
+ * `web_search` calls SerpAPI (https://serpapi.com) — the canonical Google
+ * search-as-an-API service. SerpAPI uses a single REST endpoint that takes
+ * the API key as a `?api_key=...` query parameter and returns JSON with
+ * `organic_results`, `knowledge_graph`, `answer_box`, `top_stories`, etc.
  *
- * Endpoints:
- *   - `cn`     → https://api.serp.hk/serp/google/search/advanced  (default)
- *   - `global` → https://api.serp.global/serp/google/search/advanced
+ * Why SerpAPI as the only built-in provider?
+ *   - It's the de-facto standard a model would expect to integrate against.
+ *   - One canonical surface keeps tool semantics deterministic across
+ *     deployments — provider-specific quirks (different keys, request
+ *     shapes, response field renames) live behind one well-documented API.
+ *
+ * If a deployment needs a self-hosted SerpAPI-compatible proxy (e.g.
+ * serp.hk for in-China access), pass `endpoint` to override the base URL.
+ *
+ * Two on-the-wire dialects are supported and auto-selected from the
+ * endpoint hostname:
+ *   - **query** (default — `serpapi.com`): `GET ?engine=…&q=…&api_key=…`.
+ *   - **bearer** (`*.serp.hk`, `*.serp.global`): `POST` with
+ *     `Authorization: Bearer <key>` and `{q}` JSON body. serp.hk migrated
+ *     away from the legacy `?api_key=` GET path; using it with a current
+ *     serp.hk key returns `code=3103 未授权`.
+ *
+ * Override `authMode` to force a dialect (e.g. when targeting a custom
+ * proxy whose hostname doesn't match the heuristic).
  *
  * API key resolution order (first non-empty wins):
  *   1. `options.apiKey`
- *   2. context env var `SERP_API_KEY`
+ *   2. context env var `SERP_API_KEY` (legacy fallback)
  *
  * Without a key the tool is still registered but `execute()` returns the
  * canonical `unsupported_tool` error so the model gets a deterministic
  * "configure SERP_API_KEY" hint rather than a silent failure.
  */
-export type WebSearchRegion = "cn" | "global";
+/** How the provider authenticates and ships the query. See file header. */
+export type WebSearchAuthMode = "query" | "bearer";
 
 export type CreateWebSearchToolOptions = {
   apiKey?: string;
-  region?: WebSearchRegion;
-  /** Override endpoint (testing). */
+  /** Override the SerpAPI endpoint (default `https://serpapi.com/search`). */
   endpoint?: string;
+  /** Override the search engine (default `google`). SerpAPI also supports `bing`, `duckduckgo`, etc. */
+  engine?: string;
+  /**
+   * Override the auth dialect. When unset, auto-detected from
+   * `endpoint`'s hostname (`*.serp.hk` / `*.serp.global` → `bearer`,
+   * everything else → `query`).
+   */
+  authMode?: WebSearchAuthMode;
   /** Override fetch (testing). */
   fetchImpl?: typeof fetch;
   /** Override timeout (default 30s). */
   timeoutMs?: number;
-  /** Cap on organic results returned to the model (default 8 — matches serp-search). */
+  /** Cap on organic results returned to the model (default 8). */
   organicLimit?: number;
-  /** Cap on top-stories returned (default 5 — matches serp-search). */
+  /** Cap on top-stories returned (default 5). */
   topStoriesLimit?: number;
 };
 
 export type WebSearchInput = {
   /** Search query string. */
   query: string;
-  /** Country code for localized results (default "CN"). Use "US" for English. */
+  /** Country code for localized results (default "us"). Use "cn" for China-localized results. */
   gl?: string;
 };
 
@@ -64,8 +87,8 @@ export type WebSearchOutput = {
   topStories?: Array<Record<string, unknown>>;
 };
 
-const SERP_HK_ENDPOINT = "https://api.serp.hk/serp/google/search/advanced";
-const SERP_GLOBAL_ENDPOINT = "https://api.serp.global/serp/google/search/advanced";
+const DEFAULT_ENDPOINT = "https://serpapi.com/search";
+const DEFAULT_ENGINE = "google";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_ORGANIC_LIMIT = 8;
 const DEFAULT_TOP_STORIES_LIMIT = 5;
@@ -73,9 +96,9 @@ const DEFAULT_TOP_STORIES_LIMIT = 5;
 export function createWebSearchTool(
   options: CreateWebSearchToolOptions = {},
 ): PilotDeckToolDefinition<WebSearchInput, WebSearchOutput> {
-  const region: WebSearchRegion = options.region ?? "cn";
-  const endpoint =
-    options.endpoint ?? (region === "global" ? SERP_GLOBAL_ENDPOINT : SERP_HK_ENDPOINT);
+  const endpoint = options.endpoint ?? DEFAULT_ENDPOINT;
+  const engine = options.engine ?? DEFAULT_ENGINE;
+  const authMode = options.authMode ?? detectAuthMode(endpoint);
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const organicLimit = options.organicLimit ?? DEFAULT_ORGANIC_LIMIT;
@@ -85,7 +108,7 @@ export function createWebSearchTool(
     name: "web_search",
     aliases: ["WebSearch"],
     description:
-      "Search Google via the serp.hk proxy. Returns organic results, knowledge graph, answer box, and top stories. Works in China without VPN.",
+      "Search the web via SerpAPI. Returns organic results, knowledge graph, answer box, and top stories.",
     kind: "network",
     inputSchema: {
       type: "object",
@@ -95,7 +118,7 @@ export function createWebSearchTool(
         query: { type: "string", description: "Search query string." },
         gl: {
           type: "string",
-          description: 'Country code for localized results (default "CN"). Use "US" for English.',
+          description: 'Country code for localized results (default "us"). Use "cn" for China-localized results.',
         },
       },
     },
@@ -130,7 +153,7 @@ export function createWebSearchTool(
       if (!apiKey) {
         throw new PilotDeckToolRuntimeError(
           "unsupported_tool",
-          "web_search is not configured. Set SERP_API_KEY env var or pass apiKey via createWebSearchTool({ apiKey }).",
+          "web_search is not configured. Set SERP_API_KEY env var or set tools.webSearch.apiKey in pilotdeck.yaml.",
         );
       }
       return performSearch({
@@ -138,6 +161,8 @@ export function createWebSearchTool(
         context,
         apiKey,
         endpoint,
+        engine,
+        authMode,
         fetchImpl,
         timeoutMs,
         organicLimit,
@@ -145,6 +170,25 @@ export function createWebSearchTool(
       });
     },
   };
+}
+
+/**
+ * Pick the on-the-wire dialect from the endpoint's hostname.
+ *
+ * `*.serp.hk` and `*.serp.global` no longer accept the legacy `?api_key=`
+ * GET shape; using it returns `code=3103 未授权` regardless of whether the
+ * key is valid. Default to `query` for `serpapi.com` and anything else.
+ */
+function detectAuthMode(endpoint: string): WebSearchAuthMode {
+  try {
+    const host = new URL(endpoint).hostname.toLowerCase();
+    if (host === "serp.hk" || host.endsWith(".serp.hk")) return "bearer";
+    if (host === "serp.global" || host.endsWith(".serp.global")) return "bearer";
+  } catch {
+    // fall through — invalid URLs default to the SerpAPI dialect; the
+    // request will fail anyway and surface a clear error.
+  }
+  return "query";
 }
 
 function resolveApiKey(
@@ -164,6 +208,8 @@ type PerformSearchInput = {
   context: PilotDeckToolRuntimeContext;
   apiKey: string;
   endpoint: string;
+  engine: string;
+  authMode: WebSearchAuthMode;
   fetchImpl: typeof fetch;
   timeoutMs: number;
   organicLimit: number;
@@ -173,8 +219,18 @@ type PerformSearchInput = {
 async function performSearch(
   args: PerformSearchInput,
 ): Promise<PilotDeckToolExecutionOutput<WebSearchOutput>> {
-  const { input, context, apiKey, endpoint, fetchImpl, timeoutMs, organicLimit, topStoriesLimit } =
-    args;
+  const {
+    input,
+    context,
+    apiKey,
+    endpoint,
+    engine,
+    authMode,
+    fetchImpl,
+    timeoutMs,
+    organicLimit,
+    topStoriesLimit,
+  } = args;
   const query = input.query.trim();
   if (!query) {
     throw new PilotDeckToolRuntimeError(
@@ -183,10 +239,12 @@ async function performSearch(
     );
   }
 
-  const body: Record<string, string> = { q: query };
-  if (input.gl && input.gl.trim().length > 0) {
-    body.gl = input.gl.trim();
-  }
+  const requestUrl: string =
+    authMode === "bearer" ? endpoint : buildQueryModeUrl({ endpoint, engine, apiKey, query, gl: input.gl });
+  const requestInit: RequestInit =
+    authMode === "bearer"
+      ? buildBearerModeInit({ apiKey, engine, query, gl: input.gl })
+      : { method: "GET", headers: { Accept: "application/json" } };
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -194,13 +252,8 @@ async function performSearch(
 
   let response: Response;
   try {
-    response = await fetchImpl(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
+    response = await fetchImpl(requestUrl, {
+      ...requestInit,
       signal: controller.signal,
     });
   } catch (error) {
@@ -223,21 +276,36 @@ async function performSearch(
     const detail = await response.text().catch(() => response.statusText);
     throw new PilotDeckToolRuntimeError(
       "tool_execution_failed",
-      `serp.hk API error (${response.status}): ${detail}`,
+      `SerpAPI error (${response.status}): ${truncate(detail, 500)}`,
     );
   }
 
   const raw = (await response.json()) as Record<string, unknown>;
-  if (typeof raw.code === "number" && raw.code !== 0) {
-    const message = typeof raw.msg === "string" ? raw.msg : "serp.hk error";
+  // SerpAPI returns `{ error: "..." }` on logical failures with a 200 status
+  // (e.g. "Invalid API key", quota issues). Surface those explicitly.
+  if (typeof raw.error === "string" && raw.error.length > 0) {
     throw new PilotDeckToolRuntimeError(
       "tool_execution_failed",
-      `serp.hk error code=${raw.code}: ${message}`,
+      `SerpAPI error: ${raw.error}`,
     );
   }
 
-  const result = (raw.result ?? raw) as Record<string, unknown>;
-  const organic = parseOrganic(result.organic, organicLimit);
+  // Some SerpAPI-compatible proxies wrap the payload as `{ code, msg, result }`.
+  // Unwrap when present so the same parser works for both shapes.
+  const proxyCode = raw.code;
+  if (typeof proxyCode === "number" && proxyCode !== 0) {
+    const message = typeof raw.msg === "string" ? raw.msg : "search proxy error";
+    throw new PilotDeckToolRuntimeError(
+      "tool_execution_failed",
+      `SerpAPI error code=${proxyCode}: ${message}`,
+    );
+  }
+  const result = (isRecord(raw.result) ? raw.result : raw) as Record<string, unknown>;
+
+  // SerpAPI canonical key is `organic_results`; some compatible proxies
+  // (serp.hk-style) call it `organic`. Accept both.
+  const organicSource = result.organic_results ?? result.organic;
+  const organic = parseOrganic(organicSource, organicLimit);
   const output: WebSearchOutput = { query, organic };
   if (isRecord(result.knowledge_graph)) {
     output.knowledgeGraph = result.knowledge_graph;
@@ -245,8 +313,9 @@ async function performSearch(
   if (isRecord(result.answer_box)) {
     output.answerBox = result.answer_box;
   }
-  if (Array.isArray(result.top_stories) && result.top_stories.length > 0) {
-    output.topStories = (result.top_stories as Array<Record<string, unknown>>).slice(
+  const topStoriesSource = result.top_stories;
+  if (Array.isArray(topStoriesSource) && topStoriesSource.length > 0) {
+    output.topStories = (topStoriesSource as Array<Record<string, unknown>>).slice(
       0,
       topStoriesLimit,
     );
@@ -259,10 +328,54 @@ async function performSearch(
     ],
     data: output,
     metadata: {
-      provider: "serp.hk",
+      provider: "serpapi",
       endpoint,
+      engine,
       organicCount: organic.length,
     },
+  };
+}
+
+function buildQueryModeUrl(args: {
+  endpoint: string;
+  engine: string;
+  apiKey: string;
+  query: string;
+  gl?: string;
+}): string {
+  // SerpAPI takes everything via query string. Build it deterministically
+  // so tests can assert on the URL shape.
+  const url = new URL(args.endpoint);
+  url.searchParams.set("engine", args.engine);
+  url.searchParams.set("q", args.query);
+  if (args.gl && args.gl.trim().length > 0) {
+    url.searchParams.set("gl", args.gl.trim());
+  }
+  url.searchParams.set("api_key", args.apiKey);
+  url.searchParams.set("output", "json");
+  return url.toString();
+}
+
+function buildBearerModeInit(args: {
+  apiKey: string;
+  engine: string;
+  query: string;
+  gl?: string;
+}): RequestInit {
+  // serp.hk-style: POST + Bearer auth + JSON body. The proxy infers the
+  // engine and locale defaults itself; we still forward them when the
+  // caller specified non-defaults so behaviour matches the query-mode path.
+  const body: Record<string, unknown> = { q: args.query };
+  if (args.engine && args.engine !== DEFAULT_ENGINE) body.engine = args.engine;
+  if (args.gl && args.gl.trim().length > 0) body.gl = args.gl.trim();
+  return {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${args.apiKey}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
   };
 }
 
@@ -272,7 +385,7 @@ function parseOrganic(value: unknown, limit: number): WebSearchOrganicResult[] {
     title: readString(entry.title),
     link: readString(entry.link),
     snippet: readString(entry.snippet),
-    source: readString(entry.source),
+    source: readString(entry.source) ?? readString(entry.displayed_link),
   }));
 }
 
@@ -282,6 +395,10 @@ function readString(value: unknown): string | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 function formatTextSummary(output: WebSearchOutput): string {

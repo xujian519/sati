@@ -15,6 +15,12 @@ memory:
 #     provider: "anthropic"
 #     model: "claude-sonnet-4-20250514"
 
+# 内置工具配置（可选）
+# tools:
+#   webSearch:
+#     apiKey: "..."                                 # SerpAPI key（serpapi.com）
+#     # endpoint: https://serpapi.com/search        # 高级：覆盖到 SerpAPI 兼容代理
+
 # 品牌配置（待贡献点就绪后生效）
 # brand:
 #   name: "MyProduct"

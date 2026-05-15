@@ -11,6 +11,12 @@
  *   (default 60s; cf. legacy 27.8h — see `intentional_difference`).
  * - M5 / M15 detects `mcp_session_expired` and triggers exactly one
  *   reconnect attempt for the next call.
+ * - M5b on `-32001 Request timed out` we recycle the underlying transport
+ *   (close + drop refs) before re-throwing, so the *next* `callTool` /
+ *   `listTools` spawns a fresh subprocess. Stdio MCP servers like
+ *   `@playwright/mcp` can keep an in-flight request pending server-side
+ *   after a client timeout (e.g. `page.goto` stuck on a dead TCP
+ *   connection), which wedges every follow-up call from the same session.
  * - M6 LRU-caches the result of `listTools()` for `LRU_TTL_MS` (5 min).
  *   Cache is invalidated on reconnect.
  *
@@ -248,6 +254,7 @@ export class McpClient {
       if (err instanceof McpClientError) throw err;
       const e = err as Error & { code?: number };
       if (e.code === -32001 || /timed out|timeout/i.test(e.message ?? "")) {
+        this.recycleTransportAfterTimeout();
         throw new McpClientError(
           `MCP call timed out (server=${this.spec.id}): ${e.message}`,
           "mcp_call_timeout",
@@ -267,6 +274,43 @@ export class McpClient {
     if (!e) return false;
     if (e.statusCode === 404) return true;
     return /session.*expired/i.test(e.message ?? "");
+  }
+
+  /**
+   * M5b — drop the wedged transport so the next call spawns a fresh
+   * subprocess.
+   *
+   * `-32001` only cancels the client's wait; the server-side request often
+   * keeps running. For long-running stdio MCPs (notably `@playwright/mcp`
+   * blocked inside `page.goto` on a dead TCP connection) the subprocess
+   * stays stuck and every subsequent call from the same session also
+   * times out. We null out local refs synchronously — so any caller racing
+   * into `start()` opens a brand-new connection — and close + clean up
+   * the old transport asynchronously in the background.
+   */
+  private recycleTransportAfterTimeout(): void {
+    const oldClient = this.client;
+    const oldDir = this.perSessionDir;
+    this.client = null;
+    this.transport = null;
+    this.connectPromise = null;
+    this.listToolsCache = null;
+    this.perSessionDir = null;
+    this.status = "error";
+    void (async () => {
+      try {
+        await oldClient?.close();
+      } catch {
+        // best effort — the subprocess may already be wedged
+      }
+      if (oldDir) {
+        try {
+          rmSync(oldDir, { recursive: true, force: true });
+        } catch {
+          // best effort cleanup
+        }
+      }
+    })();
   }
 
   /** M5 — close the existing client and reconnect. */

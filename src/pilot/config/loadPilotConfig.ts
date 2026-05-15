@@ -10,6 +10,7 @@ import { sha256, stableStringify } from "./hash.js";
 import { mergeConfigSources } from "./merge.js";
 import { parseMemoryConfig } from "./parseMemoryConfig.js";
 import { parseAdaptersConfig, parseGatewayConfig } from "./parseGatewayConfig.js";
+import { parseToolsConfig } from "./parseToolsConfig.js";
 import { parseRouterConfig } from "../../router/config/parseRouterConfig.js";
 import { redactConfig } from "./redact.js";
 import {
@@ -108,6 +109,7 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
 
   const alwaysOn = parseAlwaysOnConfig(rawConfig.alwaysOn, diagnostics);
   const cron = parseCronConfig(rawConfig.cron, diagnostics);
+  const tools = parseToolsConfig(rawConfig.tools, diagnostics);
   throwConfigErrorIfFatal(diagnostics);
 
   const redactedSnapshotConfig = redactConfig({
@@ -120,6 +122,7 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
     router,
     alwaysOn,
     cron,
+    tools,
   });
   return deepFreeze({
     version: options.version ?? 1,
@@ -138,6 +141,7 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
       ...(router ? { router } : {}),
       ...(alwaysOn ? { alwaysOn } : {}),
       ...(cron ? { cron } : {}),
+      ...(tools ? { tools } : {}),
     },
   });
 }
@@ -282,6 +286,7 @@ function validateTopLevel(rawConfig: PilotRawConfig, diagnostics: PilotConfigDia
     "router",
     "alwaysOn",
     "cron",
+    "tools",
     // Reserved namespace for ui/server (Web UI Express bridge). The PilotDeck
     // gateway does not parse `webui.*` itself but tolerates it so a single
     // ~/.pilotdeck/pilotdeck.yaml can carry both gateway-side and ui-side

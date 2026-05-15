@@ -44,6 +44,7 @@ export type PilotRawConfig = {
   router?: unknown;
   alwaysOn?: unknown;
   cron?: unknown;
+  tools?: unknown;
 };
 
 export type PilotExtensionConfig = {
@@ -89,6 +90,25 @@ export type PilotGatewayConfig = {
   staticAssetsPath?: string;
 };
 
+/**
+ * Per-tool runtime config.  Today only `web_search` reads from here so its
+ * SerpAPI key can live in `~/.pilotdeck/pilotdeck.yaml` instead of an env
+ * var.  When the field is omitted the tool falls back to the
+ * `SERP_API_KEY` environment variable (legacy behaviour).
+ *
+ * `endpoint` is an optional escape hatch for SerpAPI-compatible proxies
+ * (e.g. self-hosted or in-China alternatives that mirror the SerpAPI
+ * request/response shape). Most users should leave it unset.
+ */
+export type PilotWebSearchConfig = {
+  apiKey?: string;
+  endpoint?: string;
+};
+
+export type PilotToolsConfig = {
+  webSearch?: PilotWebSearchConfig;
+};
+
 export type PilotAdaptersConfig = {
   cli?: {
     autoConnectServer: boolean;
@@ -116,6 +136,7 @@ export type PilotConfig = {
   router?: RouterConfig;
   alwaysOn?: AlwaysOnConfig;
   cron?: CronConfig;
+  tools?: PilotToolsConfig;
 };
 
 export type PilotConfigSnapshot = {

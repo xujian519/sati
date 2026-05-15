@@ -284,6 +284,109 @@ router.post('/test-connection', async (req, res) => {
   }
 });
 
+/**
+ * Pick the on-the-wire dialect from the endpoint's hostname. Kept in sync
+ * with `detectAuthMode` in `src/tool/builtin/webSearch.ts` — the Test
+ * button needs to probe with the *same* shape the agent tool will use, or
+ * a successful probe is meaningless.
+ */
+function detectWebSearchAuthMode(endpoint) {
+  try {
+    const host = new URL(endpoint).hostname.toLowerCase();
+    if (host === 'serp.hk' || host.endsWith('.serp.hk')) return 'bearer';
+    if (host === 'serp.global' || host.endsWith('.serp.global')) return 'bearer';
+  } catch { /* fall through */ }
+  return 'query';
+}
+
+/**
+ * Probe a SerpAPI / SerpAPI-compatible endpoint with the given key.
+ *
+ * Mirrors `src/tool/builtin/webSearch.ts`'s resolution logic — including
+ * hostname-based auth-mode selection and the `{code, msg, result}` envelope
+ * that in-China proxies (notably serp.hk) wrap responses in. Returns:
+ * `{ ok, error?, latencyMs?, organicCount? }` to match the convention
+ * established by `/test-connection`.
+ */
+router.post('/test-web-search', async (req, res) => {
+  const { apiKey, endpoint } = req.body || {};
+  const trimmedKey = typeof apiKey === 'string' ? apiKey.trim() : '';
+  if (!trimmedKey) {
+    return res.status(400).json({ ok: false, error: 'API key is required.' });
+  }
+  const trimmedEndpoint = typeof endpoint === 'string' ? endpoint.trim() : '';
+  const effectiveEndpoint = trimmedEndpoint || 'https://serpapi.com/search';
+
+  let requestUrl;
+  let requestInit;
+  try {
+    const authMode = detectWebSearchAuthMode(effectiveEndpoint);
+    if (authMode === 'bearer') {
+      requestUrl = effectiveEndpoint;
+      requestInit = {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${trimmedKey}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ q: 'hello' }),
+      };
+    } else {
+      const url = new URL(effectiveEndpoint);
+      url.searchParams.set('engine', 'google');
+      url.searchParams.set('q', 'hello');
+      url.searchParams.set('api_key', trimmedKey);
+      url.searchParams.set('output', 'json');
+      requestUrl = url.toString();
+      requestInit = { method: 'GET', headers: { Accept: 'application/json' } };
+    }
+  } catch {
+    return res.status(400).json({ ok: false, error: `Invalid endpoint URL: ${effectiveEndpoint}` });
+  }
+
+  const timeout = 15_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  const t0 = Date.now();
+
+  try {
+    const response = await fetch(requestUrl, { ...requestInit, signal: controller.signal });
+    clearTimeout(timer);
+    const latencyMs = Date.now() - t0;
+
+    let raw = null;
+    try {
+      raw = await response.json();
+    } catch { /* not JSON */ }
+
+    if (!response.ok) {
+      const detail = (raw && (raw.error || raw.msg)) || `${response.status} ${response.statusText}`;
+      return res.json({ ok: false, error: String(detail), latencyMs });
+    }
+    // SerpAPI returns 200 with `{error: "..."}` on invalid-key / quota failures.
+    if (raw && typeof raw.error === 'string' && raw.error.length > 0) {
+      return res.json({ ok: false, error: raw.error, latencyMs });
+    }
+    // serp.hk-style envelope: `{code, msg, result}` with non-zero code === failure.
+    if (raw && typeof raw.code === 'number' && raw.code !== 0) {
+      const msg = typeof raw.msg === 'string' ? raw.msg : 'proxy error';
+      return res.json({ ok: false, error: `code=${raw.code}: ${msg}`, latencyMs });
+    }
+
+    const result = raw && raw.result && typeof raw.result === 'object' ? raw.result : raw;
+    const organic = result?.organic_results ?? result?.organic;
+    const organicCount = Array.isArray(organic) ? organic.length : 0;
+    return res.json({ ok: true, latencyMs, organicCount });
+  } catch (err) {
+    clearTimeout(timer);
+    if (err.name === 'AbortError') {
+      return res.json({ ok: false, error: `Connection timed out after ${timeout / 1000}s.` });
+    }
+    return res.json({ ok: false, error: err.message || String(err) });
+  }
+});
+
 router.post('/open', async (_req, res) => {
   const configPath = getPilotDeckConfigPath();
   try {

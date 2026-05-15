@@ -135,7 +135,6 @@ export {
   type WebSearchInput,
   type WebSearchOrganicResult,
   type WebSearchOutput,
-  type WebSearchRegion,
 } from "./builtin/webSearch.js";
 export {
   buildMcpToolWireName,

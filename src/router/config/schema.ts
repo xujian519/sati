@@ -64,7 +64,16 @@ export type RouterCustomRouterConfig = {
 };
 
 export type RouterConfig = {
-  scenarios: RouterScenariosConfig;
+  /**
+   * Resolved scenario→model map.
+   *
+   * Optional at the *parse* boundary so a yaml that lists e.g. only
+   * `router.tokenSaver.*` doesn't trip a fatal. `ensureRouterConfig` in
+   * `src/cli/createLocalGateway.ts` always fills `scenarios.default` from
+   * `agent.model` before the runtime sees the value, so callers downstream
+   * of the gateway can keep treating it as required.
+   */
+  scenarios?: RouterScenariosConfig;
   fallback?: RouterFallbackConfig;
   zeroUsageRetry?: { enabled: boolean; maxAttempts: number };
   transientRetry?: { enabled: boolean; maxAttempts: number; baseDelayMs: number; maxDelayMs: number };
