@@ -17,10 +17,12 @@ ORCH_MODEL="${ORCH_MODEL:-}"
 PARALLEL="${PARALLEL:-8}"
 
 CATEGORY="0510_Orchestration_Demo"
-if [[ -n "$ORCH_MODEL" ]]; then
-  BATCH_ID="orch_$(date +%Y%m%d_%H%M)"
-else
-  BATCH_ID="${MODEL//\//_}_$(date +%Y%m%d_%H%M)"
+if [[ -z "$BATCH_ID" ]]; then
+  if [[ -n "$ORCH_MODEL" ]]; then
+    BATCH_ID="orch_$(date +%Y%m%d_%H%M)"
+  else
+    BATCH_ID="${MODEL//\//_}_$(date +%Y%m%d_%H%M)"
+  fi
 fi
 OUTPUT_DIR="$NFS_ROOT/PilotDeck/wcb-output/$BATCH_ID"
 OUTPUT_DIR_CONTAINER="/workspace/PilotDeck/wcb-output/$BATCH_ID"
