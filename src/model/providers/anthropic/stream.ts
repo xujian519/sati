@@ -47,20 +47,26 @@ export function normalizeAnthropicStreamEvent(
     }
     case "message_stop":
       return [];
-    case "error":
+    case "error": {
+      const errObj = asRecord(event.error);
+      const errType = readString(errObj.type) ?? "provider_error";
+      const TRANSIENT_ERROR_TYPES = new Set([
+        "overloaded_error", "rate_limit_error", "api_error", "timeout_error",
+      ]);
       return [
         {
           type: "error",
           error: {
             provider: "anthropic",
             protocol: "anthropic",
-            code: readString(asRecord(event.error).type) ?? "provider_error",
-            message: readString(asRecord(event.error).message) ?? "Anthropic stream error.",
-            retryable: false,
+            code: errType,
+            message: readString(errObj.message) ?? "Anthropic stream error.",
+            retryable: TRANSIENT_ERROR_TYPES.has(errType),
             raw,
           },
         },
       ];
+    }
     default:
       return [];
   }
