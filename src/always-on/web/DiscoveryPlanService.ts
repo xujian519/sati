@@ -424,6 +424,7 @@ export class DiscoveryPlanService {
       sessionSummary: `Always-On: ${updated.title}`,
       command: buildExecutionPrompt(updated, content, projectName),
       executionToken,
+      workspaceCwd: plan.workspace?.cwd,
     };
   }
 

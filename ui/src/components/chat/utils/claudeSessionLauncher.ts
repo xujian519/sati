@@ -16,6 +16,7 @@ type StartClaudeSessionOptions = {
   images?: unknown[];
   alwaysOnPlanId?: string;
   alwaysOnExecutionToken?: string;
+  workspaceCwd?: string;
 };
 
 const VALID_PERMISSION_MODES = new Set<PermissionMode>([
@@ -87,6 +88,7 @@ export function startClaudeSessionCommand({
   images,
   alwaysOnPlanId,
   alwaysOnExecutionToken,
+  workspaceCwd,
 }: StartClaudeSessionOptions): string {
   const sessionToActivate =
     sessionId || temporarySessionId || createTemporarySessionId();
@@ -108,6 +110,7 @@ export function startClaudeSessionCommand({
       ...(alwaysOnPlanId ? { alwaysOnPlanId } : {}),
       ...(alwaysOnExecutionToken ? { alwaysOnExecutionToken } : {}),
       ...(Array.isArray(images) && images.length > 0 ? { images } : {}),
+      ...(workspaceCwd ? { workspaceCwd } : {}),
     },
   });
 

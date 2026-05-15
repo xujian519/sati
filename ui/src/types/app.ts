@@ -186,6 +186,7 @@ export interface ExecuteDiscoveryPlanResponse {
   sessionSummary: string;
   command: string;
   executionToken: string;
+  workspaceCwd?: string;
 }
 
 export interface UpdateDiscoveryPlanExecutionResponse {

@@ -481,6 +481,7 @@ export async function runChatViaGateway(
             mode: resolvePermissionMode(options),
             runId,
             ...(attachments ? { attachments } : {}),
+            ...(options.workspaceCwd ? { workspaceCwd: options.workspaceCwd } : {}),
         });
 
         for await (const event of stream) {

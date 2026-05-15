@@ -94,6 +94,8 @@ export type InProcessGatewayOptions = {
   dispatchHookForSession?: (sessionKey: string, event: string, payload: Record<string, unknown>) => void;
   /** Directory to persist large tool outputs for TUI/Web viewing. */
   toolResultsDir?: string;
+  /** Override a session's cwd via SessionConfigOverrides. */
+  setSessionCwd?: (sessionKey: string, cwd: string) => void;
 };
 
 export class InProcessGateway implements Gateway {
@@ -187,6 +189,10 @@ export class InProcessGateway implements Gateway {
 
     const queue = new AsyncQueue<GatewayEvent>();
     this.emitSinks.set(input.sessionKey, (event) => queue.enqueue(event));
+
+    if (input.workspaceCwd && this.options.setSessionCwd) {
+      this.options.setSessionCwd(input.sessionKey, input.workspaceCwd);
+    }
 
     // Background pump: agent events → queue.
     const pump = (async () => {

@@ -275,6 +275,7 @@ function MainContent({
       toolsSettings: buildAlwaysOnExecutionToolsSettings(),
       alwaysOnPlanId: planId,
       alwaysOnExecutionToken: payload.executionToken,
+      workspaceCwd: payload.workspaceCwd,
     });
 
     refreshProjectsSilently();
@@ -299,6 +300,47 @@ function MainContent({
 
     await launchQueuedDiscoveryPlanExecution(payload);
   }, [launchQueuedDiscoveryPlanExecution, selectedProject]);
+
+  const executeAndLaunchPlan = useCallback(async (
+    projectName: string,
+    planId: string,
+  ) => {
+    const project = projects.find((p) => p.name === projectName);
+    if (!project) {
+      throw new Error(`Project "${projectName}" not found`);
+    }
+
+    const response = await api.executeProjectDiscoveryPlan(projectName, planId, { source: 'manual' });
+    const payload = await readJsonPayload<ExecuteDiscoveryPlanResponse & { error?: string }>(response);
+    if (!response.ok || !payload) {
+      throw new Error(payload?.error || 'Failed to queue discovery plan execution');
+    }
+
+    const resolvedPlanId = payload.plan?.id;
+    if (!resolvedPlanId) {
+      throw new Error('Missing discovery plan id in execution payload');
+    }
+
+    pendingDiscoveryExecutionsRef.current.set(payload.executionToken, {
+      projectName,
+      planId: resolvedPlanId,
+      executionToken: payload.executionToken,
+    });
+
+    startClaudeSessionCommand({
+      sendMessage: trackedSendMessage,
+      selectedProject: project,
+      command: payload.command,
+      permissionMode: 'default',
+      sessionSummary: payload.sessionSummary,
+      toolsSettings: buildAlwaysOnExecutionToolsSettings(),
+      alwaysOnPlanId: resolvedPlanId,
+      alwaysOnExecutionToken: payload.executionToken,
+      workspaceCwd: payload.workspaceCwd,
+    });
+
+    refreshProjectsSilently();
+  }, [projects, refreshProjectsSilently, trackedSendMessage]);
 
   const flashToast = useCallback((toastValue: MainContentToast, ms = 2400) => {
     setToast(toastValue);
@@ -896,6 +938,7 @@ function SplitBody(props: SplitBodyProps) {
       return (
         <AlwaysOnV2
           selectedProject={selectedProject}
+          onExecutePlan={executeAndLaunchPlan}
         />
       );
     }

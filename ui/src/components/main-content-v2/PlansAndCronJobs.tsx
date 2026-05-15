@@ -123,7 +123,11 @@ const COL = {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function PlansAndCronJobs() {
+type PlansAndCronJobsProps = {
+  onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
+};
+
+export default function PlansAndCronJobs({ onExecutePlan }: PlansAndCronJobsProps) {
   const { t } = useTranslation('alwaysOn');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -364,6 +368,7 @@ export default function PlansAndCronJobs() {
                           item={item}
                           t={t}
                           onRefresh={refresh}
+                          onExecutePlan={onExecutePlan}
                         />
                       ))}
                     </div>
@@ -386,10 +391,12 @@ function ItemRow({
   item,
   t,
   onRefresh,
+  onExecutePlan,
 }: {
   item: UnifiedItem;
   t: (key: string, opts?: Record<string, string>) => string;
   onRefresh: () => Promise<void>;
+  onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -451,10 +458,14 @@ function ItemRow({
     if (!plan || busy) return;
     setBusy(true);
     try {
-      const res = await api.executeProjectDiscoveryPlan(item.projectName, plan.id, { source: 'manual' });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(body?.error || `HTTP ${res.status}`);
+      if (onExecutePlan) {
+        await onExecutePlan(item.projectName, plan.id);
+      } else {
+        const res = await api.executeProjectDiscoveryPlan(item.projectName, plan.id, { source: 'manual' });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({})) as { error?: string };
+          throw new Error(body?.error || `HTTP ${res.status}`);
+        }
       }
       await onRefresh();
     } catch {
