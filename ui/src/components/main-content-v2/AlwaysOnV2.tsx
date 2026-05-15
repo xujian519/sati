@@ -78,6 +78,7 @@ export default function AlwaysOnV2({ selectedProject, onExecutePlan, onApplyPlan
             planId={planDetail.planId}
             projectName={planDetail.projectName}
             projectDisplayName={planDetail.projectDisplayName}
+            backLabel={t('dashboard.runDetail.backToPlans', { defaultValue: 'Back to Plans & Cron Jobs' })}
             onBack={() => setPlanDetail(null)}
             onOpenExecutionSession={onOpenExecutionSession}
           />
