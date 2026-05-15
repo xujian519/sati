@@ -15,9 +15,10 @@ type AlwaysOnV2Props = {
   selectedProject: Project | null;
   onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
   onApplyPlan?: (projectName: string, planId: string) => Promise<void>;
+  onOpenExecutionSession?: (projectKey: string, runId: string) => void;
 };
 
-export default function AlwaysOnV2({ selectedProject, onExecutePlan, onApplyPlan }: AlwaysOnV2Props) {
+export default function AlwaysOnV2({ selectedProject, onExecutePlan, onApplyPlan, onOpenExecutionSession }: AlwaysOnV2Props) {
   const { t } = useTranslation('alwaysOn');
   const [subTab, setSubTab] = useState<AlwaysOnSubTab>('dashboard');
 
@@ -57,7 +58,7 @@ export default function AlwaysOnV2({ selectedProject, onExecutePlan, onApplyPlan
 
       {/* Sub-tab content */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {subTab === 'dashboard' ? <AlwaysOnDashboard /> : <PlansAndCronJobs onExecutePlan={onExecutePlan} onApplyPlan={onApplyPlan} />}
+        {subTab === 'dashboard' ? <AlwaysOnDashboard onOpenExecutionSession={onOpenExecutionSession} /> : <PlansAndCronJobs onExecutePlan={onExecutePlan} onApplyPlan={onApplyPlan} />}
       </div>
     </div>
   );

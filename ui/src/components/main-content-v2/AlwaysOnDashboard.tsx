@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Activity,
   AlertCircle,
+  ArrowLeft,
   CheckCircle2,
   Clock,
   FileText,
@@ -152,11 +153,24 @@ function isErrorPhase(phase: AlwaysOnDashboardEventPhase): boolean {
   return phase === 'run_failed' || phase === 'cron_failed';
 }
 
-export default function AlwaysOnDashboard() {
+type EventClickAction = 'detail' | 'session' | 'none';
+
+function getEventClickAction(phase: AlwaysOnDashboardEventPhase): EventClickAction {
+  if (phase === 'plan_produced' || phase === 'report_produced') return 'detail';
+  if (phase === 'execution_started' || phase === 'execution_completed') return 'session';
+  return 'none';
+}
+
+type AlwaysOnDashboardProps = {
+  onOpenExecutionSession?: (projectKey: string, runId: string) => void;
+};
+
+export default function AlwaysOnDashboard({ onOpenExecutionSession }: AlwaysOnDashboardProps) {
   const { t } = useTranslation('alwaysOn');
   const [events, setEvents] = useState<AlwaysOnDashboardEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<AlwaysOnDashboardEvent | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -224,6 +238,76 @@ export default function AlwaysOnDashboard() {
 
     return { todayEvents, activeProjectCount: activeProjects.size, runningCount };
   }, [events]);
+
+  const handleEventClick = useCallback(
+    (event: AlwaysOnDashboardEvent) => {
+      const action = getEventClickAction(event.phase);
+      if (action === 'detail') {
+        setSelectedEvent(event);
+      } else if (action === 'session') {
+        onOpenExecutionSession?.(event.projectKey, event.runId);
+      }
+    },
+    [onOpenExecutionSession],
+  );
+
+  if (selectedEvent) {
+    const meta = PHASE_META[selectedEvent.phase] || PHASE_META.discovery_started;
+    const Icon = meta.icon;
+    const colorIdx = projectColorMap.get(selectedEvent.projectName) ?? 0;
+
+    return (
+      <div className="w-full space-y-5 px-8 py-5">
+        <button
+          type="button"
+          onClick={() => setSelectedEvent(null)}
+          className="inline-flex items-center gap-1.5 text-[13px] text-neutral-500 transition hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
+          {t('dashboard.detail.back', { defaultValue: 'Back to events' })}
+        </button>
+
+        <div className="rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
+          <div className="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+            <div className="flex items-center gap-3">
+              <div className={cn('shrink-0', meta.color)}>
+                <Icon className="h-5 w-5" strokeWidth={1.75} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className={cn('text-[14px] font-semibold', meta.color)}>
+                  {t(meta.labelKey, { defaultValue: meta.defaultLabel })}
+                </span>
+                <span
+                  className={cn(
+                    'ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
+                    getProjectColor(colorIdx),
+                  )}
+                  title={selectedEvent.projectKey}
+                >
+                  {selectedEvent.projectDisplayName}
+                </span>
+              </div>
+              <div
+                className="shrink-0 font-mono text-xxs text-neutral-400 dark:text-neutral-500"
+                title={formatAbsoluteTime(selectedEvent.timestamp)}
+              >
+                {formatRelativeTime(selectedEvent.timestamp)}
+              </div>
+            </div>
+            {selectedEvent.title ? (
+              <p className="mt-2 text-[13px] text-neutral-700 dark:text-neutral-300">
+                {selectedEvent.title}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="flex items-center justify-center px-5 py-16 text-[13px] text-neutral-400 dark:text-neutral-500">
+            {t('dashboard.detail.placeholder', { defaultValue: 'Details coming soon.' })}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full space-y-5 px-8 py-5">
@@ -306,13 +390,20 @@ export default function AlwaysOnDashboard() {
               const meta = PHASE_META[event.phase] || PHASE_META.discovery_started;
               const Icon = meta.icon;
               const colorIdx = projectColorMap.get(event.projectName) ?? 0;
+              const clickAction = getEventClickAction(event.phase);
+              const isClickable = clickAction !== 'none';
 
               return (
                 <div
                   key={event.eventId}
+                  role={isClickable ? 'button' : undefined}
+                  tabIndex={isClickable ? 0 : undefined}
+                  onClick={isClickable ? () => handleEventClick(event) : undefined}
+                  onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleEventClick(event); } } : undefined}
                   className={cn(
                     'flex items-start gap-3 px-5 py-3 transition-colors',
                     isErrorPhase(event.phase) && 'bg-red-50/40 dark:bg-red-950/10',
+                    isClickable && 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900',
                   )}
                 >
                   {/* Phase icon */}

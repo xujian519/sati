@@ -20,6 +20,10 @@
     "eventList": {
       "title": "近期事件"
     },
+    "detail": {
+      "back": "返回事件列表",
+      "placeholder": "详细内容即将推出。"
+    },
     "phase": {
       "discoveryStarted": "发现已启动",
       "planProduced": "已产出计划",

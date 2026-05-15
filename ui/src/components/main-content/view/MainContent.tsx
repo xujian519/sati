@@ -487,6 +487,14 @@ function MainContent({
     setActiveTab,
   ]);
 
+  const handleOpenExecutionSession = useCallback(
+    (projectKey: string, runId: string) => {
+      const sessionId = `always-on/execute:project=${projectKey}:run=${runId}`;
+      void handleOpenAlwaysOnSession({ kind: 'origin', sessionId });
+    },
+    [handleOpenAlwaysOnSession],
+  );
+
   useEffect(() => {
     const message = latestMessage as {
       kind?: string;
@@ -986,6 +994,7 @@ function SplitBody(props: SplitBodyProps) {
           selectedProject={selectedProject}
           onExecutePlan={executeAndLaunchPlan}
           onApplyPlan={applyAndLaunchPlan}
+          onOpenExecutionSession={handleOpenExecutionSession}
         />
       );
     }

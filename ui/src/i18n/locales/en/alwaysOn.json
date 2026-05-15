@@ -20,6 +20,10 @@
     "eventList": {
       "title": "Recent Events"
     },
+    "detail": {
+      "back": "Back to events",
+      "placeholder": "Details coming soon."
+    },
     "phase": {
       "discoveryStarted": "Discovery Started",
       "planProduced": "Plan Produced",
