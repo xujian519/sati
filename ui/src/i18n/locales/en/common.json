@@ -169,7 +169,7 @@
     "loading": "Loading PilotDeck",
     "settingUpWorkspace": "Setting up your workspace...",
     "chooseProject": "Choose Your Project",
-    "selectProjectDescription": "Select a project from the sidebar to start coding with Claude. Each project contains your chat sessions and file history.",
+    "selectProjectDescription": "Select a project from the sidebar to start coding with PilotDeck. Each project contains your chat sessions and file history.",
     "tip": "Tip",
     "createProjectMobile": "Tap the menu button above to access projects",
     "createProjectDesktop": "Create a new project by clicking the folder icon in the sidebar",
