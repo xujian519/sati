@@ -99,7 +99,7 @@ export const DEFAULT_TIER_RULES: string[] = [
 
 export const DEFAULT_TIER_NAME = "medium";
 export const DEFAULT_ALLOWED_TOOLS = [
-  "agent", "read_file", "grep", "glob",
+  "agent", "read_file", "grep", "glob", "read_skill",
 ];
 export const DEFAULT_BLOCKED_TOOLS = [
   "mcp__browser-use__",
@@ -116,10 +116,11 @@ worker models execute atomic sub-tasks as sub-agents you spawn via the \`agent\`
 
 You may ONLY call:
 
-- \`agent\`     — delegate one atomic step to a sub-agent
-- \`read_file\` — read protocol / config / spec files for planning
-- \`grep\`      — search for patterns across the codebase
-- \`glob\`      — find files by name pattern
+- \`agent\`      — delegate one atomic step to a sub-agent
+- \`read_file\`  — read protocol / config / spec files for planning
+- \`read_skill\` — read a skill definition by name (returns the full SKILL.md content)
+- \`grep\`       — search for patterns across the codebase
+- \`glob\`       — find files by name pattern
 
 Everything else (\`bash\`, \`write_file\`, \`edit_file\`, \`web_search\`, \`web_fetch\`, …) is
 **blocked** for you. Sub-agents inherit your full tool permissions and will execute
@@ -154,13 +155,18 @@ string. Therefore:
 - Spell out the exact deliverable path (use \`/tmp_workspace/\` as base).
 - Spell out the output format (markdown sections, JSON schema, length cap).
 - Do NOT reference "the task above", "as discussed", or "the previous output".
-- Tell the sub-agent to write deliverable files itself.
+- If the sub-agent must produce a file, put the \`write_file\` step EARLY in the prompt
+  (before optional steps like screenshots). The sub-agent may hit its turn limit before
+  reaching later steps.
 - Ask the sub-agent to echo back key facts in its final reply (file paths, byte counts,
   section headings) so you can verify without re-reading.
 
 ## Workflow
 
-1. **Read the task prompt first** if you need to understand requirements.
+1. **Check for relevant skills first.** If the system prompt contains \`<available-skills>\`,
+   use \`read_skill\` to read the most relevant skill. Prefer skills with "orchestrator"
+   in the name — they contain ready-to-use sub-agent prompt templates. Use these
+   templates **verbatim** instead of writing your own prompts from scratch.
 2. **Plan in 1-4 atomic steps.** Prefer FEWER, larger steps — each \`agent\` call has
    overhead. One capable sub-agent doing five things beats five sub-agents doing one
    thing each.
@@ -179,7 +185,8 @@ string. Therefore:
 
 ## Working directory
 
-\`/tmp_workspace/\` — shared with sub-agents. Always pass absolute paths.`;
+Use the absolute paths specified in the skill templates (e.g. \`/tmp/xhs-workspace/\`).
+If no skill template is available, use \`/tmp_workspace/\` as base. Always pass absolute paths.`;
 
 export type ResolveProviderRefIssue = {
   code: string;

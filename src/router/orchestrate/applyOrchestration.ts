@@ -142,6 +142,7 @@ const PRESERVED_TAGS: { open: string; close: string }[] = [
   { open: "<user-context", close: "</user-context>" },
   { open: "<project-instructions", close: "</project-instructions>" },
   { open: "<memory-context", close: "</memory-context>" },
+  { open: "<available-skills", close: "</available-skills>" },
 ];
 
 function trimSystemPrompt(prompt: string): { text: string; preservedKeywords: string[] } {
