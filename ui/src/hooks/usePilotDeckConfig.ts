@@ -58,8 +58,23 @@ export function usePilotDeckConfig() {
   // Track local edits so we don't clobber unsaved input.
   const savedRawRef = useRef<string>('');
   const [isDirty, setIsDirty] = useState(false);
+  // Mirror `isDirty` into a ref so the WS-message effect can read the
+  // current value WITHOUT subscribing to it. Subscribing would re-run
+  // the effect every time the user types one character, which would
+  // re-apply the last cached `config:reloaded` payload and silently
+  // revert their unsaved edits — exactly the "form fields stop
+  // accepting input + unsaved badge flickers" bug.
+  const isDirtyRef = useRef(isDirty);
+  useEffect(() => {
+    isDirtyRef.current = isDirty;
+  }, [isDirty]);
 
   const { latestMessage } = useWebSocket();
+  // Apply each `config:reloaded` broadcast exactly once. Without this,
+  // any unrelated re-render that re-evaluates the deps below would
+  // re-run applyResponse against a stale-but-still-current
+  // `latestMessage` object reference.
+  const lastAppliedMessageRef = useRef<unknown>(null);
 
   const applyResponse = useCallback((data: ConfigResponse, source: ReloadSource = 'refresh') => {
     setPath(data.path);
@@ -98,6 +113,13 @@ export function usePilotDeckConfig() {
 
   useEffect(() => {
     if (!latestMessage || latestMessage.type !== 'config:reloaded') return;
+    // Each new WS frame produces a new object reference; if we've
+    // already applied this one, skip — otherwise we'd re-write `raw`
+    // every time a sibling state (e.g. isDirty, focus state) caused a
+    // re-render and React re-evaluated this effect's body.
+    if (lastAppliedMessageRef.current === latestMessage) return;
+    lastAppliedMessageRef.current = latestMessage;
+
     const payload = latestMessage as ConfigResponse & {
       source?: ReloadSource;
       timestamp?: string;
@@ -105,7 +127,9 @@ export function usePilotDeckConfig() {
     const source: ReloadSource = payload.source ?? 'watcher';
 
     // If the user has unsaved changes, preserve them and just surface a notice.
-    if (isDirty && source === 'watcher') {
+    // Read isDirty via ref so this effect doesn't subscribe to it (see
+    // isDirtyRef declaration above for why).
+    if (isDirtyRef.current && source === 'watcher') {
       setExternalChangeNotice(
         'Config was changed on disk by an external edit. Your unsaved draft is kept — click Refresh to discard and load the new version.',
       );
@@ -133,7 +157,7 @@ export function usePilotDeckConfig() {
     } else {
       setExternalChangeNotice(null);
     }
-  }, [latestMessage, isDirty, applyResponse]);
+  }, [latestMessage, applyResponse]);
 
   const save = useCallback(async () => {
     setSaving(true);
