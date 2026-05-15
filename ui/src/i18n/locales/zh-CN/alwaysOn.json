@@ -52,6 +52,8 @@
       "apply": "应用",
       "retry": "重新执行",
       "delete": "删除",
+      "runNow": "立即运行",
+      "stop": "停止",
       "confirmDelete": "确定要删除此计划吗？隔离环境将被清理。",
       "applySuccess": "变更已成功应用。",
       "applyError": "应用变更失败。"

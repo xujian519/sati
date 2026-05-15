@@ -64,6 +64,7 @@ import {
     getRouterDashboardData,
     getRouterSessionStats,
     getRouterStatsSummary,
+    getPilotDeckGateway,
 } from './pilotdeck-bridge.js';
 import sessionManager from './sessionManager.js';
 import gitRoutes from './routes/git.js';
@@ -615,6 +616,39 @@ app.get('/api/always-on/cron-jobs', authenticateToken, async (_req, res) => {
     } catch (error) {
         console.error('[always-on-cron-jobs] failed:', error);
         res.status(500).json({ error: error?.message || 'always-on-cron-jobs failed' });
+    }
+});
+
+app.post('/api/always-on/cron-jobs/:taskId/run-now', authenticateToken, async (req, res) => {
+    try {
+        const gateway = await getPilotDeckGateway();
+        const result = await gateway.cronRunNow({ taskId: req.params.taskId });
+        res.json(result);
+    } catch (error) {
+        console.error('[always-on-cron-run-now] failed:', error);
+        res.status(500).json({ error: error?.message || 'cron run-now failed' });
+    }
+});
+
+app.post('/api/always-on/cron-jobs/:taskId/stop', authenticateToken, async (req, res) => {
+    try {
+        const gateway = await getPilotDeckGateway();
+        const result = await gateway.cronStop({ taskId: req.params.taskId });
+        res.json(result);
+    } catch (error) {
+        console.error('[always-on-cron-stop] failed:', error);
+        res.status(500).json({ error: error?.message || 'cron stop failed' });
+    }
+});
+
+app.delete('/api/always-on/cron-jobs/:taskId', authenticateToken, async (req, res) => {
+    try {
+        const gateway = await getPilotDeckGateway();
+        const result = await gateway.cronDelete({ taskId: req.params.taskId, stopRunning: true });
+        res.json(result);
+    } catch (error) {
+        console.error('[always-on-cron-delete] failed:', error);
+        res.status(500).json({ error: error?.message || 'cron delete failed' });
     }
 });
 

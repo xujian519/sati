@@ -56,6 +56,12 @@ export const api = {
     authenticatedFetch(`/api/always-on/events?limit=${encodeURIComponent(limit)}${since ? `&since=${encodeURIComponent(since)}` : ''}`),
   allCronJobs: () =>
     authenticatedFetch('/api/always-on/cron-jobs'),
+  cronRunNow: (taskId) =>
+    authenticatedFetch(`/api/always-on/cron-jobs/${encodeURIComponent(taskId)}/run-now`, { method: 'POST' }),
+  cronStop: (taskId) =>
+    authenticatedFetch(`/api/always-on/cron-jobs/${encodeURIComponent(taskId)}/stop`, { method: 'POST' }),
+  cronDelete: (taskId) =>
+    authenticatedFetch(`/api/always-on/cron-jobs/${encodeURIComponent(taskId)}`, { method: 'DELETE' }),
   projectDiscoveryContext: (projectName) =>
     authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-context`),
   projectDiscoveryPlans: (projectName) =>
