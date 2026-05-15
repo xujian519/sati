@@ -23,7 +23,7 @@ import { SnapshotCopyProvider } from "../workspace/SnapshotCopyProvider.js";
 import { WorkspaceProviderRegistry } from "../workspace/WorkspaceProviderRegistry.js";
 import { AlwaysOnRunContextRegistry } from "./AlwaysOnRunContextRegistry.js";
 import { ChannelLeaseRegistry } from "./ChannelLeaseRegistry.js";
-import { DiscoveryFire } from "./DiscoveryFire.js";
+import { DiscoveryFire, type DiscoveryFireDependencies } from "./DiscoveryFire.js";
 import { DiscoveryScheduler } from "./DiscoveryScheduler.js";
 import { SessionConfigOverrides } from "./SessionConfigOverrides.js";
 
@@ -45,6 +45,7 @@ export type CreateAlwaysOnRuntimeOptions = {
   toolContractOptions?: CreateAlwaysOnDiscoveryPlanToolOptions["contract"];
   onWorktreeCreated?: (runId: string, cwd: string) => void;
   onWorktreeRemoved?: (cwd: string) => void;
+  onTurnEvent?: DiscoveryFireDependencies["onTurnEvent"];
   /** Shared run-context registry (used by AlwaysOnManager for multi-project). */
   runContexts?: AlwaysOnRunContextRegistry;
   /** Shared session-config overrides (used by AlwaysOnManager for multi-project). */
@@ -102,6 +103,7 @@ export class AlwaysOnRuntime {
   private readonly isSessionInFlight: () => boolean;
   private readonly onWorktreeCreated?: (runId: string, cwd: string) => void;
   private readonly onWorktreeRemoved?: (cwd: string) => void;
+  private readonly onTurnEvent?: DiscoveryFireDependencies["onTurnEvent"];
 
   private gateway?: Gateway;
   private fire?: DiscoveryFire;
@@ -130,6 +132,7 @@ export class AlwaysOnRuntime {
     this.sessionOverrides = options.sessionOverrides ?? new SessionConfigOverrides();
     this.onWorktreeCreated = options.onWorktreeCreated;
     this.onWorktreeRemoved = options.onWorktreeRemoved;
+    this.onTurnEvent = options.onTurnEvent;
     this.workspaceRegistry = options.workspaceRegistry ?? this.buildDefaultWorkspaceRegistry();
 
     this.tools = options.skipToolCreation
@@ -191,6 +194,7 @@ export class AlwaysOnRuntime {
       uuid: this.uuid,
       now: this.now,
       logger: this.logger,
+      onTurnEvent: this.onTurnEvent,
     });
     this.scheduler = new DiscoveryScheduler({
       config: this.config,
@@ -225,6 +229,34 @@ export class AlwaysOnRuntime {
     this.runContexts.list().forEach((ctx) => this.runContexts.unregister(ctx.sessionKey));
     this.sessionOverrides.clear();
     this.logger.info("always-on runtime stopped", { projectKey: this.projectKey });
+  }
+
+  async applyPlan(input: {
+    planId: string;
+    projectRoot: string;
+    projectName: string;
+  }): Promise<{ sessionKey: string; error?: { code: string; message: string } }> {
+    if (!this.fire) {
+      return { sessionKey: "", error: { code: "not_ready", message: "AlwaysOnRuntime.bindGateway not called" } };
+    }
+    const plan = await this.planStore.getRecord(input.planId);
+    if (!plan) {
+      return { sessionKey: "", error: { code: "plan_not_found", message: `Plan ${input.planId} not found` } };
+    }
+
+    const runId = this.uuid();
+    const result = await this.fire.runApplyPhase({
+      runId,
+      plan: {
+        id: plan.id,
+        title: plan.title,
+        workspace: plan.workspace,
+      },
+      projectName: input.projectName,
+      projectRoot: input.projectRoot,
+    });
+
+    return { sessionKey: result.sessionKey, error: result.error };
   }
 
   private buildDefaultWorkspaceRegistry(): WorkspaceProviderRegistry {

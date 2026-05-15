@@ -22,6 +22,8 @@ import type {
   ListSessionsInput,
   ListSessionsResult,
   NewSessionInput,
+  AlwaysOnApplyInput,
+  AlwaysOnApplyResult,
   ReloadConfigResult,
   WebDescribeProjectInput,
   WebListProjectsResult,
@@ -113,6 +115,8 @@ export type InProcessGatewayOptions = {
   toolResultsDir?: string;
   /** Override a session's cwd via SessionConfigOverrides. */
   setSessionCwd?: (sessionKey: string, cwd: string) => void;
+  /** Delegate for Always-On apply — wired to AlwaysOnManager.applyPlan. */
+  alwaysOnApply?: (input: AlwaysOnApplyInput) => Promise<AlwaysOnApplyResult>;
 };
 
 export class InProcessGateway implements Gateway {
@@ -430,6 +434,10 @@ export class InProcessGateway implements Gateway {
     (this.options as { cron?: GatewayCronController }).cron = cron;
   }
 
+  setAlwaysOnApply(handler: InProcessGatewayOptions["alwaysOnApply"]): void {
+    (this.options as { alwaysOnApply?: InProcessGatewayOptions["alwaysOnApply"] }).alwaysOnApply = handler;
+  }
+
   // -------------------------------------------------------------------
   // Skill management — see `SkillManager` for the actual disk ops. The
   // gateway methods just guard "skill manager configured" and translate
@@ -478,6 +486,13 @@ export class InProcessGateway implements Gateway {
       );
     }
     return this.options.skillManager;
+  }
+
+  async alwaysOnApply(input: AlwaysOnApplyInput): Promise<AlwaysOnApplyResult> {
+    if (!this.options.alwaysOnApply) {
+      return { sessionKey: "", error: { code: "not_configured", message: "Always-On apply is not configured on this gateway." } };
+    }
+    return this.options.alwaysOnApply(input);
   }
 
   private requireCron(): GatewayCronController {

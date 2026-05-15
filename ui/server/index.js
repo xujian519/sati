@@ -65,6 +65,7 @@ import {
     getRouterSessionStats,
     getRouterStatsSummary,
     getPilotDeckGateway,
+    registerAlwaysOnNotificationForwarding,
 } from './pilotdeck-bridge.js';
 import sessionManager from './sessionManager.js';
 import gitRoutes from './routes/git.js';
@@ -136,6 +137,7 @@ const alwaysOnDiscoveryTriggerClient = startDiscoveryTriggerClient({
     clients: connectedClients,
     getWriterId: (ws) => alwaysOnHeartbeat.getWriterId(ws)
 });
+registerAlwaysOnNotificationForwarding(connectedClients);
 let isGetProjectsRunning = false; // Flag to prevent reentrant calls
 let pilotDeckProxyProcess = null;
 

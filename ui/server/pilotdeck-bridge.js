@@ -1398,6 +1398,58 @@ export function getRouterStatsSummary() {
     };
 }
 
+/**
+ * Register a notification handler that forwards Always-On turn events
+ * to all connected browser WebSocket clients as NormalizedMessage frames.
+ *
+ * Called once from `index.js` after the WebSocket server is ready, passing
+ * the shared `connectedClients` set.
+ *
+ * @param {Set<import('ws').WebSocket>} clients
+ */
+export function registerAlwaysOnNotificationForwarding(clients) {
+    const knownSessions = new Set();
+
+    ensureGateway().then((gw) => {
+        gw.onNotification((name, payload) => {
+            if (name !== 'always-on:turn-event') return;
+            const { sessionKey, channelKey, event } = payload ?? {};
+            if (!sessionKey || !event) return;
+
+            const provider = 'pilotdeck';
+
+            if (!knownSessions.has(sessionKey)) {
+                knownSessions.add(sessionKey);
+                const createdFrame = createNormalizedMessage({
+                    provider,
+                    sessionId: sessionKey,
+                    kind: 'session_created',
+                    newSessionId: sessionKey,
+                    sessionKey,
+                    channelKey,
+                });
+                const createdMsg = JSON.stringify(createdFrame);
+                for (const client of clients) {
+                    if (client.readyState === 1) client.send(createdMsg);
+                }
+            }
+
+            for (const frame of gatewayEventToFrames(event, sessionKey, provider)) {
+                const msg = JSON.stringify(frame);
+                for (const client of clients) {
+                    if (client.readyState === 1) client.send(msg);
+                }
+            }
+
+            if (event.type === 'turn_completed') {
+                knownSessions.delete(sessionKey);
+            }
+        });
+    }).catch((err) => {
+        console.warn('[pilotdeck-bridge] failed to register always-on notification forwarding:', err?.message || err);
+    });
+}
+
 export async function elicitationRespondViaGateway(requestId, answer) {
     const gw = await ensureGateway();
     for (const state of sessionState.values()) {

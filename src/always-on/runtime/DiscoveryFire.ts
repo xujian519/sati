@@ -22,7 +22,8 @@ import { DiscoveryReportStore } from "../storage/DiscoveryReportStore.js";
 import { DiscoveryStateStore } from "../storage/DiscoveryStateStore.js";
 import type { WorkspaceProviderRegistry } from "../workspace/WorkspaceProviderRegistry.js";
 import type { AlwaysOnRunContextRegistry, ExecutionRunContext, DiscoveryRunContext, WorkspaceRunContext, ReportRunContext } from "./AlwaysOnRunContextRegistry.js";
-import { buildDiscoveryPrompt, buildExecutionPrompt, buildWorkspacePrompt, buildReportPrompt } from "./discoveryPrompts.js";
+import { generateWorkspaceDiff } from "../workspace/WorkspaceApply.js";
+import { buildDiscoveryPrompt, buildExecutionPrompt, buildWorkspacePrompt, buildReportPrompt, buildApplyPrompt } from "./discoveryPrompts.js";
 import type { SessionConfigOverrides } from "./SessionConfigOverrides.js";
 
 export type DiscoveryFireDependencies = {
@@ -40,6 +41,7 @@ export type DiscoveryFireDependencies = {
   uuid: () => string;
   now: () => Date;
   logger?: { info: (msg: string, data?: Record<string, unknown>) => void; warn: (msg: string, data?: Record<string, unknown>) => void };
+  onTurnEvent?: (sessionKey: string, channelKey: string, event: GatewayEvent) => void;
 };
 
 export type DiscoveryFireRunInput = {
@@ -52,6 +54,7 @@ const DISCOVERY_CHANNEL: GatewayChannelKey = "always-on/discovery";
 const WORKSPACE_CHANNEL: GatewayChannelKey = "always-on/workspace";
 const EXECUTION_CHANNEL: GatewayChannelKey = "always-on/execute";
 const REPORT_CHANNEL: GatewayChannelKey = "always-on/report";
+const APPLY_CHANNEL: GatewayChannelKey = "always-on/apply";
 
 export type EnsureAlwaysOnWorkspaceInput = {
   state: AlwaysOnDiscoveryState;
@@ -136,6 +139,67 @@ export class DiscoveryFire {
 
   static deriveReportSessionKey(projectKey: string, runId: string): string {
     return `always-on/report:project=${projectKey}:run=${runId}`;
+  }
+
+  static deriveApplySessionKey(projectKey: string, runId: string): string {
+    return `always-on/apply:project=${projectKey}:run=${runId}`;
+  }
+
+  async runApplyPhase(input: {
+    runId: string;
+    plan: { id: string; title: string; workspace?: { cwd: string; strategy: string } };
+    projectName: string;
+    projectRoot: string;
+  }): Promise<{ events: GatewayEvent[]; error?: { code: string; message: string }; sessionKey: string }> {
+    const { plan, projectRoot } = input;
+    if (!plan.workspace?.cwd) {
+      return {
+        events: [],
+        error: { code: "missing_workspace", message: "Plan has no associated workspace to apply" },
+        sessionKey: "",
+      };
+    }
+
+    const diff = await generateWorkspaceDiff(
+      plan.workspace.strategy,
+      plan.workspace.cwd,
+      projectRoot,
+    );
+
+    const sessionKey = DiscoveryFire.deriveApplySessionKey(this.deps.projectKey, input.runId);
+    this.deps.sessionOverrides.set(sessionKey, {
+      cwd: projectRoot,
+      permissionMode: "bypassPermissions",
+      bypassAvailable: true,
+      canPrompt: false,
+    });
+
+    try {
+      const events = await this.drainTurn({
+        sessionKey,
+        channelKey: APPLY_CHANNEL,
+        runId: `${input.runId}.apply`,
+        message: buildApplyPrompt({
+          plan,
+          projectName: input.projectName,
+          projectRoot,
+          diff,
+        }),
+        mode: "bypassPermissions",
+        persistEvents: true,
+      });
+      const error = pickFirstError(events);
+      return {
+        events,
+        sessionKey,
+        error: error ? { code: error.code ?? "apply_failed", message: error.message } : undefined,
+      };
+    } finally {
+      this.deps.sessionOverrides.delete(sessionKey);
+      await this.deps.gateway
+        .closeSession({ sessionKey, reason: "always-on/done" })
+        .catch(() => undefined);
+    }
   }
 
   async run(input: DiscoveryFireRunInput): Promise<DiscoveryFireResult> {
@@ -590,6 +654,7 @@ export class DiscoveryFire {
       projectKey: this.deps.projectKey,
     })) {
       events.push(event);
+      this.deps.onTurnEvent?.(input.sessionKey, input.channelKey, event);
       if (input.persistEvents) {
         await this.deps.reportStore
           .appendRunEvent(input.runId, event as unknown as Record<string, unknown>)

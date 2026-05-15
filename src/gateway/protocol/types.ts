@@ -210,6 +210,17 @@ export type ReloadConfigResult = {
   changedPaths?: string[];
 };
 
+export type AlwaysOnApplyInput = {
+  projectKey: string;
+  planId: string;
+  projectName: string;
+};
+
+export type AlwaysOnApplyResult = {
+  sessionKey: string;
+  error?: { code: string; message: string };
+};
+
 export interface Gateway {
   submitTurn(input: GatewaySubmitTurnInput): AsyncIterable<GatewayEvent>;
   abortTurn(input: { sessionKey: string; runId?: string }): Promise<void>;
@@ -277,6 +288,14 @@ export interface Gateway {
    * Optional — a `RemoteGateway` backed by an older server without
    * these methods leaves them undefined; hosts should feature-detect.
    */
+  /**
+   * Trigger an Always-On apply phase: merge workspace changes into the
+   * project root via a `bypassPermissions` agent loop inside
+   * `DiscoveryFire.drainTurn`. Progress events are broadcast as
+   * `always-on:turn-event` notifications.
+   */
+  alwaysOnApply?(input: AlwaysOnApplyInput): Promise<AlwaysOnApplyResult>;
+
   skillsList?(input: SkillsListInput): Promise<SkillsListResult>;
   skillRead?(input: SkillAddressInput): Promise<SkillReadResult>;
   skillWrite?(input: SkillWriteInput): Promise<SkillWriteResult>;

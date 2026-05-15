@@ -107,7 +107,8 @@ export type WebGatewayMethod =
   | "skill_delete"
   | "skill_import"
   | "skill_validate"
-  | "skill_scan";
+  | "skill_scan"
+  | "always_on_apply";
 
 export type WebSubmitTurnInput = {
   sessionKey: string;
