@@ -78,6 +78,7 @@ export class CronRuntime {
   }
 
   getTools(): PilotDeckToolDefinition[] {
+    if (!this.config.enabled) return [];
     return [...this.tools];
   }
 
@@ -124,6 +125,9 @@ export class CronRuntime {
   }
 
   async createTask(input: CronCreateInput): Promise<CronCreateResult> {
+    if (!this.config.enabled) {
+      throw new Error("Cron is disabled. Enable it in pilotdeck.yaml to create tasks.");
+    }
     const now = this.now();
     const taskId = this.uuid();
     const sessionKey = buildCronSessionKey(taskId);
