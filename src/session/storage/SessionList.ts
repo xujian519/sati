@@ -3,6 +3,16 @@ import { join, resolve } from "node:path";
 import { getPilotProjectChatDir } from "../../pilot/index.js";
 import { readSessionLite, type SessionLiteFile } from "./SessionLiteReader.js";
 
+const ALWAYS_ON_AUXILIARY_PREFIXES = [
+  "always-on-discovery:",
+  "always-on-workspace:",
+  "always-on-report:",
+];
+
+function isInternalSession(sessionId: string): boolean {
+  return ALWAYS_ON_AUXILIARY_PREFIXES.some((p) => sessionId.startsWith(p));
+}
+
 export type SessionInfo = {
   sessionId: string;
   summary: string;
@@ -21,6 +31,7 @@ export type ListProjectSessionsOptions = {
   pilotHome: string;
   limit?: number;
   offset?: number;
+  includeInternal?: boolean;
 };
 
 export async function listProjectSessions(options: ListProjectSessionsOptions): Promise<SessionInfo[]> {
@@ -41,7 +52,11 @@ export async function listProjectSessions(options: ListProjectSessionsOptions): 
     if (!lite) {
       continue;
     }
-    const info = parseSessionInfoFromLite(name.slice(0, -".jsonl".length), lite, options.projectRoot);
+    const sessionId = name.slice(0, -".jsonl".length);
+    if (!options.includeInternal && isInternalSession(sessionId)) {
+      continue;
+    }
+    const info = parseSessionInfoFromLite(sessionId, lite, options.projectRoot);
     if (info) {
       sessions.push(info);
     }
@@ -132,6 +147,7 @@ export type ListAllSessionsOptions = {
   pilotHome: string;
   limit?: number;
   offset?: number;
+  includeInternal?: boolean;
 };
 
 /**
@@ -161,9 +177,11 @@ export async function listAllSessions(options: ListAllSessionsOptions): Promise<
 
     for (const name of names) {
       if (!name.endsWith(".jsonl")) continue;
+      const sessionId = name.slice(0, -".jsonl".length);
+      if (!options.includeInternal && isInternalSession(sessionId)) continue;
       const lite = await readSessionLite(join(chatDir, name));
       if (!lite) continue;
-      const info = parseSessionInfoFromLite(name.slice(0, -".jsonl".length), lite);
+      const info = parseSessionInfoFromLite(sessionId, lite);
       if (info) {
         info.cwd = projectId;
         all.push(info);
@@ -183,6 +201,7 @@ export type SearchSessionsByTitleOptions = {
   pilotHome: string;
   query: string;
   limit?: number;
+  includeInternal?: boolean;
 };
 
 /**
@@ -203,9 +222,11 @@ export async function searchSessionsByTitle(options: SearchSessionsByTitleOption
   const results: SessionInfo[] = [];
   for (const name of names) {
     if (!name.endsWith(".jsonl")) continue;
+    const sessionId = name.slice(0, -".jsonl".length);
+    if (!options.includeInternal && isInternalSession(sessionId)) continue;
     const lite = await readSessionLite(join(chatDir, name));
     if (!lite) continue;
-    const info = parseSessionInfoFromLite(name.slice(0, -".jsonl".length), lite, options.projectRoot);
+    const info = parseSessionInfoFromLite(sessionId, lite, options.projectRoot);
     if (!info) continue;
     const haystack = [info.customTitle, info.aiTitle, info.firstPrompt]
       .filter(Boolean)
