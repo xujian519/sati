@@ -276,6 +276,54 @@ function patch<T extends PilotDeckConfig>(config: T, path: Path, value: unknown)
   return next as T;
 }
 
+function replaceRouterModelRefs(config: PilotDeckConfig, oldRef: string, newRef: string): PilotDeckConfig {
+  if (!oldRef || !newRef || oldRef === newRef || !config.router) return config;
+
+  let next = config;
+  const oldSlash = oldRef.indexOf('/');
+  const newSlash = newRef.indexOf('/');
+  const oldProviderId = oldSlash > 0 ? oldRef.slice(0, oldSlash) : '';
+  const oldModelId = oldSlash > 0 ? oldRef.slice(oldSlash + 1) : '';
+  const newModelId = newSlash > 0 ? newRef.slice(newSlash + 1) : '';
+  const scenarios = config.router.scenarios;
+  if (scenarios && Object.values(scenarios).some((ref) => ref === oldRef)) {
+    next = patch(next, ['router', 'scenarios'], Object.fromEntries(
+      Object.entries(scenarios).map(([key, ref]) => [key, ref === oldRef ? newRef : ref]),
+    ));
+  }
+
+  const fallback = next.router?.fallback;
+  if (fallback && Object.values(fallback).some((refs) => refs.some((ref) => ref === oldRef))) {
+    next = patch(next, ['router', 'fallback'], Object.fromEntries(
+      Object.entries(fallback).map(([key, refs]) => [key, refs.map((ref) => ref === oldRef ? newRef : ref)]),
+    ));
+  }
+
+  if (next.router?.tokenSaver?.judge === oldRef) {
+    next = patch(next, ['router', 'tokenSaver', 'judge'], newRef);
+  }
+
+  const tiers = next.router?.tokenSaver?.tiers;
+  if (tiers && Object.values(tiers).some((tier) => tier.model === oldRef)) {
+    next = patch(next, ['router', 'tokenSaver', 'tiers'], Object.fromEntries(
+      Object.entries(tiers).map(([key, tier]) => [
+        key,
+        tier.model === oldRef ? { ...tier, model: newRef } : tier,
+      ]),
+    ));
+  }
+
+  const memoryLlm = (next.memory as Record<string, unknown> | undefined)?.llm;
+  if (memoryLlm && typeof memoryLlm === 'object' && !Array.isArray(memoryLlm)) {
+    const llm = memoryLlm as Record<string, unknown>;
+    if (llm.provider === oldProviderId && llm.model === oldModelId) {
+      next = patch(next, ['memory', 'llm', 'model'], newModelId);
+    }
+  }
+
+  return next;
+}
+
 const MASK = '********';
 
 // ── Reusable inputs ────────────────────────────────────────────────────
@@ -909,7 +957,9 @@ function ModelsSection({ config, onChange }: { config: PilotDeckConfig; onChange
     onChange(nextConfig);
   };
   const setActive = (ref: string) => {
-    onChange(patch(config, ['agent', 'model'], ref));
+    const previousRef = config.agent?.model ?? '';
+    const nextConfig = patch(config, ['agent', 'model'], ref);
+    onChange(replaceRouterModelRefs(nextConfig, previousRef, ref));
   };
 
   const handleCatalogPick = (cp: CatalogProvider) => {

@@ -181,6 +181,44 @@ function validateProvider(id, provider, errors) {
   if (!normalizeString(provider.apiKey)) errors.push(`model.providers.${id}.apiKey is required`);
 }
 
+function validateModelRef(config, ref, label, errors) {
+  const modelRef = normalizeString(ref);
+  if (!modelRef) return;
+  if (!resolveModel(config, modelRef, { allowMissing: true })) {
+    errors.push(`${label}="${modelRef}" doesn't resolve to a configured provider/model`);
+  }
+}
+
+function validateRouterModelRefs(config, errors) {
+  const router = config.router;
+  if (!isRecord(router)) return;
+
+  if (isRecord(router.scenarios)) {
+    for (const [key, ref] of Object.entries(router.scenarios)) {
+      validateModelRef(config, ref, `router.scenarios.${key}`, errors);
+    }
+  }
+
+  if (isRecord(router.fallback)) {
+    for (const [key, refs] of Object.entries(router.fallback)) {
+      if (!Array.isArray(refs)) continue;
+      refs.forEach((ref, index) => validateModelRef(config, ref, `router.fallback.${key}[${index}]`, errors));
+    }
+  }
+
+  const tokenSaver = router.tokenSaver;
+  if (!isRecord(tokenSaver)) return;
+
+  validateModelRef(config, tokenSaver.judge, 'router.tokenSaver.judge', errors);
+
+  if (isRecord(tokenSaver.tiers)) {
+    for (const [key, tier] of Object.entries(tokenSaver.tiers)) {
+      if (!isRecord(tier)) continue;
+      validateModelRef(config, tier.model, `router.tokenSaver.tiers.${key}.model`, errors);
+    }
+  }
+}
+
 export function validatePilotDeckConfig(config) {
   const normalized = normalizePilotDeckConfig(config);
   const errors = [];
@@ -207,6 +245,8 @@ export function validatePilotDeckConfig(config) {
       }
     }
   }
+
+  validateRouterModelRefs(normalized, errors);
 
   return { valid: errors.length === 0, errors, warnings, config: normalized };
 }
