@@ -276,7 +276,7 @@
     "apiDocsLink": "API Documentation",
     "documentation": {
       "title": "External API Documentation",
-      "description": "Learn how to use the external API to trigger Claude/Cursor sessions from your applications.",
+      "description": "Learn how to use the external API to trigger PilotDeck sessions from your applications.",
       "viewLink": "View API Documentation →"
     },
     "loading": "Loading...",
@@ -428,7 +428,7 @@
   "mcpServers": {
     "title": "MCP Servers",
     "description": {
-      "claude": "Model Context Protocol servers provide additional tools and data sources to Claude",
+      "claude": "Model Context Protocol servers provide additional tools and data sources to PilotDeck",
       "cursor": "Model Context Protocol servers provide additional tools and data sources to Cursor",
       "codex": "Model Context Protocol servers provide additional tools and data sources to Codex"
     },
@@ -496,17 +496,110 @@
         "label": "Memory",
         "description": "PilotDeck memory service"
       },
+      "tools": {
+        "label": "Search",
+        "description": "Web search provider (SerpAPI key & endpoint)"
+      },
       "customEnv": {
         "label": "Env Vars",
         "description": "Custom environment variables for sessions"
       },
       "router": {
         "label": "Router",
-        "description": "Claude Code Router (CCR)"
+        "description": "PilotDeck Router"
       },
       "gateway": {
         "label": "Gateway",
         "description": "Messaging gateway home + channels"
+      }
+    },
+    "panels": {
+      "runtime": {
+        "title": "Advanced (Runtime)",
+        "description": "Ports, paths, and timeouts the UI server uses. Most users never need to touch these."
+      },
+      "models": {
+        "title": "Models",
+        "description": "Configure your LLM providers. The catalog auto-fills protocol, URL, and model capabilities — you only need to paste an API key and pick which models to enable."
+      },
+      "agents": {
+        "title": "Agents",
+        "description": "Pick which provider/model the chat agent runs on."
+      },
+      "customEnv": {
+        "title": "Environment Variables",
+        "description": "Custom env vars injected into every agent session. Persisted in config.yaml — no need to reconfigure after switching sessions."
+      },
+      "alwaysOn": {
+        "title": "Always-On",
+        "description": "Configure automatic discovery globally and opt individual workspaces in.",
+        "trigger": {
+          "title": "Trigger",
+          "description": "Controls when and how often discovery runs fire."
+        },
+        "dormancy": {
+          "title": "Dormancy",
+          "description": "File-system watcher that pauses discovery while the user is actively editing."
+        },
+        "workspace": {
+          "title": "Workspace",
+          "description": "Isolated workspace strategy for Always-On runs."
+        },
+        "execution": {
+          "title": "Execution",
+          "description": "Safety limits for each Always-On run."
+        },
+        "workspaceOptIn": {
+          "title": "Workspace opt-in",
+          "description": "Only enabled workspaces receive Always-On heartbeats and scheduled discovery checks."
+        }
+      },
+      "memory": {
+        "title": "Memory",
+        "description": "PilotDeck memory service — embeddings & summarisation pipelines.",
+        "enabled": {
+          "label": "Enabled",
+          "description": "Toggles the memory service."
+        },
+        "model": {
+          "label": "Memory model",
+          "description": "Provider/model the memory pipeline calls.",
+          "inherit": "inherit (use main agent's model)"
+        }
+      },
+      "tools": {
+        "title": "Search",
+        "description": "Web search backing the agent's `web_search` tool. Defaults to SerpAPI; any SerpAPI-compatible proxy works (e.g. serp.hk for in-China access).",
+        "apiKey": {
+          "label": "API key",
+          "description": "Stored in pilotdeck.yaml under tools.webSearch.apiKey. Falls back to the SERP_API_KEY env var when empty.",
+          "placeholder": "serpapi key"
+        },
+        "endpoint": {
+          "label": "Endpoint",
+          "description": "Defaults to https://serpapi.com/search. Override when using a SerpAPI-compatible proxy (e.g. https://api.serp.hk/serp/google/search/advanced).",
+          "placeholder": "https://serpapi.com/search"
+        },
+        "test": {
+          "button": "Test connection",
+          "testing": "Testing…",
+          "needsKey": "Enter an API key first.",
+          "success": "Connected — {{count}} organic result(s) in {{latency}}ms.",
+          "failedPrefix": "Failed: {{error}}"
+        }
+      },
+      "router": {
+        "title": "PilotDeck Router",
+        "description": "Embedded router for fan-out across providers (tier-based routing, token saver, auto-orchestrate)."
+      },
+      "gateway": {
+        "title": "Gateway",
+        "description": "Messaging gateway (Feishu / Telegram / Discord / Slack) — channel-level secrets are best edited via Raw YAML."
+      },
+      "subsystemReload": {
+        "title": "Subsystem reload status",
+        "fallbackDescription": "Reload status will appear after the first save or external edit.",
+        "lastReload": "Last reload: {{source}} at {{time}}"
       }
     }
   },

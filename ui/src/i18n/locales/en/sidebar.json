@@ -13,11 +13,11 @@
     "untitledSession": "Untitled Session",
     "newSession": "New Session",
     "codexSession": "Codex Session",
-    "fetchingProjects": "Fetching your Claude projects and sessions",
+    "fetchingProjects": "Fetching your PilotDeck projects and sessions",
     "projects": "projects",
     "noMatchingProjects": "No matching projects",
     "tryDifferentSearch": "Try adjusting your search term",
-    "runClaudeCli": "Run Claude CLI in a project directory to get started"
+    "runClaudeCli": "Run PilotDeck CLI in a project directory to get started"
   },
   "general": {
     "title": "General",

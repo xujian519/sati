@@ -408,9 +408,9 @@
       "usingProvidedToken": "Using provided token",
       "noAuthentication": "No authentication",
       "sshKey": "SSH Key",
-      "existingInfo": "The workspace will be added to your project list and will be available for Claude/Cursor sessions.",
+      "existingInfo": "The workspace will be added to your project list and will be available for PilotDeck sessions.",
       "newWithClone": "The repository will be cloned from this folder.",
-      "newEmpty": "The workspace will be added to your project list and will be available for Claude/Cursor sessions.",
+      "newEmpty": "The workspace will be added to your project list and will be available for PilotDeck sessions.",
       "cloningRepository": "Cloning repository..."
     },
     "buttons": {

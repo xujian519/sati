@@ -15,7 +15,7 @@
     "user": "U",
     "error": "错误",
     "tool": "工具",
-    "claude": "Claude",
+    "claude": "PilotDeck",
     "cursor": "Cursor",
     "codex": "Codex",
     "gemini": "Gemini"
@@ -64,8 +64,8 @@
   "interactive": {
     "title": "交互式提示",
     "waiting": "等待您在 CLI 中响应",
-    "instruction": "请在 Claude 运行的终端中选择一个选项。",
-    "selectedOption": "✓ Claude 选择了选项 {{number}}",
+    "instruction": "请在 PilotDeck 运行的终端中选择一个选项。",
+    "selectedOption": "✓ PilotDeck 选择了选项 {{number}}",
     "instructionDetail": "在 CLI 中，您可以使用方向键或输入数字来交互式地选择此选项。"
   },
   "thinking": {
@@ -144,14 +144,14 @@
   "thinkingMode": {
     "selector": {
       "title": "思考模式",
-      "description": "扩展思考给 Claude 更多时间来评估替代方案",
+      "description": "扩展思考给 PilotDeck 更多时间来评估替代方案",
       "active": "激活",
       "tip": "更高的思考模式需要更多时间，但提供更彻底的分析"
     },
     "modes": {
       "none": {
         "name": "标准",
-        "description": "常规 Claude 响应",
+        "description": "常规 PilotDeck 响应",
         "prefix": ""
       },
       "think": {
@@ -188,7 +188,7 @@
       "google": "由 Google 提供"
     },
     "readyPrompt": {
-      "claude": "准备好使用带有 {{model}} 的 Claude。请在下方开始输入您的消息。",
+      "claude": "已就绪：使用 {{model}} 的 PilotDeck。请在下方开始输入您的消息。",
       "cursor": "准备好使用带有 {{model}} 的 Cursor。请在下方开始输入您的消息。",
       "codex": "准备好使用带有 {{model}} 的 Codex。请在下方开始输入您的消息。",
       "gemini": "准备好使用带有 {{model}} 的 Gemini。请在下方开始输入您的消息。",
@@ -235,10 +235,10 @@
     },
     "loading": "正在加载终端...",
     "connecting": "正在连接到 Shell...",
-    "startSession": "启动新的 Claude 会话",
+    "startSession": "启动新的 PilotDeck 会话",
     "resumeSession": "恢复会话：{{displayName}}...",
     "runCommand": "在 {{projectName}} 中运行 {{command}}",
-    "startCli": "在 {{projectName}} 中启动 Claude CLI",
+    "startCli": "在 {{projectName}} 中启动 PilotDeck CLI",
     "defaultCommand": "命令"
   },
   "claudeStatus": {

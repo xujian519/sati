@@ -15,7 +15,7 @@
     "user": "U",
     "error": "Error",
     "tool": "Tool",
-    "claude": "Claude",
+    "claude": "PilotDeck",
     "cursor": "Cursor",
     "codex": "Codex",
     "gemini": "Gemini"
@@ -64,8 +64,8 @@
   "interactive": {
     "title": "Interactive Prompt",
     "waiting": "Waiting for your response in the CLI",
-    "instruction": "Please select an option in your terminal where Claude is running.",
-    "selectedOption": "✓ Claude selected option {{number}}",
+    "instruction": "Please select an option in your terminal where PilotDeck is running.",
+    "selectedOption": "✓ PilotDeck selected option {{number}}",
     "instructionDetail": "In the CLI, you would select this option interactively using arrow keys or by typing the number."
   },
   "thinking": {
@@ -161,14 +161,14 @@
   "thinkingMode": {
     "selector": {
       "title": "Thinking Mode",
-      "description": "Extended thinking gives Claude more time to evaluate alternatives",
+      "description": "Extended thinking gives PilotDeck more time to evaluate alternatives",
       "active": "Active",
       "tip": "Higher thinking modes take more time but provide more thorough analysis"
     },
     "modes": {
       "none": {
         "name": "Standard",
-        "description": "Regular Claude response",
+        "description": "Regular PilotDeck response",
         "prefix": ""
       },
       "think": {
@@ -205,7 +205,7 @@
       "google": "by Google"
     },
     "readyPrompt": {
-      "claude": "Ready to use Claude with {{model}}. Start typing your message below.",
+      "claude": "Ready to use PilotDeck with {{model}}. Start typing your message below.",
       "cursor": "Ready to use Cursor with {{model}}. Start typing your message below.",
       "codex": "Ready to use Codex with {{model}}. Start typing your message below.",
       "gemini": "Ready to use Gemini with {{model}}. Start typing your message below.",
@@ -252,10 +252,10 @@
     },
     "loading": "Loading terminal...",
     "connecting": "Connecting to shell...",
-    "startSession": "Start a new Claude session",
+    "startSession": "Start a new PilotDeck session",
     "resumeSession": "Resume session: {{displayName}}...",
     "runCommand": "Run {{command}} in {{projectName}}",
-    "startCli": "Starting Claude CLI in {{projectName}}",
+    "startCli": "Starting PilotDeck CLI in {{projectName}}",
     "defaultCommand": "command"
   },
   "claudeStatus": {

@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   Info,
   LayoutList,
+  Loader2,
   Plus,
   RefreshCw,
   Save,
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { Button } from '../../../../shared/view/ui';
+import { authenticatedFetch } from '../../../../utils/api';
 import { usePilotDeckConfig, type ConfigReload } from '../../../../hooks/usePilotDeckConfig';
 import {
   getAlwaysOnProjectRoot,
@@ -146,14 +148,21 @@ type PilotDeckConfig = {
     };
   } & Record<string, unknown>;
   gateway?: { enabled?: boolean; home?: string } & Record<string, unknown>;
+  tools?: {
+    webSearch?: {
+      apiKey?: string;
+      endpoint?: string;
+    };
+  };
 };
 
-type SectionId = 'models' | 'agents' | 'memory' | 'router' | 'gateway' | 'customEnv' | 'alwaysOn' | 'advanced';
+type SectionId = 'models' | 'agents' | 'memory' | 'tools' | 'router' | 'gateway' | 'customEnv' | 'alwaysOn' | 'advanced';
 
 const SECTIONS: Array<{ id: SectionId; labelKey: string; descriptionKey: string }> = [
   { id: 'models',    labelKey: 'models',    descriptionKey: 'models' },
   { id: 'agents',    labelKey: 'agents',    descriptionKey: 'agents' },
   { id: 'memory',    labelKey: 'memory',    descriptionKey: 'memory' },
+  { id: 'tools',     labelKey: 'tools',     descriptionKey: 'tools' },
   { id: 'router',    labelKey: 'router',    descriptionKey: 'router' },
   { id: 'gateway',   labelKey: 'gateway',   descriptionKey: 'gateway' },
   { id: 'customEnv', labelKey: 'customEnv', descriptionKey: 'customEnv' },
@@ -167,7 +176,7 @@ type SubsystemKey = 'processEnv' | 'memory' | 'router' | 'gateway' | 'proxy';
 const SUBSYSTEM_LABELS: Record<SubsystemKey, string> = {
   processEnv: 'Process Env',
   memory: 'Memory',
-  router: 'Router (CCR)',
+  router: 'PilotDeck Router',
   gateway: 'Gateway',
   proxy: 'Proxy',
 };
@@ -454,13 +463,14 @@ function FormRow({ label, description, children }: { label: string; description?
 // ── Section components ─────────────────────────────────────────────────
 
 function AdvancedSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
   const r = config.webui?.runtime ?? {};
   const set = (key: string, value: unknown) =>
     onChange(patch(config, ['webui', 'runtime', key], value));
   return (
     <SettingsSection
-      title="Advanced (Runtime)"
-      description="Ports, paths, and timeouts the UI server uses. Most users never need to touch these."
+      title={t('edgeClawConfig.panels.runtime.title')}
+      description={t('edgeClawConfig.panels.runtime.description')}
     >
       <SettingsCard divided>
         <FormRow label="Host" description="Bind interface for the HTTP/WebSocket server.">
@@ -472,7 +482,7 @@ function AdvancedSection({ config, onChange }: { config: PilotDeckConfig; onChan
         <FormRow label="Vite port" description="Frontend dev server (only used when running `npm run dev`).">
           <NumberInput value={r.vitePort} placeholder="5173" onChange={(v) => set('vitePort', v)} />
         </FormRow>
-        <FormRow label="Proxy port" description="Local LLM proxy (Claude Agent SDK target).">
+        <FormRow label="Proxy port" description="Local LLM proxy (PilotDeck agent target).">
           <NumberInput value={r.proxyPort} placeholder="18080" onChange={(v) => set('proxyPort', v)} />
         </FormRow>
         <FormRow label="Context window" description="Default token budget for new sessions.">
@@ -928,6 +938,7 @@ function CatalogPicker({
 }
 
 function ModelsSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
   const providers = config.model?.providers ?? {};
   const ids = Object.keys(providers);
   const activeModelRef = config.agent?.model ?? '';
@@ -988,8 +999,8 @@ function ModelsSection({ config, onChange }: { config: PilotDeckConfig; onChange
 
   return (
     <SettingsSection
-      title="Models"
-      description="Configure your LLM providers. The catalog auto-fills protocol, URL, and model capabilities — you only need to paste an API key and pick which models to enable."
+      title={t('edgeClawConfig.panels.models.title')}
+      description={t('edgeClawConfig.panels.models.description')}
     >
       <div className="space-y-3">
         {ids.length === 0 && (
@@ -1081,6 +1092,7 @@ function activeModelCapabilities(config: PilotDeckConfig): {
 }
 
 function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
   const refOptions = buildModelRefOptions(config);
   const mainRef = config.agent?.model ?? '';
   const subDefault = config.agent?.subagents?.default ?? 'inherit';
@@ -1173,7 +1185,10 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
   };
 
   return (
-    <SettingsSection title="Agents" description="Pick which provider/model the chat agent runs on.">
+    <SettingsSection
+      title={t('edgeClawConfig.panels.agents.title')}
+      description={t('edgeClawConfig.panels.agents.description')}
+    >
       <SettingsCard divided>
         <FormRow label="Main agent model" description="Used by the primary chat agent. Reference an enabled provider/model from the Models section.">
           <Select
@@ -1305,6 +1320,7 @@ const WELL_KNOWN_ENV_KEYS = [
 ];
 
 function CustomEnvSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
   const envMap = config.customEnv ?? {};
   const entries = Object.entries(envMap);
   const [newKey, setNewKey] = useState('');
@@ -1334,8 +1350,8 @@ function CustomEnvSection({ config, onChange }: { config: PilotDeckConfig; onCha
 
   return (
     <SettingsSection
-      title="Environment Variables"
-      description="Custom env vars injected into every agent session. Persisted in config.yaml — no need to reconfigure after switching sessions."
+      title={t('edgeClawConfig.panels.customEnv.title')}
+      description={t('edgeClawConfig.panels.customEnv.description')}
     >
       <SettingsCard className="space-y-3 p-4">
         {entries.length === 0 && (
@@ -1439,6 +1455,7 @@ function AlwaysOnSection({
   projects: SettingsProject[];
   onChange: (next: PilotDeckConfig) => void;
 }) {
+  const { t } = useTranslation('settings');
   const ao = config.alwaysOn ?? {};
   const trigger = ao.trigger ?? {};
   const dormancy = ao.dormancy ?? {};
@@ -1452,8 +1469,8 @@ function AlwaysOnSection({
 
   return (
     <SettingsSection
-      title="Always-On"
-      description="Configure automatic discovery globally and opt individual workspaces in."
+      title={t('edgeClawConfig.panels.alwaysOn.title')}
+      description={t('edgeClawConfig.panels.alwaysOn.description')}
     >
       <div className="space-y-4">
         {/* General */}
@@ -1473,7 +1490,10 @@ function AlwaysOnSection({
         {enabled && (
           <>
             {/* Trigger */}
-            <SettingsSection title="Trigger" description="Controls when and how often discovery runs fire.">
+            <SettingsSection
+              title={t('edgeClawConfig.panels.alwaysOn.trigger.title')}
+              description={t('edgeClawConfig.panels.alwaysOn.trigger.description')}
+            >
               <SettingsCard divided>
                 <SettingsRow
                   label="Auto discovery"
@@ -1534,7 +1554,10 @@ function AlwaysOnSection({
             </SettingsSection>
 
             {/* Dormancy */}
-            <SettingsSection title="Dormancy" description="File-system watcher that pauses discovery while the user is actively editing.">
+            <SettingsSection
+              title={t('edgeClawConfig.panels.alwaysOn.dormancy.title')}
+              description={t('edgeClawConfig.panels.alwaysOn.dormancy.description')}
+            >
               <SettingsCard divided>
                 <SettingsRow
                   label="Enabled"
@@ -1569,7 +1592,10 @@ function AlwaysOnSection({
             </SettingsSection>
 
             {/* Workspace */}
-            <SettingsSection title="Workspace" description="Isolated workspace strategy for Always-On runs.">
+            <SettingsSection
+              title={t('edgeClawConfig.panels.alwaysOn.workspace.title')}
+              description={t('edgeClawConfig.panels.alwaysOn.workspace.description')}
+            >
               <SettingsCard divided>
                 <FormRow label="Git worktree base dir" description="Root directory for git worktree-based isolation.">
                   <TextInput
@@ -1608,7 +1634,10 @@ function AlwaysOnSection({
             </SettingsSection>
 
             {/* Execution */}
-            <SettingsSection title="Execution" description="Safety limits for each Always-On run.">
+            <SettingsSection
+              title={t('edgeClawConfig.panels.alwaysOn.execution.title')}
+              description={t('edgeClawConfig.panels.alwaysOn.execution.description')}
+            >
               <SettingsCard divided>
                 <FormRow label="Max turns" description="Maximum number of agent turns per run.">
                   <NumberInput
@@ -1636,8 +1665,8 @@ function AlwaysOnSection({
 
             {/* Workspace opt-in */}
             <SettingsSection
-              title="Workspace opt-in"
-              description="Only enabled workspaces receive Always-On heartbeats and scheduled discovery checks."
+              title={t('edgeClawConfig.panels.alwaysOn.workspaceOptIn.title')}
+              description={t('edgeClawConfig.panels.alwaysOn.workspaceOptIn.description')}
             >
               <SettingsCard divided>
                 {projectRows.length === 0 ? (
@@ -1669,28 +1698,38 @@ function AlwaysOnSection({
 }
 
 function MemorySection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
   const m = config.memory ?? {};
   // Memory uses a "provider/model" reference, or "inherit" to fall back
   // to agent.model. The backend treats `undefined` and `"inherit"` the
   // same way, so we map both to the inherit option in the UI.
   const refOptions = buildModelRefOptions(config);
   const options = [
-    { value: 'inherit', label: 'inherit (use main agent\'s model)' },
+    { value: 'inherit', label: t('edgeClawConfig.panels.memory.model.inherit') },
     ...refOptions,
   ];
   const selected = m.model && m.model.trim() ? m.model : 'inherit';
   return (
-    <SettingsSection title="Memory" description="PilotDeck memory service — embeddings & summarisation pipelines.">
+    <SettingsSection
+      title={t('edgeClawConfig.panels.memory.title')}
+      description={t('edgeClawConfig.panels.memory.description')}
+    >
       <SettingsCard>
-        <SettingsRow label="Enabled" description="Toggles the memory service.">
+        <SettingsRow
+          label={t('edgeClawConfig.panels.memory.enabled.label')}
+          description={t('edgeClawConfig.panels.memory.enabled.description')}
+        >
           <SettingsToggle
             checked={Boolean(m.enabled)}
-            ariaLabel="Toggle memory service"
+            ariaLabel={t('edgeClawConfig.panels.memory.enabled.label')}
             onChange={(v) => onChange(patch(config, ['memory', 'enabled'], v))}
           />
         </SettingsRow>
         {m.enabled && (
-          <FormRow label="Memory model" description="Provider/model the memory pipeline calls.">
+          <FormRow
+            label={t('edgeClawConfig.panels.memory.model.label')}
+            description={t('edgeClawConfig.panels.memory.model.description')}
+          >
             <Select
               value={selected}
               options={options}
@@ -1698,6 +1737,136 @@ function MemorySection({ config, onChange }: { config: PilotDeckConfig; onChange
             />
           </FormRow>
         )}
+      </SettingsCard>
+    </SettingsSection>
+  );
+}
+
+function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
+  const ws = config.tools?.webSearch ?? {};
+  const apiKey = typeof ws.apiKey === 'string' ? ws.apiKey : '';
+  const endpoint = typeof ws.endpoint === 'string' ? ws.endpoint : '';
+
+  // Test-connection state — modeled after onboarding's LlmConfigurationStep
+  // so behaviour and accessibility match across the app. Reset whenever the
+  // user edits the key or endpoint so a stale ✓ never lies about new input.
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [testMessage, setTestMessage] = useState('');
+
+  const setField = (field: 'apiKey' | 'endpoint', value: string) => {
+    const trimmed = value;
+    const nextWs: NonNullable<PilotDeckConfig['tools']>['webSearch'] = { ...ws };
+    if (trimmed === '') {
+      delete nextWs[field];
+    } else {
+      nextWs[field] = trimmed;
+    }
+    const nextTools = Object.keys(nextWs).length > 0 ? { webSearch: nextWs } : undefined;
+    onChange(patch(config, ['tools'], nextTools));
+    setTestStatus('idle');
+    setTestMessage('');
+  };
+
+  const handleTest = async () => {
+    const trimmedKey = apiKey.trim();
+    if (!trimmedKey) {
+      setTestStatus('error');
+      setTestMessage(t('edgeClawConfig.panels.tools.test.needsKey'));
+      return;
+    }
+    setTestStatus('testing');
+    setTestMessage('');
+    try {
+      const res = await authenticatedFetch('/api/config/test-web-search', {
+        method: 'POST',
+        body: JSON.stringify({ apiKey: trimmedKey, endpoint: endpoint.trim() }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setTestStatus('success');
+        setTestMessage(
+          t('edgeClawConfig.panels.tools.test.success', {
+            count: data.organicCount ?? 0,
+            latency: data.latencyMs ?? 0,
+          }),
+        );
+      } else {
+        setTestStatus('error');
+        setTestMessage(
+          t('edgeClawConfig.panels.tools.test.failedPrefix', { error: data.error || 'unknown' }),
+        );
+      }
+    } catch (err) {
+      setTestStatus('error');
+      setTestMessage(
+        t('edgeClawConfig.panels.tools.test.failedPrefix', {
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  };
+
+  return (
+    <SettingsSection
+      title={t('edgeClawConfig.panels.tools.title')}
+      description={t('edgeClawConfig.panels.tools.description')}
+    >
+      <SettingsCard divided>
+        <FormRow
+          label={t('edgeClawConfig.panels.tools.apiKey.label')}
+          description={t('edgeClawConfig.panels.tools.apiKey.description')}
+        >
+          <TextInput
+            type="password"
+            value={apiKey}
+            placeholder={t('edgeClawConfig.panels.tools.apiKey.placeholder')}
+            monospace
+            onChange={(v) => setField('apiKey', v)}
+          />
+        </FormRow>
+        <FormRow
+          label={t('edgeClawConfig.panels.tools.endpoint.label')}
+          description={t('edgeClawConfig.panels.tools.endpoint.description')}
+        >
+          <TextInput
+            value={endpoint}
+            placeholder={t('edgeClawConfig.panels.tools.endpoint.placeholder')}
+            monospace
+            onChange={(v) => setField('endpoint', v)}
+          />
+        </FormRow>
+        <div className="flex flex-col gap-2 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTest}
+              disabled={testStatus === 'testing' || !apiKey.trim()}
+            >
+              {testStatus === 'testing' ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              {testStatus === 'testing'
+                ? t('edgeClawConfig.panels.tools.test.testing')
+                : t('edgeClawConfig.panels.tools.test.button')}
+            </Button>
+            {testStatus === 'success' && (
+              <span className="inline-flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {testMessage}
+              </span>
+            )}
+            {testStatus === 'error' && (
+              <span className="inline-flex items-center gap-1.5 text-xs text-destructive">
+                <XCircle className="h-3.5 w-3.5" />
+                {testMessage}
+              </span>
+            )}
+          </div>
+        </div>
       </SettingsCard>
     </SettingsSection>
   );
@@ -2114,6 +2283,7 @@ function TokenSaverRulesEditor({ config, onChange }: { config: PilotDeckConfig; 
 }
 
 function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
   const r = config.router ?? {};
   const enabled = Boolean(r.enabled);
   const statsEnabled = r.stats?.enabled !== false;
@@ -2127,7 +2297,10 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
   const availableTierNames = Object.keys(ts.tiers ?? {});
 
   return (
-    <SettingsSection title="Router" description="Embedded Claude Code Router (CCR) for fan-out across providers.">
+    <SettingsSection
+      title={t('edgeClawConfig.panels.router.title')}
+      description={t('edgeClawConfig.panels.router.description')}
+    >
       <div className="space-y-4">
         {/* ── Master toggle ─────────────────────────────────────────── */}
         <SettingsCard divided>
@@ -2138,7 +2311,23 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
             <SettingsToggle
               checked={enabled}
               ariaLabel="Toggle router"
-              onChange={(v) => onChange(patch(config, ['router', 'enabled'], v))}
+              onChange={(v) => {
+                let next = patch(config, ['router', 'enabled'], v);
+                // Seed `scenarios.default` on enable if missing so the
+                // gateway-side parser never sees a `router: { enabled: true }`
+                // without a default routing target. Mirrors the same
+                // auto-seed we already do for `tokenSaver.tiers` below.
+                if (v && !next.router?.scenarios?.default) {
+                  const defaultRef =
+                    typeof next.agent?.model === 'string' && next.agent.model.trim()
+                      ? next.agent.model.trim()
+                      : modelOpts[0]?.value ?? '';
+                  if (defaultRef) {
+                    next = patch(next, ['router', 'scenarios', 'default'], defaultRef);
+                  }
+                }
+                onChange(next);
+              }}
             />
           </SettingsRow>
         </SettingsCard>
@@ -2340,9 +2529,13 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
 }
 
 function GatewaySection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
   const g = config.gateway ?? {};
   return (
-    <SettingsSection title="Gateway" description="Messaging gateway (Feishu / Telegram / Discord / Slack) — channel-level secrets are best edited via Raw YAML.">
+    <SettingsSection
+      title={t('edgeClawConfig.panels.gateway.title')}
+      description={t('edgeClawConfig.panels.gateway.description')}
+    >
       <SettingsCard divided>
         <SettingsRow label="Enabled" description="When on, the gateway home is generated and channels with credentials come online.">
           <SettingsToggle
@@ -2614,6 +2807,7 @@ export default function PilotDeckConfigTab({ projects = [] }: { projects?: Setti
                 {activeSection === 'models'   && <ModelsSection  config={parsedConfig} onChange={onFormChange} />}
                 {activeSection === 'agents'   && <AgentsSection  config={parsedConfig} onChange={onFormChange} />}
                 {activeSection === 'memory'   && <MemorySection  config={parsedConfig} onChange={onFormChange} />}
+                {activeSection === 'tools'    && <ToolsSection   config={parsedConfig} onChange={onFormChange} />}
                 {activeSection === 'router'   && <RouterSection  config={parsedConfig} onChange={onFormChange} />}
                 {activeSection === 'gateway'  && <GatewaySection config={parsedConfig} onChange={onFormChange} />}
                 {activeSection === 'customEnv' && <CustomEnvSection config={parsedConfig} onChange={onFormChange} />}
@@ -2673,10 +2867,13 @@ export default function PilotDeckConfigTab({ projects = [] }: { projects?: Setti
       {/* Subsystem reload card — same in both modes, stays at the bottom so
           users always see the impact of their last save. */}
       <SettingsSection
-        title="Subsystem reload status"
+        title={t('edgeClawConfig.panels.subsystemReload.title')}
         description={lastReloadInfo
-          ? `Last reload: ${sourceLabel(lastReloadInfo.source)} at ${new Date(lastReloadInfo.at).toLocaleTimeString()}`
-          : 'Reload status will appear after the first save or external edit.'}
+          ? t('edgeClawConfig.panels.subsystemReload.lastReload', {
+              source: sourceLabel(lastReloadInfo.source),
+              time: new Date(lastReloadInfo.at).toLocaleTimeString(),
+            })
+          : t('edgeClawConfig.panels.subsystemReload.fallbackDescription')}
       >
         <SettingsCard className="p-4">
           <ReloadSummary reload={reload} />

@@ -276,7 +276,7 @@
     "apiDocsLink": "API 文档",
     "documentation": {
       "title": "外部 API 文档",
-      "description": "了解如何使用外部 API 从您的应用程序触发 Claude/Cursor 会话。",
+      "description": "了解如何使用外部 API 从您的应用程序触发 PilotDeck 会话。",
       "viewLink": "查看 API 文档 →"
     },
     "loading": "加载中...",
@@ -428,7 +428,7 @@
   "mcpServers": {
     "title": "MCP 服务器",
     "description": {
-      "claude": "Model Context Protocol 服务器为 Claude 提供额外的工具和数据源",
+      "claude": "Model Context Protocol 服务器为 PilotDeck 提供额外的工具和数据源",
       "cursor": "Model Context Protocol 服务器为 Cursor 提供额外的工具和数据源",
       "codex": "Model Context Protocol 服务器为 Codex 提供额外的工具和数据源"
     },
@@ -496,17 +496,110 @@
         "label": "记忆",
         "description": "PilotDeck 记忆服务"
       },
+      "tools": {
+        "label": "搜索",
+        "description": "Web 搜索 provider（SerpAPI 密钥与接口地址）"
+      },
       "customEnv": {
         "label": "环境变量",
         "description": "跨会话持久化的自定义环境变量"
       },
       "router": {
         "label": "路由",
-        "description": "Claude Code Router（CCR）"
+        "description": "PilotDeck Router"
       },
       "gateway": {
         "label": "网关",
         "description": "消息网关主页和频道"
+      }
+    },
+    "panels": {
+      "runtime": {
+        "title": "运行时（高级）",
+        "description": "UI server 使用的端口、路径与超时。一般用户不需要改。"
+      },
+      "models": {
+        "title": "模型",
+        "description": "配置 LLM 提供商。Catalog 会自动填入 protocol、URL 和模型能力——你只需要贴一个 API key 并勾选要启用的模型。"
+      },
+      "agents": {
+        "title": "智能体",
+        "description": "选择主对话智能体使用哪一个 provider/model。"
+      },
+      "customEnv": {
+        "title": "环境变量",
+        "description": "注入到每个智能体会话里的自定义环境变量。持久化到 config.yaml，切换会话不必重新配置。"
+      },
+      "alwaysOn": {
+        "title": "Always-On",
+        "description": "配置全局自动 discovery，并按工作区单独开关。",
+        "trigger": {
+          "title": "触发",
+          "description": "控制 discovery 何时、多久触发一次。"
+        },
+        "dormancy": {
+          "title": "休眠",
+          "description": "文件系统监听：用户正在活跃编辑时暂停 discovery。"
+        },
+        "workspace": {
+          "title": "工作区",
+          "description": "Always-On 跑批的工作区隔离策略。"
+        },
+        "execution": {
+          "title": "执行",
+          "description": "每次 Always-On 跑批的安全上限。"
+        },
+        "workspaceOptIn": {
+          "title": "工作区接入",
+          "description": "只有勾选的工作区会收到 Always-On 心跳和定时 discovery 检查。"
+        }
+      },
+      "memory": {
+        "title": "记忆",
+        "description": "PilotDeck 记忆服务 —— embedding 与摘要管线。",
+        "enabled": {
+          "label": "启用",
+          "description": "启用记忆服务的总开关。"
+        },
+        "model": {
+          "label": "记忆服务模型",
+          "description": "记忆管线使用的 provider/model。",
+          "inherit": "继承（使用主智能体模型）"
+        }
+      },
+      "tools": {
+        "title": "搜索",
+        "description": "agent 的 `web_search` 工具背后的搜索 provider。默认 SerpAPI；任何 SerpAPI 兼容代理也可以（如国内可直连的 serp.hk）。",
+        "apiKey": {
+          "label": "API Key",
+          "description": "保存到 pilotdeck.yaml 的 tools.webSearch.apiKey；为空时回落到 SERP_API_KEY 环境变量。",
+          "placeholder": "serpapi key"
+        },
+        "endpoint": {
+          "label": "接口地址",
+          "description": "默认 https://serpapi.com/search。换 SerpAPI 兼容代理时改这里（如 https://api.serp.hk/serp/google/search/advanced）。",
+          "placeholder": "https://serpapi.com/search"
+        },
+        "test": {
+          "button": "测试连接",
+          "testing": "测试中…",
+          "needsKey": "先填一个 API Key。",
+          "success": "连通 —— {{count}} 条 organic 结果，{{latency}}ms。",
+          "failedPrefix": "失败：{{error}}"
+        }
+      },
+      "router": {
+        "title": "PilotDeck Router",
+        "description": "内嵌路由器，跨 provider 路由分发（按 tier 分流、token saver、auto-orchestrate）。"
+      },
+      "gateway": {
+        "title": "网关",
+        "description": "消息网关（飞书 / Telegram / Discord / Slack）—— 频道级密钥建议用 Raw YAML 编辑。"
+      },
+      "subsystemReload": {
+        "title": "子系统重载状态",
+        "fallbackDescription": "首次保存或外部编辑后会出现重载状态。",
+        "lastReload": "上次重载：{{source}} 于 {{time}}"
       }
     }
   },
