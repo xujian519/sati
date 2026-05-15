@@ -204,7 +204,7 @@ export function createRouterRuntime(
               fallbackTier: tokenSaver.tier,
             });
           }
-          if (tokenSaver.resolvedFrom === "judge" || !selection) {
+          if (tokenSaver.selection) {
             selection = tokenSaver.selection;
             resolvedFrom = "tokenSaver";
           }
@@ -286,6 +286,12 @@ export function createRouterRuntime(
           decision.model = config.autoOrchestrate.mainAgentModel.model;
         }
       }
+    }
+
+    if (!input.isMainAgent && config.autoOrchestrate?.subagentModel) {
+      decision.provider = config.autoOrchestrate.subagentModel.provider;
+      decision.model = config.autoOrchestrate.subagentModel.model;
+      mutations = { ...mutations, subagentModelOverride: true };
     }
 
     if (scenarioOutcome.subagentModelHint || decision.isSubagent) {

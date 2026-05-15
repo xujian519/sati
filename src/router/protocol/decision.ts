@@ -16,6 +16,7 @@ export type RouterMutationsLog = {
   orchestrationPromptInjected?: { tier: string; chars: number };
   asyncAgentLaunchedRewritten?: boolean;
   subagentTagStripped?: boolean;
+  subagentModelOverride?: boolean;
 };
 
 export type RouterRequestPatch = Pick<

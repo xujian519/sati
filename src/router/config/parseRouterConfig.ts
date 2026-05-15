@@ -379,6 +379,12 @@ function parseAutoOrchestrate(
     modelConfig,
     diagnostics,
   );
+  const subagentModel = optionalRef(
+    raw.subagentModel,
+    "router.autoOrchestrate.subagentModel",
+    modelConfig,
+    diagnostics,
+  );
   let triggerTiers: string[] = [...DEFAULT_TRIGGER_TIERS];
   if (raw.triggerTiers !== undefined) {
     if (Array.isArray(raw.triggerTiers) && raw.triggerTiers.every((entry) => typeof entry === "string")) {
@@ -471,6 +477,7 @@ function parseAutoOrchestrate(
   return {
     enabled,
     mainAgentModel,
+    subagentModel,
     triggerTiers,
     allowedTools,
     blockedTools,
