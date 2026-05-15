@@ -489,7 +489,8 @@ function MainContent({
 
   const handleOpenExecutionSession = useCallback(
     (projectKey: string, runId: string) => {
-      const sessionId = `always-on/execute:project=${projectKey}:run=${runId}`;
+      const rawId = `always-on/execute:project=${projectKey}:run=${runId}`;
+      const sessionId = rawId.replace(/[\\/]+/g, '-').replace(/^-+|-+$/g, '') || 'session';
       void handleOpenAlwaysOnSession({ kind: 'origin', sessionId });
     },
     [handleOpenAlwaysOnSession],
