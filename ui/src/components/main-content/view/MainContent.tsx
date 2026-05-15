@@ -786,6 +786,7 @@ function MainContent({
           handleExecuteDiscoveryPlan={handleExecuteDiscoveryPlan}
           executeAndLaunchPlan={executeAndLaunchPlan}
           applyAndLaunchPlan={applyAndLaunchPlan}
+          handleOpenExecutionSession={handleOpenExecutionSession}
           editorExpanded={editorExpanded}
           onDeselectProject={onDeselectProject}
           onSelectProjectByName={onSelectProjectByName}
@@ -856,6 +857,7 @@ type SplitBodyProps = {
   handleExecuteDiscoveryPlan: any;
   executeAndLaunchPlan: (projectName: string, planId: string) => Promise<void>;
   applyAndLaunchPlan: (projectName: string, planId: string) => Promise<void>;
+  handleOpenExecutionSession: (projectKey: string, runId: string) => void;
   editorExpanded: boolean;
   onDeselectProject?: () => void;
   onSelectProjectByName?: (projectName: string) => void;
@@ -893,6 +895,7 @@ function SplitBody(props: SplitBodyProps) {
     handleExecuteDiscoveryPlan,
     executeAndLaunchPlan,
     applyAndLaunchPlan,
+    handleOpenExecutionSession,
     editorExpanded,
     onDeselectProject,
     onSelectProjectByName,
