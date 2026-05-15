@@ -65,14 +65,6 @@ export type DiscoveryPlanStatus =
   | 'applied'
   | 'archived';
 
-export interface DiscoveryPlanContextRefs {
-  workingDirectory: string[];
-  memory: string[];
-  existingPlans: string[];
-  cronJobs: string[];
-  recentChats: string[];
-}
-
 export interface DiscoveryPlanOverview {
   id: string;
   title: string;
@@ -80,23 +72,7 @@ export interface DiscoveryPlanOverview {
   updatedAt: string;
   approvalMode: DiscoveryPlanApprovalMode;
   status: DiscoveryPlanStatus;
-  summary: string;
-  rationale: string;
-  dedupeKey: string;
-  sourceDiscoverySessionId: string;
   executionSessionId?: string;
-  executionStartedAt?: string;
-  executionLastActivityAt?: string;
-  executionStatus?: string;
-  latestSummary?: string;
-  contextRefs: DiscoveryPlanContextRefs;
-  planFilePath: string;
-  structureVersion: number;
-  content: string;
-  workspace?: {
-    strategy: string;
-    cwd: string;
-  };
 }
 
 export interface ProjectDiscoveryPlansResponse {
@@ -120,16 +96,6 @@ export interface DiscoveryContextPlanItem {
 
 export type CronJobOverviewStatus = 'scheduled' | 'running' | 'completed' | 'failed';
 
-export type CronRunOutcomeStatus = 'completed' | 'failed' | 'running';
-
-export interface CronJobOverviewLatestRun {
-  status: CronRunOutcomeStatus;
-  runId: string;
-  startedAt: string;
-  taskId: string;
-  sessionId: string;
-}
-
 export interface CronJobOverview {
   id: string;
   projectKey: string | null;
@@ -140,7 +106,6 @@ export interface CronJobOverview {
   manualOnly: boolean;
   status: CronJobOverviewStatus;
   lastFiredAt?: number;
-  latestRun: CronJobOverviewLatestRun | null;
 }
 
 export interface CronJobsOverviewResponse {
