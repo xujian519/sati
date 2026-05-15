@@ -52,7 +52,7 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
+import { getProjects, getProjectCronJobsOverview, getSessions, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
 import {
     runChatViaGateway,
     abortViaGateway,
@@ -605,6 +605,16 @@ app.get('/api/always-on/events', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('[always-on-events] failed:', error);
         res.status(500).json({ error: error?.message || 'always-on-events failed' });
+    }
+});
+
+app.get('/api/always-on/cron-jobs', authenticateToken, async (_req, res) => {
+    try {
+        const result = await getProjectCronJobsOverview();
+        res.json(result);
+    } catch (error) {
+        console.error('[always-on-cron-jobs] failed:', error);
+        res.status(500).json({ error: error?.message || 'always-on-cron-jobs failed' });
     }
 });
 

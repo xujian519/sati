@@ -462,9 +462,10 @@ async function getProjectCronJobsOverview(_projectName) {
             const isCron = task.schedule?.type === 'cron';
             return {
                 id: task.taskId,
+                projectKey: task.projectKey || null,
                 cron: isCron ? task.schedule.expression : '',
                 prompt: task.message || '',
-                createdAt: new Date(task.createdAt).getTime() || 0,
+                createdAt: task.createdAt,
                 recurring: isCron,
                 permanent: isCron,
                 manualOnly: false,

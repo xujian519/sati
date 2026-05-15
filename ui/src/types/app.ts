@@ -114,6 +114,37 @@ export interface DiscoveryContextPlanItem {
   summary: string;
 }
 
+export type CronJobOverviewStatus = 'scheduled' | 'running' | 'completed' | 'failed';
+
+export type CronRunOutcomeStatus = 'completed' | 'failed' | 'running';
+
+export interface CronJobOverviewLatestRun {
+  status: CronRunOutcomeStatus;
+  runId: string;
+  startedAt: string;
+  taskId: string;
+  sessionId: string;
+}
+
+export interface CronJobOverview {
+  id: string;
+  projectKey: string | null;
+  cron: string;
+  prompt: string;
+  createdAt: string;
+  recurring: boolean;
+  manualOnly: boolean;
+  status: CronJobOverviewStatus;
+  lastFiredAt?: number;
+  latestRun: CronJobOverviewLatestRun | null;
+}
+
+export interface CronJobsOverviewResponse {
+  jobs: CronJobOverview[];
+}
+
+export type AlwaysOnSubTab = 'dashboard' | 'plans-cron';
+
 export interface DiscoveryContextCronItem {
   id: string;
   status: CronJobOverviewStatus;

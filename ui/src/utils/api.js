@@ -54,6 +54,8 @@ export const api = {
   projects: () => authenticatedFetch('/api/projects'),
   alwaysOnDashboardEvents: (limit = 200, since) =>
     authenticatedFetch(`/api/always-on/events?limit=${encodeURIComponent(limit)}${since ? `&since=${encodeURIComponent(since)}` : ''}`),
+  allCronJobs: () =>
+    authenticatedFetch('/api/always-on/cron-jobs'),
   projectDiscoveryContext: (projectName) =>
     authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-context`),
   projectDiscoveryPlans: (projectName) =>

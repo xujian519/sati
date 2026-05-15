@@ -3,6 +3,10 @@
   "actions": {
     "refresh": "刷新"
   },
+  "tabs": {
+    "dashboard": "仪表盘",
+    "plansCron": "计划与定时任务"
+  },
   "dashboard": {
     "title": "Always-On 仪表盘",
     "subtitle": "所有工作区的活动动态。",
@@ -29,6 +33,33 @@
       "cronStarted": "定时任务已启动",
       "cronCompleted": "定时任务完成",
       "cronFailed": "定时任务失败"
+    }
+  },
+  "plansCron": {
+    "title": "计划与定时任务",
+    "subtitle": "所有项目的计划与定时任务。",
+    "loading": "正在加载计划与定时任务…",
+    "empty": "暂无计划或定时任务。",
+    "unassigned": "未关联项目",
+    "columns": {
+      "title": "标题",
+      "type": "类型",
+      "createdAt": "创建时间",
+      "status": "状态"
+    },
+    "type": {
+      "plan": "计划",
+      "cronJob": "定时任务"
+    },
+    "status": {
+      "created": "刚创建",
+      "preparingWorkspace": "正在创建隔离环境",
+      "executing": "正在执行",
+      "completedWaiting": "执行完成",
+      "failed": "执行失败",
+      "superseded": "已被替代",
+      "scheduled": "已安排",
+      "running": "运行中"
     }
   }
 }
