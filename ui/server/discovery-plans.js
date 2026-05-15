@@ -91,19 +91,43 @@ export async function applyProjectDiscoveryPlan(projectName, planId) {
   const result = await getService().queueApply(projectName, planId);
 
   const gw = await getPilotDeckGateway();
-  if (gw.alwaysOnApply) {
-    const applyResult = await gw.alwaysOnApply({
+
+  let applyResult;
+  try {
+    applyResult = await gw.alwaysOnApply({
       projectKey: result.projectRoot,
       planId,
       projectName,
     });
-    return {
-      plan: result.plan,
-      sessionKey: applyResult.sessionKey,
+  } catch (err) {
+    const finalPlan = await getService().updateExecution(projectName, planId, {
+      status: 'failed',
+      latestSummary: (err && err.message) || 'Apply failed due to unexpected error',
       executionToken: result.executionToken,
-      error: applyResult.error,
+    });
+    return {
+      plan: finalPlan,
+      error: { code: 'apply_error', message: (err && err.message) || 'Apply failed' },
     };
   }
 
-  return result;
+  if (applyResult.error) {
+    const finalPlan = await getService().updateExecution(projectName, planId, {
+      status: 'failed',
+      latestSummary: applyResult.error.message || 'Apply failed',
+      executionToken: result.executionToken,
+    });
+    return { plan: finalPlan, error: applyResult.error };
+  }
+
+  const finalPlan = await getService().updateExecution(projectName, planId, {
+    status: 'completed',
+    executionSessionId: applyResult.sessionKey,
+    executionToken: result.executionToken,
+  });
+  return {
+    plan: finalPlan,
+    sessionKey: applyResult.sessionKey,
+    executionToken: result.executionToken,
+  };
 }

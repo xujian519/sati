@@ -142,10 +142,21 @@ export default function RunDetail(props: RunDetailProps) {
     if (!projectName || !planId) return;
     setActionLoading('apply');
     try {
-      await api.applyProjectDiscoveryPlan(projectName, planId);
-      setPlan((prev) => (prev ? { ...prev, status: 'applying' } : prev));
+      const response = await api.applyProjectDiscoveryPlan(projectName, planId);
+      const body = await response.json().catch(() => ({})) as {
+        plan?: { status?: string };
+        error?: { code?: string; message?: string } | string;
+      };
+      if (!response.ok || body.error) {
+        setPlan((prev) => (prev ? { ...prev, status: 'failed' } : prev));
+        return;
+      }
+      const serverStatus = body.plan?.status;
+      setPlan((prev) =>
+        prev ? { ...prev, status: serverStatus || 'applying' } : prev,
+      );
     } catch {
-      // swallow
+      setPlan((prev) => (prev ? { ...prev, status: 'failed' } : prev));
     } finally {
       setActionLoading(null);
     }
