@@ -86,6 +86,23 @@ export type InProcessGatewayOptions = {
    */
   reloadConfig?: () => Promise<ReloadConfigResult>;
   /**
+   * Optional pre-turn hook that lets the host re-read disk config before
+   * `submitTurn` resolves a session and starts streaming. Wired by
+   * `createLocalGateway` to `configStore.reload("turn-start")` so that
+   * a credential / model edit applied between turns is guaranteed to
+   * take effect on the very next message even when fs watchers miss the
+   * change (network mounts, debounce gaps, container snapshots).
+   *
+   * Cheap and singleton-deduped — `PilotConfigStore.reload` is a no-op
+   * when the yaml hasn't changed and only re-runs the
+   * invalidate-runtimes / mark-sessions-dirty path when something
+   * actually moved.
+   *
+   * Failures are swallowed so a transient yaml read error does not
+   * block in-progress chats; the existing snapshot remains in use.
+   */
+  refreshConfigBeforeTurn?: () => Promise<void>;
+  /**
    * Authoritative skill CRUD manager backed by `~/.pilotdeck/skills/`.
    * Wired by `createLocalGateway` so every host (CLI, TUI, Web UI bridge,
    * SDK) reads and writes the same skill directory the agent loads from.
@@ -170,6 +187,18 @@ export class InProcessGateway implements Gateway {
   }
 
   async *submitTurn(input: GatewaySubmitTurnInput): AsyncIterable<GatewayEvent> {
+    // Per-turn config refresh (defensive). The fs watcher path already
+    // catches most edits, but this guarantees a fresh apiKey/url is in
+    // effect for the very next turn even when watcher events are
+    // dropped or coalesced.
+    if (this.options.refreshConfigBeforeTurn) {
+      try {
+        await this.options.refreshConfigBeforeTurn();
+      } catch {
+        // Intentional: keep streaming on the previous snapshot rather
+        // than failing a turn over a transient yaml read error.
+      }
+    }
     const runId = input.runId ?? this.uuid();
     if (!this.router.beginTurn(input.sessionKey, runId)) {
       yield {

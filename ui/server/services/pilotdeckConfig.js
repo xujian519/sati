@@ -101,6 +101,29 @@ export function normalizePilotDeckConfig(input) {
   return deepMerge(buildDefaultPilotDeckConfig(), isRecord(input) ? input : {});
 }
 
+// Strip surrounding whitespace from provider apiKey + url before they
+// hit disk. Without this, a copy-paste with a stray space (e.g.
+// `apiKey: " sk-..."`) survives the round-trip and produces an
+// `Authorization: Bearer  sk-...` header that providers reject as
+// `invalid_token` / `无效的令牌`. The gateway's parseModelConfig already
+// trims as a defence-in-depth, but cleaning here keeps the on-disk
+// yaml authoritative + diff-clean for users browsing the file.
+export function sanitizeProviderCredentials(config) {
+  if (!isRecord(config)) return config;
+  const providers = config?.model?.providers;
+  if (!isRecord(providers)) return config;
+  for (const provider of Object.values(providers)) {
+    if (!isRecord(provider)) continue;
+    if (typeof provider.apiKey === 'string') {
+      provider.apiKey = provider.apiKey.trim();
+    }
+    if (typeof provider.url === 'string') {
+      provider.url = provider.url.trim();
+    }
+  }
+  return config;
+}
+
 // ─── Model resolution ────────────────────────────────────────────────────────
 
 function splitModelRef(ref) {
@@ -383,7 +406,10 @@ export function readPilotDeckConfigFile() {
 // there's no read-modify-write needed anymore (the previous translation
 // layer existed only to bridge an older internal schema).
 export async function writePilotDeckConfig(config) {
-  const validation = validatePilotDeckConfig(config);
+  const sanitized = sanitizeProviderCredentials(
+    isRecord(config) ? deepMerge({}, config) : config,
+  );
+  const validation = validatePilotDeckConfig(sanitized);
   if (!validation.valid) {
     const error = new Error('Invalid PilotDeck config');
     error.validation = validation;

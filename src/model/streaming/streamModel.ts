@@ -252,11 +252,17 @@ function buildHeaders(provider: ProviderConfig): HeadersInit {
     ...provider.headers,
   };
 
+  // Defensive trim: parseModelConfig already strips whitespace from
+  // apiKey, but a programmatic caller could hand a ProviderConfig in
+  // here that bypassed the parser. A stray space in the header value
+  // (`Bearer  sk-...`) is silently rejected by most providers as
+  // `invalid_token`, so guard at the wire boundary too.
+  const apiKey = provider.apiKey.trim();
   if (provider.protocol === "anthropic") {
-    headers["x-api-key"] = provider.apiKey;
+    headers["x-api-key"] = apiKey;
     headers["anthropic-version"] = headers["anthropic-version"] ?? "2023-06-01";
   } else {
-    headers.authorization = headers.authorization ?? `Bearer ${provider.apiKey}`;
+    headers.authorization = headers.authorization ?? `Bearer ${apiKey}`;
   }
 
   return headers;

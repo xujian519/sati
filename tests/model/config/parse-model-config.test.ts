@@ -37,3 +37,17 @@ test("rejects model config without providers", () => {
     (error) => error instanceof ModelConfigError && error.code === "missing_provider",
   );
 });
+
+test("trims whitespace from provider url and apiKey", () => {
+  const raw = validModelConfig();
+  const providers = raw.providers as Record<string, any>;
+  providers["openai-main"].url = "  https://api.openai.com/v1\n";
+  providers["openai-main"].apiKey = " sk-from-yaml ";
+
+  const config = parseModelConfig(raw, {
+    env: { ANTHROPIC_API_KEY: "anthropic-key" },
+  });
+
+  assert.equal(config.providers["openai-main"].url, "https://api.openai.com/v1");
+  assert.equal(config.providers["openai-main"].apiKey, "sk-from-yaml");
+});

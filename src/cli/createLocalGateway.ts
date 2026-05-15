@@ -228,6 +228,15 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       }
       return { reloaded: true, changedPaths };
     },
+    // Defensive: re-check the on-disk config at the start of every
+    // turn so an apiKey/url edit applied between two messages takes
+    // effect on the next one, even if the fs watcher missed it.
+    // Singleton-deduped inside PilotConfigStore.reload — concurrent
+    // turns share a single in-flight read, and unchanged config is a
+    // no-op (no invalidation, no session recreation).
+    async refreshConfigBeforeTurn() {
+      await configStore.reload("turn-start");
+    },
   });
   // Hand the gateway back to the registry so per-session creation can
   // build a `GatewayElicitationChannel` against this gateway's bus +
