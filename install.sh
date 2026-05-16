@@ -123,6 +123,16 @@ npx @playwright/mcp install-browser chrome-for-testing 2>/dev/null && \
   warn "Chrome for Testing install failed (browser-use plugin may not work)"
 echo ""
 
+echo "Installing ClawHub CLI..."
+if command -v clawhub >/dev/null 2>&1; then
+  ok "ClawHub CLI already installed ($(clawhub --version 2>/dev/null || echo 'unknown version'))"
+else
+  npm install -g clawhub --loglevel=error && \
+    ok "ClawHub CLI installed" || \
+    warn "ClawHub CLI install failed (skill marketplace features may not work)"
+fi
+echo ""
+
 echo "Setting up CLI command..."
 CLI_TARGET="$INSTALL_DIR/ui/server/cli.js"
 chmod +x "$CLI_TARGET"
