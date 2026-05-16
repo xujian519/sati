@@ -59,7 +59,7 @@ import { createAgentProjectSessionStorage, listProjectSessions, resumeAgentSessi
 import { readWebSessionMessages } from "../web/server/readSessionMessages.js";
 import { describeWebProject, listWebProjects } from "../web/server/listProjects.js";
 import { BackgroundTaskRuntime } from "../task/runtime/BackgroundTaskRuntime.js";
-import { createBuiltinRegistry } from "../tool/index.js";
+import { createBuiltinRegistry, createPlanFileManager } from "../tool/index.js";
 import type { PilotDeckToolDefinition, ToolRegistry, PilotDeckElicitationChannel } from "../tool/index.js";
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
 import type { RouterEventBus, RouterEvent } from "../router/protocol/events.js";
@@ -843,11 +843,13 @@ class ProjectRuntimeRegistry {
           };
         },
       };
+      const planFileManager = createPlanFileManager({ projectRoot });
       return {
         context: contextRuntime,
         fileHistory,
         subagentTranscript,
         elicitation,
+        planFileManager,
       };
     };
     return {
@@ -915,7 +917,7 @@ function mergeSessionDependencies(
   extension: Partial<
     Pick<
       AgentRuntimeDependencies,
-      "context" | "fileHistory" | "subagentTranscript" | "elicitation" | "eventEmitter" | "drainEvents"
+      "context" | "fileHistory" | "subagentTranscript" | "elicitation" | "eventEmitter" | "drainEvents" | "planFileManager"
     >
   >,
 ): CreateAgentSessionOptions["dependencies"] {
@@ -927,6 +929,7 @@ function mergeSessionDependencies(
     ...(extension.elicitation ? { elicitation: extension.elicitation } : {}),
     ...(extension.eventEmitter ? { eventEmitter: extension.eventEmitter } : {}),
     ...(extension.drainEvents ? { drainEvents: extension.drainEvents } : {}),
+    ...(extension.planFileManager ? { planFileManager: extension.planFileManager } : {}),
   };
 }
 

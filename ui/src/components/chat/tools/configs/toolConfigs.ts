@@ -600,61 +600,40 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
 
   exit_plan_mode: {
     input: {
+      type: 'hide',
+    },
+    result: {
       type: 'collapsible',
       title: 'Implementation plan',
       defaultOpen: true,
       contentType: 'markdown',
-      getContentProps: (input) => ({
-        content: input.plan?.replace(/\\n/g, '\n') || input.plan
-      })
-    },
-    result: {
-      type: 'collapsible',
-      contentType: 'markdown',
       getContentProps: (result) => {
-        try {
-          let parsed = result.content;
-          if (typeof parsed === 'string') {
-            parsed = JSON.parse(parsed);
-          }
-          return {
-            content: parsed.plan?.replace(/\\n/g, '\n') || parsed.plan
-          };
-        } catch (e) {
-          console.warn('Failed to parse plan content:', e);
-          return { content: '' };
-        }
+        const text = typeof result.content === 'string'
+          ? result.content
+          : Array.isArray(result.content)
+            ? result.content.map((c: { text?: string }) => c.text || '').join('')
+            : '';
+        return { content: text };
       }
     }
   },
 
-  // Also register as ExitPlanMode (the actual tool name used by Claude)
   ExitPlanMode: {
     input: {
+      type: 'hide',
+    },
+    result: {
       type: 'collapsible',
       title: 'Implementation plan',
       defaultOpen: true,
       contentType: 'markdown',
-      getContentProps: (input) => ({
-        content: input.plan?.replace(/\\n/g, '\n') || input.plan
-      })
-    },
-    result: {
-      type: 'collapsible',
-      contentType: 'markdown',
       getContentProps: (result) => {
-        try {
-          let parsed = result.content;
-          if (typeof parsed === 'string') {
-            parsed = JSON.parse(parsed);
-          }
-          return {
-            content: parsed.plan?.replace(/\\n/g, '\n') || parsed.plan
-          };
-        } catch (e) {
-          console.warn('Failed to parse plan content:', e);
-          return { content: '' };
-        }
+        const text = typeof result.content === 'string'
+          ? result.content
+          : Array.isArray(result.content)
+            ? result.content.map((c: { text?: string }) => c.text || '').join('')
+            : '';
+        return { content: text };
       }
     }
   },

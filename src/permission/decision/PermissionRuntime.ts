@@ -50,12 +50,24 @@ export class PermissionRuntime {
     // Deny rules (checked above) still win over allow rules.
     const allowRule = findMatchingRule(permissionContext.rules.allow, tool.name, input);
     if (allowRule) {
-      return allow({
-        type: "rule",
-        behavior: "allow",
-        rule: allowRule,
-        message: `Allow rule permits ${tool.name}.`,
-      });
+      // Plan mode deny takes precedence over user allow rules for
+      // non-readonly tools (except plan file writes). Without this guard,
+      // a user who previously allowed write_file/bash can inadvertently
+      // bypass plan mode's read-only constraint.
+      if (
+        permissionContext.mode === "plan" &&
+        !tool.isReadOnly(input) &&
+        !(permissionContext.planFilePath && isPlanFileWrite(tool, input, permissionContext))
+      ) {
+        // Fall through to mode-level deny below.
+      } else {
+        return allow({
+          type: "rule",
+          behavior: "allow",
+          rule: allowRule,
+          message: `Allow rule permits ${tool.name}.`,
+        });
+      }
     }
 
     const toolPermission = await tool.checkPermissions?.(input, context);
