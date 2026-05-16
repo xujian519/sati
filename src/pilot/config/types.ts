@@ -88,6 +88,12 @@ export type PilotGatewayConfig = {
   bindAddress: "127.0.0.1";
   idleSessionTimeoutMinutes: number;
   staticAssetsPath?: string;
+  /**
+   * Maximum number of concurrent per-session MCP instances (e.g. browser-use
+   * browser processes).  When the limit is reached, new sessions fall back
+   * to the shared project-level MCP runtime.  Default 5.
+   */
+  maxPerSessionMcpInstances?: number;
 };
 
 /**

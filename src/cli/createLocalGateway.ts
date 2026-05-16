@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync as mkdirSyncFs } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync as mkdirSyncFs, renameSync } from "node:fs";
 import { resolve, join as joinPath } from "node:path";
 import { tmpdir } from "node:os";
 import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
@@ -199,6 +199,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     idleSessionTimeoutMs:
       (defaultRuntime.snapshot.config.gateway?.idleSessionTimeoutMinutes ?? 30) * 60_000,
     now,
+    onSessionEvict: (sessionKey) => registry.evictSessionMcp(sessionKey),
   });
   const skillManager = new SkillManager({ pilotHome });
   const gateway = new InProcessGateway(router, {
@@ -296,10 +297,18 @@ type ProjectRuntime = {
   /**
    * Lazily-started MCP runtime (C1). Built on first session creation by
    * `ensureMcpReady()` because plugin refresh + connect is async.
+   * Only contains non-`perSession` servers (shared across sessions).
    */
   mcpRuntime?: McpRuntime;
   /** Tracks the in-flight `ensureMcpReady` promise so concurrent sessions share it. */
   mcpReady?: Promise<void>;
+  /**
+   * Server specs marked `perSession: true`. These are NOT started at the
+   * project level — each agent session creates its own `McpRuntime` from
+   * these specs so that e.g. browser-use gets an isolated process per
+   * session.  Populated during `ensureMcpReady()`.
+   */
+  perSessionServerSpecs?: import("../mcp/protocol/types.js").PilotDeckMcpServerSpec[];
 };
 
 class ProjectRuntimeRegistry {
@@ -323,6 +332,14 @@ class ProjectRuntimeRegistry {
     { allow: PermissionRule[]; deny: PermissionRule[]; ask: PermissionRule[] }
   >();
 
+  /**
+   * Per-session MCP runtimes for `perSession: true` servers (e.g.
+   * browser-use).  Each entry owns one or more child processes and a temp
+   * directory.  Cleaned up by `evictSessionMcp()` when the SessionRouter
+   * evicts the session (idle sweep, explicit close, or dirty-recreate).
+   */
+  private readonly sessionMcpRuntimes = new Map<string, McpRuntime>();
+
   private _extraTools: PilotDeckToolDefinition[];
   private _sessionOverrides: SessionConfigOverrides | undefined;
 
@@ -331,14 +348,33 @@ class ProjectRuntimeRegistry {
     this._sessionOverrides = options.sessionOverrides;
   }
 
+  /**
+   * Stop and discard the per-session MCP runtime for `sessionKey`.
+   * Called by the `SessionRouter.onSessionEvict` callback.
+   */
+  evictSessionMcp(sessionKey: string): void {
+    const mcp = this.sessionMcpRuntimes.get(sessionKey);
+    if (mcp) {
+      this.sessionMcpRuntimes.delete(sessionKey);
+      mcp.stop().catch(() => {});
+    }
+  }
+
   setGateway(gateway: InProcessGateway): void {
     this.gateway = gateway;
   }
 
   private buildRouterEventBus(): RouterEventBus {
     const pilotHome = this.options.pilotHome;
-    const eventsPath = joinPath(pilotHome, "router-events.jsonl");
-    try { mkdirSyncFs(pilotHome, { recursive: true }); } catch { /* exists */ }
+    const routerDir = joinPath(pilotHome, "router");
+    try { mkdirSyncFs(routerDir, { recursive: true }); } catch { /* exists */ }
+    const eventsPath = joinPath(routerDir, "events.jsonl");
+    try {
+      const oldPath = joinPath(pilotHome, "router-events.jsonl");
+      if (!existsSync(eventsPath) && existsSync(oldPath)) {
+        renameSync(oldPath, eventsPath);
+      }
+    } catch { /* best-effort migration */ }
     return {
       emit(event: RouterEvent) {
         try {
@@ -379,9 +415,15 @@ class ProjectRuntimeRegistry {
   /**
    * Drop cached runtimes so the next `resolve()` call rebuilds from
    * a fresh `loadPilotConfig()` snapshot. Gracefully shuts down any
-   * active MCP connections before discarding the entry.
+   * active MCP connections (both shared and per-session) before
+   * discarding the entry.
    */
   invalidate(projectRoot?: string): void {
+    for (const [, mcp] of this.sessionMcpRuntimes) {
+      mcp.stop().catch(() => {});
+    }
+    this.sessionMcpRuntimes.clear();
+
     if (projectRoot) {
       const runtime = this.runtimes.get(projectRoot);
       if (runtime?.mcpRuntime) {
@@ -516,12 +558,20 @@ class ProjectRuntimeRegistry {
         const rawServers = runtime.pluginRuntime.mcpServers();
         const { servers } = parsePluginMcpServers(rawServers);
         if (servers.length === 0) return;
-        const mcp = new McpRuntime(servers);
-        runtime.mcpRuntime = mcp;
-        await mcp.start();
-        const defs = await createMcpToolDefinitionsFromRuntime(mcp);
-        for (const def of defs) {
-          if (!runtime.tools.has(def.name)) runtime.tools.register(def);
+
+        const sharedServers = servers.filter((s) => s.transport !== "stdio" || !s.perSession);
+        const perSessionServers = servers.filter((s) => s.transport === "stdio" && s.perSession);
+
+        runtime.perSessionServerSpecs = perSessionServers.length > 0 ? perSessionServers : undefined;
+
+        if (sharedServers.length > 0) {
+          const mcp = new McpRuntime(sharedServers);
+          runtime.mcpRuntime = mcp;
+          await mcp.start();
+          const defs = await createMcpToolDefinitionsFromRuntime(mcp);
+          for (const def of defs) {
+            if (!runtime.tools.has(def.name)) runtime.tools.register(def);
+          }
         }
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -578,6 +628,42 @@ class ProjectRuntimeRegistry {
     await this.ensureMcpReady(runtime);
     const contributions = runtime.pluginRuntime.snapshotContributions();
 
+    // -- per-session MCP runtime (e.g. browser-use) --------------------
+    let sessionTools: ToolRegistry = runtime.tools;
+    const perSpecs = runtime.perSessionServerSpecs;
+    const maxInstances = runtime.snapshot.config.gateway?.maxPerSessionMcpInstances ?? 5;
+    if (perSpecs && perSpecs.length > 0 && this.sessionMcpRuntimes.size < maxInstances) {
+      this.evictSessionMcp(context.sessionKey);
+      const sessionMcp = new McpRuntime(perSpecs);
+      this.sessionMcpRuntimes.set(context.sessionKey, sessionMcp);
+      try {
+        await sessionMcp.start();
+        const defs = await createMcpToolDefinitionsFromRuntime(sessionMcp);
+        if (defs.length > 0) {
+          sessionTools = runtime.tools.clone();
+          for (const def of defs) {
+            if (sessionTools.has(def.name)) {
+              sessionTools.replace(def);
+            } else {
+              sessionTools.register(def);
+            }
+          }
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[pilotdeck] Per-session MCP startup failed for ${context.sessionKey}:`,
+          (err as Error).message,
+        );
+      }
+    } else if (perSpecs && perSpecs.length > 0) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[pilotdeck] Per-session MCP limit reached (${maxInstances}). ` +
+        `Session ${context.sessionKey} will share the project-level browser instance.`,
+      );
+    }
+
     // Inject the gateway's interactive permission hook so the agent's
     // PermissionRequest lifecycle is round-tripped through whichever
     // client is streaming this session (Web UI, TUI, etc.) instead of
@@ -625,7 +711,7 @@ class ProjectRuntimeRegistry {
 
     const baseDependencies: CreateAgentSessionOptions["dependencies"] = {
       router: runtime.router,
-      tools: { registry: runtime.tools },
+      tools: { registry: sessionTools },
       lifecycle,
       now: this.options.now,
       eventEmitter: eventBuf.emitter,

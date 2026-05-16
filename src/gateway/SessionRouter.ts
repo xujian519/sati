@@ -19,6 +19,12 @@ export type SessionRouterOptions = {
   listSessions?: (input: ListSessionsInput) => Promise<ListSessionsResult>;
   idleSessionTimeoutMs?: number;
   now?: () => Date;
+  /**
+   * Called (fire-and-forget) when a session is evicted from the router —
+   * idle sweep, explicit close, or dirty-recreate. Use this to clean up
+   * per-session resources (e.g. per-session MCP runtimes / browser processes).
+   */
+  onSessionEvict?: (sessionKey: string) => void;
 };
 
 type SessionRecord = {
@@ -47,6 +53,7 @@ export class SessionRouter {
     if (cached) {
       cached.context = mergeSessionContext(cached.context, context);
       if (cached.dirtyReason && this.options.recreateSession) {
+        this.options.onSessionEvict?.(context.sessionKey);
         cached.session = await this.options.recreateSession(cached.context, cached.session);
         cached.dirtyReason = undefined;
       }
@@ -92,7 +99,9 @@ export class SessionRouter {
   }
 
   async close(sessionKey: string): Promise<void> {
-    this.sessions.delete(sessionKey);
+    if (this.sessions.delete(sessionKey)) {
+      this.options.onSessionEvict?.(sessionKey);
+    }
   }
 
   markAllDirty(reason = "runtime_changed"): number {
@@ -165,6 +174,7 @@ export class SessionRouter {
       }
       if (now - record.lastUsedAt > this.idleSessionTimeoutMs) {
         this.sessions.delete(sessionKey);
+        this.options.onSessionEvict?.(sessionKey);
       }
     }
   }

@@ -90,13 +90,6 @@ export class PromptAssembler {
       "Operate decisively: prefer using available tools to gather facts before answering, prefer concise replies, and surface uncertainty when present.",
     ];
 
-    const toolCatalog = this.formatToolCatalog(input.tools);
-    if (toolCatalog) {
-      lines.push("");
-      lines.push("Available tools:");
-      lines.push(toolCatalog);
-    }
-
     const permissionLine = formatPermissionMode(input.permissionMode);
     if (permissionLine) {
       lines.push("");
@@ -155,14 +148,6 @@ export class PromptAssembler {
     return sections;
   }
 
-  private formatToolCatalog(tools: CanonicalToolSchema[]): string {
-    if (tools.length === 0) {
-      return "";
-    }
-    return tools
-      .map((tool) => `- ${tool.name}${tool.description ? `: ${tool.description}` : ""}`)
-      .join("\n");
-  }
 }
 
 function formatPermissionMode(mode: string): string {
