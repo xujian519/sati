@@ -35,7 +35,10 @@ export function createExitPlanModeTool(): PilotDeckToolDefinition<ExitPlanModeIn
       required: ["plan"],
       additionalProperties: false,
       properties: {
-        plan: { type: "string" },
+        plan: {
+          type: "string",
+          description: "The full plan text to submit before exiting plan mode.",
+        },
       },
     },
     isReadOnly: () => true,

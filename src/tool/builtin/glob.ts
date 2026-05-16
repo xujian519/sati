@@ -15,16 +15,25 @@ export function createGlobTool(): PilotDeckToolDefinition<GlobInput> {
   return {
     name: "glob",
     aliases: ["Glob"],
-    description: "Find workspace files matching a glob pattern.",
+    description: "Find workspace files matching a glob pattern. Returns a list of matching file paths.",
     kind: "filesystem",
     inputSchema: {
       type: "object",
       required: ["pattern"],
       additionalProperties: false,
       properties: {
-        pattern: { type: "string" },
-        path: { type: "string" },
-        limit: { type: "integer" },
+        pattern: {
+          type: "string",
+          description: "Glob pattern to match files against (e.g. '**/*.ts', 'src/**/*.json').",
+        },
+        path: {
+          type: "string",
+          description: "Relative directory to search within. Defaults to workspace root.",
+        },
+        limit: {
+          type: "integer",
+          description: "Maximum number of file paths to return. Defaults to 1000.",
+        },
       },
     },
     maxResultBytes: 200_000,

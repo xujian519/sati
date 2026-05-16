@@ -13,16 +13,25 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
   return {
     name: "read_file",
     aliases: ["Read"],
-    description: "Read a UTF-8 text file from the PilotDeck workspace.",
+    description: "Read a UTF-8 text file from the PilotDeck workspace. Returns file content as text.",
     kind: "filesystem",
     inputSchema: {
       type: "object",
       required: ["filePath"],
       additionalProperties: false,
       properties: {
-        filePath: { type: "string" },
-        offset: { type: "integer" },
-        limit: { type: "integer" },
+        filePath: {
+          type: "string",
+          description: "Relative or absolute path of the file to read.",
+        },
+        offset: {
+          type: "integer",
+          description: "Zero-based line offset to start reading from. Defaults to 0.",
+        },
+        limit: {
+          type: "integer",
+          description: "Maximum number of lines to return. Omit to read the entire file.",
+        },
       },
     },
     maxResultBytes: 200_000,

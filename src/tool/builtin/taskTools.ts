@@ -109,9 +109,19 @@ export function createTaskCreateTool(
       required: ["command"],
       additionalProperties: false,
       properties: {
-        command: { type: "string" },
-        agentId: { type: "string" },
-        kind: { type: "string", enum: ["bash", "monitor"] },
+        command: {
+          type: "string",
+          description: "Shell command to run as a detached background task.",
+        },
+        agentId: {
+          type: "string",
+          description: "Optional agent id to associate this task with.",
+        },
+        kind: {
+          type: "string",
+          enum: ["bash", "monitor"],
+          description: "Task kind: 'bash' (default) or 'monitor'.",
+        },
       },
     },
     isReadOnly: () => false,
@@ -148,9 +158,19 @@ export function createTaskListTool(
       type: "object",
       additionalProperties: false,
       properties: {
-        agentId: { type: "string" },
-        status: { type: ["string", "array"] },
-        kind: { type: "string", enum: ["bash", "monitor"] },
+        agentId: {
+          type: "string",
+          description: "Filter tasks by agent id.",
+        },
+        status: {
+          type: ["string", "array"],
+          description: "Filter by status (e.g. 'running', 'completed'). String or array of strings.",
+        },
+        kind: {
+          type: "string",
+          enum: ["bash", "monitor"],
+          description: "Filter by task kind.",
+        },
       },
     },
     isReadOnly: () => true,
@@ -196,9 +216,18 @@ export function createTaskOutputTool(
       required: ["taskId"],
       additionalProperties: false,
       properties: {
-        taskId: { type: "string" },
-        offset: { type: "integer" },
-        maxBytes: { type: "integer" },
+        taskId: {
+          type: "string",
+          description: "The task id returned by task_create.",
+        },
+        offset: {
+          type: "integer",
+          description: "Byte offset to start reading from (for incremental polling). Defaults to 0.",
+        },
+        maxBytes: {
+          type: "integer",
+          description: "Maximum bytes to return in this read. Defaults to tool limit.",
+        },
       },
     },
     maxResultBytes: 200_000,
@@ -241,8 +270,14 @@ export function createTaskStopTool(
       required: ["taskId"],
       additionalProperties: false,
       properties: {
-        taskId: { type: "string" },
-        graceMs: { type: "integer" },
+        taskId: {
+          type: "string",
+          description: "The task id to stop.",
+        },
+        graceMs: {
+          type: "integer",
+          description: "Grace period in ms between SIGTERM and SIGKILL. Defaults to 5000.",
+        },
       },
     },
     isReadOnly: () => false,

@@ -23,16 +23,25 @@ export function createBashTool(options?: CreateBashToolOptions): PilotDeckToolDe
   return {
     name: "bash",
     aliases: ["Bash"],
-    description: "Run a shell command in the PilotDeck workspace.",
+    description: "Run a shell command in the PilotDeck workspace. Returns stdout/stderr and exit code.",
     kind: "shell",
     inputSchema: {
       type: "object",
       required: ["command"],
       additionalProperties: false,
       properties: {
-        command: { type: "string" },
-        timeoutMs: { type: "integer" },
-        description: { type: "string" },
+        command: {
+          type: "string",
+          description: "The shell command to execute (passed to /bin/sh -c).",
+        },
+        timeoutMs: {
+          type: "integer",
+          description: "Timeout in milliseconds. Defaults to 30000. Max 600000.",
+        },
+        description: {
+          type: "string",
+          description: "Short human-readable label for audit logs (3-10 words).",
+        },
       },
     },
     maxResultBytes: 200_000,

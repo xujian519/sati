@@ -23,23 +23,54 @@ export function createGrepTool(): PilotDeckToolDefinition<GrepInput> {
   return {
     name: "grep",
     aliases: ["Grep"],
-    description: "Search workspace text files with a regular expression.",
+    description: "Search workspace text files with a regular expression. Returns matching lines, file paths, or match counts.",
     kind: "filesystem",
     inputSchema: {
       type: "object",
       required: ["pattern"],
       additionalProperties: false,
       properties: {
-        pattern: { type: "string" },
-        path: { type: "string" },
-        glob: { type: "string" },
-        outputMode: { type: "string", enum: ["content", "files_with_matches", "count"] },
-        before: { type: "integer" },
-        after: { type: "integer" },
-        context: { type: "integer" },
-        caseInsensitive: { type: "boolean" },
-        headLimit: { type: "integer" },
-        offset: { type: "integer" },
+        pattern: {
+          type: "string",
+          description: "JavaScript regular expression pattern to search for.",
+        },
+        path: {
+          type: "string",
+          description: "Relative directory or file path to search within. Defaults to workspace root.",
+        },
+        glob: {
+          type: "string",
+          description: "Glob pattern to filter which files are searched (e.g. '*.ts').",
+        },
+        outputMode: {
+          type: "string",
+          enum: ["content", "files_with_matches", "count"],
+          description: "Output format: 'content' shows matching lines, 'files_with_matches' lists file paths, 'count' shows per-file counts. Defaults to 'files_with_matches'.",
+        },
+        before: {
+          type: "integer",
+          description: "Number of lines to show before each match (content mode only).",
+        },
+        after: {
+          type: "integer",
+          description: "Number of lines to show after each match (content mode only).",
+        },
+        context: {
+          type: "integer",
+          description: "Number of lines to show before and after each match (content mode only).",
+        },
+        caseInsensitive: {
+          type: "boolean",
+          description: "When true, perform case-insensitive matching.",
+        },
+        headLimit: {
+          type: "integer",
+          description: "Maximum number of matches to return. Defaults to 250.",
+        },
+        offset: {
+          type: "integer",
+          description: "Skip this many matches before returning results.",
+        },
       },
     },
     maxResultBytes: 200_000,

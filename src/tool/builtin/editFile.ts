@@ -15,17 +15,30 @@ export function createEditFileTool(): PilotDeckToolDefinition<EditFileInput> {
   return {
     name: "edit_file",
     aliases: ["Edit"],
-    description: "Edit a workspace text file by replacing an exact string.",
+    description:
+      "Edit a workspace text file by replacing an exact string match. All three of filePath, oldString, and newString are required.",
     kind: "filesystem",
     inputSchema: {
       type: "object",
       required: ["filePath", "oldString", "newString"],
       additionalProperties: false,
       properties: {
-        filePath: { type: "string" },
-        oldString: { type: "string" },
-        newString: { type: "string" },
-        replaceAll: { type: "boolean" },
+        filePath: {
+          type: "string",
+          description: "Relative or absolute path of the file to edit.",
+        },
+        oldString: {
+          type: "string",
+          description: "The exact substring to find and replace. Must appear in the file.",
+        },
+        newString: {
+          type: "string",
+          description: "The replacement string that will replace oldString.",
+        },
+        replaceAll: {
+          type: "boolean",
+          description: "When true, replace all occurrences of oldString. Defaults to false (replace first only; errors if multiple found).",
+        },
       },
     },
     isReadOnly: () => false,

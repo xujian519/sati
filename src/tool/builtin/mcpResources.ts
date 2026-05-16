@@ -16,7 +16,10 @@ export function createListMcpResourcesTool(adapter?: PilotDeckMcpResourceAdapter
       type: "object",
       additionalProperties: false,
       properties: {
-        serverId: { type: "string" },
+        serverId: {
+          type: "string",
+          description: "Optional MCP server id to filter resources. Omit to list all servers.",
+        },
       },
     },
     isReadOnly: () => true,
@@ -43,8 +46,14 @@ export function createReadMcpResourceTool(adapter?: PilotDeckMcpResourceAdapter)
       required: ["serverId", "uri"],
       additionalProperties: false,
       properties: {
-        serverId: { type: "string" },
-        uri: { type: "string" },
+        serverId: {
+          type: "string",
+          description: "MCP server identifier that hosts the resource.",
+        },
+        uri: {
+          type: "string",
+          description: "Resource URI to read (as listed by list_mcp_resources).",
+        },
       },
     },
     maxResultBytes: 200_000,
