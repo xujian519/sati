@@ -221,6 +221,11 @@ export const api = {
   downloadProjectZip: (projectName) =>
     authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/download`),
 
+  fileDownloadUrl: (projectName, filePath) =>
+    appendAuthToken(
+      `/api/projects/${encodeURIComponent(projectName)}/files/content?path=${encodeURIComponent(filePath)}&download=1`,
+    ),
+
   // TaskMaster endpoints
   taskmaster: {
     // Initialize TaskMaster in a project

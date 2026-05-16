@@ -1211,6 +1211,8 @@ export function getRouterDashboardData() {
                 ...(record.role === 'subagent' ? { query: 'sub-agent' } : {}),
                 tokens: (record.usage?.totalTokens ?? (record.usage?.inputTokens || 0) + (record.usage?.outputTokens || 0)),
                 cost: record.cost?.total || 0,
+                baselineCost: record.baselineCost ?? (record.cost?.total || 0),
+                savedCost: (record.baselineCost ?? (record.cost?.total || 0)) - (record.cost?.total || 0),
             });
             mergeRecordIntoSession(sessionEntry.routing, record);
             const ended = Date.parse(record.endedAt) || 0;
@@ -1286,6 +1288,8 @@ function makeBucket() {
         totalTokens: 0,
         requestCount: 0,
         estimatedCost: 0,
+        baselineCost: 0,
+        savedCost: 0,
     };
 }
 
@@ -1296,11 +1300,17 @@ function addBuckets(target, source) {
     target.totalTokens += source.totalTokens || 0;
     target.requestCount += source.requestCount || 0;
     target.estimatedCost += source.estimatedCost || 0;
+    if (typeof target.baselineCost !== 'number') target.baselineCost = 0;
+    if (typeof target.savedCost !== 'number') target.savedCost = 0;
+    target.baselineCost += source.baselineCost || 0;
+    target.savedCost += source.savedCost || 0;
 }
 
 function mergeRecordIntoSession(routing, record) {
     const usage = record.usage || {};
     const cost = record.cost || {};
+    const actualCost = cost.total || 0;
+    const baseline = record.baselineCost ?? actualCost;
     const bucket = {
         inputTokens: usage.inputTokens || 0,
         outputTokens: usage.outputTokens || 0,
@@ -1309,7 +1319,9 @@ function mergeRecordIntoSession(routing, record) {
             usage.totalTokens ??
             (usage.inputTokens || 0) + (usage.outputTokens || 0),
         requestCount: 1,
-        estimatedCost: cost.total || 0,
+        estimatedCost: actualCost,
+        baselineCost: baseline,
+        savedCost: baseline - actualCost,
     };
     addBuckets(routing.total, bucket);
 

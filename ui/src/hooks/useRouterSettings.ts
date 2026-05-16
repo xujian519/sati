@@ -8,6 +8,8 @@ export type TokenBucket = {
   totalTokens: number;
   requestCount: number;
   estimatedCost: number;
+  baselineCost?: number;
+  savedCost?: number;
 };
 
 export type CCRProvider = {

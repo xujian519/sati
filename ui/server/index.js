@@ -1179,6 +1179,11 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
         const mimeType = mime.lookup(resolved) || 'application/octet-stream';
         res.setHeader('Content-Type', mimeType);
 
+        if (req.query.download) {
+            const basename = path.basename(resolved);
+            res.setHeader('Content-Disposition', `attachment; filename="${basename}"`);
+        }
+
         // Stream the file
         const fileStream = fs.createReadStream(resolved);
         fileStream.pipe(res);

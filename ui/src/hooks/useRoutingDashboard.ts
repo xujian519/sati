@@ -9,6 +9,8 @@ export type RequestLogEntry = {
   model: string;
   tokens: number;
   cost: number;
+  baselineCost?: number;
+  savedCost?: number;
   query?: string;
 };
 
