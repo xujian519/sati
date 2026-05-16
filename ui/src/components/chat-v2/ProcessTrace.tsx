@@ -1,0 +1,271 @@
+import { useState, type ReactNode } from 'react';
+import {
+  Activity,
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Pencil,
+  Search,
+  Terminal,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react';
+
+export type ProcessTraceMetric = {
+  key: string;
+  label: string;
+};
+
+export type ProcessTraceStep = {
+  id?: string;
+  title?: string;
+  detail?: string;
+  state?: string;
+  severity?: string;
+  phase?: string;
+  toolName?: string;
+};
+
+type ProcessTraceProps = {
+  label: string;
+  collapsedDetail?: string;
+  statusLabel?: string;
+  status?: string;
+  metrics?: ProcessTraceMetric[];
+  steps?: ProcessTraceStep[];
+  children?: ReactNode;
+  defaultExpanded?: boolean;
+  live?: boolean;
+  className?: string;
+};
+
+export function ProcessRunHeader({
+  label,
+  className = '',
+}: {
+  label: string;
+  className?: string;
+}) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={`mb-4 border-b border-neutral-200/70 pb-2.5 text-[14px] leading-6 text-neutral-500 dark:border-neutral-800/80 dark:text-neutral-400 ${className}`}
+    >
+      <span className="tabular-nums">{label}</span>
+    </div>
+  );
+}
+
+export function ProcessLiveStatus({
+  step,
+  children,
+  compact = false,
+  className = '',
+}: {
+  step: ProcessTraceStep;
+  children?: ReactNode;
+  compact?: boolean;
+  className?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const Icon = getStepIcon(step);
+  const title = step.title || step.toolName || 'Working';
+  const isRunning = step.state !== 'failed' && step.state !== 'completed' && step.state !== 'cancelled';
+  const hasDetails = Boolean(children);
+  const statusContent = (
+    <>
+      <Icon
+        className={`mt-1 h-4 w-4 shrink-0 ${getStepIconClass(step)} ${
+          Icon === Loader2 && isRunning ? 'animate-spin' : ''
+        }`}
+        strokeWidth={1.8}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="truncate">{title}</div>
+        {step.detail ? (
+          <div className="truncate text-[12px] leading-5 text-neutral-400/80 dark:text-neutral-500/80">
+            {step.detail}
+          </div>
+        ) : null}
+      </div>
+      {hasDetails ? (
+        expanded ? (
+          <ChevronDown className="mt-1 h-4 w-4 shrink-0 text-neutral-400 dark:text-neutral-500" strokeWidth={1.8} />
+        ) : (
+          <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-neutral-400 dark:text-neutral-500" strokeWidth={1.8} />
+        )
+      ) : null}
+    </>
+  );
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={`process-live-status ${compact ? 'pb-1 pt-0.5' : 'pb-4'} text-[14px] leading-6 text-neutral-400 dark:text-neutral-500 ${className}`}
+    >
+      {hasDetails ? (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+          className={`group flex w-full min-w-0 items-start gap-2.5 text-left transition hover:text-neutral-600 dark:hover:text-neutral-300 ${
+            isRunning ? 'animate-pulse' : ''
+          }`}
+        >
+          {statusContent}
+        </button>
+      ) : (
+        <div className={`flex min-w-0 items-start gap-2.5 ${isRunning ? 'animate-pulse' : ''}`}>
+          {statusContent}
+        </div>
+      )}
+      {expanded && hasDetails ? (
+        <div className="mt-2.5 space-y-3 pl-6">
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function getStepIcon(step: ProcessTraceStep): LucideIcon {
+  const haystack = `${step.phase || ''} ${step.toolName || ''} ${step.title || ''}`.toLowerCase();
+
+  if (step.state === 'failed' || step.severity === 'error' || step.severity === 'warning') {
+    return AlertCircle;
+  }
+  if (step.phase === 'rag' || /search|grep|glob|find/.test(haystack)) {
+    return Search;
+  }
+  if (/edit|write|patch|update|create|modify/.test(haystack)) {
+    return Pencil;
+  }
+  if (/bash|shell|terminal|command|exec|run/.test(haystack)) {
+    return Terminal;
+  }
+  if (step.phase === 'tool' || step.phase === 'subtask' || step.toolName) {
+    return Wrench;
+  }
+  if (step.state === 'completed') {
+    return CheckCircle2;
+  }
+  if (step.state === 'running') {
+    return Loader2;
+  }
+  return Activity;
+}
+
+function getStepIconClass(step: ProcessTraceStep): string {
+  if (step.state === 'failed' || step.severity === 'error') {
+    return 'text-amber-600 dark:text-amber-400';
+  }
+  if (step.severity === 'warning') {
+    return 'text-amber-500 dark:text-amber-400';
+  }
+  if (step.state === 'running') {
+    return 'text-neutral-400 dark:text-neutral-500';
+  }
+  return 'text-neutral-400 dark:text-neutral-500';
+}
+
+function ProcessTraceLine({ step }: { step: ProcessTraceStep }) {
+  const Icon = getStepIcon(step);
+  const isRunning = step.state === 'running';
+  const title = step.title || step.toolName || 'Step';
+
+  return (
+    <div
+      className={`flex min-w-0 items-start gap-2.5 text-[13px] leading-6 text-neutral-400 dark:text-neutral-500 ${
+        isRunning ? 'animate-pulse' : ''
+      }`}
+    >
+      <Icon
+        className={`mt-1 h-3.5 w-3.5 shrink-0 ${getStepIconClass(step)} ${
+          Icon === Loader2 && isRunning ? 'animate-spin' : ''
+        }`}
+        strokeWidth={1.9}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="truncate">{title}</div>
+        {step.detail ? (
+          <div className="truncate text-[12px] leading-5 text-neutral-400/80 dark:text-neutral-500/80">
+            {step.detail}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export function ProcessTrace({
+  label,
+  collapsedDetail,
+  statusLabel,
+  status = 'completed',
+  metrics = [],
+  steps = [],
+  children,
+  defaultExpanded = false,
+  live = false,
+  className = '',
+}: ProcessTraceProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const hasDetails = Boolean(statusLabel) || metrics.length > 0 || steps.length > 0 || Boolean(children);
+  const visibleCollapsedDetail = !expanded && collapsedDetail;
+  const statusStep: ProcessTraceStep | null =
+    statusLabel || metrics.length > 0
+      ? {
+          id: 'process-status',
+          title: statusLabel,
+          detail: metrics.map((metric) => metric.label).join(', '),
+          state: status,
+        }
+      : null;
+
+  return (
+    <div
+      role={live ? 'status' : undefined}
+      aria-live={live ? 'polite' : undefined}
+      className={`process-trace mb-4 border-b border-neutral-200/70 pb-2.5 dark:border-neutral-800/80 ${className}`}
+    >
+      <button
+        type="button"
+        onClick={() => {
+          if (hasDetails) {
+            setExpanded((value) => !value);
+          }
+        }}
+        disabled={!hasDetails}
+        className="group flex w-full min-w-0 items-center gap-1.5 text-left text-[14px] leading-6 text-neutral-500 transition hover:text-neutral-700 disabled:cursor-default disabled:hover:text-neutral-500 dark:text-neutral-400 dark:hover:text-neutral-200 dark:disabled:hover:text-neutral-400"
+      >
+        <span className="shrink-0 tabular-nums">{label}</span>
+        {hasDetails ? (
+          expanded ? (
+            <ChevronDown className="h-4 w-4 shrink-0 text-neutral-400 transition group-hover:text-neutral-500 dark:text-neutral-500 dark:group-hover:text-neutral-300" strokeWidth={1.8} />
+          ) : (
+            <ChevronRight className="h-4 w-4 shrink-0 text-neutral-400 transition group-hover:text-neutral-500 dark:text-neutral-500 dark:group-hover:text-neutral-300" strokeWidth={1.8} />
+          )
+        ) : null}
+        {visibleCollapsedDetail ? (
+          <span className="min-w-0 truncate text-neutral-400 dark:text-neutral-500">
+            {visibleCollapsedDetail}
+          </span>
+        ) : null}
+      </button>
+
+      {expanded ? (
+        <div className="mt-2.5 space-y-3">
+          {statusStep ? <ProcessTraceLine step={statusStep} /> : null}
+          {steps.map((step, index) => (
+            <ProcessTraceLine key={step.id || `${step.title || 'process-step'}-${index}`} step={step} />
+          ))}
+          {children ? <div className="space-y-3 pt-0.5">{children}</div> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}

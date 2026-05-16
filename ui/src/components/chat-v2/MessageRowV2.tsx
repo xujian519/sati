@@ -9,6 +9,7 @@ import type { Project, SessionProvider } from '../../types/app';
 import MessageComponent from '../chat/view/subcomponents/MessageComponent';
 import { Markdown } from '../chat/view/subcomponents/Markdown';
 import { formatUsageLimitText } from '../chat/utils/chatFormatting';
+import { ProcessLiveStatus, type ProcessTraceStep } from './ProcessTrace';
 
 type DiffLine = { type: string; content: string; lineNum: number };
 
@@ -38,10 +39,30 @@ const shouldDelegate = (message: ChatMessage): boolean => {
   if (message.isSubagentContainer) return true;
   if (message.isTaskNotification) return true;
   const t = message.type;
-  // These types have custom bespoke renderings we preserve 1:1 from legacy.
   if (t !== 'user' && t !== 'assistant' && t !== 'error') return true;
   return false;
 };
+
+function messageToProcessStep(message: ChatMessage): ProcessTraceStep | null {
+  if (!message.isToolUse) return null;
+  const toolName = (message as Record<string, unknown>).tool_use_name as string | undefined
+    || (message as Record<string, unknown>).toolName as string | undefined
+    || '';
+  const detail = typeof (message as Record<string, unknown>).toolParams === 'object'
+    ? (((message as Record<string, unknown>).toolParams as Record<string, unknown>)?.command as string
+      || ((message as Record<string, unknown>).toolParams as Record<string, unknown>)?.file_path as string
+      || ((message as Record<string, unknown>).toolParams as Record<string, unknown>)?.pattern as string
+      || '')
+    : '';
+  return {
+    id: message.id,
+    title: toolName || 'Tool call',
+    detail: detail ? String(detail).slice(0, 120) : undefined,
+    state: message.isStreaming ? 'running' : 'completed',
+    phase: 'tool',
+    toolName,
+  };
+}
 
 function MessageRowV2({
   message,
@@ -64,25 +85,42 @@ function MessageRowV2({
   );
 
   if (delegate) {
-    // Wrap legacy output in a neutral container so gradients/colors from the
-    // legacy theme get a zinc frame — keeps the prototype aesthetic while
-    // preserving every tool/permission renderer.
+    const processStep = useMemo(() => messageToProcessStep(message), [message]);
     return (
       <div className="ui-v2-legacy-row">
-        <MessageComponent
-          message={message}
-          prevMessage={prevMessage}
-          createDiff={createDiff}
-          onFileOpen={onFileOpen}
-          onShowSettings={onShowSettings}
-          onGrantSessionToolPermission={onGrantSessionToolPermission}
-          autoExpandTools={autoExpandTools}
-          showRawParameters={showRawParameters}
-          showThinking={showThinking}
-          selectedProject={selectedProject ?? null}
-          provider={provider}
-          hideHeader
-        />
+        {processStep ? (
+          <ProcessLiveStatus step={processStep} compact>
+            <MessageComponent
+              message={message}
+              prevMessage={prevMessage}
+              createDiff={createDiff}
+              onFileOpen={onFileOpen}
+              onShowSettings={onShowSettings}
+              onGrantSessionToolPermission={onGrantSessionToolPermission}
+              autoExpandTools={autoExpandTools}
+              showRawParameters={showRawParameters}
+              showThinking={showThinking}
+              selectedProject={selectedProject ?? null}
+              provider={provider}
+              hideHeader
+            />
+          </ProcessLiveStatus>
+        ) : (
+          <MessageComponent
+            message={message}
+            prevMessage={prevMessage}
+            createDiff={createDiff}
+            onFileOpen={onFileOpen}
+            onShowSettings={onShowSettings}
+            onGrantSessionToolPermission={onGrantSessionToolPermission}
+            autoExpandTools={autoExpandTools}
+            showRawParameters={showRawParameters}
+            showThinking={showThinking}
+            selectedProject={selectedProject ?? null}
+            provider={provider}
+            hideHeader
+          />
+        )}
       </div>
     );
   }

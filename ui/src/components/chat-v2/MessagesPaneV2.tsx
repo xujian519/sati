@@ -9,6 +9,7 @@ import type {
 import { isBackgroundTaskSession, type Project, type ProjectSession, type SessionProvider } from '../../types/app';
 import { getIntrinsicMessageKey } from '../chat/utils/messageKeys';
 import MessageRowV2 from './MessageRowV2';
+import { ProcessLiveStatus, type ProcessTraceStep } from './ProcessTrace';
 
 type DiffLine = { type: string; content: string; lineNum: number };
 
@@ -242,7 +243,7 @@ export default function MessagesPaneV2({
           })}
 
           {isAssistantWorking ? (
-            <WorkingIndicator label={resolveWorkingLabel(workingStatusText, t)} />
+            <WorkingProcessStatus label={resolveWorkingLabel(workingStatusText, t)} />
           ) : null}
         </div>
       )}
@@ -281,26 +282,26 @@ function resolveWorkingLabel(
 // Three-dot bouncing pill that signals the assistant is busy. Lives at the
 // bottom of the message list and is naturally pushed offscreen as new
 // messages arrive — same pattern as ChatGPT/Claude.ai.
-function WorkingIndicator({ label }: { label: string }) {
+function WorkingProcessStatus({ label }: { label: string }) {
+  const step: ProcessTraceStep = parseWorkingStatusToStep(label);
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex items-center gap-2 pl-1 text-[12px] text-neutral-500 dark:text-neutral-400"
-    >
-      <span
-        className="inline-flex h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 dark:bg-neutral-500"
-        style={{ animationDelay: '0ms' }}
-      />
-      <span
-        className="inline-flex h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 dark:bg-neutral-500"
-        style={{ animationDelay: '150ms' }}
-      />
-      <span
-        className="inline-flex h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 dark:bg-neutral-500"
-        style={{ animationDelay: '300ms' }}
-      />
-      <span className="ml-1.5 tabular-nums">{label}</span>
-    </div>
+    <ProcessLiveStatus step={step} compact={false} />
   );
+}
+
+function parseWorkingStatusToStep(label: string): ProcessTraceStep {
+  const lower = label.toLowerCase();
+  if (/search|grep|glob|find/i.test(lower)) {
+    return { title: label, state: 'running', phase: 'rag' };
+  }
+  if (/edit|write|patch|creat|modif/i.test(lower)) {
+    return { title: label, state: 'running', phase: 'tool', toolName: 'edit_file' };
+  }
+  if (/bash|shell|terminal|command|exec|run/i.test(lower)) {
+    return { title: label, state: 'running', phase: 'tool', toolName: 'bash' };
+  }
+  if (/tool|function/i.test(lower)) {
+    return { title: label, state: 'running', phase: 'tool' };
+  }
+  return { title: label, state: 'running' };
 }

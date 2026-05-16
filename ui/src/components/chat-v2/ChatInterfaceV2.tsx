@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTasksSettings } from '../../contexts/TasksSettingsContext';
-import type { ChatInterfaceProps, Provider } from '../chat/types/types';
+import type { ChatInterfaceProps, ChatRunMode, Provider } from '../chat/types/types';
 import {
   getSessionRequestParams,
   isBackgroundTaskSession,
@@ -68,6 +68,7 @@ function ChatInterfaceV2({
   const streamTimerRef = useRef<number | null>(null);
   const accumulatedStreamRef = useRef('');
   const pendingViewSessionRef = useRef<PendingViewSession | null>(null);
+  const [runMode, setRunMode] = useState<ChatRunMode>('agent');
 
   const resetStreamingState = useCallback(() => {
     if (streamTimerRef.current) {
@@ -372,12 +373,15 @@ function ChatInterfaceV2({
       isLoading={isLoading}
       canAbortSession={canAbortSession}
       isAborting={isAborting}
+      tokenBudget={tokenBudget}
       pendingPermissionRequests={pendingPermissionRequests}
       handlePermissionDecision={handlePermissionDecision}
       handleGrantToolPermission={handleGrantToolPermission}
       sendByCtrlEnter={sendByCtrlEnter}
       permissionMode={permissionMode}
       onSelectPermissionMode={selectPermissionMode}
+      runMode={runMode}
+      onRunModeChange={setRunMode}
       chromeless={isWelcomeMode}
     />
   );
