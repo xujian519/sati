@@ -32,9 +32,11 @@ function formatTokens(n: number): string {
 }
 
 function formatCost(n: number): string {
-  if (!n) return '$0.00';
-  if (n < 0.01) return `$${n.toFixed(4)}`;
-  return `$${n.toFixed(2)}`;
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  if (!abs) return '$0.00';
+  if (abs < 0.01) return `${sign}$${abs.toFixed(4)}`;
+  return `${sign}$${abs.toFixed(2)}`;
 }
 
 function formatTime(iso?: string | null, fallback?: number): string {
@@ -49,6 +51,36 @@ function formatTime(iso?: string | null, fallback?: number): string {
   if (value === null) return '—';
   const d = new Date(value);
   return d.toLocaleTimeString([], { hour12: false });
+}
+
+const TIER_DISPLAY_ORDER = ['SIMPLE', 'MEDIUM', 'COMPLEX', 'REASONING', 'HARD', 'RECORDED'];
+const TIER_DISPLAY_RANK = new Map(TIER_DISPLAY_ORDER.map((tier, index) => [tier, index]));
+
+function getSortedTierEntries<T>(byTier: Record<string, T> | null | undefined): Array<[string, T]> {
+  return Object.entries(byTier || {}).sort(([tierA], [tierB]) => {
+    const rankA = TIER_DISPLAY_RANK.get(tierA.toUpperCase()) ?? TIER_DISPLAY_ORDER.length;
+    const rankB = TIER_DISPLAY_RANK.get(tierB.toUpperCase()) ?? TIER_DISPLAY_ORDER.length;
+    if (rankA !== rankB) return rankA - rankB;
+    return tierA.localeCompare(tierB);
+  });
+}
+
+function SavingsBadge({ baseline, saved }: { baseline?: number; saved?: number }) {
+  if (!baseline || baseline <= 0) return null;
+  const actualSaved = saved ?? 0;
+  const pct = Math.round((actualSaved / baseline) * 100);
+  const isPositive = actualSaved >= 0;
+  return (
+    <span className={cn(
+      'text-xxs inline-flex items-center gap-1',
+      isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400',
+    )}>
+      <TrendingUp className="h-3 w-3" strokeWidth={1.75} />
+      {isPositive
+        ? `Saved ${formatCost(actualSaved)} (${pct}%)`
+        : `Over ${formatCost(Math.abs(actualSaved))}`}
+    </span>
+  );
 }
 
 type RecentRoute = {
@@ -167,7 +199,7 @@ function buildProjectGroups(
   let generalGroup: ProjectGroup | null = null;
   const unmatched = data.unmatchedSessions || [];
   if (unmatched.length > 0) {
-    const aggTotal = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, totalTokens: 0, requestCount: 0, estimatedCost: 0 };
+    const aggTotal = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, totalTokens: 0, requestCount: 0, estimatedCost: 0, baselineCost: 0, savedCost: 0 };
     const aggByTier: Record<string, any> = {};
     const aggByRole: Record<string, any> = {};
     const sessions: DashboardSession[] = [];
@@ -179,12 +211,16 @@ function buildProjectGroups(
       aggTotal.totalTokens += u.total?.totalTokens || 0;
       aggTotal.requestCount += u.total?.requestCount || 0;
       aggTotal.estimatedCost += u.total?.estimatedCost || 0;
+      aggTotal.baselineCost += u.total?.baselineCost || 0;
+      aggTotal.savedCost += u.total?.savedCost || 0;
 
       for (const [k, v] of Object.entries(u.byTier || {})) {
-        if (!aggByTier[k]) aggByTier[k] = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, totalTokens: 0, requestCount: 0, estimatedCost: 0 };
+        if (!aggByTier[k]) aggByTier[k] = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, totalTokens: 0, requestCount: 0, estimatedCost: 0, baselineCost: 0, savedCost: 0 };
         aggByTier[k].totalTokens += v?.totalTokens || 0;
         aggByTier[k].requestCount += v?.requestCount || 0;
         aggByTier[k].estimatedCost += v?.estimatedCost || 0;
+        aggByTier[k].baselineCost += v?.baselineCost || 0;
+        aggByTier[k].savedCost += v?.savedCost || 0;
       }
 
       sessions.push({
@@ -318,6 +354,9 @@ export default function DashboardV2({ projectFilter, projectFullPath, onSelectPr
   const inputTokens = overall.total.inputTokens || 0;
   const outputTokens = overall.total.outputTokens || 0;
   const totalCost = overall.total.estimatedCost || 0;
+  const totalBaselineCost = overall.total.baselineCost || 0;
+  const totalSavedCost = overall.total.savedCost || 0;
+  const hasBaselineData = totalBaselineCost > 0;
 
   const routedSessionCount =
     groups.reduce((sum, g) => sum + g.aggregated.routedSessionCount, 0) +
@@ -413,6 +452,12 @@ export default function DashboardV2({ projectFilter, projectFullPath, onSelectPr
                   }) as string)
                 : undefined
             }
+            hint={hasBaselineData ? (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-neutral-400 dark:text-neutral-500">No-router {formatCost(totalBaselineCost)}</span>
+                <SavingsBadge baseline={totalBaselineCost} saved={totalSavedCost} />
+              </div>
+            ) : undefined}
           />
         </div>
 
@@ -551,7 +596,7 @@ function ProjectGroupCard({
             <div className="mb-3">
               <div className="text-xxs mb-2 text-neutral-400 dark:text-neutral-500">Tier breakdown</div>
               <div className="flex flex-wrap gap-2">
-                {Object.entries(agg.byTier).map(([tier, bucket]) => (
+                {getSortedTierEntries(agg.byTier).map(([tier, bucket]) => (
                   <span
                     key={tier}
                     className="text-xxs inline-flex items-center gap-1.5 rounded-md border border-neutral-200 px-2 py-1 text-neutral-600 dark:border-neutral-700 dark:text-neutral-400"
@@ -595,7 +640,7 @@ const TIER_COLORS: Record<string, string> = {
 };
 
 function TierBar({ byTier }: { byTier: Record<string, { estimatedCost?: number; requestCount?: number }> }) {
-  const entries = Object.entries(byTier).filter(([, b]) => (b?.requestCount ?? 0) > 0);
+  const entries = getSortedTierEntries(byTier).filter(([, b]) => (b?.requestCount ?? 0) > 0);
   if (entries.length === 0) return null;
   const total = entries.reduce((s, [, b]) => s + (b?.estimatedCost ?? 0), 0) || 1;
 
@@ -633,6 +678,8 @@ function ProjectCostCard({ group, onClick }: { group: ProjectGroup; onClick?: ()
   const cost = agg.total.estimatedCost || 0;
   const requests = agg.total.requestCount || 0;
   const tokens = agg.total.totalTokens || 0;
+  const baseline = agg.total.baselineCost || 0;
+  const saved = agg.total.savedCost || 0;
   const Tag = onClick ? 'button' : 'div';
 
   return (
@@ -656,6 +703,11 @@ function ProjectCostCard({ group, onClick }: { group: ProjectGroup; onClick?: ()
         </div>
         <div className="shrink-0 text-right">
           <div className="text-[18px] font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">{formatCost(cost)}</div>
+          {baseline > 0 && (
+            <div className="mt-0.5">
+              <SavingsBadge baseline={baseline} saved={saved} />
+            </div>
+          )}
         </div>
       </div>
       <TierBar byTier={agg.byTier || {}} />
@@ -805,6 +857,9 @@ function SessionRow({ session }: { session: DashboardSession }) {
             <span className="text-xxs tabular-nums text-neutral-500 dark:text-neutral-400">
               {formatCost(routing.total.estimatedCost || 0)}
             </span>
+            {(routing.total.baselineCost ?? 0) > 0 && (
+              <SavingsBadge baseline={routing.total.baselineCost} saved={routing.total.savedCost} />
+            )}
           </div>
         ) : (
           <span className="text-xxs shrink-0 text-neutral-300 dark:text-neutral-700">

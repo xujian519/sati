@@ -413,6 +413,22 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
     [projectRoot, selectedProject?.name],
   );
 
+  const handleDownloadFile = useCallback(
+    (event: ReactMouseEvent<HTMLButtonElement> | null, node: FileTreeNode) => {
+      event?.stopPropagation();
+      if (!selectedProject?.name || node.type === 'directory') return;
+
+      const url = api.fileDownloadUrl(selectedProject.name, node.path);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = node.name;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+    },
+    [selectedProject?.name],
+  );
+
   const handleDeleteActive = useCallback(() => {
     if (!activePath) return;
     const activeNode = flat.find((f) => f.node.path === activePath);
@@ -690,7 +706,7 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
                       onClick={() => handleClick(node)}
                       style={{ marginLeft: `${depth * 20}px` }}
                       className={cn(
-                        'flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 transition-colors',
+                        'group/row flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 transition-colors',
                         isActive
                           ? 'bg-neutral-100 dark:bg-neutral-900'
                           : 'hover:bg-neutral-50 dark:hover:bg-neutral-900/60',
@@ -722,6 +738,17 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
                       >
                         {node.name}
                       </span>
+                      {!isDir && (
+                        <button
+                          type="button"
+                          onClick={(event) => handleDownloadFile(event, node)}
+                          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-neutral-500 opacity-0 transition group-hover/row:opacity-100 hover:bg-neutral-200 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                          title={t('fileTree.downloadFile', { defaultValue: 'Download file' }) as string}
+                          aria-label={t('fileTree.downloadFile', { defaultValue: 'Download file' }) as string}
+                        >
+                          <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
+                        </button>
+                      )}
                       {isHtmlFile ? (
                         <button
                           type="button"
@@ -802,6 +829,15 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
                   >
                     <FilePlus className={menuIconClass} strokeWidth={1.75} />
                     Open
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => handleDownloadFile(null, contextMenu.node!)}
+                    className={menuItemClass}
+                  >
+                    <Download className={menuIconClass} strokeWidth={1.75} />
+                    {t('fileTree.context.download', { defaultValue: 'Download' })}
                   </button>
                   <div className="my-1 border-t border-neutral-100 dark:border-neutral-800" />
                 </>
