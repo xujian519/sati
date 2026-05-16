@@ -57,7 +57,7 @@ export class AgentLoop {
   ) {}
 
   async *run(input: AgentLoopInput): AsyncGenerator<AgentEvent, AgentLoopRunResult, unknown> {
-    this.applyPermissionOverrides(input.permissionMode, input.permissionRules);
+    this.applyPermissionOverrides(input.sessionId, input.permissionMode, input.permissionRules);
     const startedAt = this.now().toISOString();
     let messages = [...input.messages];
     let turnCount = 1;
@@ -413,9 +413,19 @@ export class AgentLoop {
         }
         const requestedMode = readRequestedMode(result.type === "success" ? result.data : undefined);
         if (requestedMode) {
-          this.config.permissionMode = requestedMode;
-          this.config.permissionContext.mode = requestedMode;
-          yield { type: "mode_change_requested", sessionId: input.sessionId, turnId: input.turnId, mode: requestedMode };
+          if (
+            this.config.permissionModeOrigin === "user" &&
+            this.config.permissionMode === "plan" &&
+            requestedMode !== "plan"
+          ) {
+            // User locked plan mode via UI — tools cannot exit it.
+          } else {
+            this.config.permissionMode = requestedMode;
+            this.config.permissionContext.mode = requestedMode;
+            this.config.permissionModeOrigin = "tool";
+            this.syncPlanFilePath(input.sessionId);
+            yield { type: "mode_change_requested", sessionId: input.sessionId, turnId: input.turnId, mode: requestedMode };
+          }
         }
         yield { type: "tool_result", sessionId: input.sessionId, turnId: input.turnId, result };
       }
@@ -609,6 +619,13 @@ export class AgentLoop {
       fileHistory: this.dependencies.fileHistory,
       subagentDepth: this.config.subagentDepth ?? 0,
       subagent: this.buildSubagentForkApi(input, messages),
+      planFile: this.dependencies.planFileManager
+        ? (() => {
+            const mgr = this.dependencies.planFileManager!;
+            const filePath = mgr.ensurePlanFile(input.sessionId);
+            return { path: filePath, read: () => mgr.readPlan(input.sessionId) };
+          })()
+        : undefined,
     };
   }
 
@@ -796,17 +813,29 @@ export class AgentLoop {
   }
 
   private applyPermissionOverrides(
+    sessionId: string,
     permissionMode?: PermissionMode,
     permissionRules?: Partial<PermissionRuleSet>,
   ): void {
     if (permissionMode) {
       this.config.permissionMode = permissionMode;
       this.config.permissionContext.mode = permissionMode;
+      this.config.permissionModeOrigin = "user";
     }
+    this.syncPlanFilePath(sessionId);
     if (!permissionRules) return;
     mergeUserRules(this.config.permissionContext.rules.allow, permissionRules.allow);
     mergeUserRules(this.config.permissionContext.rules.deny, permissionRules.deny);
     mergeUserRules(this.config.permissionContext.rules.ask, permissionRules.ask);
+  }
+
+  private syncPlanFilePath(sessionId: string): void {
+    if (this.config.permissionMode === "plan" && this.dependencies.planFileManager) {
+      this.config.permissionContext.planFilePath =
+        this.dependencies.planFileManager.ensurePlanFile(sessionId);
+    } else {
+      this.config.permissionContext.planFilePath = undefined;
+    }
   }
 
   private readonly now = (): Date => this.dependencies.now?.() ?? new Date();

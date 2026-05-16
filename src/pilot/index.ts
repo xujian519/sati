@@ -9,6 +9,7 @@ export {
   getPilotProjectConfigFilePath,
   getPilotProjectChatDir,
   getPilotProjectChatDirAsync,
+  getPilotProjectPlanDir,
   resolvePilotHome,
   type PilotExtensionPaths,
   type PilotPathEnv,

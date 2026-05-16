@@ -13,6 +13,8 @@ export type AgentRuntimeConfig = {
   maxContextMessages?: number;
   stopOnStructuredOutput?: boolean;
   permissionMode: PermissionMode;
+  /** Who last set the current mode: "user" (UI/CLI) or "tool" (enter_plan_mode). */
+  permissionModeOrigin?: "user" | "tool";
   permissionContext: PermissionContext;
   env?: NodeJS.ProcessEnv;
   maxResultBytes?: number;

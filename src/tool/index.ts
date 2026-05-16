@@ -154,6 +154,10 @@ export {
   type ExitPlanModeInput,
 } from "./builtin/planMode.js";
 export {
+  createPlanFileManager,
+  type PlanFileManager,
+} from "./builtin/planFile.js";
+export {
   createTaskCreateTool,
   createTaskListTool,
   createTaskOutputTool,

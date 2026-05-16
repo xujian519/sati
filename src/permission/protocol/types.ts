@@ -24,6 +24,8 @@ export type PermissionContext = {
   additionalWorkingDirectories: string[];
   canPrompt: boolean;
   bypassAvailable: boolean;
+  /** Absolute path of the plan file that plan mode is allowed to write to. */
+  planFilePath?: string;
 };
 
 export type PermissionDecisionReason =

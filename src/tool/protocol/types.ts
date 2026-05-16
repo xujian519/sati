@@ -168,6 +168,16 @@ export type PilotDeckToolRuntimeContext = {
    * call so unit tests still work.
    */
   subagent?: PilotDeckSubagentForkApi;
+  /**
+   * Plan file handle for plan-mode tools (`enter_plan_mode` /
+   * `exit_plan_mode`). When plan mode is active the model is allowed to
+   * write only this file. Absent when PlanFileManager is not configured
+   * (e.g. headless / test runtimes).
+   */
+  planFile?: {
+    path: string;
+    read(): string | undefined;
+  };
 };
 
 export type PilotDeckToolDefinition<Input = unknown, Output = unknown> = {

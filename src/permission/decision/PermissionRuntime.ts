@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import type { PilotDeckToolDefinition, PilotDeckToolRuntimeContext } from "../../tool/index.js";
 import { matchPermissionRule } from "../policy/matchPermissionRule.js";
 import type {
@@ -168,6 +169,14 @@ function decideByMode(
       });
     }
 
+    if (context.planFilePath && isPlanFileWrite(tool, input, context)) {
+      return allow({
+        type: "mode",
+        mode: "plan",
+        message: `Plan mode allows writing to plan file.`,
+      });
+    }
+
     return deny({
       type: "mode",
       mode: "plan",
@@ -306,4 +315,21 @@ function summarizeInput(input: unknown): string {
   } catch {
     return "[unserializable input]";
   }
+}
+
+/**
+ * Returns true when a filesystem write tool (write_file / edit_file) targets
+ * exactly the plan file. Resolves relative paths against the permission
+ * context cwd so `./plan.md` and the absolute path both match.
+ */
+function isPlanFileWrite(
+  tool: PilotDeckToolDefinition,
+  input: unknown,
+  context: PermissionContext,
+): boolean {
+  if (tool.kind !== "filesystem") return false;
+  const filePath = (input as Record<string, unknown> | null)?.filePath;
+  if (typeof filePath !== "string") return false;
+  const absolute = resolve(context.cwd, filePath);
+  return absolute === context.planFilePath;
 }

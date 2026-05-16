@@ -6,6 +6,7 @@ import type {
   PilotDeckToolScheduler,
   ToolRegistry,
 } from "../../tool/index.js";
+import type { PlanFileManager } from "../../tool/builtin/planFile.js";
 import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
 import type { RouterRuntime } from "../../router/index.js";
@@ -94,6 +95,11 @@ export type AgentRuntimeDependencies = {
    * `FileHistoryStore` directly satisfies this contract.
    */
   fileHistory?: PilotDeckToolFileHistorySink;
+  /**
+   * Plan file manager — creates / reads the per-session plan file used by
+   * `enter_plan_mode` / `exit_plan_mode`. Absent in headless / test runtimes.
+   */
+  planFileManager?: PlanFileManager;
   eventEmitter?: AgentEventEmitter;
   drainEvents?: () => AgentEvent[];
 };

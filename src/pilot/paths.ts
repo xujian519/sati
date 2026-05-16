@@ -35,6 +35,10 @@ export function getPilotProjectChatDir(projectRoot: string, pilotHome: string): 
   return resolve(pilotHome, "projects", createProjectId(projectRoot), "chats");
 }
 
+export function getPilotProjectPlanDir(projectRoot: string, pilotHome: string): string {
+  return resolve(pilotHome, "projects", createProjectId(projectRoot), "plans");
+}
+
 /**
  * Async variant that first resolves a worktree cwd to its canonical
  * main-repository root (so all worktrees share the same project ID).
