@@ -6,6 +6,7 @@ import { createEditFileTool } from "../builtin/editFile.js";
 import { createGlobTool } from "../builtin/glob.js";
 import { createGrepTool } from "../builtin/grep.js";
 import { createReadFileTool } from "../builtin/readFile.js";
+import { createEnterPlanModeTool, createExitPlanModeTool } from "../builtin/planMode.js";
 import { createStructuredOutputTool } from "../builtin/structuredOutput.js";
 import {
   createTaskCreateTool,
@@ -76,6 +77,12 @@ export type CreateBuiltinRegistryOptions = {
    * names for the "not found" diagnostic message.
    */
   readSkill?: ReadSkillDeps | false;
+  /**
+   * `enter_plan_mode` / `exit_plan_mode` builtins. Registered by default —
+   * these lightweight skeleton tools let the model request a permission-mode
+   * switch to plan (read-only) and back. Pass `false` to skip.
+   */
+  planMode?: false;
 };
 
 export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): ToolRegistry {
@@ -108,6 +115,10 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
   }
   if (options?.askUserQuestion !== false) {
     registry.register(createAskUserQuestionTool());
+  }
+  if (options?.planMode !== false) {
+    registry.register(createEnterPlanModeTool());
+    registry.register(createExitPlanModeTool());
   }
   if (options?.readSkill) {
     registry.register(createReadSkillTool(options.readSkill));

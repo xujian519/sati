@@ -19,6 +19,8 @@ test("creates a builtin registry with first implementation tools", () => {
       "ask_user_question",
       "bash",
       "edit_file",
+      "enter_plan_mode",
+      "exit_plan_mode",
       "glob",
       "grep",
       "read_file",
@@ -36,6 +38,8 @@ test("creates a builtin registry with first implementation tools", () => {
   assert.equal(registry.get("Task")?.name, "agent");
   assert.equal(registry.get("StructuredOutput")?.name, "structured_output");
   assert.equal(registry.get("AskUserQuestion")?.name, "ask_user_question");
+  assert.equal(registry.get("EnterPlanMode")?.name, "enter_plan_mode");
+  assert.equal(registry.get("ExitPlanMode")?.name, "exit_plan_mode");
 });
 
 test("createBuiltinRegistry can opt out of structured_output", () => {
@@ -96,6 +100,19 @@ test("createBuiltinRegistry can opt out of agent", () => {
     agent: false,
   });
   assert.equal(registry.has("agent"), false);
+});
+
+test("createBuiltinRegistry can opt out of planMode", () => {
+  const registry = createBuiltinRegistry({
+    bash: {
+      runner: {
+        run: async () => ({ exitCode: 0, stdout: "", stderr: "", timedOut: false, durationMs: 0 }),
+      },
+    },
+    planMode: false,
+  });
+  assert.equal(registry.has("enter_plan_mode"), false);
+  assert.equal(registry.has("exit_plan_mode"), false);
 });
 
 test("deferred tool features are not exposed by the first-phase builtin registry", () => {
