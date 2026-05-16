@@ -254,7 +254,7 @@ router:
 
 ### 验证路由生效
 
-重启 ui bridge 后，发送不同复杂度的请求，检查 `~/.pilotdeck/router-stats.json` 中：
+重启 ui bridge 后，发送不同复杂度的请求，检查 `~/.pilotdeck/router/stats.json` 中：
 
 - `global.perTier` 各 tier 计数是否合理
 - `global.perModel` 模型分布是否符合预期
@@ -272,7 +272,7 @@ router:
 |------|------|
 | `~/.pilotdeck/pilotdeck.yaml` | 主配置（providers, agent, router, extension 等） |
 | `~/.pilotdeck/extensions/` | 全局插件自动发现目录 |
-| `~/.pilotdeck/router-stats.json` | TokenStatsCollector 持久化数据（Full 模式） |
+| `~/.pilotdeck/router/stats.json` | TokenStatsCollector 持久化数据（Full 模式） |
 
 ## 关键源文件
 

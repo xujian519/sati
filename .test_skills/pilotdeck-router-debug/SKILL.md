@@ -27,7 +27,7 @@ description: >-
 关键点：
 - 路由逻辑在 `RouterRuntime` 中，是 PilotDeck 内置的，无外部进程
 - 配置在 `~/.pilotdeck/pilotdeck.yaml` 的 `router:` 段
-- 统计持久化到 `~/.pilotdeck/router-stats.json`
+- 统计持久化到 `~/.pilotdeck/router/stats.json`
 
 ## 快速诊断清单
 
@@ -73,7 +73,7 @@ print(f'stats.enabled: {st.get(\"enabled\", False)}')
 ### 3. 检查 stats 数据
 
 ```bash
-cat ~/.pilotdeck/router-stats.json 2>/dev/null | python3 -c "
+cat ~/.pilotdeck/router/stats.json 2>/dev/null | python3 -c "
 import json, sys
 try:
     data = json.load(sys.stdin)
@@ -152,7 +152,7 @@ curl -sS https://openrouter.ai/api/v1/chat/completions \
 1. 确认 `router.stats.enabled: true`
 2. `TokenStatsCollector` 每 5 分钟自动 flush 到磁盘
 3. 如果刚发请求，stats 可能还在内存中。等 5 分钟或重启 ui bridge 触发 flush
-4. 检查文件权限：`ls -la ~/.pilotdeck/router-stats.json`
+4. 检查文件权限：`ls -la ~/.pilotdeck/router/stats.json`
 
 **手动触发 flush**：重启 ui bridge 进程会在退出时 flush。
 
@@ -245,7 +245,7 @@ curl -s http://localhost:3001/api/health
 | 文件 | 用途 |
 |------|------|
 | `~/.pilotdeck/pilotdeck.yaml` | 主配置（router, model, agent） |
-| `~/.pilotdeck/router-stats.json` | 路由统计持久化数据 |
+| `~/.pilotdeck/router/stats.json` | 路由统计持久化数据 |
 | `src/router/RouterRuntime.ts` | 路由运行时主逻辑 |
 | `src/router/config/schema.ts` | 配置类型定义 + `resolveProviderRef` |
 | `src/router/tokenSaver/classifyAndRoute.ts` | 分级路由逻辑 |

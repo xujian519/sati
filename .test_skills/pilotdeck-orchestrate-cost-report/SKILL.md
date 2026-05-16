@@ -21,7 +21,7 @@ description: >-
 ```bash
 kill $(lsof -ti :3001) 2>/dev/null || true
 sleep 2
-echo '{}' > ~/.pilotdeck/router-stats.json   # 重置统计
+echo '{}' > ~/.pilotdeck/router/stats.json   # 重置统计
 cd /Users/a1/Desktop/claw/PilotDeck/ui && npm run start
 ```
 
@@ -51,10 +51,10 @@ node dist/src/cli/pilotdeck.js --message "<测试任务描述>" &
 
 ## Step 3: 验证编排激活
 
-检查 `~/.pilotdeck/router-stats.json`：
+检查 `~/.pilotdeck/router/stats.json`：
 
 ```bash
-cat ~/.pilotdeck/router-stats.json | python3 -c "
+cat ~/.pilotdeck/router/stats.json | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 g = data.get('global', {})
@@ -75,7 +75,7 @@ print(f'Per model: {json.dumps(g.get(\"perModel\", {}), indent=2)}')
 ### 查看 session 统计
 
 ```bash
-cat ~/.pilotdeck/router-stats.json | python3 -c "
+cat ~/.pilotdeck/router/stats.json | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 sessions = data.get('sessions', {})
@@ -93,7 +93,7 @@ for sid, s in sorted(sessions.items(), key=lambda x: x[1]['aggregate']['totalReq
 
 ### 区分主 agent 和子 agent
 
-在 `router-stats.json` 的 `sessions` 中，每个 session 的 `requestLog` 条目有 `role` 字段：
+在 `router/stats.json` 的 `sessions` 中，每个 session 的 `requestLog` 条目有 `role` 字段：
 - `role: "main"` → 主 agent（编排者）
 - `role: "subagent"` → 子 agent（执行者）
 
@@ -102,7 +102,7 @@ for sid, s in sorted(sessions.items(), key=lambda x: x[1]['aggregate']['totalReq
 等待所有子 agent 完成后（CLI 返回），完整读取统计：
 
 ```bash
-cat ~/.pilotdeck/router-stats.json | python3 -m json.tool
+cat ~/.pilotdeck/router/stats.json | python3 -m json.tool
 ```
 
 ### 关键字段
@@ -147,7 +147,7 @@ PilotDeck 的 `TokenStatsCollector` 内置了默认定价（`src/router/stats/To
 ### 成本计算脚本
 
 ```bash
-cat ~/.pilotdeck/router-stats.json | python3 -c "
+cat ~/.pilotdeck/router/stats.json | python3 -c "
 import json, sys
 
 OPUS_PRICING = {'input': 15/1e6, 'output': 75/1e6, 'cacheRead': 1.5/1e6}
@@ -192,7 +192,7 @@ print(f'Role 分布: {json.dumps(g.get(\"perRole\", {}))}')
 4. 汇总所有 turn 的 cache + input，按 Opus 单价计算
 
 ```bash
-cat ~/.pilotdeck/router-stats.json | python3 -c "
+cat ~/.pilotdeck/router/stats.json | python3 -c "
 import json, sys
 
 OPUS = {'input': 15/1e6, 'output': 75/1e6, 'cache': 1.5/1e6}
@@ -268,7 +268,7 @@ print(f'累积上下文: {cumulative_context:,} tokens')
 | 文件 | 用途 |
 |------|------|
 | `~/.pilotdeck/pilotdeck.yaml` | 全局配置 |
-| `~/.pilotdeck/router-stats.json` | Token 统计持久化数据（测试前用 `echo '{}'` 重置） |
+| `~/.pilotdeck/router/stats.json` | Token 统计持久化数据（测试前用 `echo '{}'` 重置） |
 | `src/router/stats/TokenStatsCollector.ts` | 统计收集与成本计算逻辑 |
 | `src/router/orchestrate/applyOrchestration.ts` | 编排逻辑 |
 | `src/router/tokenSaver/classifyAndRoute.ts` | 分级路由逻辑 |

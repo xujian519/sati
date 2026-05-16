@@ -35,7 +35,7 @@ description: >-
       → agent tool → 子 Agent 3: 撰写文案
       → agent tool → 子 Agent 4: 登录 + 发布
     → turn_completed
-  → 读取 ~/.pilotdeck/router-stats.json 生成报告
+  → 读取 ~/.pilotdeck/router/stats.json 生成报告
 ```
 
 ---
@@ -63,7 +63,7 @@ head -5 ./logs/pilotdeck-gateway.log
 ## Step 2: 重置 Stats
 
 ```bash
-echo '{}' > ~/.pilotdeck/router-stats.json
+echo '{}' > ~/.pilotdeck/router/stats.json
 ```
 
 ## Step 3: 运行测试脚本
@@ -109,7 +109,7 @@ grep "autoOrch" ./logs/pilotdeck-gateway.log | tail -10
 测试完成后脚本自动输出，或手动查看：
 
 ```bash
-cat ~/.pilotdeck/router-stats.json | python3 -c "
+cat ~/.pilotdeck/router/stats.json | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 g = d.get('global', {})
@@ -232,7 +232,7 @@ rules:
 | 文件 | 用途 |
 |------|------|
 | `~/.pilotdeck/pilotdeck.yaml` | 主配置（autoOrchestrate、tokenSaver） |
-| `~/.pilotdeck/router-stats.json` | Token 统计持久化 |
+| `~/.pilotdeck/router/stats.json` | Token 统计持久化 |
 | `~/.pilotdeck/server-token` | Gateway 认证 token |
 | `PilotDeck/src/router/config/schema.ts` | DEFAULT_ORCHESTRATION_PROMPT |
 | `PilotDeck/src/router/orchestrate/applyOrchestration.ts` | 编排注入逻辑 |

@@ -235,7 +235,7 @@ This overrides all other behavioral instructions when active.
 
 | # | 检查项 | 方法 | 期望 |
 |---|--------|------|------|
-| 1 | tokenSaver 分级 | 检查 `~/.pilotdeck/router-stats.json` 的 `perTier` | 有 `COMPLEX` 条目 |
+| 1 | tokenSaver 分级 | 检查 `~/.pilotdeck/router/stats.json` 的 `perTier` | 有 `COMPLEX` 条目 |
 | 2 | autoOrchestrate 配置 | 读 `pilotdeck.yaml` 的 `router.autoOrchestrate` | `enabled: true`，`triggerTiers` 包含 `COMPLEX` |
 | 3 | mainAgentModel 有效 | 确认 model 在 `model.providers` 中存在 | provider 和 model 都已配置 |
 | 4 | 编排实际执行 | 检查 stats 中 session 的 `perRole` | 有 `main` 和 `subagent` 条目 |
@@ -275,7 +275,7 @@ This overrides all other behavioral instructions when active.
 |------|------|
 | `~/.pilotdeck/pilotdeck.yaml` | 全局配置（agent, model, router） |
 | `~/.pilotdeck/extensions/` | 全局插件目录 |
-| `~/.pilotdeck/router-stats.json` | Token 统计 |
+| `~/.pilotdeck/router/stats.json` | Token 统计 |
 | `src/router/RouterRuntime.ts` | 路由运行时主逻辑 |
 | `src/router/config/schema.ts` | 配置类型定义（RouterAutoOrchestrateConfig 等） |
 | `src/router/orchestrate/applyOrchestration.ts` | 编排逻辑实现 |

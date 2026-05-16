@@ -154,7 +154,7 @@ cd /Users/a1/Desktop/claw/PilotDeck/ui && npm run start
 ### 重置统计
 
 ```bash
-echo '{}' > ~/.pilotdeck/router-stats.json
+echo '{}' > ~/.pilotdeck/router/stats.json
 ```
 
 ### 快速验证分级
@@ -173,7 +173,7 @@ echo '{}' > ~/.pilotdeck/router-stats.json
 发送后检查统计：
 
 ```bash
-cat ~/.pilotdeck/router-stats.json | python3 -m json.tool
+cat ~/.pilotdeck/router/stats.json | python3 -m json.tool
 ```
 
 验证 `global.perTier` 中各 tier 的分布是否符合预期。
@@ -184,10 +184,10 @@ cat ~/.pilotdeck/router-stats.json | python3 -m json.tool
 
 ### 统计文件
 
-PilotDeck 的 `TokenStatsCollector` 将数据持久化到 `~/.pilotdeck/router-stats.json`。
+PilotDeck 的 `TokenStatsCollector` 将数据持久化到 `~/.pilotdeck/router/stats.json`。
 
 ```bash
-cat ~/.pilotdeck/router-stats.json | python3 -c "
+cat ~/.pilotdeck/router/stats.json | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 g = data.get('global', {})
@@ -203,7 +203,7 @@ print(f'Per model: {json.dumps(g.get(\"perModel\", {}), indent=2)}')
 ### 按 Session 查看
 
 ```bash
-cat ~/.pilotdeck/router-stats.json | python3 -c "
+cat ~/.pilotdeck/router/stats.json | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 sessions = data.get('sessions', {})
@@ -254,10 +254,10 @@ node dist/src/cli/pilotdeck.js --message "请分析 PilotDeck 项目的整体架
 
 ### 验证点
 
-检查 `~/.pilotdeck/router-stats.json`：
+检查 `~/.pilotdeck/router/stats.json`：
 
 ```bash
-cat ~/.pilotdeck/router-stats.json | python3 -c "
+cat ~/.pilotdeck/router/stats.json | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 for sid, s in data.get('sessions', {}).items():
@@ -317,7 +317,7 @@ for sid, s in data.get('sessions', {}).items():
 | 文件 | 用途 |
 |------|------|
 | `~/.pilotdeck/pilotdeck.yaml` | 全局配置（router.tokenSaver, autoOrchestrate, stats） |
-| `~/.pilotdeck/router-stats.json` | TokenStatsCollector 持久化数据 |
+| `~/.pilotdeck/router/stats.json` | TokenStatsCollector 持久化数据 |
 | `src/router/RouterRuntime.ts` | 路由运行时（分级 + 编排 + 统计） |
 | `src/router/tokenSaver/classifyAndRoute.ts` | Judge 分类逻辑 |
 | `src/router/tokenSaver/generateJudgePrompt.ts` | Judge prompt 生成 |

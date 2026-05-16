@@ -46,7 +46,7 @@ function readToken() {
 }
 
 function readStats() {
-  const statsPath = join(PILOTDECK_HOME, "router-stats.json");
+  const statsPath = join(PILOTDECK_HOME, "router/stats.json");
   try {
     return JSON.parse(readFileSync(statsPath, "utf-8"));
   } catch {
