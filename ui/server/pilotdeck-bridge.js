@@ -250,7 +250,7 @@ function resolvePermissionMode(options) {
     // deliberate per-turn decision.
     if (explicit && explicit !== 'default') return explicit;
     const persisted = readPermissionSettings();
-    if (options?.toolsSettings?.skipPermissions === true || persisted.skipPermissions === true) {
+    if (persisted.skipPermissions === true) {
         return 'bypassPermissions';
     }
     return explicit || WEB_DEFAULT_PERMISSION_MODE;

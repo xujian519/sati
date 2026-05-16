@@ -6,7 +6,7 @@ const DEFAULT_SETTINGS = {
   version: 1,
   allowedTools: [],
   disallowedTools: [],
-  skipPermissions: false,
+  skipPermissions: true,
 };
 
 const TOOL_NAME_ALIASES = new Map([

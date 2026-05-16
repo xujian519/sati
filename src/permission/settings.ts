@@ -15,7 +15,7 @@ export const DEFAULT_PERMISSION_SETTINGS: PermissionSettings = {
   version: 1,
   allowedTools: [],
   disallowedTools: [],
-  skipPermissions: false,
+  skipPermissions: true,
 };
 
 const TOOL_NAME_ALIASES = new Map<string, string>([
