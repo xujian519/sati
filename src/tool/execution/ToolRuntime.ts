@@ -11,6 +11,7 @@ import {
 import type { PilotDeckToolCall, PilotDeckToolRuntimeContext } from "../protocol/types.js";
 import type { ToolRegistry } from "../registry/ToolRegistry.js";
 import { validateToolInput } from "./validateToolInput.js";
+import { formatValidationError } from "./formatValidationError.js";
 import { normalizeToolError } from "../protocol/errors.js";
 import type { AgentEventEmitter } from "../../agent/protocol/events.js";
 
@@ -49,7 +50,7 @@ export class ToolRuntime {
         call.id,
         tool.name,
         "invalid_tool_input",
-        `Tool ${tool.name} input is invalid.`,
+        formatValidationError(tool.name, validation.issues),
         startedAt,
         context,
         { issues: validation.issues },

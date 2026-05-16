@@ -49,4 +49,40 @@ export class ToolRegistry {
       inputSchema: tool.inputSchema,
     }));
   }
+
+  /**
+   * Shallow-clone this registry so the caller can register additional tools
+   * (or replace existing ones) without mutating the original.  Tool
+   * definitions are shared by reference — only the lookup maps are copied.
+   */
+  clone(): ToolRegistry {
+    const copy = new ToolRegistry();
+    for (const [name, tool] of this.toolsByName) {
+      copy.toolsByName.set(name, tool);
+    }
+    for (const [alias, realName] of this.aliases) {
+      copy.aliases.set(alias, realName);
+    }
+    return copy;
+  }
+
+  /**
+   * Replace an existing tool definition in-place.  Unlike `register()`,
+   * this overwrites the entry keyed by `tool.name` (which must already
+   * exist).  Aliases from the *previous* definition are removed and
+   * replaced with those from the new one.
+   */
+  replace(tool: PilotDeckToolDefinition): void {
+    const existing = this.toolsByName.get(tool.name);
+    if (!existing) {
+      throw new Error(`Tool ${tool.name} is not registered — cannot replace.`);
+    }
+    for (const alias of existing.aliases ?? []) {
+      this.aliases.delete(alias);
+    }
+    this.toolsByName.set(tool.name, tool);
+    for (const alias of tool.aliases ?? []) {
+      this.aliases.set(alias, tool.name);
+    }
+  }
 }
