@@ -59,8 +59,8 @@ test("parseRouterConfig validates default scenario provider/model", () => {
     modelConfig,
   );
   assert.ok(result.config);
-  assert.equal(result.config?.scenarios.default.provider, "vendor-a");
-  assert.equal(result.config?.scenarios.default.model, "main");
+  assert.equal(result.config?.scenarios?.default.provider, "vendor-a");
+  assert.equal(result.config?.scenarios?.default.model, "main");
   assert.equal(result.diagnostics.length, 0);
 });
 

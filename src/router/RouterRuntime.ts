@@ -112,7 +112,7 @@ export function createRouterRuntime(
         context: {
           sessionId: input.sessionId,
           isMainAgent: input.isMainAgent,
-          scenarios: Object.keys(config.scenarios),
+          scenarios: Object.keys(config.scenarios ?? {}),
         },
       });
     } catch (error) {
@@ -142,7 +142,7 @@ export function createRouterRuntime(
     };
 
     const custom = await resolveCustom(inputWithUsage);
-    const scenarioOutcome = decideScenario(inputWithUsage, config.scenarios);
+    const scenarioOutcome = decideScenario(inputWithUsage, config.scenarios ?? {} as any);
 
     let scenarioType: RouterScenarioType = scenarioOutcome.scenarioType;
     let selection: RouterModelRef | undefined =
@@ -232,8 +232,12 @@ export function createRouterRuntime(
     }
 
     if (!selection) {
-      selection = config.scenarios.default;
+      selection = config.scenarios?.default;
       scenarioType = scenarioType === "explicit" ? scenarioType : "default";
+    }
+
+    if (!selection) {
+      throw new Error("Router: no default scenario configured and no model could be resolved");
     }
 
     const decision: RouterDecision = {
