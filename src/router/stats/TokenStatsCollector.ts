@@ -17,6 +17,7 @@ export type RouterStatsRecord = {
   role?: "main" | "subagent";
   usage: CanonicalUsage;
   cost?: { input: number; output: number; cacheRead: number; total: number };
+  baselineCost?: number;
   startedAt: string;
   endedAt: string;
 };
@@ -26,6 +27,8 @@ export type RouterStatsAggregate = {
   totalInputTokens: number;
   totalOutputTokens: number;
   totalCost: number;
+  totalBaselineCost: number;
+  totalSavedCost: number;
   perScenario: Record<string, number>;
   perModel: Record<string, number>;
   perProvider: Record<string, number>;
@@ -55,6 +58,7 @@ export class TokenStatsCollector {
   private readonly enabled: boolean;
   private readonly filePath: string | undefined;
   private readonly modelPricing: RouterStatsConfig["modelPricing"];
+  private readonly baselineModel: RouterStatsConfig["baselineModel"];
   private data: PersistedData;
   private dirty = false;
   private flushTimer: ReturnType<typeof setInterval> | undefined;
@@ -63,6 +67,7 @@ export class TokenStatsCollector {
   constructor(config: RouterStatsConfig | undefined) {
     this.enabled = config?.enabled ?? false;
     this.modelPricing = config?.modelPricing;
+    this.baselineModel = config?.baselineModel;
 
     if (this.enabled) {
       if (config?.filePath) {
@@ -88,6 +93,8 @@ export class TokenStatsCollector {
     } else {
       record.cost = this.calculateCost(record.usage, record.provider, record.model);
     }
+
+    record.baselineCost = this.calculateBaselineCostForRecord(record.usage, record.provider, record.model);
 
     this.recentRecords.push(record);
     if (this.recentRecords.length > 500) {
@@ -242,6 +249,23 @@ export class TokenStatsCollector {
     }
     return lookupDefaultPricing(combined, model);
   }
+
+  private calculateBaselineCostForRecord(
+    usage: CanonicalUsage,
+    provider: string,
+    model: string,
+  ): number {
+    if (!this.baselineModel?.model) {
+      const cost = this.calculateCost(usage, provider, model);
+      return cost.total;
+    }
+    const cost = this.calculateCost(
+      usage,
+      this.baselineModel.provider || provider,
+      this.baselineModel.model,
+    );
+    return cost.total;
+  }
 }
 
 function createAggregate(): RouterStatsAggregate {
@@ -250,6 +274,8 @@ function createAggregate(): RouterStatsAggregate {
     totalInputTokens: 0,
     totalOutputTokens: 0,
     totalCost: 0,
+    totalBaselineCost: 0,
+    totalSavedCost: 0,
     perScenario: {},
     perModel: {},
     perProvider: {},
@@ -277,7 +303,13 @@ function bumpAggregate(agg: RouterStatsAggregate, record: RouterStatsRecord): vo
   agg.totalRequests += 1;
   agg.totalInputTokens += record.usage.inputTokens ?? 0;
   agg.totalOutputTokens += record.usage.outputTokens ?? 0;
-  agg.totalCost += record.cost?.total ?? 0;
+  const cost = record.cost?.total ?? 0;
+  const baseline = record.baselineCost ?? cost;
+  agg.totalCost += cost;
+  if (typeof agg.totalBaselineCost !== "number") agg.totalBaselineCost = 0;
+  if (typeof agg.totalSavedCost !== "number") agg.totalSavedCost = 0;
+  agg.totalBaselineCost += baseline;
+  agg.totalSavedCost += baseline - cost;
 
   agg.perScenario[record.scenarioType] = (agg.perScenario[record.scenarioType] ?? 0) + 1;
 

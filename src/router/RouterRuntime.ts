@@ -79,7 +79,13 @@ export function createRouterRuntime(
   config: RouterConfig,
   deps: RouterRuntimeDeps,
 ): RouterRuntime {
-  const stats = new TokenStatsCollector(config.stats);
+  const stats = new TokenStatsCollector({
+    ...config.stats,
+    enabled: config.stats?.enabled ?? false,
+    baselineModel: config.scenarios?.default
+      ? { provider: config.scenarios.default.provider, model: config.scenarios.default.model }
+      : config.stats?.baselineModel,
+  });
   const sessionStore = new SessionRouterStore({
     now: () => (deps.now?.() ?? new Date()).getTime(),
   });

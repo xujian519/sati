@@ -57,6 +57,8 @@ export type RouterStatsConfig = {
   modelPricing?: Record<string, { input?: number; output?: number; cacheRead?: number }>;
   /** Override the default ~/.pilotdeck/router-stats.json path (useful for tests). */
   filePath?: string;
+  /** Provider/model ref used as the "no-router" baseline for savedCost calculation. */
+  baselineModel?: { provider: string; model: string };
 };
 
 export type RouterFallbackConfig = Partial<Record<RouterScenarioType, RouterModelRef[]>>;
