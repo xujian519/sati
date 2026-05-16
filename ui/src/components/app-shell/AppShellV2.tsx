@@ -36,7 +36,6 @@ type TypedSettingsProps = {
 type DeleteSessionTarget = {
   project: Project;
   session: ProjectSession;
-  provider: SessionProvider;
 };
 
 const SettingsComponent = Settings as unknown as (props: TypedSettingsProps) => JSX.Element;
@@ -305,9 +304,8 @@ export default function AppShellV2() {
       const message = event.data;
       if (!message || message.type !== 'notification:navigate') return;
 
-      if (typeof message.provider === 'string' && message.provider.trim()) {
-        localStorage.setItem('selected-provider', message.provider);
-      }
+      // Provider hint from notifications is no longer stored; all sessions
+      // go through the unified pilotdeck gateway.
 
       setActiveTab('chat');
       setSidebarOpen(false);
@@ -405,9 +403,9 @@ export default function AppShellV2() {
 	  const [isDeletingSession, setIsDeletingSession] = useState(false);
 	  const [deleteSessionError, setDeleteSessionError] = useState<string | null>(null);
 	  const handleRequestDeleteSession = useCallback(
-	    (project: Project, session: ProjectSession, provider: SessionProvider) => {
+	    (project: Project, session: ProjectSession) => {
 	      setDeleteSessionError(null);
-	      setDeleteSessionTarget({ project, session, provider });
+	      setDeleteSessionTarget({ project, session });
 	    },
 	    [],
 	  );
@@ -419,28 +417,14 @@ export default function AppShellV2() {
 	  const handleConfirmDeleteSession = useCallback(async () => {
 	    if (!deleteSessionTarget) return;
 
-	    const { project, session, provider } = deleteSessionTarget;
+	    const { project, session } = deleteSessionTarget;
 	    setIsDeletingSession(true);
 	    setDeleteSessionError(null);
 
 	    try {
-	      const projectPath = project.fullPath || project.path || '';
-	      let response: Response;
-	      if (provider === 'codex') {
-	        response = await api.deleteCodexSession(session.id);
-	      } else if (provider === 'cursor') {
-	        response = await api.deleteCursorSession(session.id, projectPath);
-	      } else if (provider === 'gemini') {
-	        response = await api.deleteGeminiSession(session.id);
-	      } else if (isBackgroundTaskSession(session)) {
-	        response = await api.deleteSession(
-	          project.name,
-	          session.id,
-	          getSessionRequestParams(session),
-	        );
-	      } else {
-	        response = await api.deleteSession(project.name, session.id);
-	      }
+	      const response = isBackgroundTaskSession(session)
+	        ? await api.deleteSession(project.name, session.id, getSessionRequestParams(session))
+	        : await api.deleteSession(project.name, session.id);
 
 	      if (!response.ok) {
 	        const body = (await response.json().catch(() => ({}))) as { error?: string };
@@ -483,12 +467,7 @@ export default function AppShellV2() {
       if (project.name !== selectedProject?.name) {
         handleProjectSelect(project);
       }
-      const target = [
-        ...(project.sessions ?? []),
-        ...(project.codexSessions ?? []),
-        ...(project.cursorSessions ?? []),
-        ...(project.geminiSessions ?? []),
-      ].find((s) => s.id === sessId);
+      const target = (project.sessions ?? []).find((s) => s.id === sessId);
       if (target) {
         handleSessionSelect(target);
       } else if (fallbackSession) {
@@ -612,8 +591,7 @@ export default function AppShellV2() {
           processingSessions={processingSessions}
           onReplaceTemporarySession={replaceTemporarySession}
           onNavigateToSession={(sid: string) => {
-            const provider = (localStorage.getItem('selected-provider') || 'claude') as SessionProvider;
-            setSelectedSession((prev) => prev?.id === sid ? prev : { id: sid, __provider: provider } as ProjectSession);
+            setSelectedSession((prev) => prev?.id === sid ? prev : { id: sid } as ProjectSession);
             navigate(`/session/${sid}`);
           }}
           onStartNewSession={handleNewSession}
@@ -701,11 +679,7 @@ function DeleteProjectDialog({
   onCancel,
   onConfirm,
 }: DeleteProjectDialogProps) {
-  const sessionCount =
-    (project.sessions?.length ?? 0) +
-    (project.codexSessions?.length ?? 0) +
-    (project.cursorSessions?.length ?? 0) +
-    (project.geminiSessions?.length ?? 0);
+  const sessionCount = project.sessions?.length ?? 0;
   const displayName = project.displayName || project.name;
 
   return (
@@ -808,9 +782,7 @@ function DeleteSessionDialog({
           <p className="text-sm text-foreground">
             This removes the conversation from <span className="font-medium">{projectName}</span>.
           </p>
-          <p className="text-xs text-muted-foreground">
-            Provider: <span className="font-medium text-foreground">{target.provider}</span>
-          </p>
+          
           {error ? (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}

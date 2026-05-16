@@ -18,7 +18,5 @@ export function getSessionDisplayName(session: ProjectSession | null | undefined
     return null;
   }
 
-  return session.__provider === 'cursor'
-    ? session.name || 'Untitled Session'
-    : session.summary || 'New Session';
+  return session.summary || session.name || 'New Session';
 }

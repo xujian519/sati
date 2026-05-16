@@ -21,7 +21,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import type { TFunction } from 'i18next';
-import type { AppTab, Project, ProjectSession, SessionProvider } from '../../types/app';
+import type { AppTab, Project, ProjectSession } from '../../types/app';
 import { cn } from '../../lib/utils.js';
 import {
   projectDisplayName,
@@ -84,15 +84,6 @@ const useProjectSortOrder = (): ProjectSortOrder => {
 const projectLastActivity = (project: Project): number => {
   const buckets: ProjectSession[][] = [
     Array.isArray(project.sessions) ? project.sessions : [],
-    Array.isArray((project as Project & { codexSessions?: ProjectSession[] }).codexSessions)
-      ? (project as Project & { codexSessions: ProjectSession[] }).codexSessions
-      : [],
-    Array.isArray((project as Project & { cursorSessions?: ProjectSession[] }).cursorSessions)
-      ? (project as Project & { cursorSessions: ProjectSession[] }).cursorSessions
-      : [],
-    Array.isArray((project as Project & { geminiSessions?: ProjectSession[] }).geminiSessions)
-      ? (project as Project & { geminiSessions: ProjectSession[] }).geminiSessions
-      : [],
   ];
   let latest = 0;
   for (const list of buckets) {
@@ -112,37 +103,23 @@ const projectLastActivity = (project: Project): number => {
 type FlatSession = {
   session: ProjectSession;
   sessionId: string;
-  provider: SessionProvider;
   lastActivity: number;
 };
 
 const collectSessionsForProject = (project: Project): FlatSession[] => {
-  const asSessionList = (sessions: unknown): ProjectSession[] =>
-    Array.isArray(sessions) ? sessions : [];
-
-  const all: Array<[SessionProvider, ProjectSession[]]> = [
-    ['claude', asSessionList(project.sessions)],
-    ['codex', asSessionList(project.codexSessions)],
-    ['cursor', asSessionList(project.cursorSessions)],
-    ['gemini', asSessionList(project.geminiSessions)],
-  ];
-  const entries: FlatSession[] = [];
-  for (const [provider, sessions] of all) {
-    for (const session of sessions) {
-      entries.push({
-        session,
-        sessionId: session.id,
-        provider: session.__provider ?? provider,
-        lastActivity: Math.max(
-          asTimestamp(session.lastActivity),
-          asTimestamp(session.updated_at),
-          asTimestamp(session.createdAt),
-          asTimestamp(session.created_at),
-        ),
-      });
-    }
-  }
-  return entries.sort((a, b) => b.lastActivity - a.lastActivity);
+  const sessions = Array.isArray(project.sessions) ? project.sessions : [];
+  return sessions
+    .map((session) => ({
+      session,
+      sessionId: session.id,
+      lastActivity: Math.max(
+        asTimestamp(session.lastActivity),
+        asTimestamp(session.updated_at),
+        asTimestamp(session.createdAt),
+        asTimestamp(session.created_at),
+      ),
+    }))
+    .sort((a, b) => b.lastActivity - a.lastActivity);
 };
 
 const formatRelative = (ts: number, t: TFunction): string => {
@@ -224,7 +201,7 @@ export type SidebarV2Props = {
   onStartNewSession: (project: Project | null) => void;
   onCreateProject: () => void;
   onRequestDeleteProject: (project: Project) => void;
-  onRequestDeleteSession: (project: Project, session: ProjectSession, provider: SessionProvider) => void;
+  onRequestDeleteSession: (project: Project, session: ProjectSession) => void;
   onShowSettings: () => void;
   onDeselectProject?: () => void;
   onResetProjectSessionPreview?: (projectName: string) => void;
@@ -244,7 +221,6 @@ type SidebarContextMenu =
       kind: 'session';
       project: Project;
       session: ProjectSession;
-      provider: SessionProvider;
       x: number;
       y: number;
     };
@@ -537,7 +513,7 @@ export default function SidebarV2({
   );
 
   const openSessionContextMenu = useCallback(
-    (event: MouseEvent, project: Project, session: ProjectSession, provider: SessionProvider) => {
+    (event: MouseEvent, project: Project, session: ProjectSession) => {
       if (renamingSession === session.id) return;
       event.preventDefault();
       event.stopPropagation();
@@ -546,7 +522,6 @@ export default function SidebarV2({
         kind: 'session',
         project,
         session,
-        provider,
         x: position.x,
         y: position.y,
       });
@@ -577,9 +552,9 @@ export default function SidebarV2({
   );
 
   const requestDeleteSession = useCallback(
-    (project: Project, session: ProjectSession, provider: SessionProvider) => {
+    (project: Project, session: ProjectSession) => {
       setContextMenu(null);
-      onRequestDeleteSession(project, session, provider);
+      onRequestDeleteSession(project, session);
     },
     [onRequestDeleteSession],
   );
@@ -598,7 +573,7 @@ export default function SidebarV2({
     if (contextMenu.kind === 'project') {
       requestDeleteProject(contextMenu.project);
     } else {
-      requestDeleteSession(contextMenu.project, contextMenu.session, contextMenu.provider);
+      requestDeleteSession(contextMenu.project, contextMenu.session);
     }
   }, [contextMenu, requestDeleteProject, requestDeleteSession]);
 
@@ -677,7 +652,7 @@ export default function SidebarV2({
         ) : null}
 
         {sessions.length > 0 ? (
-          sessions.map(({ session, sessionId, provider, lastActivity }) => {
+          sessions.map(({ session, sessionId, lastActivity }) => {
             const isSessionActive =
               selectedProject?.name === project.name &&
               selectedSession?.id === sessionId &&
@@ -698,7 +673,7 @@ export default function SidebarV2({
             return (
               <div
                 key={sessionId}
-                onContextMenu={(event) => openSessionContextMenu(event, project, session, provider)}
+                onContextMenu={(event) => openSessionContextMenu(event, project, session)}
                 className={cn(
                   'group/session relative w-full rounded-md transition-colors',
                   isSessionActive

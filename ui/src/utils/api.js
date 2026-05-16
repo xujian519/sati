@@ -152,22 +152,6 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ summary, provider }),
     }),
-  deleteCodexSession: (sessionId) =>
-    authenticatedFetch(`/api/codex/sessions/${sessionId}`, {
-      method: 'DELETE',
-    }),
-  deleteCursorSession: (sessionId, projectPath = '') => {
-    const params = new URLSearchParams();
-    if (projectPath) params.append('projectPath', projectPath);
-    const query = params.toString();
-    return authenticatedFetch(`/api/cursor/sessions/${sessionId}${query ? `?${query}` : ''}`, {
-      method: 'DELETE',
-    });
-  },
-  deleteGeminiSession: (sessionId) =>
-    authenticatedFetch(`/api/gemini/sessions/${sessionId}`, {
-      method: 'DELETE',
-    }),
   deleteProject: (projectName, force = false) =>
     authenticatedFetch(`/api/projects/${projectName}${force ? '?force=true' : ''}`, {
       method: 'DELETE',

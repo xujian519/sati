@@ -5,7 +5,6 @@ import type { ChatInterfaceProps, Provider } from '../chat/types/types';
 import {
   getSessionRequestParams,
   isBackgroundTaskSession,
-  type SessionProvider,
 } from '../../types/app';
 import { useChatProviderState } from '../chat/hooks/useChatProviderState';
 import { useChatSessionState } from '../chat/hooks/useChatSessionState';
@@ -80,12 +79,7 @@ function ChatInterfaceV2({
   }, []);
 
   const {
-    provider,
-    setProvider: _setProvider,
-    cursorModel,
-    claudeModel,
-    codexModel,
-    geminiModel,
+    model,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -185,13 +179,9 @@ function ChatInterfaceV2({
     selectedProject,
     selectedSession,
     currentSessionId,
-    provider,
+    model,
     permissionMode,
     cyclePermissionMode,
-    cursorModel,
-    claudeModel,
-    codexModel,
-    geminiModel,
     isLoading,
     canAbortSession,
     tokenBudget,
@@ -229,10 +219,8 @@ function ChatInterfaceV2({
     accumulatedStreamRef.current = '';
     streamBufferRef.current = '';
 
-    const providerVal =
-      (localStorage.getItem('selected-provider') as SessionProvider) || 'claude';
     await sessionStore.refreshFromServer(selectedSession.id, {
-      provider: (selectedSession.__provider || providerVal) as SessionProvider,
+      provider: 'pilotdeck',
       projectName: selectedProject.name,
       projectPath: selectedProject.fullPath || selectedProject.path || '',
       ...sessionRequestParams,
@@ -243,7 +231,7 @@ function ChatInterfaceV2({
     sendMessage({
       type: 'check-session-status',
       sessionId: selectedSession.id,
-      provider: (selectedSession.__provider || providerVal) as string,
+      provider: 'pilotdeck',
     });
   }, [
     selectedProject,
@@ -257,7 +245,7 @@ function ChatInterfaceV2({
   ]);
 
   useChatRealtimeHandlers({
-    provider,
+    provider: 'pilotdeck',
     selectedProject,
     selectedSession,
     currentSessionId,
@@ -424,7 +412,7 @@ function ChatInterfaceV2({
         loadAllMessages={loadAllMessages}
         allMessagesLoaded={allMessagesLoaded}
         isLoadingAllMessages={isLoadingAllMessages}
-        provider={provider as Provider}
+        provider={'pilotdeck' as Provider}
         selectedProject={selectedProject}
         selectedSession={selectedSession}
         createDiff={createDiff}

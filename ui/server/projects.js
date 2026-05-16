@@ -9,10 +9,7 @@
  *   - `getSessions()` lists session transcripts via
  *     `gateway.listSessions()` (PilotDeck transcripts under
  *     ~/.pilotdeck/projects/<id>/chats/<sessionKey>.jsonl).
- *   - The legacy `cursorSessions / codexSessions / geminiSessions`
- *     arrays remain in the response shape (empty) for back-compat with
- *     the existing React components — those components already render
- *     fine when the arrays are empty.
+ *   - All sessions are returned in the single `sessions` array.
  *
  * Exports preserved for external callers under ui/server/:
  *
@@ -74,11 +71,7 @@ function projectDisplayName(fullPath) {
 
 /**
  * Map a PilotDeck `WebSessionInfo` onto the legacy `ProjectSession`
- * shape the React frontend expects. We tag every session as
- * `__provider: 'claude'` so the existing chat composer falls through to
- * `startClaudeSessionCommand` (which dispatches `claude-command`) — the
- * PilotDeck bridge in `index.js` accepts that and routes it through
- * `src/gateway`.
+ * shape the React frontend expects.
  */
 function toLegacySession(session, projectName) {
     const presentation = mapLegacySessionPresentation(session);
@@ -105,7 +98,6 @@ function toLegacySession(session, projectName) {
         aiTitle: session.aiTitle,
         firstPrompt: session.firstPrompt,
         tag: presentation.tag,
-        __provider: 'claude',
         __projectName: projectName,
     };
 }
@@ -216,9 +208,6 @@ async function getProjects(progressCallback = null) {
             fullPath,
             path: fullPath,
             sessions,
-            cursorSessions: [],
-            codexSessions: [],
-            geminiSessions: [],
             sessionMeta: {
                 total: project.sessionCount ?? sessions.length,
                 hasMore: (project.sessionCount ?? sessions.length) > sessions.length,
@@ -275,9 +264,6 @@ async function getProjects(progressCallback = null) {
         fullPath: generalHome,
         path: generalHome,
         sessions: generalSessions,
-        cursorSessions: [],
-        codexSessions: [],
-        geminiSessions: [],
         sessionMeta: {
             total: generalTotal,
             hasMore: generalTotal > generalSessions.length,

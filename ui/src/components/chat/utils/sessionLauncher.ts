@@ -1,16 +1,15 @@
-import { CLAUDE_MODELS } from '../../../../shared/modelConstants';
 import type { Project, ProjectSession } from '../../../types/app';
 import type { PilotDeckSettings, PermissionMode } from '../types/types';
 import { getPilotDeckSettings, safeLocalStorage } from './chatStorage';
 
-type StartClaudeSessionOptions = {
+type StartSessionOptions = {
   sendMessage: (message: unknown) => void;
   selectedProject: Project;
   command: string;
   sessionId?: string | null;
   temporarySessionId?: string;
   permissionMode?: PermissionMode | string;
-  claudeModel?: string;
+  model?: string;
   sessionSummary?: string | null;
   toolsSettings?: PilotDeckSettings;
   images?: unknown[];
@@ -56,7 +55,7 @@ export function getNotificationSessionSummary(
     : normalizedFallback;
 }
 
-export function getStoredClaudePermissionMode(
+export function getStoredPermissionMode(
   selectedSession: ProjectSession | null,
 ): PermissionMode {
   if (!selectedSession?.id) {
@@ -75,29 +74,27 @@ export function getSelectedProjectPath(selectedProject: Project): string {
   return selectedProject.fullPath || selectedProject.path || '';
 }
 
-export function startClaudeSessionCommand({
+export function startSessionCommand({
   sendMessage,
   selectedProject,
   command,
   sessionId,
   temporarySessionId,
   permissionMode = 'default',
-  claudeModel,
+  model,
   sessionSummary,
   toolsSettings = getPilotDeckSettings(),
   images,
   alwaysOnPlanId,
   alwaysOnExecutionToken,
   workspaceCwd,
-}: StartClaudeSessionOptions): string {
+}: StartSessionOptions): string {
   const sessionToActivate =
     sessionId || temporarySessionId || createTemporarySessionId();
   const resolvedProjectPath = getSelectedProjectPath(selectedProject);
 
-  safeLocalStorage.setItem('selected-provider', 'claude');
-
   sendMessage({
-    type: 'claude-command',
+    type: 'pilotdeck-command',
     command,
     options: {
       ...(sessionId ? { sessionId, resume: true } : {}),
@@ -105,7 +102,7 @@ export function startClaudeSessionCommand({
       cwd: resolvedProjectPath,
       toolsSettings,
       permissionMode,
-      model: claudeModel || safeLocalStorage.getItem('claude-model') || CLAUDE_MODELS.DEFAULT,
+      ...(model ? { model } : {}),
       sessionSummary,
       ...(alwaysOnPlanId ? { alwaysOnPlanId } : {}),
       ...(alwaysOnExecutionToken ? { alwaysOnExecutionToken } : {}),

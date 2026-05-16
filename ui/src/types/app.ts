@@ -1,4 +1,4 @@
-export type SessionProvider = 'claude' | 'cursor' | 'codex' | 'gemini';
+export type SessionProvider = 'claude' | 'cursor' | 'codex' | 'gemini' | 'pilotdeck';
 export type ProjectSessionKind = 'background_task';
 
 export type AppTab = 'home' | 'chat' | 'always-on' | 'files' | 'shell' | 'git' | 'tasks' | 'memory' | 'skills' | 'preview' | 'dashboard' | `plugin:${string}`;
@@ -177,7 +177,6 @@ export interface ProjectSession {
   taskStatus?: string;
   outputFile?: string;
   isReadOnly?: boolean;
-  __provider?: SessionProvider;
   __projectName?: string;
   [key: string]: unknown;
 }
@@ -245,9 +244,6 @@ export interface Project {
   fullPath: string;
   path?: string;
   sessions?: ProjectSession[];
-  cursorSessions?: ProjectSession[];
-  codexSessions?: ProjectSession[];
-  geminiSessions?: ProjectSession[];
   sessionMeta?: ProjectSessionMeta;
   taskmaster?: ProjectTaskmasterInfo;
   alwaysOn?: ProjectAlwaysOnInfo;

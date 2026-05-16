@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
-import { CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS, GEMINI_MODELS } from '../../../../shared/modelConstants';
+import { CLAUDE_MODELS } from '../../../../shared/modelConstants';
 import type { PendingPermissionRequest, PermissionMode } from '../types/types';
-import type { ProjectSession, SessionProvider } from '../../../types/app';
+import type { ProjectSession } from '../../../types/app';
 
 interface UseChatProviderStateArgs {
   selectedSession: ProjectSession | null;
@@ -13,31 +13,17 @@ type ModelOption = {
   label: string;
 };
 
-const DEFAULT_CLAUDE_MODEL_OPTIONS: ModelOption[] = CLAUDE_MODELS.OPTIONS.map((option) => ({
+const DEFAULT_MODEL_OPTIONS: ModelOption[] = CLAUDE_MODELS.OPTIONS.map((option) => ({
   ...option,
 }));
 
 export function useChatProviderState({ selectedSession }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
-  const [provider, setProvider] = useState<SessionProvider>(() => {
-    return (localStorage.getItem('selected-provider') as SessionProvider) || 'claude';
+  const [model, setModel] = useState<string>(() => {
+    return localStorage.getItem('pilotdeck-model') || CLAUDE_MODELS.DEFAULT;
   });
-  const [cursorModel, setCursorModel] = useState<string>(() => {
-    return localStorage.getItem('cursor-model') || CURSOR_MODELS.DEFAULT;
-  });
-  const [claudeModel, setClaudeModel] = useState<string>(() => {
-    return localStorage.getItem('claude-model') || CLAUDE_MODELS.DEFAULT;
-  });
-  const [claudeModelOptions, setClaudeModelOptions] = useState<ModelOption[]>(DEFAULT_CLAUDE_MODEL_OPTIONS);
-  const [codexModel, setCodexModel] = useState<string>(() => {
-    return localStorage.getItem('codex-model') || CODEX_MODELS.DEFAULT;
-  });
-  const [geminiModel, setGeminiModel] = useState<string>(() => {
-    return localStorage.getItem('gemini-model') || GEMINI_MODELS.DEFAULT;
-  });
-
-  const lastProviderRef = useRef(provider);
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>(DEFAULT_MODEL_OPTIONS);
 
   useEffect(() => {
     if (!selectedSession?.id) {
@@ -47,23 +33,6 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     const savedMode = localStorage.getItem(`permissionMode-${selectedSession.id}`);
     setPermissionMode((savedMode as PermissionMode) || 'default');
   }, [selectedSession?.id]);
-
-  useEffect(() => {
-    if (!selectedSession?.__provider || selectedSession.__provider === provider) {
-      return;
-    }
-
-    setProvider(selectedSession.__provider);
-    localStorage.setItem('selected-provider', selectedSession.__provider);
-  }, [provider, selectedSession]);
-
-  useEffect(() => {
-    if (lastProviderRef.current === provider) {
-      return;
-    }
-    setPendingPermissionRequests([]);
-    lastProviderRef.current = provider;
-  }, [provider]);
 
   useEffect(() => {
     setPendingPermissionRequests((previous) => {
@@ -96,21 +65,21 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
             }))
             .filter((option: ModelOption) => option.value.length > 0)
           : [];
-        const runtimeOptions = availableModels.length > 0 ? availableModels : DEFAULT_CLAUDE_MODEL_OPTIONS;
+        const runtimeOptions = availableModels.length > 0 ? availableModels : DEFAULT_MODEL_OPTIONS;
         const runtimeDefaultModel = typeof data?.claude?.defaultModel === 'string' && data.claude.defaultModel.trim()
           ? data.claude.defaultModel.trim()
           : CLAUDE_MODELS.DEFAULT;
-        const storedModel = localStorage.getItem('claude-model')?.trim() || '';
+        const storedModel = localStorage.getItem('pilotdeck-model')?.trim() || '';
         const hasStoredModel = runtimeOptions.some((option: ModelOption) => option.value === storedModel);
         const shouldReuseStoredModel = hasStoredModel && storedModel !== CLAUDE_MODELS.DEFAULT;
-        const nextClaudeModel = shouldReuseStoredModel ? storedModel : runtimeDefaultModel;
+        const nextModel = shouldReuseStoredModel ? storedModel : runtimeDefaultModel;
 
-        setClaudeModelOptions(runtimeOptions);
-        setClaudeModel(nextClaudeModel);
-        localStorage.setItem('claude-model', nextClaudeModel);
+        setModelOptions(runtimeOptions);
+        setModel(nextModel);
+        localStorage.setItem('pilotdeck-model', nextModel);
       })
       .catch((error) => {
-        console.error('Error loading Claude runtime config:', error);
+        console.error('Error loading runtime config:', error);
       });
 
     return () => {
@@ -118,33 +87,8 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     };
   }, []);
 
-  useEffect(() => {
-    if (provider !== 'cursor') {
-      return;
-    }
-
-    authenticatedFetch('/api/cursor/config')
-      .then((response) => response.json())
-      .then((data) => {
-        if (!data.success || !data.config?.model?.modelId) {
-          return;
-        }
-
-        const modelId = data.config.model.modelId as string;
-        if (!localStorage.getItem('cursor-model')) {
-          setCursorModel(modelId);
-        }
-      })
-      .catch((error) => {
-        console.error('Error loading Cursor config:', error);
-      });
-  }, [provider]);
-
   const cyclePermissionMode = useCallback(() => {
-    const modes: PermissionMode[] =
-      provider === 'codex'
-        ? ['default', 'acceptEdits', 'bypassPermissions']
-        : ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
+    const modes: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
 
     const currentIndex = modes.indexOf(permissionMode);
     const nextIndex = (currentIndex + 1) % modes.length;
@@ -154,20 +98,12 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     if (selectedSession?.id) {
       localStorage.setItem(`permissionMode-${selectedSession.id}`, nextMode);
     }
-  }, [permissionMode, provider, selectedSession?.id]);
+  }, [permissionMode, selectedSession?.id]);
 
   return {
-    provider,
-    setProvider,
-    cursorModel,
-    setCursorModel,
-    claudeModel,
-    setClaudeModel,
-    claudeModelOptions,
-    codexModel,
-    setCodexModel,
-    geminiModel,
-    setGeminiModel,
+    model,
+    setModel,
+    modelOptions,
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,

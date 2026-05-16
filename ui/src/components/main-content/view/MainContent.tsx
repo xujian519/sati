@@ -10,9 +10,9 @@ import DashboardV2 from '../../main-content-v2/DashboardV2';
 import TasksV2 from '../../main-content-v2/TasksV2';
 import { cn } from '../../../lib/utils.js';
 import {
-  getStoredClaudePermissionMode,
-  startClaudeSessionCommand,
-} from '../../chat/utils/claudeSessionLauncher';
+  getStoredPermissionMode,
+  startSessionCommand,
+} from '../../chat/utils/sessionLauncher';
 import { getPilotDeckSettings } from '../../chat/utils/chatStorage';
 import type { MainContentProps } from '../types/types';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
@@ -266,7 +266,7 @@ function MainContent({
       executionToken: payload.executionToken,
     });
 
-    startClaudeSessionCommand({
+    startSessionCommand({
       sendMessage: trackedSendMessage,
       selectedProject,
       command: payload.command,
@@ -327,7 +327,7 @@ function MainContent({
       executionToken: payload.executionToken,
     });
 
-    startClaudeSessionCommand({
+    startSessionCommand({
       sendMessage: trackedSendMessage,
       selectedProject: project,
       command: payload.command,
@@ -367,12 +367,9 @@ function MainContent({
     }
   }, []);
 
-  const getProjectSessions = useCallback((project: Project): ProjectSession[] => [
-    ...(project.sessions ?? []),
-    ...(project.codexSessions ?? []),
-    ...(project.cursorSessions ?? []),
-    ...(project.geminiSessions ?? []),
-  ], []);
+  const getProjectSessions = useCallback((project: Project): ProjectSession[] =>
+    project.sessions ?? [],
+  []);
 
   const findSessionInProject = useCallback((project: Project, sessionId: string) => (
     getProjectSessions(project).find((session) => session.id === sessionId)
@@ -414,7 +411,6 @@ function MainContent({
 
       const fallbackSession: ProjectSession = {
         ...existingSession,
-        __provider: existingSession.__provider ?? 'claude',
         __projectName: lookupProjectName,
       };
 
@@ -450,7 +446,6 @@ function MainContent({
       taskStatus: target.taskStatus || existingSession.taskStatus,
       outputFile: target.outputFile || existingSession.outputFile,
       isReadOnly: true,
-      __provider: 'claude',
       __projectName: selectedProject.name,
     };
 
@@ -650,11 +645,11 @@ function MainContent({
       discoveryContext,
       discoveryPromptLanguage,
     );
-    const pendingSessionId = startClaudeSessionCommand({
+    const pendingSessionId = startSessionCommand({
       sendMessage: trackedSendMessage,
       selectedProject: targetProject,
       command: discoveryPrompt,
-      permissionMode: getStoredClaudePermissionMode(selectedSession),
+      permissionMode: getStoredPermissionMode(selectedSession),
       sessionSummary: `Always-On discovery: ${targetProject.displayName || targetProject.name}`,
       toolsSettings: buildAlwaysOnDiscoveryToolsSettings(),
     });

@@ -1922,20 +1922,17 @@ function handleChatConnection(ws, request) {
                     status: data.status === 'failed' ? 'failed' : 'started'
                 }).catch(() => {});
             } else if (
+                data.type === 'pilotdeck-command' ||
+                // Deprecated: legacy per-provider frame types kept for back-compat.
                 data.type === 'claude-command' ||
                 data.type === 'cursor-command' ||
                 data.type === 'codex-command' ||
-                data.type === 'gemini-command' ||
-                data.type === 'pilotdeck-command'
+                data.type === 'gemini-command'
             ) {
                 console.log('[DEBUG] User message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.projectPath || data.options?.cwd || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
-                // The frontend still emits provider-flavored frame types for
-                // back-compat. We accept them all and execute through the
-                // single PilotDeck gateway. The provider hint is kept only
-                // for branding in the resulting NormalizedMessage frames.
-                const providerHint = data.type.replace('-command', '');
+                const providerHint = data.options?.providerHint || data.type.replace('-command', '');
                 await runChatViaGateway(data.command, data.options, writer, providerHint);
             } else if (data.type === 'abort-session') {
                 console.log('[DEBUG] Abort session request:', data.sessionId);

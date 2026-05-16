@@ -18,8 +18,8 @@ import {
   createTemporarySessionId,
   getNotificationSessionSummary,
   isTemporarySessionId,
-  startClaudeSessionCommand,
-} from '../utils/claudeSessionLauncher';
+  startSessionCommand,
+} from '../utils/sessionLauncher';
 import type {
   ChatMessage,
   PendingPermissionRequest,
@@ -29,7 +29,6 @@ import type {
   ExecuteDiscoveryPlanResponse,
   Project,
   ProjectSession,
-  SessionProvider,
 } from '../../../types/app';
 import { escapeRegExp } from '../utils/chatFormatting';
 import { handleAlwaysOnSlashAction } from '../utils/alwaysOnSlashActions';
@@ -45,13 +44,9 @@ interface UseChatComposerStateArgs {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
-  provider: SessionProvider;
+  model: string;
   permissionMode: PermissionMode | string;
   cyclePermissionMode: () => void;
-  cursorModel: string;
-  claudeModel: string;
-  codexModel: string;
-  geminiModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
@@ -108,13 +103,9 @@ export function useChatComposerState({
   selectedProject,
   selectedSession,
   currentSessionId,
-  provider,
+  model,
   permissionMode,
   cyclePermissionMode,
-  cursorModel,
-  claudeModel,
-  codexModel,
-  geminiModel,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -412,8 +403,7 @@ export function useChatComposerState({
           projectPath: selectedProject.fullPath || selectedProject.path,
           projectName: selectedProject.name,
           sessionId: currentSessionId,
-          provider,
-          model: provider === 'cursor' ? cursorModel : provider === 'codex' ? codexModel : provider === 'gemini' ? geminiModel : claudeModel,
+          model,
           tokenUsage: tokenBudget,
         };
 
@@ -460,15 +450,11 @@ export function useChatComposerState({
       }
     },
     [
-      claudeModel,
-      codexModel,
+      model,
       currentSessionId,
-      cursorModel,
-      geminiModel,
       handleBuiltInCommand,
       handleCustomCommand,
       input,
-      provider,
       selectedProject,
       addMessage,
       tokenBudget,
@@ -671,8 +657,7 @@ export function useChatComposerState({
         (Boolean(selectedSession?.id) || pendingSessionId === currentSessionId);
       const effectiveSessionId =
         selectedSession?.id ||
-        (canResumeCurrentSession ? currentSessionId : null) ||
-        (provider === 'cursor' ? sessionStorage.getItem('cursorSessionId') : null);
+        (canResumeCurrentSession ? currentSessionId : null);
       const sessionToActivate = effectiveSessionId || createTemporarySessionId();
 
       const userMessage: ChatMessage = {
@@ -733,68 +718,18 @@ export function useChatComposerState({
       const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
       const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
 
-      if (provider === 'cursor') {
-        sendMessage({
-          type: 'cursor-command',
-          command: messageContent,
-          sessionId: effectiveSessionId,
-          options: {
-            cwd: resolvedProjectPath,
-            projectPath: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
-            model: cursorModel,
-            skipPermissions: toolsSettings?.skipPermissions || false,
-            sessionSummary,
-            toolsSettings,
-          },
-        });
-      } else if (provider === 'codex') {
-        sendMessage({
-          type: 'codex-command',
-          command: messageContent,
-          sessionId: effectiveSessionId,
-          options: {
-            cwd: resolvedProjectPath,
-            projectPath: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
-            model: codexModel,
-            sessionSummary,
-            permissionMode: permissionMode === 'plan' ? 'default' : permissionMode,
-            toolsSettings,
-          },
-        });
-      } else if (provider === 'gemini') {
-        sendMessage({
-          type: 'gemini-command',
-          command: messageContent,
-          sessionId: effectiveSessionId,
-          options: {
-            cwd: resolvedProjectPath,
-            projectPath: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
-            model: geminiModel,
-            sessionSummary,
-            permissionMode,
-            toolsSettings,
-          },
-        });
-      } else {
-        startClaudeSessionCommand({
-          sendMessage,
-          selectedProject,
-          command: messageContent,
-          sessionId: effectiveSessionId,
-          temporarySessionId: sessionToActivate,
-          toolsSettings,
-          permissionMode,
-          claudeModel,
-          sessionSummary,
-          images: uploadedImages,
-        });
-      }
+      startSessionCommand({
+        sendMessage,
+        selectedProject,
+        command: messageContent,
+        sessionId: effectiveSessionId,
+        temporarySessionId: sessionToActivate,
+        toolsSettings,
+        permissionMode,
+        model,
+        sessionSummary,
+        images: uploadedImages,
+      });
 
       setInput('');
       inputValueRef.current = '';
@@ -814,18 +749,14 @@ export function useChatComposerState({
     [
       selectedSession,
       attachedImages,
-      claudeModel,
-      codexModel,
+      model,
       currentSessionId,
-      cursorModel,
       executeCommand,
-      geminiModel,
       isLoading,
       onSessionActive,
       onSessionProcessing,
       pendingViewSessionRef,
       permissionMode,
-      provider,
       resetCommandMenuState,
       scrollToBottom,
       selectedProject,
@@ -1025,14 +956,11 @@ export function useChatComposerState({
 
     const pendingSessionId =
       typeof window !== 'undefined' ? sessionStorage.getItem('pendingSessionId') : null;
-    const cursorSessionId =
-      typeof window !== 'undefined' ? sessionStorage.getItem('cursorSessionId') : null;
 
     const candidateSessionIds = [
       currentSessionId,
       pendingViewSessionRef.current?.sessionId || null,
       pendingSessionId,
-      provider === 'cursor' ? cursorSessionId : null,
       selectedSession?.id || null,
     ];
 
@@ -1047,7 +975,7 @@ export function useChatComposerState({
     sendMessage({
       type: 'abort-session',
       sessionId: targetSessionId,
-      provider,
+      provider: 'pilotdeck',
     });
 
     setCanAbortSession(false);
@@ -1057,7 +985,7 @@ export function useChatComposerState({
       tokens: 0,
       can_interrupt: false,
     });
-  }, [canAbortSession, currentSessionId, pendingViewSessionRef, provider, selectedSession?.id, sendMessage, setCanAbortSession, setClaudeStatus, setIsAborting]);
+  }, [canAbortSession, currentSessionId, pendingViewSessionRef, selectedSession?.id, sendMessage, setCanAbortSession, setClaudeStatus, setIsAborting]);
 
   const handleGrantToolPermission = useCallback(
     (suggestion: { entry: string; toolName: string }) => {

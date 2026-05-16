@@ -235,8 +235,7 @@ export function useChatSessionState({
   if (activeSessionId && activeSessionId !== prevActiveSessionRef.current && pendingUserMessage) {
     const expectedSessionId = pendingViewSessionRef.current?.sessionId ?? null;
     if (expectedSessionId && activeSessionId === expectedSessionId) {
-      const prov = (localStorage.getItem('selected-provider') as SessionProvider) || 'claude';
-      const normalized = chatMessageToNormalized(pendingUserMessage, activeSessionId, prov);
+      const normalized = chatMessageToNormalized(pendingUserMessage, activeSessionId, 'pilotdeck' as SessionProvider);
       if (normalized) {
         sessionStore.appendRealtime(activeSessionId, normalized);
       }
@@ -274,8 +273,7 @@ export function useChatSessionState({
       setPendingUserMessage(msg);
       return;
     }
-    const prov = (localStorage.getItem('selected-provider') as SessionProvider) || 'claude';
-    const normalized = chatMessageToNormalized(msg, activeSessionId, prov);
+    const normalized = chatMessageToNormalized(msg, activeSessionId, 'pilotdeck' as SessionProvider);
     if (normalized) {
       sessionStore.appendRealtime(activeSessionId, normalized);
     }
@@ -316,16 +314,13 @@ export function useChatSessionState({
       if (allMessagesLoadedRef.current) return false;
       if (!hasMoreMessages || !selectedSession || !selectedProject) return false;
 
-      const sessionProvider = selectedSession.__provider || 'claude';
-      if (sessionProvider === 'cursor') return false;
-
       isLoadingMoreRef.current = true;
       const previousScrollHeight = container.scrollHeight;
       const previousScrollTop = container.scrollTop;
 
       try {
         const slot = await sessionStore.fetchMore(selectedSession.id, {
-          provider: sessionProvider as SessionProvider,
+          provider: 'pilotdeck',
           projectName: selectedProject.name,
           projectPath: selectedProject.fullPath || selectedProject.path || '',
           ...sessionRequestParams,
@@ -432,7 +427,6 @@ export function useChatSessionState({
       setIsAborting(false);
       setIsLoading(false);
       setCurrentSessionId(null);
-      sessionStorage.removeItem('cursorSessionId');
       messagesOffsetRef.current = 0;
       setHasMoreMessages(false);
       setTotalMessages(0);
@@ -441,7 +435,7 @@ export function useChatSessionState({
       return;
     }
 
-    const provider = (selectedSession.__provider || localStorage.getItem('selected-provider') as Provider) || 'claude';
+    const provider = 'pilotdeck';
     const sessionKey = `${selectedSession.id}:${selectedProject.name}:${provider}`;
 
     // Skip if already loaded and fresh, or if stale but has live realtime
@@ -482,9 +476,6 @@ export function useChatSessionState({
     }
 
     setCurrentSessionId(selectedSession.id);
-    if (provider === 'cursor') {
-      sessionStorage.setItem('cursorSessionId', selectedSession.id);
-    }
 
     // Check session status
     if (ws && !isReadOnlyBackgroundSession) {
@@ -505,7 +496,7 @@ export function useChatSessionState({
     // already on screen). Sessions are typically well under a few hundred
     // messages, so fetching everything is fine.
     sessionStore.fetchFromServer(selectedSession.id, {
-      provider: (selectedSession.__provider || provider) as SessionProvider,
+      provider: 'pilotdeck',
       projectName: selectedProject.name,
       projectPath: selectedProject.fullPath || selectedProject.path || '',
       ...sessionRequestParams,
@@ -540,12 +531,10 @@ export function useChatSessionState({
 
     const reloadExternalMessages = async () => {
       try {
-        const provider = (localStorage.getItem('selected-provider') as Provider) || 'claude';
-
         // Skip store refresh during active streaming
         if (!isLoading) {
           await sessionStore.refreshFromServer(selectedSession.id, {
-            provider: (selectedSession.__provider || provider) as SessionProvider,
+            provider: 'pilotdeck',
             projectName: selectedProject.name,
             projectPath: selectedProject.fullPath || selectedProject.path || '',
             ...sessionRequestParams,
@@ -600,12 +589,10 @@ export function useChatSessionState({
 
     const scrollToTarget = async () => {
       if (!allMessagesLoadedRef.current && selectedSession && selectedProject) {
-        const sessionProvider = selectedSession.__provider || 'claude';
-        if (sessionProvider !== 'cursor') {
+        {
           try {
-            // Load all messages into the store for search navigation
             const slot = await sessionStore.fetchFromServer(selectedSession.id, {
-              provider: sessionProvider as SessionProvider,
+              provider: 'pilotdeck',
               projectName: selectedProject.name,
               projectPath: selectedProject.fullPath || selectedProject.path || '',
               ...sessionRequestParams,
@@ -682,8 +669,7 @@ export function useChatSessionState({
       setTokenBudget(null);
       return;
     }
-    const sessionProvider = selectedSession.__provider || 'claude';
-    if (sessionProvider !== 'claude' || isReadOnlyBackgroundSession) {
+    if (isReadOnlyBackgroundSession) {
       setTokenBudget(null);
       return;
     }
@@ -702,7 +688,7 @@ export function useChatSessionState({
       }
     };
     fetchInitialTokenUsage();
-  }, [isReadOnlyBackgroundSession, selectedProject, selectedSession?.id, selectedSession?.__provider]);
+  }, [isReadOnlyBackgroundSession, selectedProject, selectedSession?.id]);
 
   const visibleMessages = useMemo(() => {
     if (chatMessages.length <= visibleMessageCount) return chatMessages;
@@ -774,17 +760,6 @@ export function useChatSessionState({
   const loadAllMessages = useCallback(async () => {
     if (!selectedSession || !selectedProject) return;
     if (isLoadingAllMessages) return;
-    const sessionProvider = selectedSession.__provider || 'claude';
-    if (sessionProvider === 'cursor') {
-      setVisibleMessageCount(Infinity);
-      setAllMessagesLoaded(true);
-      allMessagesLoadedRef.current = true;
-      setLoadAllJustFinished(true);
-      if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
-      loadAllFinishedTimerRef.current = setTimeout(() => { setLoadAllJustFinished(false); setShowLoadAllOverlay(false); }, 1000);
-      return;
-    }
-
     const requestSessionId = selectedSession.id;
     allMessagesLoadedRef.current = true;
     isLoadingMoreRef.current = true;
@@ -797,7 +772,7 @@ export function useChatSessionState({
 
     try {
       const slot = await sessionStore.fetchFromServer(requestSessionId, {
-        provider: sessionProvider as SessionProvider,
+        provider: 'pilotdeck',
         projectName: selectedProject.name,
         projectPath: selectedProject.fullPath || selectedProject.path || '',
         ...sessionRequestParams,
