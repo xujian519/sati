@@ -25,7 +25,6 @@ import os from 'node:os';
 
 import {
     getPilotDeckGateway,
-    getPilotDeckRepoRoot,
 } from './pilotdeck-bridge.js';
 import { mapLegacySessionPresentation } from '../../src/web/server/legacySessionPresentation.js';
 import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from './utils/pilotPaths.js';
@@ -320,7 +319,7 @@ async function getSessions(projectName, limit = 5, offset = 0) {
  */
 async function extractProjectDirectory(projectName) {
     if (!projectName) {
-        return getPilotDeckRepoRoot();
+        return resolvePilotHome(process.env);
     }
     if (path.isAbsolute(projectName)) {
         rememberProjectDirectory(projectName, projectName);
@@ -336,7 +335,7 @@ async function extractProjectDirectory(projectName) {
         rememberProjectDirectory(projectName, decoded);
         return decoded;
     }
-    return getPilotDeckRepoRoot();
+    return resolvePilotHome(process.env);
 }
 
 async function addProjectManually(projectPath, _displayName = null) {

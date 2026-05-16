@@ -274,7 +274,7 @@ error                        错误（含 code、recoverable）
 以下事件不绑定单个 agent session，而是作用于整个 Gateway 进程或项目：
 
 - **`config_changed`**：通过 `WsNotificationFrame` 广播给所有连接的客户端，`ConfigChange` 生命周期 hook 使用 `sessionId: ""` dispatch，不绑定具体会话。
-- **`RouterEvent`**：路由决策、fallback、重试等审计事件，写入 `router-events.jsonl`，不回流到 agent loop。
+- **`RouterEvent`**：路由决策、fallback、重试等审计事件，写入 `router/events.jsonl`，不回流到 agent loop。
 - **`AlwaysOnPhaseEvent`**：Always-On 任务的发现/规划/执行/报告阶段事件，跨多个合成 sessionKey 编排。
 - **`PilotConfigReloadEvent`**：配置文件变化通知，由 `PilotConfigStore.subscribe` 分发给监听者。
 - **`ExtensionWatchEvent`**：扩展目录文件变化事件，触发插件/hook 热重载。

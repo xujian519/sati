@@ -73,9 +73,13 @@ export class TokenStatsCollector {
       if (config?.filePath) {
         this.filePath = config.filePath;
       } else {
-        const dir = path.join(os.homedir(), ".pilotdeck");
-        try { fs.mkdirSync(dir, { recursive: true }); } catch { /* ok */ }
-        this.filePath = path.join(dir, "router-stats.json");
+        const routerDir = path.join(os.homedir(), ".pilotdeck", "router");
+        try { fs.mkdirSync(routerDir, { recursive: true }); } catch { /* ok */ }
+        this.filePath = path.join(routerDir, "stats.json");
+        migrateIfNeeded(
+          path.join(os.homedir(), ".pilotdeck", "router-stats.json"),
+          this.filePath,
+        );
       }
       this.data = this.loadFromDisk();
       this.flushTimer = setInterval(() => { this.flushIfDirty(); }, AUTO_FLUSH_INTERVAL_MS);
@@ -327,6 +331,14 @@ function bumpAggregate(agg: RouterStatsAggregate, record: RouterStatsRecord): vo
 
 function isAggregate(val: unknown): val is RouterStatsAggregate {
   return typeof val === "object" && val !== null && "totalRequests" in val;
+}
+
+function migrateIfNeeded(oldPath: string, newPath: string): void {
+  try {
+    if (!fs.existsSync(newPath) && fs.existsSync(oldPath)) {
+      fs.renameSync(oldPath, newPath);
+    }
+  } catch { /* best-effort, don't block startup */ }
 }
 
 // $/million tokens – fallback when neither nativeCost nor user modelPricing is available

@@ -303,7 +303,7 @@ async function main(): Promise<void> {
 
       // Router stats verbose output is currently disabled: the in-process
       // accessor was retired in the ui-server refactor (gateway is now
-      // remote-capable and stats live in ~/.pilotdeck/router-stats.json,
+      // remote-capable and stats live in ~/.pilotdeck/router/stats.json,
       // owned by `TokenStatsCollector`). Re-wire from the persisted JSON
       // if benchmark verbose mode needs this back.
       void gateway;

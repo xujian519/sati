@@ -445,7 +445,7 @@ export async function runChatViaGateway(
     provider = 'pilotdeck',
 ) {
     const gw = await ensureGateway();
-    const projectKey = options.projectPath || options.cwd || REPO_ROOT;
+    const projectKey = options.projectPath || options.cwd || GENERAL_HOME;
     const channelKey = 'web';
 
     const incoming = options.sessionId || options.sessionKey;
@@ -600,7 +600,8 @@ export function getActiveSessionIdsViaGateway() {
 }
 
 /**
- * Read persisted router stats from `~/.pilotdeck/router-stats.json`.
+ * Read persisted router stats from `~/.pilotdeck/router/stats.json`.
+ * Falls back to the legacy `~/.pilotdeck/router-stats.json` path.
  *
  * Both the gateway server and this bridge run in different processes;
  * we no longer have an in-memory accessor (`getLocalGatewayRouterStats`
@@ -649,7 +650,9 @@ function _buildSessionProjectIndex() {
 function loadPersistedStatsFromDisk() {
     const result = new Map();
     try {
-        const statsPath = path.join(GENERAL_HOME, 'router-stats.json');
+        const newStatsPath = path.join(GENERAL_HOME, 'router', 'stats.json');
+        const legacyStatsPath = path.join(GENERAL_HOME, 'router-stats.json');
+        const statsPath = fs.existsSync(newStatsPath) ? newStatsPath : legacyStatsPath;
         const raw = fs.readFileSync(statsPath, 'utf-8');
         const parsed = JSON.parse(raw);
         if (!parsed || !parsed.sessions || typeof parsed.sessions !== 'object') {
@@ -716,7 +719,7 @@ function loadPersistedStatsFromDisk() {
         }
     } catch (err) {
         if (err?.code !== 'ENOENT') {
-            console.warn('[router-dashboard] failed to load router-stats.json:', err?.message || err);
+            console.warn('[router-dashboard] failed to load router stats:', err?.message || err);
         }
     }
     return result;

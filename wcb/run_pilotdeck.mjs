@@ -741,7 +741,7 @@ function logTranscriptInventory(taskId, pilotHome) {
     };
     walk(projectsDir);
     log(taskId, `Transcripts: ${mainCount} main, ${subCount} subagent, ${toolResultCount} tool-results`);
-    const statsPath = join(pilotHome, "router-stats.json");
+    const statsPath = join(pilotHome, "router/stats.json");
     if (existsSync(statsPath)) {
       log(taskId, `Router stats: ${statsPath}`);
     }
