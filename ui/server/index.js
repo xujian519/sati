@@ -52,7 +52,6 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 import JSZip from 'jszip';
-import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from './utils/pilotPaths.js';
 import { readPermissionSettings } from './services/permissionSettings.js';
 
 import { getProjects, getProjectCronJobsOverview, getSessions, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
@@ -2484,64 +2483,7 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
 
         // PilotDeck sessions use `web:s_<uuid>` keys — return in-memory budget
         if (provider === 'pilotdeck' || /^web:s_/.test(sessionId)) {
-            const budget = getSessionTokenBudget(sessionId);
-            if (budget.used > 0) {
-                return res.json(budget);
-            }
-            // Fallback: scan the PilotDeck JSONL transcript
-            try {
-                const pilotHome = resolvePilotHome(process.env);
-                const safeId = sanitizeSessionIdForPath(sessionId);
-                const projectsDir = path.join(pilotHome, 'projects');
-                let transcriptPath = null;
-
-                // Try project-specific directory first
-                if (projectName) {
-                    try {
-                        const projectPath = await extractProjectDirectory(projectName);
-                        const projId = createProjectId(projectPath);
-                        const candidate = path.join(projectsDir, projId, 'chats', `${safeId}.jsonl`);
-                        if (fs.existsSync(candidate)) transcriptPath = candidate;
-                    } catch { /* ignore */ }
-                }
-
-                // Scan all project dirs if not found
-                if (!transcriptPath) {
-                    try {
-                        const dirs = await fsPromises.readdir(projectsDir, { withFileTypes: true });
-                        for (const d of dirs) {
-                            if (!d.isDirectory()) continue;
-                            const candidate = path.join(projectsDir, d.name, 'chats', `${safeId}.jsonl`);
-                            if (fs.existsSync(candidate)) { transcriptPath = candidate; break; }
-                        }
-                    } catch { /* ignore */ }
-                }
-
-                if (transcriptPath) {
-                    const fileContent = await fsPromises.readFile(transcriptPath, 'utf8');
-                    const lines = fileContent.trim().split('\n');
-                    let totalUsed = 0;
-                    for (const line of lines) {
-                        try {
-                            const entry = JSON.parse(line);
-                            if (entry.type === 'assistant_message' && entry.message?.usage) {
-                                const u = entry.message.usage;
-                                totalUsed +=
-                                    (u.input_tokens || u.inputTokens || 0) +
-                                    (u.output_tokens || u.outputTokens || 0) +
-                                    (u.cache_read_input_tokens || u.cacheReadTokens || 0);
-                            }
-                        } catch { /* skip malformed */ }
-                    }
-                    const parsedCtx = Number(process.env.PILOTDECK_CONTEXT_WINDOW);
-                    return res.json({
-                        used: totalUsed,
-                        total: Number.isFinite(parsedCtx) ? parsedCtx : 200000,
-                    });
-                }
-            } catch { /* ignore fallback errors */ }
-
-            return res.json(budget);
+            return res.json(getSessionTokenBudget(sessionId));
         }
 
         // Allow only safe characters in sessionId

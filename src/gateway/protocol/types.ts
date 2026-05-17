@@ -122,6 +122,13 @@ export type GatewayEvent =
   | { type: "config_changed"; changedPaths: string[]; changeClasses: string[] }
   | { type: "worktree_created"; runId: string; cwd: string }
   | { type: "worktree_removed"; cwd: string }
+  | {
+      type: "context_budget";
+      used: number;
+      total: number;
+      ratio: number;
+      state: "ok" | "warning" | "blocking";
+    }
   | { type: "turn_completed"; usage: TurnUsage; finishReason: AgentTurnResult["stopReason"] | string }
   | { type: "agent_status"; event: string; detail?: Record<string, unknown> }
   | { type: "error"; message: string; code?: string; recoverable: boolean };

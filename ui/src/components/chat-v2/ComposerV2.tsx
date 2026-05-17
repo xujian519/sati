@@ -134,7 +134,16 @@ function getContextStatus(tokenBudget?: Record<string, unknown> | null): Context
     };
   }
   const percent = Math.max(0, Math.min(999, Math.round((used / total) * 100)));
-  const tone = percent >= 90 ? 'red' : percent >= 70 ? 'amber' : 'normal';
+  const snapshotState = typeof tokenBudget?.state === 'string' ? tokenBudget.state : null;
+  const tone = snapshotState === 'blocking'
+    ? 'red'
+    : snapshotState === 'warning'
+      ? 'amber'
+      : percent >= 95
+        ? 'red'
+        : percent >= 80
+          ? 'amber'
+          : 'normal';
   return {
     known: true, used, total, percent,
     usedLabel: formatTokenCount(used),
@@ -322,8 +331,8 @@ export default function ComposerV2({
   const SelectedPermissionIcon = selectedPermissionOption.Icon;
   const selectedPermissionLabel = t(selectedPermissionOption.labelKey, { defaultValue: selectedPermissionOption.defaultLabel }) as string;
   const contextStatusTitle = contextStatus.known
-    ? `${contextStatus.percent}% used. ${contextStatus.usedLabel} tokens used out of ${contextStatus.totalLabel}.`
-    : 'Context usage unknown.';
+    ? `${contextStatus.percent}% of the current context window is occupied. ${contextStatus.usedLabel} tokens out of ${contextStatus.totalLabel}.`
+    : 'Current context usage unavailable.';
 
   return (
     <div
@@ -646,7 +655,7 @@ export default function ComposerV2({
                         {contextStatus.known ? (
                           <>
                             <div className="text-neutral-500 dark:text-neutral-400">
-                              {contextStatus.used.toLocaleString()} tokens used out of {contextStatus.total.toLocaleString()}.
+                              Current context estimate: {contextStatus.used.toLocaleString()} tokens out of {contextStatus.total.toLocaleString()}.
                             </div>
                             <div className="mt-2 text-neutral-500 dark:text-neutral-400">
                               Auto compact runs when the conversation approaches the configured limit.

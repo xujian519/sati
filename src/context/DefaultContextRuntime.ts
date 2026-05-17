@@ -34,7 +34,13 @@ export type CompactionTier = "micro" | "snip" | "full";
 
 export type AutoCompactResult =
   | { type: "skipped"; snapshot: TokenBudgetSnapshot }
-  | { type: "compacted"; messages: CanonicalMessage[]; tier: CompactionTier; result?: CompactionResult };
+  | {
+      type: "compacted";
+      messages: CanonicalMessage[];
+      tier: CompactionTier;
+      snapshot: TokenBudgetSnapshot;
+      result?: CompactionResult;
+    };
 
 export type DefaultContextRuntimeOptions = {
   extension?: ExtensionResolver;
@@ -285,7 +291,12 @@ export class DefaultContextRuntime implements ContextRuntime {
         messages = r.messages;
         const snap = this.tokenBudget.evaluate(messages, this.maxContextTokens);
         if (snap.state === "ok") {
-          return { type: "compacted", messages: ensureTrailingUserMessage(messages), tier: "micro" };
+          return {
+            type: "compacted",
+            messages: ensureTrailingUserMessage(messages),
+            tier: "micro",
+            snapshot: snap,
+          };
         }
       }
     }
@@ -297,7 +308,12 @@ export class DefaultContextRuntime implements ContextRuntime {
         messages = r.messages;
         const snap = this.tokenBudget.evaluate(messages, this.maxContextTokens);
         if (snap.state === "ok") {
-          return { type: "compacted", messages: ensureTrailingUserMessage(messages), tier: "snip" };
+          return {
+            type: "compacted",
+            messages: ensureTrailingUserMessage(messages),
+            tier: "snip",
+            snapshot: snap,
+          };
         }
       }
     }
@@ -309,10 +325,13 @@ export class DefaultContextRuntime implements ContextRuntime {
         messages,
         signal: input.abortSignal,
       });
+      const postCompactMessages = ensureTrailingUserMessage(buildPostCompactMessages(result));
+      const snapshot = this.tokenBudget.evaluate(postCompactMessages, this.maxContextTokens);
       return {
         type: "compacted",
-        messages: ensureTrailingUserMessage(buildPostCompactMessages(result)),
+        messages: postCompactMessages,
         tier: "full",
+        snapshot,
         result,
       };
     }

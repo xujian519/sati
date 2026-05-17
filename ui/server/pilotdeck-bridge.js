@@ -191,7 +191,7 @@ function ensureSessionState(sessionKey, projectKey, channelKey) {
             channelKey,
             runId: undefined,
             active: false,
-            tokenUsed: 0,
+            tokenBudget: null,
         };
         sessionState.set(sessionKey, state);
     } else {
@@ -203,9 +203,10 @@ function ensureSessionState(sessionKey, projectKey, channelKey) {
 
 export function getSessionTokenBudget(sessionKey) {
     const state = sessionState.get(sessionKey);
-    return {
-        used: state?.tokenUsed || 0,
-        total: DEFAULT_CONTEXT_WINDOW,
+    return state?.tokenBudget || {
+        used: 0,
+        total: 0,
+        unknown: true,
     };
 }
 
@@ -402,6 +403,20 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                     usage: event.usage,
                 }),
             ];
+        case 'context_budget':
+            return [
+                createNormalizedMessage({
+                    ...base,
+                    kind: 'status',
+                    text: 'token_budget',
+                    tokenBudget: {
+                        used: event.used,
+                        total: event.total || DEFAULT_CONTEXT_WINDOW,
+                        ratio: event.ratio,
+                        state: event.state,
+                    },
+                }),
+            ];
         case 'error':
             return [
                 createNormalizedMessage({
@@ -516,27 +531,16 @@ export async function runChatViaGateway(
                     ),
                 );
             }
+            if (event && event.type === 'context_budget') {
+                state.tokenBudget = {
+                    used: event.used,
+                    total: event.total || DEFAULT_CONTEXT_WINDOW,
+                    ratio: event.ratio,
+                    state: event.state,
+                };
+            }
             for (const frame of gatewayEventToFrames(event, sessionKey, provider)) {
                 writer.send(frame);
-            }
-            if (event && event.type === 'turn_completed' && event.usage) {
-                const turnTokens =
-                    (event.usage.inputTokens || 0) +
-                    (event.usage.outputTokens || 0) +
-                    (event.usage.cacheReadTokens || 0);
-                state.tokenUsed = (state.tokenUsed || 0) + turnTokens;
-                writer.send(
-                    createNormalizedMessage({
-                        provider,
-                        sessionId: sessionKey,
-                        kind: 'status',
-                        text: 'token_budget',
-                        tokenBudget: {
-                            used: state.tokenUsed,
-                            total: DEFAULT_CONTEXT_WINDOW,
-                        },
-                    }),
-                );
             }
         }
 
@@ -1516,6 +1520,15 @@ export function registerAlwaysOnNotificationForwarding(clients) {
                 }
             }
 
+            if (event.type === 'context_budget') {
+                const aoState = ensureSessionState(sessionKey, '', channelKey || 'web');
+                aoState.tokenBudget = {
+                    used: event.used,
+                    total: event.total || DEFAULT_CONTEXT_WINDOW,
+                    ratio: event.ratio,
+                    state: event.state,
+                };
+            }
             for (const frame of gatewayEventToFrames(event, sessionKey, provider)) {
                 const msg = JSON.stringify(frame);
                 for (const client of clients) {
@@ -1524,29 +1537,6 @@ export function registerAlwaysOnNotificationForwarding(clients) {
             }
 
             if (event.type === 'turn_completed') {
-                if (event.usage) {
-                    const aoState = ensureSessionState(sessionKey, '', channelKey || 'web');
-                    const turnTokens =
-                        (event.usage.inputTokens || 0) +
-                        (event.usage.outputTokens || 0) +
-                        (event.usage.cacheReadTokens || 0);
-                    aoState.tokenUsed = (aoState.tokenUsed || 0) + turnTokens;
-                    const budgetFrame = JSON.stringify(
-                        createNormalizedMessage({
-                            provider,
-                            sessionId: sessionKey,
-                            kind: 'status',
-                            text: 'token_budget',
-                            tokenBudget: {
-                                used: aoState.tokenUsed,
-                                total: DEFAULT_CONTEXT_WINDOW,
-                            },
-                        }),
-                    );
-                    for (const client of clients) {
-                        if (client.readyState === 1) client.send(budgetFrame);
-                    }
-                }
                 knownSessions.delete(sessionKey);
             }
         });

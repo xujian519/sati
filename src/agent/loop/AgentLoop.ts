@@ -140,6 +140,12 @@ export class AgentLoop {
               reason: "auto_compact",
             };
           }
+          yield {
+            type: "context_budget",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            snapshot: compact.snapshot,
+          };
         } catch {
           // Auto-compaction must never block the model call — proceed with
           // the original messages if evaluation or summarization fails.

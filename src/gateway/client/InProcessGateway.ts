@@ -686,6 +686,14 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
         event: "compact_completed",
         detail: { status: event.status, preTokens: event.preTokens, postTokens: event.postTokens },
       }];
+    case "context_budget":
+      return [{
+        type: "context_budget",
+        used: event.snapshot.tokens,
+        total: event.snapshot.maxContextTokens,
+        ratio: event.snapshot.ratio,
+        state: event.snapshot.state,
+      }];
     case "turn_continued":
       return [{
         type: "agent_status",
