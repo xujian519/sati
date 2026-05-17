@@ -23,6 +23,7 @@ test("loads EdgeClaw memory config from PilotDeck config", () => {
           captureStrategy: "full_session",
           includeAssistant: false,
           maxMessageChars: 12000,
+          retrievalTimeoutMs: 4321,
           model: "openai-main/gpt-5.1",
           apiType: "openai-completions",
           heartbeatBatchSize: 7,
@@ -50,6 +51,7 @@ test("loads EdgeClaw memory config from PilotDeck config", () => {
       captureStrategy: "full_session",
       includeAssistant: false,
       maxMessageChars: 12000,
+      retrievalTimeoutMs: 4321,
       model: "openai-main/gpt-5.1",
       apiType: "openai-completions",
       heartbeatBatchSize: 7,
@@ -107,6 +109,7 @@ test("memory config warns on unknown top-level and schedule fields", () => {
           provider: "edgeclaw",
           enabled: true,
           extraField: "ignored",
+          retrievalTimeoutMs: 1000,
           schedule: {
             autoIndexIntervalMinutes: 1,
             typoField: true,

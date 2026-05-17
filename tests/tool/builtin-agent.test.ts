@@ -13,6 +13,7 @@ import type {
 } from "../../src/model/index.js";
 import type {
   PilotDeckToolModelClient,
+  PilotDeckSubagentForkApi,
   PilotDeckToolRuntimeContext,
 } from "../../src/tool/index.js";
 import { ToolRegistry } from "../../src/tool/registry/ToolRegistry.js";
@@ -39,6 +40,18 @@ function makeContext(model?: PilotDeckToolModelClient, signal?: AbortSignal): Pi
     permissionContext: createDefaultPermissionContext({ cwd, mode: "default", canPrompt: true }),
     abortSignal: signal,
     model,
+  };
+}
+
+function makeForkContext(
+  fork: PilotDeckSubagentForkApi,
+  options: { signal?: AbortSignal; subagentTimeoutMs?: number } = {},
+): PilotDeckToolRuntimeContext {
+  return {
+    ...makeContext(undefined, options.signal),
+    subagentDepth: 0,
+    subagentTimeoutMs: options.subagentTimeoutMs,
+    subagent: fork,
   };
 }
 
@@ -207,6 +220,80 @@ test("agent tool aborts when context.abortSignal already aborted", async () => {
     () => tool.execute({ description: "x", prompt: "go" }, makeContext(undefined, controller.signal)),
     (error: unknown) =>
       error instanceof PilotDeckToolRuntimeError && error.code === "tool_aborted",
+  );
+});
+
+test("agent tool passes configured timeoutMs into full-fork subagents", async () => {
+  const tool = createAgentTool();
+  const calls: Array<{ timeoutMs?: number }> = [];
+  const fork: PilotDeckSubagentForkApi = {
+    depth: 0,
+    maxSubagentDepth: 1,
+    listDefinitions: () => [{ id: "general-purpose", description: "gp" }],
+    isAllowedDefinition: () => true,
+    async fork(args) {
+      calls.push({ timeoutMs: args.timeoutMs });
+      return {
+        markdown: "Scope: s\nResult: r\nKey files: none\nFiles changed: none\nIssues: none",
+        usage: {},
+        turns: 1,
+        durationMs: 1,
+      };
+    },
+  };
+
+  const result = await tool.execute(
+    { description: "x", prompt: "go" },
+    makeForkContext(fork, { subagentTimeoutMs: 4321 }),
+  );
+
+  assert.equal(calls[0]?.timeoutMs, 4321);
+  assert.equal((result.data as AgentToolOutput).turns, 1);
+});
+
+test("agent tool surfaces full-fork timeout as tool_execution_failed", async () => {
+  const tool = createAgentTool();
+  const fork: PilotDeckSubagentForkApi = {
+    depth: 0,
+    maxSubagentDepth: 1,
+    listDefinitions: () => [{ id: "general-purpose", description: "gp" }],
+    isAllowedDefinition: () => true,
+    async fork(args) {
+      throw new Error(`Subagent timed out after ${args.timeoutMs}ms.`);
+    },
+  };
+
+  await assert.rejects(
+    () => tool.execute({ description: "x", prompt: "go" }, makeForkContext(fork, { subagentTimeoutMs: 25 })),
+    (error: unknown) =>
+      error instanceof PilotDeckToolRuntimeError &&
+      error.code === "tool_execution_failed" &&
+      /timed out after 25ms/.test(error.message),
+  );
+});
+
+test("agent tool surfaces parent abort during full-fork as tool_aborted", async () => {
+  const tool = createAgentTool();
+  const controller = new AbortController();
+  const fork: PilotDeckSubagentForkApi = {
+    depth: 0,
+    maxSubagentDepth: 1,
+    listDefinitions: () => [{ id: "general-purpose", description: "gp" }],
+    isAllowedDefinition: () => true,
+    async fork(args) {
+      controller.abort();
+      throw new Error(args.abortSignal?.aborted ? "parent aborted" : "unexpected");
+    },
+  };
+
+  await assert.rejects(
+    () => tool.execute(
+      { description: "x", prompt: "go" },
+      makeForkContext(fork, { signal: controller.signal, subagentTimeoutMs: 25 }),
+    ),
+    (error: unknown) =>
+      error instanceof PilotDeckToolRuntimeError &&
+      error.code === "tool_aborted",
   );
 });
 

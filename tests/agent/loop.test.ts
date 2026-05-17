@@ -130,6 +130,54 @@ test("AgentLoop emits a context_budget snapshot before model execution", async (
   assert.equal(budgetEvent.snapshot.maxContextTokens, 16000);
 });
 
+test("AgentLoop stops before model request when abort fires during prepareForModel", async () => {
+  const { model, config, dependencies } = createAgentLoopFixture({
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "text_delta", text: "should not run" },
+        { type: "message_end", finishReason: "stop" },
+      ],
+    ],
+  });
+  const controller = new AbortController();
+  const loop = new AgentLoop(config, {
+    ...dependencies,
+    context: {
+      async prepareForModel() {
+        controller.abort();
+        return {
+          messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+          systemPrompt: "",
+          systemPromptParts: [],
+          tools: [],
+          diagnostics: [],
+          boundaries: [],
+        };
+      },
+      async applyToolResults() {
+        return { messages: [], diagnostics: [] };
+      },
+      async recoverFromModelError() {
+        return { type: "give_up" as const, reason: "unused" };
+      },
+    },
+  });
+
+  const { values, result } = await collectAsyncGenerator(
+    loop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+      abortSignal: controller.signal,
+    }),
+  );
+
+  assert.equal(model.requests.length, 0);
+  assert.equal(result.result.type, "aborted");
+  assert.deepEqual(values.map((event) => event.type), ["turn_completed"]);
+});
+
 test("AgentLoop executes tools and continues with canonical tool_result", async () => {
   const tool = createPilotDeckTestTool({
     name: "lookup",

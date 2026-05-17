@@ -34,6 +34,8 @@ export type AgentRuntimeConfig = {
    * but no nested forks). Increase only when intentional.
    */
   maxSubagentDepth?: number;
+  /** Optional timeout budget for forked subagents spawned by the `agent` tool. */
+  subagentTimeoutMs?: number;
   /** Enable automatic JSON self-correction retry on invalid_tool_arguments. Default false. */
   jsonSelfCorrect?: boolean;
 };

@@ -55,6 +55,7 @@ export type PilotDeckSubagentForkApi = {
     directive: string;
     subagentId: string;
     abortSignal?: AbortSignal;
+    timeoutMs?: number;
   }): Promise<{
     markdown: string;
     usage: CanonicalUsage;
@@ -112,6 +113,7 @@ export type PilotDeckToolRuntimeContext = {
   turnId: string;
   cwd: string;
   abortSignal?: AbortSignal;
+  subagentTimeoutMs?: number;
   permissionMode: PermissionMode;
   permissionContext: PermissionContext;
   auditRecorder?: PilotDeckToolAuditRecorder;

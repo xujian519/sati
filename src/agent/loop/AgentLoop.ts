@@ -154,6 +154,20 @@ export class AgentLoop {
       }
 
       const request = await this.createModelRequest(messages, input);
+      if (input.abortSignal?.aborted) {
+        const result = this.createTurnResult(input, {
+          type: "aborted",
+          stopReason: "aborted_streaming",
+          usage,
+          permissionDenials,
+          turns: turnCount,
+          startedAt,
+          finalMessage,
+        });
+        await captureTurn(result.type === "error");
+        yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+        return { result, messages };
+      }
       this.dispatchLifecycle(input, "PreModelRequest", {
         provider: request.provider,
         model: request.model,
@@ -591,6 +605,7 @@ export class AgentLoop {
       tools: this.dependencies.tools.registry.toCanonicalSchemas(),
       maxMessages: this.config.maxContextMessages,
       customSystemPrompt: this.config.systemPrompt,
+      abortSignal: input.abortSignal,
     });
 
     this.dispatchLifecycle(input, "InstructionsLoaded", {
@@ -633,6 +648,7 @@ export class AgentLoop {
       messageId: input.turnId,
       cwd: this.config.cwd,
       abortSignal: input.abortSignal,
+      subagentTimeoutMs: this.config.subagentTimeoutMs,
       permissionMode: this.config.permissionMode,
       permissionContext: this.config.permissionContext,
       auditRecorder: this.dependencies.auditRecorder,
@@ -677,11 +693,15 @@ export class AgentLoop {
           description: d.description,
         })),
       isAllowedDefinition: (id: string) => getSubagentDefinition(id) !== undefined,
-      fork: async ({ definitionId, directive, subagentId, abortSignal }) => {
+      fork: async ({ definitionId, directive, subagentId, abortSignal, timeoutMs }) => {
         // Defer SubAgentSession import to avoid the runtime cycle (sub → loop → sub).
         const { SubAgentSession } = await import("../sub/SubAgentSession.js");
         const def = getSubagentDefinition(definitionId);
         if (!def) throw new Error(`Unknown subagent type: ${definitionId}`);
+        const composedAbort = composeAbortSignal({
+          parent: abortSignal,
+          timeoutMs,
+        });
 
         const subagentSessionId = `${this.config.cwd}::sub::${subagentId}`;
         const transcriptHooks = this.dependencies.subagentTranscript;
@@ -721,7 +741,7 @@ export class AgentLoop {
           parentDependencies: this.dependencies,
           subagentSessionId,
           subagentId,
-          abortSignal,
+          abortSignal: composedAbort.signal,
           sidechainTranscript: sidechain
             ? {
                 recordAcceptedInput: sidechain.recordAcceptedInput.bind(sidechain),
@@ -734,7 +754,11 @@ export class AgentLoop {
         let errored = false;
         try {
           report = await subSession.run();
+          if (composedAbort.timedOut()) {
+            throw new Error(`Subagent timed out after ${timeoutMs}ms.`);
+          }
         } catch (err) {
+          composedAbort.cleanup();
           errored = true;
           await transcriptHooks?.recordSubagentCompleted?.({
             sessionId: input.sessionId,
@@ -762,6 +786,7 @@ export class AgentLoop {
           });
           throw err;
         }
+        composedAbort.cleanup();
 
         await transcriptHooks?.recordSubagentCompleted?.({
           sessionId: input.sessionId,
@@ -1025,4 +1050,41 @@ function isPromptTooLong(error: CanonicalModelError): boolean {
     return true;
   }
   return false;
+}
+
+function composeAbortSignal(args: {
+  parent?: AbortSignal;
+  timeoutMs?: number;
+}): { signal: AbortSignal | undefined; cleanup: () => void; timedOut: () => boolean } {
+  const { parent, timeoutMs } = args;
+  if (!parent && (!timeoutMs || timeoutMs <= 0)) {
+    return { signal: undefined, cleanup: () => {}, timedOut: () => false };
+  }
+  const controller = new AbortController();
+  const cleanupFns: Array<() => void> = [];
+  let timedOut = false;
+  if (parent) {
+    if (parent.aborted) {
+      controller.abort(parent.reason);
+    } else {
+      const onAbort = () => controller.abort(parent.reason);
+      parent.addEventListener("abort", onAbort, { once: true });
+      cleanupFns.push(() => parent.removeEventListener("abort", onAbort));
+    }
+  }
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  if (timeoutMs && timeoutMs > 0 && !controller.signal.aborted) {
+    timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort(new Error(`Subagent timed out after ${timeoutMs}ms.`));
+    }, timeoutMs);
+    cleanupFns.push(() => clearTimeout(timeout));
+  }
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      for (const fn of cleanupFns) fn();
+    },
+    timedOut: () => timedOut,
+  };
 }

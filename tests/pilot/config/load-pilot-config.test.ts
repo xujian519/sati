@@ -211,6 +211,33 @@ test("rejects an agent model outside configured providers", () => {
   }
 });
 
+test("loads optional agent subagent timeout config", () => {
+  const pilotHome = makeTempDir();
+  try {
+    writeJson(getPilotConfigFilePath(pilotHome), {
+      schemaVersion: 1,
+      agent: {
+        ...validAgentConfig(),
+        subagents: {
+          timeoutMs: 15000,
+        },
+      },
+      model: validModelConfig(),
+    });
+
+    const snapshot = loadPilotConfig({
+      env: {
+        PILOT_HOME: pilotHome,
+        ANTHROPIC_API_KEY: "anthropic-key",
+      },
+    });
+
+    assert.equal(snapshot.config.agent.subagents?.timeoutMs, 15000);
+  } finally {
+    rmSync(pilotHome, { recursive: true, force: true });
+  }
+});
+
 test("derives project chat directory under PilotHome", () => {
   const pilotHome = "/tmp/pilot-home";
   const first = getPilotProjectChatDir("/repo/project", pilotHome);

@@ -60,6 +60,9 @@ export type PilotAgentModelSelection = {
 
 export type PilotAgentConfig = {
   model: PilotAgentModelSelection;
+  subagents?: {
+    timeoutMs?: number;
+  };
 };
 
 /**
@@ -85,6 +88,7 @@ export type PilotMemoryConfig = {
   captureStrategy: "last_turn" | "full_session";
   includeAssistant: boolean;
   maxMessageChars?: number;
+  retrievalTimeoutMs?: number;
   /** "provider/model" string referencing model.providers, e.g. "openai/gpt-4.1-mini" */
   model?: string;
   apiType?: PilotMemoryApiType;

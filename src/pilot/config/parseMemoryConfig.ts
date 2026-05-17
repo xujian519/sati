@@ -54,6 +54,7 @@ export function parseMemoryConfig(
       && key !== "captureStrategy"
       && key !== "includeAssistant"
       && key !== "maxMessageChars"
+      && key !== "retrievalTimeoutMs"
       && key !== "model"
       && key !== "apiType"
       && key !== "schedule"
@@ -76,6 +77,10 @@ export function parseMemoryConfig(
     captureStrategy: readCaptureStrategy(rawMemory.captureStrategy),
     includeAssistant: readBoolean(rawMemory.includeAssistant, true, "memory.includeAssistant"),
     maxMessageChars: readOptionalPositiveNumber(rawMemory.maxMessageChars, "memory.maxMessageChars"),
+    retrievalTimeoutMs: readOptionalPositiveInteger(
+      rawMemory.retrievalTimeoutMs,
+      "memory.retrievalTimeoutMs",
+    ),
     model: memoryModel,
     apiType: readMemoryApiType(rawMemory.apiType),
     schedule,

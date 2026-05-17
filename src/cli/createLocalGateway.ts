@@ -810,6 +810,7 @@ class ProjectRuntimeRegistry {
         extension,
         projectRoot,
         memoryResolver,
+        memoryRetrievalTimeoutMs: runtime.snapshot.config.memory?.retrievalTimeoutMs,
         instructionDiscovery,
         toolResultBudget,
         tokenBudget,
@@ -943,6 +944,7 @@ class ProjectRuntimeRegistry {
       cwd,
       permissionMode,
       jsonSelfCorrect: true,
+      subagentTimeoutMs: agent.subagents?.timeoutMs,
       permissionContext: createDefaultPermissionContext({
         cwd,
         mode: permissionMode,

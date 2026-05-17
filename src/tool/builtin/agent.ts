@@ -109,6 +109,7 @@ export type CreateAgentToolOptions = {
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
 const DEFAULT_PROVIDER_FALLBACK = "edgeclaw";
 const DEFAULT_MODEL_FALLBACK = "moonshotai/kimi-k2.6";
+const DEFAULT_SUBAGENT_TIMEOUT_MS = 120_000;
 const PUBLIC_SUBAGENT_TYPES = ["general-purpose", "explore", "plan"] as const;
 
 export function createAgentTool(
@@ -273,12 +274,30 @@ async function runFullFork(args: {
     );
   }
   const subagentId = randomUUID();
-  const report = await fork.fork({
-    definitionId: requestedType,
-    directive,
-    subagentId,
-    abortSignal: context.abortSignal,
-  });
+  const timeoutMs = context.subagentTimeoutMs ?? DEFAULT_SUBAGENT_TIMEOUT_MS;
+  let report;
+  try {
+    report = await fork.fork({
+      definitionId: requestedType,
+      directive,
+      subagentId,
+      abortSignal: context.abortSignal,
+      timeoutMs,
+    });
+  } catch (error) {
+    if (context.abortSignal?.aborted) {
+      throw new PilotDeckToolRuntimeError(
+        "tool_aborted",
+        "agent subagent aborted before completion.",
+      );
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    throw new PilotDeckToolRuntimeError(
+      "tool_execution_failed",
+      `agent subagent failed: ${message}`,
+      { errorCode: "subagent_execution_failed" },
+    );
+  }
   if (context.abortSignal?.aborted) {
     throw new PilotDeckToolRuntimeError(
       "tool_aborted",

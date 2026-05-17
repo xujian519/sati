@@ -11,6 +11,7 @@ export type MemoryRetrieveInput = {
   sessionId: string;
   projectRoot: string;
   recentMessages: CanonicalMessage[];
+  signal?: AbortSignal;
 };
 
 export type MemoryRetrieveResult = {
