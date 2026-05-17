@@ -156,7 +156,23 @@ function formatPermissionMode(mode: string): string {
     case "default":
       return "Permission mode: default — write/shell tools require explicit approval.";
     case "plan":
-      return "Permission mode: plan — read-only; do not call tools that mutate the workspace.";
+      return [
+        "Permission mode: plan — You are in a READ-ONLY exploration and planning phase.",
+        "",
+        "## What To Do",
+        "1. Explore the codebase using read_file, grep, glob to understand existing patterns and structure",
+        "2. Identify the key files, functions, and data flows relevant to the task",
+        "3. Design your implementation approach — consider trade-offs between alternatives",
+        "4. When your plan is ready, call exit_plan_mode to present it for user approval",
+        "",
+        "## Rules",
+        "- DO NOT call write_file, edit_file, create_file, or bash with any command that writes, deletes, or modifies files",
+        "- You may ONLY use read-only tools: read_file, grep, glob, list_directory",
+        "- You MAY use ask_user_question to clarify requirements or choose between approaches",
+        "- Focus on understanding before proposing — read first, plan second",
+        "- Do NOT skip the planning phase — even for seemingly simple tasks, explore first",
+        "- Do NOT call exit_plan_mode until you have a concrete, actionable plan",
+      ].join("\n");
     case "acceptEdits":
       return "Permission mode: acceptEdits — file edits are auto-approved; shell still requires approval.";
     case "bypassPermissions":

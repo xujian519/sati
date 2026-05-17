@@ -83,10 +83,7 @@ export class PermissionRuntime {
         // to mode-level allow. User-configured `ask` rules already
         // short-circuited above, so they aren't affected. Tool-level
         // `deny` (safety regex etc.) is handled below and still wins.
-        if (
-          permissionContext.mode === "bypassPermissions" ||
-          (permissionContext.mode === "plan" && permissionContext.bypassAvailable)
-        ) {
+        if (permissionContext.mode === "bypassPermissions") {
           return allow({
             type: "mode",
             mode: permissionContext.mode,
@@ -98,10 +95,7 @@ export class PermissionRuntime {
       return toolDecision;
     }
 
-    if (
-      permissionContext.mode === "bypassPermissions" ||
-      (permissionContext.mode === "plan" && permissionContext.bypassAvailable)
-    ) {
+    if (permissionContext.mode === "bypassPermissions") {
       return allow({
         type: "mode",
         mode: permissionContext.mode,
