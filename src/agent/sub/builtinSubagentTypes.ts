@@ -1,12 +1,14 @@
 /**
  * Built-in subagent presets, mirroring legacy `src/tools/AgentTool/built-in/*Agent.ts`.
  *
- * Three presets:
+ * Four presets:
  *   - `general-purpose` — full tool access, claudeMd retained, full read/write.
  *   - `explore`         — read-only file inspection (read / grep / glob / bash);
  *                         omits claudeMd & gitStatus from system context.
  *   - `plan`            — read-only planning (read / grep / glob, no bash);
  *                         omits claudeMd & gitStatus.
+ *   - `verify`          — read-only verification (read / grep / glob / bash);
+ *                         inspects generated artifacts and reports issues.
  *
  * The shared system-prompt prefix and rules are duplicated faithfully from
  * the legacy `generalPurposeAgent.ts` and the `built-in/*Agent.ts` files
@@ -14,7 +16,7 @@
  * sync legacy parity tests when changing.
  */
 
-export type SubagentDefinitionId = "general-purpose" | "explore" | "plan";
+export type SubagentDefinitionId = "general-purpose" | "explore" | "plan" | "verify";
 
 export type SubagentDefinition = {
   /** Stable identifier exposed via `agent` tool's `subagent_type` input. */
@@ -103,6 +105,30 @@ export const SUBAGENT_DEFINITIONS: Record<SubagentDefinitionId, SubagentDefiniti
     isReadOnly: true,
     systemPromptSuffix:
       "Planning mode: produce a numbered, actionable plan. You may inspect code (`read_file` / `grep` / `glob`) but you may NOT execute shell commands or modify files.",
+  },
+  verify: {
+    id: "verify",
+    description:
+      "Verification subagent. Inspects generated artifacts (images, HTML, PDFs) for correctness. Can read files, run shell commands, and search code, but cannot modify files.",
+    allowedTools: ["read_file", "grep", "glob", "bash"],
+    omitClaudeMd: true,
+    omitGitStatus: true,
+    isReadOnly: true,
+    systemPromptSuffix: `Verification mode: your job is to **find problems**, not confirm success. Try to break the implementation.
+
+Approach:
+1. Read and inspect the generated artifacts (files, images, screenshots, HTML pages).
+2. Run validation commands (e.g. check file sizes, run linters, verify encoding).
+3. For images: use \`read_file\` on image files to visually inspect them (if the model supports multimodal input). Look for: missing/garbled text (tofu boxes), layout overflow, color contrast issues, truncated content.
+4. For HTML: check that the file is well-formed, that links and assets resolve, and that i18n/RTL is correct.
+5. For data files: verify schema, required fields, encoding (UTF-8), and sanity of values.
+
+Output your findings as a structured verdict:
+- PASS: all checks passed, no issues found.
+- PARTIAL: some checks passed but minor issues exist (list them).
+- FAIL: critical issues found (list them with file paths and descriptions).
+
+Be rigorous. A silent pass when issues exist is worse than a false alarm.`,
   },
 };
 

@@ -137,7 +137,7 @@ export function createAgentTool(
         subagent_type: {
           type: "string",
           description:
-            "Subagent preset id. Full-fork mode: 'general-purpose' | 'explore' | 'plan'. Fallback mode: 'general_purpose' | 'plan' | 'verify' | 'explore'.",
+            "Subagent preset id. Full-fork mode: 'general-purpose' | 'explore' | 'plan' | 'verify'. Fallback mode: 'general_purpose' | 'plan' | 'verify' | 'explore'.",
         },
         subagentType: {
           type: "string",
