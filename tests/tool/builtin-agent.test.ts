@@ -15,6 +15,7 @@ import type {
   PilotDeckToolModelClient,
   PilotDeckToolRuntimeContext,
 } from "../../src/tool/index.js";
+import { ToolRegistry } from "../../src/tool/registry/ToolRegistry.js";
 
 class ScriptedModel implements PilotDeckToolModelClient {
   readonly requests: CanonicalModelRequest[] = [];
@@ -42,14 +43,38 @@ function makeContext(model?: PilotDeckToolModelClient, signal?: AbortSignal): Pi
 }
 
 test("agent tool exposes 4 built-in subagents", () => {
-  assert.deepEqual(Object.keys(BUILTIN_SUBAGENTS).sort(), ["explore", "general_purpose", "plan", "verify"]);
+  assert.deepEqual(Object.keys(BUILTIN_SUBAGENTS).sort(), ["explore", "general-purpose", "plan", "verify"]);
   for (const subagent of Object.values(BUILTIN_SUBAGENTS)) {
     assert.ok(subagent.systemPrompt.length > 20);
     assert.ok(subagent.description.length > 0);
   }
 });
 
-test("agent tool default subagentType is general_purpose", async () => {
+test("agent tool publishes expanded description and public subagent_type docs", () => {
+  const tool = createAgentTool();
+  assert.match(tool.description, /Launch a new subagent/);
+  assert.match(tool.description, /Available built-in subagent types:/);
+  assert.match(tool.description, /general-purpose/);
+  assert.match(tool.description, /Scope`, `Result`, `Key files`, `Files changed`, and `Issues`/);
+  assert.match(
+    String(tool.inputSchema.properties?.subagent_type?.description),
+    /Defaults to 'general-purpose' when omitted/,
+  );
+  assert.match(
+    String(tool.inputSchema.properties?.subagent_type?.description),
+    /Legacy 'general_purpose' is still accepted/,
+  );
+});
+
+test("agent tool canonical schema exports expanded description", () => {
+  const registry = new ToolRegistry();
+  registry.register(createAgentTool());
+  const schema = registry.toCanonicalSchemas().find((entry) => entry.name === "agent");
+  assert.ok(schema);
+  assert.match(schema.description ?? "", /Launch a new subagent/);
+});
+
+test("agent tool default subagentType is general-purpose", async () => {
   const model = new ScriptedModel([
     { type: "message_start", role: "assistant" },
     { type: "text_delta", text: "answer" },
@@ -61,15 +86,43 @@ test("agent tool default subagentType is general_purpose", async () => {
     makeContext(),
   );
   const data = result.data as AgentToolOutput;
-  assert.equal(data.subagentType, "general_purpose");
+  assert.equal(data.subagentType, "general-purpose");
   assert.equal(data.text, "answer");
   assert.equal(model.requests.length, 1);
-  assert.equal(model.requests[0]?.systemPrompt, BUILTIN_SUBAGENTS.general_purpose.systemPrompt);
+  assert.equal(model.requests[0]?.systemPrompt, BUILTIN_SUBAGENTS["general-purpose"].systemPrompt);
 });
 
-test("agent tool routes to specified subagentType (plan)", async () => {
+test("agent tool routes to specified subagent_type (plan)", async () => {
   const model = new ScriptedModel([
     { type: "text_delta", text: "step 1\nstep 2" },
+    { type: "message_end", finishReason: "stop" },
+  ]);
+  const tool = createAgentTool({ model });
+  const result = await tool.execute(
+    { description: "plan refactor", prompt: "Refactor the auth module.", subagent_type: "plan" },
+    makeContext(),
+  );
+  assert.equal((result.data as AgentToolOutput).subagentType, "plan");
+  assert.equal(model.requests[0]?.systemPrompt, BUILTIN_SUBAGENTS.plan.systemPrompt);
+});
+
+test("agent tool accepts legacy general_purpose value and normalizes it", async () => {
+  const model = new ScriptedModel([
+    { type: "text_delta", text: "answer" },
+    { type: "message_end", finishReason: "stop" },
+  ]);
+  const tool = createAgentTool({ model });
+  const result = await tool.execute(
+    { description: "research", prompt: "what is X", subagent_type: "general_purpose" },
+    makeContext(),
+  );
+  assert.equal((result.data as AgentToolOutput).subagentType, "general-purpose");
+  assert.equal(model.requests[0]?.systemPrompt, BUILTIN_SUBAGENTS["general-purpose"].systemPrompt);
+});
+
+test("agent tool still accepts deprecated subagentType alias", async () => {
+  const model = new ScriptedModel([
+    { type: "text_delta", text: "answer" },
     { type: "message_end", finishReason: "stop" },
   ]);
   const tool = createAgentTool({ model });
@@ -78,7 +131,6 @@ test("agent tool routes to specified subagentType (plan)", async () => {
     makeContext(),
   );
   assert.equal((result.data as AgentToolOutput).subagentType, "plan");
-  assert.equal(model.requests[0]?.systemPrompt, BUILTIN_SUBAGENTS.plan.systemPrompt);
 });
 
 test("agent tool reads model from context.model when factory option absent", async () => {
