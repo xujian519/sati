@@ -3,6 +3,7 @@ import type {
   CanonicalModelRequest,
   CanonicalToolCall,
   CanonicalUsage,
+  MultimodalConstraints,
 } from "../../model/index.js";
 import type {
   PermissionContext,
@@ -178,6 +179,13 @@ export type PilotDeckToolRuntimeContext = {
     path: string;
     read(): string | undefined;
   };
+  /**
+   * Multimodal constraints of the model driving this agent session.
+   * Absent when the model config doesn't declare multimodal capabilities
+   * (text-only). Tools use this to decide whether to return rich content
+   * (e.g. base64 images) or a text-only fallback description.
+   */
+  modelMultimodal?: MultimodalConstraints;
 };
 
 export type PilotDeckToolDefinition<Input = unknown, Output = unknown> = {

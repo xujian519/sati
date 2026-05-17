@@ -1,9 +1,11 @@
-import type { CanonicalThinkingConfig, CanonicalToolChoice } from "../../model/index.js";
+import type { CanonicalThinkingConfig, CanonicalToolChoice, MultimodalConstraints } from "../../model/index.js";
 import type { PermissionContext, PermissionMode } from "../../permission/index.js";
 
 export type AgentRuntimeConfig = {
   provider: string;
   model: string;
+  /** Multimodal constraints of the selected model (absent = text-only). */
+  modelMultimodal?: MultimodalConstraints;
   cwd: string;
   systemPrompt?: string;
   maxOutputTokens?: number;

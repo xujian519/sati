@@ -579,6 +579,7 @@ function createRecordingModel(
         maxOutputTokens: 8_192,
       };
     },
+    getMultimodal() { return { input: ["text" as const] }; },
   };
 }
 
@@ -628,6 +629,7 @@ function createCronProjectBindingModel(): ModelRuntime {
         maxOutputTokens: 8_192,
       };
     },
+    getMultimodal() { return { input: ["text" as const] }; },
   };
 }
 

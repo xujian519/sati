@@ -37,6 +37,7 @@ function makeJudge(responseText: string): ModelRuntime {
       maxContextTokens: 4096,
       maxOutputTokens: 256,
     }),
+    getMultimodal: () => ({ input: ["text" as const] }),
   };
 }
 

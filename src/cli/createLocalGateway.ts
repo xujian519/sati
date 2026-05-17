@@ -891,9 +891,16 @@ class ProjectRuntimeRegistry {
     // tool call inside the same turn — no roundtrip back to the client
     // needed, even when the client lives in a different process.
     const liveRuleSet = this.getLiveRuleSet(sessionKey);
+    let modelMultimodal: import("../model/index.js").MultimodalConstraints | undefined;
+    try {
+      modelMultimodal = runtime.model.getMultimodal(agent.model.provider, agent.model.model);
+    } catch {
+      // Model or provider not found — fall back to text-only.
+    }
     return {
       provider: agent.model.provider,
       model: agent.model.model,
+      modelMultimodal,
       cwd,
       permissionMode,
       jsonSelfCorrect: true,

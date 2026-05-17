@@ -6,12 +6,14 @@ import type {
 } from "./protocol/canonical.js";
 import type { ModelCapabilities } from "./protocol/capabilities.js";
 import { ModelRequestError } from "./protocol/errors.js";
+import type { MultimodalConstraints } from "./protocol/multimodal.js";
 import { complete, streamModel, type ModelRuntimeOptions } from "./streaming/streamModel.js";
 
 export interface ModelRuntime {
   stream(request: CanonicalModelRequest, options?: ModelRuntimeOptions): AsyncIterable<CanonicalModelEvent>;
   complete(request: CanonicalModelRequest, options?: ModelRuntimeOptions): Promise<CanonicalModelResponse>;
   getCapabilities(providerId: string, modelId: string): ModelCapabilities;
+  getMultimodal(providerId: string, modelId: string): MultimodalConstraints;
 }
 
 export function createModelRuntime(
@@ -39,5 +41,6 @@ export function createModelRuntime(
     stream: (request, callOptions) => streamModel(request, config, { ...options, ...callOptions }),
     complete: (request, callOptions) => complete(request, config, { ...options, ...callOptions }),
     getCapabilities: (providerId, modelId) => getModel(providerId, modelId).capabilities,
+    getMultimodal: (providerId, modelId) => getModel(providerId, modelId).multimodal,
   };
 }

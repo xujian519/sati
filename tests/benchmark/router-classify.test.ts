@@ -162,6 +162,7 @@ function createMockJudgeRuntime(
         maxOutputTokens: 256,
       };
     },
+    getMultimodal() { return { input: ["text" as const] }; },
   };
 }
 
