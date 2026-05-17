@@ -1,5 +1,9 @@
 import type { PilotDeckToolValidationIssue } from "../protocol/schema.js";
 
+export type FormatValidationErrorOptions = {
+  maxOutputTokens?: number;
+};
+
 /**
  * Format validation issues into a human-readable (and LLM-friendly) error
  * message. Modelled after edgeclaw-opc's `formatZodValidationError` so the
@@ -9,6 +13,7 @@ import type { PilotDeckToolValidationIssue } from "../protocol/schema.js";
 export function formatValidationError(
   toolName: string,
   issues: PilotDeckToolValidationIssue[],
+  options?: FormatValidationErrorOptions,
 ): string {
   const errorParts: string[] = [];
 
@@ -40,13 +45,26 @@ export function formatValidationError(
   const label = errorParts.length > 1 ? "issues" : "issue";
   let message = `${toolName} failed due to the following ${label}:\n${errorParts.join("\n")}`;
 
-  // Hint for write_file with missing content: suggest using bash + python3 instead.
+  const FILE_TOOLS = new Set(["write_file", "edit_file", "bash"]);
+  const hasRequiredMissing = issues.some((i) => i.code === "required");
+  const tokenBudget = options?.maxOutputTokens;
+  const tokenInfo = tokenBudget ? ` (current max_output_tokens: ${tokenBudget})` : "";
+
+  if (hasRequiredMissing && FILE_TOOLS.has(toolName)) {
+    message += `\n\nNote: This may have been caused by your output being truncated before the tool call arguments were fully generated${tokenInfo}. `
+      + "Keep each tool call's arguments well within the output token budget.";
+  }
+
   if (
     toolName === "write_file" &&
     issues.some((i) => i.code === "required" && i.path.includes("content"))
   ) {
     message +=
-      "\n\nHint: If the file content is large, consider using `bash` with `python3 -c` or `cat <<'EOF'` to write it instead.";
+      "\n\nHint: Please use an incremental, multi-step approach to write large files:\n"
+      + "Step 1: Create the file with the first section using write_file (keep content short, ~50-100 lines max per call).\n"
+      + "Step 2: Append subsequent sections using bash({command: \"cat <<'SECTION' >> /path/to/file\\n...next section...\\nSECTION\"}).\n"
+      + "Step 3: Repeat Step 2 until the full file is written.\n"
+      + "Important: Break the file into logical sections (imports, classes, functions, etc.) and write one section per step.";
   }
 
   return message;

@@ -652,6 +652,7 @@ export class AgentLoop {
       subagentDepth: this.config.subagentDepth ?? 0,
       subagent: this.buildSubagentForkApi(input, messages),
       modelMultimodal: this.config.modelMultimodal,
+      maxOutputTokens: this.config.maxOutputTokens,
     };
   }
 

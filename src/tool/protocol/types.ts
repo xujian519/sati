@@ -186,6 +186,12 @@ export type PilotDeckToolRuntimeContext = {
    * (e.g. base64 images) or a text-only fallback description.
    */
   modelMultimodal?: MultimodalConstraints;
+  /**
+   * Current max output tokens for this session's model. Surfaced in
+   * validation error hints so the model can reason about output budget
+   * when planning multi-step writes.
+   */
+  maxOutputTokens?: number;
 };
 
 export type PilotDeckToolDefinition<Input = unknown, Output = unknown> = {
