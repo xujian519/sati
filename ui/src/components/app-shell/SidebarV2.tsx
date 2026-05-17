@@ -30,8 +30,8 @@ import {
   setSessionCustomTitle,
   useCustomNamesVersion,
 } from '../../lib/customNames';
-import pilotdeckLogo from '../../assets/pilotdeck-logo.png';
-import pilotdeckLogoWhite from '../../assets/pilotdeck-logo-white.png';
+import pilotdeckLogoDark from '../../assets/dark-fnial.png';
+import pilotdeckLogoWhite from '../../assets/white.png';
 
 const asTimestamp = (value: unknown): number => {
   if (typeof value === 'number') return value;
@@ -901,18 +901,18 @@ export default function SidebarV2({
           }}
           aria-label="PilotDeck"
           title="PilotDeck"
-          className="-ml-1 flex min-w-0 shrink items-center rounded-md p-1 transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300 dark:focus-visible:ring-neutral-700"
+          className="-ml-1 flex min-w-0 shrink items-center gap-2 rounded-md p-1 transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300 dark:focus-visible:ring-neutral-700"
         >
           <img
             src={pilotdeckLogoWhite}
             alt="PilotDeck"
-            className="h-20 w-auto select-none object-contain dark:hidden"
+            className="h-11 w-11 select-none object-contain dark:hidden"
             draggable={false}
           />
           <img
-            src={pilotdeckLogo}
+            src={pilotdeckLogoDark}
             alt="PilotDeck"
-            className="hidden h-20 w-auto select-none object-contain dark:block"
+            className="hidden h-11 w-11 select-none object-contain dark:block"
             draggable={false}
           />
         </button>

@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
+import pilotdeckLogoDark from '../../../assets/dark-fnial.png';
+import pilotdeckLogoWhite from '../../../assets/white.png';
 import AuthErrorAlert from './AuthErrorAlert';
 import AuthInputField from './AuthInputField';
 import AuthScreenLayout from './AuthScreenLayout';
@@ -85,7 +87,22 @@ export default function SetupForm() {
       title="Welcome to PilotDeck"
       description="Set up your account to get started"
       footerText="This is a single-user system. Only one account can be created."
-      logo={<img src="/logo.svg" alt="PilotDeck" className="h-16 w-16" />}
+      logo={
+        <div className="flex items-center justify-center gap-2">
+          <img
+            src={pilotdeckLogoWhite}
+            alt="PilotDeck"
+            className="h-14 w-14 select-none object-contain dark:hidden"
+            draggable={false}
+          />
+          <img
+            src={pilotdeckLogoDark}
+            alt="PilotDeck"
+            className="hidden h-14 w-14 select-none object-contain dark:block"
+            draggable={false}
+          />
+        </div>
+      }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <AuthInputField
