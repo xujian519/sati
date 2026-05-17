@@ -39,6 +39,17 @@ test("web_search registers basic schema and metadata", () => {
   assert.equal(tool.kind, "network");
   assert.equal(tool.isReadOnly({ query: "x" }), true);
   assert.equal(tool.isConcurrencySafe({ query: "x" }), true);
+  assert.match(tool.description, /SerpAPI-compatible or Tavily-compatible endpoints/);
+  assert.match(tool.description, /Returns structured search data including organic results/);
+  assert.match(tool.description, /Requires `TAVILY_API_KEY` or `SERP_API_KEY`/);
+  assert.equal(
+    tool.inputSchema.properties?.query?.description,
+    "Search query string. Be specific, and include versions or the current year when looking for recent documentation, releases, or current events.",
+  );
+  assert.equal(
+    tool.inputSchema.properties?.gl?.description,
+    'Optional country code for localized results. Defaults to "us"; use "cn" for China-localized results.',
+  );
 });
 
 test("web_search throws unsupported_tool when no API key configured", async () => {

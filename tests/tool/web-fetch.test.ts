@@ -113,6 +113,16 @@ test("B2.E_TOOL web_fetch tool definition shape", () => {
   assert.equal(def.isConcurrencySafe({ url: "x", prompt: "x" }), true);
   assert.equal(def.isOpenWorld?.({ url: "x", prompt: "x" }), true);
   assert.equal(def.maxResultBytes, 200_000);
+  assert.match(def.description, /can process it using a secondary AI model/);
+  assert.match(def.description, /Without a model client, returns the fetched markdown content directly/);
+  assert.equal(
+    def.inputSchema.properties?.url?.description,
+    "Fully-formed URL to fetch. HTTP URLs will be upgraded to HTTPS before the request is issued.",
+  );
+  assert.equal(
+    def.inputSchema.properties?.prompt?.description,
+    "Question or extraction directive to apply to the fetched markdown. When no model client is available, the tool returns raw markdown instead of a prompted summary.",
+  );
 });
 
 test("B2.E_VALIDATE rejects bad inputs", async () => {
