@@ -4,7 +4,7 @@ import { NodeShellCommandRunner, type PilotDeckCommandRunner } from "./bash/comm
 import { classifyBashPermission, isReadOnlyShellCommand } from "./bash/permissions.js";
 
 export type BashInput = {
-  command?: string;
+  command: string;
   timeout?: number;
   description?: string;
 };
@@ -38,7 +38,7 @@ export function createBashTool(options?: CreateBashToolOptions): PilotDeckToolDe
     kind: "shell",
     inputSchema: {
       type: "object",
-      required: [],
+      required: ["command"],
       additionalProperties: false,
       properties: {
         command: {
@@ -61,13 +61,7 @@ export function createBashTool(options?: CreateBashToolOptions): PilotDeckToolDe
     isOpenWorld: () => true,
     checkPermissions: async (input) => input.command ? classifyBashPermission(input.command) : ({ type: "allow" as const, reason: { type: "runtime" as const, message: "Empty command is safe" } }),
     execute: async (input, context) => {
-      const command = (input.command ?? "").trim();
-      if (!command) {
-        return {
-          content: [{ type: "text", text: "No command provided. The shell executed nothing.\nIf you intended to run a command, provide a non-empty `command` parameter.\nIf you have nothing to run, respond with text instead of calling bash." }],
-          data: { command: "", exitCode: 0, stdout: "", stderr: "", timedOut: false, durationMs: 0 },
-        };
-      }
+      const command = input.command.trim();
       const timeoutMs = Math.min(Math.max(1, input.timeout ?? defaultTimeoutMs), maxTimeoutMs);
       const progress = context.progress;
       const toolCallId = ""; // ToolRuntime fills this via metadata; we pull from context if available.
