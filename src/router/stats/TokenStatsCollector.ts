@@ -52,7 +52,6 @@ type PersistedData = {
 
 const MAX_HOURLY_BUCKETS = 72;
 const MAX_SESSIONS = 200;
-const MAX_SESSIONS = 200;
 
 export class TokenStatsCollector {
   private readonly enabled: boolean;
@@ -252,42 +251,6 @@ export class TokenStatsCollector {
       }
     }
     return data;
-  }
-
-  private maybeRotate(): void {
-    if (!this.jsonlPath) return;
-    try {
-      const stat = fs.statSync(this.jsonlPath);
-      if (stat.size <= MAX_JSONL_BYTES) return;
-    } catch { return; }
-
-    // Close current fd before rewrite
-    if (this.fd !== undefined) {
-      try { fs.closeSync(this.fd); } catch { /* ok */ }
-      this.fd = undefined;
-    }
-
-    // Rewrite: keep only the records that are still in our pruned in-memory
-    // state so the file shrinks back to a manageable size.
-    try {
-      const lines: string[] = [];
-      for (const sess of Object.values(this.data.sessions)) {
-        for (const rec of sess.requestLog) {
-          lines.push(JSON.stringify(rec));
-        }
-      }
-      lines.sort((a, b) => {
-        const aStart = (JSON.parse(a) as RouterStatsRecord).startedAt;
-        const bStart = (JSON.parse(b) as RouterStatsRecord).startedAt;
-        return aStart.localeCompare(bStart);
-      });
-      fs.writeFileSync(this.jsonlPath, lines.join("\n") + "\n", "utf-8");
-    } catch { /* best-effort */ }
-
-    // Re-open for future appends
-    try {
-      this.fd = fs.openSync(this.jsonlPath, "a");
-    } catch { /* ok */ }
   }
 
   private pruneHourly(): void {
