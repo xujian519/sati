@@ -6,6 +6,7 @@ import { getPermissionPanel, registerPermissionPanel } from '../../tools/configs
 import { AskUserQuestionPanel } from '../../tools/components/InteractiveRenderers';
 
 registerPermissionPanel('AskUserQuestion', AskUserQuestionPanel);
+registerPermissionPanel('ask_user_question', AskUserQuestionPanel);
 
 interface PermissionRequestsBannerProps {
   pendingPermissionRequests: PendingPermissionRequest[];

@@ -84,6 +84,7 @@ const RUN_MODE_OPTIONS: RunModeOption[] = [
 
 const BLOCKING_PERMISSION_TOOLS = new Set([
   'AskUserQuestion',
+  'ask_user_question',
   'ExitPlanMode',
   'ExitPlanModeV2',
   'exit_plan_mode',

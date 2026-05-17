@@ -89,16 +89,15 @@ export default function MessagesPaneV2({
     if (existingKey) return existingKey;
 
     const intrinsicKey = getIntrinsicMessageKey(message);
-    let candidateKey = intrinsicKey;
-
-    if (!candidateKey || allocatedKeysRef.current.has(candidateKey)) {
-      do {
-        generatedMessageKeyCounterRef.current += 1;
-        candidateKey = intrinsicKey
-          ? `${intrinsicKey}-${generatedMessageKeyCounterRef.current}`
-          : `message-generated-${generatedMessageKeyCounterRef.current}`;
-      } while (allocatedKeysRef.current.has(candidateKey));
+    if (intrinsicKey) {
+      return intrinsicKey;
     }
+
+    let candidateKey: string;
+    do {
+      generatedMessageKeyCounterRef.current += 1;
+      candidateKey = `message-generated-${generatedMessageKeyCounterRef.current}`;
+    } while (allocatedKeysRef.current.has(candidateKey));
 
     allocatedKeysRef.current.add(candidateKey);
     messageKeyMapRef.current.set(message, candidateKey);

@@ -131,7 +131,7 @@ test("elicitation_request → elicitation_cancelled flips message to status", ()
         requestId: "e1",
         toolCallId: "tc1",
         toolName: "ask_user_question",
-        questions: [{ id: "q", prompt: "?", options: [{ id: "a", label: "A" }] }],
+        questions: [{ question: "?", header: "Choice", options: [{ label: "A", description: "A" }] }],
       },
       { type: "elicitation_cancelled", requestId: "e1", reason: "abort" },
     ],
