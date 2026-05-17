@@ -483,6 +483,8 @@ export async function runChatViaGateway(
     state.active = true;
 
     const attachments = uiImagesToAttachments(options?.images);
+    const resolvedMode = resolvePermissionMode(options);
+    console.log(`[pilotdeck-bridge] submitTurn mode=${resolvedMode} (options.permissionMode=${options?.permissionMode}, options.mode=${options?.mode})`);
 
     try {
         const stream = gw.submitTurn({
@@ -490,7 +492,7 @@ export async function runChatViaGateway(
             channelKey,
             projectKey,
             message: command ?? '',
-            mode: resolvePermissionMode(options),
+            mode: resolvedMode,
             runId,
             ...(attachments ? { attachments } : {}),
             ...(options.workspaceCwd ? { workspaceCwd: options.workspaceCwd } : {}),
@@ -830,8 +832,8 @@ function _readFirstPrompt(sessionId, projectKey) {
         try {
             const fd = fs.openSync(filePath, 'r');
             try {
-                const buf = Buffer.alloc(4096);
-                const bytesRead = fs.readSync(fd, buf, 0, 4096, 0);
+                const buf = Buffer.alloc(16384);
+                const bytesRead = fs.readSync(fd, buf, 0, 16384, 0);
                 const head = buf.toString('utf-8', 0, bytesRead);
                 const firstLine = head.split('\n').find(l => l.includes('"type":"accepted_input"'));
                 if (firstLine) {
@@ -1151,6 +1153,7 @@ function _assignByTurnId(allEntries, queries, turnStructure, subagentPrompts) {
             turnIndex++;
         } else {
             if (entry.role === 'main') {
+                entry._savedTier = entry.tier;
                 entry.role = 'sub';
                 delete entry.tier;
             }
@@ -1171,6 +1174,9 @@ function _assignByTurnId(allEntries, queries, turnStructure, subagentPrompts) {
             if (entry.query === 'sub-agent') {
                 if (prompts && promptIdx < prompts.length) {
                     entry.query = prompts[promptIdx];
+                    entry.isSubagentDispatch = true;
+                    if (entry._savedTier) { entry.tier = entry._savedTier; }
+                    delete entry._savedTier;
                     promptIdx++;
                 }
             } else if (!entry.query) {
@@ -1179,6 +1185,9 @@ function _assignByTurnId(allEntries, queries, turnStructure, subagentPrompts) {
                     const isAgentCall = names.some(n => n === 'agent' || n === 'sessions_spawn' || n === 'dispatch_agent');
                     if (isAgentCall && prompts && promptIdx < prompts.length) {
                         entry.query = prompts[promptIdx];
+                        entry.isSubagentDispatch = true;
+                        if (entry._savedTier) { entry.tier = entry._savedTier; }
+                        delete entry._savedTier;
                         promptIdx++;
                     } else {
                         entry.query = '→ ' + [...new Set(names)].join(', ');
@@ -1186,6 +1195,7 @@ function _assignByTurnId(allEntries, queries, turnStructure, subagentPrompts) {
                 }
                 toolIdx++;
             }
+            delete entry._savedTier;
         }
     }
 }

@@ -95,6 +95,15 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
         setModelOptions(runtimeOptions);
         setModel(nextModel);
         localStorage.setItem('pilotdeck-model', nextModel);
+
+        const backendMode = data?.permissions?.effectiveMode;
+        if (backendMode && COMPOSER_PERMISSION_MODES.includes(backendMode as PermissionMode)) {
+          const storedPerm = readStoredPermissionMode(DEFAULT_PERMISSION_MODE_KEY);
+          if (!storedPerm || storedPerm === 'default') {
+            setPermissionModeState(backendMode as PermissionMode);
+            localStorage.setItem(DEFAULT_PERMISSION_MODE_KEY, backendMode);
+          }
+        }
       })
       .catch((error) => {
         console.error('Error loading runtime config:', error);

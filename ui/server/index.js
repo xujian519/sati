@@ -53,6 +53,7 @@ import fetch from 'node-fetch';
 import mime from 'mime-types';
 import JSZip from 'jszip';
 import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from './utils/pilotPaths.js';
+import { readPermissionSettings } from './services/permissionSettings.js';
 
 import { getProjects, getProjectCronJobsOverview, getSessions, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
 import {
@@ -569,8 +570,13 @@ app.use('/api/agent', agentRoutes);
 // model is read from PilotDeck config; fall back to a static stub so any
 // older frontend code paths render without crashing.
 app.get('/api/agents/runtime-config', authenticateToken, (_req, res) => {
+    const permSettings = readPermissionSettings();
     res.json({
         pilotdeck: { provider: 'pilotdeck' },
+        permissions: {
+            skipPermissions: permSettings.skipPermissions,
+            effectiveMode: permSettings.skipPermissions ? 'bypassPermissions' : 'default',
+        },
     });
 });
 
