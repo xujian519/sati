@@ -88,6 +88,9 @@ const GATEWAY_CONNECT_RETRY_INTERVAL_MS = 250;
 const WEB_DEFAULT_PERMISSION_MODE =
     process.env.PILOTDECK_WEB_PERMISSION_MODE || 'default';
 
+const DEFAULT_CONTEXT_WINDOW =
+    Number(process.env.PILOTDECK_CONTEXT_WINDOW) || 200_000;
+
 // Resolves to the Gateway returned by `createRemoteGateway`. We express
 // the type via `typeof createRemoteGateway` (the symbol is already imported
 // above) instead of a JSDoc dynamic-import annotation, because some tsx 4.x
@@ -188,6 +191,7 @@ function ensureSessionState(sessionKey, projectKey, channelKey) {
             channelKey,
             runId: undefined,
             active: false,
+            tokenUsed: 0,
         };
         sessionState.set(sessionKey, state);
     } else {
@@ -195,6 +199,14 @@ function ensureSessionState(sessionKey, projectKey, channelKey) {
         state.channelKey = channelKey;
     }
     return state;
+}
+
+export function getSessionTokenBudget(sessionKey) {
+    const state = sessionState.get(sessionKey);
+    return {
+        used: state?.tokenUsed || 0,
+        total: DEFAULT_CONTEXT_WINDOW,
+    };
 }
 
 /**
@@ -505,6 +517,25 @@ export async function runChatViaGateway(
             for (const frame of gatewayEventToFrames(event, sessionKey, provider)) {
                 writer.send(frame);
             }
+            if (event && event.type === 'turn_completed' && event.usage) {
+                const turnTokens =
+                    (event.usage.inputTokens || 0) +
+                    (event.usage.outputTokens || 0) +
+                    (event.usage.cacheReadTokens || 0);
+                state.tokenUsed = (state.tokenUsed || 0) + turnTokens;
+                writer.send(
+                    createNormalizedMessage({
+                        provider,
+                        sessionId: sessionKey,
+                        kind: 'status',
+                        text: 'token_budget',
+                        tokenBudget: {
+                            used: state.tokenUsed,
+                            total: DEFAULT_CONTEXT_WINDOW,
+                        },
+                    }),
+                );
+            }
         }
 
         writer.send(
@@ -659,47 +690,39 @@ function _buildSessionProjectIndex() {
 function loadPersistedStatsFromDisk() {
     const result = new Map();
     try {
-        const newStatsPath = path.join(GENERAL_HOME, 'router', 'stats.json');
-        const legacyStatsPath = path.join(GENERAL_HOME, 'router-stats.json');
-        const statsPath = fs.existsSync(newStatsPath) ? newStatsPath : legacyStatsPath;
-        const raw = fs.readFileSync(statsPath, 'utf-8');
-        const parsed = JSON.parse(raw);
-        if (!parsed || !parsed.sessions || typeof parsed.sessions !== 'object') {
-            return result;
+        // Prefer new JSONL format, fall back to legacy JSON.
+        const jsonlPath = path.join(GENERAL_HOME, 'router', 'stats.jsonl');
+        const jsonPath = path.join(GENERAL_HOME, 'router', 'stats.json');
+        const legacyPath = path.join(GENERAL_HOME, 'router-stats.json');
+
+        let records;
+        if (fs.existsSync(jsonlPath)) {
+            records = _loadRecordsFromJsonl(jsonlPath);
+        } else {
+            records = _loadRecordsFromJson(jsonPath, legacyPath);
         }
+        if (!records || records.length === 0) return result;
 
         // Build a filesystem-based sessionId→projectDirName index for
         // backward compatibility (records written before projectPath existed).
         const { sessionIndex: fsIndex, dirToPath } = _buildSessionProjectIndex();
         const generalProjectDirName = createProjectId(GENERAL_HOME);
 
-        // Helper: resolve a project dir name back to its real path.
         const resolveProjectPath = (dirName) => {
             if (dirName === generalProjectDirName) return GENERAL_HOME;
-            // Use .cwd marker if available (handles lossy encoding correctly)
             const fromCwd = dirToPath.get(dirName);
             if (fromCwd) return fromCwd;
-            // Fallback for well-known dirs without .cwd
             const repoProjectDirName = createProjectId(REPO_ROOT);
             if (dirName === repoProjectDirName) return REPO_ROOT;
             return GENERAL_HOME;
         };
 
-        // Collect records grouped by resolved project path.
         const byProject = new Map();
 
-        for (const sess of Object.values(parsed.sessions)) {
-            if (!sess || !Array.isArray(sess.requestLog) || sess.requestLog.length === 0) continue;
-
-            // Determine the project this session belongs to.
-            // 1) Prefer the record-level projectPath (new records have this).
-            // 2) Fall back to filesystem lookup via .cwd markers.
-            // 3) Last resort: GENERAL_HOME.
-            const firstRecord = sess.requestLog[0];
-            let projectKey = firstRecord?.projectPath;
-
+        for (const rec of records) {
+            let projectKey = rec.projectPath;
             if (!projectKey) {
-                const sessionId = sess.sessionId || firstRecord?.sessionId;
+                const sessionId = rec.sessionId;
                 if (sessionId) {
                     const safeId = sanitizeSessionIdForPath(sessionId);
                     const dirName = fsIndex.get(safeId) || fsIndex.get(sessionId);
@@ -708,22 +731,19 @@ function loadPersistedStatsFromDisk() {
                     }
                 }
             }
-
-            if (!projectKey) {
-                projectKey = GENERAL_HOME;
-            }
+            if (!projectKey) projectKey = GENERAL_HOME;
 
             if (!byProject.has(projectKey)) {
                 byProject.set(projectKey, []);
             }
-            byProject.get(projectKey).push(...sess.requestLog);
+            byProject.get(projectKey).push(rec);
         }
 
-        for (const [projectKey, records] of byProject.entries()) {
-            records.sort((a, b) => (a.startedAt || '').localeCompare(b.startedAt || ''));
+        for (const [projectKey, projRecords] of byProject.entries()) {
+            projRecords.sort((a, b) => (a.startedAt || '').localeCompare(b.startedAt || ''));
             result.set(projectKey, {
                 aggregate: {},
-                records: records.slice(-1000),
+                records: projRecords.slice(-1000),
             });
         }
     } catch (err) {
@@ -732,6 +752,34 @@ function loadPersistedStatsFromDisk() {
         }
     }
     return result;
+}
+
+function _loadRecordsFromJsonl(filePath) {
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const records = [];
+    for (const line of raw.split('\n')) {
+        if (!line) continue;
+        try {
+            const rec = JSON.parse(line);
+            if (rec?.sessionId && rec?.startedAt) records.push(rec);
+        } catch { /* skip malformed */ }
+    }
+    return records;
+}
+
+function _loadRecordsFromJson(jsonPath, legacyPath) {
+    const statsPath = fs.existsSync(jsonPath) ? jsonPath : legacyPath;
+    const raw = fs.readFileSync(statsPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (!parsed?.sessions || typeof parsed.sessions !== 'object') return [];
+    const records = [];
+    for (const sess of Object.values(parsed.sessions)) {
+        if (!sess || !Array.isArray(sess.requestLog)) continue;
+        for (const rec of sess.requestLog) {
+            if (rec?.sessionId && rec?.startedAt) records.push(rec);
+        }
+    }
+    return records;
 }
 
 /**
@@ -1466,6 +1514,29 @@ export function registerAlwaysOnNotificationForwarding(clients) {
             }
 
             if (event.type === 'turn_completed') {
+                if (event.usage) {
+                    const aoState = ensureSessionState(sessionKey, '', channelKey || 'web');
+                    const turnTokens =
+                        (event.usage.inputTokens || 0) +
+                        (event.usage.outputTokens || 0) +
+                        (event.usage.cacheReadTokens || 0);
+                    aoState.tokenUsed = (aoState.tokenUsed || 0) + turnTokens;
+                    const budgetFrame = JSON.stringify(
+                        createNormalizedMessage({
+                            provider,
+                            sessionId: sessionKey,
+                            kind: 'status',
+                            text: 'token_budget',
+                            tokenBudget: {
+                                used: aoState.tokenUsed,
+                                total: DEFAULT_CONTEXT_WINDOW,
+                            },
+                        }),
+                    );
+                    for (const client of clients) {
+                        if (client.readyState === 1) client.send(budgetFrame);
+                    }
+                }
                 knownSessions.delete(sessionKey);
             }
         });
