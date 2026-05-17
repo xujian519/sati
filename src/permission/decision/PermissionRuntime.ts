@@ -334,7 +334,8 @@ function isPlanFileWrite(
   context: PermissionContext,
 ): boolean {
   if (tool.kind !== "filesystem") return false;
-  const filePath = (input as Record<string, unknown> | null)?.filePath;
+  const record = input as Record<string, unknown> | null;
+  const filePath = record?.file_path ?? record?.filePath;
   if (typeof filePath !== "string") return false;
   const absolute = resolve(context.cwd, filePath);
   return absolute === context.planFilePath;

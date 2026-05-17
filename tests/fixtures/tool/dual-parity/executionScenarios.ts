@@ -37,7 +37,7 @@ export const dualParityExecutionScenarios: DualParityExecutionScenario[] = [
       "a.txt": "one\ntwo\n",
     },
     legacy: { toolName: "Read", input: { file_path: "__WORKSPACE__/a.txt", offset: 1 } },
-    pilotdeck: { toolName: "read_file", input: { filePath: "a.txt" } },
+    pilotdeck: { toolName: "read_file", input: { file_path: "a.txt" } },
   },
   {
     id: "glob-ts-files",
@@ -80,7 +80,7 @@ export const dualParityExecutionScenarios: DualParityExecutionScenario[] = [
       "src/a.txt": "needle\n",
     },
     legacy: { toolName: "Grep", input: { pattern: "needle", output_mode: "content" } },
-    pilotdeck: { toolName: "grep", input: { pattern: "needle", outputMode: "content" } },
+    pilotdeck: { toolName: "grep", input: { pattern: "needle", output_mode: "content" } },
     reason: "Legacy Grep execution import currently hits a vendored circular UI import in direct harness mode.",
   },
 ];

@@ -21,7 +21,7 @@ export async function writeTextFile(
   if (existing && !options?.allowOverwrite) {
     throw new PilotDeckToolRuntimeError(
       "file_conflict",
-      `${filePath} already exists. Set allowOverwrite to true to overwrite it.`,
+      `${filePath} already exists. Set allow_overwrite to true to overwrite it.`,
     );
   }
 

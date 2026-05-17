@@ -13,7 +13,7 @@ test("read_file reads text files with offset and limit", async (t) => {
   });
 
   const result = await toolRuntime.execute(
-    { id: "call-1", name: "read_file", input: { filePath: "src/a.txt", offset: 1, limit: 2 } },
+    { id: "call-1", name: "read_file", input: { file_path: "src/a.txt", offset: 1, limit: 2 } },
     context,
   );
 
@@ -32,11 +32,11 @@ test("read_file returns controlled errors for missing and outside paths", async 
   });
 
   const missing = await toolRuntime.execute(
-    { id: "call-1", name: "read_file", input: { filePath: "missing.txt" } },
+    { id: "call-1", name: "read_file", input: { file_path: "missing.txt" } },
     context,
   );
   const outside = await toolRuntime.execute(
-    { id: "call-2", name: "read_file", input: { filePath: "../outside.txt" } },
+    { id: "call-2", name: "read_file", input: { file_path: "../outside.txt" } },
     context,
   );
 

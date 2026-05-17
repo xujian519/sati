@@ -47,7 +47,7 @@ test("C4 edit_file calls fileHistory.trackEdit before mutating, allowing rewind"
     {
       id: "call-1",
       name: "edit_file",
-      input: { filePath: "src/notes.md", oldString: "before", newString: "after" },
+      input: { file_path: "src/notes.md", old_string: "before", new_string: "after" },
     },
     ctx,
   );
@@ -94,7 +94,7 @@ test("C4 write_file (create new file) records null backup; rewind unlinks it", a
     {
       id: "call-1",
       name: "write_file",
-      input: { filePath: "fresh.ts", content: "hello" },
+      input: { file_path: "fresh.ts", content: "hello" },
     },
     ctx,
   );

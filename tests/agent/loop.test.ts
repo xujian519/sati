@@ -16,7 +16,7 @@ test("loop helpers collect tool calls and project paired tool results", () => {
     role: "assistant" as const,
     content: [
       { type: "text" as const, text: "Reading." },
-      { type: "tool_call" as const, id: "call-1", name: "read_file", input: { filePath: "README.md" } },
+      { type: "tool_call" as const, id: "call-1", name: "read_file", input: { file_path: "README.md" } },
     ],
   };
 

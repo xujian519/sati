@@ -6,7 +6,7 @@ import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
 import { readTextFile } from "./filesystem/readTextFile.js";
 
 export type ReadFileInput = {
-  filePath: string;
+  file_path: string;
   offset?: number;
   limit?: number;
 };
@@ -30,25 +30,27 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
     aliases: ["Read"],
     description:
       "Read a file from the PilotDeck workspace. Supports UTF-8 text files and image files "
-      + "(png, jpg, jpeg, gif, webp). For images the content is returned as a visual image block "
-      + "when the model supports image input, or as a text description otherwise.",
+      + "(png, jpg, jpeg, gif, webp). Use offset and limit to narrow text reads when needed.",
     kind: "filesystem",
     inputSchema: {
       type: "object",
-      required: ["filePath"],
+      required: ["file_path"],
       additionalProperties: false,
       properties: {
-        filePath: {
+        file_path: {
           type: "string",
-          description: "Relative or absolute path of the file to read.",
+          description:
+            "Relative or absolute path of the text file to read. The path must resolve inside the current workspace.",
         },
         offset: {
           type: "integer",
-          description: "Zero-based line offset to start reading from (text files only). Defaults to 0.",
+          description:
+            "Zero-based line offset to start reading from for text files only. Only provide if the file is too large to read at once.",
         },
         limit: {
           type: "integer",
-          description: "Maximum number of lines to return (text files only). Omit to read the entire file.",
+          description:
+            "Maximum number of lines to return for text files only. Omit to read the entire file, or provide it to target a specific portion.",
         },
       },
     },
@@ -56,7 +58,7 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     execute: async (input, context) => {
-      const resolved = resolvePilotDeckWorkspacePath(input.filePath, context, { mustExist: true });
+      const resolved = resolvePilotDeckWorkspacePath(input.file_path, context, { mustExist: true });
       if (!resolved.ok) {
         throw new PilotDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
       }
@@ -70,7 +72,7 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
           return {
             content: [{
               type: "text",
-              text: `[Image file: ${input.filePath}, ${fileStat.size} bytes, ${imageMimeType(ext)}. Current model does not support image input.]`,
+              text: `[Image file: ${input.file_path}, ${fileStat.size} bytes, ${imageMimeType(ext)}. Current model does not support image input.]`,
             }],
             data: { filePath: resolved.relativePath, isImage: true, modelSupportsImage: false },
           };
@@ -81,7 +83,7 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
           return {
             content: [{
               type: "text",
-              text: `[Image file: ${input.filePath}, ${fileStat.size} bytes — exceeds ${MAX_IMAGE_BYTES} byte limit. Cannot display.]`,
+              text: `[Image file: ${input.file_path}, ${fileStat.size} bytes — exceeds ${MAX_IMAGE_BYTES} byte limit. Cannot display.]`,
             }],
             data: { filePath: resolved.relativePath, isImage: true, tooLarge: true },
           };
