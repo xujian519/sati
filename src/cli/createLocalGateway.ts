@@ -513,6 +513,7 @@ class ProjectRuntimeRegistry {
             webSearch: {
               ...(webSearchConfig.apiKey ? { apiKey: webSearchConfig.apiKey } : {}),
               ...(webSearchConfig.endpoint ? { endpoint: webSearchConfig.endpoint } : {}),
+              ...(webSearchConfig.tavilyApiKey ? { tavilyApiKey: webSearchConfig.tavilyApiKey } : {}),
             },
           }
         : {}),

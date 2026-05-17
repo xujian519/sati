@@ -103,6 +103,20 @@ function parseWebSearch(
     }
   }
 
+  if (raw.tavilyApiKey !== undefined) {
+    if (typeof raw.tavilyApiKey !== "string" || raw.tavilyApiKey.trim().length === 0) {
+      diagnostics.push({
+        code: "TOOLS_WEB_SEARCH_TAVILY_KEY_INVALID",
+        severity: "fatal",
+        message: "tools.webSearch.tavilyApiKey must be a non-empty string.",
+        path: "tools.webSearch.tavilyApiKey",
+        recoverable: false,
+      });
+    } else {
+      result.tavilyApiKey = raw.tavilyApiKey.trim();
+    }
+  }
+
   // Soft-deprecate the old `region` field (used by the dropped serp.hk
   // multi-region driver). Emit a warning + ignore so existing yamls don't
   // break — users can clean it up at their leisure.
@@ -119,7 +133,7 @@ function parseWebSearch(
   }
 
   for (const key of Object.keys(raw)) {
-    if (key !== "apiKey" && key !== "endpoint" && key !== "region") {
+    if (key !== "apiKey" && key !== "endpoint" && key !== "region" && key !== "tavilyApiKey") {
       diagnostics.push({
         code: "TOOLS_WEB_SEARCH_UNKNOWN_FIELD",
         severity: "warning",

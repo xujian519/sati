@@ -41,7 +41,7 @@ import type {
  * "configure SERP_API_KEY" hint rather than a silent failure.
  */
 /** How the provider authenticates and ships the query. See file header. */
-export type WebSearchAuthMode = "query" | "bearer";
+export type WebSearchAuthMode = "query" | "bearer" | "tavily";
 
 export type CreateWebSearchToolOptions = {
   apiKey?: string;
@@ -52,9 +52,11 @@ export type CreateWebSearchToolOptions = {
   /**
    * Override the auth dialect. When unset, auto-detected from
    * `endpoint`'s hostname (`*.serp.hk` / `*.serp.global` → `bearer`,
-   * everything else → `query`).
+   * `api.tavily.com` → `tavily`, everything else → `query`).
    */
   authMode?: WebSearchAuthMode;
+  /** Tavily API key — when set, automatically switches to tavily mode. */
+  tavilyApiKey?: string;
   /** Override fetch (testing). */
   fetchImpl?: typeof fetch;
   /** Override timeout (default 30s). */
@@ -88,6 +90,7 @@ export type WebSearchOutput = {
 };
 
 const DEFAULT_ENDPOINT = "https://serpapi.com/search";
+const DEFAULT_TAVILY_ENDPOINT = "https://api.tavily.com/search";
 const DEFAULT_ENGINE = "google";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_ORGANIC_LIMIT = 8;
@@ -96,9 +99,10 @@ const DEFAULT_TOP_STORIES_LIMIT = 5;
 export function createWebSearchTool(
   options: CreateWebSearchToolOptions = {},
 ): PilotDeckToolDefinition<WebSearchInput, WebSearchOutput> {
-  const endpoint = options.endpoint ?? DEFAULT_ENDPOINT;
+  const hasTavily = Boolean(options.tavilyApiKey?.trim());
+  const endpoint = options.endpoint ?? (hasTavily ? DEFAULT_TAVILY_ENDPOINT : DEFAULT_ENDPOINT);
   const engine = options.engine ?? DEFAULT_ENGINE;
-  const authMode = options.authMode ?? detectAuthMode(endpoint);
+  const authMode = options.authMode ?? (hasTavily ? "tavily" as WebSearchAuthMode : detectAuthMode(endpoint));
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const organicLimit = options.organicLimit ?? DEFAULT_ORGANIC_LIMIT;
@@ -149,12 +153,26 @@ export function createWebSearchTool(
       },
     }),
     execute: async (input, context) => {
-      const apiKey = resolveApiKey(options.apiKey, context);
+      const apiKey = resolveApiKey(options.apiKey, context, options.tavilyApiKey);
       if (!apiKey) {
         throw new PilotDeckToolRuntimeError(
           "unsupported_tool",
-          "web_search is not configured. Set SERP_API_KEY env var or set tools.webSearch.apiKey in pilotdeck.yaml.",
+          "web_search is not configured. Set TAVILY_API_KEY or SERP_API_KEY env var, or set tools.webSearch.apiKey / tavilyApiKey in pilotdeck.yaml.",
         );
+      }
+      const isTavily = authMode === "tavily"
+        || apiKey.startsWith("tvly-")
+        || Boolean((context.env ?? process.env).TAVILY_API_KEY?.trim());
+      if (isTavily) {
+        return performTavilySearch({
+          input,
+          context,
+          apiKey,
+          endpoint: endpoint.includes("tavily") ? endpoint : DEFAULT_TAVILY_ENDPOINT,
+          fetchImpl,
+          timeoutMs,
+          organicLimit,
+        });
       }
       return performSearch({
         input,
@@ -182,11 +200,11 @@ export function createWebSearchTool(
 function detectAuthMode(endpoint: string): WebSearchAuthMode {
   try {
     const host = new URL(endpoint).hostname.toLowerCase();
+    if (host === "api.tavily.com" || host.endsWith(".tavily.com")) return "tavily";
     if (host === "serp.hk" || host.endsWith(".serp.hk")) return "bearer";
     if (host === "serp.global" || host.endsWith(".serp.global")) return "bearer";
   } catch {
-    // fall through — invalid URLs default to the SerpAPI dialect; the
-    // request will fail anyway and surface a clear error.
+    // fall through
   }
   return "query";
 }
@@ -194,13 +212,120 @@ function detectAuthMode(endpoint: string): WebSearchAuthMode {
 function resolveApiKey(
   optionApiKey: string | undefined,
   context: PilotDeckToolRuntimeContext,
+  tavilyApiKey?: string,
 ): string | undefined {
+  if (tavilyApiKey?.trim()) return tavilyApiKey.trim();
   const fromOption = optionApiKey?.trim();
   if (fromOption) {
     return fromOption;
   }
+  const fromTavilyEnv = (context.env ?? process.env).TAVILY_API_KEY?.trim();
+  if (fromTavilyEnv && fromTavilyEnv.length > 0) return fromTavilyEnv;
   const fromEnv = (context.env ?? process.env).SERP_API_KEY?.trim();
   return fromEnv && fromEnv.length > 0 ? fromEnv : undefined;
+}
+
+type PerformTavilySearchInput = {
+  input: WebSearchInput;
+  context: PilotDeckToolRuntimeContext;
+  apiKey: string;
+  endpoint: string;
+  fetchImpl: typeof fetch;
+  timeoutMs: number;
+  organicLimit: number;
+};
+
+async function performTavilySearch(
+  args: PerformTavilySearchInput,
+): Promise<PilotDeckToolExecutionOutput<WebSearchOutput>> {
+  const { input, context, apiKey, endpoint, fetchImpl, timeoutMs, organicLimit } = args;
+  const query = input.query.trim();
+  if (!query) {
+    throw new PilotDeckToolRuntimeError(
+      "invalid_tool_input",
+      "web_search requires a non-empty `query`.",
+    );
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const detachAbort = forwardAbort(context.abortSignal, controller);
+
+  const body: Record<string, unknown> = {
+    api_key: apiKey,
+    query,
+    max_results: organicLimit,
+    include_answer: true,
+    search_depth: "basic",
+  };
+
+  let response: Response;
+  try {
+    response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted && context.abortSignal?.aborted !== true) {
+      throw new PilotDeckToolRuntimeError(
+        "tool_timeout",
+        `web_search (tavily) timed out after ${timeoutMs}ms.`,
+      );
+    }
+    throw new PilotDeckToolRuntimeError(
+      "tool_execution_failed",
+      `web_search (tavily) request failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  } finally {
+    clearTimeout(timeout);
+    detachAbort?.();
+  }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => response.statusText);
+    throw new PilotDeckToolRuntimeError(
+      "tool_execution_failed",
+      `Tavily API error (${response.status}): ${truncate(detail, 500)}`,
+    );
+  }
+
+  const raw = (await response.json()) as Record<string, unknown>;
+
+  const organic: WebSearchOrganicResult[] = [];
+  if (Array.isArray(raw.results)) {
+    for (const r of (raw.results as Array<Record<string, unknown>>).slice(0, organicLimit)) {
+      organic.push({
+        title: readString(r.title),
+        link: readString(r.url),
+        snippet: readString(r.content),
+        source: readString(r.url),
+      });
+    }
+  }
+
+  const output: WebSearchOutput = { query, organic };
+  if (typeof raw.answer === "string" && raw.answer.length > 0) {
+    output.answerBox = { answer: raw.answer };
+  }
+
+  return {
+    content: [
+      { type: "text", text: formatTextSummary(output) },
+      { type: "json", value: output },
+    ],
+    data: output,
+    metadata: {
+      provider: "tavily",
+      endpoint,
+      engine: "tavily",
+      organicCount: organic.length,
+    },
+  };
 }
 
 type PerformSearchInput = {

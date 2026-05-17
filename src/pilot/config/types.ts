@@ -109,6 +109,7 @@ export type PilotGatewayConfig = {
 export type PilotWebSearchConfig = {
   apiKey?: string;
   endpoint?: string;
+  tavilyApiKey?: string;
 };
 
 export type PilotToolsConfig = {
