@@ -317,6 +317,7 @@ function parseArgs(argv) {
     skipGrading: false,
     model: null,
     bugsFile: null,
+    configTemplate: null,
   };
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i];
@@ -332,6 +333,7 @@ function parseArgs(argv) {
       case "--skip-grading": args.skipGrading = true; break;
       case "--model":      args.model = next; i++; break;
       case "--bugs-file":  args.bugsFile = next; i++; break;
+      case "--config":     args.configTemplate = next; i++; break;
       default:
         if (!flag.startsWith("-")) args.task = flag;
     }
@@ -492,6 +494,10 @@ async function runTask(task, args) {
   const pilotHome = join(runDir, "transcripts");
   mkdirSync(pilotHome, { recursive: true });
   process.env.PILOT_HOME = pilotHome;
+  if (args.configTemplate && existsSync(args.configTemplate)) {
+    cpSync(args.configTemplate, join(pilotHome, "pilotdeck.yaml"));
+    log(task.taskId, `Config copied from template: ${args.configTemplate}`);
+  }
   ensurePilotConfig(args.model);
 
   // 0.5 Copy WCB skills into $PILOT_HOME/skills/ (mirrors Claude Code ~/.claude/skills/)
@@ -741,7 +747,7 @@ function logTranscriptInventory(taskId, pilotHome) {
     };
     walk(projectsDir);
     log(taskId, `Transcripts: ${mainCount} main, ${subCount} subagent, ${toolResultCount} tool-results`);
-    const statsPath = join(pilotHome, "router/stats.json");
+    const statsPath = join(pilotHome, "router-stats.json");
     if (existsSync(statsPath)) {
       log(taskId, `Router stats: ${statsPath}`);
     }
