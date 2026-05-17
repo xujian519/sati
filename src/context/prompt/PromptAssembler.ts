@@ -119,6 +119,7 @@ export class PromptAssembler {
     const lines: string[] = [];
     lines.push("<user-context>");
     lines.push(`cwd: ${input.cwd}`);
+    lines.push("IMPORTANT: When the user does not specify an explicit file path, all file paths in tool calls MUST be relative to the cwd above — use \"foo.html\", not an absolute path like \"/home/user/foo.html\". If the user explicitly provides a path, respect their choice.");
     lines.push(`model: ${input.provider}/${input.model}`);
     lines.push(`permission_mode: ${input.permissionMode}`);
     lines.push(`platform: ${process.platform}`);

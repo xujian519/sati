@@ -3,10 +3,13 @@ import type { PendingPermissionRequest } from '../../types/types';
 import { buildClaudeToolPermissionEntry, formatToolInputForDisplay } from '../../utils/chatPermissions';
 import { getPilotDeckSettings } from '../../utils/chatStorage';
 import { getPermissionPanel, registerPermissionPanel } from '../../tools/configs/permissionPanelRegistry';
-import { AskUserQuestionPanel } from '../../tools/components/InteractiveRenderers';
+import { AskUserQuestionPanel, ExitPlanModePanel } from '../../tools/components/InteractiveRenderers';
 
 registerPermissionPanel('AskUserQuestion', AskUserQuestionPanel);
 registerPermissionPanel('ask_user_question', AskUserQuestionPanel);
+registerPermissionPanel('ExitPlanMode', ExitPlanModePanel);
+registerPermissionPanel('exit_plan_mode', ExitPlanModePanel);
+registerPermissionPanel('ExitPlanModeV2', ExitPlanModePanel);
 
 interface PermissionRequestsBannerProps {
   pendingPermissionRequests: PendingPermissionRequest[];
@@ -15,12 +18,14 @@ interface PermissionRequestsBannerProps {
     decision: { allow?: boolean; message?: string; rememberEntry?: string | null; updatedInput?: unknown },
   ) => void;
   handleGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
+  onPlanExecutionApproved?: () => void;
 }
 
 export default function PermissionRequestsBanner({
   pendingPermissionRequests,
   handlePermissionDecision,
   handleGrantToolPermission,
+  onPlanExecutionApproved,
 }: PermissionRequestsBannerProps) {
   if (!pendingPermissionRequests.length) {
     return null;
@@ -53,6 +58,7 @@ export default function PermissionRequestsBanner({
             key={request.requestId}
             request={request}
             onDecision={handlePermissionDecision}
+            onPlanExecutionApproved={onPlanExecutionApproved}
           />
         );
       })}
