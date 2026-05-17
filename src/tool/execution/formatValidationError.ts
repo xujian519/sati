@@ -38,5 +38,16 @@ export function formatValidationError(
   }
 
   const label = errorParts.length > 1 ? "issues" : "issue";
-  return `${toolName} failed due to the following ${label}:\n${errorParts.join("\n")}`;
+  let message = `${toolName} failed due to the following ${label}:\n${errorParts.join("\n")}`;
+
+  // Hint for write_file with missing content: suggest using bash + python3 instead.
+  if (
+    toolName === "write_file" &&
+    issues.some((i) => i.code === "required" && i.path.includes("content"))
+  ) {
+    message +=
+      "\n\nHint: If the file content is large, consider using `bash` with `python3 -c` or `cat <<'EOF'` to write it instead.";
+  }
+
+  return message;
 }

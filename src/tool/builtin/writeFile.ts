@@ -31,13 +31,13 @@ export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput> {
         },
         allowOverwrite: {
           type: "boolean",
-          description: "Set to true to allow overwriting an existing file. Defaults to false.",
+          description: "Set to false to prevent overwriting an existing file. Defaults to true.",
         },
       },
     },
     isReadOnly: () => false,
     isConcurrencySafe: () => false,
-    isDestructive: (input) => input.allowOverwrite === true,
+    isDestructive: (input) => input.allowOverwrite !== false,
     execute: async (input, context) => {
       const resolved = resolvePilotDeckWorkspacePath(input.filePath, context, { forWrite: true });
       if (!resolved.ok) {
@@ -52,7 +52,7 @@ export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput> {
       }
 
       const action = await writeTextFile(resolved.absolutePath, input.content, {
-        allowOverwrite: input.allowOverwrite,
+        allowOverwrite: input.allowOverwrite ?? true,
       });
 
       return {

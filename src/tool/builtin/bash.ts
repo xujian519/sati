@@ -4,7 +4,7 @@ import { NodeShellCommandRunner, type PilotDeckCommandRunner } from "./bash/comm
 import { classifyBashPermission, isReadOnlyShellCommand } from "./bash/permissions.js";
 
 export type BashInput = {
-  command: string;
+  command?: string;
   timeoutMs?: number;
   description?: string;
 };
@@ -27,7 +27,7 @@ export function createBashTool(options?: CreateBashToolOptions): PilotDeckToolDe
     kind: "shell",
     inputSchema: {
       type: "object",
-      required: ["command"],
+      required: [],
       additionalProperties: false,
       properties: {
         command: {
@@ -45,11 +45,18 @@ export function createBashTool(options?: CreateBashToolOptions): PilotDeckToolDe
       },
     },
     maxResultBytes: 200_000,
-    isReadOnly: (input) => isReadOnlyShellCommand(input.command),
-    isConcurrencySafe: (input) => isReadOnlyShellCommand(input.command),
+    isReadOnly: (input) => !input.command || isReadOnlyShellCommand(input.command),
+    isConcurrencySafe: (input) => !input.command || isReadOnlyShellCommand(input.command),
     isOpenWorld: () => true,
-    checkPermissions: async (input) => classifyBashPermission(input.command),
+    checkPermissions: async (input) => input.command ? classifyBashPermission(input.command) : ({ type: "allow" as const, reason: { type: "runtime" as const, message: "Empty command is safe" } }),
     execute: async (input, context) => {
+      const command = (input.command ?? "").trim();
+      if (!command) {
+        return {
+          content: [{ type: "text", text: "No command provided. The shell executed nothing.\nIf you intended to run a command, provide a non-empty `command` parameter.\nIf you have nothing to run, respond with text instead of calling bash." }],
+          data: { command: "", exitCode: 0, stdout: "", stderr: "", timedOut: false, durationMs: 0 },
+        };
+      }
       const timeoutMs = Math.min(Math.max(1, input.timeoutMs ?? defaultTimeoutMs), maxTimeoutMs);
       const progress = context.progress;
       const toolCallId = ""; // ToolRuntime fills this via metadata; we pull from context if available.
@@ -71,7 +78,7 @@ export function createBashTool(options?: CreateBashToolOptions): PilotDeckToolDe
             }
           }
         : undefined;
-      const result = await runner.run(input.command, {
+      const result = await runner.run(command, {
         cwd: context.cwd,
         env: context.env,
         timeoutMs,
@@ -85,16 +92,9 @@ export function createBashTool(options?: CreateBashToolOptions): PilotDeckToolDe
       }
 
       if (result.exitCode !== 0) {
-        // Surface stdout/stderr in the message body so the model (and the UI
-        // tool-result preview) can reason about WHY the command failed.
-        // Without this, every non-zero exit collapsed to the literal string
-        // "Shell command failed", which made `ls /missing`, `grep no-match`,
-        // `test`, etc. look like infrastructure crashes and also tricked the
-        // UI's generic "Add to Allowed Tools" affordance into firing for
-        // any non-permission failure.
-        const summary = formatShellFailure(input.command, result);
+        const summary = formatShellFailure(command, result);
         throw new PilotDeckToolRuntimeError("tool_execution_failed", summary, {
-          command: input.command,
+          command,
           exitCode: result.exitCode,
           stdout: result.stdout,
           stderr: result.stderr,
@@ -111,7 +111,7 @@ export function createBashTool(options?: CreateBashToolOptions): PilotDeckToolDe
           },
         ],
         data: {
-          command: input.command,
+          command,
           exitCode: result.exitCode,
           stdout: result.stdout,
           stderr: result.stderr,
