@@ -5,7 +5,7 @@ import { classifyBashPermission, isReadOnlyShellCommand } from "./bash/permissio
 
 export type BashInput = {
   command?: string;
-  timeoutMs?: number;
+  timeout?: number;
   description?: string;
 };
 
@@ -15,6 +15,17 @@ export type CreateBashToolOptions = {
   maxTimeoutMs?: number;
 };
 
+const BASH_TOOL_DESCRIPTION = `Run a shell command in the PilotDeck workspace.
+
+Usage:
+- The \`command\` parameter is passed to \`/bin/sh -c\`.
+- The shell runs in the current workspace directory and inherits the tool runtime environment.
+- Use \`timeout\` to override the command timeout in milliseconds. When omitted, the default is 30000ms. Values above 600000ms are clamped to the maximum.
+- Use \`description\` to provide a short, clear label for logs and audits. Prefer 3-10 words that say what the command does.
+- Read-only shell commands (for example \`pwd\`, \`ls\`, \`git status\`, \`git diff\`, \`git log\`) are treated as read-only. Commands with side effects require permission, and known-dangerous commands are denied outright.
+- The tool returns stdout, stderr, exit code, and duration. Non-zero exits raise a tool error, and timeouts raise \`tool_timeout\`.
+- If you have no command to run, respond with text instead of calling bash.`;
+
 export function createBashTool(options?: CreateBashToolOptions): PilotDeckToolDefinition<BashInput> {
   const runner = options?.runner ?? new NodeShellCommandRunner();
   const defaultTimeoutMs = options?.defaultTimeoutMs ?? 30_000;
@@ -23,7 +34,7 @@ export function createBashTool(options?: CreateBashToolOptions): PilotDeckToolDe
   return {
     name: "bash",
     aliases: ["Bash"],
-    description: "Run a shell command in the PilotDeck workspace. Returns stdout/stderr and exit code.",
+    description: BASH_TOOL_DESCRIPTION,
     kind: "shell",
     inputSchema: {
       type: "object",
@@ -34,13 +45,13 @@ export function createBashTool(options?: CreateBashToolOptions): PilotDeckToolDe
           type: "string",
           description: "The shell command to execute (passed to /bin/sh -c).",
         },
-        timeoutMs: {
+        timeout: {
           type: "integer",
-          description: "Timeout in milliseconds. Defaults to 30000. Max 600000.",
+          description: "Optional timeout in milliseconds. Defaults to 30000. Max 600000.",
         },
         description: {
           type: "string",
-          description: "Short human-readable label for audit logs (3-10 words).",
+          description: "Clear, concise description of what this command does in active voice. Prefer 3-10 words.",
         },
       },
     },
@@ -57,7 +68,7 @@ export function createBashTool(options?: CreateBashToolOptions): PilotDeckToolDe
           data: { command: "", exitCode: 0, stdout: "", stderr: "", timedOut: false, durationMs: 0 },
         };
       }
-      const timeoutMs = Math.min(Math.max(1, input.timeoutMs ?? defaultTimeoutMs), maxTimeoutMs);
+      const timeoutMs = Math.min(Math.max(1, input.timeout ?? defaultTimeoutMs), maxTimeoutMs);
       const progress = context.progress;
       const toolCallId = ""; // ToolRuntime fills this via metadata; we pull from context if available.
       const emitProgress = progress
