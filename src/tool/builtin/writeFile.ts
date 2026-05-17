@@ -14,7 +14,7 @@ export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput> {
     name: "write_file",
     aliases: ["Write"],
     description:
-      "Create or overwrite a UTF-8 text file inside the workspace. content is the full file body to write, and overwriting an existing file still requires explicit confirmation via allow_overwrite.",
+      "Write a UTF-8 text file inside the workspace.\n\nUsage:\n- content must be the full file body to write.\n- Use this tool when creating a new file or replacing the entire contents of a file.\n- Prefer edit_file for targeted modifications to an existing file.\n- If the target file already exists, set allow_overwrite to true to overwrite it.\n- If the path is outside the workspace or overwrite is not allowed, the tool returns a controlled error.",
     kind: "filesystem",
     inputSchema: {
       type: "object",

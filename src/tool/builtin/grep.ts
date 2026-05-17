@@ -25,7 +25,7 @@ export function createGrepTool(): PilotDeckToolDefinition<GrepInput> {
     name: "grep",
     aliases: ["Grep"],
     description:
-      "Search workspace text files with a regular expression. Returns matching lines, file paths, or per-file match counts.",
+      "Search workspace text files with a regular expression.\n\nUsage:\n- Supports regular expression patterns for matching file contents.\n- Filter searched files with the glob parameter.\n- Output modes: \"content\" shows matching lines, \"files_with_matches\" lists file paths, and \"count\" shows per-file match counts.\n- Use \"-i\" for case-insensitive matching.\n- Use \"-A\", \"-B\", or \"-C\" to include surrounding context lines in content mode.\n- Use head_limit and offset to page through larger result sets.",
     kind: "filesystem",
     inputSchema: {
       type: "object",

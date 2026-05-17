@@ -16,7 +16,7 @@ export function createGlobTool(): PilotDeckToolDefinition<GlobInput> {
     name: "glob",
     aliases: ["Glob"],
     description:
-      "Find workspace files matching a glob pattern. Use this to locate candidate files by name or wildcard before reading or editing them.",
+      "Find workspace files matching a glob pattern.\n\nUsage:\n- Supports glob patterns like \"**/*.js\" or \"src/**/*.ts\".\n- Use this tool when you need to find files by name or wildcard pattern.\n- Provide the optional path parameter to restrict the search to a subdirectory.\n- Use this tool to narrow down candidate files before reading or editing them.",
     kind: "filesystem",
     inputSchema: {
       type: "object",

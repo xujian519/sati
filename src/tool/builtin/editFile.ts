@@ -16,7 +16,7 @@ export function createEditFileTool(): PilotDeckToolDefinition<EditFileInput> {
     name: "edit_file",
     aliases: ["Edit"],
     description:
-      "Edit a workspace text file by replacing an exact string match. Use a unique old_string, or set replace_all to update every occurrence.",
+      "Edit a workspace text file by replacing an exact string match.\n\nUsage:\n- Use this tool for targeted changes to an existing file.\n- old_string must appear in the target file.\n- If old_string is not unique, either provide a more specific old_string or set replace_all to update every occurrence.\n- Use replace_all when renaming or replacing repeated text across the same file.\n- If the file is outside the workspace or does not exist, the tool returns a controlled error.",
     kind: "filesystem",
     inputSchema: {
       type: "object",

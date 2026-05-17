@@ -29,8 +29,11 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
     name: "read_file",
     aliases: ["Read"],
     description:
-      "Read a file from the PilotDeck workspace. Supports UTF-8 text files and image files "
-      + "(png, jpg, jpeg, gif, webp). Use offset and limit to narrow text reads when needed.",
+      "Read a file from the current workspace.\n\nUsage:\n- Supports UTF-8 text files and image files "
+      + "(png, jpg, jpeg, gif, webp).\n- Provide file_path as a workspace-relative path or an absolute path "
+      + "that resolves inside the workspace.\n- By default, the tool reads the whole text file; use offset "
+      + "and limit when you only need a specific portion.\n- This tool reads files, not directories.\n- If "
+      + "the target does not exist, is outside the workspace, or is not readable, the tool returns a controlled error.",
     kind: "filesystem",
     inputSchema: {
       type: "object",
