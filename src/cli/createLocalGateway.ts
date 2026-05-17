@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync as mkdirSyncFs, renameSync } from "node:fs";
 import { resolve, join as joinPath } from "node:path";
 import { tmpdir } from "node:os";
+import type { EdgeClawMemoryService } from "edgeclaw-memory-core";
 import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
 import {
   createAgentEventBuffer,
@@ -240,6 +241,9 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     async refreshConfigBeforeTurn() {
       await configStore.reload("turn-start");
     },
+    afterTurnCompleted: ({ projectKey }) => {
+      registry.scheduleMemoryMaintenance(projectKey ?? projectRoot);
+    },
   });
   // Hand the gateway back to the registry so per-session creation can
   // build a `GatewayElicitationChannel` against this gateway's bus +
@@ -294,6 +298,11 @@ type ProjectRuntime = {
   backgroundTasks: BackgroundTaskRuntime;
   /** Memory provider, undefined when memory is disabled in PilotConfig. */
   memory?: EdgeClawMemoryProvider;
+  /** Backing memory service for maintenance / introspection. */
+  memoryService?: EdgeClawMemoryService;
+  /** Coalesced project-level memory maintenance loop. */
+  memoryMaintenanceInFlight?: Promise<void>;
+  memoryMaintenanceRequested?: boolean;
   /**
    * Lazily-started MCP runtime (C1). Built on first session creation by
    * `ensureMcpReady()` because plugin refresh + connect is async.
@@ -429,6 +438,7 @@ class ProjectRuntimeRegistry {
       if (runtime?.mcpRuntime) {
         runtime.mcpRuntime.stop().catch(() => {});
       }
+      runtime?.memoryService?.close();
       runtime?.router?.shutdown().catch(() => {});
       this.runtimes.delete(projectRoot);
     } else {
@@ -436,6 +446,7 @@ class ProjectRuntimeRegistry {
         if (runtime.mcpRuntime) {
           runtime.mcpRuntime.stop().catch(() => {});
         }
+        runtime.memoryService?.close();
         runtime.router?.shutdown().catch(() => {});
       }
       this.runtimes.clear();
@@ -538,6 +549,7 @@ class ProjectRuntimeRegistry {
       tools,
       backgroundTasks,
       memory: memory?.provider,
+      memoryService: memory?.service,
       projectStorage: {
         projectRoot,
         pilotHome: this.options.pilotHome,
@@ -545,6 +557,33 @@ class ProjectRuntimeRegistry {
     };
     this.runtimes.set(projectRoot, runtime);
     return runtime;
+  }
+
+  scheduleMemoryMaintenance(projectKey?: string): void {
+    const runtime = this.resolve(projectKey);
+    const service = runtime.memoryService;
+    if (!service) return;
+    runtime.memoryMaintenanceRequested = true;
+    if (runtime.memoryMaintenanceInFlight) return;
+    runtime.memoryMaintenanceInFlight = (async () => {
+      while (runtime.memoryMaintenanceRequested) {
+        runtime.memoryMaintenanceRequested = false;
+        try {
+          await service.runDueScheduledMaintenance("scheduled");
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[pilotdeck] memory maintenance failed for project ${runtime.projectRoot}:`,
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
+    })().finally(() => {
+      runtime.memoryMaintenanceInFlight = undefined;
+      if (runtime.memoryMaintenanceRequested) {
+        this.scheduleMemoryMaintenance(projectKey);
+      }
+    });
   }
 
   /**

@@ -119,6 +119,15 @@ export type InProcessGatewayOptions = {
   setSessionCwd?: (sessionKey: string, cwd: string) => void;
   /** Delegate for Always-On apply — wired to AlwaysOnManager.applyPlan. */
   alwaysOnApply?: (input: AlwaysOnApplyInput) => Promise<AlwaysOnApplyResult>;
+  /**
+   * Optional non-blocking post-turn callback. Used by createLocalGateway to
+   * coalesce project-level memory maintenance after a turn has fully ended.
+   */
+  afterTurnCompleted?: (input: {
+    sessionKey: string;
+    projectKey?: string;
+    runId: string;
+  }) => void;
 };
 
 const ACTIVE_TURN_EVENT_LIMIT = 500;
@@ -327,6 +336,11 @@ export class InProcessGateway implements Gateway {
         this.turnCompletions.delete(input.sessionKey);
       }
       resolveTurnDone();
+      this.options.afterTurnCompleted?.({
+        sessionKey: input.sessionKey,
+        projectKey: input.projectKey,
+        runId,
+      });
     }
   }
 
