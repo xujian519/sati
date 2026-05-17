@@ -13,6 +13,8 @@ import type {
   ChannelAttachment,
   GatewayCronController,
   Gateway,
+  GatewayActiveTurnSnapshot,
+  GatewayActiveTurnSnapshotInput,
   GatewayElicitationResponseInput,
   GatewayEvent,
   GatewayPermissionDecisionInput,
@@ -119,6 +121,17 @@ export type InProcessGatewayOptions = {
   alwaysOnApply?: (input: AlwaysOnApplyInput) => Promise<AlwaysOnApplyResult>;
 };
 
+const ACTIVE_TURN_EVENT_LIMIT = 500;
+const ACTIVE_TURN_BYTE_LIMIT = 256 * 1024;
+
+type ActiveTurnReplay = {
+  sessionKey: string;
+  runId: string;
+  events: GatewayEvent[];
+  bytes: number;
+  truncated: boolean;
+};
+
 export class InProcessGateway implements Gateway {
   private readonly now: () => Date;
   private readonly uuid: () => string;
@@ -129,6 +142,7 @@ export class InProcessGateway implements Gateway {
    * `submitTurn` stream from outside the agent's event iterator.
    */
   private readonly emitSinks = new Map<string, (event: GatewayEvent) => void>();
+  private readonly activeTurnReplays = new Map<string, ActiveTurnReplay>();
   /** B1 — pending askUser() promises keyed by sessionKey + requestId. */
   private readonly elicitationBus = new GatewayElicitationBus();
   /**
@@ -186,6 +200,7 @@ export class InProcessGateway implements Gateway {
   emitForSession(sessionKey: string, event: GatewayEvent): boolean {
     const sink = this.emitSinks.get(sessionKey);
     if (!sink) return false;
+    this.recordActiveTurnEvent(sessionKey, event);
     sink(event);
     return true;
   }
@@ -221,6 +236,13 @@ export class InProcessGateway implements Gateway {
     this.turnCompletions.set(input.sessionKey, turnDone);
 
     const queue = new AsyncQueue<GatewayEvent>();
+    this.activeTurnReplays.set(input.sessionKey, {
+      sessionKey: input.sessionKey,
+      runId,
+      events: [],
+      bytes: 0,
+      truncated: false,
+    });
     this.emitSinks.set(input.sessionKey, (event) => queue.enqueue(event));
 
     if (input.workspaceCwd && this.options.setSessionCwd) {
@@ -264,16 +286,19 @@ export class InProcessGateway implements Gateway {
           },
         )) {
           for (const gatewayEvent of mapAgentEvent(event, runId)) {
+            this.recordActiveTurnEvent(input.sessionKey, gatewayEvent);
             queue.enqueue(gatewayEvent);
           }
         }
       } catch (error) {
-        queue.enqueue({
+        const gatewayEvent: GatewayEvent = {
           type: "error",
           code: "gateway_submit_failed",
           message: error instanceof Error ? error.message : String(error),
           recoverable: false,
-        });
+        };
+        this.recordActiveTurnEvent(input.sessionKey, gatewayEvent);
+        queue.enqueue(gatewayEvent);
       } finally {
         queue.close();
       }
@@ -288,6 +313,7 @@ export class InProcessGateway implements Gateway {
       // entries before returning so a subsequent turn doesn't see stale
       // state.
       this.emitSinks.delete(input.sessionKey);
+      this.activeTurnReplays.delete(input.sessionKey);
       this.elicitationBus.rejectSession(input.sessionKey, "turn_ended");
       this.permissionBus.rejectSession(input.sessionKey, "turn_ended");
       this.router.endTurn(input.sessionKey, runId);
@@ -340,6 +366,24 @@ export class InProcessGateway implements Gateway {
       mode: "in_process",
       sessionCount: this.router.sessionCount(),
       ...this.options.serverInfo,
+    };
+  }
+
+  async getActiveTurnSnapshot(input: GatewayActiveTurnSnapshotInput): Promise<GatewayActiveTurnSnapshot> {
+    const replay = this.activeTurnReplays.get(input.sessionKey);
+    if (!replay) {
+      return {
+        active: false,
+        sessionKey: input.sessionKey,
+        events: [],
+      };
+    }
+    return {
+      active: true,
+      sessionKey: replay.sessionKey,
+      runId: replay.runId,
+      events: replay.events.map((event) => cloneGatewayEvent(event)),
+      ...(replay.truncated ? { truncated: true } : {}),
     };
   }
 
@@ -501,6 +545,28 @@ export class InProcessGateway implements Gateway {
     }
     return this.options.cron;
   }
+
+  private recordActiveTurnEvent(sessionKey: string, event: GatewayEvent): void {
+    const replay = this.activeTurnReplays.get(sessionKey);
+    if (!replay) return;
+    const copy = cloneGatewayEvent(event);
+    const bytes = Buffer.byteLength(JSON.stringify(copy), "utf8");
+    replay.events.push(copy);
+    replay.bytes += bytes;
+    while (
+      replay.events.length > ACTIVE_TURN_EVENT_LIMIT ||
+      replay.bytes > ACTIVE_TURN_BYTE_LIMIT
+    ) {
+      const dropped = replay.events.shift();
+      if (!dropped) break;
+      replay.bytes -= Buffer.byteLength(JSON.stringify(dropped), "utf8");
+      replay.truncated = true;
+    }
+  }
+}
+
+function cloneGatewayEvent(event: GatewayEvent): GatewayEvent {
+  return JSON.parse(JSON.stringify(event)) as GatewayEvent;
 }
 
 export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] {

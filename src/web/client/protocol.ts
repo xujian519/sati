@@ -26,15 +26,15 @@ export type WebGatewayChannelKey =
   | (string & {});
 
 export type WebElicitationQuestion = {
-  id: string;
-  prompt: string;
-  options: { id: string; label: string }[];
-  allowMultiple?: boolean;
+  question: string;
+  header: string;
+  options: { label: string; description: string; preview?: string }[];
+  multiSelect?: boolean;
 };
 
 export type WebElicitationAnswer =
-  | { kind: "selected"; questionId: string; optionIds: string[] }
-  | { kind: "cancelled"; reason?: string };
+  | { type: "answered"; answers: Record<string, string | string[]>; annotations?: Record<string, { preview?: string; notes?: string }> }
+  | { type: "cancelled"; reason?: string };
 
 export type WebGatewayEvent =
   | { type: "turn_started"; runId: string }
@@ -86,6 +86,7 @@ export type WebGatewayMethod =
   | "new_session"
   | "close_session"
   | "describe_server"
+  | "active_turn_snapshot"
   | "cron_create"
   | "cron_list"
   | "cron_delete"
@@ -221,6 +222,18 @@ export type WebReadSessionMessagesResult = {
   nextCursor?: string;
   total?: number;
   session: WebSessionInfo;
+};
+
+export type WebActiveTurnSnapshotInput = {
+  sessionKey: string;
+};
+
+export type WebActiveTurnSnapshot = {
+  active: boolean;
+  sessionKey: string;
+  runId?: string;
+  events: WebGatewayEvent[];
+  truncated?: boolean;
 };
 
 export type WebProjectSummary = {

@@ -126,6 +126,22 @@ export type GatewayEvent =
   | { type: "agent_status"; event: string; detail?: Record<string, unknown> }
   | { type: "error"; message: string; code?: string; recoverable: boolean };
 
+export type GatewayActiveTurnSnapshotInput = {
+  sessionKey: string;
+};
+
+export type GatewayActiveTurnSnapshot = {
+  active: boolean;
+  sessionKey: string;
+  runId?: string;
+  /**
+   * Volatile replay events for the currently active turn. Durable transcript
+   * history remains the source of truth after the turn completes.
+   */
+  events: GatewayEvent[];
+  truncated?: boolean;
+};
+
 export type GatewayElicitationResponseInput = {
   sessionKey: string;
   requestId: string;
@@ -229,6 +245,7 @@ export interface Gateway {
   newSession(input: NewSessionInput): Promise<{ sessionKey: string }>;
   closeSession(input: { sessionKey: string; reason?: string }): Promise<void>;
   describeServer(): Promise<GatewayServerInfo>;
+  getActiveTurnSnapshot?(input: GatewayActiveTurnSnapshotInput): Promise<GatewayActiveTurnSnapshot>;
   cronCreate(input: CronCreateInput): Promise<CronCreateResult>;
   cronList(input: CronListInput): Promise<CronListResult>;
   cronDelete(input: CronDeleteInput): Promise<CronDeleteResult>;

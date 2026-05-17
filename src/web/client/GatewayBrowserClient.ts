@@ -170,6 +170,13 @@ export class GatewayBrowserClient {
     );
   }
 
+  getActiveTurnSnapshot(input: import("./protocol.js").WebActiveTurnSnapshotInput) {
+    return this.request<import("./protocol.js").WebActiveTurnSnapshot>(
+      "active_turn_snapshot",
+      input,
+    );
+  }
+
   permissionDecide(input: import("./protocol.js").WebPermissionDecision) {
     return this.request<{ delivered: boolean }>("permission_decide", input);
   }

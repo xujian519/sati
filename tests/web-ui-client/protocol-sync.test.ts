@@ -28,6 +28,7 @@ test("Every Gateway WS method is a WebGatewayMethod superset", () => {
     "new_session",
     "close_session",
     "describe_server",
+    "active_turn_snapshot",
     "cron_create",
     "cron_list",
     "cron_delete",

@@ -19,6 +19,8 @@ export {
 export type {
   ChannelAttachment,
   Gateway,
+  GatewayActiveTurnSnapshot,
+  GatewayActiveTurnSnapshotInput,
   GatewayChannelKey,
   GatewayCronController,
   GatewayElicitationResponseInput,

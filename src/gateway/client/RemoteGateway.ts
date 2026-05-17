@@ -84,6 +84,10 @@ export class RemoteGateway implements Gateway {
     return (await this.client.request("describe_server", {})) as GatewayServerInfo;
   }
 
+  async getActiveTurnSnapshot(input: import("../protocol/types.js").GatewayActiveTurnSnapshotInput): Promise<import("../protocol/types.js").GatewayActiveTurnSnapshot> {
+    return (await this.client.request("active_turn_snapshot", input)) as import("../protocol/types.js").GatewayActiveTurnSnapshot;
+  }
+
   async cronCreate(input: CronCreateInput): Promise<CronCreateResult> {
     return (await this.client.request("cron_create", input)) as CronCreateResult;
   }

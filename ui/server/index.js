@@ -60,6 +60,7 @@ import {
     decidePermissionViaGateway,
     grantSessionPermissionViaGateway,
     isSessionActiveViaGateway,
+    getActiveTurnSnapshotFramesViaGateway,
     getActiveSessionIdsViaGateway,
     elicitationRespondViaGateway,
     getRouterDashboardData,
@@ -1966,11 +1967,16 @@ function handleChatConnection(ws, request) {
                 }
             } else if (data.type === 'check-session-status') {
                 const sessionId = data.sessionId;
+                const isProcessing = isSessionActiveViaGateway(sessionId);
+                const activeTurnMessages = isProcessing
+                    ? await getActiveTurnSnapshotFramesViaGateway(sessionId, data.provider || 'pilotdeck')
+                    : [];
                 writer.send({
                     type: 'session-status',
                     sessionId,
                     provider: data.provider || 'pilotdeck',
-                    isProcessing: isSessionActiveViaGateway(sessionId),
+                    isProcessing,
+                    activeTurnMessages,
                 });
             } else if (data.type === 'get-pending-permissions') {
                 // Pending-permission introspection is gateway-internal. The

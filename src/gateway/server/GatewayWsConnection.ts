@@ -164,6 +164,15 @@ export class GatewayWsConnection {
         return this.options.gateway.closeSession(frame.params as never).then(() => ({ ok: true }));
       case "describe_server":
         return this.options.gateway.describeServer();
+      case "active_turn_snapshot":
+        if (this.options.gateway.getActiveTurnSnapshot) {
+          return this.options.gateway.getActiveTurnSnapshot(frame.params as never);
+        }
+        return Promise.resolve({
+          active: false,
+          sessionKey: (frame.params as { sessionKey?: string } | undefined)?.sessionKey ?? "",
+          events: [],
+        });
       case "cron_create":
         return this.options.gateway.cronCreate(frame.params as never);
       case "cron_list":

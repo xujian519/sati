@@ -7,6 +7,8 @@ export {
 } from "./GatewayBrowserClient.js";
 export {
   PILOTDECK_GATEWAY_PROTOCOL_VERSION_WEB,
+  type WebActiveTurnSnapshot,
+  type WebActiveTurnSnapshotInput,
   type WebChannelAttachment,
   type WebElicitationAnswer,
   type WebElicitationQuestion,

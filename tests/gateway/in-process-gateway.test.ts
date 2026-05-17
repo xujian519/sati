@@ -162,6 +162,82 @@ test("InProcessGateway.abortTurn waits for the in-flight turn to fully unwind", 
   await firstDrain;
 });
 
+test("InProcessGateway exposes replayable active turn snapshot while a turn is streaming", async () => {
+  let release!: () => void;
+  const blocker = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const router = new SessionRouter({
+    createSession: async () =>
+      ({
+        abort: () => release(),
+        snapshot: () => ({
+          sessionId: "session-1",
+          messages: [],
+          usage: {},
+          permissionDenials: [],
+          status: "idle",
+          abortController: new AbortController(),
+        }),
+        replay: async function* () {},
+        submit: async function* () {
+          yield { type: "turn_started", sessionId: "session-1", turnId: "run-1" } satisfies AgentEvent;
+          yield {
+            type: "model_event",
+            sessionId: "session-1",
+            turnId: "run-1",
+            event: { type: "text_delta", text: "partial" },
+          } satisfies AgentEvent;
+          await blocker;
+          yield {
+            type: "turn_completed",
+            sessionId: "session-1",
+            turnId: "run-1",
+            result: {
+              type: "success",
+              sessionId: "session-1",
+              turnId: "run-1",
+              stopReason: "completed",
+              usage: { totalTokens: 1 },
+              permissionDenials: [],
+              turns: 1,
+              startedAt: "2026-01-01T00:00:00.000Z",
+              completedAt: "2026-01-01T00:00:01.000Z",
+            },
+          } satisfies AgentEvent;
+        },
+      }) as unknown as AgentSession,
+  });
+  const gateway = new InProcessGateway(router, { uuid: () => "run-1" });
+  const iterator = gateway.submitTurn({
+    sessionKey: "session-1",
+    channelKey: "web",
+    message: "one",
+    runId: "run-1",
+  })[Symbol.asyncIterator]();
+
+  assert.deepEqual(await iterator.next(), { done: false, value: { type: "turn_started", runId: "run-1" } });
+  assert.deepEqual(await iterator.next(), { done: false, value: { type: "assistant_text_delta", text: "partial" } });
+
+  const active = await gateway.getActiveTurnSnapshot({ sessionKey: "session-1" });
+  assert.equal(active.active, true);
+  assert.equal(active.runId, "run-1");
+  assert.deepEqual(active.events, [
+    { type: "turn_started", runId: "run-1" },
+    { type: "assistant_text_delta", text: "partial" },
+  ]);
+
+  release();
+  assert.deepEqual(await iterator.next(), {
+    done: false,
+    value: { type: "turn_completed", usage: { totalTokens: 1 }, finishReason: "completed" },
+  });
+  assert.deepEqual(await iterator.next(), { done: true, value: undefined });
+
+  const inactive = await gateway.getActiveTurnSnapshot({ sessionKey: "session-1" });
+  assert.deepEqual(inactive, { active: false, sessionKey: "session-1", events: [] });
+});
+
 test("mapAgentEvent does not surface transient model errors before turn_failed", () => {
   const frames = mapAgentEvent({
     type: "model_event",

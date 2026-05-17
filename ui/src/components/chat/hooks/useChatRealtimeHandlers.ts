@@ -32,6 +32,7 @@ type LatestChatMessage = {
   event?: string;
   status?: any;
   isNewSession?: boolean;
+  activeTurnMessages?: LatestChatMessage[];
   resultText?: string;
   isError?: boolean;
   success?: boolean;
@@ -47,6 +48,28 @@ type LatestChatMessage = {
   [key: string]: any;
 };
 
+type StreamAccumulator = {
+  content: string;
+  timer: number | null;
+};
+
+function getExplicitSessionId(msg: LatestChatMessage): string | null {
+  const value = msg.sessionId ?? msg.session_id ?? msg.actualSessionId ?? msg.newSessionId;
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function getOrCreateAccumulator(
+  map: Map<string, StreamAccumulator>,
+  sessionId: string,
+): StreamAccumulator {
+  let state = map.get(sessionId);
+  if (!state) {
+    state = { content: '', timer: null };
+    map.set(sessionId, state);
+  }
+  return state;
+}
+
 interface UseChatRealtimeHandlersArgs {
   provider: SessionProvider;
   selectedProject: Project | null;
@@ -60,9 +83,6 @@ interface UseChatRealtimeHandlersArgs {
   setTokenBudget: (budget: Record<string, unknown> | null) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
   pendingViewSessionRef: MutableRefObject<PendingViewSession | null>;
-  streamBufferRef: MutableRefObject<string>;
-  streamTimerRef: MutableRefObject<number | null>;
-  accumulatedStreamRef: MutableRefObject<string>;
   onSessionInactive?: (sessionId?: string | null) => void;
   onSessionProcessing?: (sessionId?: string | null) => void;
   onSessionNotProcessing?: (sessionId?: string | null) => void;
@@ -78,7 +98,6 @@ interface UseChatRealtimeHandlersArgs {
 
 export function useChatRealtimeHandlers({
   provider,
-  selectedProject,
   selectedSession,
   currentSessionId,
   setCurrentSessionId,
@@ -89,9 +108,6 @@ export function useChatRealtimeHandlers({
   setTokenBudget,
   setPendingPermissionRequests,
   pendingViewSessionRef,
-  streamBufferRef,
-  streamTimerRef,
-  accumulatedStreamRef,
   onSessionInactive,
   onSessionProcessing,
   onSessionNotProcessing,
@@ -102,8 +118,8 @@ export function useChatRealtimeHandlers({
 }: UseChatRealtimeHandlersArgs) {
   const { subscribe } = useWebSocket();
 
-  const accumulatedThinkingRef = useRef('');
-  const thinkingTimerRef = useRef<number | null>(null);
+  const streamBySessionRef = useRef(new Map<string, StreamAccumulator>());
+  const thinkingBySessionRef = useRef(new Map<string, StreamAccumulator>());
 
   const handleMessage = useCallback((latestMessage: LatestChatMessage) => {
     if (!latestMessage) return;
@@ -119,12 +135,53 @@ export function useChatRealtimeHandlers({
     /* ---------------------------------------------------------------- */
 
     const msg = latestMessage as any;
+    const clearAccumulators = () => {
+      for (const state of streamBySessionRef.current.values()) {
+        if (state.timer) clearTimeout(state.timer);
+      }
+      for (const state of thinkingBySessionRef.current.values()) {
+        if (state.timer) clearTimeout(state.timer);
+      }
+      streamBySessionRef.current.clear();
+      thinkingBySessionRef.current.clear();
+    };
+    const flushStream = (sessionId: string, finalize = false) => {
+      const state = streamBySessionRef.current.get(sessionId);
+      if (!state) return;
+      if (state.timer) {
+        clearTimeout(state.timer);
+        state.timer = null;
+      }
+      if (state.content) {
+        sessionStore.updateStreaming(sessionId, state.content, provider);
+      }
+      if (finalize) {
+        sessionStore.finalizeStreaming(sessionId);
+        streamBySessionRef.current.delete(sessionId);
+      }
+    };
+    const flushThinking = (sessionId: string, finalize = false) => {
+      const state = thinkingBySessionRef.current.get(sessionId);
+      if (!state) return;
+      if (state.timer) {
+        clearTimeout(state.timer);
+        state.timer = null;
+      }
+      if (state.content) {
+        sessionStore.updateStreamingThinking(sessionId, state.content, provider);
+      }
+      if (finalize) {
+        sessionStore.finalizeStreamingThinking(sessionId);
+        thinkingBySessionRef.current.delete(sessionId);
+      }
+    };
 
     if (!msg.kind) {
       const messageType = String(msg.type || '');
 
       switch (messageType) {
         case 'websocket-reconnected':
+          clearAccumulators();
           onWebSocketReconnect?.();
           return;
 
@@ -140,9 +197,18 @@ export function useChatRealtimeHandlers({
         case 'session-status': {
           const statusSessionId = msg.sessionId;
           if (!statusSessionId) return;
+          const isCurrentSession =
+            statusSessionId === currentSessionId || (selectedSession && statusSessionId === selectedSession.id);
+
+          if (isCurrentSession && Array.isArray(msg.activeTurnMessages) && msg.activeTurnMessages.length > 0) {
+            for (const activeTurnMessage of msg.activeTurnMessages) {
+              handleMessage(activeTurnMessage);
+            }
+          }
 
           const status = msg.status;
           if (status) {
+            if (!isCurrentSession) return;
             const statusInfo = {
               text: status.text || 'Working...',
               tokens: status.tokens || 0,
@@ -155,9 +221,6 @@ export function useChatRealtimeHandlers({
           }
 
           // Legacy isProcessing format from check-session-status
-          const isCurrentSession =
-            statusSessionId === currentSessionId || (selectedSession && statusSessionId === selectedSession.id);
-
           if (msg.isProcessing) {
             onSessionProcessing?.(statusSessionId);
             if (isCurrentSession) { setIsLoading(true); setCanAbortSession(true); }
@@ -183,35 +246,27 @@ export function useChatRealtimeHandlers({
     /*  NormalizedMessage handling (has `kind` field)                    */
     /* ---------------------------------------------------------------- */
 
-    const sid = msg.sessionId || activeViewSessionId;
+    const explicitSessionId = getExplicitSessionId(msg);
+    const sid = explicitSessionId;
+    const isForActiveView =
+      Boolean(sid) &&
+      (sid === currentSessionId ||
+        sid === selectedSession?.id ||
+        sid === activeViewSessionId);
 
     // --- Streaming: buffer for performance ---
     if (msg.kind === 'stream_delta') {
       const text = msg.content || '';
-      if (!text) return;
-      // Flush any accumulated thinking before text starts
-      if (accumulatedThinkingRef.current && sid) {
-        if (thinkingTimerRef.current) {
-          clearTimeout(thinkingTimerRef.current);
-          thinkingTimerRef.current = null;
-        }
-        sessionStore.updateStreamingThinking(sid, accumulatedThinkingRef.current, provider);
-        sessionStore.finalizeStreamingThinking(sid);
-        accumulatedThinkingRef.current = '';
-      }
-      streamBufferRef.current += text;
-      accumulatedStreamRef.current += text;
-      if (!streamTimerRef.current) {
-        streamTimerRef.current = window.setTimeout(() => {
-          streamTimerRef.current = null;
-          if (sid) {
-            sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
-          }
+      if (!text || !explicitSessionId) return;
+      // Flush this session's thinking before its assistant text starts.
+      flushThinking(explicitSessionId, true);
+      const state = getOrCreateAccumulator(streamBySessionRef.current, explicitSessionId);
+      state.content += text;
+      if (!state.timer) {
+        state.timer = window.setTimeout(() => {
+          state.timer = null;
+          sessionStore.updateStreaming(explicitSessionId, state.content, provider);
         }, 100);
-      }
-      // Also route to store for non-active sessions
-      if (sid && sid !== activeViewSessionId) {
-        sessionStore.appendRealtime(sid, msg as NormalizedMessage);
       }
       return;
     }
@@ -219,54 +274,27 @@ export function useChatRealtimeHandlers({
     // --- Thinking: accumulate into a single message like stream_delta ---
     if (msg.kind === 'thinking') {
       const text = msg.content || '';
-      if (!text) return;
-      accumulatedThinkingRef.current += text;
-      if (!thinkingTimerRef.current) {
-        thinkingTimerRef.current = window.setTimeout(() => {
-          thinkingTimerRef.current = null;
-          if (sid) {
-            sessionStore.updateStreamingThinking(sid, accumulatedThinkingRef.current, provider);
-          }
+      if (!text || !explicitSessionId) return;
+      const state = getOrCreateAccumulator(thinkingBySessionRef.current, explicitSessionId);
+      state.content += text;
+      if (!state.timer) {
+        state.timer = window.setTimeout(() => {
+          state.timer = null;
+          sessionStore.updateStreamingThinking(explicitSessionId, state.content, provider);
         }, 100);
       }
       return;
     }
 
     if (msg.kind === 'stream_end') {
-      if (streamTimerRef.current) {
-        clearTimeout(streamTimerRef.current);
-        streamTimerRef.current = null;
-      }
-      if (sid) {
-        if (accumulatedStreamRef.current) {
-          sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
-        }
-        sessionStore.finalizeStreaming(sid);
-      }
-      accumulatedStreamRef.current = '';
-      streamBufferRef.current = '';
+      if (explicitSessionId) flushStream(explicitSessionId, true);
       return;
     }
 
     // --- Turn boundary: finalize in-flight streaming before non-stream msgs ---
-    if (accumulatedThinkingRef.current && sid) {
-      if (thinkingTimerRef.current) {
-        clearTimeout(thinkingTimerRef.current);
-        thinkingTimerRef.current = null;
-      }
-      sessionStore.updateStreamingThinking(sid, accumulatedThinkingRef.current, provider);
-      sessionStore.finalizeStreamingThinking(sid);
-      accumulatedThinkingRef.current = '';
-    }
-    if (accumulatedStreamRef.current && sid) {
-      if (streamTimerRef.current) {
-        clearTimeout(streamTimerRef.current);
-        streamTimerRef.current = null;
-      }
-      sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
-      sessionStore.finalizeStreaming(sid);
-      accumulatedStreamRef.current = '';
-      streamBufferRef.current = '';
+    if (explicitSessionId) {
+      flushThinking(explicitSessionId, true);
+      flushStream(explicitSessionId, true);
     }
 
     // --- All other messages: route to store ---
@@ -302,46 +330,33 @@ export function useChatRealtimeHandlers({
           setPendingPermissionRequests((prev) =>
             prev.map((r) => (r.sessionId ? r : { ...r, sessionId: newSessionId })),
           );
+          onNavigateToSession?.(newSessionId);
         }
         if (window.refreshProjects) {
           void window.refreshProjects();
         }
-        onNavigateToSession?.(newSessionId);
         break;
       }
 
       case 'complete': {
-        // Flush any remaining thinking state
-        if (thinkingTimerRef.current) {
-          clearTimeout(thinkingTimerRef.current);
-          thinkingTimerRef.current = null;
+        if (sid) {
+          flushThinking(sid, true);
+          flushStream(sid, true);
         }
-        if (sid && accumulatedThinkingRef.current) {
-          sessionStore.updateStreamingThinking(sid, accumulatedThinkingRef.current, provider);
-          sessionStore.finalizeStreamingThinking(sid);
-        }
-        accumulatedThinkingRef.current = '';
-        // Flush any remaining streaming state
-        if (streamTimerRef.current) {
-          clearTimeout(streamTimerRef.current);
-          streamTimerRef.current = null;
-        }
-        if (sid && accumulatedStreamRef.current) {
-          sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
-          sessionStore.finalizeStreaming(sid);
-        }
-        accumulatedStreamRef.current = '';
-        streamBufferRef.current = '';
 
-        setIsLoading(false);
-        setCanAbortSession(false);
-        setIsAborting(false);
-        setClaudeStatus(null);
-        setPendingPermissionRequests((prev) =>
-          prev.filter((r) => r.sessionId && r.sessionId !== sid),
-        );
-        onSessionInactive?.(sid);
-        onSessionNotProcessing?.(sid);
+        if (isForActiveView) {
+          setIsLoading(false);
+          setCanAbortSession(false);
+          setIsAborting(false);
+          setClaudeStatus(null);
+        }
+        if (sid) {
+          setPendingPermissionRequests((prev) =>
+            prev.filter((r) => r.sessionId !== sid),
+          );
+          onSessionInactive?.(sid);
+          onSessionNotProcessing?.(sid);
+        }
 
         // Handle aborted case
         if (msg.aborted) {
@@ -353,7 +368,7 @@ export function useChatRealtimeHandlers({
 
         // Clear pending session
         const pendingSessionId = sessionStorage.getItem('pendingSessionId');
-        if (pendingSessionId && msg.exitCode === 0) {
+        if (pendingSessionId && sid === pendingSessionId && msg.exitCode === 0) {
           const actualId = msg.actualSessionId || pendingSessionId;
           if (!currentSessionId) {
             setCurrentSessionId(actualId);
@@ -370,23 +385,27 @@ export function useChatRealtimeHandlers({
       }
 
       case 'error': {
-        setIsLoading(false);
-        setCanAbortSession(false);
-        setIsAborting(false);
-        setClaudeStatus(null);
-        onSessionInactive?.(sid);
-        onSessionNotProcessing?.(sid);
+        if (isForActiveView) {
+          setIsLoading(false);
+          setCanAbortSession(false);
+          setIsAborting(false);
+          setClaudeStatus(null);
+        }
+        if (sid) {
+          onSessionInactive?.(sid);
+          onSessionNotProcessing?.(sid);
+        }
         break;
       }
 
       case 'permission_request': {
         if (!msg.requestId) break;
-        const permSid = msg.sessionId || sid;
+        const permSid = getExplicitSessionId(msg);
         const isForCurrentSession =
-          !permSid ||
-          permSid === currentSessionId ||
-          permSid === selectedSession?.id ||
-          permSid === activeViewSessionId;
+          Boolean(permSid) &&
+          (permSid === currentSessionId ||
+            permSid === selectedSession?.id ||
+            permSid === activeViewSessionId);
         if (!isForCurrentSession) break;
         setPendingPermissionRequests((prev) => {
           if (prev.some((r: PendingPermissionRequest) => r.requestId === msg.requestId)) return prev;
@@ -414,6 +433,7 @@ export function useChatRealtimeHandlers({
       }
 
       case 'status': {
+        if (!isForActiveView) break;
         if (msg.text === 'token_budget' && msg.tokenBudget) {
           setTokenBudget(msg.tokenBudget as Record<string, unknown>);
         } else if (msg.text) {
@@ -435,7 +455,6 @@ export function useChatRealtimeHandlers({
     }
   }, [
     provider,
-    selectedProject,
     selectedSession,
     currentSessionId,
     setCurrentSessionId,
@@ -446,9 +465,6 @@ export function useChatRealtimeHandlers({
     setTokenBudget,
     setPendingPermissionRequests,
     pendingViewSessionRef,
-    streamBufferRef,
-    streamTimerRef,
-    accumulatedStreamRef,
     onSessionInactive,
     onSessionProcessing,
     onSessionNotProcessing,

@@ -736,8 +736,20 @@ export function useChatSessionState({
     if (shouldBeProcessing && !isLoading) {
       setIsLoading(true);
       setCanAbortSession(true);
+    } else if (!shouldBeProcessing && isLoading && selectedSession?.id === activeViewSessionId) {
+      setIsLoading(false);
+      setCanAbortSession(false);
+      setIsAborting(false);
+      setClaudeStatus(null);
     }
-  }, [currentSessionId, isLoading, pendingViewSessionRef, processingSessions, selectedSession?.id]);
+  }, [
+    currentSessionId,
+    isLoading,
+    pendingViewSessionRef,
+    processingSessions,
+    selectedSession?.id,
+    setClaudeStatus,
+  ]);
 
   // "Load all" overlay
   const prevLoadingRef = useRef(false);

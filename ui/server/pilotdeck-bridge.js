@@ -264,7 +264,7 @@ function resolvePermissionMode(options) {
  * @param {string} provider Provider hint (claude/cursor/codex/gemini/pilotdeck).
  * @returns {object[]} NormalizedMessage frames.
  */
-function gatewayEventToFrames(event, sessionId, provider) {
+export function gatewayEventToFrames(event, sessionId, provider) {
     const base = { sessionId, provider };
     switch (event.type) {
         case 'turn_started':
@@ -591,6 +591,15 @@ export async function grantSessionPermissionViaGateway(sessionId, entry) {
 export function isSessionActiveViaGateway(sessionId) {
     if (!isPilotDeckSessionKey(sessionId)) return false;
     return Boolean(sessionState.get(sessionId)?.active);
+}
+
+export async function getActiveTurnSnapshotFramesViaGateway(sessionId, provider = 'pilotdeck') {
+    if (!isPilotDeckSessionKey(sessionId)) return [];
+    const gw = await ensureGateway();
+    if (typeof gw.getActiveTurnSnapshot !== 'function') return [];
+    const snapshot = await gw.getActiveTurnSnapshot({ sessionKey: sessionId });
+    if (!snapshot?.active || !Array.isArray(snapshot.events)) return [];
+    return snapshot.events.flatMap((event) => gatewayEventToFrames(event, sessionId, provider) || []);
 }
 
 export function getActiveSessionIdsViaGateway() {
