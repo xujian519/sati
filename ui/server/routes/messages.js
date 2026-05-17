@@ -88,6 +88,7 @@ function mapWebMessageToNormalized(message, sessionId) {
         toolId: message.toolCallId,
         content: message.text || '',
         isError: message.ok === false,
+        ...(message.errorCode ? { errorCode: message.errorCode } : {}),
       });
     case 'permission_request':
       return createNormalizedMessage({

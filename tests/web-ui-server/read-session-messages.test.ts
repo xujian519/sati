@@ -195,6 +195,104 @@ test("readWebSessionMessages filters out synthetic messages", async () => {
   }
 });
 
+test("readWebSessionMessages preserves tool error codes for permission UI gating", async () => {
+  const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-rsm-error-code-"));
+  const projectRoot = join(pilotHome, "fake-project");
+  mkdirSync(projectRoot, { recursive: true });
+  const sessionKey = "web:error-code";
+  try {
+    const projectId = createProjectId(projectRoot);
+    const chatDir = join(pilotHome, "projects", projectId, "chats");
+    mkdirSync(chatDir, { recursive: true });
+    const path = join(chatDir, `${sessionKey}.jsonl`);
+    const lines = [
+      {
+        type: "accepted_input",
+        sessionId: sessionKey,
+        turnId: "turn-timeout",
+        sequence: 1,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        messages: [
+          { role: "user", content: [{ type: "text", text: "run a long command" }] },
+        ],
+      },
+      {
+        type: "assistant_message",
+        sessionId: sessionKey,
+        turnId: "turn-timeout",
+        sequence: 2,
+        createdAt: "2026-01-01T00:00:01.000Z",
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_call",
+              id: "tool-bash",
+              name: "bash",
+              input: { command: "brew install something" },
+            },
+          ],
+        },
+      },
+      {
+        type: "tool_result_message",
+        sessionId: sessionKey,
+        turnId: "turn-timeout",
+        sequence: 3,
+        createdAt: "2026-01-01T00:00:02.000Z",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              toolCallId: "tool-bash",
+              content: [{ type: "text", text: "Command timed out after 120000ms." }],
+              isError: true,
+              raw: {
+                type: "error",
+                toolCallId: "tool-bash",
+                toolName: "bash",
+                error: { code: "tool_timeout", message: "Command timed out after 120000ms." },
+                content: [{ type: "text", text: "Command timed out after 120000ms." }],
+                startedAt: "2026-01-01T00:00:01.000Z",
+                completedAt: "2026-01-01T00:00:02.000Z",
+              },
+            },
+          ],
+        },
+      },
+      {
+        type: "turn_result",
+        sessionId: sessionKey,
+        turnId: "turn-timeout",
+        sequence: 4,
+        createdAt: "2026-01-01T00:00:03.000Z",
+        result: {
+          type: "success",
+          sessionId: sessionKey,
+          turnId: "turn-timeout",
+          stopReason: "completed",
+          usage: { totalTokens: 10 },
+          permissionDenials: [],
+          turns: 1,
+          startedAt: "2026-01-01T00:00:00.000Z",
+          completedAt: "2026-01-01T00:00:03.000Z",
+        },
+      },
+    ];
+    writeFileSync(path, lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+
+    const result = await readWebSessionMessages(
+      { sessionKey },
+      { projectRoot, pilotHome, now: () => new Date("2026-05-09T00:00:00.000Z") },
+    );
+    const toolResult = result.messages.find((message) => message.kind === "tool_result");
+    assert.equal(toolResult?.errorCode, "tool_timeout");
+  } finally {
+    rmSync(pilotHome, { recursive: true, force: true });
+  }
+});
+
 test("readWebSessionMessages restores incomplete turns with continuous tool calls", async () => {
   const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-rsm-incomplete-tools-"));
   const projectRoot = join(pilotHome, "fake-project");

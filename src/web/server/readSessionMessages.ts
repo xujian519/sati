@@ -254,6 +254,7 @@ function flushBlock(
     case "tool_result": {
       flushText();
       const resultText = block.content.map((part) => part.text).join("");
+      const errorCode = readToolResultErrorCode(block.raw);
       out.push({
         id: `${context.sessionKey}-tool-${block.toolCallId}-result`,
         sessionKey: context.sessionKey,
@@ -265,6 +266,7 @@ function flushBlock(
         toolCallId: block.toolCallId,
         ok: !block.isError,
         text: resultText,
+        ...(errorCode ? { errorCode } : {}),
         source: "history",
       });
       return;
@@ -357,4 +359,12 @@ function extractWebVisibleMessages(entries: AgentTranscriptEntry[]): {
 
 function cloneMessage(message: CanonicalMessage): CanonicalMessage {
   return JSON.parse(JSON.stringify(message)) as CanonicalMessage;
+}
+
+function readToolResultErrorCode(raw: unknown): string | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const error = (raw as { error?: unknown }).error;
+  if (!error || typeof error !== "object") return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && code.length > 0 ? code : undefined;
 }
