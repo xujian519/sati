@@ -56,7 +56,10 @@ export function canonicalMessagesToMemoryMessages(messages: CanonicalMessage[]):
       if (block.type === "text") {
         pushEntry(message.role, block.text);
       } else if (block.type === "tool_result") {
-        pushEntry("tool", block.content.map((item) => item.text).join("\n"));
+        pushEntry(
+          "tool",
+          block.content.map((item) => item.type === "text" ? item.text : `[${item.type}]`).join("\n"),
+        );
       } else if (block.type === "tool_result_reference") {
         pushEntry("tool", block.preview);
       }

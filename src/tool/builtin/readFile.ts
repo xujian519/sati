@@ -3,37 +3,45 @@ import path from "node:path";
 import type { PilotDeckToolDefinition } from "../protocol/types.js";
 import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
 import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
-import { readTextFile } from "./filesystem/readTextFile.js";
+import { readFileInRange } from "./filesystem/readFileInRange.js";
+import {
+  countPdfPages,
+  getImageMimeType,
+  hasBinaryExtension,
+  isBlockedDevicePath,
+  isImagePath,
+  isNotebookPath,
+  isPdfPath,
+  parsePdfPageRange,
+} from "./filesystem/fileTypeSafety.js";
+import { readNotebook } from "./filesystem/readNotebook.js";
+import { countTokens } from "../../context/budget/tokenizer.js";
 
 export type ReadFileInput = {
   file_path: string;
   offset?: number;
   limit?: number;
+  pages?: string;
 };
 
-const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp"]);
-
-const MAX_IMAGE_BYTES = 20 * 1024 * 1024; // 20 MB safety cap
-
-function isImagePath(filePath: string): boolean {
-  const ext = path.extname(filePath).toLowerCase().slice(1);
-  return IMAGE_EXTENSIONS.has(ext);
-}
-
-function imageMimeType(ext: string): string {
-  return `image/${ext === "jpg" ? "jpeg" : ext}`;
-}
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_TEXT_TOKENS = 25_000;
+const MAX_IMAGE_TOKENS = 12_000;
+const MAX_PDF_PAGES_PER_REQUEST = 20;
+const FILE_UNCHANGED_STUB =
+  "File unchanged since the last read. Refer to the earlier read_file result instead of re-reading it.";
 
 export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
   return {
     name: "read_file",
     aliases: ["Read"],
     description:
-      "Read a file from the current workspace.\n\nUsage:\n- Supports UTF-8 text files and image files "
-      + "(png, jpg, jpeg, gif, webp).\n- Provide file_path as a workspace-relative path or an absolute path "
-      + "that resolves inside the workspace.\n- By default, the tool reads the whole text file; use offset "
-      + "and limit when you only need a specific portion.\n- This tool reads files, not directories.\n- If "
-      + "the target does not exist, is outside the workspace, or is not readable, the tool returns a controlled error.",
+      "Read a file from the current workspace.\n\nUsage:\n- Supports text, images, PDF files, and Jupyter notebooks.\n"
+      + "- Provide file_path as a workspace-relative path or an absolute path that resolves inside the workspace.\n"
+      + "- offset is 1-based and defaults to 1.\n- Text-like output is formatted with cat -n style line numbers.\n"
+      + "- Use limit to read a specific range, and pages for PDF page-range validation (for example: \"1-5\").\n"
+      + "- This tool reads files, not directories.\n- If the target does not exist, is outside the workspace, or "
+      + "violates safety constraints, the tool returns a controlled error.",
     kind: "filesystem",
     inputSchema: {
       type: "object",
@@ -48,75 +56,384 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         offset: {
           type: "integer",
           description:
-            "Zero-based line offset to start reading from for text files only. Only provide if the file is too large to read at once.",
+            "1-based line number to start reading from for text and notebook output. Defaults to 1.",
         },
         limit: {
           type: "integer",
           description:
-            "Maximum number of lines to return for text files only. Omit to read the entire file, or provide it to target a specific portion.",
+            "Maximum number of lines to return for text and notebook output. Omit to read the entire file, or provide it to target a specific portion.",
+        },
+        pages: {
+          type: "string",
+          description:
+            "Optional PDF page range to validate, such as \"1-5\" or \"3\". Maximum 20 pages per request.",
         },
       },
     },
     maxResultBytes: 200_000,
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
+    validateInput: async (input, context) => {
+      if (input.offset !== undefined && input.offset < 1) {
+        return {
+          ok: false,
+          issues: [{ path: "offset", code: "invalid_schema", message: "offset must be a 1-based line number (>= 1)." }],
+        };
+      }
+      if (input.limit !== undefined && input.limit < 0) {
+        return {
+          ok: false,
+          issues: [{ path: "limit", code: "invalid_schema", message: "limit must be greater than or equal to 0." }],
+        };
+      }
+      if (input.pages !== undefined) {
+        const parsed = parsePdfPageRange(input.pages);
+        if (!parsed) {
+          return {
+            ok: false,
+            issues: [{ path: "pages", code: "invalid_schema", message: "pages must use formats like \"1-5\" or \"3\"." }],
+          };
+        }
+        if (parsed.lastPage - parsed.firstPage + 1 > MAX_PDF_PAGES_PER_REQUEST) {
+          return {
+            ok: false,
+            issues: [{
+              path: "pages",
+              code: "invalid_schema",
+              message: `pages exceeds the maximum of ${MAX_PDF_PAGES_PER_REQUEST} pages per request.`,
+            }],
+          };
+        }
+      }
+
+      const absolutePath = path.resolve(
+        path.isAbsolute(input.file_path) ? input.file_path : path.join(context.cwd, input.file_path),
+      );
+      if (isBlockedDevicePath(absolutePath)) {
+        return {
+          ok: false,
+          issues: [{ path: "file_path", code: "invalid_schema", message: "device files that block or stream infinitely are not readable." }],
+        };
+      }
+      if (hasBinaryExtension(absolutePath)) {
+        return {
+          ok: false,
+          issues: [{ path: "file_path", code: "invalid_schema", message: "binary files are not supported by read_file." }],
+        };
+      }
+      return { ok: true, input };
+    },
     execute: async (input, context) => {
       const resolved = resolvePilotDeckWorkspacePath(input.file_path, context, { mustExist: true });
       if (!resolved.ok) {
         throw new PilotDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
       }
 
-      if (isImagePath(resolved.absolutePath)) {
-        const ext = path.extname(resolved.absolutePath).toLowerCase().slice(1);
-        const supportsImage = context.modelMultimodal?.input?.includes("image");
-
-        if (!supportsImage) {
-          const fileStat = await stat(resolved.absolutePath);
-          return {
-            content: [{
-              type: "text",
-              text: `[Image file: ${input.file_path}, ${fileStat.size} bytes, ${imageMimeType(ext)}. Current model does not support image input.]`,
-            }],
-            data: { filePath: resolved.relativePath, isImage: true, modelSupportsImage: false },
-          };
-        }
-
-        const fileStat = await stat(resolved.absolutePath);
-        if (fileStat.size > MAX_IMAGE_BYTES) {
-          return {
-            content: [{
-              type: "text",
-              text: `[Image file: ${input.file_path}, ${fileStat.size} bytes — exceeds ${MAX_IMAGE_BYTES} byte limit. Cannot display.]`,
-            }],
-            data: { filePath: resolved.relativePath, isImage: true, tooLarge: true },
-          };
-        }
-
-        const buffer = await readFile(resolved.absolutePath);
-        const mimeType = imageMimeType(ext);
+      const fileStat = await stat(resolved.absolutePath);
+      const kind = classifyReadKind(resolved.absolutePath);
+      const readState = context.readFileState ?? (context.readFileState = new Map());
+      const dedupKey = buildReadStateKey(resolved.absolutePath, kind, input.offset, input.limit, input.pages);
+      const previous = readState.get(dedupKey);
+      if (previous && previous.mtimeMs === Math.floor(fileStat.mtimeMs)) {
         return {
-          content: [{ type: "image", mimeType, data: buffer.toString("base64") }],
-          data: { filePath: resolved.relativePath, isImage: true, mimeType, bytes: buffer.byteLength },
+          content: [{ type: "text", text: FILE_UNCHANGED_STUB }],
+          data: {
+            filePath: resolved.relativePath,
+            kind,
+            unchanged: true,
+          },
+          metadata: { unchanged: true },
         };
       }
 
-      const content = await readTextFile(resolved.absolutePath);
-      const lines = content.split(/\r?\n/);
-      const offset = Math.max(0, input.offset ?? 0);
-      const limit = input.limit === undefined ? lines.length : Math.max(0, input.limit);
-      const selected = lines.slice(offset, offset + limit);
-      const truncated = offset > 0 || offset + limit < lines.length;
+      if (kind === "image") {
+        const mimeType = getImageMimeType(resolved.absolutePath);
+        if (!mimeType) {
+          throw new PilotDeckToolRuntimeError("invalid_tool_input", `Unsupported image type: ${resolved.relativePath}.`);
+        }
+        const supportsImage = context.modelMultimodal?.input?.includes("image");
+        if (!supportsImage) {
+          return {
+            content: [{
+              type: "text",
+              text: `[Image file: ${resolved.relativePath}, ${fileStat.size} bytes, ${mimeType}. Current model does not support image input.]`,
+            }],
+            data: { filePath: resolved.relativePath, kind, modelSupportsImage: false },
+          };
+        }
+        const imageBuffer = await readFile(resolved.absolutePath);
+        const maxImageBytes = Math.min(MAX_IMAGE_BYTES, context.modelMultimodal?.maxImageBytes ?? MAX_IMAGE_BYTES);
+        const compressed = await compressImageForBudget(
+          imageBuffer,
+          mimeType,
+          maxImageBytes,
+          MAX_IMAGE_TOKENS,
+        );
+        readState.set(dedupKey, {
+          mtimeMs: Math.floor(fileStat.mtimeMs),
+          kind,
+          offset: input.offset,
+          limit: input.limit,
+          pages: input.pages,
+        });
+        return {
+          content: [{
+            type: "image",
+            mimeType: compressed.mimeType,
+            data: compressed.buffer.toString("base64"),
+            bytes: compressed.buffer.byteLength,
+            detail: context.modelMultimodal?.imageDetail,
+          }],
+          data: {
+            filePath: resolved.relativePath,
+            kind,
+            mimeType: compressed.mimeType,
+            bytes: compressed.buffer.byteLength,
+            originalBytes: imageBuffer.byteLength,
+          },
+        };
+      }
 
+      if (kind === "pdf") {
+        const supportsPdf = context.modelMultimodal?.input?.includes("pdf");
+        const pdfBuffer = await readFile(resolved.absolutePath);
+        const pageCount = countPdfPages(pdfBuffer);
+        const parsedPages = input.pages ? parsePdfPageRange(input.pages) : undefined;
+        if (input.pages && !parsedPages) {
+          throw new PilotDeckToolRuntimeError("invalid_tool_input", `Invalid PDF page range: ${input.pages}.`);
+        }
+        if (
+          parsedPages
+          && pageCount !== undefined
+          && parsedPages.lastPage > pageCount
+        ) {
+          throw new PilotDeckToolRuntimeError(
+            "invalid_tool_input",
+            `PDF page range ${input.pages} exceeds the detected page count (${pageCount}).`,
+          );
+        }
+        if (!supportsPdf) {
+          return {
+            content: [{
+              type: "text",
+              text: `[PDF file: ${resolved.relativePath}, ${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""}. Current model does not support PDF input.]`,
+            }],
+            data: { filePath: resolved.relativePath, kind, modelSupportsPdf: false, pageCount },
+          };
+        }
+        readState.set(dedupKey, {
+          mtimeMs: Math.floor(fileStat.mtimeMs),
+          kind,
+          offset: input.offset,
+          limit: input.limit,
+          pages: input.pages,
+        });
+        return {
+          content: [
+            ...(parsedPages
+              ? [{
+                  type: "text" as const,
+                  text: `Requested PDF pages: ${parsedPages.firstPage}-${parsedPages.lastPage}.`,
+                }]
+              : []),
+            {
+              type: "pdf" as const,
+              mimeType: "application/pdf",
+              data: pdfBuffer.toString("base64"),
+              bytes: pdfBuffer.byteLength,
+              pages: pageCount,
+            },
+          ],
+          data: {
+            filePath: resolved.relativePath,
+            kind,
+            bytes: pdfBuffer.byteLength,
+            pageCount,
+            requestedPages: input.pages,
+          },
+        };
+      }
+
+      const offset = input.offset ?? 1;
+      if (kind === "notebook") {
+        const notebook = await readNotebook(resolved.absolutePath);
+        const ranged = sliceRenderedText(notebook.text, offset, input.limit);
+        const numbered = renderNumberedLines(ranged.lines, ranged.startLine);
+        ensureTokenBudget(numbered, resolved.relativePath);
+        readState.set(dedupKey, {
+          mtimeMs: Math.floor(fileStat.mtimeMs),
+          kind,
+          offset: input.offset,
+          limit: input.limit,
+          pages: input.pages,
+        });
+        return {
+          content: [{ type: "text", text: numbered }],
+          data: {
+            filePath: resolved.relativePath,
+            kind,
+            startLine: ranged.startLine,
+            endLine: ranged.endLine,
+            totalLines: ranged.totalLines,
+            truncated: ranged.truncated,
+            cellCount: notebook.cellCount,
+          },
+          metadata: { truncated: ranged.truncated },
+        };
+      }
+
+      const ranged = await readFileInRange(resolved.absolutePath, offset, input.limit);
+      const text = renderReadableRange(ranged.content, ranged.startLine, ranged.totalLines);
+      ensureTokenBudget(text, resolved.relativePath);
+      readState.set(dedupKey, {
+        mtimeMs: ranged.mtimeMs,
+        kind,
+        offset: input.offset,
+        limit: input.limit,
+        pages: input.pages,
+      });
       return {
-        content: [{ type: "text", text: selected.join("\n") }],
+        content: [{ type: "text", text }],
         data: {
           filePath: resolved.relativePath,
-          startLine: selected.length > 0 ? offset + 1 : offset,
-          endLine: selected.length > 0 ? offset + selected.length : offset,
-          truncated,
+          kind,
+          startLine: ranged.startLine,
+          endLine: ranged.endLine,
+          totalLines: ranged.totalLines,
+          truncated: ranged.truncated,
         },
-        metadata: { truncated },
+        metadata: { truncated: ranged.truncated },
       };
     },
   };
+}
+
+function classifyReadKind(filePath: string): "text" | "image" | "pdf" | "notebook" {
+  if (isImagePath(filePath)) {
+    return "image";
+  }
+  if (isPdfPath(filePath)) {
+    return "pdf";
+  }
+  if (isNotebookPath(filePath)) {
+    return "notebook";
+  }
+  return "text";
+}
+
+function buildReadStateKey(
+  filePath: string,
+  kind: "text" | "image" | "pdf" | "notebook",
+  offset?: number,
+  limit?: number,
+  pages?: string,
+): string {
+  return `${filePath}::${kind}::${offset ?? 1}::${limit ?? "all"}::${pages ?? ""}`;
+}
+
+function renderReadableRange(content: string, startLine: number, totalLines: number): string {
+  if (content.length > 0) {
+    return renderNumberedLines(content.split("\n"), startLine);
+  }
+  if (totalLines === 0) {
+    return "<system-reminder>Warning: the file exists but the contents are empty.</system-reminder>";
+  }
+  return `<system-reminder>Warning: the file exists but is shorter than the provided offset (${startLine}). The file has ${totalLines} lines.</system-reminder>`;
+}
+
+function renderNumberedLines(lines: string[], startLine: number): string {
+  return lines.map((line, index) => `${startLine + index}|${line}`).join("\n");
+}
+
+function sliceRenderedText(
+  text: string,
+  startLine: number,
+  limit?: number,
+): { lines: string[]; startLine: number; endLine: number; totalLines: number; truncated: boolean } {
+  const lines = text.split(/\r?\n/);
+  const startIndex = Math.max(0, startLine - 1);
+  const selected = limit === undefined ? lines.slice(startIndex) : lines.slice(startIndex, startIndex + limit);
+  const actualStart = selected.length > 0 ? startLine : Math.min(startLine, lines.length + 1);
+  const actualEnd = selected.length > 0 ? actualStart + selected.length - 1 : actualStart - 1;
+  return {
+    lines: selected,
+    startLine: actualStart,
+    endLine: actualEnd,
+    totalLines: lines.length,
+    truncated: startIndex > 0 || (limit !== undefined && startIndex + limit < lines.length),
+  };
+}
+
+function ensureTokenBudget(text: string, filePath: string): void {
+  if (countTokens(text) > MAX_TEXT_TOKENS) {
+    throw new PilotDeckToolRuntimeError(
+      "result_too_large",
+      `File content from ${filePath} exceeds the text token budget. Use offset and limit to read a smaller portion.`,
+    );
+  }
+}
+
+async function compressImageForBudget(
+  buffer: Buffer,
+  mimeType: string,
+  maxBytes: number,
+  maxTokens: number,
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  let output = buffer;
+  let outputMimeType = mimeType;
+  if (output.byteLength > maxBytes || estimateBase64Tokens(output) > maxTokens) {
+    try {
+      const sharpModule = await import("sharp");
+      const sharp = sharpModule.default;
+      const pipeline = sharp(buffer).rotate();
+      if (mimeType === "image/png") {
+        output = await pipeline
+          .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+          .png({ compressionLevel: 9 })
+          .toBuffer();
+        outputMimeType = "image/png";
+      } else if (mimeType === "image/webp") {
+        output = await pipeline
+          .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+          .webp({ quality: 80 })
+          .toBuffer();
+        outputMimeType = "image/webp";
+      } else if (mimeType === "image/gif") {
+        output = await pipeline
+          .resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true })
+          .png({ compressionLevel: 9 })
+          .toBuffer();
+        outputMimeType = "image/png";
+      } else {
+        output = await pipeline
+          .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+          .jpeg({ quality: 80 })
+          .toBuffer();
+        outputMimeType = "image/jpeg";
+      }
+
+      if (output.byteLength > maxBytes || estimateBase64Tokens(output) > maxTokens) {
+        output = await sharp(output)
+          .resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true })
+          .jpeg({ quality: 55 })
+          .toBuffer();
+        outputMimeType = "image/jpeg";
+      }
+    } catch {
+      // Fall back to the original bytes when image compression is unavailable.
+    }
+  }
+
+  if (output.byteLength > maxBytes || estimateBase64Tokens(output) > maxTokens) {
+    throw new PilotDeckToolRuntimeError(
+      "result_too_large",
+      `Image content exceeds the read_file token budget after compression attempts (${mimeType}).`,
+      { mimeType: outputMimeType, bytes: output.byteLength, estimatedTokens: estimateBase64Tokens(output) },
+    );
+  }
+  return { buffer: output, mimeType: outputMimeType };
+}
+
+function estimateBase64Tokens(buffer: Buffer): number {
+  return Math.ceil(buffer.toString("base64").length * 0.125);
 }

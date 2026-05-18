@@ -166,7 +166,22 @@ function toAnthropicContentBlock(block: CanonicalContentBlock): unknown {
       return {
         type: "tool_result",
         tool_use_id: block.toolCallId,
-        content: block.content.map((content) => ({ type: "text", text: content.text })),
+        content: block.content.map((content) => {
+          switch (content.type) {
+            case "text":
+              return { type: "text", text: content.text };
+            case "image":
+              return {
+                type: "image",
+                source: { type: "base64", media_type: content.mimeType, data: content.data },
+              };
+            case "pdf":
+              return {
+                type: "document",
+                source: { type: "base64", media_type: content.mimeType, data: content.data },
+              };
+          }
+        }),
         is_error: block.isError,
       };
     case "tool_result_reference":

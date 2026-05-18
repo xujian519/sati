@@ -254,7 +254,7 @@ function flushBlock(
       return;
     case "tool_result": {
       flushText();
-      const resultText = block.content.map((part) => part.text).join("");
+      const resultText = block.content.map((part) => part.type === "text" ? part.text : `[${part.type}]`).join("");
       const errorCode = readToolResultErrorCode(block.raw);
       out.push({
         id: `${context.sessionKey}-tool-${block.toolCallId}-result`,

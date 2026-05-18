@@ -35,5 +35,26 @@ test("injects stable text for empty content", () => {
     completedAt: "2026-01-01T00:00:00.000Z",
   };
 
-  assert.equal(toCanonicalToolResultBlock(result).content[0]?.text, "Tool completed with no output.");
+  const first = toCanonicalToolResultBlock(result).content[0];
+  assert.equal(first?.type === "text" ? first.text : "", "Tool completed with no output.");
+});
+
+test("preserves image and pdf blocks in canonical tool results", () => {
+  const result: PilotDeckToolResult = {
+    type: "success",
+    toolCallId: "call-1",
+    toolName: "read_file",
+    content: [
+      { type: "text", text: "Requested PDF pages: 1-2." },
+      { type: "image", mimeType: "image/png", data: "abc", bytes: 3 },
+      { type: "pdf", mimeType: "application/pdf", data: "def", bytes: 3, pages: 2 },
+    ],
+    startedAt: "2026-01-01T00:00:00.000Z",
+    completedAt: "2026-01-01T00:00:00.000Z",
+  };
+
+  const block = toCanonicalToolResultBlock(result);
+  assert.equal(block.content[0]?.type, "text");
+  assert.equal(block.content[1]?.type, "image");
+  assert.equal(block.content[2]?.type, "pdf");
 });

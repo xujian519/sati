@@ -41,6 +41,21 @@ export function contentBlockToInputModality(block: CanonicalContentBlock): Input
   }
 }
 
+function nestedToolResultModalities(
+  block: Extract<CanonicalContentBlock, { type: "tool_result" }>,
+): InputModality[] {
+  return block.content.flatMap((item) => {
+    switch (item.type) {
+      case "image":
+        return ["image"];
+      case "pdf":
+        return ["pdf"];
+      case "text":
+        return [];
+    }
+  });
+}
+
 export function assertContentSupported(
   blocks: CanonicalContentBlock[],
   constraints: MultimodalConstraints,
@@ -49,6 +64,45 @@ export function assertContentSupported(
   let imageCount = 0;
 
   for (const block of blocks) {
+    if (block.type === "tool_result") {
+      const nested = nestedToolResultModalities(block);
+      for (const modality of nested) {
+        if (!allowed.has(modality)) {
+          throw new ModelRequestError("unsupported_modality", `Model does not support ${modality} input.`, {
+            modality,
+          });
+        }
+      }
+      for (const item of block.content) {
+        if (item.type === "image") {
+          imageCount += 1;
+          if (
+            constraints.supportedImageMimeTypes &&
+            !constraints.supportedImageMimeTypes.includes(item.mimeType)
+          ) {
+            throw new ModelRequestError(
+              "unsupported_image_mime_type",
+              `Model does not support image MIME type ${item.mimeType}.`,
+              { mimeType: item.mimeType },
+            );
+          }
+          if (constraints.maxImageBytes && item.bytes && item.bytes > constraints.maxImageBytes) {
+            throw new ModelRequestError("image_too_large", "Image content exceeds model limits.", {
+              bytes: item.bytes,
+              maxImageBytes: constraints.maxImageBytes,
+            });
+          }
+        }
+        if (item.type === "pdf" && constraints.maxPdfBytes && item.bytes > constraints.maxPdfBytes) {
+          throw new ModelRequestError("pdf_too_large", "PDF content exceeds model limits.", {
+            bytes: item.bytes,
+            maxPdfBytes: constraints.maxPdfBytes,
+          });
+        }
+      }
+      continue;
+    }
+
     const modality = contentBlockToInputModality(block);
     if (!modality) {
       continue;

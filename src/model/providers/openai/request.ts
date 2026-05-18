@@ -170,10 +170,34 @@ function toOpenAIUserMessages(message: CanonicalMessage): OpenAIMessage[] {
 function toOpenAIToolResultMessage(
   block: Extract<CanonicalContentBlock, { type: "tool_result" }>,
 ): OpenAIMessage {
+  const hasOnlyText = block.content.every((content) => content.type === "text");
   return {
     role: "tool",
     tool_call_id: block.toolCallId,
-    content: block.content.map((content) => content.text).join("\n"),
+    content: hasOnlyText
+      ? block.content.map((content) => content.type === "text" ? content.text : "").join("\n")
+      : block.content.map((content) => {
+          switch (content.type) {
+            case "text":
+              return { type: "text", text: content.text };
+            case "image":
+              return {
+                type: "image_url",
+                image_url: {
+                  url: `data:${content.mimeType};base64,${content.data}`,
+                  detail: content.detail,
+                },
+              };
+            case "pdf":
+              return {
+                type: "file",
+                file: {
+                  filename: "tool-result.pdf",
+                  file_data: `data:${content.mimeType};base64,${content.data}`,
+                },
+              };
+          }
+        }),
   };
 }
 

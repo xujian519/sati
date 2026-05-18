@@ -1,4 +1,4 @@
-import type { CanonicalToolResultBlock } from "../../model/index.js";
+import type { CanonicalToolResultBlock, CanonicalToolResultContentBlock } from "../../model/index.js";
 import type { PilotDeckToolError } from "./errors.js";
 import type { PilotDeckToolResultContent } from "./types.js";
 
@@ -43,6 +43,8 @@ export function contentToText(content: PilotDeckToolResultContent): string {
       return JSON.stringify(content.value);
     case "image":
       return `[Image: ${content.mimeType}, ${content.data.length} base64 characters]`;
+    case "pdf":
+      return `[PDF: ${content.mimeType}, ${content.data.length} base64 characters${content.pages ? `, ${content.pages} pages` : ""}]`;
     case "file":
       return `[File: ${content.path}${content.mimeType ? `, ${content.mimeType}` : ""}${
         content.description ? `, ${content.description}` : ""
@@ -51,22 +53,59 @@ export function contentToText(content: PilotDeckToolResultContent): string {
 }
 
 export function toCanonicalToolResultBlock(result: PilotDeckToolResult): CanonicalToolResultBlock {
-  const textBlocks = result.content.map((item) => ({
-    type: "text" as const,
-    text: contentToText(item),
-  }));
+  const blocks = result.content.flatMap<CanonicalToolResultContentBlock>((item) => {
+    switch (item.type) {
+      case "text":
+        return [{ type: "text", text: item.text }];
+      case "json":
+        return [{ type: "text", text: JSON.stringify(item.value) }];
+      case "image":
+        return [{
+          type: "image",
+          source: "base64",
+          data: item.data,
+          mimeType: item.mimeType,
+          bytes: item.bytes,
+          detail: item.detail,
+        }];
+      case "pdf":
+        return [{
+          type: "pdf",
+          source: "base64",
+          data: item.data,
+          mimeType: item.mimeType,
+          bytes: item.bytes,
+          pages: item.pages,
+        }];
+      case "file":
+        return [{
+          type: "text",
+          text: `[File: ${item.path}${item.mimeType ? `, ${item.mimeType}` : ""}${
+            item.description ? `, ${item.description}` : ""
+          }]`,
+        }];
+    }
+  });
 
   return {
     type: "tool_result",
     toolCallId: result.toolCallId,
     isError: result.type === "error" || undefined,
-    content: textBlocks.length > 0 ? textBlocks : [{ type: "text", text: EMPTY_TOOL_OUTPUT }],
+    content: blocks.length > 0 ? blocks : [{ type: "text", text: EMPTY_TOOL_OUTPUT }],
     raw: result,
   };
 }
 
 export function estimateResultContentBytes(content: PilotDeckToolResultContent[]): number {
-  return Buffer.byteLength(content.map(contentToText).join("\n"), "utf8");
+  return content.reduce((total, item) => {
+    switch (item.type) {
+      case "image":
+      case "pdf":
+        return total + item.data.length;
+      default:
+        return total + Buffer.byteLength(contentToText(item), "utf8");
+    }
+  }, 0);
 }
 
 export function applyResultSizeLimit(
@@ -75,6 +114,15 @@ export function applyResultSizeLimit(
 ): { content: PilotDeckToolResultContent[]; metadata?: PilotDeckToolResultSizeMetadata } {
   if (maxBytes === undefined || maxBytes < 0) {
     return { content };
+  }
+
+  if (content.some((item) => item.type === "image" || item.type === "pdf")) {
+    return {
+      content,
+      metadata: {
+        originalBytes: estimateResultContentBytes(content),
+      },
+    };
   }
 
   const originalBytes = estimateResultContentBytes(content);

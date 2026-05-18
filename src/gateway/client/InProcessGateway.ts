@@ -663,7 +663,7 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
           });
         } else if (block.type === "tool_result") {
           const projFullText = block.content
-            .map((b: { type: string; text: string }) => b.text)
+            .map((b) => b.type === "text" ? b.text : `[${b.type}]`)
             .join("\n");
           events.push({
             type: "tool_result_detail_available",

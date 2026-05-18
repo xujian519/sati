@@ -93,3 +93,28 @@ test("ToolResultBudget detects JSON content and uses .json extension", async () 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("ToolResultBudget leaves multimodal tool results inline", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pilotdeck-trb-"));
+  try {
+    const budget = new ToolResultBudget({ toolResultsDir: dir, maxResultSizeChars: 10 });
+    const message: CanonicalMessage = {
+      role: "user",
+      content: [
+        {
+          type: "tool_result",
+          toolCallId: "tool-image",
+          content: [
+            { type: "text", text: "preview" },
+            { type: "image", source: "base64", data: "x".repeat(500), mimeType: "image/png", bytes: 500 },
+          ],
+        },
+      ],
+    };
+
+    const projected = await budget.applyToMessage(message);
+    assert.equal(projected.content[0]?.type, "tool_result");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

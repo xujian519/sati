@@ -78,8 +78,19 @@ export type PilotDeckToolKind =
 export type PilotDeckToolResultContent =
   | { type: "text"; text: string }
   | { type: "json"; value: unknown }
-  | { type: "image"; mimeType: string; data: string }
+  | { type: "image"; mimeType: string; data: string; bytes?: number; detail?: "auto" | "low" | "high" }
+  | { type: "pdf"; mimeType: "application/pdf"; data: string; bytes: number; pages?: number }
   | { type: "file"; path: string; mimeType?: string; description?: string };
+
+export type PilotDeckReadFileStateEntry = {
+  mtimeMs: number;
+  kind: "text" | "image" | "pdf" | "notebook";
+  offset?: number;
+  limit?: number;
+  pages?: string;
+};
+
+export type PilotDeckReadFileStateMap = Map<string, PilotDeckReadFileStateEntry>;
 
 export type PilotDeckToolExecutionOutput<Output = unknown> = {
   content: PilotDeckToolResultContent[];
@@ -194,6 +205,12 @@ export type PilotDeckToolRuntimeContext = {
    * when planning multi-step writes.
    */
   maxOutputTokens?: number;
+  /**
+   * Optional session-scoped cache for read_file de-duplication. The agent loop
+   * keeps the map stable across turns so repeated reads of an unchanged file
+   * can return a lightweight stub instead of re-injecting the full payload.
+   */
+  readFileState?: PilotDeckReadFileStateMap;
 };
 
 export type PilotDeckToolDefinition<Input = unknown, Output = unknown> = {

@@ -1,5 +1,6 @@
 import { createDefaultPermissionContext, PermissionRuntime, type PermissionMode, type PermissionResult } from "../../src/permission/index.js";
 import type { LifecycleRuntime } from "../../src/lifecycle/index.js";
+import type { MultimodalConstraints } from "../../src/model/index.js";
 import {
   ToolRegistry,
   ToolRuntime,
@@ -52,6 +53,8 @@ export function createPilotDeckToolRuntimeFixture(options?: {
   elicitation?: PilotDeckElicitationChannel;
   fileHistory?: PilotDeckToolFileHistorySink;
   messageId?: string;
+  modelMultimodal?: MultimodalConstraints;
+  maxOutputTokens?: number;
 }): {
   registry: ToolRegistry;
   permissionRuntime: PermissionRuntime;
@@ -82,6 +85,8 @@ export function createPilotDeckToolRuntimeFixture(options?: {
     elicitation: options?.elicitation,
     fileHistory: options?.fileHistory,
     messageId: options?.messageId,
+    modelMultimodal: options?.modelMultimodal,
+    maxOutputTokens: options?.maxOutputTokens,
   };
 
   return { registry, permissionRuntime, toolRuntime, context };

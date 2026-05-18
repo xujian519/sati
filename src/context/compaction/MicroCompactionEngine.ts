@@ -61,7 +61,9 @@ export class MicroCompactionEngine {
         if (block.type !== "tool_result") {
           return block;
         }
-        const flat = (block as CanonicalToolResultBlock).content.map((entry) => entry.text).join("\n");
+        const flat = (block as CanonicalToolResultBlock).content
+          .map((entry) => entry.type === "text" ? entry.text : `[${entry.type}]`)
+          .join("\n");
         if (flat.length <= trimToBytes) {
           return block;
         }

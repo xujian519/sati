@@ -19,7 +19,7 @@ export function countMessagesTokens(messages: CanonicalMessage[]): number {
           break;
         case "tool_result":
           for (const tb of block.content) {
-            chunks.push(tb.text);
+            chunks.push(tb.type === "text" ? tb.text : `[${tb.type}]`);
           }
           break;
       }
