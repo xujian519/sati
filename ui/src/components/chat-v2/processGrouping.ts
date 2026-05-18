@@ -11,9 +11,18 @@ export type ProcessAttachment = {
   endIndex: number;
 };
 
+export type ProcessRunAttachment = {
+  id: string;
+  durationMs: number;
+  startIndex: number;
+  endIndex: number;
+};
+
 export type RenderableMessageItem = {
   message: ChatMessage;
   originalIndex: number;
+  beforeRunAttachment: ProcessRunAttachment | null;
+  afterRunAttachment: ProcessRunAttachment | null;
   beforeProcessAttachments: ProcessAttachment[];
   afterProcessAttachments: ProcessAttachment[];
 };
@@ -415,6 +424,79 @@ function getDurationMs(start: unknown, end: unknown): number {
   return Math.max(0, endTime - startTime);
 }
 
+function getTurnEndIndex(messages: ChatMessage[], turn: MessageTurn): number {
+  for (let index = turn.end - 1; index >= turn.start; index -= 1) {
+    const message = messages[index];
+    if (!message || message.isAgentActivity || message.isAgentActivitySummary) {
+      continue;
+    }
+    return index;
+  }
+  return turn.end - 1;
+}
+
+function getTurnRunDurationMs(messages: ChatMessage[], turn: MessageTurn): number | null {
+  const summaryDuration = turn.summary?.message.durationMs;
+  if (typeof summaryDuration === 'number' && Number.isFinite(summaryDuration)) {
+    return Math.max(0, summaryDuration);
+  }
+
+  const summaryStart = turn.summary?.message.startedAt;
+  const summaryEnd = turn.summary?.message.endedAt;
+  const fallbackEndIndex = getTurnEndIndex(messages, turn);
+  const startedAt = summaryStart ?? messages[turn.start]?.timestamp;
+  const endedAt = summaryEnd ?? messages[fallbackEndIndex]?.timestamp;
+  const durationMs = getDurationMs(startedAt, endedAt);
+  return durationMs > 0 ? durationMs : null;
+}
+
+function hasCompletedTurnWork(messages: ChatMessage[], turn: MessageTurn): boolean {
+  if (turn.summary) {
+    return true;
+  }
+
+  for (let index = turn.start; index < turn.end; index += 1) {
+    const message = messages[index];
+    if (!message || message.isAgentActivity || message.isAgentActivitySummary || message.type === 'user') {
+      continue;
+    }
+    if (canHostProcessSummary(message) || isProcessMessage(message)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasAgentActivitySummaryDetails(message: ChatMessage): boolean {
+  const numericDetailFields = [
+    'toolCallCount',
+    'toolErrorCount',
+    'ragSearchCount',
+    'editedFileCount',
+    'exploredFileCount',
+    'commandCount',
+    'subagentCount',
+    'compactCount',
+    'thinkingCount',
+    'otherToolCount',
+  ];
+  const hasMetrics = numericDetailFields.some((key) => {
+    const value = message[key];
+    return typeof value === 'number' && Number.isFinite(value) && value > 0;
+  });
+  if (hasMetrics) {
+    return true;
+  }
+
+  if (Array.isArray(message.keySteps) && message.keySteps.length > 0) {
+    return true;
+  }
+
+  const state = String(message.state || 'completed');
+  return state !== 'completed';
+}
+
 function createSyntheticProcessSummary(
   messages: ChatMessage[],
   turn: MessageTurn,
@@ -566,6 +648,8 @@ export function buildRenderableMessageItems(
     const item: RenderableMessageItem = {
       message,
       originalIndex,
+      beforeRunAttachment: null,
+      afterRunAttachment: null,
       beforeProcessAttachments: [],
       afterProcessAttachments: [],
     };
@@ -581,13 +665,37 @@ export function buildRenderableMessageItems(
       return;
     }
 
+    const durationMs = getTurnRunDurationMs(messages, turn);
+    if (durationMs != null && hasCompletedTurnWork(messages, turn)) {
+      const runAttachment: ProcessRunAttachment = {
+        id: `completed-run-${turn.start}-${turn.end}`,
+        durationMs,
+        startIndex: turn.start,
+        endIndex: getTurnEndIndex(messages, turn),
+      };
+      const turnStartMessage = messages[turn.start];
+      const turnStartItem = itemsByIndex.get(turn.start);
+      if (turnStartMessage?.type === 'user' && turnStartItem) {
+        turnStartItem.afterRunAttachment = runAttachment;
+      } else {
+        const firstVisibleItem = items.find((item) =>
+          item.originalIndex >= turn.start && item.originalIndex < turn.end,
+        );
+        if (firstVisibleItem) {
+          firstVisibleItem.beforeRunAttachment = runAttachment;
+        }
+      }
+    }
+
     const segments = collectCompletedProcessSegments(messages, turn);
 
     if (segments.length === 0) {
-      if (turn.summary) {
+      if (turn.summary && hasAgentActivitySummaryDetails(turn.summary.message)) {
         items.push({
           message: turn.summary.message,
           originalIndex: turn.summary.originalIndex,
+          beforeRunAttachment: null,
+          afterRunAttachment: null,
           beforeProcessAttachments: [],
           afterProcessAttachments: [],
         });
@@ -632,6 +740,8 @@ export function buildRenderableMessageItems(
         syntheticItems.push({
           message: summary,
           originalIndex: segment.startIndex - 0.1,
+          beforeRunAttachment: null,
+          afterRunAttachment: null,
           beforeProcessAttachments: [],
           afterProcessAttachments: [],
         });

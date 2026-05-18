@@ -185,6 +185,28 @@ describe('processGrouping', () => {
     expect(processAttachments(thirdAssistant)).toHaveLength(0);
   });
 
+  it('attaches completed run duration after the user turn finishes', () => {
+    const messages: ChatMessage[] = [
+      user('u1'),
+      assistant('a1', 'I finished the work.', 5000),
+      {
+        id: 'summary-1',
+        type: 'system',
+        content: 'Process summary',
+        timestamp: timestamp(81000),
+        isAgentActivitySummary: true,
+        durationMs: 80000,
+        state: 'completed',
+      },
+    ];
+
+    const items = buildRenderableMessageItems(messages);
+    const userItem = items.find((item) => item.message.id === 'u1');
+
+    expect(items.map((item) => item.message.id)).toEqual(['u1', 'a1']);
+    expect(userItem?.afterRunAttachment?.durationMs).toBe(80000);
+  });
+
   it('attaches a leading completed process segment before the next assistant message', () => {
     const messages = [
       user('u1'),

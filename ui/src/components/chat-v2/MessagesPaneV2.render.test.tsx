@@ -131,6 +131,44 @@ describe('MessagesPaneV2 render behavior', () => {
     expect(Boolean(headerStatus.compareDocumentPosition(assistantText) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
+  it('keeps the processed duration visible after the active turn completes', () => {
+    const now = '2026-05-18T08:00:00.000Z';
+    const messages: ChatMessage[] = [
+      {
+        id: 'u-1',
+        type: 'user',
+        content: '继续优化',
+        timestamp: now,
+      },
+      {
+        id: 'a-1',
+        type: 'assistant',
+        content: 'I finished the changes.',
+        timestamp: '2026-05-18T08:01:20.000Z',
+      },
+      {
+        id: 'summary-1',
+        type: 'system',
+        content: 'Process summary',
+        timestamp: '2026-05-18T08:01:20.000Z',
+        isAgentActivitySummary: true,
+        durationMs: 80000,
+        state: 'completed',
+      },
+    ];
+
+    renderPane({ messages });
+
+    const headerStatus = screen.getByText('Processed 1m 20s').closest('[role="status"]');
+    const userText = screen.getByText('继续优化');
+    const assistantText = screen.getByText('I finished the changes.');
+
+    expect(headerStatus).not.toBeNull();
+    expect(headerStatus?.querySelector('button')).toBeNull();
+    expect(Boolean(userText.compareDocumentPosition(headerStatus as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean((headerStatus as Element).compareDocumentPosition(assistantText) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+  });
+
   it('keeps live tool calls collapsed but lets the running status expand their details', () => {
     const now = new Date().toISOString();
     const messages: ChatMessage[] = [

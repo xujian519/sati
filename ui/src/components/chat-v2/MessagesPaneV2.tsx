@@ -113,12 +113,13 @@ export function estimateMessageItemHeight(item: RenderableMessageItem): number {
   const processSummaryCount =
     item.beforeProcessAttachments.length + item.afterProcessAttachments.length;
   const processSummaryHeight = processSummaryCount * 32;
+  const runHeaderHeight = (item.beforeRunAttachment ? 34 : 0) + (item.afterRunAttachment ? 34 : 0);
   const attachmentHeight = Array.isArray(item.message.attachments) && item.message.attachments.length > 0 ? 56 : 0;
   const imageHeight = Array.isArray(item.message.images) && item.message.images.length > 0 ? 180 : 0;
   const toolHeight = item.message.isToolUse || item.message.toolName ? 140 : 0;
 
   return clampNumber(
-    baseHeight + roughLines * 20 + processSummaryHeight + attachmentHeight + imageHeight + toolHeight + MESSAGE_GAP_PX,
+    baseHeight + roughLines * 20 + runHeaderHeight + processSummaryHeight + attachmentHeight + imageHeight + toolHeight + MESSAGE_GAP_PX,
     72,
     720,
   );
@@ -506,6 +507,12 @@ export default function MessagesPaneV2({
           compactBottomSpacing={anchoredLiveGroups.length > 0 || rendersLiveHeaderAfterItem}
           onHeightChange={handleMeasuredItemHeight}
         >
+          {item.beforeRunAttachment ? (
+            <CompletedProcessHeader
+              durationMs={item.beforeRunAttachment.durationMs}
+              t={t}
+            />
+          ) : null}
           <MessageRowV2
             message={item.message}
             prevMessage={previousMessage}
@@ -523,6 +530,12 @@ export default function MessagesPaneV2({
           />
           {rendersLiveHeaderAfterItem ? (
             <LiveProcessHeader activities={liveActivities} t={t} />
+          ) : null}
+          {item.afterRunAttachment ? (
+            <CompletedProcessHeader
+              durationMs={item.afterRunAttachment.durationMs}
+              t={t}
+            />
           ) : null}
           {anchoredLiveGroups.length > 0 ? (
             <div className="mt-2 flex min-w-0 flex-col gap-2">
@@ -820,6 +833,22 @@ function LiveProcessHeader({
     [activities, nowMs],
   );
   const duration = formatProcessDuration(elapsedMs);
+  const label = t('process.summary.processed', {
+    duration,
+    defaultValue: `Processed ${duration}`,
+  });
+
+  return <ProcessRunHeader label={label} />;
+}
+
+function CompletedProcessHeader({
+  durationMs,
+  t,
+}: {
+  durationMs: number;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const duration = formatProcessDuration(durationMs);
   const label = t('process.summary.processed', {
     duration,
     defaultValue: `Processed ${duration}`,
