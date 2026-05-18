@@ -3,6 +3,7 @@ import type { PilotDeckToolResult } from "../../tool/index.js";
 import type { AgentError } from "./errors.js";
 import type { AgentTurnResult } from "./result.js";
 import type { AgentLoopTransition } from "./state.js";
+import type { TokenBudgetSnapshot } from "../../context/budget/TokenBudgetManager.js";
 
 export type AgentEvent =
   | { type: "session_started"; sessionId: string }
@@ -27,6 +28,7 @@ export type AgentEvent =
   | { type: "stop_failure"; sessionId: string; turnId: string; error: string }
   | { type: "compact_started"; sessionId: string; turnId: string; trigger: string; preTokens: number }
   | { type: "compact_completed"; sessionId: string; turnId: string; status: string; preTokens: number; postTokens?: number }
+  | { type: "context_budget"; sessionId: string; turnId: string; snapshot: TokenBudgetSnapshot }
   | { type: "subagent_started"; sessionId: string; turnId: string; subagentId: string; subagentType: string }
   | { type: "subagent_completed"; sessionId: string; turnId: string; subagentId: string; subagentType: string; success: boolean; durationMs: number }
   | { type: "elicitation_requested"; sessionId: string; turnId: string; requestId: string; toolName: string }

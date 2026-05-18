@@ -3,6 +3,7 @@ import type {
   CanonicalModelRequest,
   CanonicalToolCall,
   CanonicalUsage,
+  MultimodalConstraints,
 } from "../../model/index.js";
 import type {
   PermissionContext,
@@ -54,6 +55,7 @@ export type PilotDeckSubagentForkApi = {
     directive: string;
     subagentId: string;
     abortSignal?: AbortSignal;
+    timeoutMs?: number;
   }): Promise<{
     markdown: string;
     usage: CanonicalUsage;
@@ -111,6 +113,7 @@ export type PilotDeckToolRuntimeContext = {
   turnId: string;
   cwd: string;
   abortSignal?: AbortSignal;
+  subagentTimeoutMs?: number;
   permissionMode: PermissionMode;
   permissionContext: PermissionContext;
   auditRecorder?: PilotDeckToolAuditRecorder;
@@ -178,6 +181,19 @@ export type PilotDeckToolRuntimeContext = {
     path: string;
     read(): string | undefined;
   };
+  /**
+   * Multimodal constraints of the model driving this agent session.
+   * Absent when the model config doesn't declare multimodal capabilities
+   * (text-only). Tools use this to decide whether to return rich content
+   * (e.g. base64 images) or a text-only fallback description.
+   */
+  modelMultimodal?: MultimodalConstraints;
+  /**
+   * Current max output tokens for this session's model. Surfaced in
+   * validation error hints so the model can reason about output budget
+   * when planning multi-step writes.
+   */
+  maxOutputTokens?: number;
 };
 
 export type PilotDeckToolDefinition<Input = unknown, Output = unknown> = {

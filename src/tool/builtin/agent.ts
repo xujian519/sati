@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { CanonicalModelRequest, CanonicalUsage } from "../../model/index.js";
 import type { PermissionResult } from "../../permission/index.js";
+import { SUBAGENT_DEFINITIONS } from "../../agent/sub/builtinSubagentTypes.js";
 import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
 import type {
   PilotDeckSubagentForkApi,
@@ -30,7 +31,6 @@ import type {
  */
 
 export type AgentSubagentType =
-  | "general_purpose"
   | "general-purpose"
   | "plan"
   | "explore"
@@ -44,8 +44,8 @@ export type AgentSubagentDefinition = {
 
 /** Legacy P0 single-shot presets. Used only in the fallback path. */
 export const BUILTIN_SUBAGENTS: Record<string, AgentSubagentDefinition> = {
-  general_purpose: {
-    type: "general_purpose",
+  "general-purpose": {
+    type: "general-purpose",
     description:
       "General-purpose subagent for delegating bounded research / synthesis tasks. Returns a single text answer.",
     systemPrompt:
@@ -109,17 +109,19 @@ export type CreateAgentToolOptions = {
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
 const DEFAULT_PROVIDER_FALLBACK = "edgeclaw";
 const DEFAULT_MODEL_FALLBACK = "moonshotai/kimi-k2.6";
+const DEFAULT_SUBAGENT_TIMEOUT_MS = 120_000;
+const PUBLIC_SUBAGENT_TYPES = ["general-purpose", "explore", "plan"] as const;
 
 export function createAgentTool(
   options: CreateAgentToolOptions = {},
 ): PilotDeckToolDefinition<AgentToolInput, AgentToolOutput> {
   const fallbackPresets = options.subagents ?? BUILTIN_SUBAGENTS;
+  const description = buildAgentToolDescription();
 
   return {
     name: "agent",
     aliases: ["Agent", "Task"],
-    description:
-      "Delegate a bounded subtask to a subagent. When invoked from the AgentLoop, runs a real subagent with its own tool loop; otherwise issues a single model call. Returns the subagent's structured report.",
+    description,
     kind: "agent",
     inputSchema: {
       type: "object",
@@ -128,20 +130,21 @@ export function createAgentTool(
       properties: {
         description: {
           type: "string",
-          description: "Short label used in audit / progress (3-5 words).",
+          description: "Short 3-5 word task summary used to label the subagent run.",
         },
         prompt: {
           type: "string",
-          description: "Detailed directive for the subagent (free-form text).",
+          description:
+            "Detailed directive for the subagent. Include the goal, relevant context, constraints, and desired output; do not assume the subagent already knows why the task matters.",
         },
         subagent_type: {
           type: "string",
           description:
-            "Subagent preset id. Full-fork mode: 'general-purpose' | 'explore' | 'plan'. Fallback mode: 'general_purpose' | 'plan' | 'verify' | 'explore'.",
+            "Optional subagent preset. Public built-ins: 'general-purpose' (full tool access), 'explore' (read-only investigation with read_file/grep/glob/bash), or 'plan' (read-only planning with read_file/grep/glob). Some runtimes may also expose additional presets such as 'verify'. Defaults to 'general-purpose' when omitted. Legacy 'general_purpose' is still accepted for compatibility.",
         },
         subagentType: {
           type: "string",
-          description: "Deprecated camelCase alias for subagent_type.",
+          description: "Deprecated legacy alias for subagent_type. Prefer subagent_type.",
         },
       },
     },
@@ -172,7 +175,9 @@ export function createAgentTool(
       },
     }),
     execute: async (input, context) => {
-      const explicit = input.subagent_type ?? input.subagentType;
+      const explicit = normalizeRequestedSubagentType(
+        input.subagent_type ?? input.subagentType,
+      );
       const directive = input.prompt;
 
       // Full fork path (C2): preferred when AgentLoop wired the fork API.
@@ -186,8 +191,7 @@ export function createAgentTool(
           fork: context.subagent,
         });
       }
-      // Fallback path keeps the legacy `general_purpose` underscore default.
-      const requestedType = explicit ?? "general_purpose";
+      const requestedType = explicit ?? "general-purpose";
 
       return runFallback({
         input,
@@ -203,6 +207,46 @@ export function createAgentTool(
       });
     },
   };
+}
+
+function buildAgentToolDescription(): string {
+  const publicTypes = PUBLIC_SUBAGENT_TYPES
+    .map((id) => {
+      const definition = SUBAGENT_DEFINITIONS[id];
+      const tools =
+        definition.allowedTools[0] === "*"
+          ? "all parent tools"
+          : definition.allowedTools.join(", ");
+      return `- ${id}: ${definition.description} Tools: ${tools}.`;
+    })
+    .join("\n");
+
+  return [
+    "Launch a new subagent to handle a focused multi-step task.",
+    "",
+    "Use this tool when a bounded piece of work would benefit from an autonomous helper instead of keeping every intermediate step in the parent agent's context.",
+    "",
+    "Provide:",
+    "- `description`: a short 3-5 word label for the task.",
+    "- `prompt`: the full directive for the subagent. Write it like a complete briefing: include the goal, relevant context, constraints, and what good output looks like.",
+    "- `subagent_type` (optional): choose a built-in preset. If omitted, `general-purpose` is used.",
+    "",
+    "Available built-in subagent types:",
+    publicTypes,
+    "",
+    "The subagent returns one structured report with these sections: `Scope`, `Result`, `Key files`, `Files changed`, and `Issues`.",
+    "",
+    "Runtime behavior:",
+    "- Inside the AgentLoop, this runs a real forked subagent with its own scoped tool loop.",
+    "- In stand-alone runtimes and some tests, it falls back to a single model call that preserves the same high-level subagent intent.",
+  ].join("\n");
+}
+
+function normalizeRequestedSubagentType(value: string | undefined): string | undefined {
+  if (value === "general_purpose") {
+    return "general-purpose";
+  }
+  return value;
 }
 
 async function runFullFork(args: {
@@ -230,12 +274,30 @@ async function runFullFork(args: {
     );
   }
   const subagentId = randomUUID();
-  const report = await fork.fork({
-    definitionId: requestedType,
-    directive,
-    subagentId,
-    abortSignal: context.abortSignal,
-  });
+  const timeoutMs = context.subagentTimeoutMs ?? DEFAULT_SUBAGENT_TIMEOUT_MS;
+  let report;
+  try {
+    report = await fork.fork({
+      definitionId: requestedType,
+      directive,
+      subagentId,
+      abortSignal: context.abortSignal,
+      timeoutMs,
+    });
+  } catch (error) {
+    if (context.abortSignal?.aborted) {
+      throw new PilotDeckToolRuntimeError(
+        "tool_aborted",
+        "agent subagent aborted before completion.",
+      );
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    throw new PilotDeckToolRuntimeError(
+      "tool_execution_failed",
+      `agent subagent failed: ${message}`,
+      { errorCode: "subagent_execution_failed" },
+    );
+  }
   if (context.abortSignal?.aborted) {
     throw new PilotDeckToolRuntimeError(
       "tool_aborted",

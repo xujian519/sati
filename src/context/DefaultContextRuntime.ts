@@ -34,7 +34,13 @@ export type CompactionTier = "micro" | "snip" | "full";
 
 export type AutoCompactResult =
   | { type: "skipped"; snapshot: TokenBudgetSnapshot }
-  | { type: "compacted"; messages: CanonicalMessage[]; tier: CompactionTier; result?: CompactionResult };
+  | {
+      type: "compacted";
+      messages: CanonicalMessage[];
+      tier: CompactionTier;
+      snapshot: TokenBudgetSnapshot;
+      result?: CompactionResult;
+    };
 
 export type DefaultContextRuntimeOptions = {
   extension?: ExtensionResolver;
@@ -76,12 +82,15 @@ export type DefaultContextRuntimeOptions = {
   truncateFirstKeepRatio?: number;
   /** Aggressive ratio used after one truncate-and-retry already failed. */
   truncateSecondKeepRatio?: number;
+  /** Timeout budget for MemoryResolver.retrieve during prepareForModel. */
+  memoryRetrievalTimeoutMs?: number;
   now?: () => Date;
 };
 
 const DEFAULT_MAX_CONTEXT_TOKENS = 8192;
 const DEFAULT_TRUNCATE_FIRST_RATIO = 0.5;
 const DEFAULT_TRUNCATE_SECOND_RATIO = 0.25;
+const DEFAULT_MEMORY_RETRIEVAL_TIMEOUT_MS = 5_000;
 
 export class DefaultContextRuntime implements ContextRuntime {
   private readonly extension: ExtensionResolver;
@@ -102,6 +111,7 @@ export class DefaultContextRuntime implements ContextRuntime {
   private readonly maxContextTokens: number;
   private readonly truncateFirstKeepRatio: number;
   private readonly truncateSecondKeepRatio: number;
+  private readonly memoryRetrievalTimeoutMs: number;
   private readonly now: () => Date;
 
   constructor(options: DefaultContextRuntimeOptions = {}) {
@@ -125,6 +135,7 @@ export class DefaultContextRuntime implements ContextRuntime {
     this.maxContextTokens = options.maxContextTokens ?? DEFAULT_MAX_CONTEXT_TOKENS;
     this.truncateFirstKeepRatio = options.truncateFirstKeepRatio ?? DEFAULT_TRUNCATE_FIRST_RATIO;
     this.truncateSecondKeepRatio = options.truncateSecondKeepRatio ?? DEFAULT_TRUNCATE_SECOND_RATIO;
+    this.memoryRetrievalTimeoutMs = options.memoryRetrievalTimeoutMs ?? DEFAULT_MEMORY_RETRIEVAL_TIMEOUT_MS;
     this.now = options.now ?? (() => new Date());
   }
 
@@ -163,6 +174,8 @@ export class DefaultContextRuntime implements ContextRuntime {
         sessionId: input.sessionId,
         projectRoot: this.projectRoot ?? input.cwd,
         recentMessages: projection.messages,
+        signal: input.abortSignal,
+        timeoutMs: this.memoryRetrievalTimeoutMs,
       });
       for (const block of memory.attachments) {
         for (const content of block.content) {
@@ -177,6 +190,20 @@ export class DefaultContextRuntime implements ContextRuntime {
           severity: diagnostic.severity,
           message: diagnostic.message,
         });
+      }
+      if (input.abortSignal?.aborted) {
+        return {
+          messages: projection.messages,
+          systemPrompt: parts.join("\n\n"),
+          systemPromptParts: parts,
+          tools: input.tools,
+          diagnostics,
+          boundaries: [],
+          metadata: {
+            droppedCount: projection.droppedCount,
+            toolCount: input.tools.length,
+          },
+        };
       }
     }
 
@@ -285,7 +312,12 @@ export class DefaultContextRuntime implements ContextRuntime {
         messages = r.messages;
         const snap = this.tokenBudget.evaluate(messages, this.maxContextTokens);
         if (snap.state === "ok") {
-          return { type: "compacted", messages: ensureTrailingUserMessage(messages), tier: "micro" };
+          return {
+            type: "compacted",
+            messages: ensureTrailingUserMessage(messages),
+            tier: "micro",
+            snapshot: snap,
+          };
         }
       }
     }
@@ -297,7 +329,12 @@ export class DefaultContextRuntime implements ContextRuntime {
         messages = r.messages;
         const snap = this.tokenBudget.evaluate(messages, this.maxContextTokens);
         if (snap.state === "ok") {
-          return { type: "compacted", messages: ensureTrailingUserMessage(messages), tier: "snip" };
+          return {
+            type: "compacted",
+            messages: ensureTrailingUserMessage(messages),
+            tier: "snip",
+            snapshot: snap,
+          };
         }
       }
     }
@@ -309,10 +346,13 @@ export class DefaultContextRuntime implements ContextRuntime {
         messages,
         signal: input.abortSignal,
       });
+      const postCompactMessages = ensureTrailingUserMessage(buildPostCompactMessages(result));
+      const snapshot = this.tokenBudget.evaluate(postCompactMessages, this.maxContextTokens);
       return {
         type: "compacted",
-        messages: ensureTrailingUserMessage(buildPostCompactMessages(result)),
+        messages: postCompactMessages,
         tier: "full",
+        snapshot,
         result,
       };
     }

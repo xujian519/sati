@@ -20,6 +20,7 @@ export type EdgeClawMemoryServiceLike = {
       recentMessages?: ContextMemoryMessage[];
       workspaceHint?: string;
       retrievalMode?: "auto" | "explicit";
+      signal?: AbortSignal;
     },
   ): Promise<EdgeClawRetrieveContextResult>;
   captureTurn(
@@ -53,6 +54,7 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
         recentMessages,
         workspaceHint: input.projectRoot,
         retrievalMode: this.options.retrievalMode ?? "auto",
+        signal: input.signal,
       });
       const systemContext = (result.systemContext ?? result.context ?? "").trim();
       if (!systemContext) {

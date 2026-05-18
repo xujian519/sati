@@ -15,6 +15,8 @@ export type TuiActivityItem = {
   status: "running" | "done" | "error" | "info";
 };
 
+export type DashboardMode = "closed" | "sidebar" | "overlay";
+
 export type TuiAppState = {
   connection: TuiConnectionMode;
   activeSessionKey: string;
@@ -35,6 +37,12 @@ export type TuiAppState = {
     toolName: string;
     payload: unknown;
   }>;
+  dashboardMode: DashboardMode;
+  helpTab: "shortcuts" | "settings" | "about";
+  settingsCursor: number;
+  sidebarCursorIndex: number;
+  sidebarCollapsed: Set<string>;
+  sidebarGroupBy: "project" | "status";
 };
 
 export type TuiEventReducerResult = Pick<TuiAppState, "messages" | "activity" | "mode" | "isRunning" | "pendingPermissions">;

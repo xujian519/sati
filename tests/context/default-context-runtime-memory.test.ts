@@ -46,3 +46,36 @@ test("DefaultContextRuntime memory failure surfaces as diagnostic, not throw", a
   const context = await runtime.prepareForModel(baseInput);
   assert.ok(context.diagnostics.some((d) => d.code === "memory_provider_error"));
 });
+
+test("DefaultContextRuntime times out stalled memory retrieval and continues", async () => {
+  const runtime = new DefaultContextRuntime({
+    memoryResolver: {
+      retrieve: async () => await new Promise<never>(() => undefined),
+      captureTurn: async () => undefined,
+    },
+    memoryRetrievalTimeoutMs: 10,
+  });
+  const context = await runtime.prepareForModel(baseInput);
+  assert.ok(context.diagnostics.some((d) =>
+    d.code === "memory_provider_error" && /timed out/i.test(d.message)
+  ));
+});
+
+test("DefaultContextRuntime exits memory retrieval quickly when aborted", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const runtime = new DefaultContextRuntime({
+    memoryResolver: {
+      retrieve: async () => {
+        throw new Error("should not be called once aborted");
+      },
+      captureTurn: async () => undefined,
+    },
+    memoryRetrievalTimeoutMs: 100,
+  });
+  const context = await runtime.prepareForModel({
+    ...baseInput,
+    abortSignal: controller.signal,
+  });
+  assert.equal(context.diagnostics.filter((d) => d.code === "memory_provider_error").length, 0);
+});

@@ -4,7 +4,7 @@ import { createEditFileTool, createWriteFileTool } from "../../src/tool/index.js
 import { createPilotDeckTempWorkspace } from "../helpers/filesystem.js";
 import { createPilotDeckToolRuntimeFixture } from "../helpers/tool.js";
 
-test("edit_file replaces one exact occurrence and replaceAll replaces all", async (t) => {
+test("edit_file replaces one exact occurrence and replace_all replaces all", async (t) => {
   const workspace = await createPilotDeckTempWorkspace({ "a.txt": "one two one" });
   t.after(() => workspace.cleanup());
   const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
@@ -14,7 +14,7 @@ test("edit_file replaces one exact occurrence and replaceAll replaces all", asyn
   });
 
   const ambiguous = await toolRuntime.execute(
-    { id: "call-1", name: "edit_file", input: { filePath: "a.txt", oldString: "one", newString: "1" } },
+    { id: "call-1", name: "edit_file", input: { file_path: "a.txt", old_string: "one", new_string: "1" } },
     context,
   );
   assert.equal(ambiguous.type, "error");
@@ -24,7 +24,7 @@ test("edit_file replaces one exact occurrence and replaceAll replaces all", asyn
     {
       id: "call-2",
       name: "edit_file",
-      input: { filePath: "a.txt", oldString: "one", newString: "1", replaceAll: true },
+      input: { file_path: "a.txt", old_string: "one", new_string: "1", replace_all: true },
     },
     context,
   );
@@ -42,18 +42,18 @@ test("write_file creates files and denies overwrite without explicit flag", asyn
   });
 
   const created = await toolRuntime.execute(
-    { id: "call-1", name: "write_file", input: { filePath: "new.txt", content: "new" } },
+    { id: "call-1", name: "write_file", input: { file_path: "new.txt", content: "new" } },
     context,
   );
   const denied = await toolRuntime.execute(
-    { id: "call-2", name: "write_file", input: { filePath: "existing.txt", content: "new" } },
+    { id: "call-2", name: "write_file", input: { file_path: "existing.txt", content: "new" } },
     context,
   );
   const overwritten = await toolRuntime.execute(
     {
       id: "call-3",
       name: "write_file",
-      input: { filePath: "existing.txt", content: "new", allowOverwrite: true },
+      input: { file_path: "existing.txt", content: "new", allow_overwrite: true },
     },
     context,
   );
@@ -75,7 +75,7 @@ test("write tools are denied in plan mode before execution", async (t) => {
   });
 
   const result = await toolRuntime.execute(
-    { id: "call-1", name: "write_file", input: { filePath: "new.txt", content: "new" } },
+    { id: "call-1", name: "write_file", input: { file_path: "new.txt", content: "new" } },
     context,
   );
 

@@ -22,6 +22,7 @@ function makeModelRuntime(scripts: CanonicalModelEvent[][]): ModelRuntime & { re
       supportsThinking: false, supportsJsonSchema: true, supportsSystemPrompt: true,
       supportsPromptCache: false, maxContextTokens: 100_000, maxOutputTokens: 4_000,
     }),
+    getMultimodal: () => ({ input: ["text" as const] }),
   };
 }
 
@@ -42,6 +43,7 @@ function makeJudgeRuntime(tierSequence: string[]): ModelRuntime {
       supportsThinking: false, supportsJsonSchema: false, supportsSystemPrompt: false,
       supportsPromptCache: false, maxContextTokens: 4096, maxOutputTokens: 256,
     }),
+    getMultimodal: () => ({ input: ["text" as const] }),
   };
 }
 
@@ -106,6 +108,7 @@ test("TokenSaver subagent policy=skip does not invoke judge", async () => {
       supportsThinking: false, supportsJsonSchema: false, supportsSystemPrompt: false,
       supportsPromptCache: false, maxContextTokens: 4096, maxOutputTokens: 256,
     }),
+    getMultimodal: () => ({ input: ["text" as const] }),
   };
   const config: RouterConfig = {
     ...tokenSaverConfig,
@@ -233,6 +236,7 @@ test("stream passes previousTier to judge prompt", async () => {
       supportsThinking: false, supportsJsonSchema: false, supportsSystemPrompt: false,
       supportsPromptCache: false, maxContextTokens: 4096, maxOutputTokens: 256,
     }),
+    getMultimodal: () => ({ input: ["text" as const] }),
   };
   const modelRuntime = makeModelRuntime([[...successEvents]]);
   const router = createRouterRuntime(tokenSaverConfig, { modelRuntime, judgeRuntime });

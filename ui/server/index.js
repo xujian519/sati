@@ -52,6 +52,7 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 import JSZip from 'jszip';
+import { readPermissionSettings } from './services/permissionSettings.js';
 
 import { getProjects, getProjectCronJobsOverview, getSessions, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
 import {
@@ -68,6 +69,7 @@ import {
     getRouterStatsSummary,
     getPilotDeckGateway,
     registerAlwaysOnNotificationForwarding,
+    getSessionTokenBudget,
 } from './pilotdeck-bridge.js';
 import sessionManager from './sessionManager.js';
 import gitRoutes from './routes/git.js';
@@ -567,8 +569,13 @@ app.use('/api/agent', agentRoutes);
 // model is read from PilotDeck config; fall back to a static stub so any
 // older frontend code paths render without crashing.
 app.get('/api/agents/runtime-config', authenticateToken, (_req, res) => {
+    const permSettings = readPermissionSettings();
     res.json({
         pilotdeck: { provider: 'pilotdeck' },
+        permissions: {
+            skipPermissions: permSettings.skipPermissions,
+            effectiveMode: permSettings.skipPermissions ? 'bypassPermissions' : 'default',
+        },
     });
 });
 
@@ -1977,6 +1984,7 @@ function handleChatConnection(ws, request) {
                     provider: data.provider || 'pilotdeck',
                     isProcessing,
                     activeTurnMessages,
+                    tokenBudget: getSessionTokenBudget(sessionId),
                 });
             } else if (data.type === 'get-pending-permissions') {
                 // Pending-permission introspection is gateway-internal. The
@@ -2472,6 +2480,11 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
         const { projectName, sessionId } = req.params;
         const { provider = 'claude' } = req.query;
         const homeDir = os.homedir();
+
+        // PilotDeck sessions use `web:s_<uuid>` keys — return in-memory budget
+        if (provider === 'pilotdeck' || /^web:s_/.test(sessionId)) {
+            return res.json(getSessionTokenBudget(sessionId));
+        }
 
         // Allow only safe characters in sessionId
         const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');

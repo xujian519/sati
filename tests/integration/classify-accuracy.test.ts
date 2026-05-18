@@ -83,6 +83,7 @@ test("benchmark: mock judge returning expected tier yields correct model selecti
         supportsThinking: false, supportsJsonSchema: false, supportsSystemPrompt: false,
         supportsPromptCache: false, maxContextTokens: 4096, maxOutputTokens: 256,
       }),
+      getMultimodal: () => ({ input: ["text" as const] }),
     };
     const result = await classifyAndRoute({
       config: CONFIG,
@@ -111,6 +112,7 @@ test("benchmark: mock judge returning wrong tier still produces valid pipeline o
         supportsThinking: false, supportsJsonSchema: false, supportsSystemPrompt: false,
         supportsPromptCache: false, maxContextTokens: 4096, maxOutputTokens: 256,
       }),
+      getMultimodal: () => ({ input: ["text" as const] }),
     };
     const result = await classifyAndRoute({
       config: CONFIG,

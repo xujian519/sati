@@ -90,10 +90,14 @@ function ChatInterfaceV2({
 
   const selectPermissionMode = useCallback((mode: typeof permissionMode) => {
     setPermissionModeRaw(mode);
+    localStorage.setItem('permissionMode-default', mode);
     if (selectedSession?.id) {
       localStorage.setItem(`permissionMode-${selectedSession.id}`, mode);
     }
   }, [setPermissionModeRaw, selectedSession?.id]);
+
+  const effectivePermissionMode =
+    runMode === 'plan' ? 'plan' : permissionMode;
 
   const {
     chatMessages,
@@ -189,7 +193,7 @@ function ChatInterfaceV2({
     selectedSession,
     currentSessionId,
     model,
-    permissionMode,
+    permissionMode: effectivePermissionMode,
     cyclePermissionMode,
     isLoading,
     canAbortSession,
@@ -215,6 +219,10 @@ function ChatInterfaceV2({
     pendingPermissionRequests,
     setPendingPermissionRequests,
   });
+
+  const handlePlanExecutionApproved = useCallback(() => {
+    setRunMode('agent');
+  }, []);
 
   const handleWebSocketReconnect = useCallback(async () => {
     if (!selectedProject || !selectedSession) return;
@@ -379,6 +387,8 @@ function ChatInterfaceV2({
       onSelectPermissionMode={selectPermissionMode}
       runMode={runMode}
       onRunModeChange={setRunMode}
+      planModeAvailable={true}
+      onPlanExecutionApproved={handlePlanExecutionApproved}
       chromeless={isWelcomeMode}
     />
   );

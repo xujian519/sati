@@ -619,12 +619,26 @@ export function createRouterRuntime(
     const current = sessionStore.get(sessionId, false);
     const previousTier = current?.tokenSaverTier;
     const orchestrating = current?.orchestrating ?? false;
-    sessionStore.set({
-      sessionId,
-      isSubagent: false,
-      orchestrating,
-      updatedAt: (deps.now?.() ?? new Date()).getTime(),
-    });
+    if (orchestrating && previousTier) {
+      // While orchestrating, preserve the tier sticky so continuation turns
+      // don't get re-judged and accidentally downgraded.
+      sessionStore.set({
+        sessionId,
+        isSubagent: false,
+        orchestrating,
+        tokenSaverTier: previousTier,
+        stickyProvider: current?.stickyProvider,
+        stickyModel: current?.stickyModel,
+        updatedAt: (deps.now?.() ?? new Date()).getTime(),
+      });
+    } else {
+      sessionStore.set({
+        sessionId,
+        isSubagent: false,
+        orchestrating,
+        updatedAt: (deps.now?.() ?? new Date()).getTime(),
+      });
+    }
     return { previousTier, orchestrating };
   }
 

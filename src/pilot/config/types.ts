@@ -60,6 +60,9 @@ export type PilotAgentModelSelection = {
 
 export type PilotAgentConfig = {
   model: PilotAgentModelSelection;
+  subagents?: {
+    timeoutMs?: number;
+  };
 };
 
 /**
@@ -70,6 +73,13 @@ export type PilotAgentConfig = {
 export type PilotRouterConfig = RouterConfig;
 
 export type PilotMemoryApiType = "openai-responses" | "responses" | "openai-completions";
+export type PilotMemoryReasoningMode = "answer_first" | "accuracy_first";
+
+export type PilotMemoryScheduleConfig = {
+  reasoningMode?: PilotMemoryReasoningMode;
+  autoIndexIntervalMinutes?: number;
+  autoDreamIntervalMinutes?: number;
+};
 
 export type PilotMemoryConfig = {
   enabled: boolean;
@@ -78,9 +88,12 @@ export type PilotMemoryConfig = {
   captureStrategy: "last_turn" | "full_session";
   includeAssistant: boolean;
   maxMessageChars?: number;
+  retrievalTimeoutMs?: number;
   /** "provider/model" string referencing model.providers, e.g. "openai/gpt-4.1-mini" */
   model?: string;
   apiType?: PilotMemoryApiType;
+  schedule?: PilotMemoryScheduleConfig;
+  heartbeatBatchSize?: number;
 };
 
 export type PilotGatewayConfig = {

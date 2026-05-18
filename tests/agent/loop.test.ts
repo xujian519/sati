@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  AgentLoop,
   AgentSession,
   collectToolCalls,
   decideLoopContinuation,
@@ -16,7 +17,7 @@ test("loop helpers collect tool calls and project paired tool results", () => {
     role: "assistant" as const,
     content: [
       { type: "text" as const, text: "Reading." },
-      { type: "tool_call" as const, id: "call-1", name: "read_file", input: { filePath: "README.md" } },
+      { type: "tool_call" as const, id: "call-1", name: "read_file", input: { file_path: "README.md" } },
     ],
   };
 
@@ -57,6 +58,124 @@ test("AgentLoop completes a no-tool turn", async () => {
     values.map((event) => event.type),
     ["model_request_started", "model_event", "model_event", "model_event", "model_event", "assistant_message", "stop_requested", "turn_completed"],
   );
+});
+
+test("AgentLoop emits a context_budget snapshot before model execution", async () => {
+  const { model, config, dependencies } = createAgentLoopFixture({
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "text_delta", text: "Done." },
+        { type: "message_end", finishReason: "stop" },
+      ],
+    ],
+  });
+  const budgetLoop = new AgentLoop(config, {
+    ...dependencies,
+    context: {
+      async prepareForModel() {
+        return {
+          messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+          systemPrompt: "",
+          systemPromptParts: [],
+          tools: [],
+          diagnostics: [],
+          boundaries: [],
+        };
+      },
+      async applyToolResults() {
+        return {
+          messages: [],
+          diagnostics: [],
+        };
+      },
+      async recoverFromModelError() {
+        return {
+          type: "give_up" as const,
+          reason: "unused",
+        };
+      },
+      async tryAutoCompact() {
+        return {
+          type: "skipped" as const,
+          snapshot: {
+            tokens: 1234,
+            maxContextTokens: 16000,
+            warningRatio: 0.8,
+            blockingRatio: 0.95,
+            state: "ok" as const,
+            ratio: 1234 / 16000,
+          },
+        };
+      },
+    },
+  });
+
+  const { values } = await collectAsyncGenerator(
+    budgetLoop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+    }),
+  );
+
+  assert.equal(model.requests.length, 1);
+  const budgetEventIndex = values.findIndex((event) => event.type === "context_budget");
+  const modelStartIndex = values.findIndex((event) => event.type === "model_request_started");
+  assert.ok(budgetEventIndex >= 0, "should emit context_budget");
+  assert.ok(modelStartIndex >= 0, "should emit model_request_started");
+  assert.ok(budgetEventIndex < modelStartIndex, "context_budget should be emitted before model_request_started");
+  const budgetEvent = values[budgetEventIndex] as Extract<(typeof values)[number], { type: "context_budget" }>;
+  assert.equal(budgetEvent.snapshot.tokens, 1234);
+  assert.equal(budgetEvent.snapshot.maxContextTokens, 16000);
+});
+
+test("AgentLoop stops before model request when abort fires during prepareForModel", async () => {
+  const { model, config, dependencies } = createAgentLoopFixture({
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "text_delta", text: "should not run" },
+        { type: "message_end", finishReason: "stop" },
+      ],
+    ],
+  });
+  const controller = new AbortController();
+  const loop = new AgentLoop(config, {
+    ...dependencies,
+    context: {
+      async prepareForModel() {
+        controller.abort();
+        return {
+          messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+          systemPrompt: "",
+          systemPromptParts: [],
+          tools: [],
+          diagnostics: [],
+          boundaries: [],
+        };
+      },
+      async applyToolResults() {
+        return { messages: [], diagnostics: [] };
+      },
+      async recoverFromModelError() {
+        return { type: "give_up" as const, reason: "unused" };
+      },
+    },
+  });
+
+  const { values, result } = await collectAsyncGenerator(
+    loop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+      abortSignal: controller.signal,
+    }),
+  );
+
+  assert.equal(model.requests.length, 0);
+  assert.equal(result.result.type, "aborted");
+  assert.deepEqual(values.map((event) => event.type), ["turn_completed"]);
 });
 
 test("AgentLoop executes tools and continues with canonical tool_result", async () => {

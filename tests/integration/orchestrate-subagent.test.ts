@@ -22,6 +22,7 @@ function makeModelRuntime(scripts: CanonicalModelEvent[][]): ModelRuntime & { re
       supportsThinking: false, supportsJsonSchema: true, supportsSystemPrompt: true,
       supportsPromptCache: false, maxContextTokens: 100_000, maxOutputTokens: 4_000,
     }),
+    getMultimodal: () => ({ input: ["text" as const] }),
   };
 }
 
@@ -81,6 +82,7 @@ function makeJudge(tier: string): ModelRuntime {
       supportsThinking: false, supportsJsonSchema: false, supportsSystemPrompt: false,
       supportsPromptCache: false, maxContextTokens: 4096, maxOutputTokens: 256,
     }),
+    getMultimodal: () => ({ input: ["text" as const] }),
   };
 }
 

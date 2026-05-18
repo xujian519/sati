@@ -32,7 +32,7 @@ test("PilotDeck filesystem read and search tools are read-only and concurrency s
   const grep = createGrepTool();
 
   assert.equal(read.name, "read_file");
-  assert.equal(read.isReadOnly({ filePath: "package.json" }), true);
+  assert.equal(read.isReadOnly({ file_path: "package.json" }), true);
 
   assert.equal(glob.name, "glob");
   assert.equal(glob.isReadOnly({ pattern: "**/*" }), true);

@@ -1,6 +1,13 @@
 import { isRecord } from "../../model/config/schema.js";
 import type { ModelConfig } from "../../model/protocol/canonical.js";
-import { PilotConfigError, type PilotConfigDiagnostic, type PilotMemoryApiType, type PilotMemoryConfig } from "./types.js";
+import {
+  PilotConfigError,
+  type PilotConfigDiagnostic,
+  type PilotMemoryApiType,
+  type PilotMemoryConfig,
+  type PilotMemoryReasoningMode,
+  type PilotMemoryScheduleConfig,
+} from "./types.js";
 
 export function parseMemoryConfig(
   rawMemory: unknown,
@@ -37,6 +44,31 @@ export function parseMemoryConfig(
   }
 
   const memoryModel = parseMemoryModelRef(rawMemory.model, diagnostics, modelConfig);
+  const schedule = parseMemorySchedule(rawMemory.schedule, diagnostics);
+
+  for (const key of Object.keys(rawMemory)) {
+    if (
+      key !== "enabled"
+      && key !== "provider"
+      && key !== "rootDir"
+      && key !== "captureStrategy"
+      && key !== "includeAssistant"
+      && key !== "maxMessageChars"
+      && key !== "retrievalTimeoutMs"
+      && key !== "model"
+      && key !== "apiType"
+      && key !== "schedule"
+      && key !== "heartbeatBatchSize"
+    ) {
+      diagnostics.push({
+        code: "CONFIG_MEMORY_UNKNOWN_FIELD",
+        severity: "warning",
+        message: `Unknown memory field ${key}.`,
+        path: `memory.${key}`,
+        recoverable: true,
+      });
+    }
+  }
 
   return {
     enabled,
@@ -45,9 +77,56 @@ export function parseMemoryConfig(
     captureStrategy: readCaptureStrategy(rawMemory.captureStrategy),
     includeAssistant: readBoolean(rawMemory.includeAssistant, true, "memory.includeAssistant"),
     maxMessageChars: readOptionalPositiveNumber(rawMemory.maxMessageChars, "memory.maxMessageChars"),
+    retrievalTimeoutMs: readOptionalPositiveInteger(
+      rawMemory.retrievalTimeoutMs,
+      "memory.retrievalTimeoutMs",
+    ),
     model: memoryModel,
     apiType: readMemoryApiType(rawMemory.apiType),
+    schedule,
+    heartbeatBatchSize: readOptionalPositiveInteger(rawMemory.heartbeatBatchSize, "memory.heartbeatBatchSize"),
   };
+}
+
+function parseMemorySchedule(
+  value: unknown,
+  diagnostics: PilotConfigDiagnostic[],
+): PilotMemoryScheduleConfig | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw new PilotConfigError("CONFIG_MEMORY_VALUE_INVALID", "memory.schedule must be an object.");
+  }
+  const schedule: PilotMemoryScheduleConfig = {};
+  const reasoningMode = readOptionalMemoryReasoningMode(value.reasoningMode);
+  if (reasoningMode !== undefined) schedule.reasoningMode = reasoningMode;
+  const autoIndexIntervalMinutes = readOptionalNonNegativeInteger(
+    value.autoIndexIntervalMinutes,
+    "memory.schedule.autoIndexIntervalMinutes",
+  );
+  if (autoIndexIntervalMinutes !== undefined) {
+    schedule.autoIndexIntervalMinutes = autoIndexIntervalMinutes;
+  }
+  const autoDreamIntervalMinutes = readOptionalNonNegativeInteger(
+    value.autoDreamIntervalMinutes,
+    "memory.schedule.autoDreamIntervalMinutes",
+  );
+  if (autoDreamIntervalMinutes !== undefined) {
+    schedule.autoDreamIntervalMinutes = autoDreamIntervalMinutes;
+  }
+  for (const key of Object.keys(value)) {
+    if (key !== "reasoningMode" && key !== "autoIndexIntervalMinutes" && key !== "autoDreamIntervalMinutes") {
+      diagnostics.push({
+        code: "CONFIG_MEMORY_UNKNOWN_FIELD",
+        severity: "warning",
+        message: `Unknown memory.schedule field ${key}.`,
+        path: `memory.schedule.${key}`,
+        recoverable: true,
+      });
+    }
+  }
+  return Object.keys(schedule).length > 0 ? schedule : undefined;
 }
 
 function parseMemoryModelRef(
@@ -108,6 +187,19 @@ function readMemoryApiType(value: unknown): PilotMemoryApiType | undefined {
   );
 }
 
+function readOptionalMemoryReasoningMode(value: unknown): PilotMemoryReasoningMode | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "answer_first" || value === "accuracy_first") {
+    return value;
+  }
+  throw new PilotConfigError(
+    "CONFIG_MEMORY_VALUE_INVALID",
+    "memory.schedule.reasoningMode must be answer_first or accuracy_first.",
+  );
+}
+
 function readCaptureStrategy(value: unknown): PilotMemoryConfig["captureStrategy"] {
   if (value === undefined) {
     return "last_turn";
@@ -153,4 +245,24 @@ function readOptionalPositiveNumber(value: unknown, path: string): number | unde
     throw new PilotConfigError("CONFIG_MEMORY_VALUE_INVALID", `${path} must be a positive number.`);
   }
   return value;
+}
+
+function readOptionalPositiveInteger(value: unknown, path: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new PilotConfigError("CONFIG_MEMORY_VALUE_INVALID", `${path} must be a positive number.`);
+  }
+  return Math.floor(value);
+}
+
+function readOptionalNonNegativeInteger(value: unknown, path: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new PilotConfigError("CONFIG_MEMORY_VALUE_INVALID", `${path} must be a non-negative number.`);
+  }
+  return Math.floor(value);
 }

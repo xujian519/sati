@@ -23,12 +23,14 @@ test("loads EdgeClaw memory config from PilotDeck config", () => {
           captureStrategy: "full_session",
           includeAssistant: false,
           maxMessageChars: 12000,
-          llm: {
-            provider: "edgeclaw",
-            model: "anthropic/claude-sonnet-4.6",
-            baseUrl: "https://openrouter.ai/api/v1",
-            apiKey: "secret-key",
-            apiType: "openai-completions",
+          retrievalTimeoutMs: 4321,
+          model: "openai-main/gpt-5.1",
+          apiType: "openai-completions",
+          heartbeatBatchSize: 7,
+          schedule: {
+            reasoningMode: "accuracy_first",
+            autoIndexIntervalMinutes: 1,
+            autoDreamIntervalMinutes: 5,
           },
         },
       }),
@@ -49,12 +51,14 @@ test("loads EdgeClaw memory config from PilotDeck config", () => {
       captureStrategy: "full_session",
       includeAssistant: false,
       maxMessageChars: 12000,
-      llm: {
-        provider: "edgeclaw",
-        model: "anthropic/claude-sonnet-4.6",
-        baseUrl: "https://openrouter.ai/api/v1",
-        apiKey: "secret-key",
-        apiType: "openai-completions",
+      retrievalTimeoutMs: 4321,
+      model: "openai-main/gpt-5.1",
+      apiType: "openai-completions",
+      heartbeatBatchSize: 7,
+      schedule: {
+        reasoningMode: "accuracy_first",
+        autoIndexIntervalMinutes: 1,
+        autoDreamIntervalMinutes: 5,
       },
     });
   } finally {
@@ -87,6 +91,84 @@ test("defaults memory rootDir to PilotHome memory directory", () => {
     });
 
     assert.equal(snapshot.config.memory?.rootDir, join(pilotHome, "memory"));
+  } finally {
+    rmSync(pilotHome, { recursive: true, force: true });
+  }
+});
+
+test("memory config warns on unknown top-level and schedule fields", () => {
+  const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-memory-config-"));
+  try {
+    writeFileSync(
+      getPilotConfigFilePath(pilotHome),
+      JSON.stringify({
+        schemaVersion: 1,
+        agent: validAgentConfig(),
+        model: validModelConfig(),
+        memory: {
+          provider: "edgeclaw",
+          enabled: true,
+          extraField: "ignored",
+          retrievalTimeoutMs: 1000,
+          schedule: {
+            autoIndexIntervalMinutes: 1,
+            typoField: true,
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const snapshot = loadPilotConfig({
+      env: {
+        PILOT_HOME: pilotHome,
+        ANTHROPIC_API_KEY: "anthropic-key",
+      },
+    });
+
+    assert.deepEqual(
+      snapshot.diagnostics
+        .filter((diagnostic) => diagnostic.code === "CONFIG_MEMORY_UNKNOWN_FIELD")
+        .map((diagnostic) => ({ code: diagnostic.code, path: diagnostic.path })),
+      [
+        { code: "CONFIG_MEMORY_UNKNOWN_FIELD", path: "memory.schedule.typoField" },
+        { code: "CONFIG_MEMORY_UNKNOWN_FIELD", path: "memory.extraField" },
+      ],
+    );
+  } finally {
+    rmSync(pilotHome, { recursive: true, force: true });
+  }
+});
+
+test("memory config rejects invalid schedule reasoning mode", () => {
+  const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-memory-config-"));
+  try {
+    writeFileSync(
+      getPilotConfigFilePath(pilotHome),
+      JSON.stringify({
+        schemaVersion: 1,
+        agent: validAgentConfig(),
+        model: validModelConfig(),
+        memory: {
+          provider: "edgeclaw",
+          enabled: true,
+          schedule: {
+            reasoningMode: "fast_first",
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    assert.throws(
+      () => loadPilotConfig({
+        env: {
+          PILOT_HOME: pilotHome,
+          ANTHROPIC_API_KEY: "anthropic-key",
+        },
+      }),
+      /memory\.schedule\.reasoningMode must be answer_first or accuracy_first\./,
+    );
   } finally {
     rmSync(pilotHome, { recursive: true, force: true });
   }

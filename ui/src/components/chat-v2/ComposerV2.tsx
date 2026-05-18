@@ -134,7 +134,16 @@ function getContextStatus(tokenBudget?: Record<string, unknown> | null): Context
     };
   }
   const percent = Math.max(0, Math.min(999, Math.round((used / total) * 100)));
-  const tone = percent >= 90 ? 'red' : percent >= 70 ? 'amber' : 'normal';
+  const snapshotState = typeof tokenBudget?.state === 'string' ? tokenBudget.state : null;
+  const tone = snapshotState === 'blocking'
+    ? 'red'
+    : snapshotState === 'warning'
+      ? 'amber'
+      : percent >= 95
+        ? 'red'
+        : percent >= 80
+          ? 'amber'
+          : 'normal';
   return {
     known: true, used, total, percent,
     usedLabel: formatTokenCount(used),
@@ -230,6 +239,8 @@ export type ComposerV2Props = {
   onSelectPermissionMode: (mode: PermissionMode) => void;
   runMode: ChatRunMode;
   onRunModeChange: (mode: ChatRunMode) => void;
+  planModeAvailable?: boolean;
+  onPlanExecutionApproved?: () => void;
 
   /**
    * When true, the outer "footer" chrome (top divider, page bg, page padding)
@@ -288,6 +299,8 @@ export default function ComposerV2({
   onSelectPermissionMode,
   runMode,
   onRunModeChange,
+  planModeAvailable = true,
+  onPlanExecutionApproved,
   chromeless = false,
 }: ComposerV2Props) {
   const { t } = useTranslation('chat');
@@ -318,8 +331,8 @@ export default function ComposerV2({
   const SelectedPermissionIcon = selectedPermissionOption.Icon;
   const selectedPermissionLabel = t(selectedPermissionOption.labelKey, { defaultValue: selectedPermissionOption.defaultLabel }) as string;
   const contextStatusTitle = contextStatus.known
-    ? `${contextStatus.percent}% used. ${contextStatus.usedLabel} tokens used out of ${contextStatus.totalLabel}.`
-    : 'Context usage unknown.';
+    ? `${contextStatus.percent}% of the current context window is occupied. ${contextStatus.usedLabel} tokens out of ${contextStatus.totalLabel}.`
+    : 'Current context usage unavailable.';
 
   return (
     <div
@@ -338,6 +351,7 @@ export default function ComposerV2({
               pendingPermissionRequests={pendingPermissionRequests}
               handlePermissionDecision={handlePermissionDecision}
               handleGrantToolPermission={handleGrantToolPermission}
+              onPlanExecutionApproved={onPlanExecutionApproved}
             />
           </div>
         ) : null}
@@ -476,6 +490,7 @@ export default function ComposerV2({
                           const Icon = option.Icon;
                           const isSelected = runMode === option.mode;
                           const isPlan = option.mode === 'plan';
+                          const isDisabled = isPlan && !planModeAvailable;
                           const label = t(option.labelKey, { defaultValue: option.defaultLabel }) as string;
                           const description = isPlan ? 'Plan first, then execute' : 'Handle and execute directly';
                           return (
@@ -484,8 +499,9 @@ export default function ComposerV2({
                               type="button"
                               role="menuitemradio"
                               aria-checked={isSelected}
+                              disabled={isDisabled}
                               onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => { onRunModeChange(option.mode); setIsRunModeMenuOpen(false); }}
+                              onClick={() => { if (!isDisabled) { onRunModeChange(option.mode); setIsRunModeMenuOpen(false); } }}
                               className={cn(
                                 'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition',
                                 isSelected ? 'bg-neutral-100 dark:bg-neutral-800' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/70',
@@ -639,7 +655,7 @@ export default function ComposerV2({
                         {contextStatus.known ? (
                           <>
                             <div className="text-neutral-500 dark:text-neutral-400">
-                              {contextStatus.used.toLocaleString()} tokens used out of {contextStatus.total.toLocaleString()}.
+                              Current context estimate: {contextStatus.used.toLocaleString()} tokens out of {contextStatus.total.toLocaleString()}.
                             </div>
                             <div className="mt-2 text-neutral-500 dark:text-neutral-400">
                               Auto compact runs when the conversation approaches the configured limit.

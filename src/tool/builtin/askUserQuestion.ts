@@ -18,6 +18,15 @@ export const ASK_USER_QUESTION_TOOL_NAME = "ask_user_question";
  */
 export const ASK_USER_QUESTION_HEADER_MAX = 12;
 
+const ASK_USER_QUESTION_DESCRIPTION =
+  "Use this tool when you need to ask the user one or more multiple-choice questions during execution. " +
+  "It is suitable for gathering preferences or requirements, clarifying ambiguous instructions, " +
+  "getting decisions on implementation choices, or offering the user concrete directions to choose from. " +
+  "Usage notes: provide 1-4 questions, each with 2-4 options; set multiSelect to true when a question " +
+  "should allow multiple selections; phrase the choices yourself instead of using this tool for open-ended " +
+  "free-form clarification. In plan mode, use ask_user_question to clarify requirements or choose between " +
+  "approaches before finalizing your plan. Do not use it to ask for plan approval; use exit_plan_mode for that.";
+
 export type AskUserQuestionOption = {
   label: string;
   description: string;
@@ -73,11 +82,7 @@ export function createAskUserQuestionTool(): PilotDeckToolDefinition<
   return {
     name: ASK_USER_QUESTION_TOOL_NAME,
     aliases: ["AskUserQuestion"],
-    description:
-      "Ask the user a multiple-choice question through a host elicitation channel. " +
-      "Use when human input is required to make a meaningful decision; do NOT use " +
-      "for free-form clarifications — phrase the choices yourself. 1-4 questions, " +
-      "each with 2-4 mutually-exclusive options.",
+    description: ASK_USER_QUESTION_DESCRIPTION,
     kind: "session",
     shouldDefer: true,
     maxResultBytes: 100_000,
@@ -90,41 +95,86 @@ export function createAskUserQuestionTool(): PilotDeckToolDefinition<
           type: "array",
           minItems: 1,
           maxItems: 4,
+          description:
+            "Questions to ask the user. Provide 1-4 multiple-choice questions in one batch.",
           items: {
             type: "object",
             required: ["question", "header", "options"],
             additionalProperties: false,
             properties: {
-              question: { type: "string" },
-              header: { type: "string", maxLength: ASK_USER_QUESTION_HEADER_MAX },
+              question: {
+                type: "string",
+                description:
+                  "The full question shown to the user. Keep it clear and specific; if multiSelect is true, phrase it as a multi-select question.",
+              },
+              header: {
+                type: "string",
+                maxLength: ASK_USER_QUESTION_HEADER_MAX,
+                description:
+                  `Very short chip/tag label for the question (max ${ASK_USER_QUESTION_HEADER_MAX} chars).`,
+              },
               options: {
                 type: "array",
                 minItems: 2,
                 maxItems: 4,
+                description:
+                  "Available choices for this question. Provide 2-4 distinct options; they should be mutually exclusive unless multiSelect is true.",
                 items: {
                   type: "object",
                   required: ["label", "description"],
                   additionalProperties: false,
                   properties: {
-                    label: { type: "string" },
-                    description: { type: "string" },
-                    preview: { type: "string" },
+                    label: {
+                      type: "string",
+                      description:
+                        "Short display text for the option. This is what the user selects.",
+                    },
+                    description: {
+                      type: "string",
+                      description:
+                        "Explanation of what the option means or what choosing it implies.",
+                    },
+                    preview: {
+                      type: "string",
+                      description:
+                        "Optional host-specific preview content associated with this option. Hosts may surface it alongside the choice and may echo the selected preview back in annotations.",
+                    },
                   },
                 },
               },
-              multiSelect: { type: "boolean" },
+              multiSelect: {
+                type: "boolean",
+                description:
+                  "Set to true to allow the user to select multiple options for this question instead of just one.",
+              },
             },
           },
         },
         // Records keyed by free-form question text — schema validator only
         // checks the outer object shape; per-key types are enforced by
         // `validateInput` below.
-        answers: { type: "object" },
-        annotations: { type: "object" },
+        answers: {
+          type: "object",
+          description:
+            "Optional pre-supplied answers keyed by question text. Values may be a single string or an array of strings for multi-select questions.",
+        },
+        annotations: {
+          type: "object",
+          description:
+            "Optional per-question annotation data keyed by question text, such as selected preview text or free-form user notes returned by the host.",
+        },
         metadata: {
           type: "object",
           additionalProperties: false,
-          properties: { source: { type: "string" } },
+          description:
+            "Optional metadata forwarded to the host with the elicitation request. Not displayed to the user.",
+          properties: {
+            source: {
+              type: "string",
+              description:
+                "Optional identifier describing why this question was asked, for host-side analytics or routing.",
+            },
+          },
         },
       },
     },

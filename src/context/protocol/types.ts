@@ -42,6 +42,7 @@ export type ContextPrepareInput = {
   sessionId: string;
   turnId: string;
   cwd: string;
+  abortSignal?: AbortSignal;
   /** Provider/model identifier. */
   provider: string;
   model: string;

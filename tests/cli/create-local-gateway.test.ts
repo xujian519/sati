@@ -260,6 +260,101 @@ test("createLocalGateway only reloads cached sessions for the project whose plug
   }
 });
 
+test("createLocalGateway schedules project memory maintenance after a turn completes", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-local-gateway-memory-maint-"));
+  try {
+    const pilotHome = path.join(root, "home");
+    const projectRoot = path.join(root, "project");
+
+    await writeJson(getPilotConfigFilePath(pilotHome), {
+      schemaVersion: 1,
+      agent: validAgentConfig(),
+      model: validModelConfig(),
+    });
+
+    const { gateway, registry, dispose } = createLocalGateway({
+      projectRoot,
+      pilotHome,
+      env: {
+        ANTHROPIC_API_KEY: "anthropic-key",
+        OPENAI_API_KEY: "openai-key",
+      },
+      __testModelFactory: (snapshot) => createRecordingModel(snapshot, []),
+    });
+    try {
+      const calls: string[] = [];
+      const originalScheduleMemoryMaintenance = registry.scheduleMemoryMaintenance.bind(registry);
+      registry.scheduleMemoryMaintenance = (nextProjectKey?: string) => {
+        calls.push(nextProjectKey ?? "");
+        originalScheduleMemoryMaintenance(nextProjectKey);
+      };
+
+      const events = await collectGatewayEvents(gateway.submitTurn({
+        sessionKey: "cli:project=memory:session",
+        channelKey: "cli",
+        projectKey: projectRoot,
+        message: "hello",
+      }));
+
+      assert.ok(events.some((event) => event.type === "turn_completed" && event.finishReason === "completed"));
+      await waitForCondition(() => calls.length === 1, "memory maintenance callback");
+      assert.deepEqual(calls, [projectRoot]);
+    } finally {
+      dispose();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("createLocalGateway retains a project memory service when memory is enabled", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-local-gateway-memory-service-"));
+  try {
+    const pilotHome = path.join(root, "home");
+    const projectRoot = path.join(root, "project");
+    await writeJson(getPilotConfigFilePath(pilotHome), {
+      schemaVersion: 1,
+      agent: validAgentConfig(),
+      model: validModelConfig(),
+      memory: {
+        enabled: true,
+        provider: "edgeclaw",
+        model: "openai-main/gpt-5.1",
+        schedule: {
+          reasoningMode: "answer_first",
+          autoIndexIntervalMinutes: 1,
+          autoDreamIntervalMinutes: 1,
+        },
+      },
+    });
+
+    const { registry, dispose } = createLocalGateway({
+      projectRoot,
+      pilotHome,
+      env: {
+        ANTHROPIC_API_KEY: "anthropic-key",
+        OPENAI_API_KEY: "openai-key",
+      },
+      __testModelFactory: (snapshot) => createRecordingModel(snapshot, []),
+    });
+    try {
+      const runtime = registry.resolve(projectRoot) as {
+        memoryService?: { getSettings: () => { reasoningMode: string; autoIndexIntervalMinutes: number; autoDreamIntervalMinutes: number } };
+      };
+      assert.ok(runtime.memoryService, "expected memoryService to be retained on the project runtime");
+      assert.deepEqual(runtime.memoryService?.getSettings(), {
+        reasoningMode: "answer_first",
+        autoIndexIntervalMinutes: 1,
+        autoDreamIntervalMinutes: 1,
+      });
+    } finally {
+      dispose();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("createLocalGateway cron tasks inherit and execute with the originating project runtime", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "pilotdeck-local-gateway-cron-project-"));
   let now = new Date("2026-05-09T12:00:00.000Z");
@@ -579,6 +674,7 @@ function createRecordingModel(
         maxOutputTokens: 8_192,
       };
     },
+    getMultimodal() { return { input: ["text" as const] }; },
   };
 }
 
@@ -628,6 +724,7 @@ function createCronProjectBindingModel(): ModelRuntime {
         maxOutputTokens: 8_192,
       };
     },
+    getMultimodal() { return { input: ["text" as const] }; },
   };
 }
 

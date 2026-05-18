@@ -20,20 +20,17 @@ export function MessageResponse({
   if (message.role === "user") {
     return (
       <Box flexDirection="column" marginTop={1}>
-        <Text color={pilotDeckDarkBlueTheme.brandAccent} bold>
-          You
-        </Text>
-        <Text>{message.text.trimEnd()}</Text>
+        <Box flexDirection="row">
+          <Text color={pilotDeckDarkBlueTheme.brandAccent} bold>{"❯ "}</Text>
+          <Text color={pilotDeckDarkBlueTheme.brandAccent}>{message.text.trimEnd()}</Text>
+        </Box>
       </Box>
     );
   }
 
   if (message.role === "assistant") {
     return (
-      <Box flexDirection="column" marginTop={1}>
-        <Text color={pilotDeckDarkBlueTheme.brand} bold>
-          PilotDeck
-        </Text>
+      <Box flexDirection="column" marginTop={0} paddingLeft={2}>
         {message.thinking && message.thinking.length > 0 && (
           <Text dimColor italic>
             {"∴ Thinking"} ({formatCharCount(message.thinking.length)})
@@ -48,8 +45,8 @@ export function MessageResponse({
 
   if (message.role === "system") {
     return (
-      <Box flexDirection="row">
-        <Text color={pilotDeckDarkBlueTheme.subtle}>{message.text}</Text>
+      <Box flexDirection="row" paddingLeft={2}>
+        <Text color={pilotDeckDarkBlueTheme.subtle} dimColor>{"ℹ "}{message.text}</Text>
       </Box>
     );
   }

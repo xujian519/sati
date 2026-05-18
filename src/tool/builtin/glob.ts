@@ -15,7 +15,8 @@ export function createGlobTool(): PilotDeckToolDefinition<GlobInput> {
   return {
     name: "glob",
     aliases: ["Glob"],
-    description: "Find workspace files matching a glob pattern. Returns a list of matching file paths.",
+    description:
+      "Find workspace files matching a glob pattern.\n\nUsage:\n- Supports glob patterns like \"**/*.js\" or \"src/**/*.ts\".\n- Use this tool when you need to find files by name or wildcard pattern.\n- Provide the optional path parameter to restrict the search to a subdirectory.\n- Use this tool to narrow down candidate files before reading or editing them.",
     kind: "filesystem",
     inputSchema: {
       type: "object",
@@ -24,15 +25,17 @@ export function createGlobTool(): PilotDeckToolDefinition<GlobInput> {
       properties: {
         pattern: {
           type: "string",
-          description: "Glob pattern to match files against (e.g. '**/*.ts', 'src/**/*.json').",
+          description: "The glob pattern to match files against.",
         },
         path: {
           type: "string",
-          description: "Relative directory to search within. Defaults to workspace root.",
+          description:
+            "The directory to search in. If not specified, the workspace root will be used. Must resolve to a directory inside the workspace if provided.",
         },
         limit: {
           type: "integer",
-          description: "Maximum number of file paths to return. Defaults to 1000.",
+          description:
+            "Maximum number of file paths to return. This is a PilotDeck-specific output cap; defaults to 1000.",
         },
       },
     },

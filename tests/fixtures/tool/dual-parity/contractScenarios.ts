@@ -29,7 +29,7 @@ export const dualParityContractScenarios: DualParityContractScenario[] = [
     id: "read-contract",
     status: "compare",
     legacy: { toolName: "Read", input: { file_path: "__ABS_PACKAGE_JSON__" } },
-    pilotdeck: { toolName: "read_file", input: { filePath: "package.json" } },
+    pilotdeck: { toolName: "read_file", input: { file_path: "package.json" } },
     compareFields: ["readOnly", "concurrencySafe"],
   },
   {
@@ -53,14 +53,14 @@ export const dualParityContractScenarios: DualParityContractScenario[] = [
       toolName: "Edit",
       input: { file_path: "__ABS_EDIT_FILE__", old_string: "alpha", new_string: "beta" },
     },
-    pilotdeck: { toolName: "edit_file", input: { filePath: "edit.txt", oldString: "alpha", newString: "beta" } },
+    pilotdeck: { toolName: "edit_file", input: { file_path: "edit.txt", old_string: "alpha", new_string: "beta" } },
     compareFields: ["readOnly", "concurrencySafe", "destructive"],
   },
   {
     id: "write-contract",
     status: "compare",
     legacy: { toolName: "Write", input: { file_path: "__ABS_WRITE_FILE__", content: "x" } },
-    pilotdeck: { toolName: "write_file", input: { filePath: "write.txt", content: "x" } },
+    pilotdeck: { toolName: "write_file", input: { file_path: "write.txt", content: "x" } },
     compareFields: ["readOnly", "concurrencySafe"],
   },
   {

@@ -30,6 +30,7 @@ class ScriptedModelRuntime implements ModelRuntime {
       supportsPromptCache: false, maxContextTokens: 100_000, maxOutputTokens: 4_000,
     };
   }
+  getMultimodal() { return { input: ["text" as const] }; }
 }
 
 function buildAgentWithRouter(

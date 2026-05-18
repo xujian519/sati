@@ -4,9 +4,9 @@ import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
 import { writeTextFile } from "./filesystem/writeTextFile.js";
 
 export type WriteFileInput = {
-  filePath: string;
+  file_path: string;
   content: string;
-  allowOverwrite?: boolean;
+  allow_overwrite?: boolean;
 };
 
 export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput> {
@@ -14,32 +14,34 @@ export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput> {
     name: "write_file",
     aliases: ["Write"],
     description:
-      "Create or overwrite a UTF-8 text file. Both filePath and content are required — content is the full file body to write.",
+      "Write a UTF-8 text file inside the workspace.\n\nUsage:\n- content must be the full file body to write.\n- Use this tool when creating a new file or replacing the entire contents of a file.\n- Prefer edit_file for targeted modifications to an existing file.\n- If the target file already exists, set allow_overwrite to true to overwrite it.\n- If the path is outside the workspace or overwrite is not allowed, the tool returns a controlled error.",
     kind: "filesystem",
     inputSchema: {
       type: "object",
-      required: ["filePath", "content"],
+      required: ["file_path", "content"],
       additionalProperties: false,
       properties: {
-        filePath: {
+        file_path: {
           type: "string",
-          description: "Relative or absolute path of the file to create or overwrite.",
+          description:
+            "Relative or absolute path of the file to create or overwrite. The path must resolve inside the workspace.",
         },
         content: {
           type: "string",
-          description: "The full text content to write into the file. Must not be omitted.",
+          description: "The full text content to write into the file.",
         },
-        allowOverwrite: {
+        allow_overwrite: {
           type: "boolean",
-          description: "Set to false to prevent overwriting an existing file. Defaults to true.",
+          description:
+            "When true, allow this call to overwrite an existing file. Omit or set to false to require create-only behavior.",
         },
       },
     },
     isReadOnly: () => false,
     isConcurrencySafe: () => false,
-    isDestructive: (input) => input.allowOverwrite !== false,
+    isDestructive: (input) => input.allow_overwrite !== false,
     execute: async (input, context) => {
-      const resolved = resolvePilotDeckWorkspacePath(input.filePath, context, { forWrite: true });
+      const resolved = resolvePilotDeckWorkspacePath(input.file_path, context, { forWrite: true });
       if (!resolved.ok) {
         throw new PilotDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
       }
@@ -52,7 +54,7 @@ export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput> {
       }
 
       const action = await writeTextFile(resolved.absolutePath, input.content, {
-        allowOverwrite: input.allowOverwrite ?? true,
+        allowOverwrite: input.allow_overwrite ?? false,
       });
 
       return {

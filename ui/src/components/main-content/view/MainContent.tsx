@@ -71,6 +71,7 @@ const AUTO_EXECUTION_POLL_INTERVAL_MS = 15000;
 const FILES_CHAT_DEFAULT_WIDTH = 460;
 const FILES_CHAT_MIN_WIDTH = 320;
 const FILES_TREE_MIN_WIDTH = 280;
+const FILES_TREE_ONLY_WIDTH = 300;
 
 async function readJsonPayload<T>(response: Response): Promise<T | null> {
   try {
@@ -768,6 +769,7 @@ function MainContent({
           applyAndLaunchPlan={applyAndLaunchPlan}
           handleOpenExecutionSession={handleOpenExecutionSession}
           editorExpanded={editorExpanded}
+          hasEditor={editingFile !== null}
           onSelectProjectByName={onSelectProjectByName}
         />
 
@@ -838,6 +840,7 @@ type SplitBodyProps = {
   applyAndLaunchPlan: (projectName: string, planId: string) => Promise<void>;
   handleOpenExecutionSession: (projectKey: string, runId: string, projectName?: string) => void;
   editorExpanded: boolean;
+  hasEditor: boolean;
   onSelectProjectByName?: (projectName: string) => void;
 };
 
@@ -875,6 +878,7 @@ function SplitBody(props: SplitBodyProps) {
     applyAndLaunchPlan,
     handleOpenExecutionSession,
     editorExpanded,
+    hasEditor,
     onSelectProjectByName,
   } = props;
 
@@ -1016,10 +1020,10 @@ function SplitBody(props: SplitBodyProps) {
         className={cn(
           'flex min-h-0 min-w-0 flex-col',
           showChat
-            ? (isFiles ? 'flex-shrink-0' : 'flex-1')
+            ? (isFiles ? (hasEditor ? 'flex-shrink-0' : 'flex-1') : 'flex-1')
             : 'invisible absolute h-0 w-0 overflow-hidden',
         )}
-        style={showChat && isFiles
+        style={showChat && isFiles && hasEditor
           ? {
               minWidth: `${FILES_CHAT_MIN_WIDTH}px`,
               width: `min(${filesChatWidth}px, calc(100% - ${FILES_TREE_MIN_WIDTH}px))`,
@@ -1071,8 +1075,13 @@ function SplitBody(props: SplitBodyProps) {
             <div className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-neutral-400 opacity-0 transition-opacity group-hover:opacity-100 dark:bg-neutral-600" />
           </div>
           <div
-            className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-            style={{ minWidth: `${FILES_TREE_MIN_WIDTH}px` }}
+            className={cn(
+              'flex min-h-0 min-w-0 flex-col overflow-hidden',
+              hasEditor ? 'flex-1' : 'flex-shrink-0',
+            )}
+            style={hasEditor
+              ? { minWidth: `${FILES_TREE_MIN_WIDTH}px` }
+              : { width: `${FILES_TREE_ONLY_WIDTH}px` }}
           >
             <FilesV2
               key={selectedProject?.name ?? ''}

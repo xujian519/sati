@@ -10,12 +10,13 @@ export type GrepInput = {
   pattern: string;
   path?: string;
   glob?: string;
-  outputMode?: "content" | "files_with_matches" | "count";
-  before?: number;
-  after?: number;
+  output_mode?: "content" | "files_with_matches" | "count";
+  "-B"?: number;
+  "-A"?: number;
+  "-C"?: number;
   context?: number;
-  caseInsensitive?: boolean;
-  headLimit?: number;
+  "-i"?: boolean;
+  head_limit?: number;
   offset?: number;
 };
 
@@ -23,7 +24,8 @@ export function createGrepTool(): PilotDeckToolDefinition<GrepInput> {
   return {
     name: "grep",
     aliases: ["Grep"],
-    description: "Search workspace text files with a regular expression. Returns matching lines, file paths, or match counts.",
+    description:
+      "Search workspace text files with a regular expression.\n\nUsage:\n- Supports regular expression patterns for matching file contents.\n- Filter searched files with the glob parameter.\n- Output modes: \"content\" shows matching lines, \"files_with_matches\" lists file paths, and \"count\" shows per-file match counts.\n- Use \"-i\" for case-insensitive matching.\n- Use \"-A\", \"-B\", or \"-C\" to include surrounding context lines in content mode.\n- Use head_limit and offset to page through larger result sets.",
     kind: "filesystem",
     inputSchema: {
       type: "object",
@@ -32,38 +34,43 @@ export function createGrepTool(): PilotDeckToolDefinition<GrepInput> {
       properties: {
         pattern: {
           type: "string",
-          description: "JavaScript regular expression pattern to search for.",
+          description: "The regular expression pattern to search for in file contents.",
         },
         path: {
           type: "string",
-          description: "Relative directory or file path to search within. Defaults to workspace root.",
+          description: "File or directory to search within. Defaults to the workspace root.",
         },
         glob: {
           type: "string",
-          description: "Glob pattern to filter which files are searched (e.g. '*.ts').",
+          description: "Glob pattern to filter files (for example '*.ts').",
         },
-        outputMode: {
+        output_mode: {
           type: "string",
           enum: ["content", "files_with_matches", "count"],
-          description: "Output format: 'content' shows matching lines, 'files_with_matches' lists file paths, 'count' shows per-file counts. Defaults to 'files_with_matches'.",
+          description:
+            "Output mode: 'content' shows matching lines, 'files_with_matches' lists file paths, and 'count' shows per-file counts. Defaults to 'files_with_matches'.",
         },
-        before: {
+        "-B": {
           type: "integer",
           description: "Number of lines to show before each match (content mode only).",
         },
-        after: {
+        "-A": {
           type: "integer",
           description: "Number of lines to show after each match (content mode only).",
+        },
+        "-C": {
+          type: "integer",
+          description: "Alias for context: number of lines to show before and after each match.",
         },
         context: {
           type: "integer",
           description: "Number of lines to show before and after each match (content mode only).",
         },
-        caseInsensitive: {
+        "-i": {
           type: "boolean",
           description: "When true, perform case-insensitive matching.",
         },
-        headLimit: {
+        head_limit: {
           type: "integer",
           description: "Maximum number of matches to return. Defaults to 250.",
         },
@@ -82,7 +89,7 @@ export function createGrepTool(): PilotDeckToolDefinition<GrepInput> {
         throw new PilotDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
       }
 
-      const regex = new RegExp(input.pattern, input.caseInsensitive ? "i" : undefined);
+      const regex = new RegExp(input.pattern, input["-i"] ? "i" : undefined);
       const globRegex = input.glob ? globPatternToRegExp(input.glob) : undefined;
       const files = (await walkFiles(resolved.absolutePath))
         .map((file) => file.split(path.sep).join("/"))
@@ -106,9 +113,9 @@ export function createGrepTool(): PilotDeckToolDefinition<GrepInput> {
         });
       }
 
-      const mode = input.outputMode ?? "files_with_matches";
+      const mode = input.output_mode ?? "files_with_matches";
       const offset = Math.max(0, input.offset ?? 0);
-      const limit = input.headLimit ?? 250;
+      const limit = input.head_limit ?? 250;
       const selected = limit === 0 ? matches.slice(offset) : matches.slice(offset, offset + limit);
       const truncated = selected.length < matches.length - offset;
       const workspacePrefix = resolved.relativePath === "." ? "" : `${resolved.relativePath}/`;
@@ -161,9 +168,9 @@ function countByFile(matches: GrepMatch[], prefix: string): Record<string, numbe
 }
 
 function formatMatch(match: GrepMatch, input: GrepInput, prefix: string): string {
-  const context = input.context ?? 0;
-  const before = input.before ?? context;
-  const after = input.after ?? context;
+  const context = input.context ?? input["-C"] ?? 0;
+  const before = input["-B"] ?? context;
+  const after = input["-A"] ?? context;
   const start = Math.max(0, match.lineNumber - 1 - before);
   const end = Math.min(match.lines.length, match.lineNumber + after);
   const lines = match.lines.slice(start, end);

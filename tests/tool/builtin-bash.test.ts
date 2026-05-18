@@ -17,6 +17,15 @@ class FakeRunner implements PilotDeckCommandRunner {
   }
 }
 
+class CapturingRunner implements PilotDeckCommandRunner {
+  received: PilotDeckCommandOptions | undefined;
+
+  async run(_command: string, options: PilotDeckCommandOptions): Promise<PilotDeckCommandResult> {
+    this.received = options;
+    return { exitCode: 0, stdout: "ok\n", stderr: "", timedOut: false, durationMs: 1 };
+  }
+}
+
 test("bash runs safe commands and converts non-zero exit to tool error", async (t) => {
   const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
@@ -63,4 +72,32 @@ test("bash converts runner timeout to tool_timeout", async (t) => {
 
   assert.equal(result.type, "error");
   if (result.type === "error") assert.equal(result.error.code, "tool_timeout");
+});
+
+test("bash exposes Claude-aligned timeout field in schema and drops timeoutMs", () => {
+  const tool = createBashTool();
+  const properties = tool.inputSchema.properties ?? {};
+
+  assert.ok("timeout" in properties);
+  assert.ok(!("timeoutMs" in properties));
+  assert.match(tool.description, /Use `timeout` to override the command timeout/i);
+  assert.match(tool.description, /Read-only shell commands/i);
+});
+
+test("bash reads timeout input and forwards it to runner", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({});
+  t.after(() => workspace.cleanup());
+  const runner = new CapturingRunner();
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
+    tools: [createBashTool({ runner })],
+    cwd: workspace.cwd,
+  });
+
+  const result = await toolRuntime.execute(
+    { id: "call-1", name: "bash", input: { command: "pwd", timeout: 1234 } },
+    context,
+  );
+
+  assert.equal(result.type, "success");
+  assert.equal(runner.received?.timeoutMs, 1234);
 });

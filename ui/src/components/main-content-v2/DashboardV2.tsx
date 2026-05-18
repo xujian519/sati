@@ -931,7 +931,7 @@ function SessionRow({ session }: { session: DashboardSession }) {
                     {group.subs.length > 0 && (
                       <div className="ml-5 mt-1 space-y-1 border-l-2 border-amber-200/60 pl-3 dark:border-amber-700/30">
                         {group.subs.map((sub, si) => (
-                          <RequestLogRow key={si} entry={sub} variant={sub.tier ? 'sub' : 'tool'} />
+                          <RequestLogRow key={si} entry={sub} variant={sub.tier || sub.isSubagentDispatch ? 'sub' : 'tool'} />
                         ))}
                       </div>
                     )}

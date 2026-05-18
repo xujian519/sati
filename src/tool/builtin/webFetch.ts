@@ -84,11 +84,14 @@ export function createWebFetchTool(
       required: ["url", "prompt"],
       additionalProperties: false,
       properties: {
-        url: { type: "string", description: "Fully-formed URL to fetch." },
+        url: {
+          type: "string",
+          description: "Fully-formed URL to fetch. HTTP URLs will be upgraded to HTTPS before the request is issued.",
+        },
         prompt: {
           type: "string",
           description:
-            "Question or extraction directive applied to the fetched markdown.",
+            "Question or extraction directive to apply to the fetched markdown. When no model client is available, the tool returns raw markdown instead of a prompted summary.",
         },
       },
     },

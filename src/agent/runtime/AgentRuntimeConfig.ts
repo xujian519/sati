@@ -1,9 +1,11 @@
-import type { CanonicalThinkingConfig, CanonicalToolChoice } from "../../model/index.js";
+import type { CanonicalThinkingConfig, CanonicalToolChoice, MultimodalConstraints } from "../../model/index.js";
 import type { PermissionContext, PermissionMode } from "../../permission/index.js";
 
 export type AgentRuntimeConfig = {
   provider: string;
   model: string;
+  /** Multimodal constraints of the selected model (absent = text-only). */
+  modelMultimodal?: MultimodalConstraints;
   cwd: string;
   systemPrompt?: string;
   maxOutputTokens?: number;
@@ -32,6 +34,8 @@ export type AgentRuntimeConfig = {
    * but no nested forks). Increase only when intentional.
    */
   maxSubagentDepth?: number;
+  /** Optional timeout budget for forked subagents spawned by the `agent` tool. */
+  subagentTimeoutMs?: number;
   /** Enable automatic JSON self-correction retry on invalid_tool_arguments. Default false. */
   jsonSelfCorrect?: boolean;
 };

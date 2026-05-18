@@ -279,6 +279,56 @@ test("mapAgentEvent surfaces terminal turn_failed once", () => {
   ]);
 });
 
+test("InProcessGateway fires afterTurnCompleted without blocking turn completion", async () => {
+  let releaseMaintenance!: () => void;
+  const maintenanceStarted = new Promise<void>((resolve) => {
+    releaseMaintenance = resolve;
+  });
+  const afterTurnCalls: Array<{ sessionKey: string; projectKey?: string; runId: string }> = [];
+  const router = new SessionRouter({
+    createSession: async () =>
+      fakeSession("session-1", [
+        { type: "turn_started", sessionId: "session-1", turnId: "run-1" },
+        {
+          type: "turn_completed",
+          sessionId: "session-1",
+          turnId: "run-1",
+          result: {
+            type: "success",
+            sessionId: "session-1",
+            turnId: "run-1",
+            stopReason: "completed",
+            usage: {},
+            permissionDenials: [],
+            turns: 1,
+            startedAt: "2026-01-01T00:00:00.000Z",
+            completedAt: "2026-01-01T00:00:01.000Z",
+          },
+        },
+      ]),
+  });
+  const gateway = new InProcessGateway(router, {
+    uuid: () => "run-1",
+    afterTurnCompleted: (input) => {
+      afterTurnCalls.push(input);
+      void maintenanceStarted;
+    },
+  });
+
+  const events = await collect(
+    gateway.submitTurn({
+      sessionKey: "cli:project=one:default",
+      channelKey: "cli",
+      projectKey: "/repo",
+      message: "hi",
+    }),
+  );
+
+  assert.equal(events.at(-1)?.type, "turn_completed");
+  assert.deepEqual(afterTurnCalls, [{ sessionKey: "cli:project=one:default", projectKey: "/repo", runId: "run-1" }]);
+  releaseMaintenance();
+});
+
 async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
   const values: T[] = [];
   for await (const value of iterable) {

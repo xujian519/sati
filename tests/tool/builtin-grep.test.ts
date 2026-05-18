@@ -16,7 +16,7 @@ test("grep returns files with matches by default", async (t) => {
   });
 
   const result = await toolRuntime.execute(
-    { id: "call-1", name: "grep", input: { pattern: "hello", caseInsensitive: true } },
+    { id: "call-1", name: "grep", input: { pattern: "hello", "-i": true } },
     context,
   );
 
@@ -35,11 +35,11 @@ test("grep supports content and count modes", async (t) => {
   });
 
   const content = await toolRuntime.execute(
-    { id: "call-1", name: "grep", input: { pattern: "beta", outputMode: "content", context: 1 } },
+    { id: "call-1", name: "grep", input: { pattern: "beta", output_mode: "content", context: 1 } },
     context,
   );
   const count = await toolRuntime.execute(
-    { id: "call-2", name: "grep", input: { pattern: "alpha", outputMode: "count" } },
+    { id: "call-2", name: "grep", input: { pattern: "alpha", output_mode: "count" } },
     context,
   );
 

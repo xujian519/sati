@@ -12,6 +12,8 @@ export type RequestLogEntry = {
   baselineCost?: number;
   savedCost?: number;
   query?: string;
+  isSubagentDispatch?: boolean;
+  subRequestCount?: number;
 };
 
 export type SessionRouting = {

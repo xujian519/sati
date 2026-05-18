@@ -88,6 +88,9 @@ const GATEWAY_CONNECT_RETRY_INTERVAL_MS = 250;
 const WEB_DEFAULT_PERMISSION_MODE =
     process.env.PILOTDECK_WEB_PERMISSION_MODE || 'default';
 
+const DEFAULT_CONTEXT_WINDOW =
+    Number(process.env.PILOTDECK_CONTEXT_WINDOW) || 200_000;
+
 // Resolves to the Gateway returned by `createRemoteGateway`. We express
 // the type via `typeof createRemoteGateway` (the symbol is already imported
 // above) instead of a JSDoc dynamic-import annotation, because some tsx 4.x
@@ -188,6 +191,7 @@ function ensureSessionState(sessionKey, projectKey, channelKey) {
             channelKey,
             runId: undefined,
             active: false,
+            tokenBudget: null,
         };
         sessionState.set(sessionKey, state);
     } else {
@@ -195,6 +199,15 @@ function ensureSessionState(sessionKey, projectKey, channelKey) {
         state.channelKey = channelKey;
     }
     return state;
+}
+
+export function getSessionTokenBudget(sessionKey) {
+    const state = sessionState.get(sessionKey);
+    return state?.tokenBudget || {
+        used: 0,
+        total: 0,
+        unknown: true,
+    };
 }
 
 /**
@@ -390,6 +403,20 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                     usage: event.usage,
                 }),
             ];
+        case 'context_budget':
+            return [
+                createNormalizedMessage({
+                    ...base,
+                    kind: 'status',
+                    text: 'token_budget',
+                    tokenBudget: {
+                        used: event.used,
+                        total: event.total || DEFAULT_CONTEXT_WINDOW,
+                        ratio: event.ratio,
+                        state: event.state,
+                    },
+                }),
+            ];
         case 'error':
             return [
                 createNormalizedMessage({
@@ -471,6 +498,8 @@ export async function runChatViaGateway(
     state.active = true;
 
     const attachments = uiImagesToAttachments(options?.images);
+    const resolvedMode = resolvePermissionMode(options);
+    console.log(`[pilotdeck-bridge] submitTurn mode=${resolvedMode} (options.permissionMode=${options?.permissionMode}, options.mode=${options?.mode})`);
 
     try {
         const stream = gw.submitTurn({
@@ -478,7 +507,7 @@ export async function runChatViaGateway(
             channelKey,
             projectKey,
             message: command ?? '',
-            mode: resolvePermissionMode(options),
+            mode: resolvedMode,
             runId,
             ...(attachments ? { attachments } : {}),
             ...(options.workspaceCwd ? { workspaceCwd: options.workspaceCwd } : {}),
@@ -501,6 +530,14 @@ export async function runChatViaGateway(
                         2,
                     ),
                 );
+            }
+            if (event && event.type === 'context_budget') {
+                state.tokenBudget = {
+                    used: event.used,
+                    total: event.total || DEFAULT_CONTEXT_WINDOW,
+                    ratio: event.ratio,
+                    state: event.state,
+                };
             }
             for (const frame of gatewayEventToFrames(event, sessionKey, provider)) {
                 writer.send(frame);
@@ -659,47 +696,39 @@ function _buildSessionProjectIndex() {
 function loadPersistedStatsFromDisk() {
     const result = new Map();
     try {
-        const newStatsPath = path.join(GENERAL_HOME, 'router', 'stats.json');
-        const legacyStatsPath = path.join(GENERAL_HOME, 'router-stats.json');
-        const statsPath = fs.existsSync(newStatsPath) ? newStatsPath : legacyStatsPath;
-        const raw = fs.readFileSync(statsPath, 'utf-8');
-        const parsed = JSON.parse(raw);
-        if (!parsed || !parsed.sessions || typeof parsed.sessions !== 'object') {
-            return result;
+        // Prefer new JSONL format, fall back to legacy JSON.
+        const jsonlPath = path.join(GENERAL_HOME, 'router', 'stats.jsonl');
+        const jsonPath = path.join(GENERAL_HOME, 'router', 'stats.json');
+        const legacyPath = path.join(GENERAL_HOME, 'router-stats.json');
+
+        let records;
+        if (fs.existsSync(jsonlPath)) {
+            records = _loadRecordsFromJsonl(jsonlPath);
+        } else {
+            records = _loadRecordsFromJson(jsonPath, legacyPath);
         }
+        if (!records || records.length === 0) return result;
 
         // Build a filesystem-based sessionId→projectDirName index for
         // backward compatibility (records written before projectPath existed).
         const { sessionIndex: fsIndex, dirToPath } = _buildSessionProjectIndex();
         const generalProjectDirName = createProjectId(GENERAL_HOME);
 
-        // Helper: resolve a project dir name back to its real path.
         const resolveProjectPath = (dirName) => {
             if (dirName === generalProjectDirName) return GENERAL_HOME;
-            // Use .cwd marker if available (handles lossy encoding correctly)
             const fromCwd = dirToPath.get(dirName);
             if (fromCwd) return fromCwd;
-            // Fallback for well-known dirs without .cwd
             const repoProjectDirName = createProjectId(REPO_ROOT);
             if (dirName === repoProjectDirName) return REPO_ROOT;
             return GENERAL_HOME;
         };
 
-        // Collect records grouped by resolved project path.
         const byProject = new Map();
 
-        for (const sess of Object.values(parsed.sessions)) {
-            if (!sess || !Array.isArray(sess.requestLog) || sess.requestLog.length === 0) continue;
-
-            // Determine the project this session belongs to.
-            // 1) Prefer the record-level projectPath (new records have this).
-            // 2) Fall back to filesystem lookup via .cwd markers.
-            // 3) Last resort: GENERAL_HOME.
-            const firstRecord = sess.requestLog[0];
-            let projectKey = firstRecord?.projectPath;
-
+        for (const rec of records) {
+            let projectKey = rec.projectPath;
             if (!projectKey) {
-                const sessionId = sess.sessionId || firstRecord?.sessionId;
+                const sessionId = rec.sessionId;
                 if (sessionId) {
                     const safeId = sanitizeSessionIdForPath(sessionId);
                     const dirName = fsIndex.get(safeId) || fsIndex.get(sessionId);
@@ -708,22 +737,19 @@ function loadPersistedStatsFromDisk() {
                     }
                 }
             }
-
-            if (!projectKey) {
-                projectKey = GENERAL_HOME;
-            }
+            if (!projectKey) projectKey = GENERAL_HOME;
 
             if (!byProject.has(projectKey)) {
                 byProject.set(projectKey, []);
             }
-            byProject.get(projectKey).push(...sess.requestLog);
+            byProject.get(projectKey).push(rec);
         }
 
-        for (const [projectKey, records] of byProject.entries()) {
-            records.sort((a, b) => (a.startedAt || '').localeCompare(b.startedAt || ''));
+        for (const [projectKey, projRecords] of byProject.entries()) {
+            projRecords.sort((a, b) => (a.startedAt || '').localeCompare(b.startedAt || ''));
             result.set(projectKey, {
                 aggregate: {},
-                records: records.slice(-1000),
+                records: projRecords.slice(-1000),
             });
         }
     } catch (err) {
@@ -732,6 +758,34 @@ function loadPersistedStatsFromDisk() {
         }
     }
     return result;
+}
+
+function _loadRecordsFromJsonl(filePath) {
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const records = [];
+    for (const line of raw.split('\n')) {
+        if (!line) continue;
+        try {
+            const rec = JSON.parse(line);
+            if (rec?.sessionId && rec?.startedAt) records.push(rec);
+        } catch { /* skip malformed */ }
+    }
+    return records;
+}
+
+function _loadRecordsFromJson(jsonPath, legacyPath) {
+    const statsPath = fs.existsSync(jsonPath) ? jsonPath : legacyPath;
+    const raw = fs.readFileSync(statsPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (!parsed?.sessions || typeof parsed.sessions !== 'object') return [];
+    const records = [];
+    for (const sess of Object.values(parsed.sessions)) {
+        if (!sess || !Array.isArray(sess.requestLog)) continue;
+        for (const rec of sess.requestLog) {
+            if (rec?.sessionId && rec?.startedAt) records.push(rec);
+        }
+    }
+    return records;
 }
 
 /**
@@ -782,8 +836,8 @@ function _readFirstPrompt(sessionId, projectKey) {
         try {
             const fd = fs.openSync(filePath, 'r');
             try {
-                const buf = Buffer.alloc(4096);
-                const bytesRead = fs.readSync(fd, buf, 0, 4096, 0);
+                const buf = Buffer.alloc(16384);
+                const bytesRead = fs.readSync(fd, buf, 0, 16384, 0);
                 const head = buf.toString('utf-8', 0, bytesRead);
                 const firstLine = head.split('\n').find(l => l.includes('"type":"accepted_input"'));
                 if (firstLine) {
@@ -1103,6 +1157,7 @@ function _assignByTurnId(allEntries, queries, turnStructure, subagentPrompts) {
             turnIndex++;
         } else {
             if (entry.role === 'main') {
+                entry._savedTier = entry.tier;
                 entry.role = 'sub';
                 delete entry.tier;
             }
@@ -1123,6 +1178,9 @@ function _assignByTurnId(allEntries, queries, turnStructure, subagentPrompts) {
             if (entry.query === 'sub-agent') {
                 if (prompts && promptIdx < prompts.length) {
                     entry.query = prompts[promptIdx];
+                    entry.isSubagentDispatch = true;
+                    if (entry._savedTier) { entry.tier = entry._savedTier; }
+                    delete entry._savedTier;
                     promptIdx++;
                 }
             } else if (!entry.query) {
@@ -1131,6 +1189,9 @@ function _assignByTurnId(allEntries, queries, turnStructure, subagentPrompts) {
                     const isAgentCall = names.some(n => n === 'agent' || n === 'sessions_spawn' || n === 'dispatch_agent');
                     if (isAgentCall && prompts && promptIdx < prompts.length) {
                         entry.query = prompts[promptIdx];
+                        entry.isSubagentDispatch = true;
+                        if (entry._savedTier) { entry.tier = entry._savedTier; }
+                        delete entry._savedTier;
                         promptIdx++;
                     } else {
                         entry.query = '→ ' + [...new Set(names)].join(', ');
@@ -1138,6 +1199,7 @@ function _assignByTurnId(allEntries, queries, turnStructure, subagentPrompts) {
                 }
                 toolIdx++;
             }
+            delete entry._savedTier;
         }
     }
 }
@@ -1458,6 +1520,15 @@ export function registerAlwaysOnNotificationForwarding(clients) {
                 }
             }
 
+            if (event.type === 'context_budget') {
+                const aoState = ensureSessionState(sessionKey, '', channelKey || 'web');
+                aoState.tokenBudget = {
+                    used: event.used,
+                    total: event.total || DEFAULT_CONTEXT_WINDOW,
+                    ratio: event.ratio,
+                    state: event.state,
+                };
+            }
             for (const frame of gatewayEventToFrames(event, sessionKey, provider)) {
                 const msg = JSON.stringify(frame);
                 for (const client of clients) {

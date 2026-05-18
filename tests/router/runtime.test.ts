@@ -49,6 +49,7 @@ class ScriptedModelRuntime implements ModelRuntime {
       maxOutputTokens: 4_000,
     };
   }
+  getMultimodal() { return { input: ["text" as const] }; }
 }
 
 const baseConfig: RouterConfig = {
@@ -285,6 +286,7 @@ test("RouterRuntime loads auto-orchestrate skill prompts from PluginRuntime", as
       finishReason: "stop" as const,
     }),
     getCapabilities: modelRuntime.getCapabilities.bind(modelRuntime),
+    getMultimodal: modelRuntime.getMultimodal.bind(modelRuntime),
   };
   const plugins = new PluginRuntime({
     projectRoot: "/tmp/project",

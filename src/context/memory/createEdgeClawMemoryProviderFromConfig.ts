@@ -53,6 +53,8 @@ export function createEdgeClawMemoryProviderFromConfig(
     captureStrategy: cfg.captureStrategy,
     includeAssistant: cfg.includeAssistant,
     maxMessageChars: cfg.maxMessageChars,
+    heartbeatBatchSize: cfg.heartbeatBatchSize,
+    defaultIndexingSettings: cfg.schedule,
     source: "pilotdeck",
     logger: options.logger,
     llm,

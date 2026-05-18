@@ -97,3 +97,14 @@ test("C2.depth fork-mode metadata reports forkMode=full", async () => {
   );
   assert.equal(out.metadata?.forkMode, "full");
 });
+
+test("C2.depth full-fork normalizes legacy general_purpose to general-purpose", async () => {
+  const fork = buildFork({ depth: 0, maxSubagentDepth: 1 });
+  const tool = createAgentTool();
+  const out = await tool.execute(
+    { description: "x", prompt: "go", subagent_type: "general_purpose" },
+    makeContext(fork, 0),
+  );
+  assert.match((out.content[0] as { text: string }).text, /\[general-purpose\] x/);
+  assert.equal(out.metadata?.subagent, "general-purpose");
+});

@@ -52,17 +52,15 @@ type PersistedData = {
 
 const MAX_HOURLY_BUCKETS = 72;
 const MAX_SESSIONS = 200;
-const AUTO_FLUSH_INTERVAL_MS = 30_000;
 
 export class TokenStatsCollector {
   private readonly enabled: boolean;
-  private readonly filePath: string | undefined;
+  private readonly jsonlPath: string | undefined;
   private readonly modelPricing: RouterStatsConfig["modelPricing"];
   private readonly baselineModel: RouterStatsConfig["baselineModel"];
   private data: PersistedData;
-  private dirty = false;
-  private flushTimer: ReturnType<typeof setInterval> | undefined;
   private recentRecords: RouterStatsRecord[] = [];
+  private fd: number | undefined;
 
   constructor(config: RouterStatsConfig | undefined) {
     this.enabled = config?.enabled ?? false;
@@ -70,20 +68,23 @@ export class TokenStatsCollector {
     this.baselineModel = config?.baselineModel;
 
     if (this.enabled) {
-      if (config?.filePath) {
-        this.filePath = config.filePath;
-      } else {
-        const routerDir = path.join(os.homedir(), ".pilotdeck", "router");
-        try { fs.mkdirSync(routerDir, { recursive: true }); } catch { /* ok */ }
-        this.filePath = path.join(routerDir, "stats.json");
-        migrateIfNeeded(
-          path.join(os.homedir(), ".pilotdeck", "router-stats.json"),
-          this.filePath,
-        );
-      }
-      this.data = this.loadFromDisk();
-      this.flushTimer = setInterval(() => { this.flushIfDirty(); }, AUTO_FLUSH_INTERVAL_MS);
-      if (this.flushTimer.unref) this.flushTimer.unref();
+      const routerDir = config?.filePath
+        ? path.dirname(config.filePath)
+        : path.join(os.homedir(), ".pilotdeck", "router");
+      try { fs.mkdirSync(routerDir, { recursive: true }); } catch { /* ok */ }
+
+      this.jsonlPath = path.join(routerDir, "stats.jsonl");
+
+      // One-time migration: old JSON formats → JSONL
+      migrateJsonToJsonl(routerDir, this.jsonlPath);
+
+      this.data = this.rebuildFromJsonl();
+
+      // Keep the file open for appends so multiple collector instances
+      // (one per project runtime) safely share the same file via O_APPEND.
+      try {
+        this.fd = fs.openSync(this.jsonlPath, "a");
+      } catch { /* will fall back to per-write open */ }
     } else {
       this.data = createPersistedData();
     }
@@ -105,6 +106,7 @@ export class TokenStatsCollector {
       this.recentRecords = this.recentRecords.slice(-250);
     }
 
+    // Update in-memory aggregates
     bumpAggregate(this.data.global, record);
 
     const hour = record.startedAt.slice(0, 13);
@@ -129,7 +131,9 @@ export class TokenStatsCollector {
     }
     this.pruneSessions();
 
-    this.dirty = true;
+    // Append immediately — no batching needed; O_APPEND is atomic for
+    // small writes on Linux/macOS so concurrent collectors are safe.
+    this.appendRecord(record);
   }
 
   snapshot(): RouterStatsAggregate {
@@ -157,46 +161,96 @@ export class TokenStatsCollector {
   }
 
   async flush(): Promise<void> {
-    if (!this.enabled || !this.filePath) return;
-    this.dirty = false;
-    try {
-      const json = JSON.stringify(this.data, null, 2);
-      fs.writeFileSync(this.filePath, json, "utf-8");
-    } catch { /* best-effort */ }
+    // With JSONL append-only writes, there is nothing to batch-flush.
+    // This method is kept for API compatibility (called by shutdown).
   }
 
   clear(): void {
     this.data = createPersistedData();
     this.recentRecords = [];
-    this.dirty = true;
+    if (this.jsonlPath) {
+      try { fs.writeFileSync(this.jsonlPath, "", "utf-8"); } catch { /* ok */ }
+    }
   }
 
   dispose(): void {
-    if (this.flushTimer) {
-      clearInterval(this.flushTimer);
-      this.flushTimer = undefined;
+    if (this.fd !== undefined) {
+      try { fs.closeSync(this.fd); } catch { /* ok */ }
+      this.fd = undefined;
     }
   }
 
-  private flushIfDirty(): void {
-    if (this.dirty) {
-      void this.flush();
-    }
-  }
+  // ── JSONL persistence ──────────────────────────────────────────────
 
-  private loadFromDisk(): PersistedData {
-    if (!this.filePath) return createPersistedData();
+  private appendRecord(record: RouterStatsRecord): void {
+    const line = JSON.stringify(record) + "\n";
     try {
-      const raw = fs.readFileSync(this.filePath, "utf-8");
-      const parsed = JSON.parse(raw) as Partial<PersistedData>;
-      return {
-        hourly: parsed.hourly && typeof parsed.hourly === "object" ? parsed.hourly : {},
-        sessions: parsed.sessions && typeof parsed.sessions === "object" ? parsed.sessions : {},
-        global: isAggregate(parsed.global) ? parsed.global : createAggregate(),
-      };
+      if (this.fd !== undefined) {
+        fs.writeSync(this.fd, line);
+      } else if (this.jsonlPath) {
+        fs.appendFileSync(this.jsonlPath, line, "utf-8");
+      }
+    } catch { /* best-effort */ }
+  }
+
+  private rebuildFromJsonl(): PersistedData {
+    const data = createPersistedData();
+    if (!this.jsonlPath) return data;
+    let raw: string;
+    try {
+      raw = fs.readFileSync(this.jsonlPath, "utf-8");
     } catch {
-      return createPersistedData();
+      return data;
     }
+    for (const line of raw.split("\n")) {
+      if (!line) continue;
+      try {
+        const record = JSON.parse(line) as RouterStatsRecord;
+        if (!record.sessionId || !record.startedAt) continue;
+
+        bumpAggregate(data.global, record);
+
+        const hour = record.startedAt.slice(0, 13);
+        if (!data.hourly[hour]) {
+          data.hourly[hour] = { ...createAggregate(), hour };
+        }
+        bumpAggregate(data.hourly[hour]!, record);
+
+        if (!data.sessions[record.sessionId]) {
+          data.sessions[record.sessionId] = {
+            sessionId: record.sessionId,
+            aggregate: createAggregate(),
+            requestLog: [],
+          };
+        }
+        const sess = data.sessions[record.sessionId]!;
+        bumpAggregate(sess.aggregate, record);
+        sess.requestLog.push(record);
+      } catch { /* skip malformed lines */ }
+    }
+
+    // Prune after full replay
+    const hourKeys = Object.keys(data.hourly).sort();
+    while (hourKeys.length > MAX_HOURLY_BUCKETS) {
+      delete data.hourly[hourKeys.shift()!];
+    }
+    const sessEntries = Object.entries(data.sessions);
+    if (sessEntries.length > MAX_SESSIONS) {
+      sessEntries.sort((a, b) => {
+        const aLast = a[1].requestLog.at(-1)?.endedAt ?? "";
+        const bLast = b[1].requestLog.at(-1)?.endedAt ?? "";
+        return aLast.localeCompare(bLast);
+      });
+      for (let i = 0; i < sessEntries.length - MAX_SESSIONS; i++) {
+        delete data.sessions[sessEntries[i]![0]];
+      }
+    }
+    for (const sess of Object.values(data.sessions)) {
+      if (sess.requestLog.length > 200) {
+        sess.requestLog = sess.requestLog.slice(-100);
+      }
+    }
+    return data;
   }
 
   private pruneHourly(): void {
@@ -333,12 +387,48 @@ function isAggregate(val: unknown): val is RouterStatsAggregate {
   return typeof val === "object" && val !== null && "totalRequests" in val;
 }
 
-function migrateIfNeeded(oldPath: string, newPath: string): void {
-  try {
-    if (!fs.existsSync(newPath) && fs.existsSync(oldPath)) {
-      fs.renameSync(oldPath, newPath);
-    }
-  } catch { /* best-effort, don't block startup */ }
+/**
+ * One-time migration from the old stats.json (or legacy router-stats.json)
+ * into the new append-only stats.jsonl format.  Extracts every requestLog
+ * entry and writes one JSON line per record.
+ */
+function migrateJsonToJsonl(routerDir: string, jsonlPath: string): void {
+  if (fs.existsSync(jsonlPath)) return; // already migrated
+
+  const candidates = [
+    path.join(routerDir, "stats.json"),
+    path.join(path.dirname(routerDir), "router-stats.json"),
+  ];
+
+  for (const jsonPath of candidates) {
+    try {
+      if (!fs.existsSync(jsonPath)) continue;
+      const raw = fs.readFileSync(jsonPath, "utf-8");
+      const parsed = JSON.parse(raw) as { sessions?: Record<string, { requestLog?: RouterStatsRecord[] }> };
+      if (!parsed?.sessions) continue;
+
+      const lines: string[] = [];
+      for (const sess of Object.values(parsed.sessions)) {
+        if (!Array.isArray(sess?.requestLog)) continue;
+        for (const rec of sess.requestLog) {
+          if (rec?.sessionId && rec?.startedAt) {
+            lines.push(JSON.stringify(rec));
+          }
+        }
+      }
+      lines.sort((a, b) => {
+        const aStart = (JSON.parse(a) as RouterStatsRecord).startedAt;
+        const bStart = (JSON.parse(b) as RouterStatsRecord).startedAt;
+        return aStart.localeCompare(bStart);
+      });
+      if (lines.length > 0) {
+        fs.writeFileSync(jsonlPath, lines.join("\n") + "\n", "utf-8");
+      }
+      // Rename old file so it won't be read again
+      try { fs.renameSync(jsonPath, jsonPath + ".bak"); } catch { /* ok */ }
+      return;
+    } catch { /* skip this candidate */ }
+  }
 }
 
 // $/million tokens – fallback when neither nativeCost nor user modelPricing is available

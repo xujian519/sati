@@ -324,6 +324,7 @@ function parseAgent(
   }
 
   const model = parseAgentModelSelection(rawAgent.model, "agent.model", modelConfig, diagnostics);
+  const subagents = parseAgentSubagents(rawAgent.subagents, diagnostics);
   if (rawAgent.fallbackModel !== undefined) {
     diagnostics.push({
       code: "CONFIG_AGENT_FALLBACK_MODEL_DEPRECATED",
@@ -338,6 +339,33 @@ function parseAgent(
 
   return {
     model,
+    ...(subagents ? { subagents } : {}),
+  };
+}
+
+function parseAgentSubagents(
+  value: unknown,
+  diagnostics: PilotConfigDiagnostic[],
+): PilotAgentConfig["subagents"] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw new PilotConfigError("CONFIG_AGENT_SUBAGENTS_INVALID", "agent.subagents must be an object.");
+  }
+  for (const key of Object.keys(value)) {
+    if (key !== "timeoutMs") {
+      diagnostics.push({
+        code: "CONFIG_AGENT_UNKNOWN_FIELD",
+        severity: "warning",
+        message: `Unknown agent.subagents field ${key}.`,
+        path: `agent.subagents.${key}`,
+        recoverable: true,
+      });
+    }
+  }
+  return {
+    timeoutMs: readOptionalPositiveInteger(value.timeoutMs, "agent.subagents.timeoutMs"),
   };
 }
 
@@ -529,6 +557,16 @@ function stringifyDetails(details: unknown): string | undefined {
     return undefined;
   }
   return stableStringify(redactConfig(details));
+}
+
+function readOptionalPositiveInteger(value: unknown, path: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new PilotConfigError("CONFIG_AGENT_SUBAGENTS_INVALID", `${path} must be a positive integer.`);
+  }
+  return Math.floor(value);
 }
 
 function throwConfigErrorIfFatal(diagnostics: PilotConfigDiagnostic[]): void {

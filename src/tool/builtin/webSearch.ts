@@ -111,18 +111,29 @@ export function createWebSearchTool(
   return {
     name: "web_search",
     aliases: ["WebSearch"],
-    description:
-      "Search the web via SerpAPI. Returns organic results, knowledge graph, answer box, and top stories.",
+    description: `- Searches the web for current information using SerpAPI-compatible or Tavily-compatible endpoints
+- Takes a search query and optional country code (\`gl\`) as input
+- Returns structured search data including organic results and, when available, knowledge graph, answer box, and top stories
+- Use this tool for current events, recent documentation, and information beyond the model's knowledge cutoff
+
+Usage notes:
+  - Requires \`TAVILY_API_KEY\` or \`SERP_API_KEY\`, or \`tools.webSearch.apiKey\` / \`tools.webSearch.tavilyApiKey\` in \`pilotdeck.yaml\`
+  - Supports localized results via the optional \`gl\` parameter (default: \`us\`; use \`cn\` for China-localized results)
+  - Supports SerpAPI-compatible endpoint overrides; auth mode is auto-detected for Tavily, \`*.serp.hk\`, and \`*.serp.global\`, and can also be configured explicitly
+  - This tool is read-only and does not modify files`,
     kind: "network",
     inputSchema: {
       type: "object",
       required: ["query"],
       additionalProperties: false,
       properties: {
-        query: { type: "string", description: "Search query string." },
+        query: {
+          type: "string",
+          description: "Search query string. Be specific, and include versions or the current year when looking for recent documentation, releases, or current events.",
+        },
         gl: {
           type: "string",
-          description: 'Country code for localized results (default "us"). Use "cn" for China-localized results.',
+          description: 'Optional country code for localized results. Defaults to "us"; use "cn" for China-localized results.',
         },
       },
     },

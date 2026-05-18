@@ -122,6 +122,7 @@ function makeRecordingModel(): { model: ModelRuntime; lastRequest: { value?: Can
         maxOutputTokens: 8192,
       };
     },
+    getMultimodal() { return { input: ["text" as const] }; },
   };
   return { model, lastRequest };
 }

@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DefaultContextRuntime } from "../../src/context/DefaultContextRuntime.js";
+import { TokenBudgetManager } from "../../src/context/budget/TokenBudgetManager.js";
+import { AutoCompactionPolicy } from "../../src/context/compaction/AutoCompactionPolicy.js";
 import { PluginRuntimeExtensionResolver } from "../../src/context/extension/PluginRuntimeExtensionResolver.js";
 import { PluginRuntime } from "../../src/extension/index.js";
 import type { CanonicalMessage, CanonicalModelError } from "../../src/model/index.js";
@@ -154,4 +156,71 @@ test("DefaultContextRuntime.recoverFromModelError gives up on non-PTL errors", a
   if (decision.type === "give_up") {
     assert.match(decision.reason, /rate_limit_error/);
   }
+});
+
+test("DefaultContextRuntime.tryAutoCompact reports a current-history snapshot when no compaction is needed", async () => {
+  const tokenBudget = new TokenBudgetManager();
+  const runtime = new DefaultContextRuntime({
+    tokenBudget,
+    autoCompactionPolicy: new AutoCompactionPolicy({ tokenBudget }),
+    maxContextTokens: 100_000,
+  });
+
+  const result = await runtime.tryAutoCompact({
+    messages: [{ role: "user", content: [{ type: "text", text: "small history" }] }],
+  });
+
+  assert.equal(result.type, "skipped");
+  assert.ok(result.snapshot.tokens > 0);
+  assert.equal(result.snapshot.maxContextTokens, 100_000);
+  assert.equal(result.snapshot.state, "ok");
+});
+
+test("DefaultContextRuntime.tryAutoCompact returns a post-compaction snapshot after full compaction", async () => {
+  const tokenBudget = new TokenBudgetManager();
+  const runtime = new DefaultContextRuntime({
+    tokenBudget,
+    autoCompactionPolicy: new AutoCompactionPolicy({ tokenBudget }),
+    compactionEngine: {
+      async run() {
+        return {
+          trigger: "auto" as const,
+          preTokens: 0,
+          summaryMessage: {
+            role: "assistant" as const,
+            content: [{ type: "text" as const, text: "short summary" }],
+          },
+          boundaryMarker: {
+            role: "user" as const,
+            content: [{ type: "text" as const, text: "<compact-boundary trigger=\"auto\" />" }],
+          },
+          messagesToKeep: [],
+          attachments: [],
+          hookResults: [],
+          diagnostics: [],
+        };
+      },
+    } as never,
+    maxContextTokens: 500,
+  });
+
+  const messages: CanonicalMessage[] = [
+    {
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "A".repeat(4_000),
+        },
+      ],
+    },
+  ];
+
+  const result = await runtime.tryAutoCompact({ messages });
+
+  assert.equal(result.type, "compacted");
+  assert.equal(result.tier, "full");
+  assert.ok(result.snapshot.tokens > 0);
+  assert.equal(result.snapshot.maxContextTokens, 500);
+  assert.equal(result.snapshot.state, "ok");
 });

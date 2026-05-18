@@ -680,8 +680,8 @@ function ProviderCard({
                     'group inline-flex items-center rounded-md border text-[11px] transition-colors',
                     on
                       ? isActive
-                        ? 'border-foreground bg-foreground/15 text-foreground'
-                        : 'border-foreground/40 bg-foreground/10 text-foreground'
+                        ? 'border-primary bg-primary/15 text-primary ring-1 ring-primary/30'
+                        : 'border-foreground/30 bg-muted/60 text-foreground'
                       : 'border-border bg-muted text-muted-foreground hover:border-foreground/30 hover:text-foreground',
                   )}
                 >
@@ -691,7 +691,7 @@ function ProviderCard({
                     className="inline-flex items-center gap-1 px-2 py-1"
                     title={on ? 'Click to disable' : 'Click to enable'}
                   >
-                    {on && <Check className="h-3 w-3" strokeWidth={2.5} />}
+                    {isActive && <Check className="h-3 w-3 text-primary" strokeWidth={2.5} />}
                     {m.displayName}
                     {m.supportsImage && (
                       <ImageIcon
@@ -706,8 +706,8 @@ function ProviderCard({
                       onClick={() => onSetActive(ref)}
                       title={isActive ? 'Currently the main agent model' : 'Set as main agent model'}
                       className={cn(
-                        'border-l border-current/20 px-1.5 py-1 transition-opacity',
-                        isActive ? 'opacity-100' : 'opacity-30 hover:opacity-100',
+                        'border-l px-1.5 py-1 transition-opacity',
+                        isActive ? 'border-primary/30 text-primary opacity-100' : 'border-current/20 opacity-30 hover:opacity-100',
                       )}
                     >
                       <Star className={cn('h-3 w-3', isActive && 'fill-current')} strokeWidth={isActive ? 0 : 2} />
@@ -725,7 +725,7 @@ function ProviderCard({
           return (
             <div key={mid} className={cn(
               'mb-1 flex items-center gap-2 rounded-md border px-2 py-1 text-[11px]',
-              isActive ? 'border-foreground/40 bg-foreground/10 text-foreground' : 'border-border bg-muted/40',
+              isActive ? 'border-primary bg-primary/15 text-primary ring-1 ring-primary/30' : 'border-border bg-muted/40',
             )}>
               <code className="flex-1 truncate font-mono">{mid}</code>
               <button
@@ -734,7 +734,7 @@ function ProviderCard({
                 title={isActive ? 'Currently the main agent model' : 'Set as main agent model'}
                 className={cn(
                   'transition-opacity',
-                  isActive ? 'text-foreground opacity-100' : 'text-muted-foreground opacity-40 hover:opacity-100',
+                  isActive ? 'text-primary opacity-100' : 'text-muted-foreground opacity-40 hover:opacity-100',
                 )}
               >
                 <Star className={cn('h-3 w-3', isActive && 'fill-current')} strokeWidth={isActive ? 0 : 2} />

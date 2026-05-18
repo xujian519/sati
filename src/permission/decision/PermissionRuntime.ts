@@ -83,10 +83,7 @@ export class PermissionRuntime {
         // to mode-level allow. User-configured `ask` rules already
         // short-circuited above, so they aren't affected. Tool-level
         // `deny` (safety regex etc.) is handled below and still wins.
-        if (
-          permissionContext.mode === "bypassPermissions" ||
-          (permissionContext.mode === "plan" && permissionContext.bypassAvailable)
-        ) {
+        if (permissionContext.mode === "bypassPermissions") {
           return allow({
             type: "mode",
             mode: permissionContext.mode,
@@ -98,10 +95,7 @@ export class PermissionRuntime {
       return toolDecision;
     }
 
-    if (
-      permissionContext.mode === "bypassPermissions" ||
-      (permissionContext.mode === "plan" && permissionContext.bypassAvailable)
-    ) {
+    if (permissionContext.mode === "bypassPermissions") {
       return allow({
         type: "mode",
         mode: permissionContext.mode,
@@ -340,7 +334,8 @@ function isPlanFileWrite(
   context: PermissionContext,
 ): boolean {
   if (tool.kind !== "filesystem") return false;
-  const filePath = (input as Record<string, unknown> | null)?.filePath;
+  const record = input as Record<string, unknown> | null;
+  const filePath = record?.file_path ?? record?.filePath;
   if (typeof filePath !== "string") return false;
   const absolute = resolve(context.cwd, filePath);
   return absolute === context.planFilePath;
