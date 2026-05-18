@@ -502,11 +502,13 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
 
   return (
     <div className="flex h-full flex-col bg-white dark:bg-neutral-950">
-      <div className="flex h-10 shrink-0 items-center justify-between border-b border-neutral-200 px-6 dark:border-neutral-800">
-        <span className="truncate font-mono text-xxs text-neutral-500 dark:text-neutral-400">
-          {cwd}
-        </span>
-        <div className="flex items-center gap-1">
+      <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-800">
+        <div className="flex h-7 items-center px-3 pt-1">
+          <span className="truncate font-mono text-xxs text-neutral-500 dark:text-neutral-400">
+            {cwd}
+          </span>
+        </div>
+        <div className="flex items-center gap-1 px-3 pb-1">
           <button
             type="button"
             onClick={() => handleNewFile('', 0)}

@@ -115,6 +115,7 @@ export class TurnRunner {
     } catch (error) {
       const normalized = normalizeAgentError(error);
       const result = this.createErrorResult(options, normalized);
+      await Promise.resolve(this.transcript.recordTurnResult(options.sessionId, options.turnId, result)).catch(() => {});
       yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error: normalized };
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
       return { result, messages };

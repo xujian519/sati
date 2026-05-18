@@ -66,6 +66,7 @@ export async function readWebSessionMessages(
         entryTimestamp: entryTimestamps[index],
       }),
     );
+  injectErrorTurnMessages(entries, allMessages, input.sessionKey, input.projectKey);
   if (incompleteTurnIds.length > 0) {
     allMessages.push(createIncompleteTurnStatusMessage(input, incompleteTurnIds, options));
   }
@@ -359,6 +360,52 @@ function extractWebVisibleMessages(entries: AgentTranscriptEntry[]): {
 
 function cloneMessage(message: CanonicalMessage): CanonicalMessage {
   return JSON.parse(JSON.stringify(message)) as CanonicalMessage;
+}
+
+/**
+ * Scan transcript entries for failed turns (`turn_result` with `type === "error"`)
+ * and inject corresponding `WebMessage { kind: 'error' }` into the message list
+ * so error banners survive history reload.
+ */
+function injectErrorTurnMessages(
+  entries: AgentTranscriptEntry[],
+  allMessages: WebMessage[],
+  sessionKey: string,
+  projectKey?: string,
+): void {
+  const errorMessages: WebMessage[] = [];
+  for (const entry of entries) {
+    if (entry.type !== "turn_result" || entry.result.type !== "error") continue;
+    const errorTexts = entry.result.errors?.map((e) => e.message).filter(Boolean) ?? [];
+    const text = errorTexts.length > 0
+      ? errorTexts.join("\n")
+      : `Turn failed: ${entry.result.stopReason}`;
+    errorMessages.push({
+      id: `${sessionKey}-turn-error-${entry.turnId}`,
+      sessionKey,
+      projectKey,
+      createdAt: entry.createdAt,
+      provider: "pilotdeck",
+      role: "error",
+      kind: "error",
+      text,
+      payload: { code: entry.result.stopReason, recoverable: false },
+      source: "history",
+    });
+  }
+  if (errorMessages.length === 0) return;
+
+  for (const errMsg of errorMessages) {
+    let insertAt = allMessages.length;
+    for (let i = allMessages.length - 1; i >= 0; i--) {
+      if (allMessages[i].createdAt <= errMsg.createdAt) {
+        insertAt = i + 1;
+        break;
+      }
+      if (i === 0) insertAt = 0;
+    }
+    allMessages.splice(insertAt, 0, errMsg);
+  }
 }
 
 function readToolResultErrorCode(raw: unknown): string | undefined {
