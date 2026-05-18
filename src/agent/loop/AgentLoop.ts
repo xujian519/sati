@@ -196,7 +196,7 @@ export class AgentLoop {
             break;
           }
         }
-        previousTier = undefined;
+        if (!stickyInfo?.orchestrating) previousTier = undefined;
       } catch (error) {
         if (input.abortSignal?.aborted) {
           const result = this.createTurnResult(input, {
