@@ -14,5 +14,8 @@ export const OPENAI_DEFAULT_CAPABILITIES: ModelCapabilities = {
 };
 
 export const OPENAI_DEFAULT_MULTIMODAL: MultimodalConstraints = {
-  input: ["text"],
+  input: ["text", "image"],
+  maxImagesPerRequest: 20,
+  supportedImageMimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+  imageDetail: "auto",
 };

@@ -51,3 +51,32 @@ test("trims whitespace from provider url and apiKey", () => {
   assert.equal(config.providers["openai-main"].url, "https://api.openai.com/v1");
   assert.equal(config.providers["openai-main"].apiKey, "sk-from-yaml");
 });
+
+test("defaults unknown local OpenAI-compatible models to image input", () => {
+  const config = parseModelConfig({
+    providers: {
+      local: {
+        protocol: "openai",
+        url: "http://localhost:52010/v1",
+        apiKey: "local-key",
+        models: {
+          "qwen3.6-35b-a3b": {
+            capabilities: {
+              maxOutputTokens: 16384,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const model = config.providers.local.models["qwen3.6-35b-a3b"];
+  assert.deepEqual(model.multimodal.input, ["text", "image"]);
+  assert.equal(model.multimodal.maxImagesPerRequest, 20);
+  assert.deepEqual(model.multimodal.supportedImageMimeTypes, [
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+  ]);
+});
