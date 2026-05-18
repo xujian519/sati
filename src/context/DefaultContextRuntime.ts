@@ -275,6 +275,7 @@ export class DefaultContextRuntime implements ContextRuntime {
         sessionId: input.sessionId,
         projectRoot: this.projectRoot ?? "",
         messages: input.messages,
+        errored: input.errored,
       });
     } catch {
       // Memory capture must never break the agent turn — provider already

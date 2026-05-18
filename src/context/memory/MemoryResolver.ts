@@ -24,6 +24,7 @@ export type MemoryCaptureTurnInput = {
   sessionId: string;
   projectRoot: string;
   messages: CanonicalMessage[];
+  errored: boolean;
 };
 
 export type MemoryDiagnostic = {
@@ -39,25 +40,32 @@ export type MemoryResolver = {
 
 export function canonicalMessagesToMemoryMessages(messages: CanonicalMessage[]): ContextMemoryMessage[] {
   return messages.flatMap((message, index) => {
-    const content = message.content
-      .flatMap((block) => {
-        if (block.type === "text") return [block.text];
-        if (block.type === "tool_result") return block.content.map((item) => item.text);
-        return [];
-      })
-      .join("\n")
-      .trim();
+    const entries: Array<Omit<ContextMemoryMessage, "msgId">> = [];
+    const pushEntry = (role: string, text: string) => {
+      const content = text.trim();
+      if (!content) return;
+      const previous = entries.at(-1);
+      if (previous?.role === role) {
+        previous.content = `${previous.content}\n${content}`;
+        return;
+      }
+      entries.push({ role, content });
+    };
 
-    if (!content) {
-      return [];
+    for (const block of message.content) {
+      if (block.type === "text") {
+        pushEntry(message.role, block.text);
+      } else if (block.type === "tool_result") {
+        pushEntry("tool", block.content.map((item) => item.text).join("\n"));
+      } else if (block.type === "tool_result_reference") {
+        pushEntry("tool", block.preview);
+      }
     }
 
-    return [
-      {
-        msgId: `message-${index}`,
-        role: message.role,
-        content,
-      },
-    ];
+    return entries.map((entry, entryIndex) => ({
+      msgId: entries.length === 1 ? `message-${index}` : `message-${index}:${entryIndex}`,
+      role: entry.role,
+      content: entry.content,
+    }));
   });
 }
