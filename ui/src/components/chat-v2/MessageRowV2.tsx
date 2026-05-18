@@ -1,4 +1,4 @@
-import { memo, useMemo, type ReactNode } from 'react';
+import { memo, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { AlertTriangle, ChevronRight, FileText } from 'lucide-react';
@@ -13,6 +13,8 @@ import { Markdown } from '../chat/view/subcomponents/Markdown';
 import { formatUsageLimitText } from '../chat/utils/chatFormatting';
 import { ProcessTrace } from './ProcessTrace';
 import { processSummaryToTrace, type ProcessAttachment } from './processGrouping';
+import { copyTextToClipboard } from '../../utils/clipboard';
+import { Copy, Check } from 'lucide-react';
 
 type DiffLine = { type: string; content: string; lineNum: number };
 
@@ -273,9 +275,41 @@ function MessageRowV2({
       {message.isStreaming && !formattedContent ? (
         <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
       ) : (
-        <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-hr:my-4 prose-table:my-0 prose-pre:my-3">{formattedContent}</Markdown>
+        <>
+          <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-hr:my-4 prose-table:my-0 prose-pre:my-3">{formattedContent}</Markdown>
+          {formattedContent.trim() ? (
+            <div className="mt-1.5 flex justify-end">
+              <CopyMarkdownButton content={formattedContent} />
+            </div>
+          ) : null}
+        </>
       )}
     </div>,
+  );
+}
+
+function CopyMarkdownButton({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleClick = async () => {
+    const ok = await copyTextToClipboard(content);
+    if (!ok) return;
+    setCopied(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className="rounded p-1 text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+      aria-label={copied ? 'Copied' : 'Copy'}
+      title={copied ? 'Copied' : 'Copy'}
+    >
+      {copied ? <Check className="h-3.5 w-3.5" strokeWidth={2} /> : <Copy className="h-3.5 w-3.5" strokeWidth={2} />}
+    </button>
   );
 }
 
