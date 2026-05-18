@@ -16,9 +16,10 @@
  * `WebMessage` boundaries.
  */
 
-import type {
-  CanonicalContentBlock,
-  CanonicalMessage,
+import {
+  flattenToolResultBlockText,
+  type CanonicalContentBlock,
+  type CanonicalMessage,
 } from "../../model/index.js";
 import { listProjectSessions, readTranscript, findLastCompactBoundaryIndex, type SessionInfo } from "../../session/index.js";
 import type { AgentTranscriptEntry } from "../../session/transcript/TranscriptEntry.js";
@@ -286,7 +287,7 @@ function flushBlock(
       return;
     case "tool_result": {
       flushText();
-      const resultText = block.content.map((part) => part.type === "text" ? part.text : `[${part.type}]`).join("");
+      const resultText = flattenToolResultBlockText(block);
       const errorCode = readToolResultErrorCode(block.raw);
       out.push({
         id: `${context.sessionKey}-tool-${block.toolCallId}-result`,

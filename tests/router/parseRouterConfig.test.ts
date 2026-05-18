@@ -126,6 +126,30 @@ test("parseRouterConfig validates fallback list", () => {
   assert.equal(result.config?.fallback?.default?.[0]?.model, "budget");
 });
 
+test("parseRouterConfig parses stats baseline model", () => {
+  const result = parseRouterConfig(
+    {
+      scenarios: { default: "vendor-a/main" },
+      stats: {
+        enabled: true,
+        baselineModel: "vendor-a/main",
+        modelPricing: {
+          "vendor-a/budget": { input: 0.1, output: 0.2, cacheRead: 0.01 },
+        },
+      },
+    },
+    modelConfig,
+  );
+  assert.equal(result.diagnostics.filter((diagnostic) => diagnostic.severity === "fatal").length, 0);
+  assert.equal(result.config?.stats?.baselineModel?.provider, "vendor-a");
+  assert.equal(result.config?.stats?.baselineModel?.model, "main");
+  assert.deepEqual(result.config?.stats?.modelPricing?.["vendor-a/budget"], {
+    input: 0.1,
+    output: 0.2,
+    cacheRead: 0.01,
+  });
+});
+
 test("parseRouterConfig defaults zeroUsageRetry to enabled with 2 attempts", () => {
   const result = parseRouterConfig({ scenarios: { default: "vendor-a/main" } }, modelConfig);
   assert.deepEqual(result.config?.zeroUsageRetry, { enabled: true, maxAttempts: 2 });

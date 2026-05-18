@@ -2,6 +2,7 @@ import type {
   CanonicalContentBlock,
   CanonicalMessage,
   CanonicalModelRequest,
+  CanonicalToolResultContentBlock,
   CanonicalToolChoice,
   CanonicalToolSchema,
   ModelDefinition,
@@ -166,22 +167,7 @@ function toAnthropicContentBlock(block: CanonicalContentBlock): unknown {
       return {
         type: "tool_result",
         tool_use_id: block.toolCallId,
-        content: block.content.map((content) => {
-          switch (content.type) {
-            case "text":
-              return { type: "text", text: content.text };
-            case "image":
-              return {
-                type: "image",
-                source: { type: "base64", media_type: content.mimeType, data: content.data },
-              };
-            case "pdf":
-              return {
-                type: "document",
-                source: { type: "base64", media_type: content.mimeType, data: content.data },
-              };
-          }
-        }),
+        content: block.content.map(toAnthropicToolResultContentBlock),
         is_error: block.isError,
       };
     case "tool_result_reference":
@@ -195,6 +181,25 @@ function toAnthropicContentBlock(block: CanonicalContentBlock): unknown {
             : ""),
         }],
         is_error: false,
+      };
+  }
+}
+
+function toAnthropicToolResultContentBlock(block: CanonicalToolResultContentBlock): unknown {
+  switch (block.type) {
+    case "text":
+      return { type: "text", text: block.text };
+    case "image":
+      return block.source === "url"
+        ? { type: "image", source: { type: "url", url: block.data } }
+        : {
+            type: "image",
+            source: { type: "base64", media_type: block.mimeType, data: block.data },
+          };
+    case "pdf":
+      return {
+        type: "document",
+        source: { type: "base64", media_type: block.mimeType, data: block.data },
       };
   }
 }

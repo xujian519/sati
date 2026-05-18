@@ -51,6 +51,11 @@ export type {
   ProviderConfig,
 } from "./protocol/canonical.js";
 export {
+  flattenToolResultBlockText,
+  flattenToolResultContentText,
+  toolResultContentBlockToText,
+} from "./protocol/toolResultContent.js";
+export {
   ANTHROPIC_STRUCTURED_OUTPUT_TOOL_NAME,
 } from "./providers/anthropic/request.js";
 export {

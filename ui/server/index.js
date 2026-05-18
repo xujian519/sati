@@ -2389,6 +2389,161 @@ function handleShellConnection(ws) {
         console.error('[ERROR] Shell WebSocket error:', error);
     });
 }
+
+const CHAT_ATTACHMENT_IMAGE_MIMES = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/svg+xml',
+]);
+
+function sanitizeAttachmentFilename(name, fallback = 'attachment') {
+    const baseName = path.basename(String(name || fallback));
+    const sanitized = baseName
+        .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+        .replace(/^\.+$/, fallback)
+        .slice(0, 180)
+        .trim();
+    return sanitized || fallback;
+}
+
+function normalizeUploadedFilename(name, fallback = 'attachment') {
+    const original = String(name || fallback);
+    try {
+        const decoded = Buffer.from(original, 'latin1').toString('utf8');
+        const looksMojibake = /[ÃÂÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùûüýþÿ]/.test(original);
+        if (looksMojibake && decoded && !decoded.includes('�')) {
+            return decoded;
+        }
+    } catch {
+        // Keep the browser-provided name when transcoding is not applicable.
+    }
+    return original;
+}
+
+async function moveUploadedAttachment(file, attachmentDir, index) {
+    const originalName = normalizeUploadedFilename(file.originalname, `attachment-${index + 1}`);
+    file.originalname = originalName;
+    const safeName = sanitizeAttachmentFilename(originalName, `attachment-${index + 1}`);
+    const ext = path.extname(safeName);
+    const stem = ext ? safeName.slice(0, -ext.length) : safeName;
+    let candidate = `${index + 1}-${safeName}`;
+    let destination = path.join(attachmentDir, candidate);
+    let suffix = 1;
+    while (true) {
+        try {
+            await fsPromises.access(destination);
+            candidate = `${index + 1}-${stem}-${suffix}${ext}`;
+            destination = path.join(attachmentDir, candidate);
+            suffix += 1;
+        } catch {
+            break;
+        }
+    }
+
+    await fsPromises.copyFile(file.path, destination);
+    await fsPromises.unlink(file.path);
+    return {
+        name: originalName,
+        path: destination,
+        size: file.size,
+        mimeType: file.mimetype || mime.lookup(originalName) || 'application/octet-stream',
+    };
+}
+
+// Mixed chat attachment upload endpoint. Images are returned as data URLs for
+// multimodal input and previews; other files are staged under the project so
+// the gateway can resolve them by path.
+app.post('/api/projects/:projectName/upload-attachments', authenticateToken, async (req, res) => {
+    let multerUpload;
+    try {
+        const multer = (await import('multer')).default;
+        const uploadRoot = path.join(os.tmpdir(), 'pilotdeck-chat-attachments', String(req.user.id));
+        const storage = multer.diskStorage({
+            destination: async (_req, _file, cb) => {
+                try {
+                    await fsPromises.mkdir(uploadRoot, { recursive: true });
+                    cb(null, uploadRoot);
+                } catch (error) {
+                    cb(error);
+                }
+            },
+            filename: (_req, file, cb) => {
+                const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
+                file.originalname = normalizeUploadedFilename(file.originalname);
+                cb(null, `${uniqueSuffix}-${sanitizeAttachmentFilename(file.originalname)}`);
+            },
+        });
+
+        multerUpload = multer({
+            storage,
+            limits: {
+                fileSize: 20 * 1024 * 1024,
+                files: 10,
+            },
+        }).array('attachments', 10);
+    } catch (error) {
+        console.error('Error configuring attachment upload:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+
+    multerUpload(req, res, async (err) => {
+        if (err) {
+            return res.status(400).json({ error: err.message });
+        }
+
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({ error: 'No attachments provided' });
+        }
+
+        let attachmentDir = null;
+        try {
+            const projectRoot = await extractProjectDirectory(req.params.projectName);
+            const targetDir = path.join(projectRoot, '.tmp', 'chat-attachments', `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`);
+            const validation = validatePathInProject(projectRoot, targetDir);
+            if (!validation.valid) {
+                throw new Error(validation.error || 'Invalid attachment target');
+            }
+            attachmentDir = validation.resolved;
+
+            const images = [];
+            const files = [];
+            await fsPromises.mkdir(attachmentDir, { recursive: true });
+
+            for (const [index, file] of req.files.entries()) {
+                if (CHAT_ATTACHMENT_IMAGE_MIMES.has(file.mimetype)) {
+                    const originalName = normalizeUploadedFilename(file.originalname);
+                    const buffer = await fsPromises.readFile(file.path);
+                    await fsPromises.unlink(file.path).catch(() => { });
+                    images.push({
+                        name: originalName,
+                        data: `data:${file.mimetype};base64,${buffer.toString('base64')}`,
+                        size: file.size,
+                        mimeType: file.mimetype,
+                    });
+                    continue;
+                }
+
+                files.push(await moveUploadedAttachment(file, attachmentDir, index));
+            }
+
+            if (files.length === 0 && attachmentDir) {
+                await fsPromises.rm(attachmentDir, { recursive: true, force: true }).catch(() => { });
+            }
+
+            res.json({ images, files });
+        } catch (error) {
+            console.error('Error processing attachments:', error);
+            await Promise.all((req.files || []).map(file => fsPromises.unlink(file.path).catch(() => { })));
+            if (attachmentDir) {
+                await fsPromises.rm(attachmentDir, { recursive: true, force: true }).catch(() => { });
+            }
+            res.status(500).json({ error: 'Failed to process attachments' });
+        }
+    });
+});
+
 // Image upload endpoint
 app.post('/api/projects/:projectName/upload-images', authenticateToken, async (req, res) => {
     try {

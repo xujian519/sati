@@ -63,10 +63,9 @@ test("C2.S2 byte-stable fork placeholder enables prompt-cache hit", () => {
   const bBlock = b[1].content.find((x) => x.type === "tool_result");
   assert.ok(aBlock && bBlock);
   if (aBlock?.type !== "tool_result" || bBlock?.type !== "tool_result") return;
-  assert.equal(
-    aBlock.content[0]?.type === "text" ? aBlock.content[0].text : "",
-    bBlock.content[0]?.type === "text" ? bBlock.content[0].text : "",
-  );
+  assert.equal(aBlock.content[0].type, "text");
+  assert.equal(bBlock.content[0].type, "text");
+  assert.equal(aBlock.content[0].text, bBlock.content[0].text);
 });
 
 test("C2.S3 buildChildMessage wraps directive in slim fork shell (rules live in system prompt)", () => {

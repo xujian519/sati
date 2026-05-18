@@ -10,6 +10,7 @@ import {
   type SessionProvider,
 } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
+import { parseUserAttachmentNote } from '../utils/attachmentNotes';
 import { createCachedDiffCalculator, type DiffCalculator } from '../utils/messageTransforms';
 import { normalizedToChatMessages } from './useChatMessages';
 
@@ -92,13 +93,49 @@ function chatMessageToNormalized(
         .filter((img) => img && typeof img.data === 'string')
         .map((img) => img.data)
     : undefined;
+  const attachments = msg.type === 'user' && Array.isArray(msg.attachments)
+    ? msg.attachments.filter((attachment) => attachment && typeof attachment.name === 'string')
+    : undefined;
   return {
     ...base,
     kind: 'text',
     role: msg.type === 'user' ? 'user' : 'assistant',
     content: msg.content || '',
     ...(images && images.length > 0 ? { images } : {}),
+    ...(attachments && attachments.length > 0 ? { attachments } : {}),
   } as NormalizedMessage;
+}
+
+function normalizeUserMessageText(value: unknown): string {
+  const parsed = parseUserAttachmentNote(value);
+  return parsed.content.replace(/\s+/g, ' ').trim();
+}
+
+function getUserAttachmentNames(message: ChatMessage): string[] {
+  const explicitNames = Array.isArray(message.attachments)
+    ? message.attachments.map((attachment) => attachment.name || '').filter(Boolean)
+    : [];
+  const parsedNames = parseUserAttachmentNote(message.content).attachments
+    .map((attachment) => attachment.name || '')
+    .filter(Boolean);
+  return [...explicitNames, ...parsedNames].sort();
+}
+
+function hasEquivalentUserMessage(messages: ChatMessage[], pendingUserMessage: ChatMessage): boolean {
+  const pendingText = normalizeUserMessageText(pendingUserMessage.content);
+  const pendingImageCount = Array.isArray(pendingUserMessage.images) ? pendingUserMessage.images.length : 0;
+  const pendingAttachmentNames = getUserAttachmentNames(pendingUserMessage);
+
+  return messages.some((message) => {
+    if (message.type !== 'user') return false;
+    if (normalizeUserMessageText(message.content) !== pendingText) return false;
+
+    const imageCount = Array.isArray(message.images) ? message.images.length : 0;
+    if (imageCount !== pendingImageCount) return false;
+
+    const attachmentNames = getUserAttachmentNames(message);
+    return attachmentNames.join('\n') === pendingAttachmentNames.join('\n');
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -259,9 +296,10 @@ export function useChatSessionState({
 
   const chatMessages = useMemo(() => {
     const all = normalizedToChatMessages(storeMessages);
-    // Show pending user message when no session data exists yet (new session, pre-backend-response)
-    if (pendingUserMessage && all.length === 0) {
-      return [pendingUserMessage];
+    // Keep the optimistic user bubble visible even if the first backend frame
+    // is an error; otherwise attachment cards disappear on failed turns.
+    if (pendingUserMessage && !hasEquivalentUserMessage(all, pendingUserMessage)) {
+      return [pendingUserMessage, ...all];
     }
     if (viewHiddenCount > 0 && viewHiddenCount < all.length) return all.slice(0, -viewHiddenCount);
     return all;

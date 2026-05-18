@@ -257,6 +257,69 @@ test("thinking-only assistant message serializes content as empty string for Dee
   assert.equal(assistantMsg.reasoning_content, "Let me reason through this...");
 });
 
+test("tool result images are appended after contiguous OpenAI tool messages", () => {
+  const raw = validModelConfig();
+  const providers = raw.providers as Record<string, any>;
+  providers["openai-main"].models["gpt-5.1"].multimodal.input = ["text", "image"];
+  const config = parseModelConfig(raw, {
+    env: { ANTHROPIC_API_KEY: "anthropic-key" },
+  });
+  const messages: CanonicalMessage[] = [
+    {
+      role: "assistant",
+      content: [
+        { type: "tool_call", id: "call-1", name: "screenshot", input: {} },
+        { type: "tool_call", id: "call-2", name: "read_file", input: { path: "a.txt" } },
+      ],
+    },
+    {
+      role: "user",
+      content: [
+        {
+          type: "tool_result",
+          toolCallId: "call-1",
+          content: [
+            { type: "text", text: "Screenshot captured." },
+            { type: "image", source: "base64", mimeType: "image/png", data: "abc123" },
+          ],
+        },
+        {
+          type: "tool_result",
+          toolCallId: "call-2",
+          content: [{ type: "text", text: "file contents" }],
+        },
+      ],
+    },
+  ];
+
+  const body = buildModelRequest(
+    { provider: "openai-main", model: "gpt-5.1", messages },
+    config,
+  ) as Record<string, any>;
+
+  assert.deepEqual(
+    body.messages.map((m: any) => [m.role, m.tool_call_id ?? null]),
+    [
+      ["assistant", null],
+      ["tool", "call-1"],
+      ["tool", "call-2"],
+      ["user", null],
+    ],
+  );
+  assert.equal(body.messages[1].content, "Screenshot captured.\n[Image: image/png, 6 base64 characters]");
+  assert.equal(body.messages[2].content, "file contents");
+  assert.deepEqual(body.messages[3].content, [
+    { type: "text", text: "[Visual content from tool result]" },
+    {
+      type: "image_url",
+      image_url: {
+        url: "data:image/png;base64,abc123",
+        detail: undefined,
+      },
+    },
+  ]);
+});
+
 test("rejects unsupported multimodal input before provider request", () => {
   const raw = validModelConfig();
   const config = parseModelConfig(raw, {

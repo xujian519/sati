@@ -1,4 +1,7 @@
-import type { CanonicalToolResultBlock, CanonicalToolResultContentBlock } from "../../model/index.js";
+import type {
+  CanonicalToolResultBlock,
+  CanonicalToolResultContentBlock,
+} from "../../model/index.js";
 import type { PilotDeckToolError } from "./errors.js";
 import type { PilotDeckToolResultContent } from "./types.js";
 
@@ -53,46 +56,45 @@ export function contentToText(content: PilotDeckToolResultContent): string {
 }
 
 export function toCanonicalToolResultBlock(result: PilotDeckToolResult): CanonicalToolResultBlock {
-  const blocks = result.content.flatMap<CanonicalToolResultContentBlock>((item) => {
-    switch (item.type) {
-      case "text":
-        return [{ type: "text", text: item.text }];
-      case "json":
-        return [{ type: "text", text: JSON.stringify(item.value) }];
-      case "image":
-        return [{
-          type: "image",
-          source: "base64",
-          data: item.data,
-          mimeType: item.mimeType,
-          bytes: item.bytes,
-          detail: item.detail,
-        }];
-      case "pdf":
-        return [{
-          type: "pdf",
-          source: "base64",
-          data: item.data,
-          mimeType: item.mimeType,
-          bytes: item.bytes,
-          pages: item.pages,
-        }];
-      case "file":
-        return [{
-          type: "text",
-          text: `[File: ${item.path}${item.mimeType ? `, ${item.mimeType}` : ""}${
-            item.description ? `, ${item.description}` : ""
-          }]`,
-        }];
-    }
-  });
+  const contentBlocks = result.content.map(toCanonicalToolResultContentBlock);
 
   return {
     type: "tool_result",
     toolCallId: result.toolCallId,
     isError: result.type === "error" || undefined,
-    content: blocks.length > 0 ? blocks : [{ type: "text", text: EMPTY_TOOL_OUTPUT }],
+    content: contentBlocks.length > 0 ? contentBlocks : [{ type: "text", text: EMPTY_TOOL_OUTPUT }],
     raw: result,
+  };
+}
+
+function toCanonicalToolResultContentBlock(
+  content: PilotDeckToolResultContent,
+): CanonicalToolResultContentBlock {
+  if (content.type === "image") {
+    return {
+      type: "image",
+      source: "base64",
+      data: content.data,
+      mimeType: content.mimeType,
+      bytes: content.bytes,
+      detail: content.detail,
+    };
+  }
+
+  if (content.type === "pdf") {
+    return {
+      type: "pdf",
+      source: "base64",
+      data: content.data,
+      mimeType: content.mimeType,
+      bytes: content.bytes,
+      pages: content.pages,
+    };
+  }
+
+  return {
+    type: "text",
+    text: contentToText(content),
   };
 }
 

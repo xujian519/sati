@@ -1040,13 +1040,13 @@ function ensureRouterConfig(
       ...router,
       scenarios: router.scenarios ?? { default: defaultRef },
       fallback: router.fallback ?? { default: [defaultRef] },
-      stats: router.stats ?? { enabled: true },
+      stats: { enabled: true, baselineModel: defaultRef, ...(router.stats ?? {}) },
     };
   }
   return {
     scenarios: { default: defaultRef },
     fallback: { default: [defaultRef] },
     zeroUsageRetry: { enabled: true, maxAttempts: 2 },
-    stats: { enabled: true },
+    stats: { enabled: true, baselineModel: defaultRef },
   };
 }

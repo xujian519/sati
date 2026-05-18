@@ -99,6 +99,25 @@ const createFakeSubmitEvent = () => {
   return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
 };
 
+const MAX_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024;
+const MAX_ATTACHMENTS = 10;
+
+type UploadedAttachmentFile = {
+  name: string;
+  path: string;
+  size?: number;
+  mimeType?: string;
+};
+
+function buildAttachmentPathNote(files: UploadedAttachmentFile[]): string {
+  if (!files.length) {
+    return '';
+  }
+
+  const lines = files.map((file) => `- ${file.name}: ${file.path}`);
+  return `\n\n[Files attached by user and available for reading in the project:]\n${lines.join('\n')}`;
+}
+
 export function useChatComposerState({
   selectedProject,
   selectedSession,
@@ -514,15 +533,11 @@ export function useChatComposerState({
           return false;
         }
 
-        if (!file.type || !file.type.startsWith('image/')) {
-          return false;
-        }
-
-        if (!file.size || file.size > 5 * 1024 * 1024) {
+        if (typeof file.size !== 'number' || file.size > MAX_ATTACHMENT_SIZE_BYTES) {
           const fileName = file.name || 'Unknown file';
           setImageErrors((previous) => {
             const next = new Map(previous);
-            next.set(fileName, 'File too large (max 5MB)');
+            next.set(fileName, 'File too large (max 20MB)');
             return next;
           });
           return false;
@@ -536,7 +551,7 @@ export function useChatComposerState({
     });
 
     if (validFiles.length > 0) {
-      setAttachedImages((previous) => [...previous, ...validFiles].slice(0, 5));
+      setAttachedImages((previous) => [...previous, ...validFiles].slice(0, MAX_ATTACHMENTS));
     }
   }, []);
 
@@ -544,21 +559,27 @@ export function useChatComposerState({
     (event: ClipboardEvent<HTMLTextAreaElement>) => {
       const items = Array.from(event.clipboardData.items);
 
+      const pastedFiles: File[] = [];
+
       items.forEach((item) => {
-        if (!item.type.startsWith('image/')) {
-          return;
-        }
+        if (item.kind !== 'file') return;
         const file = item.getAsFile();
         if (file) {
-          handleImageFiles([file]);
+          pastedFiles.push(file);
         }
       });
 
+      if (pastedFiles.length > 0) {
+        handleImageFiles(pastedFiles);
+        event.preventDefault();
+        return;
+      }
+
       if (items.length === 0 && event.clipboardData.files.length > 0) {
         const files = Array.from(event.clipboardData.files);
-        const imageFiles = files.filter((file) => file.type.startsWith('image/'));
-        if (imageFiles.length > 0) {
-          handleImageFiles(imageFiles);
+        if (files.length > 0) {
+          handleImageFiles(files);
+          event.preventDefault();
         }
       }
     },
@@ -566,11 +587,8 @@ export function useChatComposerState({
   );
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    accept: {
-      'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'],
-    },
-    maxSize: 5 * 1024 * 1024,
-    maxFiles: 5,
+    maxSize: MAX_ATTACHMENT_SIZE_BYTES,
+    maxFiles: MAX_ATTACHMENTS,
     onDrop: handleImageFiles,
     noClick: true,
     noKeyboard: true,
@@ -582,7 +600,8 @@ export function useChatComposerState({
     ) => {
       event.preventDefault();
       const currentInput = inputValueRef.current;
-      if (!currentInput.trim() || isLoading || !selectedProject) {
+      const hasAttachments = attachedImages.length > 0;
+      if ((!currentInput.trim() && !hasAttachments) || isLoading || !selectedProject) {
         return;
       }
 
@@ -613,43 +632,48 @@ export function useChatComposerState({
         }
       }
 
-      let messageContent = currentInput;
+      const userVisibleInput = currentInput.trim() || 'Please review the attached file(s).';
+      let messageContent = userVisibleInput;
       const selectedThinkingMode = thinkingModes.find((mode: { id: string; prefix?: string }) => mode.id === thinkingMode);
       if (selectedThinkingMode && selectedThinkingMode.prefix) {
-        messageContent = `${selectedThinkingMode.prefix}: ${currentInput}`;
+        messageContent = `${selectedThinkingMode.prefix}: ${userVisibleInput}`;
       }
 
       let uploadedImages: unknown[] = [];
+      let uploadedFiles: UploadedAttachmentFile[] = [];
       if (attachedImages.length > 0) {
         const formData = new FormData();
         attachedImages.forEach((file) => {
-          formData.append('images', file);
+          formData.append('attachments', file);
         });
 
         try {
-          const response = await authenticatedFetch(`/api/projects/${selectedProject.name}/upload-images`, {
+          const response = await authenticatedFetch(`/api/projects/${encodeURIComponent(selectedProject.name)}/upload-attachments`, {
             method: 'POST',
             headers: {},
             body: formData,
           });
 
           if (!response.ok) {
-            throw new Error('Failed to upload images');
+            throw new Error('Failed to upload attachments');
           }
 
           const result = await response.json();
-          uploadedImages = result.images;
+          uploadedImages = Array.isArray(result.images) ? result.images : [];
+          uploadedFiles = Array.isArray(result.files) ? result.files : [];
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
-          console.error('Image upload failed:', error);
+          console.error('Attachment upload failed:', error);
           addMessage({
             type: 'error',
-            content: `Failed to upload images: ${message}`,
+            content: `Failed to upload attachments: ${message}`,
             timestamp: new Date(),
           });
           return;
         }
       }
+
+      messageContent = `${messageContent}${buildAttachmentPathNote(uploadedFiles)}`;
 
       const pendingSessionId = pendingViewSessionRef.current?.sessionId ?? null;
       const canResumeCurrentSession =
@@ -662,8 +686,9 @@ export function useChatComposerState({
 
       const userMessage: ChatMessage = {
         type: 'user',
-        content: currentInput,
+        content: userVisibleInput,
         images: uploadedImages as any,
+        attachments: uploadedFiles as any,
         timestamp: new Date(),
       };
 
@@ -713,8 +738,7 @@ export function useChatComposerState({
       };
 
       const toolsSettings = getToolsSettings();
-      const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
-      const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
+      const sessionSummary = getNotificationSessionSummary(selectedSession, userVisibleInput);
 
       startSessionCommand({
         sendMessage,
@@ -787,7 +811,7 @@ export function useChatComposerState({
       inputValueRef.current = next;
       return next;
     });
-  }, [selectedProject?.name]);
+  }, [selectedProject]);
 
   useEffect(() => {
     if (!selectedProject) {

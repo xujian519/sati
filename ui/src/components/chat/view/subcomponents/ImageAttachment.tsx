@@ -9,16 +9,38 @@ interface ImageAttachmentProps {
 
 const ImageAttachment = ({ file, onRemove, uploadProgress, error }: ImageAttachmentProps) => {
   const [preview, setPreview] = useState<string | undefined>(undefined);
+  const isImage = file.type.startsWith('image/');
   
   useEffect(() => {
+    if (!isImage) {
+      setPreview(undefined);
+      return;
+    }
     const url = URL.createObjectURL(file);
     setPreview(url);
     return () => URL.revokeObjectURL(url);
-  }, [file]);
+  }, [file, isImage]);
   
   return (
     <div className="group relative">
-      <img src={preview} alt={file.name} className="h-20 w-20 rounded object-cover" />
+      {isImage ? (
+        <img src={preview} alt={file.name} className="h-20 w-20 rounded object-cover" />
+      ) : (
+        <div className="flex h-20 w-44 items-center gap-2 rounded border border-neutral-200 bg-white p-2 text-neutral-900 shadow-sm dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 3h7l5 5v13H7z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 3v5h5" />
+            </svg>
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-xs font-medium">{file.name}</div>
+            <div className="mt-0.5 text-[11px] uppercase text-neutral-500">
+              {file.type || 'file'}
+            </div>
+          </div>
+        </div>
+      )}
       {uploadProgress !== undefined && uploadProgress < 100 && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
           <div className="text-xs text-white">{uploadProgress}%</div>
@@ -35,7 +57,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }: ImageAttachm
         type="button"
         onClick={onRemove}
         className="absolute -right-2 -top-2 rounded-full bg-red-500 p-1 text-white opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-        aria-label="Remove image"
+        aria-label="Remove attachment"
       >
         <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

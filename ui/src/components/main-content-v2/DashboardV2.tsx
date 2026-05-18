@@ -65,9 +65,10 @@ function getSortedTierEntries<T>(byTier: Record<string, T> | null | undefined): 
 }
 
 function SavingsBadge({ baseline, saved }: { baseline?: number; saved?: number }) {
+  const { t } = useTranslation('routing');
   if (!baseline || baseline <= 0) return null;
   const actualSaved = saved ?? 0;
-  const pct = Math.round((actualSaved / baseline) * 100);
+  const pct = Math.round(Math.abs(actualSaved / baseline) * 100);
   const isPositive = actualSaved >= 0;
   return (
     <span className={cn(
@@ -76,8 +77,8 @@ function SavingsBadge({ baseline, saved }: { baseline?: number; saved?: number }
     )}>
       <TrendingUp className="h-3 w-3" strokeWidth={1.75} />
       {isPositive
-        ? `Saved ${formatCost(actualSaved)} (${pct}%)`
-        : `Over ${formatCost(Math.abs(actualSaved))}`}
+        ? `${t('dashboard.price.saved', { defaultValue: 'Saved' })} ${formatCost(actualSaved)} (${pct}%)`
+        : `${t('dashboard.price.extraShort', { defaultValue: 'Over' })} ${formatCost(Math.abs(actualSaved))}`}
     </span>
   );
 }
@@ -259,6 +260,13 @@ function buildProjectGroups(
   return { groups, generalGroup };
 }
 
+function collectPricedSessions(groups: ProjectGroup[], generalGroup: ProjectGroup | null): DashboardSession[] {
+  return [
+    ...groups.flatMap((group) => group.allSessions),
+    ...(generalGroup?.allSessions ?? []),
+  ].filter((session) => session.routing);
+}
+
 // ─── Component ───
 
 export type DashboardV2Props = {
@@ -370,12 +378,16 @@ export default function DashboardV2({ projectFilter, projectFullPath, onSelectPr
   const routedSessionCount =
     groups.reduce((sum, g) => sum + g.aggregated.routedSessionCount, 0) +
     (generalGroup?.aggregated.routedSessionCount ?? 0);
+  const pricedSessions = collectPricedSessions(groups, generalGroup);
 
   const projectDisplayName = effectiveProjectFilter && groups.length > 0
     ? groups[0].displayName
     : effectiveProjectFilter;
   const subtitle = effectiveProjectFilter
-    ? `Routing stats for ${projectDisplayName}.`
+    ? t('dashboard.projectSubtitle', {
+        project: projectDisplayName,
+        defaultValue: `Routing stats for ${projectDisplayName}.`,
+      })
     : t('dashboard.subtitle', { defaultValue: 'Usage across all projects and sessions.' });
 
   return (
@@ -437,7 +449,10 @@ export default function DashboardV2({ projectFilter, projectFullPath, onSelectPr
             value={totalRequests.toLocaleString()}
             sub={
               routedSessionCount > 0
-                ? `${routedSessionCount} routed sessions`
+                ? t('dashboard.stats.routedSessions', {
+                    count: routedSessionCount,
+                    defaultValue: `${routedSessionCount} routed sessions`,
+                  })
                 : undefined
             }
             hint={
@@ -473,18 +488,20 @@ export default function DashboardV2({ projectFilter, projectFullPath, onSelectPr
             label={t('dashboard.stats.cost', { defaultValue: 'Cost' })}
             value={formatCost(totalCost)}
             sub={
-              totalRequests > 0
-                ? (t('dashboard.stats.perRequest', {
+              hasBaselineData
+                ? t('dashboard.stats.noRouterCost', {
+                    value: formatCost(totalBaselineCost),
+                    defaultValue: `No-router ${formatCost(totalBaselineCost)}`,
+                  })
+                : totalRequests > 0
+                  ? (t('dashboard.stats.perRequest', {
                     value: formatCost(totalCost / totalRequests),
                     defaultValue: `≈ ${formatCost(totalCost / totalRequests)} / request`,
                   }) as string)
-                : undefined
+                  : undefined
             }
             hint={hasBaselineData ? (
-              <div className="flex flex-col gap-0.5">
-                <span className="text-neutral-400 dark:text-neutral-500">No-router {formatCost(totalBaselineCost)}</span>
-                <SavingsBadge baseline={totalBaselineCost} saved={totalSavedCost} />
-              </div>
+              <SavingsBadge baseline={totalBaselineCost} saved={totalSavedCost} />
             ) : undefined}
           />
         </div>
@@ -493,7 +510,7 @@ export default function DashboardV2({ projectFilter, projectFullPath, onSelectPr
         {effectiveProjectFilter && (
           <div className="mt-6 space-y-2">
             <div className="text-xxs uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-              Sessions
+              {t('dashboard.sessions.title', { defaultValue: 'Sessions' })}
             </div>
             {groups.length > 0 && groups[0].allSessions.length > 0 ? (
               <div className="rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
@@ -505,10 +522,14 @@ export default function DashboardV2({ projectFilter, projectFullPath, onSelectPr
               </div>
             ) : (
               <p className="py-6 text-center text-[13px] text-neutral-400 dark:text-neutral-500">
-                No sessions yet.
+                {t('dashboard.sessions.empty', { defaultValue: 'No sessions yet.' })}
               </p>
             )}
           </div>
+        )}
+
+        {pricedSessions.length > 0 && (
+          <PriceSection sessions={pricedSessions} />
         )}
 
         {/* Global view: project cost cards grid + recent routes */}
@@ -702,6 +723,7 @@ function TierBar({ byTier }: { byTier: Record<string, { estimatedCost?: number; 
 }
 
 function ProjectCostCard({ group, onClick }: { group: ProjectGroup; onClick?: () => void }) {
+  const { t } = useTranslation('routing');
   const agg = group.aggregated;
   const cost = agg.total.estimatedCost || 0;
   const requests = agg.total.requestCount || 0;
@@ -726,7 +748,12 @@ function ProjectCostCard({ group, onClick }: { group: ProjectGroup; onClick?: ()
             <span className="truncate text-[13px] font-medium text-neutral-800 dark:text-neutral-200">{group.displayName}</span>
           </div>
           <div className="text-xxs mt-1 text-neutral-500 dark:text-neutral-400">
-            {requests} requests · {formatTokens(tokens)} tokens · {agg.sessionCount} sessions
+            {t('dashboard.projectCard.summary', {
+              requests,
+              tokens: formatTokens(tokens),
+              sessions: agg.sessionCount,
+              defaultValue: `${requests} requests · ${formatTokens(tokens)} tokens · ${agg.sessionCount} sessions`,
+            })}
           </div>
         </div>
         <div className="shrink-0 text-right">
@@ -740,6 +767,216 @@ function ProjectCostCard({ group, onClick }: { group: ProjectGroup; onClick?: ()
       </div>
       <TierBar byTier={agg.byTier || {}} />
     </Tag>
+  );
+}
+
+type PriceTotals = {
+  actual: number;
+  baseline: number;
+  saved: number;
+  requests: number;
+  tokens: number;
+};
+
+function PriceSection({ sessions }: { sessions: DashboardSession[] }) {
+  const { t } = useTranslation('routing');
+  const pricedSessions = sessions.filter((session) => session.routing);
+  const totals = pricedSessions.reduce<PriceTotals>(
+    (acc, session) => {
+      const total = session.routing?.total;
+      if (!total) return acc;
+      acc.actual += total.estimatedCost || 0;
+      acc.baseline += total.baselineCost || 0;
+      acc.saved += total.savedCost || 0;
+      acc.requests += total.requestCount || 0;
+      acc.tokens += total.totalTokens || 0;
+      return acc;
+    },
+    { actual: 0, baseline: 0, saved: 0, requests: 0, tokens: 0 },
+  );
+  const hasBaseline = totals.baseline > 0;
+  const savedIsPositive = totals.saved >= 0;
+
+  return (
+    <div className="mt-6 space-y-2">
+      <div className="text-xxs uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+        {t('dashboard.price.title', { defaultValue: 'Price' })}
+      </div>
+      <div className={cn(
+        'rounded-xl border',
+        hasBaseline
+          ? savedIsPositive
+            ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/60 dark:bg-emerald-950/20'
+            : 'border-amber-200 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/20'
+          : 'border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950',
+      )}>
+        {pricedSessions.length === 0 ? (
+          <p className="px-5 py-6 text-center text-[13px] text-neutral-400 dark:text-neutral-500">
+            {t('dashboard.price.empty', { defaultValue: 'No priced sessions yet.' })}
+          </p>
+        ) : (
+          <>
+            <div className={cn(
+              'grid grid-cols-1 divide-y md:grid-cols-3 md:divide-x md:divide-y-0',
+              hasBaseline
+                ? savedIsPositive
+                  ? 'divide-emerald-100 dark:divide-emerald-900/40'
+                  : 'divide-amber-100 dark:divide-amber-900/40'
+                : 'divide-neutral-100 dark:divide-neutral-800',
+            )}>
+              <PriceMetric
+                label={t('dashboard.price.actual', { defaultValue: 'Actual cost' })}
+                value={formatCost(totals.actual)}
+                sub={t('dashboard.price.summary', {
+                  sessions: pricedSessions.length,
+                  requests: totals.requests,
+                  tokens: formatTokens(totals.tokens),
+                  defaultValue: `${pricedSessions.length} sessions · ${totals.requests} req · ${formatTokens(totals.tokens)} tokens`,
+                })}
+              />
+              <PriceMetric
+                label={t('dashboard.price.baseline', { defaultValue: 'No-router cost' })}
+                value={hasBaseline ? formatCost(totals.baseline) : '—'}
+                sub={t('dashboard.price.baselineHint', {
+                  defaultValue: 'Baseline assumes the main model handles all routed tokens.',
+                })}
+              />
+              <PriceMetric
+                label={savedIsPositive
+                  ? t('dashboard.price.saved', { defaultValue: 'Saved' })
+                  : t('dashboard.price.extra', { defaultValue: 'Extra spent' })}
+                value={hasBaseline ? formatCost(Math.abs(totals.saved)) : '—'}
+                sub={hasBaseline
+                  ? t('dashboard.price.savedHint', {
+                      rate: Math.round(Math.abs(totals.saved / totals.baseline) * 100),
+                      defaultValue: `${Math.round(Math.abs(totals.saved / totals.baseline) * 100)}% vs baseline`,
+                    })
+                  : t('dashboard.price.missingBaseline', { defaultValue: 'No baseline configured for these sessions.' })}
+                tone={hasBaseline ? (savedIsPositive ? 'positive' : 'warning') : 'neutral'}
+              />
+            </div>
+
+            <div className={cn(
+              'border-t',
+              hasBaseline
+                ? savedIsPositive
+                  ? 'border-emerald-100 dark:border-emerald-900/40'
+                  : 'border-amber-100 dark:border-amber-900/40'
+                : 'border-neutral-100 dark:border-neutral-800',
+            )}>
+              <div className="hidden grid-cols-[minmax(0,1fr)_112px_112px_112px] gap-4 px-5 py-2 text-[11px] leading-[14px] text-neutral-500 dark:text-neutral-400 md:grid">
+                <span>{t('dashboard.price.session', { defaultValue: 'Session' })}</span>
+                <span className="text-right">{t('dashboard.price.actualShort', { defaultValue: 'Actual' })}</span>
+                <span className="text-right">{t('dashboard.price.baselineShort', { defaultValue: 'No router' })}</span>
+                <span className="text-right">{t('dashboard.price.savedShort', { defaultValue: 'Saved' })}</span>
+              </div>
+              <div className={cn(
+                'divide-y',
+                hasBaseline
+                  ? savedIsPositive
+                    ? 'divide-emerald-100/80 dark:divide-emerald-900/30'
+                    : 'divide-amber-100/80 dark:divide-amber-900/30'
+                  : 'divide-neutral-100 dark:divide-neutral-800/50',
+              )}>
+                {pricedSessions.map((session) => {
+                  const total = session.routing!.total;
+                  const actual = total.estimatedCost || 0;
+                  const baseline = total.baselineCost || 0;
+                  const saved = total.savedCost || 0;
+                  const rowHasBaseline = baseline > 0;
+                  const rowSavedPositive = saved >= 0;
+                  return (
+                    <div
+                      key={session.sessionId}
+                      className="grid grid-cols-1 gap-2 px-5 py-3 text-[13px] md:grid-cols-[minmax(0,1fr)_112px_112px_112px] md:items-center md:gap-4"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-neutral-800 dark:text-neutral-200">
+                          {session.title || session.sessionId}
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xxs text-neutral-500 dark:text-neutral-400">
+                          <span>
+                            {t('dashboard.units.requestsShort', {
+                              count: total.requestCount || 0,
+                              defaultValue: `${total.requestCount || 0} req`,
+                            })}
+                          </span>
+                          <span>
+                            {t('dashboard.units.tokens', {
+                              value: formatTokens(total.totalTokens || 0),
+                              defaultValue: `${formatTokens(total.totalTokens || 0)} tokens`,
+                            })}
+                          </span>
+                          <span>{formatTime(session.lastActivity, session.routing?.lastActiveAt)}</span>
+                        </div>
+                      </div>
+                      <PriceCell label={t('dashboard.price.actualShort', { defaultValue: 'Actual' })} value={formatCost(actual)} />
+                      <PriceCell label={t('dashboard.price.baselineShort', { defaultValue: 'No router' })} value={rowHasBaseline ? formatCost(baseline) : '—'} />
+                      <PriceCell
+                        label={rowSavedPositive
+                          ? t('dashboard.price.savedShort', { defaultValue: 'Saved' })
+                          : t('dashboard.price.extraShort', { defaultValue: 'Extra' })}
+                        value={rowHasBaseline ? formatCost(Math.abs(saved)) : '—'}
+                        tone={rowHasBaseline ? (rowSavedPositive ? 'positive' : 'warning') : 'neutral'}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PriceMetric({
+  label,
+  value,
+  sub,
+  tone = 'neutral',
+}: {
+  label: ReactNode;
+  value: ReactNode;
+  sub?: ReactNode;
+  tone?: 'neutral' | 'positive' | 'warning';
+}) {
+  return (
+    <div className="px-5 py-4">
+      <div className="text-xxs text-neutral-500 dark:text-neutral-400">{label}</div>
+      <div className={cn(
+        'mt-1 text-[22px] font-semibold tabular-nums text-neutral-900 dark:text-neutral-100',
+        tone === 'positive' && 'text-emerald-700 dark:text-emerald-300',
+        tone === 'warning' && 'text-amber-700 dark:text-amber-300',
+      )}>
+        {value}
+      </div>
+      {sub && <div className="mt-1 text-xxs text-neutral-500 dark:text-neutral-400">{sub}</div>}
+    </div>
+  );
+}
+
+function PriceCell({
+  label,
+  value,
+  tone = 'neutral',
+}: {
+  label: ReactNode;
+  value: ReactNode;
+  tone?: 'neutral' | 'positive' | 'warning';
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 md:block md:text-right">
+      <span className="text-xxs text-neutral-500 dark:text-neutral-400 md:hidden">{label}</span>
+      <span className={cn(
+        'tabular-nums text-neutral-700 dark:text-neutral-300',
+        tone === 'positive' && 'font-medium text-emerald-700 dark:text-emerald-300',
+        tone === 'warning' && 'font-medium text-amber-700 dark:text-amber-300',
+      )}>
+        {value}
+      </span>
+    </div>
   );
 }
 
@@ -776,8 +1013,10 @@ function filterUserQueries(queries: string[]): string[] {
 }
 
 function RequestLogRow({ entry, variant }: { entry: RequestLogEntry; variant: 'main' | 'sub' | 'tool' }) {
+  const { t } = useTranslation('routing');
   const isSub = variant === 'sub';
   const isTool = variant === 'tool';
+  const saved = entry.savedCost ?? 0;
   const bgClass = isTool
     ? 'bg-amber-50/40 dark:bg-amber-900/10'
     : isSub
@@ -793,7 +1032,11 @@ function RequestLogRow({ entry, variant }: { entry: RequestLogEntry; variant: 'm
     : isSub
       ? 'bg-violet-50 text-violet-500 dark:bg-violet-900/20 dark:text-violet-400'
       : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-500';
-  const badgeLabel = isTool ? 'tool' : isSub ? 'sub' : 'main';
+  const badgeLabel = isTool
+    ? t('dashboard.session.toolShort', { defaultValue: 'tool' })
+    : isSub
+      ? t('dashboard.session.subShort', { defaultValue: 'sub' })
+      : t('dashboard.session.mainShort', { defaultValue: 'main' });
 
   return (
     <div className={cn('flex items-start gap-2 rounded-md px-2.5 py-1.5 text-[12px]', bgClass)}>
@@ -805,12 +1048,27 @@ function RequestLogRow({ entry, variant }: { entry: RequestLogEntry; variant: 'm
       </span>
       <div className="min-w-0 flex-1">
         <div className="truncate text-neutral-700 dark:text-neutral-300">
-          {entry.query || <span className="italic text-neutral-400">(no content)</span>}
+          {entry.query || (
+            <span className="italic text-neutral-400">
+              {t('dashboard.session.noContent', { defaultValue: '(no content)' })}
+            </span>
+          )}
         </div>
         <div className="mt-0.5 flex items-center gap-2 text-xxs text-neutral-400 dark:text-neutral-500">
           <span className="truncate">{entry.model}</span>
           <span className="tabular-nums">{formatTokens(entry.tokens)}</span>
           <span className="tabular-nums">{formatCost(entry.cost)}</span>
+          {typeof entry.savedCost === 'number' && Math.abs(saved) > 0.000001 && (
+            <span className={cn(
+              'tabular-nums',
+              saved >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400',
+            )}>
+              {saved >= 0
+                ? t('dashboard.price.savedLower', { defaultValue: 'saved' })
+                : t('dashboard.price.extraLower', { defaultValue: 'over' })}{' '}
+              {formatCost(Math.abs(saved))}
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -818,6 +1076,7 @@ function RequestLogRow({ entry, variant }: { entry: RequestLogEntry; variant: 'm
 }
 
 function SessionRow({ session }: { session: DashboardSession }) {
+  const { t } = useTranslation('routing');
   const [open, setOpen] = useState(false);
   const routing = session.routing;
   const rawQueries = session.userQueries || [];
@@ -868,7 +1127,7 @@ function SessionRow({ session }: { session: DashboardSession }) {
           <div className="flex shrink-0 items-center gap-2">
             {isOrchestrated && (
               <span className="text-xxs rounded bg-violet-100 px-1.5 py-0.5 font-medium text-violet-600 dark:bg-violet-900/40 dark:text-violet-400">
-                orchestrated
+                {t('dashboard.session.orchestrated', { defaultValue: 'orchestrated' })}
               </span>
             )}
             {Object.keys(routing.byTier || {}).map((tier) => (
@@ -876,22 +1135,39 @@ function SessionRow({ session }: { session: DashboardSession }) {
                 {tier}
               </span>
             ))}
-            <span className="text-xxs tabular-nums text-neutral-500 dark:text-neutral-400">
-              {routing.total.requestCount} req
-            </span>
-            <span className="text-xxs tabular-nums text-neutral-600 dark:text-neutral-400">
-              {formatTokens(routing.total.totalTokens || 0)}
-            </span>
-            <span className="text-xxs tabular-nums text-neutral-500 dark:text-neutral-400">
-              {formatCost(routing.total.estimatedCost || 0)}
-            </span>
-            {(routing.total.baselineCost ?? 0) > 0 && (
-              <SavingsBadge baseline={routing.total.baselineCost} saved={routing.total.savedCost} />
-            )}
+            <div className="ml-1 grid grid-cols-[56px_62px_58px_86px] items-center gap-2 text-[11px] leading-[14px] tabular-nums">
+              <span className="text-right text-neutral-500 dark:text-neutral-400">
+                {t('dashboard.units.requestsShort', {
+                  count: routing.total.requestCount,
+                  defaultValue: `${routing.total.requestCount} req`,
+                })}
+              </span>
+              <span className="text-right text-neutral-600 dark:text-neutral-400">
+                {formatTokens(routing.total.totalTokens || 0)}
+              </span>
+              <span className="text-right text-neutral-500 dark:text-neutral-400">
+                {formatCost(routing.total.estimatedCost || 0)}
+              </span>
+              <span className={cn(
+                'text-right font-medium',
+                !(routing.total.baselineCost || 0) && 'invisible',
+                (routing.total.savedCost || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400',
+              )}>
+                {(routing.total.savedCost || 0) >= 0
+                  ? t('dashboard.price.savedLower', { defaultValue: 'saved' })
+                  : t('dashboard.price.extraLower', { defaultValue: 'over' })}{' '}
+                {formatCost(Math.abs(routing.total.savedCost || 0))}
+              </span>
+            </div>
           </div>
         ) : (
           <span className="text-xxs shrink-0 text-neutral-300 dark:text-neutral-700">
-            {queryCount > 0 ? `${queryCount} queries` : '—'}
+            {queryCount > 0
+              ? t('dashboard.units.queries', {
+                  count: queryCount,
+                  defaultValue: `${queryCount} queries`,
+                })
+              : '—'}
           </span>
         )}
       </button>
@@ -906,17 +1182,27 @@ function SessionRow({ session }: { session: DashboardSession }) {
                 <div className="mb-2.5 grid grid-cols-2 gap-2">
                   {mainRole && (
                     <div className="rounded-lg border border-neutral-200 px-3 py-2 dark:border-neutral-700/60">
-                      <div className="text-xxs font-medium text-neutral-700 dark:text-neutral-300">Main Agent</div>
+                      <div className="text-xxs font-medium text-neutral-700 dark:text-neutral-300">
+                        {t('dashboard.session.mainAgent', { defaultValue: 'Main Agent' })}
+                      </div>
                       <div className="mt-0.5 text-xxs tabular-nums text-neutral-500 dark:text-neutral-400">
-                        {mainRole.requestCount} req · {formatTokens(mainRole.totalTokens || 0)} · {formatCost(mainRole.estimatedCost || 0)}
+                        {t('dashboard.units.requestsShort', {
+                          count: mainRole.requestCount,
+                          defaultValue: `${mainRole.requestCount} req`,
+                        })} · {formatTokens(mainRole.totalTokens || 0)} · {formatCost(mainRole.estimatedCost || 0)}
                       </div>
                     </div>
                   )}
                   {subRole && (
                     <div className="rounded-lg border border-violet-200/60 bg-violet-50/30 px-3 py-2 dark:border-violet-700/30 dark:bg-violet-900/10">
-                      <div className="text-xxs font-medium text-violet-700 dark:text-violet-300">Sub-agents</div>
+                      <div className="text-xxs font-medium text-violet-700 dark:text-violet-300">
+                        {t('dashboard.session.subagents', { defaultValue: 'Sub-agents' })}
+                      </div>
                       <div className="mt-0.5 text-xxs tabular-nums text-violet-600 dark:text-violet-400">
-                        {subRole.requestCount} req · {formatTokens(subRole.totalTokens || 0)} · {formatCost(subRole.estimatedCost || 0)}
+                        {t('dashboard.units.requestsShort', {
+                          count: subRole.requestCount,
+                          defaultValue: `${subRole.requestCount} req`,
+                        })} · {formatTokens(subRole.totalTokens || 0)} · {formatCost(subRole.estimatedCost || 0)}
                       </div>
                     </div>
                   )}
@@ -946,17 +1232,27 @@ function SessionRow({ session }: { session: DashboardSession }) {
                 <div className="mb-2.5 grid grid-cols-2 gap-2">
                   {mainRole && (
                     <div className="rounded-lg border border-neutral-200 px-3 py-2 dark:border-neutral-700/60">
-                      <div className="text-xxs font-medium text-neutral-700 dark:text-neutral-300">Main Agent</div>
+                      <div className="text-xxs font-medium text-neutral-700 dark:text-neutral-300">
+                        {t('dashboard.session.mainAgent', { defaultValue: 'Main Agent' })}
+                      </div>
                       <div className="mt-0.5 text-xxs tabular-nums text-neutral-500 dark:text-neutral-400">
-                        {mainRole.requestCount} req · {formatTokens(mainRole.totalTokens || 0)} · {formatCost(mainRole.estimatedCost || 0)}
+                        {t('dashboard.units.requestsShort', {
+                          count: mainRole.requestCount,
+                          defaultValue: `${mainRole.requestCount} req`,
+                        })} · {formatTokens(mainRole.totalTokens || 0)} · {formatCost(mainRole.estimatedCost || 0)}
                       </div>
                     </div>
                   )}
                   {subRole && (
                     <div className="rounded-lg border border-violet-200/60 bg-violet-50/30 px-3 py-2 dark:border-violet-700/30 dark:bg-violet-900/10">
-                      <div className="text-xxs font-medium text-violet-700 dark:text-violet-300">Sub-agents</div>
+                      <div className="text-xxs font-medium text-violet-700 dark:text-violet-300">
+                        {t('dashboard.session.subagents', { defaultValue: 'Sub-agents' })}
+                      </div>
                       <div className="mt-0.5 text-xxs tabular-nums text-violet-600 dark:text-violet-400">
-                        {subRole.requestCount} req · {formatTokens(subRole.totalTokens || 0)} · {formatCost(subRole.estimatedCost || 0)}
+                        {t('dashboard.units.requestsShort', {
+                          count: subRole.requestCount,
+                          defaultValue: `${subRole.requestCount} req`,
+                        })} · {formatTokens(subRole.totalTokens || 0)} · {formatCost(subRole.estimatedCost || 0)}
                       </div>
                     </div>
                   )}
@@ -981,7 +1277,9 @@ function SessionRow({ session }: { session: DashboardSession }) {
                   ))}
                 </div>
               ) : (
-                <p className="text-xxs text-neutral-400 dark:text-neutral-600">No user queries recorded.</p>
+                <p className="text-xxs text-neutral-400 dark:text-neutral-600">
+                  {t('dashboard.session.noUserQueries', { defaultValue: 'No user queries recorded.' })}
+                </p>
               )}
             </>
           )}
@@ -989,7 +1287,9 @@ function SessionRow({ session }: { session: DashboardSession }) {
           {/* Footer: models as pills */}
           {routing && Object.keys(routing.byModel || {}).length > 0 && (
             <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-              <span className="text-xxs text-neutral-400 dark:text-neutral-500">Models:</span>
+              <span className="text-xxs text-neutral-400 dark:text-neutral-500">
+                {t('dashboard.session.models', { defaultValue: 'Models:' })}
+              </span>
               {Object.entries(routing.byModel || {}).map(([model, bucket]) => (
                 <span key={model} className="text-xxs rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                   {model} <span className="tabular-nums text-neutral-400 dark:text-neutral-500">×{bucket?.requestCount ?? 0}</span>

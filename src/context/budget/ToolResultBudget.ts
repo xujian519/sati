@@ -2,10 +2,10 @@ import { mkdir, writeFile, access } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type {
   CanonicalMessage,
-  CanonicalTextBlock,
   CanonicalToolResultBlock,
   CanonicalToolResultReferenceBlock,
 } from "../../model/index.js";
+import { flattenToolResultBlockText } from "../../model/index.js";
 
 /** Default aggregate cap (chars) — mirrors legacy `DEFAULT_MAX_RESULT_SIZE_CHARS`. */
 export const DEFAULT_MAX_RESULT_SIZE_CHARS = 50_000;
@@ -92,7 +92,7 @@ export class ToolResultBudget {
       return this.toReferenceBlock(this.state.replacements.get(block.toolCallId)!);
     }
 
-    const flat = block.content.map((entry) => entry.type === "text" ? entry.text : `[${entry.type}]`).join("\n");
+    const flat = flattenToolResultBlockText(block);
     const byteLength = Buffer.byteLength(flat, "utf8");
     if (byteLength <= this.maxResultSizeChars) {
       return block;
@@ -175,5 +175,5 @@ function headTailPreview(value: string, budgetBytes: number): string {
 
 /** Helper for tests / inspection. */
 export function flattenToolResultText(block: CanonicalToolResultBlock): string {
-  return block.content.map((entry) => entry.type === "text" ? entry.text : `[${entry.type}]`).join("\n");
+  return flattenToolResultBlockText(block);
 }

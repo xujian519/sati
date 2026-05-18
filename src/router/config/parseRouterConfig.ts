@@ -73,7 +73,7 @@ export function parseRouterConfig(
   const zeroUsageRetry = parseZeroUsageRetry(raw.zeroUsageRetry, diagnostics);
   const tokenSaver = parseTokenSaver(raw.tokenSaver, modelConfig, diagnostics);
   const autoOrchestrate = parseAutoOrchestrate(raw.autoOrchestrate, modelConfig, tokenSaver, diagnostics);
-  const stats = parseStats(raw.stats, diagnostics);
+  const stats = parseStats(raw.stats, modelConfig, diagnostics);
   const customRouter = parseCustomRouter(raw.customRouter, diagnostics);
 
   return {
@@ -490,6 +490,7 @@ function parseAutoOrchestrate(
 
 function parseStats(
   raw: unknown,
+  modelConfig: ModelConfig,
   diagnostics: RouterConfigDiagnostic[],
 ): RouterStatsConfig | undefined {
   if (raw === undefined) {
@@ -528,7 +529,13 @@ function parseStats(
       }
     }
   }
-  return { enabled, modelPricing };
+  const baselineModel = optionalRef(
+    raw.baselineModel,
+    "router.stats.baselineModel",
+    modelConfig,
+    diagnostics,
+  );
+  return { enabled, modelPricing, baselineModel };
 }
 
 function parseCustomRouter(

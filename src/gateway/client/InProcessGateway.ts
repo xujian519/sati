@@ -3,7 +3,11 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 import type { AgentEvent, AgentInput, AgentTurnResult } from "../../agent/index.js";
-import type { CanonicalContentBlock, CanonicalModelEvent } from "../../model/index.js";
+import {
+  flattenToolResultBlockText,
+  type CanonicalContentBlock,
+  type CanonicalModelEvent,
+} from "../../model/index.js";
 import { contentToText } from "../../tool/index.js";
 import type { SessionRouter } from "../SessionRouter.js";
 import { GatewayElicitationBus } from "../elicitation/GatewayElicitationBus.js";
@@ -48,6 +52,7 @@ import type {
 import { permissionEntryToRule, permissionSettingsToRuleSet, readPermissionSettings } from "../../permission/index.js";
 import type { PermissionRule } from "../../permission/index.js";
 import { SkillManagerError, type SkillManager } from "../../extension/skills/index.js";
+import { AttachmentResolver, type AttachmentRequest } from "../../context/attachments/AttachmentResolver.js";
 import type {
   SkillAddressInput,
   SkillCreateInput,
@@ -270,15 +275,10 @@ export class InProcessGateway implements Gateway {
         const permissionMode = input.mode ?? (permissionSettings.skipPermissions ? "bypassPermissions" : undefined);
         const persistedRules = permissionSettingsToRuleSet(permissionSettings);
         const sessionAllowRules = this.sessionPermissionGrants.get(input.sessionKey) ?? [];
-        // Promote a text-only turn to a multimodal blocks turn when the
-        // host channel attached files/images. Without this the
-        // GatewaySubmitTurnInput.attachments field was effectively dead —
-        // the bridge could forward UI uploads but the agent never saw
-        // them. Only `image` attachments map to a canonical block today;
-        // file/pdf/audio attachments would need their own block builders
-        // (or a tool round-trip) so they fall through and the user gets
-        // a text-only turn rather than a corrupted multipart.
-        const agentInput = buildAgentInputWithAttachments(
+        // Promote a text-only turn to blocks when the host channel attached
+        // files/images. UI uploads come through this path; resolving them here
+        // keeps attachment semantics in the gateway for every client.
+        const agentInput = await buildAgentInputWithAttachments(
           input.message,
           input.attachments,
         );
@@ -662,9 +662,7 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
             resultPath: block.path,
           });
         } else if (block.type === "tool_result") {
-          const projFullText = block.content
-            .map((b) => b.type === "text" ? b.text : `[${b.type}]`)
-            .join("\n");
+          const projFullText = flattenToolResultBlockText(block);
           events.push({
             type: "tool_result_detail_available",
             toolCallId: block.toolCallId,
@@ -771,52 +769,75 @@ function previewUnknown(value: unknown): string | undefined {
   }
 }
 
-/**
- * Build an `AgentInput` from the user's text plus any host-provided
- * channel attachments. Returns a plain text input when no attachments
- * are useful (the agent loop fast-paths text and writes a cleaner
- * transcript entry), and a `blocks` input when at least one image is
- * present so the model receives the multimodal payload.
- *
- * Today only `image` attachments map to a canonical block. Non-image
- * attachments are dropped here (with no error event — callers that
- * need richer surface should add their own block builders or use a
- * tool round-trip), so the user still gets a text-only turn rather
- * than a corrupted multipart.
- */
-function buildAgentInputWithAttachments(
+async function buildAgentInputWithAttachments(
   message: string,
   attachments: ChannelAttachment[] | undefined,
-): AgentInput {
-  const imageBlocks = attachmentsToImageBlocks(attachments);
-  if (imageBlocks.length === 0) {
+): Promise<AgentInput> {
+  const attachmentBlocks = await attachmentsToContentBlocks(attachments);
+  if (attachmentBlocks.length === 0) {
     return { type: "text", text: message };
   }
   const blocks: CanonicalContentBlock[] = [];
   if (message && message.length > 0) {
     blocks.push({ type: "text", text: message });
   }
-  for (const block of imageBlocks) {
+  for (const block of attachmentBlocks) {
     blocks.push(block);
   }
   return { type: "blocks", content: blocks };
 }
 
-function attachmentsToImageBlocks(
+async function attachmentsToContentBlocks(
   attachments: ChannelAttachment[] | undefined,
-): CanonicalContentBlock[] {
+): Promise<CanonicalContentBlock[]> {
   if (!attachments || attachments.length === 0) return [];
   const blocks: CanonicalContentBlock[] = [];
+  const resolverRequests: AttachmentRequest[] = [];
+  const diagnostics: string[] = [];
+
   for (const att of attachments) {
-    if (att.type !== "image") continue;
-    if (!att.content || !att.mimeType) continue;
+    if (att.type === "image" && att.content && att.mimeType) {
+      blocks.push({
+        type: "image",
+        source: "base64",
+        data: att.content,
+        mimeType: att.mimeType,
+        ...(typeof att.bytes === "number" ? { bytes: att.bytes } : {}),
+      });
+      continue;
+    }
+
+    if (att.type === "text" && att.content) {
+      blocks.push({ type: "text", text: att.content });
+      continue;
+    }
+
+    if (!att.path) continue;
+    if (att.type === "image" || att.mimeType?.startsWith("image/")) {
+      resolverRequests.push({ type: "image", path: att.path, mimeType: att.mimeType });
+    } else if (att.mimeType === "application/pdf" || att.path.toLowerCase().endsWith(".pdf")) {
+      resolverRequests.push({ type: "pdf", path: att.path });
+    } else {
+      resolverRequests.push({ type: "file", path: att.path });
+    }
+  }
+
+  if (resolverRequests.length > 0) {
+    const resolved = await new AttachmentResolver().resolveAll(resolverRequests);
+    blocks.push(...resolved.blocks);
+    for (const diagnostic of resolved.diagnostics) {
+      if (diagnostic.severity === "error" || diagnostic.severity === "warning") {
+        diagnostics.push(diagnostic.message);
+      }
+    }
+  }
+
+  if (diagnostics.length > 0) {
     blocks.push({
-      type: "image",
-      source: "base64",
-      data: att.content,
-      mimeType: att.mimeType,
-      ...(typeof att.bytes === "number" ? { bytes: att.bytes } : {}),
+      type: "text",
+      text: `[Attachment diagnostics]\n${diagnostics.map((message) => `- ${message}`).join("\n")}`,
     });
   }
+
   return blocks;
 }

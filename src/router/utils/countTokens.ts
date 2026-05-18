@@ -1,4 +1,8 @@
-import type { CanonicalMessage, CanonicalModelEvent } from "../../model/index.js";
+import {
+  flattenToolResultBlockText,
+  type CanonicalMessage,
+  type CanonicalModelEvent,
+} from "../../model/index.js";
 import { countTokens } from "../../context/budget/tokenizer.js";
 
 export { countTokens };
@@ -18,9 +22,7 @@ export function countMessagesTokens(messages: CanonicalMessage[]): number {
           }
           break;
         case "tool_result":
-          for (const tb of block.content) {
-            chunks.push(tb.type === "text" ? tb.text : `[${tb.type}]`);
-          }
+          chunks.push(flattenToolResultBlockText(block));
           break;
       }
     }

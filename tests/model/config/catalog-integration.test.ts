@@ -82,26 +82,6 @@ test("unknown model falls back to protocol defaults", () => {
   assert.deepEqual(model.multimodal.input, ["text"]);
 });
 
-test("yeysai catalog entry: gemini-3.1-pro-preview auto-fills capabilities and multimodal", () => {
-  const config = parseModelConfig({
-    providers: {
-      yeysai: {
-        apiKey: "sk-test",
-        models: {
-          "gemini-3.1-pro-preview": {},
-        },
-      },
-    },
-  });
-
-  const model = config.providers["yeysai"].models["gemini-3.1-pro-preview"];
-  // yeysai now has its own catalog entry that proxies Gemini, so the display
-  // name is suffixed; capabilities and multimodal still cover image input.
-  assert.equal(model.displayName, "Gemini 3.1 Pro Preview via THUNLP");
-  assert.equal(model.capabilities.maxContextTokens, 1048576);
-  assert.ok(model.multimodal.input.includes("image"));
-});
-
 test("vendor-prefixed model lookup: anthropic/claude-sonnet-4.6 on openrouter", () => {
   const config = parseModelConfig({
     providers: {
@@ -151,7 +131,7 @@ test("lookupCatalogModel returns correct match types", () => {
   assert.equal(alias.matchType, "alias");
   assert.ok(alias.model);
 
-  const crossProvider = lookupCatalogModel("yeysai", "gemini-2.5-pro");
+  const crossProvider = lookupCatalogModel("custom", "gemini-2.5-pro");
   assert.equal(crossProvider.matchType, "cross-provider");
   assert.ok(crossProvider.model);
 

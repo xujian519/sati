@@ -6,6 +6,7 @@
 import type { NormalizedMessage } from '../../../stores/useSessionStore';
 import type { ChatMessage, SubagentChildTool } from '../types/types';
 import { decodeHtmlEntities, unescapeWithMathProtection, formatUsageLimitText } from '../utils/chatFormatting';
+import { parseUserAttachmentNote } from '../utils/attachmentNotes';
 
 function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[] {
   const converted: ChatMessage[] = [];
@@ -21,8 +22,18 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
   for (const msg of messages) {
     switch (msg.kind) {
       case 'text': {
-        const content = msg.content || '';
-        if (!content.trim()) continue;
+        const parsedUserContent = msg.role === 'user'
+          ? parseUserAttachmentNote(msg.content || '')
+          : { content: msg.content || '', attachments: [] };
+        const content = parsedUserContent.content;
+        const storedAttachments = Array.isArray(msg.attachments)
+          ? msg.attachments.filter((attachment) => attachment && typeof attachment.name === 'string')
+          : undefined;
+        const userAttachments = [
+          ...(storedAttachments || []),
+          ...parsedUserContent.attachments,
+        ];
+        if (!content.trim() && (!userAttachments || userAttachments.length === 0)) continue;
 
         if (msg.role === 'user') {
           // `NormalizedMessage.images` carries data URLs as strings (see
@@ -41,6 +52,7 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
             content: unescapeWithMathProtection(decodeHtmlEntities(content)),
             timestamp: msg.timestamp,
             ...(userImages && userImages.length > 0 ? { images: userImages } : {}),
+            ...(userAttachments.length > 0 ? { attachments: userAttachments } : {}),
           });
         } else {
           let text = decodeHtmlEntities(content);

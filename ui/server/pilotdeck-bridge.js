@@ -253,6 +253,24 @@ function uiImagesToAttachments(images) {
     return out.length > 0 ? out : undefined;
 }
 
+function uiFilesToAttachments(files) {
+    if (!Array.isArray(files) || files.length === 0) return undefined;
+    const out = [];
+    for (const file of files) {
+        if (!file || typeof file !== 'object') continue;
+        const filePath = typeof file.path === 'string' ? file.path : '';
+        if (!filePath) continue;
+        out.push({
+            type: 'file',
+            name: typeof file.name === 'string' ? file.name : undefined,
+            path: filePath,
+            mimeType: typeof file.mimeType === 'string' ? file.mimeType : undefined,
+            ...(typeof file.size === 'number' ? { bytes: file.size } : {}),
+        });
+    }
+    return out.length > 0 ? out : undefined;
+}
+
 function resolvePermissionMode(options) {
     const explicit = options?.permissionMode || options?.mode;
     // A literal "default" from the chat composer is the implicit
@@ -535,7 +553,10 @@ export async function runChatViaGateway(
     state.runId = runId;
     state.active = true;
 
-    const attachments = uiImagesToAttachments(options?.images);
+    const attachments = [
+        ...(uiImagesToAttachments(options?.images) || []),
+        ...(uiFilesToAttachments(options?.attachments) || []),
+    ];
     const resolvedMode = resolvePermissionMode(options);
     console.log(`[pilotdeck-bridge] submitTurn mode=${resolvedMode} (options.permissionMode=${options?.permissionMode}, options.mode=${options?.mode})`);
 
@@ -547,7 +568,7 @@ export async function runChatViaGateway(
             message: command ?? '',
             mode: resolvedMode,
             runId,
-            ...(attachments ? { attachments } : {}),
+            ...(attachments.length > 0 ? { attachments } : {}),
             ...(options.workspaceCwd ? { workspaceCwd: options.workspaceCwd } : {}),
         });
 
