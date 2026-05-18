@@ -168,6 +168,7 @@ function formatPermissionMode(mode: string): string {
         "",
         "## Rules",
         "- DO NOT exit plan mode any other way; use exit_plan_mode when you want to leave it",
+        "- Do NOT call enter_plan_mode again - you are already in plan mode",
         "- DO NOT call write_file, edit_file, create_file, or bash with any command that writes, deletes, or modifies files, except for the designated plan file",
         "- You may use read-only tools freely, and you may write only the designated plan file while plan mode is active",
         "- You MAY use ask_user_question to clarify requirements or choose between approaches",

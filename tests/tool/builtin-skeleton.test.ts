@@ -269,3 +269,26 @@ test("exit_plan_mode keeps plan mode when user wants more planning", async (t) =
   assert.match(continueText, /Stay in plan mode/i);
   assert.match(continueText, /User feedback:\nAdd a test plan section\./i);
 });
+
+test("enter_plan_mode returns an error when already in plan mode", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({});
+  t.after(() => workspace.cleanup());
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
+    tools: [createEnterPlanModeTool()],
+    cwd: workspace.cwd,
+    permissionMode: "plan",
+  });
+  context.planFile = {
+    path: `${workspace.cwd}/.pilotdeck/plans/test-session.md`,
+    read: () => undefined,
+  };
+
+  const result = await toolRuntime.execute(
+    { id: "call-1", name: "enter_plan_mode", input: {} },
+    context,
+  );
+
+  assert.equal(result.type, "error");
+  assert.equal(result.error.code, "tool_execution_failed");
+  assert.match(result.content[0]?.type === "text" ? result.content[0].text : "", /Plan mode is already active/i);
+});

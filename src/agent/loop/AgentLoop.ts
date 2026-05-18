@@ -667,7 +667,8 @@ export class AgentLoop {
     input: AgentLoopInput,
     messages: CanonicalMessage[],
   ): PilotDeckToolRuntimeContext {
-    const planFilePath = this.dependencies.planFileManager?.ensurePlanFile(input.sessionId);
+    const planTitle = extractFirstUserTitle(messages);
+    const planFilePath = this.dependencies.planFileManager?.ensurePlanFile(input.sessionId, planTitle);
     const permissionContext = {
       ...this.config.permissionContext,
       cwd: this.config.cwd,
@@ -1097,6 +1098,20 @@ function textFromMessage(message: CanonicalMessage): string {
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
+}
+
+function extractFirstUserTitle(messages: CanonicalMessage[]): string | undefined {
+  for (const message of messages) {
+    if (message.role !== "user") {
+      continue;
+    }
+    const text = textFromMessage(message).trim();
+    if (text.length === 0) {
+      continue;
+    }
+    return text.split("\n")[0]?.trim().slice(0, 80) || undefined;
+  }
+  return undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -576,6 +576,47 @@ test("AgentLoop injects plan file context when planFileManager is configured", a
   const expected = planFileManager.getPlanFilePath("session-1");
   assert.equal(seenPlanFilePath, expected);
   assert.equal(seenPermissionPlanFilePath, expected);
+  assert.match(expected, /inspect-session-1\.md$/);
+});
+
+test("AgentLoop falls back to session id plan file name when no user title exists", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({});
+  t.after(() => workspace.cleanup());
+  let seenPlanFilePath: string | undefined;
+  const inspectTool = createPilotDeckTestTool({
+    name: "inspect_plan_context",
+    execute: async (_input, context) => {
+      seenPlanFilePath = context.planFile?.path;
+      return { content: [{ type: "text", text: "ok" }] };
+    },
+  });
+  const fixture = createAgentLoopFixture({
+    tools: [inspectTool],
+    config: { cwd: workspace.cwd },
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "tool_call_end", toolCall: { id: "call-1", name: "inspect_plan_context", input: {} } },
+        { type: "message_end", finishReason: "tool_call" },
+      ],
+    ],
+  });
+  const planFileManager = createPlanFileManager({ projectRoot: workspace.cwd });
+  const loop = new AgentLoop(fixture.config, {
+    ...fixture.dependencies,
+    planFileManager,
+  });
+
+  await collectAsyncGenerator(
+    loop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "assistant", content: [{ type: "text", text: "seed" }] }],
+      maxTurns: 1,
+    }),
+  );
+
+  assert.match(seenPlanFilePath ?? "", /session-1\.md$/);
 });
 
 test("approved exit_plan_mode result is projected into the next model request", async (t) => {

@@ -43,17 +43,13 @@ export function createPlanFileManager(options: {
 
     mkdirSync(planDir, { recursive: true });
 
+    const safeId = sanitizeSessionIdForPath(sessionId);
     let filePath: string;
     if (title) {
       const slug = slugifyTitle(title);
-      filePath = resolve(planDir, `${slug}.md`);
-      if (existsSync(filePath)) {
-        const safeId = sanitizeSessionIdForPath(sessionId);
-        const shortId = safeId.slice(0, 12);
-        filePath = resolve(planDir, `${slug}-${shortId}.md`);
-      }
+      const shortId = safeId.slice(0, 12);
+      filePath = resolve(planDir, `${slug}-${shortId}.md`);
     } else {
-      const safeId = sanitizeSessionIdForPath(sessionId);
       filePath = resolve(planDir, `${safeId}.md`);
     }
 

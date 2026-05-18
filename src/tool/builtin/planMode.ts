@@ -20,7 +20,8 @@ const ENTER_PLAN_MODE_DESCRIPTION =
   "and write a structured plan to a plan file before making any changes. " +
   "Prefer using this tool for non-trivial implementation tasks, especially when: " +
   "multiple valid approaches exist, the task touches many files, " +
-  "or requirements need exploration to fully understand.";
+  "or requirements need exploration to fully understand. " +
+  "Do NOT call this tool if you are already in plan mode.";
 
 const EXIT_PLAN_MODE_DESCRIPTION =
   "Signal that your plan is complete and ready for user review. " +
@@ -136,13 +137,16 @@ export function createEnterPlanModeTool(): PilotDeckToolDefinition<Record<string
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     execute: async (_input, context) => {
-      const text =
-        context?.permissionMode === "plan"
-          ? buildAlreadyInPlanModeResult(context?.planFile?.path)
-          : buildEnterPlanModeResult(context?.planFile?.path);
+      if (context?.permissionMode === "plan") {
+        throw new PilotDeckToolRuntimeError(
+          "tool_execution_failed",
+          buildAlreadyInPlanModeResult(context?.planFile?.path),
+        );
+      }
+      const text = buildEnterPlanModeResult(context?.planFile?.path);
       return {
         content: [{ type: "text", text }],
-        ...(context?.permissionMode === "plan" ? {} : { data: { requestedMode: "plan" } }),
+        data: { requestedMode: "plan" },
       };
     },
   };
