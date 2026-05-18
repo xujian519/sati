@@ -68,16 +68,29 @@ test("filesystem search parity scenarios match legacy gates", async (t) => {
 test("filesystem edit and write parity scenarios match legacy gates", async (t) => {
   const workspace = await createPilotDeckTempWorkspace({
     "edit.txt": "alpha",
+    "full.txt": "full",
     "existing.txt": "old",
   });
   t.after(() => workspace.cleanup());
   const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
-    tools: [createEditFileTool(), createWriteFileTool()],
+    tools: [createReadFileTool(), createEditFileTool(), createWriteFileTool()],
     cwd: workspace.cwd,
     permissionMode: "acceptEdits",
   });
+  const existingEditFiles = new Set(["edit.txt", "full.txt", "existing.txt"]);
 
   for (const scenario of filesystemEditWriteScenarios.filter((item) => item.parity !== "deferred")) {
+    const filePath = (scenario.input as { file_path?: string }).file_path;
+    if (
+      scenario.pilotdeckToolName === "edit_file"
+      && typeof filePath === "string"
+      && existingEditFiles.has(filePath)
+    ) {
+      await toolRuntime.execute(
+        { id: `${scenario.name}:read`, name: "read_file", input: { file_path: filePath } },
+        context,
+      );
+    }
     const result = await toolRuntime.execute(
       { id: scenario.name, name: scenario.pilotdeckToolName, input: scenario.input },
       context,

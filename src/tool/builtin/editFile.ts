@@ -1,8 +1,15 @@
+import { stat } from "node:fs/promises";
 import type { PilotDeckToolDefinition } from "../protocol/types.js";
 import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
 import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
 import { readTextFile } from "./filesystem/readTextFile.js";
 import { writeTextFile } from "./filesystem/writeTextFile.js";
+import {
+  ensureWriteSnapshotFresh,
+  invalidateReadFileState,
+  recordWriteSnapshot,
+  validateWriteSnapshotFresh,
+} from "./filesystem/writeSnapshots.js";
 
 export type EditFileInput = {
   file_path: string;
@@ -45,16 +52,90 @@ export function createEditFileTool(): PilotDeckToolDefinition<EditFileInput> {
     isReadOnly: () => false,
     isConcurrencySafe: () => false,
     isDestructive: () => false,
-    execute: async (input, context) => {
-      if (input.old_string.length === 0) {
-        throw new PilotDeckToolRuntimeError("invalid_tool_input", "old_string must not be empty.");
+    validateInput: async (input, context) => {
+      const resolved = resolvePilotDeckWorkspacePath(input.file_path, context, { forWrite: true });
+      if (!resolved.ok) {
+        return {
+          ok: false,
+          issues: [{
+            path: "file_path",
+            code: "invalid_schema",
+            message: resolved.error.message,
+          }],
+        };
       }
 
-      const resolved = resolvePilotDeckWorkspacePath(input.file_path, context, { mustExist: true, forWrite: true });
+      if (input.old_string !== "" && input.old_string === input.new_string) {
+        return {
+          ok: false,
+          issues: [{
+            path: "new_string",
+            code: "invalid_schema",
+            message: "old_string and new_string must differ.",
+          }],
+        };
+      }
+
+      let freshness: { exists: boolean };
+      try {
+        freshness = await validateWriteSnapshotFresh(context, resolved.absolutePath);
+      } catch (error) {
+        const normalized = error instanceof PilotDeckToolRuntimeError ? error.message : String(error);
+        if (
+          normalized === "File has not been read yet. Read it first before writing to it."
+          || normalized === "File has changed since the last full read. Read it again before writing to it."
+        ) {
+          return {
+            ok: false,
+            issues: [{
+              path: "file_path",
+              code: "invalid_schema",
+              message: normalized,
+            }],
+          };
+        }
+        throw error;
+      }
+
+      if (!freshness.exists) {
+        if (input.old_string === "") {
+          return { ok: true, input };
+        }
+        return {
+          ok: false,
+          issues: [{
+            path: "file_path",
+            code: "invalid_schema",
+            message: `File ${input.file_path} does not exist.`,
+          }],
+        };
+      }
+
+      if (input.old_string !== "") {
+        return { ok: true, input };
+      }
+
+      const content = await readTextFile(resolved.absolutePath);
+      if (content.length === 0) {
+        return { ok: true, input };
+      }
+
+      return {
+        ok: false,
+        issues: [{
+          path: "old_string",
+          code: "invalid_schema",
+          message: "old_string may be empty only when creating a new file or writing to an empty file.",
+        }],
+      };
+    },
+    execute: async (input, context) => {
+      const resolved = resolvePilotDeckWorkspacePath(input.file_path, context, { forWrite: true });
       if (!resolved.ok) {
         throw new PilotDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
       }
 
+      const freshness = await ensureWriteSnapshotFresh(context, resolved.absolutePath);
       if (context.fileHistory) {
         await context.fileHistory.trackEdit(
           resolved.absolutePath,
@@ -62,30 +143,63 @@ export function createEditFileTool(): PilotDeckToolDefinition<EditFileInput> {
         );
       }
 
-      const content = await readTextFile(resolved.absolutePath);
-      const occurrences = countOccurrences(content, input.old_string);
-      if (occurrences === 0) {
-        throw new PilotDeckToolRuntimeError("invalid_tool_input", "old_string was not found.");
-      }
-      if (occurrences > 1 && !input.replace_all) {
-        throw new PilotDeckToolRuntimeError(
-          "invalid_tool_input",
-          "old_string occurs more than once. Set replace_all to true to replace all occurrences.",
-        );
+      const content = freshness.previousContent ?? "";
+      let occurrences = 0;
+      let nextContent: string;
+
+      if (input.old_string === "") {
+        if (freshness.exists && content.length !== 0) {
+          throw new PilotDeckToolRuntimeError(
+            "invalid_tool_input",
+            "old_string may be empty only when creating a new file or writing to an empty file.",
+          );
+        }
+        nextContent = input.new_string;
+      } else {
+        occurrences = countOccurrences(content, input.old_string);
+        if (occurrences === 0) {
+          throw new PilotDeckToolRuntimeError("invalid_tool_input", "old_string was not found.");
+        }
+        if (occurrences > 1 && !input.replace_all) {
+          throw new PilotDeckToolRuntimeError(
+            "invalid_tool_input",
+            "old_string occurs more than once. Set replace_all to true to replace all occurrences.",
+          );
+        }
+        nextContent = input.replace_all
+          ? content.split(input.old_string).join(input.new_string)
+          : content.replace(input.old_string, input.new_string);
       }
 
-      const nextContent = input.replace_all
-        ? content.split(input.old_string).join(input.new_string)
-        : content.replace(input.old_string, input.new_string);
-      await writeTextFile(resolved.absolutePath, nextContent, { allowOverwrite: true });
+      const action = await writeTextFile(resolved.absolutePath, nextContent, { allowOverwrite: true });
+      const fileStat = await stat(resolved.absolutePath);
+      invalidateReadFileState(context, resolved.absolutePath);
+      recordWriteSnapshot(context, resolved.absolutePath, nextContent, Math.floor(fileStat.mtimeMs));
 
-      const replacements = input.replace_all ? occurrences : 1;
+      const update = {
+        absolutePath: resolved.absolutePath,
+        relativePath: resolved.relativePath,
+        root: resolved.root,
+        content: nextContent,
+        previousContent: freshness.previousContent,
+      };
+      await context.fileUpdateNotifier?.didChange?.(update);
+      await context.fileUpdateNotifier?.didSave?.(update);
+
+      const replacements = input.old_string === "" ? 0 : input.replace_all ? occurrences : 1;
       return {
-        content: [{ type: "text", text: `Updated ${resolved.relativePath} (${replacements} replacement).` }],
+        content: [{
+          type: "text",
+          text: `${action === "created" ? "Created" : "Updated"} ${resolved.relativePath}${replacements > 0 ? ` (${replacements} replacement).` : "."}`,
+        }],
         data: {
           filePath: resolved.relativePath,
           replacements,
-          changed: nextContent !== content,
+          changed: action === "created" || nextContent !== content,
+        },
+        metadata: {
+          bytesWritten: Buffer.byteLength(nextContent, "utf8"),
+          mtimeMs: Math.floor(fileStat.mtimeMs),
         },
       };
     },

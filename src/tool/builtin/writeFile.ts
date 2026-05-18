@@ -10,6 +10,7 @@ import {
 } from "./filesystem/structuredPatch.js";
 import {
   ensureWriteSnapshotFresh,
+  invalidateReadFileState,
   recordWriteSnapshot,
   validateWriteSnapshotFresh,
 } from "./filesystem/writeSnapshots.js";
@@ -187,17 +188,4 @@ export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput, W
       };
     },
   };
-}
-
-function invalidateReadFileState(
-  context: { readFileState?: Map<string, unknown> },
-  absolutePath: string,
-): void {
-  if (!context.readFileState) return;
-  const prefix = `${absolutePath}::`;
-  for (const key of context.readFileState.keys()) {
-    if (key.startsWith(prefix)) {
-      context.readFileState.delete(key);
-    }
-  }
 }

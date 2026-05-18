@@ -28,6 +28,19 @@ export function recordWriteSnapshot(
   });
 }
 
+export function invalidateReadFileState(
+  context: { readFileState?: Map<string, unknown> },
+  absolutePath: string,
+): void {
+  if (!context.readFileState) return;
+  const prefix = `${absolutePath}::`;
+  for (const key of context.readFileState.keys()) {
+    if (key.startsWith(prefix)) {
+      context.readFileState.delete(key);
+    }
+  }
+}
+
 export async function validateWriteSnapshotFresh(
   context: PilotDeckToolRuntimeContext,
   absolutePath: string,
