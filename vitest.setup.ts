@@ -47,6 +47,7 @@ vi.mock('lucide-react', () => ({
   ClipboardList: MockIcon,
   Clock: MockIcon,
   Command: MockIcon,
+  Copy: MockIcon,
   FolderGit2: MockIcon,
   Hand: MockIcon,
   HelpCircle: MockIcon,

@@ -4,6 +4,7 @@ import type { ClaudeWorkStatus, CompactProgress, PendingPermissionRequest } from
 import type { Project, ProjectSession, SessionProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
 import { useWebSocket } from '../../../contexts/WebSocketContext';
+import { SmoothTextStream } from './streamSmoother';
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -51,23 +52,21 @@ type LatestChatMessage = {
   [key: string]: any;
 };
 
-type StreamAccumulator = {
-  content: string;
-  timer: number | null;
-};
+type StreamSmootherMap = Map<string, SmoothTextStream>;
 
 function getExplicitSessionId(msg: LatestChatMessage): string | null {
   const value = msg.sessionId ?? msg.session_id ?? msg.actualSessionId ?? msg.newSessionId;
   return typeof value === 'string' && value.trim() ? value : null;
 }
 
-function getOrCreateAccumulator(
-  map: Map<string, StreamAccumulator>,
+function getOrCreateSmoother(
+  map: StreamSmootherMap,
   sessionId: string,
-): StreamAccumulator {
+  create: () => SmoothTextStream,
+): SmoothTextStream {
   let state = map.get(sessionId);
   if (!state) {
-    state = { content: '', timer: null };
+    state = create();
     map.set(sessionId, state);
   }
   return state;
@@ -121,8 +120,8 @@ export function useChatRealtimeHandlers({
 }: UseChatRealtimeHandlersArgs) {
   const { subscribe } = useWebSocket();
 
-  const streamBySessionRef = useRef(new Map<string, StreamAccumulator>());
-  const thinkingBySessionRef = useRef(new Map<string, StreamAccumulator>());
+  const streamBySessionRef = useRef<StreamSmootherMap>(new Map());
+  const thinkingBySessionRef = useRef<StreamSmootherMap>(new Map());
 
   const handleMessage = useCallback((latestMessage: LatestChatMessage) => {
     if (!latestMessage) return;
@@ -140,10 +139,10 @@ export function useChatRealtimeHandlers({
     const msg = latestMessage as any;
     const clearAccumulators = () => {
       for (const state of streamBySessionRef.current.values()) {
-        if (state.timer) clearTimeout(state.timer);
+        state.cancel();
       }
       for (const state of thinkingBySessionRef.current.values()) {
-        if (state.timer) clearTimeout(state.timer);
+        state.cancel();
       }
       streamBySessionRef.current.clear();
       thinkingBySessionRef.current.clear();
@@ -151,30 +150,16 @@ export function useChatRealtimeHandlers({
     const flushStream = (sessionId: string, finalize = false) => {
       const state = streamBySessionRef.current.get(sessionId);
       if (!state) return;
-      if (state.timer) {
-        clearTimeout(state.timer);
-        state.timer = null;
-      }
-      if (state.content) {
-        sessionStore.updateStreaming(sessionId, state.content, provider);
-      }
+      state.flush(finalize);
       if (finalize) {
-        sessionStore.finalizeStreaming(sessionId);
         streamBySessionRef.current.delete(sessionId);
       }
     };
     const flushThinking = (sessionId: string, finalize = false) => {
       const state = thinkingBySessionRef.current.get(sessionId);
       if (!state) return;
-      if (state.timer) {
-        clearTimeout(state.timer);
-        state.timer = null;
-      }
-      if (state.content) {
-        sessionStore.updateStreamingThinking(sessionId, state.content, provider);
-      }
+      state.flush(finalize);
       if (finalize) {
-        sessionStore.finalizeStreamingThinking(sessionId);
         thinkingBySessionRef.current.delete(sessionId);
       }
     };
@@ -279,14 +264,15 @@ export function useChatRealtimeHandlers({
       if (!text || !sid) return;
       // Flush this session's thinking before its assistant text starts.
       flushThinking(sid, true);
-      const state = getOrCreateAccumulator(streamBySessionRef.current, sid);
-      state.content += text;
-      if (!state.timer) {
-        state.timer = window.setTimeout(() => {
-          state.timer = null;
-          sessionStore.updateStreaming(sid, state.content, provider);
-        }, 100);
-      }
+      const state = getOrCreateSmoother(
+        streamBySessionRef.current,
+        sid,
+        () => new SmoothTextStream({
+          emit: (content) => sessionStore.updateStreaming(sid, content, provider),
+          finalize: () => sessionStore.finalizeStreaming(sid),
+        }),
+      );
+      state.append(text);
       return;
     }
 
@@ -294,14 +280,15 @@ export function useChatRealtimeHandlers({
     if (msg.kind === 'thinking') {
       const text = msg.content || '';
       if (!text || !sid) return;
-      const state = getOrCreateAccumulator(thinkingBySessionRef.current, sid);
-      state.content += text;
-      if (!state.timer) {
-        state.timer = window.setTimeout(() => {
-          state.timer = null;
-          sessionStore.updateStreamingThinking(sid, state.content, provider);
-        }, 100);
-      }
+      const state = getOrCreateSmoother(
+        thinkingBySessionRef.current,
+        sid,
+        () => new SmoothTextStream({
+          emit: (content) => sessionStore.updateStreamingThinking(sid, content, provider),
+          finalize: () => sessionStore.finalizeStreamingThinking(sid),
+        }),
+      );
+      state.append(text);
       return;
     }
 

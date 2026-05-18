@@ -17,6 +17,7 @@ import { normalizedToChatMessages } from './useChatMessages';
 const MESSAGES_PER_PAGE = 20;
 const INITIAL_VISIBLE_MESSAGES = 100;
 const EMPTY_NORMALIZED_MESSAGES: NormalizedMessage[] = [];
+export const BOTTOM_FOLLOW_THRESHOLD_PX = 96;
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -39,6 +40,34 @@ interface UseChatSessionStateArgs {
 interface ScrollRestoreState {
   height: number;
   top: number;
+}
+
+export function isScrollNearBottom(
+  scrollTop: number,
+  scrollHeight: number,
+  clientHeight: number,
+  thresholdPx = BOTTOM_FOLLOW_THRESHOLD_PX,
+): boolean {
+  return scrollHeight - scrollTop - clientHeight < thresholdPx;
+}
+
+export function getStreamContentKey(messages: ChatMessage[]): string {
+  const lastMessage = messages[messages.length - 1];
+  if (!lastMessage) {
+    return 'empty';
+  }
+
+  const contentLength = typeof lastMessage.content === 'string' ? lastMessage.content.length : 0;
+  const toolContent = lastMessage.toolResult?.content;
+  const toolContentLength = typeof toolContent === 'string' ? toolContent.length : 0;
+  return [
+    lastMessage.id || '',
+    lastMessage.type || '',
+    lastMessage.isStreaming ? 'streaming' : '',
+    contentLength,
+    toolContentLength,
+    messages.length,
+  ].join(':');
 }
 
 /* ------------------------------------------------------------------ */
@@ -186,8 +215,16 @@ export function useChatSessionState({
   const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadAllOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLoadedSessionKeyRef = useRef<string | null>(null);
+  const followScrollFrameRef = useRef<number | null>(null);
 
   const createDiff = useMemo<DiffCalculator>(() => createCachedDiffCalculator(), []);
+
+  useEffect(() => () => {
+    if (followScrollFrameRef.current !== null) {
+      cancelAnimationFrame(followScrollFrameRef.current);
+      followScrollFrameRef.current = null;
+    }
+  }, []);
 
   /* ---------------------------------------------------------------- */
   /*  Derive chatMessages from the store                              */
@@ -336,6 +373,16 @@ export function useChatSessionState({
     container.scrollTop = container.scrollHeight;
   }, []);
 
+  const scheduleScrollToBottom = useCallback(() => {
+    if (followScrollFrameRef.current !== null) {
+      return;
+    }
+    followScrollFrameRef.current = requestAnimationFrame(() => {
+      followScrollFrameRef.current = null;
+      scrollToBottom();
+    });
+  }, [scrollToBottom]);
+
   const scrollToBottomAndReset = useCallback(() => {
     scrollToBottom();
     if (allMessagesLoaded) {
@@ -349,7 +396,7 @@ export function useChatSessionState({
     const container = scrollContainerRef.current;
     if (!container) return false;
     const { scrollTop, scrollHeight, clientHeight } = container;
-    return scrollHeight - scrollTop - clientHeight < 50;
+    return isScrollNearBottom(scrollTop, scrollHeight, clientHeight);
   }, []);
 
   const loadOlderMessages = useCallback(
@@ -745,6 +792,10 @@ export function useChatSessionState({
     if (chatMessages.length <= visibleMessageCount) return chatMessages;
     return chatMessages.slice(-visibleMessageCount);
   }, [chatMessages, visibleMessageCount]);
+  const streamContentKey = useMemo(
+    () => getStreamContentKey(visibleMessages),
+    [visibleMessages],
+  );
 
   useEffect(() => {
     if (!autoScrollToBottom && scrollContainerRef.current) {
@@ -759,7 +810,7 @@ export function useChatSessionState({
     if (searchScrollActiveRef.current) return;
 
     if (autoScrollToBottom) {
-      if (!isUserScrolledUp) setTimeout(() => scrollToBottom(), 50);
+      if (!isUserScrolledUp) scheduleScrollToBottom();
       return;
     }
 
@@ -769,7 +820,14 @@ export function useChatSessionState({
     const newHeight = container.scrollHeight;
     const heightDiff = newHeight - prevHeight;
     if (heightDiff > 0 && prevTop > 0) container.scrollTop = prevTop + heightDiff;
-  }, [autoScrollToBottom, chatMessages.length, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
+  }, [
+    autoScrollToBottom,
+    chatMessages.length,
+    isLoadingMoreMessages,
+    isUserScrolledUp,
+    scheduleScrollToBottom,
+    streamContentKey,
+  ]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
