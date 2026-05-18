@@ -212,10 +212,16 @@ test("structured_output and plan skeleton tools produce stable results", async (
   assert.equal(structured.type, "success");
   assert.equal(enter.type, "success");
   assert.equal(exit.type, "success");
+  const executeText = exit.type === "success"
+    ? exit.content.map((item) => ("text" in item ? item.text : "")).join("\n")
+    : "";
   assert.equal(
     exit.type === "success" ? (exit.data as { requestedMode?: string } | undefined)?.requestedMode : undefined,
     "default",
   );
+  assert.match(executeText, /User has approved your plan/i);
+  assert.match(executeText, /start coding/i);
+  assert.match(executeText, /## Approved Plan/i);
 });
 
 test("exit_plan_mode keeps plan mode when user wants more planning", async (t) => {
@@ -253,7 +259,13 @@ test("exit_plan_mode keeps plan mode when user wants more planning", async (t) =
     action?: string;
     feedback?: string;
   } | undefined) : undefined;
+  const continueText = exit.type === "success"
+    ? exit.content.map((item) => ("text" in item ? item.text : "")).join("\n")
+    : "";
   assert.equal(data?.requestedMode, undefined);
   assert.equal(data?.action, "continue_planning");
   assert.equal(data?.feedback, "Add a test plan section.");
+  assert.match(continueText, /continue planning before implementation/i);
+  assert.match(continueText, /Stay in plan mode/i);
+  assert.match(continueText, /User feedback:\nAdd a test plan section\./i);
 });

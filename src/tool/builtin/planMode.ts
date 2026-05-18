@@ -65,6 +65,34 @@ function buildAlreadyInPlanModeResult(planFilePath: string | undefined): string 
   ].join("\n");
 }
 
+function buildApprovedPlanResult(plan: string, planFilePath: string | undefined): string {
+  const locationSection = planFilePath
+    ? [
+        `Your plan file is at: ${planFilePath}`,
+        "You can refer back to it during implementation if needed.",
+        "",
+      ]
+    : [];
+  return [
+    "User has approved your plan. You can now start coding.",
+    "Start with updating your todo list if applicable.",
+    "",
+    ...locationSection,
+    "## Approved Plan",
+    plan,
+  ].join("\n");
+}
+
+function buildContinuePlanningResult(feedback: string | undefined): string {
+  const feedbackSection = feedback
+    ? `\n\nUser feedback:\n${feedback}`
+    : "\n\nNo additional feedback was provided.";
+  return [
+    "The user wants to continue planning before implementation.",
+    "Stay in plan mode, refine the plan file, and call exit_plan_mode again when the updated plan is ready.",
+  ].join(" ") + feedbackSection;
+}
+
 function getExitPlanFeedback(answer: PilotDeckElicitationAnswer): string | undefined {
   if (answer.type !== "answered" || !answer.annotations) {
     return undefined;
@@ -186,20 +214,18 @@ export function createExitPlanModeTool(): PilotDeckToolDefinition<ExitPlanModeIn
 
       if (action === EXIT_PLAN_MODE_EXECUTE) {
         return {
-          content: [{ type: "text", text: plan }],
+          content: [{
+            type: "text",
+            text: buildApprovedPlanResult(plan, context.planFile?.path),
+          }],
           data: { plan, action, requestedMode: "default" },
         };
       }
 
-      const feedbackSection = feedback
-        ? `\n\nUser feedback:\n${feedback}`
-        : "\n\nNo additional feedback was provided.";
       return {
         content: [{
           type: "text",
-          text:
-            "The user wants to continue planning before implementation. Stay in plan mode, refine the plan file, and call exit_plan_mode again when the updated plan is ready."
-            + feedbackSection,
+          text: buildContinuePlanningResult(feedback),
         }],
         data: { plan, action, ...(feedback ? { feedback } : {}) },
       };

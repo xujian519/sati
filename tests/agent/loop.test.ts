@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
   AgentLoop,
@@ -10,7 +11,12 @@ import {
   ensureToolResultPairing,
   projectToolResults,
 } from "../../src/agent/index.js";
-import { createEnterPlanModeTool, createPlanFileManager, createStructuredOutputTool } from "../../src/tool/index.js";
+import {
+  createEnterPlanModeTool,
+  createExitPlanModeTool,
+  createPlanFileManager,
+  createStructuredOutputTool,
+} from "../../src/tool/index.js";
 import { createPilotDeckTestTool } from "../helpers/tool.js";
 import { collectAsyncGenerator, createAgentLoopFixture } from "../helpers/agent.js";
 import { createPilotDeckTempWorkspace } from "../helpers/filesystem.js";
@@ -570,4 +576,63 @@ test("AgentLoop injects plan file context when planFileManager is configured", a
   const expected = planFileManager.getPlanFilePath("session-1");
   assert.equal(seenPlanFilePath, expected);
   assert.equal(seenPermissionPlanFilePath, expected);
+});
+
+test("approved exit_plan_mode result is projected into the next model request", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({});
+  t.after(() => workspace.cleanup());
+  const fixture = createAgentLoopFixture({
+    tools: [createExitPlanModeTool()],
+    permissionMode: "plan",
+    config: { cwd: workspace.cwd },
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "tool_call_end", toolCall: { id: "call-1", name: "exit_plan_mode", input: {} } },
+        { type: "message_end", finishReason: "tool_call" },
+      ],
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "text_delta", text: "Starting implementation." },
+        { type: "message_end", finishReason: "stop" },
+      ],
+    ],
+  });
+  const planFileManager = createPlanFileManager({ projectRoot: workspace.cwd });
+  const planFilePath = planFileManager.ensurePlanFile("session-1");
+  await writeFile(planFilePath, "Plan step 1\nPlan step 2\n", "utf8");
+  const loop = new AgentLoop(fixture.config, {
+    ...fixture.dependencies,
+    planFileManager,
+    elicitation: {
+      askUser: async () => ({
+        type: "answered",
+        answers: { "What should happen next?": "execute_plan" },
+      }),
+    },
+  });
+
+  await collectAsyncGenerator(
+    loop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "user", content: [{ type: "text", text: "finish plan" }] }],
+    }),
+  );
+
+  assert.equal(fixture.model.requests.length, 2);
+  const secondRequest = fixture.model.requests[1];
+  const toolResultMessage = secondRequest?.messages.find((message) =>
+    message.role === "user"
+    && message.content.some((block) => block.type === "tool_result"),
+  );
+  const toolResultBlock = toolResultMessage?.content.find((block) => block.type === "tool_result");
+  assert.equal(toolResultBlock?.type, "tool_result");
+  assert.match(
+    toolResultBlock?.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n") ?? "",
+    /User has approved your plan\. You can now start coding\./i,
+  );
 });
