@@ -85,7 +85,6 @@ export function buildDefaultPilotDeckConfig() {
         serverPort: 3001,
         vitePort: 5173,
         proxyPort: 18080,
-        contextWindow: 160000,
         apiTimeoutMs: 120000,
         httpsProxy: '',
         databasePath: path.join(os.homedir(), '.pilotdeck', 'auth.db'),
@@ -248,6 +247,13 @@ export function validatePilotDeckConfig(config) {
 
   validateRouterModelRefs(normalized, errors);
 
+  if (normalized.webui?.runtime?.contextWindow !== undefined) {
+    warnings.push(
+      'webui.runtime.contextWindow is deprecated and ignored. ' +
+      'Use agent.maxContextTokens to override the model\'s context window for auto-compaction.',
+    );
+  }
+
   return { valid: errors.length === 0, errors, warnings, config: normalized };
 }
 
@@ -309,8 +315,6 @@ export function buildRuntimeEnv(config) {
     SERVER_PORT: process.env.SERVER_PORT || String(runtime.serverPort ?? 3001),
     VITE_PORT: process.env.VITE_PORT || String(runtime.vitePort ?? 5173),
     HOST: process.env.HOST || String(runtime.host ?? '0.0.0.0'),
-    CONTEXT_WINDOW: String(runtime.contextWindow ?? 160000),
-    VITE_CONTEXT_WINDOW: String(runtime.contextWindow ?? 160000),
     API_TIMEOUT_MS: String(runtime.apiTimeoutMs ?? 120000),
     PILOTDECK_MEMORY_ENABLED: normalized.memory?.enabled ? '1' : '0',
   };

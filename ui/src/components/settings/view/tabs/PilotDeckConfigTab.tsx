@@ -84,7 +84,6 @@ type PilotDeckConfig = {
       serverPort?: number;
       vitePort?: number;
       proxyPort?: number;
-      contextWindow?: number;
       apiTimeoutMs?: number;
       httpsProxy?: string;
       databasePath?: string;
@@ -507,9 +506,6 @@ function AdvancedSection({ config, onChange }: { config: PilotDeckConfig; onChan
         </FormRow>
         <FormRow label="Proxy port" description="Local LLM proxy (PilotDeck agent target).">
           <NumberInput value={r.proxyPort} placeholder="18080" onChange={(v) => set('proxyPort', v)} />
-        </FormRow>
-        <FormRow label="Context window" description="Default token budget for new sessions.">
-          <NumberInput value={r.contextWindow} placeholder="160000" onChange={(v) => set('contextWindow', v)} />
         </FormRow>
         <FormRow label="API timeout (ms)" description="Per-request upstream timeout.">
           <NumberInput value={r.apiTimeoutMs} placeholder="120000" onChange={(v) => set('apiTimeoutMs', v)} />

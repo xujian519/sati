@@ -185,10 +185,6 @@ const BLOCKING_PERMISSION_TOOLS = new Set([
   'exit_plan_mode',
 ]);
 
-const DEFAULT_CONTEXT_WINDOW = (() => {
-  const parsed = Number(import.meta.env.VITE_CONTEXT_WINDOW);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 160000;
-})();
 
 function readNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -211,7 +207,7 @@ function formatTokenCount(value: number): string {
 
 function getContextStatus(tokenBudget?: Record<string, unknown> | null): ContextStatus {
   const used = readNumber(tokenBudget?.used) ?? 0;
-  const total = readNumber(tokenBudget?.total) ?? DEFAULT_CONTEXT_WINDOW;
+  const total = readNumber(tokenBudget?.total) ?? 0;
   if (total <= 0) {
     return {
       known: false,

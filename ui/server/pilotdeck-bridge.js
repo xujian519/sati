@@ -89,8 +89,6 @@ const subagentActivityStarts = new Map();
 const WEB_DEFAULT_PERMISSION_MODE =
     process.env.PILOTDECK_WEB_PERMISSION_MODE || 'default';
 
-const DEFAULT_CONTEXT_WINDOW =
-    Number(process.env.PILOTDECK_CONTEXT_WINDOW) || 200_000;
 
 // Resolves to the Gateway returned by `createRemoteGateway`. We express
 // the type via `typeof createRemoteGateway` (the symbol is already imported
@@ -430,7 +428,7 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                     text: 'token_budget',
                     tokenBudget: {
                         used: event.used,
-                        total: event.total || DEFAULT_CONTEXT_WINDOW,
+                        total: event.total,
                         ratio: event.ratio,
                         state: event.state,
                     },
@@ -678,7 +676,7 @@ export async function runChatViaGateway(
             if (event && event.type === 'context_budget') {
                 state.tokenBudget = {
                     used: event.used,
-                    total: event.total || DEFAULT_CONTEXT_WINDOW,
+                    total: event.total,
                     ratio: event.ratio,
                     state: event.state,
                 };
@@ -1668,7 +1666,7 @@ export function registerAlwaysOnNotificationForwarding(clients) {
                 const aoState = ensureSessionState(sessionKey, '', channelKey || 'web');
                 aoState.tokenBudget = {
                     used: event.used,
-                    total: event.total || DEFAULT_CONTEXT_WINDOW,
+                    total: event.total,
                     ratio: event.ratio,
                     state: event.state,
                 };

@@ -31,12 +31,10 @@ export default defineConfig(({ mode }) => {
   const disableLocalAuth =
     env.CLOUDCLI_DISABLE_LOCAL_AUTH !== '0' &&
     env.CLOUDCLI_DISABLE_LOCAL_AUTH !== 'false'
-  const contextWindow = env.CONTEXT_WINDOW || env.VITE_CONTEXT_WINDOW || '160000'
 
   return {
     define: {
       'import.meta.env.VITE_DISABLE_LOCAL_AUTH': JSON.stringify(disableLocalAuth ? 'true' : 'false'),
-      'import.meta.env.VITE_CONTEXT_WINDOW': JSON.stringify(contextWindow),
     },
     plugins: [react()],
     resolve: {
