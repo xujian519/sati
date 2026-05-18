@@ -252,6 +252,8 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 className={`mt-1 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${
                   message.taskStatus === 'completed'
                     ? 'bg-green-500'
+                    : message.taskStatus === 'failed' || message.taskStatus === 'error'
+                      ? 'bg-red-500'
                     : 'bg-amber-500'
                 }`}
               />
@@ -448,6 +450,8 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                         createDiff={createDiff}
                         selectedProject={selectedProject}
                         autoExpandTools={autoExpandTools}
+                        isSubagentContainer={message.isSubagentContainer}
+                        subagentState={message.subagentState}
                       />
                     </div>
                   )

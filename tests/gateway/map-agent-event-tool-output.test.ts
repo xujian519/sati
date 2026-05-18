@@ -160,3 +160,113 @@ test("tool_results_projected: maps tool_result_reference to detail_available wit
     assert.equal(events[0]!.fullText, undefined);
   }
 });
+
+test("subagent_status maps to agent_status detail", () => {
+  const events = mapAgentEvent(
+    {
+      type: "subagent_status",
+      sessionId: "s1",
+      turnId: "t1",
+      subagentId: "sub-1",
+      subagentType: "explore",
+      status: "tool_started",
+      toolCallId: "child-read",
+      toolName: "read_file",
+      durationMs: 1200,
+    } as AgentEvent,
+    "run1",
+  );
+
+  assert.equal(events.length, 1);
+  assert.deepEqual(events[0], {
+    type: "agent_status",
+    event: "subagent_status",
+    detail: {
+      subagentId: "sub-1",
+      subagentType: "explore",
+      status: "tool_started",
+      toolCallId: "child-read",
+      toolName: "read_file",
+      success: undefined,
+      durationMs: 1200,
+    },
+  });
+});
+
+test("subagent_model_event text delta maps to subagent_text_delta status", () => {
+  const events = mapAgentEvent(
+    {
+      type: "subagent_model_event",
+      sessionId: "s1",
+      turnId: "t1",
+      subagentId: "sub-1",
+      subagentType: "explore",
+      event: { type: "text_delta", text: "drafting plan" },
+    } as AgentEvent,
+    "run1",
+  );
+
+  assert.deepEqual(events, [{
+    type: "agent_status",
+    event: "subagent_text_delta",
+    detail: {
+      subagentId: "sub-1",
+      subagentType: "explore",
+      text: "drafting plan",
+    },
+  }]);
+});
+
+test("subagent tool call and result map to visible activity statuses", () => {
+  const started = mapAgentEvent(
+    {
+      type: "subagent_tool_calls_detected",
+      sessionId: "s1",
+      turnId: "t1",
+      subagentId: "sub-1",
+      subagentType: "general-purpose",
+      calls: [{ id: "tc1", name: "edit_file", input: { file_path: "game.html", new_string: "html" } }],
+    } as AgentEvent,
+    "run1",
+  );
+
+  assert.deepEqual(started, [{
+    type: "agent_status",
+    event: "subagent_tool_call_started",
+    detail: {
+      subagentId: "sub-1",
+      subagentType: "general-purpose",
+      toolCallId: "tc1",
+      toolName: "edit_file",
+      input: { file_path: "game.html", new_string: "html" },
+    },
+  }]);
+
+  const finished = mapAgentEvent(
+    {
+      type: "subagent_tool_result",
+      sessionId: "s1",
+      turnId: "t1",
+      subagentId: "sub-1",
+      subagentType: "general-purpose",
+      result: {
+        type: "success",
+        toolCallId: "tc1",
+        toolName: "edit_file",
+        content: [{ type: "text", text: "wrote game.html" }],
+        startedAt: "2026-01-01T00:00:00.000Z",
+        completedAt: "2026-01-01T00:00:01.000Z",
+      },
+    } as AgentEvent,
+    "run1",
+  );
+
+  assert.equal(finished.length, 1);
+  assert.equal(finished[0]?.type, "agent_status");
+  if (finished[0]?.type === "agent_status") {
+    assert.equal(finished[0].event, "subagent_tool_result");
+    assert.equal(finished[0].detail?.toolName, "edit_file");
+    assert.equal(finished[0].detail?.ok, true);
+    assert.equal(finished[0].detail?.preview, "wrote game.html");
+  }
+});

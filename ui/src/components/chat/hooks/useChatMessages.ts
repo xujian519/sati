@@ -70,7 +70,8 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
 
       case 'tool_use': {
         const tr = msg.toolResult || (msg.toolId ? toolResultMap.get(msg.toolId) : null);
-        const isSubagentContainer = msg.toolName === 'Task';
+        const normalizedToolName = String(msg.toolName || '').toLowerCase();
+        const isSubagentContainer = normalizedToolName === 'task' || normalizedToolName === 'agent';
 
         // Build child tools from subagentTools
         const childTools: SubagentChildTool[] = [];
@@ -111,6 +112,7 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
                 childTools,
                 currentToolIndex: childTools.length > 0 ? childTools.length - 1 : -1,
                 isComplete: Boolean(toolResult),
+                isFailed: Boolean(toolResult?.isError),
               }
             : undefined,
         });

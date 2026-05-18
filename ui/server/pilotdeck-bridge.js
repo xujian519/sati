@@ -76,6 +76,7 @@ const GATEWAY_TOKEN_PATH =
 // slower machines.
 const GATEWAY_CONNECT_TIMEOUT_MS = 30_000;
 const GATEWAY_CONNECT_RETRY_INTERVAL_MS = 250;
+const subagentActivityStarts = new Map();
 
 /**
  * Default permission mode for sessions started from the Web UI. We use
@@ -446,6 +447,9 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                 }),
             ];
         case 'agent_status': {
+            const subagentFrame = createSubagentStatusFrame(event, base);
+            if (subagentFrame) return [subagentFrame];
+
             const detail = event.detail || {};
             if (event.event === 'compact_started') {
                 const compactProgress = {
@@ -486,6 +490,87 @@ export function gatewayEventToFrames(event, sessionId, provider) {
         default:
             return [];
     }
+}
+
+function createSubagentStatusFrame(event, base) {
+    const detail = event?.detail || {};
+    const visibleEvents = [
+        'subagent_started',
+        'subagent_completed',
+        'subagent_status',
+    ];
+    const hiddenEvents = [
+        'subagent_text_delta',
+        'subagent_thinking_delta',
+        'subagent_tool_call_started',
+        'subagent_tool_result',
+        'subagent_model_error',
+    ];
+    if (hiddenEvents.includes(event?.event)) {
+        return null;
+    }
+    if (!visibleEvents.includes(event?.event)) return null;
+
+    const subagentId = String(detail.subagentId || 'unknown');
+    const status = normalizeSubagentStatus(event.event, detail);
+    const subagentType = detail.subagentType || 'agent';
+    const activityKey = `${base.sessionId || ''}:${subagentId}`;
+    const nowMs = Date.now();
+    const reportedDurationMs = Number(detail.durationMs);
+    let startedAtMs = subagentActivityStarts.get(activityKey);
+    if (event.event === 'subagent_started' || !startedAtMs) {
+        startedAtMs = Number.isFinite(reportedDurationMs) && reportedDurationMs > 0
+            ? nowMs - reportedDurationMs
+            : nowMs;
+        subagentActivityStarts.set(activityKey, startedAtMs);
+    }
+
+    const durationMs = Number.isFinite(reportedDurationMs) && reportedDurationMs >= 0
+        ? reportedDurationMs
+        : Math.max(0, nowMs - startedAtMs);
+    const isDone = status === 'completed' || status === 'failed';
+    const title = formatSubagentActivityTitle(subagentType, status);
+    const activity = createNormalizedMessage({
+        ...base,
+        id: `subagent_activity_${sanitizeMessageId(base.sessionId)}_${sanitizeMessageId(subagentId)}`,
+        kind: 'agent_activity',
+        activityId: `subagent:${subagentId}`,
+        runId: `subagent:${subagentId}`,
+        phase: 'subagent',
+        state: status,
+        title,
+        detail: '',
+        startedAt: new Date(startedAtMs).toISOString(),
+        endedAt: isDone ? new Date(nowMs).toISOString() : null,
+        durationMs,
+        severity: status === 'failed' ? 'error' : undefined,
+        toolName: 'agent',
+    });
+    if (isDone) {
+        subagentActivityStarts.delete(activityKey);
+    }
+    return activity;
+}
+
+function formatSubagentActivityTitle(subagentType, status) {
+    if (status === 'completed') {
+        return `Subagent ${subagentType} completed`;
+    }
+    if (status === 'failed') {
+        return `Subagent ${subagentType} failed`;
+    }
+    return `Subagent ${subagentType} running`;
+}
+
+function normalizeSubagentStatus(eventName, detail) {
+    if (eventName === 'subagent_completed') {
+        return detail.success === false ? 'failed' : 'completed';
+    }
+    return 'running';
+}
+
+function sanitizeMessageId(value) {
+    return String(value || 'unknown').replace(/[^a-zA-Z0-9_.:-]/g, '_');
 }
 
 function tryParseJson(value) {

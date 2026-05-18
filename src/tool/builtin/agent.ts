@@ -109,7 +109,7 @@ export type CreateAgentToolOptions = {
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
 const DEFAULT_PROVIDER_FALLBACK = "edgeclaw";
 const DEFAULT_MODEL_FALLBACK = "moonshotai/kimi-k2.6";
-const DEFAULT_SUBAGENT_TIMEOUT_MS = 120_000;
+const DEFAULT_SUBAGENT_TIMEOUT_MS = 60 * 60_000;
 const PUBLIC_SUBAGENT_TYPES = ["general-purpose", "explore", "plan"] as const;
 
 export function createAgentTool(

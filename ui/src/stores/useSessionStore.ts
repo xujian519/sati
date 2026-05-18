@@ -293,6 +293,25 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
   return [...server, ...extra];
 }
 
+function upsertRealtimeMessages(
+  existing: NormalizedMessage[],
+  incoming: NormalizedMessage[],
+): NormalizedMessage[] {
+  if (incoming.length === 0) return existing;
+  const updated = [...existing];
+  const indexById = new Map(updated.map((message, index) => [message.id, index]));
+  for (const message of incoming) {
+    const existingIndex = indexById.get(message.id);
+    if (existingIndex === undefined) {
+      indexById.set(message.id, updated.length);
+      updated.push(message);
+    } else {
+      updated[existingIndex] = message;
+    }
+  }
+  return updated;
+}
+
 /**
  * Recompute slot.merged only when the input arrays have actually changed
  * (by reference). Returns true if merged was recomputed.
@@ -490,7 +509,7 @@ export function useSessionStore() {
    */
   const appendRealtime = useCallback((sessionId: string, msg: NormalizedMessage) => {
     const slot = getSlot(sessionId);
-    let updated = [...slot.realtimeMessages, msg];
+    let updated = upsertRealtimeMessages(slot.realtimeMessages, [msg]);
     if (updated.length > MAX_REALTIME_MESSAGES) {
       updated = updated.slice(-MAX_REALTIME_MESSAGES);
     }
@@ -536,7 +555,7 @@ export function useSessionStore() {
   const appendRealtimeBatch = useCallback((sessionId: string, msgs: NormalizedMessage[]) => {
     if (msgs.length === 0) return;
     const slot = getSlot(sessionId);
-    let updated = [...slot.realtimeMessages, ...msgs];
+    let updated = upsertRealtimeMessages(slot.realtimeMessages, msgs);
     if (updated.length > MAX_REALTIME_MESSAGES) {
       updated = updated.slice(-MAX_REALTIME_MESSAGES);
     }

@@ -13,6 +13,7 @@ import {
   AgentLoop,
   type AgentLoopRunResult,
 } from "../loop/AgentLoop.js";
+import type { AgentEvent } from "../protocol/events.js";
 import type {
   CanonicalAssistantTextSummary,
 } from "./types.js";
@@ -67,6 +68,9 @@ export type SubAgentSessionOptions = {
   parentReadFileState?: PilotDeckReadFileStateMap;
   /** Parent agent's write snapshots (cloned into the child). */
   parentWriteSnapshots?: PilotDeckWriteSnapshotMap;
+  /** Parent session/turn scope used for forwarding child activity to hosts. */
+  parentSessionId: string;
+  parentTurnId: string;
   /** New session id for the fork's transcript writer (C3 sidechain hook). */
   subagentSessionId: string;
   /** Stable subagent UUID — mirrors C3 sidechain naming. */
@@ -146,6 +150,7 @@ export class SubAgentSession {
         break;
       }
       const event = next.value;
+      this.forwardActivity(event);
       if (
         this.options.sidechainTranscript &&
         (event.type === "assistant_message" || event.type === "tool_results_projected")
@@ -216,6 +221,40 @@ export class SubAgentSession {
       scoped.register(tool as PilotDeckToolDefinition);
     }
     return scoped;
+  }
+
+  private forwardActivity(event: AgentEvent): void {
+    const emit = this.options.parentDependencies.eventEmitter;
+    if (!emit) return;
+    const base = {
+      sessionId: this.options.parentSessionId,
+      turnId: this.options.parentTurnId,
+      subagentId: this.options.subagentId,
+      subagentType: this.options.definition.id,
+    };
+    if (event.type === "model_event") {
+      emit({
+        type: "subagent_model_event",
+        ...base,
+        event: event.event,
+      });
+      return;
+    }
+    if (event.type === "tool_calls_detected") {
+      emit({
+        type: "subagent_tool_calls_detected",
+        ...base,
+        calls: event.calls,
+      });
+      return;
+    }
+    if (event.type === "tool_result") {
+      emit({
+        type: "subagent_tool_result",
+        ...base,
+        result: event.result,
+      });
+    }
   }
 
   private cloneDependencies(registry: ToolRegistry): AgentRuntimeDependencies {

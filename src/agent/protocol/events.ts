@@ -31,6 +31,21 @@ export type AgentEvent =
   | { type: "context_budget"; sessionId: string; turnId: string; snapshot: TokenBudgetSnapshot }
   | { type: "subagent_started"; sessionId: string; turnId: string; subagentId: string; subagentType: string }
   | { type: "subagent_completed"; sessionId: string; turnId: string; subagentId: string; subagentType: string; success: boolean; durationMs: number }
+  | {
+      type: "subagent_status";
+      sessionId: string;
+      turnId: string;
+      subagentId: string;
+      subagentType?: string;
+      status: "running" | "waiting_model" | "tool_started" | "tool_completed";
+      toolCallId?: string;
+      toolName?: string;
+      success?: boolean;
+      durationMs?: number;
+    }
+  | { type: "subagent_model_event"; sessionId: string; turnId: string; subagentId: string; subagentType: string; event: CanonicalModelEvent }
+  | { type: "subagent_tool_calls_detected"; sessionId: string; turnId: string; subagentId: string; subagentType: string; calls: CanonicalToolCall[] }
+  | { type: "subagent_tool_result"; sessionId: string; turnId: string; subagentId: string; subagentType: string; result: PilotDeckToolResult }
   | { type: "elicitation_requested"; sessionId: string; turnId: string; requestId: string; toolName: string }
   | { type: "elicitation_resolved"; sessionId: string; requestId: string; delivered: boolean }
   | { type: "turn_continued"; sessionId: string; turnId: string; reason: AgentLoopTransition["reason"] }

@@ -251,6 +251,33 @@ test("agent tool passes configured timeoutMs into full-fork subagents", async ()
   assert.equal((result.data as AgentToolOutput).turns, 1);
 });
 
+test("agent tool defaults full-fork subagent timeout to 60 minutes", async () => {
+  const tool = createAgentTool();
+  const calls: Array<{ timeoutMs?: number }> = [];
+  const fork: PilotDeckSubagentForkApi = {
+    depth: 0,
+    maxSubagentDepth: 1,
+    listDefinitions: () => [{ id: "general-purpose", description: "gp" }],
+    isAllowedDefinition: () => true,
+    async fork(args) {
+      calls.push({ timeoutMs: args.timeoutMs });
+      return {
+        markdown: "Scope: s\nResult: r\nKey files: none\nFiles changed: none\nIssues: none",
+        usage: {},
+        turns: 1,
+        durationMs: 1,
+      };
+    },
+  };
+
+  await tool.execute(
+    { description: "x", prompt: "go" },
+    makeForkContext(fork),
+  );
+
+  assert.equal(calls[0]?.timeoutMs, 60 * 60_000);
+});
+
 test("agent tool surfaces full-fork timeout as tool_execution_failed", async () => {
   const tool = createAgentTool();
   const fork: PilotDeckSubagentForkApi = {

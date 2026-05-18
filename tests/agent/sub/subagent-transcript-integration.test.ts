@@ -89,6 +89,8 @@ test("C2+C3 SubAgentSession writes turn-by-turn entries to the sidechain writer"
     parentMessages,
     parentConfig: buildConfig(tmp),
     parentDependencies: deps,
+    parentSessionId: "parent-session",
+    parentTurnId: "parent-turn",
     subagentSessionId: "subsess-1",
     subagentId: "uuid-1",
     sidechainTranscript: {

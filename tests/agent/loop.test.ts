@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { setTimeout as sleep } from "node:timers/promises";
 import {
   AgentLoop,
   AgentSession,
   collectToolCalls,
+  createAgentEventBuffer,
   decideLoopContinuation,
   ensureToolResultPairing,
   projectToolResults,
@@ -220,6 +222,99 @@ test("AgentLoop executes tools and continues with canonical tool_result", async 
   assert.ok(values.some((event) => event.type === "tool_calls_detected"));
   assert.ok(values.some((event) => event.type === "tool_result"));
   assert.ok(values.some((event) => event.type === "turn_continued"));
+});
+
+test("AgentLoop drains subagent status while tool execution is pending", async () => {
+  const { model, config, dependencies } = createAgentLoopFixture({
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "tool_call_end", toolCall: { id: "call-agent", name: "agent", input: { description: "inspect", prompt: "look" } } },
+        { type: "message_end", finishReason: "tool_call" },
+      ],
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "text_delta", text: "Done." },
+        { type: "message_end", finishReason: "stop" },
+      ],
+    ],
+  });
+  const eventBuffer = createAgentEventBuffer();
+  const loop = new AgentLoop(config, {
+    ...dependencies,
+    eventEmitter: eventBuffer.emitter,
+    drainEvents: eventBuffer.drain,
+    tools: {
+      ...dependencies.tools,
+      scheduler: {
+        async executeAll(calls, context) {
+          eventBuffer.emitter({
+            type: "subagent_started",
+            sessionId: context.sessionId,
+            turnId: context.turnId,
+            subagentId: "sub-1",
+            subagentType: "explore",
+          });
+          eventBuffer.emitter({
+            type: "pre_tool_execute",
+            sessionId: `${config.cwd}::sub::sub-1`,
+            turnId: "sub-1-t0",
+            toolCallId: "child-read",
+            toolName: "read_file",
+          });
+          await sleep(5);
+          eventBuffer.emitter({
+            type: "post_tool_execute",
+            sessionId: `${config.cwd}::sub::sub-1`,
+            turnId: "sub-1-t0",
+            toolCallId: "child-read",
+            toolName: "read_file",
+            success: true,
+          });
+          eventBuffer.emitter({
+            type: "subagent_completed",
+            sessionId: context.sessionId,
+            turnId: context.turnId,
+            subagentId: "sub-1",
+            subagentType: "explore",
+            success: true,
+            durationMs: 5,
+          });
+          return calls.map((call) => ({
+            type: "success" as const,
+            toolCallId: call.id,
+            toolName: call.name,
+            content: [{ type: "text" as const, text: "subagent done" }],
+            startedAt: "2026-01-01T00:00:00.000Z",
+            completedAt: "2026-01-01T00:00:00.005Z",
+          }));
+        },
+      },
+    },
+  });
+
+  const { values, result } = await collectAsyncGenerator(
+    loop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "user", content: [{ type: "text", text: "delegate" }] }],
+      maxTurns: 3,
+    }),
+  );
+
+  assert.equal(model.requests.length, 2);
+  assert.equal(result.result.type, "success");
+  const startedIndex = values.findIndex((event) => event.type === "subagent_started");
+  const statusIndex = values.findIndex((event) => event.type === "subagent_status" && event.status === "tool_started");
+  const completedStatusIndex = values.findIndex((event) => event.type === "subagent_status" && event.status === "tool_completed");
+  const toolResultIndex = values.findIndex((event) => event.type === "tool_result");
+  assert.ok(startedIndex >= 0, "subagent_started should be yielded");
+  assert.ok(statusIndex >= 0, "subagent child tool status should be yielded");
+  assert.ok(completedStatusIndex >= 0, "subagent child tool completion should be yielded");
+  assert.ok(toolResultIndex >= 0, "tool_result should be yielded");
+  assert.ok(startedIndex < toolResultIndex, "subagent_started should arrive before final tool_result");
+  assert.ok(statusIndex < toolResultIndex, "child tool status should arrive before final tool_result");
+  assert.ok(completedStatusIndex < toolResultIndex, "child tool completion should arrive before final tool_result");
 });
 
 test("AgentLoop records permission denials and returns max_turns after tool results", async () => {

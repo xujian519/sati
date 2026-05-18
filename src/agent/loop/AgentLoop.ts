@@ -1,7 +1,9 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import {
   applyModelEventToAssembler,
   assembleAssistantMessage,
   createModelMessageAssemblerState,
+  type CanonicalToolCall,
   PROMPT_TOO_LONG_ANTHROPIC_PATTERN,
   PROMPT_TOO_LONG_OPENAI_PATTERN,
   REQUEST_TOO_LARGE_PATTERN,
@@ -35,6 +37,18 @@ import type { PermissionMode, PermissionRule, PermissionRuleSet } from "../../pe
 import { collectToolCalls } from "./collectToolCalls.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
 import { projectToolResults } from "./projectToolResults.js";
+
+const TOOL_EVENT_PUMP_INTERVAL_MS = 500;
+const SUBAGENT_STATUS_HEARTBEAT_MS = 2_000;
+
+type ActiveSubagentStatus = {
+  subagentId: string;
+  subagentType?: string;
+  startedAtMs: number;
+  lastHeartbeatMs: number;
+  currentToolCallId?: string;
+  currentToolName?: string;
+};
 
 export type AgentLoopInput = {
   sessionId: string;
@@ -424,9 +438,10 @@ export class AgentLoop {
       }
       let results: PilotDeckToolResult[];
       try {
-        results = await this.dependencies.tools.scheduler.executeAll(
+        results = yield* this.executeToolsWithEventPump(
           toolCalls,
           this.createToolContext(input, messages),
+          input,
         );
       } catch (error) {
         results = toolCalls.map((call) =>
@@ -758,6 +773,8 @@ export class AgentLoop {
           parentDependencies: this.dependencies,
           parentReadFileState: this.readFileState,
           parentWriteSnapshots: this.writeSnapshots,
+          parentSessionId: input.sessionId,
+          parentTurnId: input.turnId,
           subagentSessionId,
           subagentId,
           abortSignal: composedAbort.signal,
@@ -877,6 +894,137 @@ export class AgentLoop {
     }
   }
 
+  private async *executeToolsWithEventPump(
+    toolCalls: CanonicalToolCall[],
+    context: PilotDeckToolRuntimeContext,
+    input: AgentLoopInput,
+  ): AsyncGenerator<AgentEvent, PilotDeckToolResult[], unknown> {
+    const activeSubagents = new Map<string, ActiveSubagentStatus>();
+    let results: PilotDeckToolResult[] | undefined;
+    let error: unknown;
+    let settled = false;
+
+    const execution = this.dependencies.tools.scheduler.executeAll(toolCalls, context)
+      .then((value) => {
+        results = value;
+      }, (err) => {
+        error = err;
+      })
+      .finally(() => {
+        settled = true;
+      });
+
+    while (!settled) {
+      await Promise.race([execution, sleep(TOOL_EVENT_PUMP_INTERVAL_MS)]);
+      yield* this.drainToolEventBufferForSubagentStatus(input, activeSubagents);
+      if (!settled) {
+        yield* this.emitSubagentHeartbeats(input, activeSubagents);
+      }
+    }
+
+    yield* this.drainToolEventBufferForSubagentStatus(input, activeSubagents);
+    if (error) throw error;
+    return results ?? [];
+  }
+
+  private *drainToolEventBufferForSubagentStatus(
+    input: AgentLoopInput,
+    activeSubagents: Map<string, ActiveSubagentStatus>,
+  ): Generator<AgentEvent> {
+    const events = this.dependencies.drainEvents?.() ?? [];
+    for (const event of events) {
+      const statusEvent = this.updateSubagentStatusFromEvent(input, activeSubagents, event);
+      yield event;
+      if (statusEvent) {
+        yield statusEvent;
+      }
+    }
+  }
+
+  private updateSubagentStatusFromEvent(
+    input: AgentLoopInput,
+    activeSubagents: Map<string, ActiveSubagentStatus>,
+    event: AgentEvent,
+  ): AgentEvent | undefined {
+    if (event.type === "subagent_started") {
+      const nowMs = this.now().getTime();
+      activeSubagents.set(event.subagentId, {
+        subagentId: event.subagentId,
+        subagentType: event.subagentType,
+        startedAtMs: nowMs,
+        lastHeartbeatMs: nowMs,
+      });
+      return undefined;
+    }
+
+    if (event.type === "subagent_completed") {
+      activeSubagents.delete(event.subagentId);
+      return undefined;
+    }
+
+    if (event.type !== "pre_tool_execute" && event.type !== "post_tool_execute") {
+      return undefined;
+    }
+
+    const subagentId = subagentIdFromSessionId(event.sessionId);
+    if (!subagentId) {
+      return undefined;
+    }
+
+    const nowMs = this.now().getTime();
+    const state = activeSubagents.get(subagentId) ?? {
+      subagentId,
+      startedAtMs: nowMs,
+      lastHeartbeatMs: nowMs,
+    };
+    if (event.type === "pre_tool_execute") {
+      state.currentToolCallId = event.toolCallId;
+      state.currentToolName = event.toolName;
+    } else {
+      state.currentToolCallId = undefined;
+      state.currentToolName = undefined;
+    }
+    state.lastHeartbeatMs = nowMs;
+    activeSubagents.set(subagentId, state);
+
+    return {
+      type: "subagent_status",
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      subagentId,
+      subagentType: state.subagentType,
+      status: event.type === "pre_tool_execute" ? "tool_started" : "tool_completed",
+      toolCallId: event.toolCallId,
+      toolName: event.toolName,
+      ...(event.type === "post_tool_execute" ? { success: event.success } : {}),
+      durationMs: Math.max(0, nowMs - state.startedAtMs),
+    };
+  }
+
+  private *emitSubagentHeartbeats(
+    input: AgentLoopInput,
+    activeSubagents: Map<string, ActiveSubagentStatus>,
+  ): Generator<AgentEvent> {
+    const nowMs = this.now().getTime();
+    for (const state of activeSubagents.values()) {
+      if (nowMs - state.lastHeartbeatMs < SUBAGENT_STATUS_HEARTBEAT_MS) {
+        continue;
+      }
+      state.lastHeartbeatMs = nowMs;
+      yield {
+        type: "subagent_status",
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        subagentId: state.subagentId,
+        subagentType: state.subagentType,
+        status: state.currentToolName ? "running" : "waiting_model",
+        toolCallId: state.currentToolCallId,
+        toolName: state.currentToolName,
+        durationMs: Math.max(0, nowMs - state.startedAtMs),
+      };
+    }
+  }
+
   private createTurnResult(
     input: AgentLoopInput,
     options: Omit<AgentTurnResult, "sessionId" | "turnId" | "completedAt">,
@@ -968,6 +1116,14 @@ function cloneWriteSnapshotMap(
     out.set(key, { ...value });
   }
   return out;
+}
+
+function subagentIdFromSessionId(sessionId: string): string | undefined {
+  const marker = "::sub::";
+  const index = sessionId.lastIndexOf(marker);
+  if (index < 0) return undefined;
+  const subagentId = sessionId.slice(index + marker.length).trim();
+  return subagentId.length > 0 ? subagentId : undefined;
 }
 
 const OUTPUT_TOKEN_RETRY_DEFAULT = 4_096;

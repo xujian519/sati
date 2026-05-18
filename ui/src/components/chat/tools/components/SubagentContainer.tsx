@@ -48,11 +48,12 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
     try { return JSON.parse(toolInput); } catch { return {}; }
   })() : (toolInput || {});
 
-  const subagentType = parsedInput?.subagent_type || 'Agent';
+  const subagentType = parsedInput?.subagent_type || parsedInput?.subagentType || 'Agent';
   const description = parsedInput?.description || 'Running task';
   const prompt = parsedInput?.prompt || '';
   const childTools = Array.isArray(subagentState.childTools) ? subagentState.childTools : [];
   const { currentToolIndex, isComplete } = subagentState;
+  const isFailed = Boolean(subagentState.isFailed || toolResult?.isError);
   const currentTool = currentToolIndex >= 0 ? childTools[currentToolIndex] : null;
 
   const title = `Subagent / ${subagentType}: ${description}`;
@@ -88,8 +89,24 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
           </div>
         )}
 
+        {!currentTool && !isComplete && (
+          <div className="mt-1 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+            <span className="h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400" />
+            <span>Running subagent...</span>
+          </div>
+        )}
+
         {/* Completion status */}
-        {isComplete && (
+        {isComplete && isFailed && (
+          <div className="mt-1 flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+            <svg className="h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            <span>Failed ({childTools.length} {childTools.length === 1 ? 'tool' : 'tools'})</span>
+          </div>
+        )}
+
+        {isComplete && !isFailed && (
           <div className="mt-1 flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
             <svg className="h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

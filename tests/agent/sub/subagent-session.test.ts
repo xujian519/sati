@@ -21,6 +21,7 @@ import {
 } from "../../../src/permission/index.js";
 import type { AgentRuntimeConfig } from "../../../src/agent/runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../../../src/agent/runtime/AgentRuntimeDependencies.js";
+import type { AgentEvent } from "../../../src/agent/protocol/events.js";
 import {
   createReadFileTool,
   createWriteFileTool,
@@ -38,7 +39,11 @@ class ScriptedModel {
   }
 }
 
-function buildDeps(model: ScriptedModel, registry: ToolRegistry): AgentRuntimeDependencies {
+function buildDeps(
+  model: ScriptedModel,
+  registry: ToolRegistry,
+  eventEmitter?: (event: AgentEvent) => void,
+): AgentRuntimeDependencies {
   const permissions = new PermissionRuntime();
   const toolRuntime = new ToolRuntime(registry, permissions);
   const scheduler = new SequentialToolScheduler(toolRuntime);
@@ -48,7 +53,7 @@ function buildDeps(model: ScriptedModel, registry: ToolRegistry): AgentRuntimeDe
   const router = {
     stream: (request: CanonicalModelRequest) => model.stream(request),
   };
-  return { router, tools: { scheduler, registry } };
+  return { router, tools: { scheduler, registry }, eventEmitter };
 }
 
 function buildConfig(cwd: string): AgentRuntimeConfig {
@@ -107,6 +112,8 @@ test("C2.E2E SubAgentSession.run drives one assistant message and returns a pars
     parentMessages,
     parentConfig: config,
     parentDependencies: deps,
+    parentSessionId: "parent-session",
+    parentTurnId: "parent-turn",
     subagentSessionId: "sub-1",
     subagentId: "uuid-1",
   });
@@ -124,6 +131,42 @@ test("C2.E2E SubAgentSession.run drives one assistant message and returns a pars
   assert.ok(!sysPrompt.includes("secrets"));
   // Subagent prefix injected.
   assert.match(sysPrompt, /You are a subagent of PilotDeck/);
+});
+
+test("C2.E2E SubAgentSession forwards child model activity to the parent event stream", async () => {
+  const events: CanonicalModelEvent[] = [
+    { type: "message_start", role: "assistant" },
+    { type: "text_delta", text: "working on it" },
+    { type: "message_end", finishReason: "stop" },
+  ];
+  const model = new ScriptedModel(events);
+  const registry = new ToolRegistry();
+  const forwarded: AgentEvent[] = [];
+  const session = new SubAgentSession({
+    definition: SUBAGENT_DEFINITIONS.explore,
+    directive: "Find all references to foo",
+    parentMessages: [{ role: "assistant", content: [{ type: "text", text: "trigger" }] }],
+    parentConfig: buildConfig("/tmp/proj"),
+    parentDependencies: buildDeps(model, registry, (event) => forwarded.push(event)),
+    parentSessionId: "parent-session",
+    parentTurnId: "parent-turn",
+    subagentSessionId: "sub-activity",
+    subagentId: "uuid-activity",
+  });
+
+  await session.run();
+
+  const textEvent = forwarded.find(
+    (event): event is Extract<AgentEvent, { type: "subagent_model_event" }> =>
+      event.type === "subagent_model_event" && event.event.type === "text_delta",
+  );
+  assert.ok(textEvent, "expected child text_delta to be forwarded");
+  assert.equal(textEvent.sessionId, "parent-session");
+  assert.equal(textEvent.turnId, "parent-turn");
+  assert.equal(textEvent.subagentId, "uuid-activity");
+  assert.equal(textEvent.subagentType, "explore");
+  assert.equal(textEvent.event.type, "text_delta");
+  assert.equal(textEvent.event.text, "working on it");
 });
 
 test("C2.E2E SubAgentSession scopes the tool registry per definition.allowedTools", async () => {
@@ -164,6 +207,8 @@ test("C2.E2E SubAgentSession scopes the tool registry per definition.allowedTool
     parentMessages,
     parentConfig: buildConfig("/tmp/proj"),
     parentDependencies: deps,
+    parentSessionId: "parent-session",
+    parentTurnId: "parent-turn",
     subagentSessionId: "sub-2",
     subagentId: "uuid-2",
   });
@@ -188,6 +233,8 @@ test("C2.E2E SubAgentSession returns empty markdown when no assistant text produ
     parentMessages: [{ role: "assistant", content: [{ type: "text", text: "" }] }],
     parentConfig: buildConfig("/tmp/proj"),
     parentDependencies: deps,
+    parentSessionId: "parent-session",
+    parentTurnId: "parent-turn",
     subagentSessionId: "sub-3",
     subagentId: "uuid-3",
   });
@@ -257,6 +304,8 @@ test("C2.E2E SubAgentSession inherits parent read/write state one-way", async (t
     parentDependencies: deps,
     parentReadFileState,
     parentWriteSnapshots,
+    parentSessionId: "parent-session",
+    parentTurnId: "parent-turn",
     subagentSessionId: "sub-4",
     subagentId: "uuid-4",
   });

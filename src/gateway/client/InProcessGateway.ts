@@ -710,6 +710,53 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
         event: "subagent_completed",
         detail: { subagentId: event.subagentId, subagentType: event.subagentType, success: event.success, durationMs: event.durationMs },
       }];
+    case "subagent_model_event":
+      return mapSubagentModelEvent(event);
+    case "subagent_tool_calls_detected":
+      return event.calls.map((call) => ({
+        type: "agent_status",
+        event: "subagent_tool_call_started",
+        detail: {
+          subagentId: event.subagentId,
+          subagentType: event.subagentType,
+          toolCallId: call.id,
+          toolName: call.name,
+          input: call.input,
+        },
+      }));
+    case "subagent_tool_result": {
+      const fullText = event.result.content.map(contentToText).join("\n");
+      const lines = fullText.split("\n");
+      return [{
+        type: "agent_status",
+        event: "subagent_tool_result",
+        detail: {
+          subagentId: event.subagentId,
+          subagentType: event.subagentType,
+          toolCallId: event.result.toolCallId,
+          toolName: event.result.toolName,
+          ok: event.result.type === "success",
+          preview: lines.slice(0, 3).join("\n"),
+          resultLineCount: lines.length,
+          resultBytes: Buffer.byteLength(fullText, "utf-8"),
+          ...(event.result.type === "error" && { errorCode: event.result.error.code }),
+        },
+      }];
+    }
+    case "subagent_status":
+      return [{
+        type: "agent_status",
+        event: "subagent_status",
+        detail: {
+          subagentId: event.subagentId,
+          subagentType: event.subagentType,
+          status: event.status,
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          success: event.success,
+          durationMs: event.durationMs,
+        },
+      }];
     case "session_ended":
     case "user_prompt_submitted":
     case "setup_completed":
@@ -744,6 +791,41 @@ function mapModelEvent(event: CanonicalModelEvent): GatewayEvent[] {
       // whether they are recoverable. Surfacing them here duplicates the final
       // turn_failed frame and also shows self-correction retries as red errors.
       return [];
+    default:
+      return [];
+  }
+}
+
+function mapSubagentModelEvent(
+  event: Extract<AgentEvent, { type: "subagent_model_event" }>,
+): GatewayEvent[] {
+  const base = {
+    subagentId: event.subagentId,
+    subagentType: event.subagentType,
+  };
+  switch (event.event.type) {
+    case "text_delta":
+      return [{
+        type: "agent_status",
+        event: "subagent_text_delta",
+        detail: { ...base, text: event.event.text },
+      }];
+    case "thinking_delta":
+      return [{
+        type: "agent_status",
+        event: "subagent_thinking_delta",
+        detail: { ...base, text: event.event.text },
+      }];
+    case "error":
+      return [{
+        type: "agent_status",
+        event: "subagent_model_error",
+        detail: {
+          ...base,
+          code: event.event.error.code,
+          message: event.event.error.message,
+        },
+      }];
     default:
       return [];
   }
