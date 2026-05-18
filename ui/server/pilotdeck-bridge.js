@@ -427,6 +427,44 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                     recoverable: event.recoverable,
                 }),
             ];
+        case 'agent_status': {
+            const detail = event.detail || {};
+            if (event.event === 'compact_started') {
+                const compactProgress = {
+                    level: detail.level || 1,
+                    stage: detail.stage || 'compacting',
+                    label: detail.label || detail.stage || 'Compacting',
+                    state: 'running',
+                    pre_tokens: detail.preTokens,
+                    reason: detail.trigger,
+                };
+                return [
+                    createNormalizedMessage({
+                        ...base,
+                        kind: 'status',
+                        text: 'compacting',
+                        tokens: 0,
+                        canInterrupt: true,
+                        compactProgress,
+                    }),
+                ];
+            }
+            if (event.event === 'compact_completed') {
+                return [
+                    createNormalizedMessage({
+                        ...base,
+                        kind: 'compact_boundary',
+                        trigger: detail.trigger || 'auto',
+                        preTokens: detail.preTokens,
+                        compactLevel: detail.level,
+                        compactStage: detail.stage,
+                        compactStageLabel: detail.stageLabel || detail.stage,
+                        compactMetadata: detail,
+                    }),
+                ];
+            }
+            return [];
+        }
         default:
             return [];
     }

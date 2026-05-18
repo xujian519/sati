@@ -120,6 +120,19 @@ function mapWebMessageToNormalized(message, sessionId) {
       return createNormalizedMessage({ ...base, kind: 'error', content: message.text || '' });
     case 'interrupted':
       return createNormalizedMessage({ ...base, kind: 'interrupted', content: message.text || '' });
+    case 'compact_boundary': {
+      const payload = message.payload || {};
+      return createNormalizedMessage({
+        ...base,
+        kind: 'compact_boundary',
+        trigger: payload.trigger || 'auto',
+        preTokens: payload.preTokens,
+        compactLevel: payload.level,
+        compactStage: payload.stage,
+        compactStageLabel: payload.stageLabel || payload.stage,
+        compactMetadata: payload,
+      });
+    }
     default:
       return createNormalizedMessage({ ...base, kind: 'status', text: message.kind });
   }

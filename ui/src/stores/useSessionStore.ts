@@ -28,7 +28,10 @@ export type MessageKind =
   | 'session_created'
   | 'interactive_prompt'
   | 'task_notification'
-  | 'interrupted';
+  | 'interrupted'
+  | 'compact_boundary'
+  | 'agent_activity'
+  | 'agent_activity_summary';
 
 export interface NormalizedMessage {
   id: string;
@@ -56,6 +59,14 @@ export interface NormalizedMessage {
   text?: string;
   tokens?: number;
   canInterrupt?: boolean;
+  compactProgress?: {
+    level: number;
+    stage: string;
+    label: string;
+    state: 'started' | 'running' | 'failed' | 'completed';
+    pre_tokens?: number;
+    reason?: string;
+  };
   tokenBudget?: unknown;
   requestId?: string;
   input?: unknown;
@@ -69,6 +80,29 @@ export interface NormalizedMessage {
   subagentTools?: unknown[];
   taskId?: string;
   outputFile?: string;
+  taskResult?: string;
+  trigger?: string;
+  preTokens?: number;
+  compactLevel?: number;
+  compactStage?: string;
+  compactStageLabel?: string;
+  compactMetadata?: unknown;
+  // agent_activity fields
+  runId?: string;
+  activityId?: string;
+  phase?: string;
+  state?: string;
+  title?: string;
+  detail?: string;
+  startedAt?: string;
+  endedAt?: string | null;
+  durationMs?: number | null;
+  severity?: string;
+  toolCallCount?: number;
+  toolErrorCount?: number;
+  ragSearchCount?: number;
+  compactCount?: number;
+  keySteps?: unknown[];
   isFinal?: boolean;
   // Cursor-specific ordering
   sequence?: number;
