@@ -49,6 +49,11 @@ export type WebMessage = {
   requestId?: string;
   ok?: boolean;
   text?: string;
+  images?: Array<{
+    data: string;
+    name?: string;
+    mimeType?: string;
+  }>;
   /**
    * `PilotDeckToolErrorCode` of the underlying failure when
    * `kind === 'tool_result'` and `ok === false`. Empty for non-error or
