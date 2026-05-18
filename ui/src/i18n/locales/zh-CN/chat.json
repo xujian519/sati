@@ -156,7 +156,16 @@
   },
   "plan": {
     "viewPlan": "📋 查看实施计划",
-    "title": "实施计划"
+    "title": "实施计划",
+    "exitMode": {
+      "header": "计划已准备好",
+      "subtitle": "确认后会退出 Plan 模式，并让模型开始按计划执行。",
+      "syncingPlan": "计划正文正在同步，请确认是否执行。",
+      "feedbackLabel": "继续讨论时可以补充说明",
+      "feedbackPlaceholder": "例如：再补充测试方案，或者先不要改数据库。",
+      "continueButton": "发送继续交流消息",
+      "executeButton": "按计划执行"
+    }
   },
   "usageLimit": {
     "resetAt": "Claude 使用限制已达到。您的限制将在 **{{time}} {{timezone}}** - {{date}} 重置"

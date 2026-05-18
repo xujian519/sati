@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { CheckCircle2, ClipboardList, MessageSquareText } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { PermissionPanelProps } from '../../configs/permissionPanelRegistry';
 import { MarkdownContent } from '../ContentRenderers/MarkdownContent';
 
@@ -40,7 +41,7 @@ export function extractPlanMarkdown(input: unknown): string {
   if (plan) return plan;
 
   if (input === undefined || input === null) {
-    return '计划正文正在同步，请确认是否执行。';
+    return '';
   }
 
   if (typeof input === 'object' && !Array.isArray(input)) {
@@ -51,7 +52,7 @@ export function extractPlanMarkdown(input: unknown): string {
       key === 'planFilePath'
     ));
     if (onlyPermissionHints) {
-      return '计划正文正在同步，请确认是否执行。';
+      return '';
     }
   }
 
@@ -67,8 +68,12 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
   onDecision,
   onPlanExecutionApproved,
 }) => {
+  const { t } = useTranslation('chat');
   const [feedback, setFeedback] = useState('');
-  const plan = useMemo(() => extractPlanMarkdown(request.input), [request.input]);
+  const plan = useMemo(() => {
+    const extracted = extractPlanMarkdown(request.input);
+    return extracted || t('plan.exitMode.syncingPlan');
+  }, [request.input, t]);
 
   const handleExecute = () => {
     onPlanExecutionApproved?.();
@@ -112,10 +117,10 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold text-neutral-950 dark:text-neutral-50">
-              计划已准备好
+              {t('plan.exitMode.header')}
             </div>
             <div className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">
-              确认后会退出 Plan 模式，并让模型开始按计划执行。
+              {t('plan.exitMode.subtitle')}
             </div>
           </div>
         </div>
@@ -130,13 +135,13 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
 
       <div className="border-t border-neutral-100 bg-neutral-50/70 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-950/40">
         <label className="mb-2 block text-xs font-medium text-neutral-600 dark:text-neutral-400">
-          继续讨论时可以补充说明
+          {t('plan.exitMode.feedbackLabel')}
         </label>
         <textarea
           value={feedback}
           onChange={(event) => setFeedback(event.target.value)}
           rows={3}
-          placeholder="例如：再补充测试方案，或者先不要改数据库。"
+          placeholder={t('plan.exitMode.feedbackPlaceholder')}
           className="block w-full resize-none rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-blue-700 dark:focus:ring-blue-950"
         />
         <div className="mt-3 flex flex-wrap justify-end gap-2">
@@ -146,7 +151,7 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
             className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
           >
             <MessageSquareText className="h-3.5 w-3.5" strokeWidth={2} />
-            发送继续交流消息
+            {t('plan.exitMode.continueButton')}
           </button>
           <button
             type="button"
@@ -154,7 +159,7 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
             className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
           >
             <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} />
-            按计划执行
+            {t('plan.exitMode.executeButton')}
           </button>
         </div>
       </div>

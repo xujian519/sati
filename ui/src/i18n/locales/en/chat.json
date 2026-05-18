@@ -156,7 +156,16 @@
   },
   "plan": {
     "viewPlan": "📋 View implementation plan",
-    "title": "Implementation Plan"
+    "title": "Implementation Plan",
+    "exitMode": {
+      "header": "Plan is ready",
+      "subtitle": "Confirming will exit Plan mode and let the model execute the plan.",
+      "syncingPlan": "Plan content is syncing, please confirm whether to execute.",
+      "feedbackLabel": "Optional notes for continued discussion",
+      "feedbackPlaceholder": "e.g. Add a test plan, or do not modify the database yet.",
+      "continueButton": "Continue Discussion",
+      "executeButton": "Execute Plan"
+    }
   },
   "usageLimit": {
     "resetAt": "Claude usage limit reached. Your limit will reset at **{{time}} {{timezone}}** - {{date}}"
