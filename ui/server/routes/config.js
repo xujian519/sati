@@ -285,61 +285,93 @@ router.post('/test-connection', async (req, res) => {
 });
 
 /**
- * Pick the on-the-wire dialect from the endpoint's hostname. Kept in sync
- * with `detectAuthMode` in `src/tool/builtin/webSearch.ts` — the Test
- * button needs to probe with the *same* shape the agent tool will use, or
- * a successful probe is meaningless.
- */
-function detectWebSearchAuthMode(endpoint) {
-  try {
-    const host = new URL(endpoint).hostname.toLowerCase();
-    if (host === 'serp.hk' || host.endsWith('.serp.hk')) return 'bearer';
-    if (host === 'serp.global' || host.endsWith('.serp.global')) return 'bearer';
-  } catch { /* fall through */ }
-  return 'query';
-}
-
-/**
- * Probe a SerpAPI / SerpAPI-compatible endpoint with the given key.
- *
- * Mirrors `src/tool/builtin/webSearch.ts`'s resolution logic — including
- * hostname-based auth-mode selection and the `{code, msg, result}` envelope
- * that in-China proxies (notably serp.hk) wrap responses in. Returns:
+ * Probe the configured web-search provider. Mirrors
+ * `src/tool/builtin/webSearch.ts`'s GLM/Tavily/custom request shape. Returns:
  * `{ ok, error?, latencyMs?, organicCount? }` to match the convention
  * established by `/test-connection`.
  */
 router.post('/test-web-search', async (req, res) => {
-  const { apiKey, endpoint } = req.body || {};
+  const { provider, apiKey, endpoint, customProvider } = req.body || {};
+  const selectedProvider = provider === 'tavily' || provider === 'custom' ? provider : 'glm';
+  const custom = customProvider && typeof customProvider === 'object' ? customProvider : {};
+  const customAuth = typeof custom.auth === 'string' ? custom.auth : 'bearer';
+  const customMethod = custom.method === 'GET' ? 'GET' : 'POST';
+  const queryParam = typeof custom.queryParam === 'string' && custom.queryParam.trim() ? custom.queryParam.trim() : 'query';
+  const apiKeyParam = typeof custom.apiKeyParam === 'string' && custom.apiKeyParam.trim() ? custom.apiKeyParam.trim() : 'api_key';
+  const resultsPath = typeof custom.resultsPath === 'string' ? custom.resultsPath.trim() : '';
   const trimmedKey = typeof apiKey === 'string' ? apiKey.trim() : '';
-  if (!trimmedKey) {
+  if (!trimmedKey && !(selectedProvider === 'custom' && customAuth === 'none')) {
     return res.status(400).json({ ok: false, error: 'API key is required.' });
   }
   const trimmedEndpoint = typeof endpoint === 'string' ? endpoint.trim() : '';
-  const effectiveEndpoint = trimmedEndpoint || 'https://serpapi.com/search';
+  if (selectedProvider === 'custom' && !trimmedEndpoint) {
+    return res.status(400).json({ ok: false, error: 'Custom provider endpoint is required.' });
+  }
+  const effectiveEndpoint = trimmedEndpoint || (
+    selectedProvider === 'tavily'
+      ? 'https://api.tavily.com/search'
+      : 'https://api.z.ai/api/paas/v4/web_search'
+  );
 
   let requestUrl;
   let requestInit;
   try {
-    const authMode = detectWebSearchAuthMode(effectiveEndpoint);
-    if (authMode === 'bearer') {
+    const url = new URL(effectiveEndpoint);
+    if (selectedProvider === 'tavily') {
       requestUrl = effectiveEndpoint;
       requestInit = {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${trimmedKey}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({ q: 'hello' }),
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({
+            api_key: trimmedKey,
+            query: 'hello',
+            max_results: 3,
+            include_answer: true,
+            search_depth: 'basic',
+          }),
+        };
+    } else if (selectedProvider === 'custom') {
+      const headers = { Accept: 'application/json' };
+      const body = {};
+      if (customMethod === 'GET') {
+        url.searchParams.set(queryParam, 'hello');
+      } else {
+        headers['Content-Type'] = 'application/json';
+        body[queryParam] = 'hello';
+      }
+      if (customAuth === 'bearer' && trimmedKey) {
+        headers.Authorization = `Bearer ${trimmedKey}`;
+      } else if (customAuth === 'queryApiKey' && trimmedKey) {
+        url.searchParams.set(apiKeyParam, trimmedKey);
+      } else if (customAuth === 'bodyApiKey' && trimmedKey) {
+        if (customMethod === 'GET') url.searchParams.set(apiKeyParam, trimmedKey);
+        else body[apiKeyParam] = trimmedKey;
+      }
+      requestUrl = url.toString();
+      requestInit = {
+        method: customMethod,
+        headers,
+        ...(customMethod === 'POST' ? { body: JSON.stringify(body) } : {}),
       };
     } else {
-      const url = new URL(effectiveEndpoint);
-      url.searchParams.set('engine', 'google');
-      url.searchParams.set('q', 'hello');
-      url.searchParams.set('api_key', trimmedKey);
-      url.searchParams.set('output', 'json');
-      requestUrl = url.toString();
-      requestInit = { method: 'GET', headers: { Accept: 'application/json' } };
+      requestUrl = effectiveEndpoint;
+      requestInit = {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${trimmedKey}`,
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({
+            search_engine: 'search-prime',
+            search_query: 'hello',
+            count: 3,
+            search_recency_filter: 'noLimit',
+          }),
+        };
     }
   } catch {
     return res.status(400).json({ ok: false, error: `Invalid endpoint URL: ${effectiveEndpoint}` });
@@ -364,18 +396,19 @@ router.post('/test-web-search', async (req, res) => {
       const detail = (raw && (raw.error || raw.msg)) || `${response.status} ${response.statusText}`;
       return res.json({ ok: false, error: String(detail), latencyMs });
     }
-    // SerpAPI returns 200 with `{error: "..."}` on invalid-key / quota failures.
     if (raw && typeof raw.error === 'string' && raw.error.length > 0) {
       return res.json({ ok: false, error: raw.error, latencyMs });
     }
-    // serp.hk-style envelope: `{code, msg, result}` with non-zero code === failure.
     if (raw && typeof raw.code === 'number' && raw.code !== 0) {
       const msg = typeof raw.msg === 'string' ? raw.msg : 'proxy error';
       return res.json({ ok: false, error: `code=${raw.code}: ${msg}`, latencyMs });
     }
 
-    const result = raw && raw.result && typeof raw.result === 'object' ? raw.result : raw;
-    const organic = result?.organic_results ?? result?.organic;
+    const organic = selectedProvider === 'tavily'
+      ? raw?.results
+      : selectedProvider === 'custom' && resultsPath
+        ? readPath(raw, resultsPath)
+        : (raw?.search_result ?? raw?.results ?? raw?.items ?? raw?.data);
     const organicCount = Array.isArray(organic) ? organic.length : 0;
     return res.json({ ok: true, latencyMs, organicCount });
   } catch (err) {
@@ -386,6 +419,13 @@ router.post('/test-web-search', async (req, res) => {
     return res.json({ ok: false, error: err.message || String(err) });
   }
 });
+
+function readPath(value, pathValue) {
+  return pathValue.split('.').reduce((current, segment) => {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined;
+    return current[segment];
+  }, value);
+}
 
 router.post('/open', async (_req, res) => {
   const configPath = getPilotDeckConfigPath();

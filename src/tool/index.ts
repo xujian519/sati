@@ -37,6 +37,8 @@ export type {
   PilotDeckToolModelClient,
   PilotDeckToolProgressEvent,
   PilotDeckToolProgressSink,
+  PilotDeckReadFileStateEntry,
+  PilotDeckReadFileStateMap,
   PilotDeckToolResultContent,
   PilotDeckToolRuntimeContext,
   PilotDeckSubagentForkApi,

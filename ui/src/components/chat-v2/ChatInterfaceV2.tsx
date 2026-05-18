@@ -68,6 +68,7 @@ function ChatInterfaceV2({
   const streamTimerRef = useRef<number | null>(null);
   const accumulatedStreamRef = useRef('');
   const pendingViewSessionRef = useRef<PendingViewSession | null>(null);
+  const [isAbortPending, setIsAbortPending] = useState(false);
   const [runMode, setRunMode] = useState<ChatRunMode>('agent');
 
   const resetStreamingState = useCallback(() => {
@@ -116,7 +117,7 @@ function ChatInterfaceV2({
     totalMessages,
     canAbortSession,
     setCanAbortSession,
-    isAborting,
+    isAborting: _isAborting,
     setIsAborting,
     setIsUserScrolledUp,
     tokenBudget,
@@ -286,17 +287,33 @@ function ChatInterfaceV2({
   });
 
   useEffect(() => {
+    if (!isLoading || !canAbortSession) {
+      setIsAbortPending(false);
+    }
+  }, [canAbortSession, isLoading]);
+
+  useEffect(() => {
+    setIsAbortPending(false);
+  }, [currentSessionId, selectedSession?.id]);
+
+  const handleAbortWithPending = useCallback(() => {
+    if (!isLoading || !canAbortSession || isAbortPending) return;
+    handleAbortSession();
+    setIsAbortPending(true);
+  }, [canAbortSession, handleAbortSession, isAbortPending, isLoading]);
+
+  useEffect(() => {
     if (!isLoading || !canAbortSession) return;
     const handleGlobalEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.repeat || event.defaultPrevented) return;
       event.preventDefault();
-      handleAbortSession();
+      handleAbortWithPending();
     };
     document.addEventListener('keydown', handleGlobalEscape, { capture: true });
     return () => {
       document.removeEventListener('keydown', handleGlobalEscape, { capture: true });
     };
-  }, [canAbortSession, handleAbortSession, isLoading]);
+  }, [canAbortSession, handleAbortWithPending, isLoading]);
 
   useEffect(() => {
     return () => {
@@ -351,7 +368,7 @@ function ChatInterfaceV2({
       onTextareaInput={handleTextareaInput}
       onInputFocusChange={handleInputFocusChange}
       onSubmit={wrappedSubmit as typeof handleSubmit}
-      onAbortSession={handleAbortSession}
+      onAbortSession={handleAbortWithPending}
       openImagePicker={openImagePicker}
       attachedImages={attachedImages}
       onRemoveImage={(index) =>
@@ -379,18 +396,18 @@ function ChatInterfaceV2({
       isDragActive={isDragActive}
       isLoading={isLoading}
       canAbortSession={canAbortSession}
-      isAborting={isAborting}
+      isAbortPending={isAbortPending}
       tokenBudget={tokenBudget}
       pendingPermissionRequests={pendingPermissionRequests}
       handlePermissionDecision={handlePermissionDecision}
       handleGrantToolPermission={handleGrantToolPermission}
-      sendByCtrlEnter={sendByCtrlEnter}
       permissionMode={permissionMode}
-      onSelectPermissionMode={selectPermissionMode}
+      onPermissionModeChange={selectPermissionMode}
       runMode={runMode}
       onRunModeChange={setRunMode}
       planModeAvailable={true}
       onPlanExecutionApproved={handlePlanExecutionApproved}
+      sendByCtrlEnter={sendByCtrlEnter}
       chromeless={isWelcomeMode}
     />
   );

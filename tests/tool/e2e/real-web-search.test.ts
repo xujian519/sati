@@ -4,25 +4,27 @@ import { createWebSearchTool, type WebSearchOutput } from "../../../src/tool/bui
 import { createDefaultPermissionContext } from "../../../src/permission/index.js";
 
 const RUN = process.env.PILOTDECK_RUN_REAL_WEB_SEARCH_E2E === "1";
-// Optional override — point at a SerpAPI-compatible proxy when needed.
+const PROVIDER = process.env.PILOTDECK_E2E_WEB_SEARCH_PROVIDER === "tavily" ? "tavily" : "glm";
 const ENDPOINT = process.env.PILOTDECK_E2E_WEB_SEARCH_ENDPOINT?.trim() || undefined;
 
 test(
-  "web_search hits the real SerpAPI and returns organic results",
+  "web_search hits the real configured provider and returns organic results",
   { timeout: 60_000 },
   async (t) => {
     if (!RUN) {
       t.skip(
-        "Set PILOTDECK_RUN_REAL_WEB_SEARCH_E2E=1 (with SERP_API_KEY in env) to run the real SerpAPI e2e test.",
+        "Set PILOTDECK_RUN_REAL_WEB_SEARCH_E2E=1 with GLM_WEB_SEARCH_API_KEY/ZAI_API_KEY or TAVILY_API_KEY to run the real web_search e2e test.",
       );
       return;
     }
-    const apiKey = process.env.SERP_API_KEY?.trim();
+    const apiKey = PROVIDER === "tavily"
+      ? process.env.TAVILY_API_KEY?.trim()
+      : (process.env.GLM_WEB_SEARCH_API_KEY?.trim() || process.env.ZAI_API_KEY?.trim());
     if (!apiKey) {
-      throw new Error("SERP_API_KEY env var is required for the real web_search e2e test.");
+      throw new Error(`${PROVIDER === "tavily" ? "TAVILY_API_KEY" : "GLM_WEB_SEARCH_API_KEY or ZAI_API_KEY"} env var is required for the real web_search e2e test.`);
     }
 
-    const tool = createWebSearchTool({ apiKey, endpoint: ENDPOINT });
+    const tool = createWebSearchTool({ provider: PROVIDER, apiKey, endpoint: ENDPOINT });
     const cwd = process.cwd();
     const result = await tool.execute(
       { query: "PilotDeck", gl: "US" },

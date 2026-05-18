@@ -6,6 +6,7 @@ schemaVersion: 1
 
 agent:
   model: deepseek/deepseek-v4-pro
+  # maxContextTokens: 65536  # Override model catalog's context window for auto-compaction
 
 model:
   providers:

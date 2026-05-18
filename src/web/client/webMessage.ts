@@ -27,7 +27,8 @@ export type WebMessageKind =
   | "complete"
   | "interrupted"
   | "error"
-  | "structured_output";
+  | "structured_output"
+  | "compact_boundary";
 
 export type WebMessage = {
   id: string;

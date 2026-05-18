@@ -61,8 +61,8 @@ export function applyOrchestration(input: OrchestrationInput): OrchestrationResu
   let tools = request.tools;
   if (tools && config.allowedTools && config.allowedTools.length > 0) {
     const before = tools.length;
-    const allowed = new Set(config.allowedTools);
-    const filtered = tools.filter((tool: CanonicalToolSchema) => allowed.has(tool.name));
+    const allowed = new Set(config.allowedTools.map(n => n.toLowerCase()));
+    const filtered = tools.filter((tool: CanonicalToolSchema) => allowed.has(tool.name.toLowerCase()));
     if (filtered.length !== before) {
       tools = filtered;
       mutations = {
@@ -71,10 +71,14 @@ export function applyOrchestration(input: OrchestrationInput): OrchestrationResu
       };
       mutated = true;
     }
+    if (filtered.length === 0 && before > 0) {
+      console.warn(`[autoOrch] WARNING: allowedTools filter matched 0 of ${before} tools — falling back to unfiltered to preserve API tools param`);
+      tools = request.tools;
+    }
   } else if (tools && config.blockedTools && config.blockedTools.length > 0) {
     const before = tools.length;
-    const blocked = new Set(config.blockedTools);
-    const filtered = tools.filter((tool: CanonicalToolSchema) => !blocked.has(tool.name));
+    const blocked = new Set(config.blockedTools.map(n => n.toLowerCase()));
+    const filtered = tools.filter((tool: CanonicalToolSchema) => !blocked.has(tool.name.toLowerCase()));
     if (filtered.length !== before) {
       tools = filtered;
       mutations = {

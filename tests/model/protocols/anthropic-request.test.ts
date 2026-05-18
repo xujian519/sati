@@ -125,3 +125,37 @@ test("A4 cacheBreakpoints absent → no cache_control emitted (regression)", () 
   ) as Record<string, any>;
   assert.equal(body.messages[0].content[0].cache_control, undefined);
 });
+
+test("tool_result preserves multimodal image and pdf blocks for Anthropic", () => {
+  const config = parseModelConfig(validModelConfig(), {
+    env: { ANTHROPIC_API_KEY: "anthropic-key" },
+  });
+  const body = buildModelRequest(
+    {
+      provider: "anthropic-main",
+      model: "claude-sonnet-4-5",
+      messages: [
+        { role: "assistant", content: [{ type: "tool_call", id: "call-1", name: "read_file", input: {} }] },
+        {
+          role: "user",
+          content: [{
+            type: "tool_result",
+            toolCallId: "call-1",
+            content: [
+              { type: "text", text: "preview" },
+              { type: "image", source: "base64", mimeType: "image/png", data: "abc", bytes: 3 },
+              { type: "pdf", source: "base64", mimeType: "application/pdf", data: "def", bytes: 3, pages: 1 },
+            ],
+          }],
+        },
+      ],
+    },
+    config,
+  ) as Record<string, any>;
+
+  const toolResult = body.messages[1].content[0];
+  assert.equal(toolResult.type, "tool_result");
+  assert.equal(toolResult.content[0].type, "text");
+  assert.equal(toolResult.content[1].type, "image");
+  assert.equal(toolResult.content[2].type, "document");
+});

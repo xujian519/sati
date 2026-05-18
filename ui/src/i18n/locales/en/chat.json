@@ -27,13 +27,25 @@
   "interrupted": {
     "label": "Interrupted by user"
   },
+  "compact": {
+    "label": "Context compacted",
+    "level": "Level {{level}}",
+    "tokens": "{{tokens}} tokens before compact",
+    "stages": {
+      "context_collapse": "Context collapse",
+      "session_memory": "Session memory compaction",
+      "summary": "Summary compaction",
+      "reactive": "Reactive compaction",
+      "overflow_recovery": "Overflow recovery retry"
+    }
+  },
   "working": {
     "default": "Working",
     "processing": "Processing",
     "thinking": "Thinking",
     "generating": "Generating response",
     "compacting": "Compacting context...",
-    "compactingLevel": "Compacting context (level {{level}})",
+    "compactingLevel": "Triggering level {{level}} compaction: {{label}}",
     "waitingForPermission": "Waiting for permission"
   },
   "process": {

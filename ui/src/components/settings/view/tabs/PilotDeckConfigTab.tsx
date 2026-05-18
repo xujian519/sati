@@ -59,6 +59,7 @@ type PilotDeckConfig = {
   schemaVersion?: number;
   agent?: {
     model?: string;
+    maxContextTokens?: number;
     params?: Record<string, unknown>;
     subagents?: { default?: string; params?: Record<string, unknown> };
   };
@@ -150,8 +151,22 @@ type PilotDeckConfig = {
   gateway?: { enabled?: boolean; home?: string } & Record<string, unknown>;
   tools?: {
     webSearch?: {
+      provider?: 'glm' | 'tavily' | 'custom';
       apiKey?: string;
       endpoint?: string;
+      customProvider?: {
+        name?: string;
+        auth?: 'bearer' | 'bodyApiKey' | 'queryApiKey' | 'none';
+        method?: 'GET' | 'POST';
+        queryParam?: string;
+        apiKeyParam?: string;
+        resultsPath?: string;
+        titleField?: string;
+        urlField?: string;
+        snippetField?: string;
+        sourceField?: string;
+        publishedAtField?: string;
+      };
     };
   };
 };
@@ -401,16 +416,24 @@ function Select({
   onChange: (next: string) => void;
   options: Array<{ value: string; label: string }>;
 }) {
+  const selectedLabel = options.find((opt) => opt.value === value)?.label ?? '';
   return (
-    <select
-      value={value ?? ''}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-ring"
-    >
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>{opt.label}</option>
-      ))}
-    </select>
+    <div className="relative min-w-0">
+      <div className="pointer-events-none flex w-full min-w-0 items-center rounded-md border border-border bg-background px-2 py-1.5 pr-8 text-sm text-foreground">
+        <span className="block min-w-0 truncate" title={selectedLabel}>{selectedLabel}</span>
+      </div>
+      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
+      <select
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        aria-label={selectedLabel}
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+    </div>
   );
 }
 
@@ -1285,6 +1308,59 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
                   Cap on tokens the model may generate per turn (sent as <code className="font-mono">max_tokens</code> to upstream). Leave empty to fall back to the catalog or protocol default (typically 8192 for openai). Increase this for long-form creative tasks or thinking models that burn output budget while reasoning — too small a value cuts the response off mid-stream and the UI then appears stuck.
                 </p>
               </div>
+
+              <div className="mt-3 border-t border-border/60 pt-3">
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Gauge className="h-3.5 w-3.5" />
+                    Max context tokens
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={config.agent?.maxContextTokens ?? ''}
+                    placeholder={String(caps.catalogModel?.maxContextTokens ?? 200000)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === '') {
+                        const next = { ...(config.agent ?? {}) };
+                        delete next.maxContextTokens;
+                        onChange(patch(config, ['agent'], next));
+                        return;
+                      }
+                      const n = Number(v);
+                      if (Number.isFinite(n) && n > 0) {
+                        onChange(patch(config, ['agent', 'maxContextTokens'], Math.floor(n)));
+                      }
+                    }}
+                    className="w-28 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <span className={cn(
+                    'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                    config.agent?.maxContextTokens !== undefined
+                      ? 'border border-foreground/30 bg-foreground/10 text-foreground'
+                      : 'border border-border bg-muted text-muted-foreground',
+                  )}>
+                    {config.agent?.maxContextTokens !== undefined ? 'Override' : 'Default'}
+                  </span>
+                  {config.agent?.maxContextTokens !== undefined && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = { ...(config.agent ?? {}) };
+                        delete next.maxContextTokens;
+                        onChange(patch(config, ['agent'], next));
+                      }}
+                      className="text-[10px] text-muted-foreground underline hover:text-foreground"
+                    >
+                      reset to default
+                    </button>
+                  )}
+                </div>
+                <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                  Override the model&apos;s context window size for auto-compaction. The agent automatically compresses conversation history when usage reaches 80% (warning) or 95% (blocking) of this budget. Leave empty to use the catalog default. Set a smaller value to trigger compaction earlier — useful for proxy providers or to reduce per-turn cost.
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -1744,9 +1820,18 @@ function MemorySection({ config, onChange }: { config: PilotDeckConfig; onChange
 
 function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const { t } = useTranslation('settings');
+  const glmDefaultEndpoint = 'https://api.z.ai/api/paas/v4/web_search';
   const ws = config.tools?.webSearch ?? {};
+  const provider = ws.provider === 'tavily' || ws.provider === 'custom' ? ws.provider : 'glm';
   const apiKey = typeof ws.apiKey === 'string' ? ws.apiKey : '';
   const endpoint = typeof ws.endpoint === 'string' ? ws.endpoint : '';
+  const custom = ws.customProvider ?? {};
+  const endpointValue = endpoint || (provider === 'glm' ? glmDefaultEndpoint : '');
+  const endpointPlaceholder = provider === 'custom'
+    ? 'https://example.com/search'
+    : provider === 'tavily'
+      ? 'https://api.tavily.com/search'
+      : glmDefaultEndpoint;
 
   // Test-connection state — modeled after onboarding's LlmConfigurationStep
   // so behaviour and accessibility match across the app. Reset whenever the
@@ -1754,9 +1839,26 @@ function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange:
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState('');
 
+  const resetTest = () => {
+    setTestStatus('idle');
+    setTestMessage('');
+  };
+
+  const setProvider = (nextProvider: 'glm' | 'tavily' | 'custom') => {
+    const nextTools = {
+      webSearch: {
+        provider: nextProvider,
+        ...(nextProvider === 'glm' ? { endpoint: glmDefaultEndpoint } : {}),
+      },
+    };
+    onChange(patch(config, ['tools'], nextTools));
+    resetTest();
+  };
+
   const setField = (field: 'apiKey' | 'endpoint', value: string) => {
     const trimmed = value;
     const nextWs: NonNullable<PilotDeckConfig['tools']>['webSearch'] = { ...ws };
+    nextWs.provider = provider;
     if (trimmed === '') {
       delete nextWs[field];
     } else {
@@ -1764,8 +1866,32 @@ function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange:
     }
     const nextTools = Object.keys(nextWs).length > 0 ? { webSearch: nextWs } : undefined;
     onChange(patch(config, ['tools'], nextTools));
-    setTestStatus('idle');
-    setTestMessage('');
+    resetTest();
+  };
+
+  const setCustomField = (
+    field: keyof NonNullable<NonNullable<PilotDeckConfig['tools']>['webSearch']>['customProvider'],
+    value: string,
+  ) => {
+    const nextWs: NonNullable<PilotDeckConfig['tools']>['webSearch'] = {
+      ...ws,
+      provider: 'custom',
+      customProvider: { ...(ws.customProvider ?? {}) },
+    };
+    if (value === '') {
+      delete nextWs.customProvider?.[field];
+    } else if (field === 'auth') {
+      nextWs.customProvider![field] = value as 'bearer' | 'bodyApiKey' | 'queryApiKey' | 'none';
+    } else if (field === 'method') {
+      nextWs.customProvider![field] = value as 'GET' | 'POST';
+    } else {
+      nextWs.customProvider![field] = value;
+    }
+    if (Object.keys(nextWs.customProvider ?? {}).length === 0) {
+      delete nextWs.customProvider;
+    }
+    onChange(patch(config, ['tools'], { webSearch: nextWs }));
+    resetTest();
   };
 
   const handleTest = async () => {
@@ -1780,7 +1906,7 @@ function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange:
     try {
       const res = await authenticatedFetch('/api/config/test-web-search', {
         method: 'POST',
-        body: JSON.stringify({ apiKey: trimmedKey, endpoint: endpoint.trim() }),
+        body: JSON.stringify({ provider, apiKey: trimmedKey, endpoint: endpointValue.trim(), customProvider: custom }),
       });
       const data = await res.json();
       if (data.ok) {
@@ -1814,6 +1940,20 @@ function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange:
     >
       <SettingsCard divided>
         <FormRow
+          label={t('edgeClawConfig.panels.tools.provider.label')}
+          description={t('edgeClawConfig.panels.tools.provider.description')}
+        >
+          <Select
+            value={provider}
+            options={[
+              { value: 'glm', label: t('edgeClawConfig.panels.tools.provider.glm') },
+              { value: 'tavily', label: t('edgeClawConfig.panels.tools.provider.tavily') },
+              { value: 'custom', label: t('edgeClawConfig.panels.tools.provider.custom') },
+            ]}
+            onChange={(v) => setProvider(v === 'custom' ? 'custom' : v === 'tavily' ? 'tavily' : 'glm')}
+          />
+        </FormRow>
+        <FormRow
           label={t('edgeClawConfig.panels.tools.apiKey.label')}
           description={t('edgeClawConfig.panels.tools.apiKey.description')}
         >
@@ -1830,12 +1970,86 @@ function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange:
           description={t('edgeClawConfig.panels.tools.endpoint.description')}
         >
           <TextInput
-            value={endpoint}
-            placeholder={t('edgeClawConfig.panels.tools.endpoint.placeholder')}
+            value={endpointValue}
+            placeholder={endpointPlaceholder}
             monospace
             onChange={(v) => setField('endpoint', v)}
           />
         </FormRow>
+        {provider === 'custom' && (
+          <>
+            <FormRow
+              label={t('edgeClawConfig.panels.tools.custom.name.label')}
+              description={t('edgeClawConfig.panels.tools.custom.name.description')}
+            >
+              <TextInput
+                value={custom.name ?? ''}
+                placeholder="My Search"
+                onChange={(v) => setCustomField('name', v)}
+              />
+            </FormRow>
+            <FormRow
+              label={t('edgeClawConfig.panels.tools.custom.auth.label')}
+              description={t('edgeClawConfig.panels.tools.custom.auth.description')}
+            >
+              <Select
+                value={custom.auth ?? 'bearer'}
+                options={[
+                  { value: 'bearer', label: t('edgeClawConfig.panels.tools.custom.auth.bearer') },
+                  { value: 'bodyApiKey', label: t('edgeClawConfig.panels.tools.custom.auth.bodyApiKey') },
+                  { value: 'queryApiKey', label: t('edgeClawConfig.panels.tools.custom.auth.queryApiKey') },
+                  { value: 'none', label: t('edgeClawConfig.panels.tools.custom.auth.none') },
+                ]}
+                onChange={(v) => setCustomField('auth', v)}
+              />
+            </FormRow>
+            <FormRow
+              label={t('edgeClawConfig.panels.tools.custom.method.label')}
+              description={t('edgeClawConfig.panels.tools.custom.method.description')}
+            >
+              <Select
+                value={custom.method ?? 'POST'}
+                options={[
+                  { value: 'POST', label: 'POST' },
+                  { value: 'GET', label: 'GET' },
+                ]}
+                onChange={(v) => setCustomField('method', v)}
+              />
+            </FormRow>
+            <FormRow
+              label={t('edgeClawConfig.panels.tools.custom.params.label')}
+              description={t('edgeClawConfig.panels.tools.custom.params.description')}
+            >
+              <div className="grid gap-2 md:grid-cols-2">
+                <TextInput
+                  value={custom.queryParam ?? ''}
+                  placeholder="query"
+                  monospace
+                  onChange={(v) => setCustomField('queryParam', v)}
+                />
+                <TextInput
+                  value={custom.apiKeyParam ?? ''}
+                  placeholder="api_key"
+                  monospace
+                  onChange={(v) => setCustomField('apiKeyParam', v)}
+                />
+              </div>
+            </FormRow>
+            <FormRow
+              label={t('edgeClawConfig.panels.tools.custom.mapping.label')}
+              description={t('edgeClawConfig.panels.tools.custom.mapping.description')}
+            >
+              <div className="grid gap-2 md:grid-cols-2">
+                <TextInput value={custom.resultsPath ?? ''} placeholder="data.items" monospace onChange={(v) => setCustomField('resultsPath', v)} />
+                <TextInput value={custom.titleField ?? ''} placeholder="title" monospace onChange={(v) => setCustomField('titleField', v)} />
+                <TextInput value={custom.urlField ?? ''} placeholder="url" monospace onChange={(v) => setCustomField('urlField', v)} />
+                <TextInput value={custom.snippetField ?? ''} placeholder="snippet" monospace onChange={(v) => setCustomField('snippetField', v)} />
+                <TextInput value={custom.sourceField ?? ''} placeholder="source" monospace onChange={(v) => setCustomField('sourceField', v)} />
+                <TextInput value={custom.publishedAtField ?? ''} placeholder="publishedAt" monospace onChange={(v) => setCustomField('publishedAtField', v)} />
+              </div>
+            </FormRow>
+          </>
+        )}
         <div className="flex flex-col gap-2 px-4 py-3">
           <div className="flex items-center gap-2">
             <Button

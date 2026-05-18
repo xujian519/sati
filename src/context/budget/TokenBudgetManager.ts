@@ -108,9 +108,15 @@ export class TokenBudgetManager {
         return this.estimateTextTokens(serialized);
       }
       case "tool_result":
-        // T10: recurse inner text-only blocks.
+        // T10: recurse inner blocks. Rich media reuses the generic multimedia
+        // estimate so nested tool_result image/pdf payloads still count.
         return block.content.reduce(
-          (sum, item) => sum + this.estimateTextTokens(item.text),
+          (sum, item) => {
+            if (item.type === "text") {
+              return sum + this.estimateTextTokens(item.text);
+            }
+            return sum + this.multimediaTokens;
+          },
           0,
         );
       case "tool_result_reference":

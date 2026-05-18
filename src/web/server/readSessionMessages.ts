@@ -55,9 +55,10 @@ export async function readWebSessionMessages(
   const webReplay = extractWebVisibleMessages(entries);
   const entryTimestamps = webReplay.timestamps;
   const incompleteTurnIds = extractIncompleteTurnIds(entries);
-  const allMessages = webReplay.messages
+
+  const flattenedPerMessage: WebMessage[][] = webReplay.messages
     .filter((message) => !message.metadata?.synthetic)
-    .flatMap((message, index) =>
+    .map((message, index) =>
       flattenCanonicalMessage(message, {
         index,
         sessionKey: input.sessionKey,
@@ -66,6 +67,37 @@ export async function readWebSessionMessages(
         entryTimestamp: entryTimestamps[index],
       }),
     );
+
+  const cumulativeWebCounts: number[] = [];
+  let cumulative = 0;
+  for (const group of flattenedPerMessage) {
+    cumulative += group.length;
+    cumulativeWebCounts.push(cumulative);
+  }
+
+  const allMessages: WebMessage[] = flattenedPerMessage.flat();
+
+  for (const boundary of [...webReplay.compactBoundaries].reverse()) {
+    const insertPos =
+      boundary.insertAfterMessageIndex >= 0
+        ? (cumulativeWebCounts[boundary.insertAfterMessageIndex] ?? 0)
+        : 0;
+    const meta = boundary.metadata ?? {};
+    const compactMsg: WebMessage = {
+      id: `${input.sessionKey}-compact-${boundary.timestamp}`,
+      sessionKey: input.sessionKey,
+      projectKey: input.projectKey,
+      createdAt: boundary.timestamp,
+      provider: "pilotdeck",
+      role: "system",
+      kind: "compact_boundary",
+      text: "Context compacted",
+      payload: meta,
+      source: "history",
+    };
+    allMessages.splice(insertPos, 0, compactMsg);
+  }
+
   injectErrorTurnMessages(entries, allMessages, input.sessionKey, input.projectKey);
   if (incompleteTurnIds.length > 0) {
     allMessages.push(createIncompleteTurnStatusMessage(input, incompleteTurnIds, options));
@@ -254,7 +286,7 @@ function flushBlock(
       return;
     case "tool_result": {
       flushText();
-      const resultText = block.content.map((part) => part.text).join("");
+      const resultText = block.content.map((part) => part.type === "text" ? part.text : `[${part.type}]`).join("");
       const errorCode = readToolResultErrorCode(block.raw);
       out.push({
         id: `${context.sessionKey}-tool-${block.toolCallId}-result`,
@@ -323,13 +355,21 @@ function flushBlock(
  * durable messages so agent resume never feeds half-finished tool histories
  * back to the model.
  */
+type CompactBoundaryInfo = {
+  insertAfterMessageIndex: number;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
+};
+
 function extractWebVisibleMessages(entries: AgentTranscriptEntry[]): {
   messages: CanonicalMessage[];
   timestamps: string[];
+  compactBoundaries: CompactBoundaryInfo[];
 } {
   const lastBoundaryIndex = findLastCompactBoundaryIndex(entries);
   const messages: CanonicalMessage[] = [];
   const timestamps: string[] = [];
+  const compactBoundaries: CompactBoundaryInfo[] = [];
 
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index];
@@ -352,10 +392,29 @@ function extractWebVisibleMessages(entries: AgentTranscriptEntry[]): {
           timestamps.push(entry.createdAt);
         }
         break;
+      case "control_boundary": {
+        if (!beforeBoundary && entry.boundary && entry.boundary.kind === "compact") {
+          const meta: Record<string, unknown> = {};
+          if (entry.boundary.subtype === "compact_boundary" && "compactMetadata" in entry.boundary) {
+            const cm = entry.boundary.compactMetadata as Record<string, unknown>;
+            meta.trigger = cm.trigger;
+            meta.preTokens = cm.preTokens;
+            meta.level = cm.level;
+            meta.stage = cm.stage;
+            meta.stageLabel = cm.stageLabel;
+          }
+          compactBoundaries.push({
+            insertAfterMessageIndex: messages.length - 1,
+            timestamp: entry.createdAt,
+            metadata: meta,
+          });
+        }
+        break;
+      }
     }
   }
 
-  return { messages, timestamps };
+  return { messages, timestamps, compactBoundaries };
 }
 
 function cloneMessage(message: CanonicalMessage): CanonicalMessage {

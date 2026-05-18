@@ -94,6 +94,52 @@ test("tool_result_reference is converted to role:tool message with preview", () 
   );
 });
 
+test("tool_result preserves multimodal image and pdf blocks for OpenAI", () => {
+  const raw = validModelConfig();
+  const providers = raw.providers as {
+    "openai-main": {
+      models: {
+        "gpt-5.1": {
+          multimodal: { input: string[] };
+        };
+      };
+    };
+  };
+  providers["openai-main"].models["gpt-5.1"].multimodal.input = ["text", "image", "audio", "pdf"];
+  const config = parseModelConfig(raw, {
+    env: { ANTHROPIC_API_KEY: "anthropic-key" },
+  });
+  const body = buildModelRequest(
+    {
+      provider: "openai-main",
+      model: "gpt-5.1",
+      messages: [
+        { role: "assistant", content: [{ type: "tool_call", id: "call-1", name: "read_file", input: {} }] },
+        {
+          role: "user",
+          content: [{
+            type: "tool_result",
+            toolCallId: "call-1",
+            content: [
+              { type: "text", text: "preview" },
+              { type: "image", source: "base64", mimeType: "image/png", data: "abc", bytes: 3 },
+              { type: "pdf", source: "base64", mimeType: "application/pdf", data: "def", bytes: 3, pages: 1 },
+            ],
+          }],
+        },
+      ],
+    },
+    config,
+  ) as Record<string, any>;
+
+  const toolMessage = body.messages.find((m: any) => m.role === "tool");
+  assert.ok(toolMessage, "should emit a tool role message");
+  assert.ok(Array.isArray(toolMessage.content), "multimodal tool_result should stay structured");
+  assert.equal(toolMessage.content[0].type, "text");
+  assert.equal(toolMessage.content[1].type, "image_url");
+  assert.equal(toolMessage.content[2].type, "file");
+});
+
 test("tool_result_reference is excluded from normalContent (not duplicated)", () => {
   const config = parseModelConfig(validModelConfig(), {
     env: { ANTHROPIC_API_KEY: "anthropic-key" },

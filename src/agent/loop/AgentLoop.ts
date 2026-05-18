@@ -11,6 +11,7 @@ import {
   type CanonicalUsage,
 } from "../../model/index.js";
 import type {
+  PilotDeckReadFileStateMap,
   PilotDeckSubagentForkApi,
   PilotDeckToolResult,
   PilotDeckToolRuntimeContext,
@@ -51,6 +52,8 @@ export type AgentLoopRunResult = {
 };
 
 export class AgentLoop {
+  private readonly readFileState: PilotDeckReadFileStateMap = new Map();
+
   constructor(
     private readonly config: AgentRuntimeConfig,
     private readonly dependencies: AgentRuntimeDependencies,
@@ -675,6 +678,7 @@ export class AgentLoop {
       subagent: this.buildSubagentForkApi(input, messages),
       modelMultimodal: this.config.modelMultimodal,
       maxOutputTokens: this.config.maxOutputTokens,
+      readFileState: this.readFileState,
     };
   }
 

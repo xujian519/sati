@@ -85,11 +85,14 @@ export class ToolResultBudget {
   private async maybeReplace(
     block: CanonicalToolResultBlock,
   ): Promise<CanonicalToolResultBlock | CanonicalToolResultReferenceBlock> {
+    if (block.content.some((entry) => entry.type !== "text")) {
+      return block;
+    }
     if (this.state.replacements.has(block.toolCallId)) {
       return this.toReferenceBlock(this.state.replacements.get(block.toolCallId)!);
     }
 
-    const flat = block.content.map((entry) => entry.text).join("\n");
+    const flat = block.content.map((entry) => entry.type === "text" ? entry.text : `[${entry.type}]`).join("\n");
     const byteLength = Buffer.byteLength(flat, "utf8");
     if (byteLength <= this.maxResultSizeChars) {
       return block;
@@ -172,5 +175,5 @@ function headTailPreview(value: string, budgetBytes: number): string {
 
 /** Helper for tests / inspection. */
 export function flattenToolResultText(block: CanonicalToolResultBlock): string {
-  return block.content.map((entry: CanonicalTextBlock) => entry.text).join("\n");
+  return block.content.map((entry) => entry.type === "text" ? entry.text : `[${entry.type}]`).join("\n");
 }

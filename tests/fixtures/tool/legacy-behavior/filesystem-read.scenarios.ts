@@ -46,15 +46,14 @@ export const filesystemReadScenarios: PilotDeckToolBehaviorScenario[] = [
     expectedErrorCode: "path_not_allowed",
   },
   {
-    name: "read binary-like file is a controlled difference",
+    name: "read binary-like file returns controlled error",
     legacyToolName: "Read",
     pilotdeckToolName: "read_file",
     input: { file_path: "bin.dat" },
     permissionMode: "default",
-    parity: "intentional_difference",
+    parity: "must_match",
     source: readSource,
     expectedResultType: "error",
     expectedErrorCode: "invalid_tool_input",
-    intentionalDifferenceReason: "PilotDeck Phase 1 supports UTF-8 text reads only.",
   },
 ];

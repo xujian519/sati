@@ -9,6 +9,7 @@ import type {
   CanonicalUsage,
 } from "../protocol/canonical.js";
 import type { CanonicalModelError } from "../protocol/errors.js";
+import { extractTextToolCalls } from "./parseTextToolCalls.js";
 
 export type ModelMessageAssemblerState = {
   content: CanonicalContentBlock[];
@@ -83,6 +84,29 @@ export function applyModelEventToAssembler(
 
 export function assembleAssistantMessage(state: ModelMessageAssemblerState): AssembledAssistantMessage {
   flushTextBuffers(state);
+
+  if (state.toolCalls.length === 0) {
+    const textIdx = state.content.findIndex(
+      (b): b is CanonicalTextBlock => b.type === "text" && hasTextToolCallMarker(b.text),
+    );
+    if (textIdx >= 0) {
+      const textBlock = state.content[textIdx] as CanonicalTextBlock;
+      const { toolCalls, remainingText } = extractTextToolCalls(textBlock.text);
+      if (toolCalls.length > 0) {
+        console.log(`[text-tool-call-fallback] Extracted ${toolCalls.length} tool call(s) from assistant text`);
+        if (remainingText.length > 0) {
+          (state.content[textIdx] as CanonicalTextBlock).text = remainingText;
+        } else {
+          state.content.splice(textIdx, 1);
+        }
+        for (const tc of toolCalls) {
+          state.content.push({ type: "tool_call", ...tc });
+          state.toolCalls.push(tc);
+        }
+      }
+    }
+  }
+
   return {
     message: {
       role: "assistant",
@@ -93,6 +117,18 @@ export function assembleAssistantMessage(state: ModelMessageAssemblerState): Ass
     toolCalls: [...state.toolCalls],
     error: state.error,
   };
+}
+
+const TEXT_TOOL_CALL_MARKERS = [
+  "<function=",
+  "<tool_call>",
+  "\uff5cDSML\uff5c",
+  "[TOOL_CALLS]",
+  "<|python_tag|>",
+];
+
+function hasTextToolCallMarker(text: string): boolean {
+  return TEXT_TOOL_CALL_MARKERS.some((m) => text.includes(m));
 }
 
 function flushTextBuffers(state: ModelMessageAssemblerState): void {

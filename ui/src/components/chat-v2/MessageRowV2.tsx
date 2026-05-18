@@ -1,7 +1,7 @@
 import { memo, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { AlertTriangle, ChevronRight } from 'lucide-react';
+import { AlertTriangle, ChevronRight, FileText } from 'lucide-react';
 import type {
   ChatMessage,
   PilotDeckPermissionSuggestion,
@@ -15,6 +15,22 @@ import { ProcessTrace } from './ProcessTrace';
 import { processSummaryToTrace, type ProcessAttachment } from './processGrouping';
 
 type DiffLine = { type: string; content: string; lineNum: number };
+
+const getAttachmentTypeLabel = (name?: string, mimeType?: string): string => {
+  const ext = String(name || '').split('.').pop()?.toUpperCase();
+  if (ext && ext !== String(name || '').toUpperCase()) return ext;
+  if (mimeType?.includes('/')) return mimeType.split('/').pop()?.toUpperCase() || 'FILE';
+  return 'FILE';
+};
+
+const getAttachmentAccent = (name?: string, mimeType?: string): string => {
+  const label = getAttachmentTypeLabel(name, mimeType).toLowerCase();
+  if (label === 'pdf') return 'bg-red-500 text-white';
+  if (label === 'doc' || label === 'docx') return 'bg-blue-500 text-white';
+  if (label === 'xls' || label === 'xlsx' || label === 'csv') return 'bg-emerald-500 text-white';
+  if (label === 'ppt' || label === 'pptx') return 'bg-orange-500 text-white';
+  return 'bg-neutral-500 text-white';
+};
 
 type MessageRowV2Props = {
   message: ChatMessage;
@@ -69,6 +85,20 @@ function MessageRowV2({
   const formattedContent = useMemo(
     () => formatUsageLimitText(String(message.content ?? '')),
     [message.content],
+  );
+  const messageImages = useMemo(
+    () =>
+      Array.isArray(message.images)
+        ? message.images.filter((image) => image && typeof image.data === 'string')
+        : [],
+    [message.images],
+  );
+  const messageAttachments = useMemo(
+    () =>
+      Array.isArray(message.attachments)
+        ? message.attachments.filter((attachment) => attachment && typeof attachment.name === 'string')
+        : [],
+    [message.attachments],
   );
 
   if (message.isAgentActivitySummary) {
@@ -145,32 +175,62 @@ function MessageRowV2({
 
   // User: right-aligned grey bubble.
   if (isUser) {
-    const userImages = Array.isArray(message.images)
-      ? message.images.filter((img) => img && typeof img.data === 'string')
-      : [];
     return withProcessRows(
       <div className="flex w-full justify-end">
         <div className="min-w-0 max-w-[78%] overflow-hidden rounded-[22px] bg-neutral-100 px-4 py-2.5 text-[14px] leading-relaxed text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100">
-          {userImages.length > 0 && (
-            <div className="mb-2 grid grid-cols-2 gap-2">
-              {userImages.map((img, idx) => (
-                <img
-                  key={img.name || idx}
-                  src={img.data}
-                  alt={img.name || ''}
-                  className="h-auto max-w-full cursor-pointer rounded-lg transition-opacity hover:opacity-90"
-                  onClick={() => window.open(img.data, '_blank')}
-                />
-              ))}
-            </div>
-          )}
           {message.isStreaming && !formattedContent ? (
             <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
-          ) : formattedContent ? (
-            <div className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-              {formattedContent}
-            </div>
-          ) : null}
+          ) : (
+            <>
+              {messageAttachments.length > 0 ? (
+                <div className={formattedContent ? 'mb-2 grid grid-cols-1 gap-2' : 'grid grid-cols-1 gap-2'}>
+                  {messageAttachments.map((attachment, index) => (
+                    <div
+                      key={`${attachment.name || 'attachment'}-${index}`}
+                      className="flex min-w-0 items-center gap-3 rounded-2xl bg-white/85 p-2.5 pr-3 dark:bg-neutral-900/45"
+                    >
+                      <div
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${getAttachmentAccent(
+                          attachment.name,
+                          attachment.mimeType,
+                        )}`}
+                      >
+                        <FileText className="h-5 w-5" strokeWidth={2} />
+                      </div>
+                      <div className="min-w-0 text-left">
+                        <div className="truncate text-[13px] font-semibold text-neutral-900 dark:text-neutral-100">
+                          {attachment.name}
+                        </div>
+                        <div className="mt-0.5 text-[11px] font-medium uppercase text-neutral-500 dark:text-neutral-400">
+                          {getAttachmentTypeLabel(attachment.name, attachment.mimeType)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {messageImages.length > 0 ? (
+                <div className={formattedContent ? 'mb-2 grid grid-cols-1 gap-2' : 'grid grid-cols-1 gap-2'}>
+                  {messageImages.map((image, index) => (
+                    <div
+                      key={`${image.name || 'image'}-${index}`}
+                      className="block w-72 max-w-full overflow-hidden rounded-xl border border-neutral-200 bg-white/70 dark:border-neutral-700 dark:bg-neutral-900/40"
+                    >
+                      <img
+                        src={image.data}
+                        alt={image.name || 'Uploaded image'}
+                        className="block h-auto max-h-64 w-full object-contain"
+                        loading="lazy"
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {formattedContent ? (
+                <Markdown className="min-w-0 break-words [overflow-wrap:anywhere]">{formattedContent}</Markdown>
+              ) : null}
+            </>
+          )}
         </div>
       </div>,
     );

@@ -39,6 +39,7 @@ export type {
   CanonicalToolCall,
   CanonicalToolCallBlock,
   CanonicalToolChoice,
+  CanonicalToolResultContentBlock,
   CanonicalToolResultBlock,
   CanonicalToolResultReferenceBlock,
   CanonicalToolResult,

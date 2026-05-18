@@ -62,10 +62,15 @@ export type CanonicalToolCallBlock = CanonicalToolCall & {
 export type CanonicalToolResultBlock = {
   type: "tool_result";
   toolCallId: string;
-  content: CanonicalTextBlock[];
+  content: CanonicalToolResultContentBlock[];
   isError?: boolean;
   raw?: unknown;
 };
+
+export type CanonicalToolResultContentBlock =
+  | CanonicalTextBlock
+  | CanonicalImageBlock
+  | CanonicalPdfBlock;
 
 /**
  * Reference to a persisted tool result whose body lives on disk. Replaces

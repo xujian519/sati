@@ -23,12 +23,9 @@ import { ToolRegistry } from "./ToolRegistry.js";
 export type CreateBuiltinRegistryOptions = {
   bash?: CreateBashToolOptions;
   /**
-   * web_search defaults to the serp.hk provider (matches the openclaw
-   * `serp-search` extension). Pass `false` to skip registering web_search;
-   * pass an options object to customize apiKey / region / endpoint.
-   *
-   * When omitted the tool is registered with default options and reads the
-   * API key from the `SERP_API_KEY` env var at execution time.
+   * `web_search` defaults to the GLM/Z.AI provider. Pass `false` to skip
+   * registering web_search; pass an options object to select GLM or Tavily
+   * and customize apiKey / endpoint.
    */
   webSearch?: CreateWebSearchToolOptions | false;
   /**

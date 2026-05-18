@@ -129,6 +129,20 @@ test("tool_result recurses inner text blocks", () => {
   assert.equal(t, countTokens("a".repeat(40)) + countTokens("a".repeat(20)));
 });
 
+test("tool_result counts nested multimodal blocks with multimedia constant", () => {
+  const m = new TokenBudgetManager({ multimediaTokens: 321 });
+  const t = m.estimateForBlock({
+    type: "tool_result",
+    toolCallId: "x",
+    content: [
+      { type: "text", text: "hello" },
+      { type: "image", source: "base64", data: "abc", mimeType: "image/png", bytes: 3 },
+      { type: "pdf", source: "base64", data: "def", mimeType: "application/pdf", bytes: 3 },
+    ],
+  });
+  assert.equal(t, countTokens("hello") + 321 + 321);
+});
+
 test("tool_result_reference uses preview only", () => {
   const m = new TokenBudgetManager();
   const preview = "a".repeat(40);
