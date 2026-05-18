@@ -935,4 +935,19 @@
       background-color: transparent;
     }
   }
+
+  /*
+   * Tighter vertical rhythm for tool-call rows in the chat message list.
+   * .ui-v2-legacy-row is the marker class set by MessageRowV2 on every
+   * delegated (tool/permission/subagent) message.  The parent container
+   * uses Tailwind space-y-8 (32px) which is fine for prose-to-prose gaps
+   * but far too generous between consecutive tool rows.
+   */
+  .space-y-8 > .ui-v2-legacy-row + .ui-v2-legacy-row {
+    margin-top: 0.125rem; /* 2px — tool rows sit nearly flush */
+  }
+  .space-y-8 > :not(.ui-v2-legacy-row) + .ui-v2-legacy-row,
+  .space-y-8 > .ui-v2-legacy-row + :not(.ui-v2-legacy-row) {
+    margin-top: 1rem; /* 16px — transitional gap between prose ↔ tool */
+  }
 }

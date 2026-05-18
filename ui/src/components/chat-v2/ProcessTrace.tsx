@@ -105,7 +105,7 @@ export function ProcessLiveStatus({
     <div
       role="status"
       aria-live="polite"
-      className={`process-live-status ${compact ? 'pb-1 pt-0.5' : 'pb-4'} text-[14px] leading-6 text-neutral-400 dark:text-neutral-500 ${className}`}
+      className={`process-live-status ${compact ? 'pb-0.5' : 'pb-4'} text-[14px] leading-6 text-neutral-400 dark:text-neutral-500 ${className}`}
     >
       {hasDetails ? (
         <button
