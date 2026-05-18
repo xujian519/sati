@@ -23,6 +23,29 @@ test("plan mode allows read-only tools and denies side-effecting tools", async (
   assert.equal((await runtime.decide(writeTool, {}, context, "call-2")).type, "deny");
 });
 
+test("plan mode allows writing only the configured plan file", async () => {
+  const runtime = new PermissionRuntime();
+  const writeTool = createPilotDeckTestTool({ name: "write_file", readOnly: false, kind: "filesystem" });
+  const { context } = createPilotDeckToolRuntimeFixture({ permissionMode: "plan" });
+  context.permissionContext.planFilePath = "/tmp/demo/.pilotdeck/plans/plan.md";
+
+  const allowed = await runtime.decide(
+    writeTool,
+    { filePath: "/tmp/demo/.pilotdeck/plans/plan.md" },
+    context,
+    "call-allowed",
+  );
+  const denied = await runtime.decide(
+    writeTool,
+    { filePath: "/tmp/demo/README.md" },
+    context,
+    "call-denied",
+  );
+
+  assert.equal(allowed.type, "allow");
+  assert.equal(denied.type, "deny");
+});
+
 test("acceptEdits allows filesystem edit tools", async () => {
   const runtime = new PermissionRuntime();
   const writeTool = createPilotDeckTestTool({ name: "write_file", readOnly: false, kind: "filesystem" });

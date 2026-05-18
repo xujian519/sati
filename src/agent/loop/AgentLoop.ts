@@ -667,6 +667,12 @@ export class AgentLoop {
     input: AgentLoopInput,
     messages: CanonicalMessage[],
   ): PilotDeckToolRuntimeContext {
+    const planFilePath = this.dependencies.planFileManager?.ensurePlanFile(input.sessionId);
+    const permissionContext = {
+      ...this.config.permissionContext,
+      cwd: this.config.cwd,
+      ...(planFilePath ? { planFilePath } : {}),
+    };
     return {
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -679,7 +685,7 @@ export class AgentLoop {
       abortSignal: input.abortSignal,
       subagentTimeoutMs: this.config.subagentTimeoutMs,
       permissionMode: this.config.permissionMode,
-      permissionContext: this.config.permissionContext,
+      permissionContext,
       auditRecorder: this.dependencies.auditRecorder,
       now: this.now,
       env: this.config.env,
@@ -707,6 +713,14 @@ export class AgentLoop {
       readFileState: this.readFileState,
       writeSnapshots: this.writeSnapshots,
       fileUpdateNotifier: this.dependencies.fileUpdateNotifier,
+      ...(planFilePath
+        ? {
+            planFile: {
+              path: planFilePath,
+              read: () => this.dependencies.planFileManager?.readPlan(input.sessionId),
+            },
+          }
+        : {}),
     };
   }
 

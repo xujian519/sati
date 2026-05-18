@@ -187,7 +187,17 @@ test("structured_output and plan skeleton tools produce stable results", async (
     tools: [createStructuredOutputTool(), createEnterPlanModeTool(), createExitPlanModeTool()],
     cwd: workspace.cwd,
     canPrompt: true,
+    elicitation: {
+      askUser: async () => ({
+        type: "answered",
+        answers: { "What should happen next?": "execute_plan" },
+      }),
+    },
   });
+  context.planFile = {
+    path: `${workspace.cwd}/.pilotdeck/plans/test-session.md`,
+    read: () => "Do the work.",
+  };
 
   const structured = await toolRuntime.execute(
     { id: "call-1", name: "structured_output", input: { value: { ok: true } } },
@@ -195,11 +205,55 @@ test("structured_output and plan skeleton tools produce stable results", async (
   );
   const enter = await toolRuntime.execute({ id: "call-2", name: "enter_plan_mode", input: {} }, context);
   const exit = await toolRuntime.execute(
-    { id: "call-3", name: "exit_plan_mode", input: { plan: "Do the work." } },
+    { id: "call-3", name: "exit_plan_mode", input: {} },
     context,
   );
 
   assert.equal(structured.type, "success");
   assert.equal(enter.type, "success");
   assert.equal(exit.type, "success");
+  assert.equal(
+    exit.type === "success" ? (exit.data as { requestedMode?: string } | undefined)?.requestedMode : undefined,
+    "default",
+  );
+});
+
+test("exit_plan_mode keeps plan mode when user wants more planning", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({});
+  t.after(() => workspace.cleanup());
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
+    tools: [createExitPlanModeTool()],
+    cwd: workspace.cwd,
+    canPrompt: true,
+    elicitation: {
+      askUser: async () => ({
+        type: "answered",
+        answers: { "What should happen next?": "continue_planning" },
+        annotations: {
+          "What should happen next?": {
+            notes: "Add a test plan section.",
+          },
+        },
+      }),
+    },
+  });
+  context.planFile = {
+    path: `${workspace.cwd}/.pilotdeck/plans/test-session.md`,
+    read: () => "Draft plan",
+  };
+
+  const exit = await toolRuntime.execute(
+    { id: "call-1", name: "exit_plan_mode", input: {} },
+    context,
+  );
+
+  assert.equal(exit.type, "success");
+  const data = exit.type === "success" ? (exit.data as {
+    requestedMode?: string;
+    action?: string;
+    feedback?: string;
+  } | undefined) : undefined;
+  assert.equal(data?.requestedMode, undefined);
+  assert.equal(data?.action, "continue_planning");
+  assert.equal(data?.feedback, "Add a test plan section.");
 });

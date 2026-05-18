@@ -10,9 +10,10 @@ import {
   ensureToolResultPairing,
   projectToolResults,
 } from "../../src/agent/index.js";
-import { createEnterPlanModeTool, createStructuredOutputTool } from "../../src/tool/index.js";
+import { createEnterPlanModeTool, createPlanFileManager, createStructuredOutputTool } from "../../src/tool/index.js";
 import { createPilotDeckTestTool } from "../helpers/tool.js";
 import { collectAsyncGenerator, createAgentLoopFixture } from "../helpers/agent.js";
+import { createPilotDeckTempWorkspace } from "../helpers/filesystem.js";
 
 test("loop helpers collect tool calls and project paired tool results", () => {
   const message = {
@@ -525,4 +526,48 @@ test("AgentLoop consumes requested plan mode changes from plan tools", async () 
   assert.equal(fixture.config.permissionMode, "plan");
   assert.equal(fixture.config.permissionContext.mode, "plan");
   assert.ok(values.some((event) => event.type === "mode_change_requested"));
+});
+
+test("AgentLoop injects plan file context when planFileManager is configured", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({});
+  t.after(() => workspace.cleanup());
+  let seenPlanFilePath: string | undefined;
+  let seenPermissionPlanFilePath: string | undefined;
+  const inspectTool = createPilotDeckTestTool({
+    name: "inspect_plan_context",
+    execute: async (_input, context) => {
+      seenPlanFilePath = context.planFile?.path;
+      seenPermissionPlanFilePath = context.permissionContext.planFilePath;
+      return { content: [{ type: "text", text: "ok" }] };
+    },
+  });
+  const fixture = createAgentLoopFixture({
+    tools: [inspectTool],
+    config: { cwd: workspace.cwd },
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "tool_call_end", toolCall: { id: "call-1", name: "inspect_plan_context", input: {} } },
+        { type: "message_end", finishReason: "tool_call" },
+      ],
+    ],
+  });
+  const planFileManager = createPlanFileManager({ projectRoot: workspace.cwd });
+  const loop = new AgentLoop(fixture.config, {
+    ...fixture.dependencies,
+    planFileManager,
+  });
+
+  await collectAsyncGenerator(
+    loop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "user", content: [{ type: "text", text: "inspect" }] }],
+      maxTurns: 1,
+    }),
+  );
+
+  const expected = planFileManager.getPlanFilePath("session-1");
+  assert.equal(seenPlanFilePath, expected);
+  assert.equal(seenPermissionPlanFilePath, expected);
 });

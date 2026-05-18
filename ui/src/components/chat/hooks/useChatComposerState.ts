@@ -1069,12 +1069,20 @@ export function useChatComposerState({
         if (pending?.isElicitation) {
           // Elicitation flow (e.g. `ask_user_question`): submit selections
           // through GatewayElicitationBus, not GatewayPermissionBus.
-          const submittedAnswers =
-            (decision?.updatedInput as { answers?: Record<string, string | string[]> } | undefined)?.answers ?? {};
+          const submitted =
+            (decision?.updatedInput as {
+              answers?: Record<string, string | string[]>;
+              annotations?: Record<string, { preview?: string; notes?: string }>;
+            } | undefined) ?? {};
+          const submittedAnswers = submitted.answers ?? {};
           const hasAnswers = Object.keys(submittedAnswers).length > 0;
           const answer =
             decision?.allow && hasAnswers
-              ? { type: 'answered' as const, answers: submittedAnswers }
+              ? {
+                  type: 'answered' as const,
+                  answers: submittedAnswers,
+                  ...(submitted.annotations ? { annotations: submitted.annotations } : {}),
+                }
               : {
                   type: 'cancelled' as const,
                   reason: decision?.message ?? (decision?.allow ? 'skipped' : 'declined'),

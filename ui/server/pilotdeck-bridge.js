@@ -369,6 +369,25 @@ export function gatewayEventToFrames(event, sessionId, provider) {
             // route the user's answer back through `elicitation-response`
             // (GatewayElicitationBus) instead of `claude-permission-response`
             // (GatewayPermissionBus).
+            if (event.toolName === 'exit_plan_mode') {
+                return [
+                    createNormalizedMessage({
+                        ...base,
+                        kind: 'permission_request',
+                        requestId: event.requestId,
+                        toolCallId: event.toolCallId,
+                        toolName: 'ExitPlanModeV2',
+                        input: {
+                            plan: event.metadata?.plan,
+                            planFilePath: event.metadata?.planFilePath,
+                            questions: event.questions,
+                            metadata: event.metadata,
+                        },
+                        context: { provider, originalToolName: event.toolName },
+                        isElicitation: true,
+                    }),
+                ];
+            }
             return [
                 createNormalizedMessage({
                     ...base,

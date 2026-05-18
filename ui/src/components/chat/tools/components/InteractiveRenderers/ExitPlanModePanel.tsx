@@ -3,6 +3,8 @@ import { CheckCircle2, ClipboardList, MessageSquareText } from 'lucide-react';
 import type { PermissionPanelProps } from '../../configs/permissionPanelRegistry';
 import { MarkdownContent } from '../ContentRenderers/MarkdownContent';
 
+const EXIT_PLAN_MODE_QUESTION = 'What should happen next?';
+
 function normalizePlanText(text: string): string {
   return text.replace(/\\n/g, '\n').trim();
 }
@@ -70,16 +72,34 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
 
   const handleExecute = () => {
     onPlanExecutionApproved?.();
-    onDecision(request.requestId, { allow: true });
+    onDecision(request.requestId, {
+      allow: true,
+      updatedInput: {
+        answers: {
+          [EXIT_PLAN_MODE_QUESTION]: 'execute_plan',
+        },
+      },
+    });
   };
 
   const handleContinuePlanning = () => {
     const trimmed = feedback.trim();
     onDecision(request.requestId, {
-      allow: false,
-      message: trimmed
-        ? `User wants to continue planning before implementation. Feedback:\n${trimmed}`
-        : 'User wants to continue planning before implementation. Keep refining the plan instead of executing it.',
+      allow: true,
+      updatedInput: {
+        answers: {
+          [EXIT_PLAN_MODE_QUESTION]: 'continue_planning',
+        },
+        ...(trimmed
+          ? {
+              annotations: {
+                [EXIT_PLAN_MODE_QUESTION]: {
+                  notes: trimmed,
+                },
+              },
+            }
+          : {}),
+      },
     });
   };
 
@@ -101,7 +121,7 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
         </div>
       </div>
 
-      <div className="max-h-72 overflow-y-auto px-4 py-3">
+      <div className="min-h-[200px] max-h-[50vh] overflow-y-auto px-4 py-3">
         <MarkdownContent
           content={plan}
           className="prose prose-sm max-w-none text-neutral-800 dark:prose-invert dark:text-neutral-200"
@@ -115,7 +135,7 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
         <textarea
           value={feedback}
           onChange={(event) => setFeedback(event.target.value)}
-          rows={2}
+          rows={3}
           placeholder="例如：再补充测试方案，或者先不要改数据库。"
           className="block w-full resize-none rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-blue-700 dark:focus:ring-blue-950"
         />
@@ -126,7 +146,7 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
             className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
           >
             <MessageSquareText className="h-3.5 w-3.5" strokeWidth={2} />
-            继续完善
+            发送继续交流消息
           </button>
           <button
             type="button"
@@ -134,7 +154,7 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
             className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
           >
             <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} />
-            执行计划
+            按计划执行
           </button>
         </div>
       </div>
