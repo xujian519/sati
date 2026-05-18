@@ -245,6 +245,7 @@ export default function MessagesPaneV2({
   const heightVersionRafRef = useRef<number | null>(null);
   const [heightVersion, setHeightVersion] = useState(0);
   const [scrollViewport, setScrollViewport] = useState({ scrollTop: 0, height: 0 });
+  const [expandedProcessRows, setExpandedProcessRows] = useState<Map<string, boolean>>(() => new Map());
 
   const getMessageKey = useCallback((message: ChatMessage, index: number) => {
     const existingKey = messageKeyMapRef.current.get(message);
@@ -260,6 +261,27 @@ export default function MessagesPaneV2({
     const candidateKey = `message-generated-${index}-${generatedMessageKeyCounterRef.current}`;
     messageKeyMapRef.current.set(message, candidateKey);
     return candidateKey;
+  }, []);
+
+  const isProcessExpanded = useCallback((processKey: string, defaultExpanded = false) => (
+    expandedProcessRows.get(processKey) ?? defaultExpanded
+  ), [expandedProcessRows]);
+
+  const handleProcessExpandedChange = useCallback((processKey: string, expanded: boolean) => {
+    setExpandedProcessRows((currentRows) => {
+      const currentExpanded = currentRows.get(processKey) ?? false;
+      if (currentExpanded === expanded) {
+        return currentRows;
+      }
+
+      const nextRows = new Map(currentRows);
+      if (expanded) {
+        nextRows.set(processKey, true);
+      } else {
+        nextRows.delete(processKey);
+      }
+      return nextRows;
+    });
   }, []);
 
   const suggestedPrompts: string[] = [
@@ -457,6 +479,8 @@ export default function MessagesPaneV2({
         autoExpandTools={autoExpandTools}
         showRawParameters={showRawParameters}
         showThinking={showThinking}
+        isProcessExpanded={isProcessExpanded}
+        onProcessExpandedChange={handleProcessExpandedChange}
       />
     ))
   ), [
@@ -468,6 +492,8 @@ export default function MessagesPaneV2({
     onShowSettings,
     provider,
     selectedProject,
+    isProcessExpanded,
+    handleProcessExpandedChange,
     showRawParameters,
     showThinking,
   ]);
@@ -481,13 +507,22 @@ export default function MessagesPaneV2({
         key={group.id || `${group.afterOriginalIndex}-${index}`}
         step={step}
         compact
+        expanded={isProcessExpanded(group.id)}
+        onExpandedChange={(expanded) => handleProcessExpandedChange(group.id, expanded)}
       >
         {group.detailMessages.length > 0
           ? renderLiveProcessDetailMessages(group.detailMessages, group.id)
           : null}
       </ProcessLiveStatus>
     );
-  }, [liveProcessGroups, liveStatusStep, renderLiveProcessDetailMessages, t]);
+  }, [
+    handleProcessExpandedChange,
+    isProcessExpanded,
+    liveProcessGroups,
+    liveStatusStep,
+    renderLiveProcessDetailMessages,
+    t,
+  ]);
 
   const renderMessageItem = useCallback((item: KeyedRenderableMessageItem) => {
     const previousMessage = item.renderIndex > 0 ? keyedMessageItems[item.renderIndex - 1].message : null;
@@ -527,6 +562,8 @@ export default function MessagesPaneV2({
             autoExpandTools={autoExpandTools}
             showRawParameters={showRawParameters}
             showThinking={showThinking}
+            isProcessExpanded={isProcessExpanded}
+            onProcessExpandedChange={handleProcessExpandedChange}
           />
           {rendersLiveHeaderAfterItem ? (
             <LiveProcessHeader activities={liveActivities} t={t} />
@@ -549,6 +586,8 @@ export default function MessagesPaneV2({
     autoExpandTools,
     createDiff,
     handleMeasuredItemHeight,
+    handleProcessExpandedChange,
+    isProcessExpanded,
     isAssistantWorking,
     keyedMessageItems,
     liveActivities,

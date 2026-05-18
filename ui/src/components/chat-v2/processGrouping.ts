@@ -93,6 +93,22 @@ function getActivitySummaryKey(message: ChatMessage, index: number): string {
   return message.runId || message.id || `${message.startedAt || ''}-${message.endedAt || ''}-${index}`;
 }
 
+function getStableMessagePart(message: ChatMessage | undefined, fallback: string): string {
+  const value = message?.id || message?.toolId || message?.activityId || message?.runId;
+  return String(value || fallback);
+}
+
+function getStableProcessSegmentId(
+  messages: ChatMessage[],
+  turn: MessageTurn,
+  firstMessage: ChatMessage,
+  startIndex: number,
+): string {
+  const turnPart = getStableMessagePart(messages[turn.start], `turn-${turn.start}`);
+  const firstPart = getStableMessagePart(firstMessage, `message-${startIndex}`);
+  return `process-segment-${turnPart}-${firstPart}`;
+}
+
 function createMessageTurns(messages: ChatMessage[]): MessageTurn[] {
   if (messages.length === 0) {
     return [];
@@ -560,17 +576,12 @@ function collectCompletedProcessSegments(messages: ChatMessage[], turn: MessageT
 
     const endIndex = beforeOriginalIndex - 1;
     const first = segmentMessages[0];
-    const last = segmentMessages[segmentMessages.length - 1];
     const nextHostIndex = previousHostIndex == null
       ? findNextHostIndex(messages, turn, beforeOriginalIndex)
       : null;
 
     segments.push({
-      id: [
-        'completed-process',
-        first.id || first.toolId || segmentStartIndex,
-        last.id || last.toolId || endIndex,
-      ].join('-'),
+      id: getStableProcessSegmentId(messages, turn, first, segmentStartIndex),
       startIndex: segmentStartIndex,
       endIndex,
       messages: segmentMessages,
@@ -782,13 +793,8 @@ export function getLiveProcessGroups(
     }
 
     const first = groupMessages[0];
-    const last = groupMessages[groupMessages.length - 1];
     groups.push({
-      id: [
-        'live-process',
-        first.id || first.toolId || groupStartIndex,
-        last.id || last.toolId || beforeOriginalIndex || messages.length,
-      ].join('-'),
+      id: getStableProcessSegmentId(messages, liveTurn, first, groupStartIndex),
       afterOriginalIndex: previousVisibleIndex,
       beforeOriginalIndex,
       startIndex: groupStartIndex,

@@ -1,20 +1,19 @@
 import { memo, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { AlertTriangle, ChevronRight, FileText } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Copy, FileText } from 'lucide-react';
+import { copyTextToClipboard } from '../../utils/clipboard';
+import type { Project, SessionProvider } from '../../types/app';
 import type {
   ChatMessage,
   PilotDeckPermissionSuggestion,
   PermissionGrantResult,
 } from '../chat/types/types';
-import type { Project, SessionProvider } from '../../types/app';
 import MessageComponent from '../chat/view/subcomponents/MessageComponent';
 import { Markdown } from '../chat/view/subcomponents/Markdown';
 import { formatUsageLimitText } from '../chat/utils/chatFormatting';
 import { ProcessTrace } from './ProcessTrace';
 import { processSummaryToTrace, type ProcessAttachment } from './processGrouping';
-import { copyTextToClipboard } from '../../utils/clipboard';
-import { Copy, Check } from 'lucide-react';
 
 type DiffLine = { type: string; content: string; lineNum: number };
 
@@ -50,6 +49,8 @@ type MessageRowV2Props = {
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
+  isProcessExpanded?: (processKey: string, defaultExpanded?: boolean) => boolean;
+  onProcessExpandedChange?: (processKey: string, expanded: boolean) => void;
 };
 
 // Fall back to the heavy legacy renderer for anything that isn't a vanilla
@@ -80,6 +81,8 @@ function MessageRowV2({
   autoExpandTools,
   showRawParameters,
   showThinking,
+  isProcessExpanded,
+  onProcessExpandedChange,
 }: MessageRowV2Props) {
   const { t } = useTranslation('chat');
   const delegate = useMemo(() => shouldDelegate(message), [message]);
@@ -107,6 +110,9 @@ function MessageRowV2({
     return (
       <ProcessSummaryRow
         message={message}
+        processKey={message.id || message.runId || message.activityId}
+        isProcessExpanded={isProcessExpanded}
+        onProcessExpandedChange={onProcessExpandedChange}
         t={t}
       />
     );
@@ -116,6 +122,7 @@ function MessageRowV2({
     <ProcessSummaryRow
       key={attachment.id}
       message={attachment.processSummary}
+      processKey={attachment.id}
       detailMessages={attachment.processDetailMessages}
       renderDetailMessage={(detailMessage, index) => (
         <MessageRowV2
@@ -131,8 +138,12 @@ function MessageRowV2({
           autoExpandTools={autoExpandTools}
           showRawParameters={showRawParameters}
           showThinking={showThinking}
+          isProcessExpanded={isProcessExpanded}
+          onProcessExpandedChange={onProcessExpandedChange}
         />
       )}
+      isProcessExpanded={isProcessExpanded}
+      onProcessExpandedChange={onProcessExpandedChange}
       t={t}
     />
   );
@@ -276,7 +287,7 @@ function MessageRowV2({
         <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
       ) : (
         <>
-          <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-hr:my-4 prose-table:my-0 prose-pre:my-3">{formattedContent}</Markdown>
+          <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-pre:my-3 prose-ol:my-2 prose-ul:my-2 prose-table:my-0 prose-hr:my-4">{formattedContent}</Markdown>
           {formattedContent.trim() ? (
             <div className="mt-1.5 flex justify-end">
               <CopyMarkdownButton content={formattedContent} />
@@ -317,17 +328,27 @@ export default memo(MessageRowV2);
 
 function ProcessSummaryRow({
   message,
+  processKey,
   detailMessages = [],
   renderDetailMessage,
+  isProcessExpanded,
+  onProcessExpandedChange,
   t,
 }: {
   message: ChatMessage;
+  processKey?: string;
   detailMessages?: ChatMessage[];
   renderDetailMessage?: (message: ChatMessage, index: number) => ReactNode;
+  isProcessExpanded?: (processKey: string, defaultExpanded?: boolean) => boolean;
+  onProcessExpandedChange?: (processKey: string, expanded: boolean) => void;
   t: TFunction<'chat'>;
 }) {
   const trace = useMemo(() => processSummaryToTrace(message, t), [message, t]);
   const detailSteps = detailMessages.length > 0 && renderDetailMessage ? [] : trace.steps;
+  const resolvedProcessKey = processKey || message.id || message.runId || message.activityId;
+  const expanded = resolvedProcessKey
+    ? isProcessExpanded?.(resolvedProcessKey, false)
+    : undefined;
 
   return (
     <ProcessTrace
@@ -337,6 +358,10 @@ function ProcessSummaryRow({
       status={trace.status}
       metrics={trace.metrics}
       steps={detailSteps}
+      expanded={expanded}
+      onExpandedChange={resolvedProcessKey
+        ? (nextExpanded) => onProcessExpandedChange?.(resolvedProcessKey, nextExpanded)
+        : undefined}
     >
       {detailMessages.length > 0 && renderDetailMessage
         ? detailMessages.map((detailMessage, index) =>

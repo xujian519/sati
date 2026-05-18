@@ -31,7 +31,7 @@ function makeMessage(index: number): ChatMessage {
   };
 }
 
-function renderPane({
+function createPaneElement({
   messages,
   activityMessages = [],
   isAssistantWorking = false,
@@ -44,7 +44,7 @@ function renderPane({
 }) {
   const scrollContainerRef = React.createRef<HTMLDivElement>();
 
-  return render(
+  return (
     <MessagesPaneV2
       scrollContainerRef={scrollContainerRef}
       onWheel={() => {}}
@@ -68,8 +68,17 @@ function renderPane({
       setInput={() => {}}
       isAssistantWorking={isAssistantWorking}
       runMode={runMode}
-    />,
+    />
   );
+}
+
+function renderPane(options: {
+  messages: ChatMessage[];
+  activityMessages?: ChatMessage[];
+  isAssistantWorking?: boolean;
+  runMode?: ChatRunMode;
+}) {
+  return render(createPaneElement(options));
 }
 
 describe('MessagesPaneV2 render behavior', () => {
@@ -225,6 +234,126 @@ describe('MessagesPaneV2 render behavior', () => {
 
     expect(expandButton?.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('HiddenTool.tsx')).toBeTruthy();
+  });
+
+  it('preserves an expanded live process row while streamed tool groups grow', () => {
+    const now = new Date().toISOString();
+    const baseMessages: ChatMessage[] = [
+      {
+        id: 'u-1',
+        type: 'user',
+        content: '检查文件',
+        timestamp: now,
+      },
+      {
+        id: 'a-1',
+        type: 'assistant',
+        content: 'I will inspect the current file.',
+        timestamp: now,
+      },
+      {
+        id: 'tool-read-1',
+        type: 'assistant',
+        content: '',
+        timestamp: now,
+        isToolUse: true,
+        toolName: 'Read',
+        toolId: 'tool-read-1',
+        toolInput: '{"file_path":"src/ReadHidden.tsx"}',
+      },
+    ];
+    const { rerender } = renderPane({ messages: baseMessages, isAssistantWorking: true });
+
+    const liveStatus = screen.getByText('Reading ReadHidden.tsx').closest('[role="status"]');
+    expect(liveStatus).not.toBeNull();
+    if (!liveStatus) throw new Error('Expected live status container');
+    const expandButton = liveStatus.querySelector('button');
+    expect(expandButton).not.toBeNull();
+    fireEvent.click(expandButton as HTMLButtonElement);
+    expect(expandButton?.getAttribute('aria-expanded')).toBe('true');
+
+    const nextMessages: ChatMessage[] = [
+      ...baseMessages,
+      {
+        id: 'tool-grep-1',
+        type: 'assistant',
+        content: '',
+        timestamp: now,
+        isToolUse: true,
+        toolName: 'Grep',
+        toolId: 'tool-grep-1',
+        toolInput: '{"pattern":"Footer"}',
+      },
+    ];
+    rerender(createPaneElement({ messages: nextMessages, isAssistantWorking: true }));
+
+    const updatedStatus = screen.getByText('Searching Footer').closest('[role="status"]');
+    expect(updatedStatus).not.toBeNull();
+    const updatedButton = updatedStatus?.querySelector('button');
+    expect(updatedButton?.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('ReadHidden.tsx')).toBeTruthy();
+  });
+
+  it('preserves process row expansion when a live turn completes', () => {
+    const now = new Date().toISOString();
+    const baseMessages: ChatMessage[] = [
+      {
+        id: 'u-1',
+        type: 'user',
+        content: '检查文件',
+        timestamp: now,
+      },
+      {
+        id: 'a-1',
+        type: 'assistant',
+        content: 'I will inspect first.',
+        timestamp: now,
+      },
+      {
+        id: 'tool-read-1',
+        type: 'assistant',
+        content: '',
+        timestamp: now,
+        isToolUse: true,
+        toolName: 'Read',
+        toolId: 'tool-read-1',
+        toolInput: '{"file_path":"src/ReadHidden.tsx"}',
+      },
+    ];
+    const { rerender } = renderPane({ messages: baseMessages, isAssistantWorking: true });
+
+    const liveStatus = screen.getByText('Reading ReadHidden.tsx').closest('[role="status"]');
+    expect(liveStatus).not.toBeNull();
+    if (!liveStatus) throw new Error('Expected live status container');
+    const expandButton = liveStatus.querySelector('button');
+    expect(expandButton).not.toBeNull();
+    fireEvent.click(expandButton as HTMLButtonElement);
+    expect(expandButton?.getAttribute('aria-expanded')).toBe('true');
+
+    const completedMessages: ChatMessage[] = [
+      {
+        ...baseMessages[0],
+      },
+      {
+        ...baseMessages[1],
+      },
+      {
+        ...baseMessages[2],
+        toolResult: { content: 'ok', isError: false },
+      },
+      {
+        id: 'a-2',
+        type: 'assistant',
+        content: 'Done.',
+        timestamp: now,
+      },
+    ];
+    rerender(createPaneElement({ messages: completedMessages }));
+
+    const summary = screen.getByText('Explored 1 file');
+    const completedButton = summary.closest('button');
+    expect(completedButton?.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('ReadHidden.tsx')).toBeTruthy();
   });
 
   it('keeps separated live process rows at the positions where they happened', () => {

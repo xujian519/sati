@@ -37,6 +37,8 @@ type ProcessTraceProps = {
   steps?: ProcessTraceStep[];
   children?: ReactNode;
   defaultExpanded?: boolean;
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
   live?: boolean;
   className?: string;
 };
@@ -63,14 +65,30 @@ export function ProcessLiveStatus({
   step,
   children,
   compact = false,
+  defaultExpanded = false,
+  expanded: controlledExpanded,
+  onExpandedChange,
   className = '',
 }: {
   step: ProcessTraceStep;
   children?: ReactNode;
   compact?: boolean;
+  defaultExpanded?: boolean;
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
   className?: string;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [uncontrolledExpanded, setUncontrolledExpanded] = useState(defaultExpanded);
+  const expanded = controlledExpanded ?? uncontrolledExpanded;
+  const setExpanded = (nextExpanded: boolean | ((value: boolean) => boolean)) => {
+    const resolvedExpanded = typeof nextExpanded === 'function'
+      ? nextExpanded(expanded)
+      : nextExpanded;
+    if (controlledExpanded === undefined) {
+      setUncontrolledExpanded(resolvedExpanded);
+    }
+    onExpandedChange?.(resolvedExpanded);
+  };
   const Icon = getStepIcon(step);
   const title = step.title || step.toolName || 'Working';
   const isRunning = step.state !== 'failed' && step.state !== 'completed' && step.state !== 'cancelled';
@@ -210,10 +228,22 @@ export function ProcessTrace({
   steps = [],
   children,
   defaultExpanded = false,
+  expanded: controlledExpanded,
+  onExpandedChange,
   live = false,
   className = '',
 }: ProcessTraceProps) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [uncontrolledExpanded, setUncontrolledExpanded] = useState(defaultExpanded);
+  const expanded = controlledExpanded ?? uncontrolledExpanded;
+  const setExpanded = (nextExpanded: boolean | ((value: boolean) => boolean)) => {
+    const resolvedExpanded = typeof nextExpanded === 'function'
+      ? nextExpanded(expanded)
+      : nextExpanded;
+    if (controlledExpanded === undefined) {
+      setUncontrolledExpanded(resolvedExpanded);
+    }
+    onExpandedChange?.(resolvedExpanded);
+  };
   const hasDetails = Boolean(statusLabel) || metrics.length > 0 || steps.length > 0 || Boolean(children);
   const visibleCollapsedDetail = !expanded && collapsedDetail;
   const statusStep: ProcessTraceStep | null =
@@ -237,6 +267,7 @@ export function ProcessTrace({
     >
       <button
         type="button"
+        aria-expanded={hasDetails ? expanded : undefined}
         onClick={() => {
           if (hasDetails) {
             setExpanded((value) => !value);
