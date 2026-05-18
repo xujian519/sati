@@ -2,17 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
+  existsSync,
   lstatSync,
   mkdtempSync,
   readFileSync,
-  realpathSync,
   rmSync,
 } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-test("bootstrap writes config and symlinks repo skills on first init", async () => {
+test("bootstrap writes config and copies repo skills on first init", async () => {
   const fixture = await createBootstrapFixture({
     skills: [
       { category: "xiaohongshu", slug: "xhs-orchestrator" },
@@ -26,9 +26,7 @@ test("bootstrap writes config and symlinks repo skills on first init", async () 
     assert.match(readFileSync(configPath, "utf8"), /PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE/);
 
     for (const skill of fixture.skills) {
-      const targetPath = path.join(fixture.pilotHome, "skills", skill.slug);
-      assert.equal(lstatSync(targetPath).isSymbolicLink(), true, `${skill.slug} should be a symlink`);
-      assert.equal(realpathSync(targetPath), realpathSync(skill.sourcePath));
+      assertCopiedSkill(path.join(fixture.pilotHome, "skills", skill.slug), skill);
     }
   } finally {
     cleanupFixture(fixture.root);
@@ -45,16 +43,14 @@ test("bootstrap syncs repo skills even when config already exists", async () => 
 
     runBootstrap(fixture.repoRoot, fixture.pilotHome);
 
-    const targetPath = path.join(fixture.pilotHome, "skills", "xhs-orchestrator");
-    assert.equal(lstatSync(targetPath).isSymbolicLink(), true);
-    assert.equal(realpathSync(targetPath), realpathSync(fixture.skills[0].sourcePath));
+    assertCopiedSkill(path.join(fixture.pilotHome, "skills", "xhs-orchestrator"), fixture.skills[0]);
     assert.equal(readFileSync(path.join(fixture.pilotHome, "pilotdeck.yaml"), "utf8"), "schemaVersion: 1\n");
   } finally {
     cleanupFixture(fixture.root);
   }
 });
 
-test("bootstrap keeps existing targets and links the remaining repo skills", async () => {
+test("bootstrap keeps existing targets and copies the remaining repo skills", async () => {
   const fixture = await createBootstrapFixture({
     skills: [
       { category: "xiaohongshu", slug: "xhs-orchestrator" },
@@ -69,9 +65,8 @@ test("bootstrap keeps existing targets and links the remaining repo skills", asy
     runBootstrap(fixture.repoRoot, fixture.pilotHome);
 
     assert.equal(lstatSync(existingPath).isDirectory(), true, "existing target should remain untouched");
-    const linkedPath = path.join(fixture.pilotHome, "skills", "xhs-publish");
-    assert.equal(lstatSync(linkedPath).isSymbolicLink(), true);
-    assert.equal(realpathSync(linkedPath), realpathSync(fixture.skills[1].sourcePath));
+    assert.equal(readFileSync(path.join(existingPath, "SKILL.md"), "utf8"), "existing");
+    assertCopiedSkill(path.join(fixture.pilotHome, "skills", "xhs-publish"), fixture.skills[1]);
   } finally {
     cleanupFixture(fixture.root);
   }
@@ -101,8 +96,8 @@ test("bootstrap skips duplicate leaf slugs across repo skills", async () => {
     runBootstrap(fixture.repoRoot, fixture.pilotHome);
 
     const targetPath = path.join(fixture.pilotHome, "skills", "shared-skill");
-    assert.equal(lstatSync(targetPath).isSymbolicLink(), true);
-    assert.equal(realpathSync(targetPath), realpathSync(fixture.skills[0].sourcePath));
+    assertCopiedSkill(targetPath, fixture.skills[0]);
+    assert.equal(readFileSync(path.join(targetPath, "notes.md"), "utf8"), "note from one/shared-skill\n");
   } finally {
     cleanupFixture(fixture.root);
   }
@@ -137,7 +132,7 @@ async function createBootstrapFixture(input: {
     const sourcePath = path.join(repoRoot, "skills", entry.category, entry.slug);
     await mkdir(sourcePath, { recursive: true });
     await writeFile(path.join(sourcePath, "SKILL.md"), `# ${entry.slug}\n`, "utf8");
-    await writeFile(path.join(sourcePath, "notes.md"), "supporting content\n", "utf8");
+    await writeFile(path.join(sourcePath, "notes.md"), `note from ${entry.category}/${entry.slug}\n`, "utf8");
     skills.push({ ...entry, sourcePath });
   }
 
@@ -158,6 +153,20 @@ function runBootstrap(repoRoot: string, pilotHome: string): string {
 
 function cleanupFixture(root: string): void {
   rmSync(root, { recursive: true, force: true });
+}
+
+function assertCopiedSkill(targetPath: string, skill: SkillFixture): void {
+  assert.equal(existsSync(targetPath), true, `${skill.slug} should exist`);
+  assert.equal(lstatSync(targetPath).isDirectory(), true, `${skill.slug} should be copied as a directory`);
+  assert.equal(lstatSync(targetPath).isSymbolicLink(), false, `${skill.slug} should not be a symlink`);
+  assert.equal(
+    readFileSync(path.join(targetPath, "SKILL.md"), "utf8"),
+    readFileSync(path.join(skill.sourcePath, "SKILL.md"), "utf8"),
+  );
+  assert.equal(
+    readFileSync(path.join(targetPath, "notes.md"), "utf8"),
+    readFileSync(path.join(skill.sourcePath, "notes.md"), "utf8"),
+  );
 }
 
 function pathExists(targetPath: string): boolean {

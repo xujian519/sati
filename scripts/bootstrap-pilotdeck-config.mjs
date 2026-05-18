@@ -6,7 +6,7 @@
  * into ~/.pilotdeck/skills without overwriting existing targets.
  *
  * Behaviour:
- *   1. Every run: discover repo skills and symlink missing slugs into
+ *   1. Every run: discover repo skills and copy missing slugs into
  *      $PILOT_HOME/skills, skipping existing targets.
  *   2. If $PILOT_HOME/pilotdeck.yaml already exists -> skip config bootstrap.
  *   3. Otherwise write a minimal V2 yaml that:
@@ -19,7 +19,7 @@
  * Override the target via $PILOT_HOME (same env var the engine reads).
  * Skip the whole step via $PILOTDECK_SKIP_BOOTSTRAP=1.
  */
-import { existsSync, mkdirSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -109,11 +109,7 @@ function syncRepoSkillsToPilotHome(pilotHome) {
     }
 
     try {
-      symlinkSync(
-        sourceDir,
-        targetPath,
-        process.platform === 'win32' ? 'junction' : 'dir',
-      );
+      cpSync(sourceDir, targetPath, { recursive: true });
       created += 1;
     } catch (error) {
       console.warn(
@@ -138,7 +134,7 @@ function main() {
   if (skillSync.created > 0 || skillSync.skippedExisting > 0 || skillSync.skippedDuplicateSlug > 0) {
     console.log(
       `[pilotdeck] Synced repo skills into ${join(pilotHome, 'skills')}: ` +
-        `${skillSync.created} linked, ${skillSync.skippedExisting} skipped existing, ` +
+        `${skillSync.created} copied, ${skillSync.skippedExisting} skipped existing, ` +
         `${skillSync.skippedDuplicateSlug} skipped duplicate slug.`,
     );
   }
