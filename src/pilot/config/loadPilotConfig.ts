@@ -325,6 +325,7 @@ function parseAgent(
 
   const model = parseAgentModelSelection(rawAgent.model, "agent.model", modelConfig, diagnostics);
   const subagents = parseAgentSubagents(rawAgent.subagents, diagnostics);
+  const maxContextTokens = readOptionalPositiveInteger(rawAgent.maxContextTokens, "agent.maxContextTokens");
   if (rawAgent.fallbackModel !== undefined) {
     diagnostics.push({
       code: "CONFIG_AGENT_FALLBACK_MODEL_DEPRECATED",
@@ -339,6 +340,7 @@ function parseAgent(
 
   return {
     model,
+    ...(maxContextTokens !== undefined ? { maxContextTokens } : {}),
     ...(subagents ? { subagents } : {}),
   };
 }
@@ -564,7 +566,7 @@ function readOptionalPositiveInteger(value: unknown, path: string): number | und
     return undefined;
   }
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    throw new PilotConfigError("CONFIG_AGENT_SUBAGENTS_INVALID", `${path} must be a positive integer.`);
+    throw new PilotConfigError("CONFIG_INVALID_VALUE", `${path} must be a positive integer.`);
   }
   return Math.floor(value);
 }

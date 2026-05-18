@@ -59,6 +59,7 @@ type PilotDeckConfig = {
   schemaVersion?: number;
   agent?: {
     model?: string;
+    maxContextTokens?: number;
     params?: Record<string, unknown>;
     subagents?: { default?: string; params?: Record<string, unknown> };
   };
@@ -1283,6 +1284,59 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
                 </div>
                 <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
                   Cap on tokens the model may generate per turn (sent as <code className="font-mono">max_tokens</code> to upstream). Leave empty to fall back to the catalog or protocol default (typically 8192 for openai). Increase this for long-form creative tasks or thinking models that burn output budget while reasoning — too small a value cuts the response off mid-stream and the UI then appears stuck.
+                </p>
+              </div>
+
+              <div className="mt-3 border-t border-border/60 pt-3">
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Gauge className="h-3.5 w-3.5" />
+                    Max context tokens
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={config.agent?.maxContextTokens ?? ''}
+                    placeholder={String(caps.catalogModel?.maxContextTokens ?? 200000)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === '') {
+                        const next = { ...(config.agent ?? {}) };
+                        delete next.maxContextTokens;
+                        onChange(patch(config, ['agent'], next));
+                        return;
+                      }
+                      const n = Number(v);
+                      if (Number.isFinite(n) && n > 0) {
+                        onChange(patch(config, ['agent', 'maxContextTokens'], Math.floor(n)));
+                      }
+                    }}
+                    className="w-28 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <span className={cn(
+                    'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                    config.agent?.maxContextTokens !== undefined
+                      ? 'border border-foreground/30 bg-foreground/10 text-foreground'
+                      : 'border border-border bg-muted text-muted-foreground',
+                  )}>
+                    {config.agent?.maxContextTokens !== undefined ? 'Override' : 'Default'}
+                  </span>
+                  {config.agent?.maxContextTokens !== undefined && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = { ...(config.agent ?? {}) };
+                        delete next.maxContextTokens;
+                        onChange(patch(config, ['agent'], next));
+                      }}
+                      className="text-[10px] text-muted-foreground underline hover:text-foreground"
+                    >
+                      reset to default
+                    </button>
+                  )}
+                </div>
+                <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                  Override the model&apos;s context window size for auto-compaction. The agent automatically compresses conversation history when usage reaches 80% (warning) or 95% (blocking) of this budget. Leave empty to use the catalog default. Set a smaller value to trigger compaction earlier — useful for proxy providers or to reduce per-turn cost.
                 </p>
               </div>
             </div>

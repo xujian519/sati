@@ -820,7 +820,7 @@ class ProjectRuntimeRegistry {
         microCompaction,
         snipEngine,
         overflowRecovery,
-        maxContextTokens: caps.maxContextTokens,
+        maxContextTokens: runtime.snapshot.config.agent.maxContextTokens ?? caps.maxContextTokens,
         now,
       });
       const fileHistory = new FileHistoryStore({

@@ -60,6 +60,13 @@ export type PilotAgentModelSelection = {
 
 export type PilotAgentConfig = {
   model: PilotAgentModelSelection;
+  /**
+   * Override the model catalog's context window size (tokens). When set,
+   * auto-compaction thresholds (80% warn / 95% block) are computed against
+   * this value instead of the catalog default. Useful for proxy providers
+   * or when you want compaction to kick in earlier.
+   */
+  maxContextTokens?: number;
   subagents?: {
     timeoutMs?: number;
   };

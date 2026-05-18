@@ -13,6 +13,8 @@ export type CatalogModel = {
   displayName: string;
   /** Whether the model accepts image input. Drives the 🖼 indicator in the UI. */
   supportsImage?: boolean;
+  /** Context window size (tokens). Drives the placeholder in the max-context-tokens setting. */
+  maxContextTokens?: number;
 };
 
 export type CatalogProvider = {
@@ -30,11 +32,11 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
     protocol: 'anthropic',
     defaultUrl: 'https://api.anthropic.com',
     models: [
-      { id: 'claude-sonnet-4.6', displayName: 'Claude Sonnet 4.6', supportsImage: true },
-      { id: 'claude-opus-4-20250514', displayName: 'Claude Opus 4', supportsImage: true },
-      { id: 'claude-sonnet-4-20250514', displayName: 'Claude Sonnet 4', supportsImage: true },
-      { id: 'claude-sonnet-4-5-20250929', displayName: 'Claude Sonnet 4.5', supportsImage: true },
-      { id: 'claude-haiku-3-5-20241022', displayName: 'Claude 3.5 Haiku', supportsImage: true },
+      { id: 'claude-sonnet-4.6', displayName: 'Claude Sonnet 4.6', supportsImage: true, maxContextTokens: 200000 },
+      { id: 'claude-opus-4-20250514', displayName: 'Claude Opus 4', supportsImage: true, maxContextTokens: 200000 },
+      { id: 'claude-sonnet-4-20250514', displayName: 'Claude Sonnet 4', supportsImage: true, maxContextTokens: 200000 },
+      { id: 'claude-sonnet-4-5-20250929', displayName: 'Claude Sonnet 4.5', supportsImage: true, maxContextTokens: 200000 },
+      { id: 'claude-haiku-3-5-20241022', displayName: 'Claude 3.5 Haiku', supportsImage: true, maxContextTokens: 200000 },
     ],
   },
   {
@@ -43,12 +45,12 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
     protocol: 'openai',
     defaultUrl: 'https://api.openai.com/v1',
     models: [
-      { id: 'gpt-4.1', displayName: 'GPT-4.1', supportsImage: true },
-      { id: 'gpt-4.1-mini', displayName: 'GPT-4.1 Mini', supportsImage: true },
-      { id: 'gpt-4o', displayName: 'GPT-4o', supportsImage: true },
-      { id: 'gpt-4o-mini', displayName: 'GPT-4o Mini', supportsImage: true },
-      { id: 'o3', displayName: 'o3', supportsImage: true },
-      { id: 'o3-mini', displayName: 'o3 Mini' },
+      { id: 'gpt-4.1', displayName: 'GPT-4.1', supportsImage: true, maxContextTokens: 1047576 },
+      { id: 'gpt-4.1-mini', displayName: 'GPT-4.1 Mini', supportsImage: true, maxContextTokens: 1047576 },
+      { id: 'gpt-4o', displayName: 'GPT-4o', supportsImage: true, maxContextTokens: 128000 },
+      { id: 'gpt-4o-mini', displayName: 'GPT-4o Mini', supportsImage: true, maxContextTokens: 128000 },
+      { id: 'o3', displayName: 'o3', supportsImage: true, maxContextTokens: 200000 },
+      { id: 'o3-mini', displayName: 'o3 Mini', maxContextTokens: 200000 },
     ],
   },
   {
@@ -57,10 +59,10 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
     protocol: 'openai',
     defaultUrl: 'https://api.deepseek.com/v1',
     models: [
-      { id: 'deepseek-v4-pro', displayName: 'DeepSeek V4 Pro' },
-      { id: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash' },
-      { id: 'deepseek-chat', displayName: 'DeepSeek Chat (V3)' },
-      { id: 'deepseek-reasoner', displayName: 'DeepSeek Reasoner' },
+      { id: 'deepseek-v4-pro', displayName: 'DeepSeek V4 Pro', maxContextTokens: 131072 },
+      { id: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', maxContextTokens: 1048576 },
+      { id: 'deepseek-chat', displayName: 'DeepSeek Chat (V3)', maxContextTokens: 65536 },
+      { id: 'deepseek-reasoner', displayName: 'DeepSeek Reasoner', maxContextTokens: 65536 },
     ],
   },
   {
@@ -69,9 +71,9 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
     protocol: 'openai',
     defaultUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     models: [
-      { id: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', supportsImage: true },
-      { id: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', supportsImage: true },
-      { id: 'gemini-2.0-flash', displayName: 'Gemini 2.0 Flash', supportsImage: true },
+      { id: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', supportsImage: true, maxContextTokens: 1048576 },
+      { id: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', supportsImage: true, maxContextTokens: 1048576 },
+      { id: 'gemini-2.0-flash', displayName: 'Gemini 2.0 Flash', supportsImage: true, maxContextTokens: 1048576 },
     ],
   },
   {
@@ -80,10 +82,10 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
     protocol: 'openai',
     defaultUrl: 'https://openrouter.ai/api/v1',
     models: [
-      { id: 'anthropic/claude-sonnet-4.6', displayName: 'Claude Sonnet 4.6', supportsImage: true },
-      { id: 'google/gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', supportsImage: true },
-      { id: 'deepseek/deepseek-v4-flash', displayName: 'DeepSeek V4 Flash' },
-      { id: 'moonshotai/kimi-k2.6', displayName: 'Kimi K2.6', supportsImage: true },
+      { id: 'anthropic/claude-sonnet-4.6', displayName: 'Claude Sonnet 4.6', supportsImage: true, maxContextTokens: 200000 },
+      { id: 'google/gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', supportsImage: true, maxContextTokens: 1048576 },
+      { id: 'deepseek/deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', maxContextTokens: 1048576 },
+      { id: 'moonshotai/kimi-k2.6', displayName: 'Kimi K2.6', supportsImage: true, maxContextTokens: 262144 },
     ],
   },
   {
@@ -92,8 +94,8 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
     protocol: 'openai',
     defaultUrl: 'https://api.minimaxi.com/v1',
     models: [
-      { id: 'MiniMax-M2.5', displayName: 'MiniMax M2.5' },
-      { id: 'MiniMax-M2.7-highspeed', displayName: 'MiniMax M2.7 Highspeed' },
+      { id: 'MiniMax-M2.5', displayName: 'MiniMax M2.5', maxContextTokens: 1000000 },
+      { id: 'MiniMax-M2.7-highspeed', displayName: 'MiniMax M2.7 Highspeed', maxContextTokens: 1000000 },
     ],
   },
   {
@@ -102,8 +104,8 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
     protocol: 'openai',
     defaultUrl: 'https://yeysai.com/v1',
     models: [
-      { id: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro Preview', supportsImage: true },
-      { id: 'kimi-k2.6', displayName: 'Kimi K2.6', supportsImage: true },
+      { id: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro Preview', supportsImage: true, maxContextTokens: 1048576 },
+      { id: 'kimi-k2.6', displayName: 'Kimi K2.6', supportsImage: true, maxContextTokens: 262144 },
     ],
   },
 ];
