@@ -146,19 +146,6 @@ on your behalf.
 - AVOID: Do NOT read large data files, raw logs, or binary artifacts. Delegate
   data-heavy inspection to a sub-agent.
 
-## \`agent\` tool call schema
-
-\`\`\`json
-{
-  "description": "<short 3-5 word label>",
-  "prompt": "<self-contained instruction with every path, format, constraint>"
-}
-\`\`\`
-
-Sub-agents inherit the parent agent's full tool permissions (read/write/bash/edit/
-web_search etc.). No need to specify \`subagent_type\` — all sub-agents are
-general-purpose executors with the same capabilities.
-
 ## Writing a self-contained \`prompt\` string
 
 The sub-agent has **no access** to your conversation history. It sees ONLY the \`prompt\`
