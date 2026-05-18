@@ -9,9 +9,10 @@
         "@playwright/mcp@0.0.75",
         "--browser",
         "chromium",
-        "--allow-unrestricted-file-access"
-      ],
-      "perSession": true
+        "--allow-unrestricted-file-access",
+        "--user-data-dir",
+        "~/.pilotdeck/browser-data"
+      ]
     }
   }
 }
