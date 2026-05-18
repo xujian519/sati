@@ -1,4 +1,8 @@
-import type { CanonicalContentBlock, CanonicalMessage } from "../../model/index.js";
+import {
+  flattenToolResultBlockText,
+  type CanonicalContentBlock,
+  type CanonicalMessage,
+} from "../../model/index.js";
 import { countTokens } from "./tokenizer.js";
 
 export type TokenWarningState = "ok" | "warning" | "blocking";
@@ -108,17 +112,8 @@ export class TokenBudgetManager {
         return this.estimateTextTokens(serialized);
       }
       case "tool_result":
-        // T10: recurse inner blocks. Rich media reuses the generic multimedia
-        // estimate so nested tool_result image/pdf payloads still count.
-        return block.content.reduce(
-          (sum, item) => {
-            if (item.type === "text") {
-              return sum + this.estimateTextTokens(item.text);
-            }
-            return sum + this.multimediaTokens;
-          },
-          0,
-        );
+        // T10: count text plus stable placeholders for visual tool output.
+        return this.estimateTextTokens(flattenToolResultBlockText(block));
       case "tool_result_reference":
         // T13: PilotDeck-only block; preview only.
         return this.estimateTextTokens(block.preview);

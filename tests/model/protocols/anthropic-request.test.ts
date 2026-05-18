@@ -155,6 +155,7 @@ test("tool_result preserves multimodal image and pdf blocks for Anthropic", () =
 
   const toolResult = body.messages[1].content[0];
   assert.equal(toolResult.type, "tool_result");
+  assert.equal(toolResult.tool_use_id, "call-1");
   assert.equal(toolResult.content[0].type, "text");
   assert.equal(toolResult.content[1].type, "image");
   assert.equal(toolResult.content[2].type, "document");

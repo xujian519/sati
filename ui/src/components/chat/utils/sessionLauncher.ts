@@ -1,5 +1,5 @@
 import type { Project, ProjectSession } from '../../../types/app';
-import type { PilotDeckSettings, PermissionMode } from '../types/types';
+import type { ChatAttachment, PilotDeckSettings, PermissionMode } from '../types/types';
 import { getPilotDeckSettings, safeLocalStorage } from './chatStorage';
 
 type StartSessionOptions = {
@@ -13,6 +13,7 @@ type StartSessionOptions = {
   sessionSummary?: string | null;
   toolsSettings?: PilotDeckSettings;
   images?: unknown[];
+  attachments?: ChatAttachment[];
   alwaysOnPlanId?: string;
   alwaysOnExecutionToken?: string;
   workspaceCwd?: string;
@@ -85,6 +86,7 @@ export function startSessionCommand({
   sessionSummary,
   toolsSettings = getPilotDeckSettings(),
   images,
+  attachments,
   alwaysOnPlanId,
   alwaysOnExecutionToken,
   workspaceCwd,
@@ -107,6 +109,7 @@ export function startSessionCommand({
       ...(alwaysOnPlanId ? { alwaysOnPlanId } : {}),
       ...(alwaysOnExecutionToken ? { alwaysOnExecutionToken } : {}),
       ...(Array.isArray(images) && images.length > 0 ? { images } : {}),
+      ...(Array.isArray(attachments) && attachments.length > 0 ? { attachments } : {}),
       ...(workspaceCwd ? { workspaceCwd } : {}),
     },
   });

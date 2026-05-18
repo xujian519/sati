@@ -1,4 +1,8 @@
-import type { CanonicalMessage, CanonicalToolResultBlock } from "../../model/index.js";
+import {
+  flattenToolResultBlockText,
+  type CanonicalMessage,
+  type CanonicalToolResultBlock,
+} from "../../model/index.js";
 
 export type MicroCompactionInput = {
   messages: CanonicalMessage[];
@@ -61,9 +65,7 @@ export class MicroCompactionEngine {
         if (block.type !== "tool_result") {
           return block;
         }
-        const flat = (block as CanonicalToolResultBlock).content
-          .map((entry) => entry.type === "text" ? entry.text : `[${entry.type}]`)
-          .join("\n");
+        const flat = flattenToolResultBlockText(block as CanonicalToolResultBlock);
         if (flat.length <= trimToBytes) {
           return block;
         }

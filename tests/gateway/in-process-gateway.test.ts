@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { InProcessGateway, SessionRouter, mapAgentEvent } from "../../src/gateway/index.js";
 import type { AgentEvent, AgentInput, AgentSession } from "../../src/agent/index.js";
 
@@ -429,6 +432,73 @@ test("InProcessGateway forwards image attachments as a multimodal blocks input",
     mimeType: "image/png",
     bytes: 42,
   });
+});
+
+test("InProcessGateway resolves file attachments into multimodal blocks input", async () => {
+  const tmp = await mkdtemp(join(tmpdir(), "pilotdeck-attachment-"));
+  try {
+    const attachmentPath = join(tmp, "note.txt");
+    await writeFile(attachmentPath, "hello from attachment", "utf8");
+
+    const capturedInputs: AgentInput[] = [];
+    const router = new SessionRouter({
+      createSession: async () =>
+        fakeSession(
+          "session-1",
+          [
+            { type: "turn_started", sessionId: "session-1", turnId: "run-1" },
+            {
+              type: "turn_completed",
+              sessionId: "session-1",
+              turnId: "run-1",
+              result: {
+                type: "success",
+                sessionId: "session-1",
+                turnId: "run-1",
+                stopReason: "completed",
+                usage: {},
+                permissionDenials: [],
+                turns: 1,
+                startedAt: "2026-01-01T00:00:00.000Z",
+                completedAt: "2026-01-01T00:00:01.000Z",
+              },
+            },
+          ],
+          capturedInputs,
+        ),
+    });
+    const gateway = new InProcessGateway(router, { uuid: () => "run-1" });
+
+    for await (const _event of gateway.submitTurn({
+      sessionKey: "web:project=one:default",
+      channelKey: "web",
+      message: "Read this",
+      attachments: [
+        {
+          type: "file",
+          name: "note.txt",
+          path: attachmentPath,
+          mimeType: "text/plain",
+          bytes: 21,
+        },
+      ],
+    })) {
+      void _event;
+    }
+
+    assert.equal(capturedInputs.length, 1, "submit should be called once");
+    const input = capturedInputs[0];
+    assert.equal(input.type, "blocks", "input should be promoted to blocks");
+    if (input.type !== "blocks") return;
+    assert.equal(input.content.length, 2, "expected [text, attachment text] blocks");
+    assert.deepEqual(input.content[0], { type: "text", text: "Read this" });
+    assert.equal(input.content[1]?.type, "text");
+    if (input.content[1]?.type !== "text") return;
+    assert.match(input.content[1].text, /<attachment path=".*note\.txt">/);
+    assert.match(input.content[1].text, /hello from attachment/);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
 });
 
 test("InProcessGateway awaits refreshConfigBeforeTurn before beginning a turn", async () => {

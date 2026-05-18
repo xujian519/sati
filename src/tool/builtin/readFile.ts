@@ -1,5 +1,8 @@
-import { readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import type { PilotDeckToolDefinition } from "../protocol/types.js";
 import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
 import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
@@ -31,6 +34,7 @@ const MAX_IMAGE_TOKENS = 12_000;
 const MAX_PDF_PAGES_PER_REQUEST = 20;
 const FILE_UNCHANGED_STUB =
   "File unchanged since the last read. Refer to the earlier read_file result instead of re-reading it.";
+const execFileAsync = promisify(execFile);
 
 export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
   return {
@@ -220,12 +224,59 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
           );
         }
         if (!supportsPdf) {
+          const supportsImage = context.modelMultimodal?.input?.includes("image");
+          if (supportsImage) {
+            const rendered = await renderPdfPagesAsImages(
+              resolved.absolutePath,
+              resolved.relativePath,
+              parsedPages,
+              pageCount,
+              context.modelMultimodal?.maxImageBytes ?? MAX_IMAGE_BYTES,
+              context.modelMultimodal?.imageDetail,
+            );
+            if (rendered.ok) {
+              const textBlocks = [{
+                type: "text" as const,
+                text: `[PDF pages rendered from ${resolved.relativePath}: ${rendered.firstPage}-${rendered.lastPage}${pageCount ? ` of ${pageCount}` : ""}.]`
+                  + (rendered.truncated ? `\n[PDF truncated to ${MAX_PDF_PAGES_PER_REQUEST} pages; use the pages parameter to read another range.]` : ""),
+              }];
+              readState.set(dedupKey, {
+                mtimeMs: Math.floor(fileStat.mtimeMs),
+                kind,
+                offset: input.offset,
+                limit: input.limit,
+                pages: input.pages,
+              });
+              return {
+                content: [...textBlocks, ...rendered.images],
+                data: {
+                  filePath: resolved.relativePath,
+                  kind,
+                  modelSupportsPdf: false,
+                  pdfPagesRendered: true,
+                  pageCount,
+                  requestedPages: input.pages,
+                  renderedPages: { firstPage: rendered.firstPage, lastPage: rendered.lastPage },
+                  truncated: rendered.truncated,
+                },
+                metadata: { truncated: rendered.truncated },
+              };
+            }
+            return {
+              content: [{
+                type: "text",
+                text: `[PDF file: ${resolved.relativePath}, ${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""}. Current model does not support PDF input, and PDF page rendering failed: ${rendered.error}]`,
+              }],
+              data: { filePath: resolved.relativePath, kind, modelSupportsPdf: false, modelSupportsImage: true, pageCount },
+            };
+          }
+
           return {
             content: [{
               type: "text",
-              text: `[PDF file: ${resolved.relativePath}, ${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""}. Current model does not support PDF input.]`,
+              text: `[PDF file: ${resolved.relativePath}, ${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""}. Current model does not support PDF input or image input.]`,
             }],
-            data: { filePath: resolved.relativePath, kind, modelSupportsPdf: false, pageCount },
+            data: { filePath: resolved.relativePath, kind, modelSupportsPdf: false, modelSupportsImage: false, pageCount },
           };
         }
         readState.set(dedupKey, {
@@ -317,7 +368,6 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
     },
   };
 }
-
 function classifyReadKind(filePath: string): "text" | "image" | "pdf" | "notebook" {
   if (isImagePath(filePath)) {
     return "image";
@@ -353,6 +403,82 @@ function renderReadableRange(content: string, startLine: number, totalLines: num
 
 function renderNumberedLines(lines: string[], startLine: number): string {
   return lines.map((line, index) => `${startLine + index}|${line}`).join("\n");
+}
+
+async function renderPdfPagesAsImages(
+  absolutePath: string,
+  relativePath: string,
+  pages: { firstPage: number; lastPage: number } | undefined,
+  pageCount: number | undefined,
+  maxImageBytes: number,
+  imageDetail: "auto" | "low" | "high" | undefined,
+): Promise<{
+  ok: true;
+  images: Array<{
+    type: "image";
+    mimeType: string;
+    data: string;
+    bytes: number;
+    detail?: "auto" | "low" | "high";
+  }>;
+  firstPage: number;
+  lastPage: number;
+  truncated: boolean;
+} | {
+  ok: false;
+  error: string;
+}> {
+  const firstPage = pages?.firstPage ?? 1;
+  const lastPage = pages?.lastPage ?? Math.min(pageCount ?? MAX_PDF_PAGES_PER_REQUEST, MAX_PDF_PAGES_PER_REQUEST);
+  const truncated = pages === undefined && pageCount !== undefined && pageCount > lastPage;
+  const outputDir = await mkdtemp(path.join(tmpdir(), "pilotdeck-pdf-pages-"));
+
+  try {
+    const prefix = path.join(outputDir, "page");
+    await execFileAsync(
+      "pdftoppm",
+      ["-jpeg", "-r", "100", "-f", String(firstPage), "-l", String(lastPage), absolutePath, prefix],
+      { encoding: "utf8", timeout: 120_000 },
+    );
+
+    const imageFiles = (await readdir(outputDir))
+      .filter((file) => file.endsWith(".jpg") || file.endsWith(".jpeg"))
+      .sort();
+    if (imageFiles.length === 0) {
+      return { ok: false, error: `pdftoppm produced no page images for ${relativePath}` };
+    }
+
+    const images = [];
+    for (const imageFile of imageFiles) {
+      const imageBuffer = await readFile(path.join(outputDir, imageFile));
+      const compressed = await compressImageForBudget(
+        imageBuffer,
+        "image/jpeg",
+        Math.min(MAX_IMAGE_BYTES, maxImageBytes),
+        MAX_IMAGE_TOKENS,
+      );
+      images.push({
+        type: "image" as const,
+        mimeType: compressed.mimeType,
+        data: compressed.buffer.toString("base64"),
+        bytes: compressed.buffer.byteLength,
+        ...(imageDetail ? { detail: imageDetail } : {}),
+      });
+    }
+
+    return {
+      ok: true,
+      images,
+      firstPage,
+      lastPage,
+      truncated,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: message || "pdftoppm is unavailable" };
+  } finally {
+    await rm(outputDir, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 function sliceRenderedText(

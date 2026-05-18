@@ -68,7 +68,8 @@ test("executes allowed tools and maps result to canonical tool_result", async ()
   assert.equal(block.type, "tool_result");
   assert.equal(block.toolCallId, "call-1");
   assert.equal(block.isError, undefined);
-  assert.equal(block.content[0]?.type === "text" ? block.content[0].text : "", "{\"ok\":true}");
+  assert.equal(block.content[0]?.type, "text");
+  assert.equal(block.content[0]?.text, "{\"ok\":true}");
 });
 
 test("normalizes execution throws", async () => {

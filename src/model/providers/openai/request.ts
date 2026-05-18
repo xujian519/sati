@@ -1,11 +1,13 @@
 import type {
   CanonicalContentBlock,
+  CanonicalImageBlock,
   CanonicalMessage,
   CanonicalModelRequest,
   CanonicalToolChoice,
   CanonicalToolSchema,
   ModelDefinition,
 } from "../../protocol/canonical.js";
+import { flattenToolResultBlockText } from "../../protocol/toolResultContent.js";
 
 export type OpenAIRequestBody = {
   model: string;
@@ -88,9 +90,10 @@ function toOpenAIMessages(message: CanonicalMessage): OpenAIMessage[] {
     return toOpenAIUserMessages(message);
   }
 
-  const toolResultMessages = message.content
-    .filter((block) => block.type === "tool_result")
-    .map(toOpenAIToolResultMessage);
+  const toolResultBlocks = message.content
+    .filter((block) => block.type === "tool_result");
+  const toolResultMessages = toolResultBlocks.map(toOpenAIToolResultMessage);
+  const toolResultVisualMessages = toolResultBlocks.flatMap(toOpenAIToolResultVisualMessages);
 
   const toolResultRefMessages = message.content
     .filter((block) => block.type === "tool_result_reference")
@@ -133,7 +136,7 @@ function toOpenAIMessages(message: CanonicalMessage): OpenAIMessage[] {
     messages.push(msg);
   }
 
-  return [...messages, ...toolResultMessages, ...toolResultRefMessages];
+  return [...messages, ...toolResultMessages, ...toolResultRefMessages, ...toolResultVisualMessages];
 }
 
 function toOpenAIUserMessages(message: CanonicalMessage): OpenAIMessage[] {
@@ -149,10 +152,36 @@ function toOpenAIUserMessages(message: CanonicalMessage): OpenAIMessage[] {
     normalContent = [];
   };
 
-  for (const block of message.content) {
+  for (let i = 0; i < message.content.length; i += 1) {
+    const block = message.content[i];
     if (block.type === "tool_result") {
       flushNormalContent();
-      messages.push(toOpenAIToolResultMessage(block));
+      const visualContent: CanonicalContentBlock[] = [];
+      while (i < message.content.length) {
+        const toolBlock = message.content[i];
+        if (toolBlock.type === "tool_result") {
+          messages.push(toOpenAIToolResultMessage(toolBlock));
+          visualContent.push(...toolResultVisualContent(toolBlock));
+          i += 1;
+          continue;
+        }
+        if (toolBlock.type === "tool_result_reference") {
+          messages.push(toOpenAIToolResultReferenceMessage(toolBlock));
+          i += 1;
+          continue;
+        }
+        break;
+      }
+      i -= 1;
+      if (visualContent.length > 0) {
+        messages.push({
+          role: "user",
+          content: toOpenAIContent([
+            { type: "text", text: "[Visual content from tool result]" },
+            ...visualContent,
+          ]),
+        });
+      }
       continue;
     }
     if (block.type === "tool_result_reference") {
@@ -171,11 +200,12 @@ function toOpenAIToolResultMessage(
   block: Extract<CanonicalContentBlock, { type: "tool_result" }>,
 ): OpenAIMessage {
   const hasOnlyText = block.content.every((content) => content.type === "text");
+  const hasPdf = block.content.some((content) => content.type === "pdf");
   return {
     role: "tool",
     tool_call_id: block.toolCallId,
-    content: hasOnlyText
-      ? block.content.map((content) => content.type === "text" ? content.text : "").join("\n")
+    content: hasOnlyText || !hasPdf
+      ? flattenToolResultBlockText(block)
       : block.content.map((content) => {
           switch (content.type) {
             case "text":
@@ -199,6 +229,28 @@ function toOpenAIToolResultMessage(
           }
         }),
   };
+}
+
+function toOpenAIToolResultVisualMessages(
+  block: Extract<CanonicalContentBlock, { type: "tool_result" }>,
+): OpenAIMessage[] {
+  const visualContent = toolResultVisualContent(block);
+  if (visualContent.length === 0) {
+    return [];
+  }
+  return [{
+    role: "user",
+    content: toOpenAIContent([
+      { type: "text", text: "[Visual content from tool result]" },
+      ...visualContent,
+    ]),
+  }];
+}
+
+function toolResultVisualContent(
+  block: Extract<CanonicalContentBlock, { type: "tool_result" }>,
+): CanonicalImageBlock[] {
+  return block.content.filter((content) => content.type === "image");
 }
 
 function toOpenAIToolResultReferenceMessage(

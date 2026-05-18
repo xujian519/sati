@@ -35,8 +35,9 @@ test("injects stable text for empty content", () => {
     completedAt: "2026-01-01T00:00:00.000Z",
   };
 
-  const first = toCanonicalToolResultBlock(result).content[0];
-  assert.equal(first?.type === "text" ? first.text : "", "Tool completed with no output.");
+  const block = toCanonicalToolResultBlock(result).content[0];
+  assert.equal(block?.type, "text");
+  assert.equal(block?.text, "Tool completed with no output.");
 });
 
 test("preserves image and pdf blocks in canonical tool results", () => {
