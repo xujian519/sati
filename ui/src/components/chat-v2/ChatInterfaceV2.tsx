@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTasksSettings } from '../../contexts/TasksSettingsContext';
-import type { ChatInterfaceProps, ChatRunMode, Provider } from '../chat/types/types';
+import type { ChatInterfaceProps, ChatRunMode, ClaudeWorkStatus, Provider } from '../chat/types/types';
 import {
   getSessionRequestParams,
   isBackgroundTaskSession,
@@ -19,21 +19,11 @@ type PendingViewSession = {
   startedAt: number;
 };
 
-// V2 chat wrapper. Reuses all business-logic hooks from legacy
-// `ChatInterface` so streaming, file-mentions, slash commands, permissions,
-// ccr_output, task notifications, subagent containers, etc. all keep working
-// unchanged. The difference is purely in the rendered UI:
-//   · MessagesPaneV2 — markdown row layout, GPT-like reading width
-//   · ComposerV2     — card textarea + paperclip/at + arrow-up send
-//   · NO provider picker empty state, NO pill bar, NO gradient bubbles
 function ChatInterfaceV2({
   selectedProject,
   selectedSession,
   ws,
   sendMessage,
-  // latestMessage is intentionally not consumed here — useChatRealtimeHandlers
-  // now subscribes to the WebSocket directly so React 18 state batching can't
-  // drop intermediate stream_delta events.
   onFileOpen,
   onInputFocusChange,
   onSessionActive,
@@ -68,7 +58,8 @@ function ChatInterfaceV2({
   const streamTimerRef = useRef<number | null>(null);
   const accumulatedStreamRef = useRef('');
   const pendingViewSessionRef = useRef<PendingViewSession | null>(null);
-  const [runMode, setRunMode] = useState<ChatRunMode>('agent');
+  const [isAbortPending, setIsAbortPending] = React.useState(false);
+  const [runMode, setRunMode] = React.useState<ChatRunMode>('agent');
 
   const resetStreamingState = useCallback(() => {
     if (streamTimerRef.current) {
@@ -82,19 +73,11 @@ function ChatInterfaceV2({
   const {
     model,
     permissionMode,
-    setPermissionMode: setPermissionModeRaw,
+    setPermissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,
   } = useChatProviderState({ selectedSession });
-
-  const selectPermissionMode = useCallback((mode: typeof permissionMode) => {
-    setPermissionModeRaw(mode);
-    localStorage.setItem('permissionMode-default', mode);
-    if (selectedSession?.id) {
-      localStorage.setItem(`permissionMode-${selectedSession.id}`, mode);
-    }
-  }, [setPermissionModeRaw, selectedSession?.id]);
 
   const effectivePermissionMode =
     runMode === 'plan' ? 'plan' : permissionMode;
@@ -114,7 +97,7 @@ function ChatInterfaceV2({
     totalMessages,
     canAbortSession,
     setCanAbortSession,
-    isAborting,
+    isAborting: _isAborting,
     setIsAborting,
     setIsUserScrolledUp,
     tokenBudget,
@@ -227,8 +210,6 @@ function ChatInterfaceV2({
   const handleWebSocketReconnect = useCallback(async () => {
     if (!selectedProject || !selectedSession) return;
 
-    // Reset streaming refs so stale accumulated text from the previous
-    // connection doesn't merge with freshly-fetched server messages.
     if (streamTimerRef.current) {
       clearTimeout(streamTimerRef.current);
       streamTimerRef.current = null;
@@ -243,8 +224,6 @@ function ChatInterfaceV2({
       ...sessionRequestParams,
     });
 
-    // Ask the backend whether the session is still processing so the
-    // loading indicator and Stop button reflect reality after reconnect.
     sendMessage({
       type: 'check-session-status',
       sessionId: selectedSession.id,
@@ -284,17 +263,33 @@ function ChatInterfaceV2({
   });
 
   useEffect(() => {
+    if (!isLoading || !canAbortSession) {
+      setIsAbortPending(false);
+    }
+  }, [canAbortSession, isLoading]);
+
+  useEffect(() => {
+    setIsAbortPending(false);
+  }, [currentSessionId, selectedSession?.id]);
+
+  const handleAbortWithPending = useCallback(() => {
+    if (!isLoading || !canAbortSession || isAbortPending) return;
+    handleAbortSession();
+    setIsAbortPending(true);
+  }, [canAbortSession, handleAbortSession, isAbortPending, isLoading]);
+
+  useEffect(() => {
     if (!isLoading || !canAbortSession) return;
     const handleGlobalEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.repeat || event.defaultPrevented) return;
       event.preventDefault();
-      handleAbortSession();
+      handleAbortWithPending();
     };
     document.addEventListener('keydown', handleGlobalEscape, { capture: true });
     return () => {
       document.removeEventListener('keydown', handleGlobalEscape, { capture: true });
     };
-  }, [canAbortSession, handleAbortSession, isLoading]);
+  }, [canAbortSession, handleAbortWithPending, isLoading]);
 
   useEffect(() => {
     return () => {
@@ -302,18 +297,19 @@ function ChatInterfaceV2({
     };
   }, [resetStreamingState]);
 
-  // ChatGPT-style empty state. Triggered explicitly via `forceWelcome` and
-  // implicitly when nothing has been started yet (no session, no
-  // messages, not in the middle of loading). The composer floats in the
-  // middle with a welcome headline above it; once the user sends, we drop
-  // into the normal layout (composer at bottom, messages on top) on the
-  // next render.
+  const workingStatus: ClaudeWorkStatus | null = claudeStatus
+    ? {
+        text: claudeStatus.text,
+        tokens: claudeStatus.tokens,
+        can_interrupt: claudeStatus.can_interrupt,
+        compactProgress: (claudeStatus as Record<string, unknown>).compactProgress as ClaudeWorkStatus['compactProgress'] ?? null,
+      }
+    : null;
+
   const isWelcomeMode =
     !!forceWelcome ||
     (!selectedSession && !currentSessionId && !isLoadingSessionMessages && chatMessages.length === 0);
 
-  // Fire onExitWelcome the moment the user submits from welcome mode. Wraps
-  // handleSubmit so we don't have to thread state through useChatComposerState.
   const wrappedSubmit = useCallback(
     (...args: unknown[]) => {
       if (isWelcomeMode && onExitWelcome) onExitWelcome();
@@ -322,8 +318,6 @@ function ChatInterfaceV2({
     [handleSubmit, isWelcomeMode, onExitWelcome],
   );
 
-  // The composer is identical in welcome / normal mode — just rendered in a
-  // different parent container. Pulled out so we don't drift between the two.
   const composer = isReadOnlyBackgroundSession ? (
     <div className="mx-auto w-full max-w-[720px] px-6 pb-6 pt-3">
       <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-[13px] text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
@@ -349,7 +343,7 @@ function ChatInterfaceV2({
       onTextareaInput={handleTextareaInput}
       onInputFocusChange={handleInputFocusChange}
       onSubmit={wrappedSubmit as typeof handleSubmit}
-      onAbortSession={handleAbortSession}
+      onAbortSession={handleAbortWithPending}
       openImagePicker={openImagePicker}
       attachedImages={attachedImages}
       onRemoveImage={(index) =>
@@ -377,18 +371,18 @@ function ChatInterfaceV2({
       isDragActive={isDragActive}
       isLoading={isLoading}
       canAbortSession={canAbortSession}
-      isAborting={isAborting}
+      isAbortPending={isAbortPending}
       tokenBudget={tokenBudget}
       pendingPermissionRequests={pendingPermissionRequests}
       handlePermissionDecision={handlePermissionDecision}
       handleGrantToolPermission={handleGrantToolPermission}
-      sendByCtrlEnter={sendByCtrlEnter}
       permissionMode={permissionMode}
-      onSelectPermissionMode={selectPermissionMode}
+      onPermissionModeChange={setPermissionMode}
       runMode={runMode}
       onRunModeChange={setRunMode}
       planModeAvailable={true}
       onPlanExecutionApproved={handlePlanExecutionApproved}
+      sendByCtrlEnter={sendByCtrlEnter}
       chromeless={isWelcomeMode}
     />
   );
@@ -439,13 +433,14 @@ function ChatInterfaceV2({
         createDiff={createDiff}
         onFileOpen={onFileOpen}
         onShowSettings={onShowSettings}
-        onGrantSessionToolPermission={handleGrantSessionToolPermission}
+        onGrantToolPermission={handleGrantSessionToolPermission}
         autoExpandTools={autoExpandTools}
         showRawParameters={showRawParameters}
         showThinking={showThinking}
         setInput={setInput}
         isAssistantWorking={isLoading}
-        workingStatusText={claudeStatus?.text ?? null}
+        workingStatus={workingStatus}
+        runMode={runMode}
       />
       {composer}
     </div>
