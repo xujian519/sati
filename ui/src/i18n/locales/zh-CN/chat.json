@@ -195,7 +195,21 @@
     "clickToChangeMode": "点击更改权限模式（或在输入框中按 Tab）",
     "showAllCommands": "显示所有命令",
     "clearInput": "清空输入",
-    "scrollToBottom": "滚动到底部"
+    "scrollToBottom": "滚动到底部",
+    "permissions": {
+      "default": "默认权限",
+      "defaultDescription": "需要风险操作时先询问",
+      "bypassPermissions": "完全访问权限",
+      "bypassPermissionsDescription": "跳过确认并允许完全访问",
+      "change": "选择权限模式"
+    },
+    "runModes": {
+      "agent": "智能体",
+      "plan": "计划",
+      "change": "选择运行模式",
+      "agentDescription": "直接处理并执行任务",
+      "planDescription": "先产出计划，确认后再执行"
+    }
   },
   "commandMenu": {
     "empty": "暂无可用命令",

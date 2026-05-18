@@ -142,17 +142,17 @@ const PERMISSION_MODE_OPTIONS: PermissionModeOption[] = [
     mode: 'default',
     Icon: Hand,
     labelKey: 'input.permissions.default',
-    defaultLabel: '默认权限',
+    defaultLabel: 'Default Permissions',
     descriptionKey: 'input.permissions.defaultDescription',
-    defaultDescription: '需要风险操作时先询问',
+    defaultDescription: 'Ask before risky operations',
   },
   {
     mode: 'bypassPermissions',
     Icon: ShieldAlert,
     labelKey: 'input.permissions.bypassPermissions',
-    defaultLabel: '完全访问权限',
+    defaultLabel: 'Full Access',
     descriptionKey: 'input.permissions.bypassPermissionsDescription',
-    defaultDescription: '跳过确认并允许完全访问',
+    defaultDescription: 'Skip confirmations and allow full access',
   },
 ];
 
@@ -168,13 +168,13 @@ const RUN_MODE_OPTIONS: RunModeOption[] = [
     mode: 'agent',
     Icon: Bot,
     labelKey: 'input.runModes.agent',
-    defaultLabel: '智能体',
+    defaultLabel: 'Agent',
   },
   {
     mode: 'plan',
     Icon: ListChecks,
     labelKey: 'input.runModes.plan',
-    defaultLabel: '计划',
+    defaultLabel: 'Plan',
   },
 ];
 
@@ -485,7 +485,7 @@ export default function ComposerV2({
                             : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800',
                         )}
                         title={t('input.runModes.change', {
-                          defaultValue: '选择运行模式',
+                          defaultValue: 'Select run mode',
                         }) as string}
                         aria-haspopup="menu"
                         aria-expanded={isRunModeMenuOpen}
@@ -515,10 +515,10 @@ export default function ComposerV2({
                             }) as string;
                             const description = isPlan
                               ? (t('input.runModes.planDescription', {
-                                  defaultValue: '先产出计划，确认后再执行',
+                                  defaultValue: 'Generate a plan first, then execute after confirmation',
                                 }) as string)
                               : (t('input.runModes.agentDescription', {
-                                  defaultValue: '直接处理并执行任务',
+                                  defaultValue: 'Directly process and execute the task',
                                 }) as string);
 
                             return (
@@ -622,7 +622,7 @@ export default function ComposerV2({
                           : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800',
                       )}
                       title={t('input.permissions.change', {
-                        defaultValue: '选择权限模式',
+                        defaultValue: 'Select permission mode',
                       }) as string}
                       aria-haspopup="menu"
                       aria-expanded={isPermissionMenuOpen}

@@ -212,7 +212,21 @@
     "clickToChangeMode": "Click to change permission mode (or press Tab in input)",
     "showAllCommands": "Show all commands",
     "clearInput": "Clear input",
-    "scrollToBottom": "Scroll to bottom"
+    "scrollToBottom": "Scroll to bottom",
+    "permissions": {
+      "default": "Default Permissions",
+      "defaultDescription": "Ask before risky operations",
+      "bypassPermissions": "Full Access",
+      "bypassPermissionsDescription": "Skip confirmations and allow full access",
+      "change": "Select permission mode"
+    },
+    "runModes": {
+      "agent": "Agent",
+      "plan": "Plan",
+      "change": "Select run mode",
+      "agentDescription": "Directly process and execute the task",
+      "planDescription": "Generate a plan first, then execute after confirmation"
+    }
   },
   "commandMenu": {
     "empty": "No commands available",
