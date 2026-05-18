@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
-import pilotdeckLogoDark from '../../../assets/dark-fnial.png';
-import pilotdeckLogoWhite from '../../../assets/white.png';
+import pilotdeckLogoDark from '../../../assets/pilotdeck-wordmark-dark.png';
+import pilotdeckLogoLight from '../../../assets/pilotdeck-wordmark-light.png';
 import AuthErrorAlert from './AuthErrorAlert';
 import AuthInputField from './AuthInputField';
 import AuthScreenLayout from './AuthScreenLayout';
@@ -90,15 +90,15 @@ export default function SetupForm() {
       logo={
         <div className="flex items-center justify-center gap-2">
           <img
-            src={pilotdeckLogoWhite}
+            src={pilotdeckLogoLight}
             alt="PilotDeck"
-            className="h-14 w-14 select-none object-contain dark:hidden"
+            className="h-14 w-auto max-w-72 select-none object-contain dark:hidden"
             draggable={false}
           />
           <img
             src={pilotdeckLogoDark}
             alt="PilotDeck"
-            className="hidden h-14 w-14 select-none object-contain dark:block"
+            className="hidden h-14 w-auto max-w-72 select-none object-contain dark:block"
             draggable={false}
           />
         </div>
