@@ -16,8 +16,11 @@ export { filterIncompleteToolCalls } from "./filterIncompleteToolCalls.js";
 export {
   applySystemPromptFilters,
   cloneReadFileState,
+  cloneWriteSnapshots,
   type ReadFileStateEntry,
   type ReadFileStateMap,
+  type WriteSnapshotEntry,
+  type WriteSnapshotMap,
 } from "./contextInheritance.js";
 export {
   SubAgentSession,

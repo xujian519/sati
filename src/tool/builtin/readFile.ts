@@ -15,6 +15,7 @@ import {
   parsePdfPageRange,
 } from "./filesystem/fileTypeSafety.js";
 import { readNotebook } from "./filesystem/readNotebook.js";
+import { recordWriteSnapshot } from "./filesystem/writeSnapshots.js";
 import { countTokens } from "../../context/budget/tokenizer.js";
 
 export type ReadFileInput = {
@@ -292,6 +293,9 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         limit: input.limit,
         pages: input.pages,
       });
+      if (offset === 1 && input.limit === undefined) {
+        recordWriteSnapshot(context, resolved.absolutePath, ranged.content, ranged.mtimeMs);
+      }
       return {
         content: [{ type: "text", text }],
         data: {

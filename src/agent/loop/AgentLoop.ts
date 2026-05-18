@@ -15,6 +15,7 @@ import type {
   PilotDeckSubagentForkApi,
   PilotDeckToolResult,
   PilotDeckToolRuntimeContext,
+  PilotDeckWriteSnapshotMap,
 } from "../../tool/index.js";
 import {
   SUBAGENT_DEFINITIONS,
@@ -53,6 +54,7 @@ export type AgentLoopRunResult = {
 
 export class AgentLoop {
   private readonly readFileState: PilotDeckReadFileStateMap = new Map();
+  private readonly writeSnapshots: PilotDeckWriteSnapshotMap = new Map();
 
   constructor(
     private readonly config: AgentRuntimeConfig,
@@ -679,6 +681,8 @@ export class AgentLoop {
       modelMultimodal: this.config.modelMultimodal,
       maxOutputTokens: this.config.maxOutputTokens,
       readFileState: this.readFileState,
+      writeSnapshots: this.writeSnapshots,
+      fileUpdateNotifier: this.dependencies.fileUpdateNotifier,
     };
   }
 

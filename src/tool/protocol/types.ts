@@ -92,6 +92,27 @@ export type PilotDeckReadFileStateEntry = {
 
 export type PilotDeckReadFileStateMap = Map<string, PilotDeckReadFileStateEntry>;
 
+export type PilotDeckWriteSnapshotEntry = {
+  absolutePath: string;
+  mtimeMs: number;
+  contentHash: string;
+};
+
+export type PilotDeckWriteSnapshotMap = Map<string, PilotDeckWriteSnapshotEntry>;
+
+export type PilotDeckFileUpdateNotification = {
+  absolutePath: string;
+  relativePath: string;
+  root: string;
+  content: string;
+  previousContent: string | null;
+};
+
+export type PilotDeckFileUpdateNotifier = {
+  didChange?(update: PilotDeckFileUpdateNotification): Promise<void> | void;
+  didSave?(update: PilotDeckFileUpdateNotification): Promise<void> | void;
+};
+
 export type PilotDeckToolExecutionOutput<Output = unknown> = {
   content: PilotDeckToolResultContent[];
   data?: Output;
@@ -211,6 +232,16 @@ export type PilotDeckToolRuntimeContext = {
    * can return a lightweight stub instead of re-injecting the full payload.
    */
   readFileState?: PilotDeckReadFileStateMap;
+  /**
+   * Optional session-scoped map of full-text reads that may authorize
+   * subsequent write_file overwrites. Only complete text reads populate this.
+   */
+  writeSnapshots?: PilotDeckWriteSnapshotMap;
+  /**
+   * Optional sink that propagates successful file writes to host integrations
+   * such as LSP bridges or editor diff views.
+   */
+  fileUpdateNotifier?: PilotDeckFileUpdateNotifier;
 };
 
 export type PilotDeckToolDefinition<Input = unknown, Output = unknown> = {

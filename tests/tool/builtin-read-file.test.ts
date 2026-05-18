@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import path from "node:path";
 import { createReadFileTool } from "../../src/tool/index.js";
 import { createPilotDeckTempWorkspace } from "../helpers/filesystem.js";
 import { createPilotDeckToolRuntimeFixture } from "../helpers/tool.js";
@@ -70,6 +71,8 @@ test("read_file returns unchanged stub for repeated reads", async (t) => {
     second.content[0]?.type === "text" ? second.content[0].text : "",
     /File unchanged since the last read/,
   );
+  assert.equal(context.writeSnapshots?.get(path.join(workspace.cwd, "src/a.txt"))?.absolutePath, path.join(workspace.cwd, "src/a.txt"));
+  assert.equal(context.writeSnapshots?.get(path.join(workspace.cwd, "src/a.txt"))?.mtimeMs !== undefined, true);
 });
 
 test("read_file renders notebook files as numbered text", async (t) => {
