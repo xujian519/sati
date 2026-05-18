@@ -116,20 +116,33 @@ export type PilotGatewayConfig = {
   maxPerSessionMcpInstances?: number;
 };
 
+export type PilotWebSearchProvider = "glm" | "tavily" | "custom";
+export type PilotWebSearchCustomAuth = "bearer" | "bodyApiKey" | "queryApiKey" | "none";
+export type PilotWebSearchCustomMethod = "GET" | "POST";
+
+export type PilotWebSearchCustomProviderConfig = {
+  name?: string;
+  auth?: PilotWebSearchCustomAuth;
+  method?: PilotWebSearchCustomMethod;
+  queryParam?: string;
+  apiKeyParam?: string;
+  resultsPath?: string;
+  titleField?: string;
+  urlField?: string;
+  snippetField?: string;
+  sourceField?: string;
+  publishedAtField?: string;
+};
+
 /**
- * Per-tool runtime config.  Today only `web_search` reads from here so its
- * SerpAPI key can live in `~/.pilotdeck/pilotdeck.yaml` instead of an env
- * var.  When the field is omitted the tool falls back to the
- * `SERP_API_KEY` environment variable (legacy behaviour).
- *
- * `endpoint` is an optional escape hatch for SerpAPI-compatible proxies
- * (e.g. self-hosted or in-China alternatives that mirror the SerpAPI
- * request/response shape). Most users should leave it unset.
+ * Per-tool runtime config for `web_search`. Exactly one provider is active at
+ * runtime; `apiKey` and `endpoint` apply to the selected provider.
  */
 export type PilotWebSearchConfig = {
+  provider?: PilotWebSearchProvider;
   apiKey?: string;
   endpoint?: string;
-  tavilyApiKey?: string;
+  customProvider?: PilotWebSearchCustomProviderConfig;
 };
 
 export type PilotToolsConfig = {

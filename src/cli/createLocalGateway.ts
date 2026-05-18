@@ -514,17 +514,16 @@ class ProjectRuntimeRegistry {
         loader: (name) => pluginRuntime.loadSkillPrompt(name),
         lister: () => pluginRuntime.getAllSkills(),
       },
-      // Pass the YAML-configured SerpAPI key (and optional endpoint
-      // override for compatible proxies) through to the built-in
-      // `web_search` tool. When the section is absent the tool keeps its
-      // legacy behaviour and reads `SERP_API_KEY` from the environment at
-      // execution time.
+      // Pass the YAML-configured web-search provider through to the built-in
+      // `web_search` tool. When absent, the tool may infer GLM/Tavily from
+      // provider-specific environment variables.
       ...(webSearchConfig
         ? {
             webSearch: {
+              ...(webSearchConfig.provider ? { provider: webSearchConfig.provider } : {}),
               ...(webSearchConfig.apiKey ? { apiKey: webSearchConfig.apiKey } : {}),
               ...(webSearchConfig.endpoint ? { endpoint: webSearchConfig.endpoint } : {}),
-              ...(webSearchConfig.tavilyApiKey ? { tavilyApiKey: webSearchConfig.tavilyApiKey } : {}),
+              ...(webSearchConfig.customProvider ? { customProvider: webSearchConfig.customProvider } : {}),
             },
           }
         : {}),

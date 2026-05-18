@@ -498,7 +498,7 @@
       },
       "tools": {
         "label": "搜索",
-        "description": "Web 搜索 provider（SerpAPI 密钥与接口地址）"
+        "description": "Web 搜索 provider"
       },
       "customEnv": {
         "label": "环境变量",
@@ -569,16 +569,49 @@
       },
       "tools": {
         "title": "搜索",
-        "description": "agent 的 `web_search` 工具背后的搜索 provider。默认 SerpAPI；任何 SerpAPI 兼容代理也可以（如国内可直连的 serp.hk）。",
+        "description": "agent 的 `web_search` 工具背后的搜索 provider。只能选择一个 provider，未选中的 provider 不会生效。",
+        "provider": {
+          "label": "Provider",
+          "description": "选择 agent 使用的唯一搜索 provider。",
+          "glm": "GLM / Z.AI Web Search",
+          "tavily": "Tavily",
+          "custom": "自定义"
+        },
         "apiKey": {
           "label": "API Key",
-          "description": "保存到 pilotdeck.yaml 的 tools.webSearch.apiKey；为空时回落到 SERP_API_KEY 环境变量。",
-          "placeholder": "serpapi key"
+          "description": "保存到 pilotdeck.yaml 的 tools.webSearch.apiKey，作用于当前选择的 provider。",
+          "placeholder": "provider API key"
         },
         "endpoint": {
           "label": "接口地址",
-          "description": "默认 https://serpapi.com/search。换 SerpAPI 兼容代理时改这里（如 https://api.serp.hk/serp/google/search/advanced）。",
-          "placeholder": "https://serpapi.com/search"
+          "description": "当前 provider 的接口地址覆盖项。留空时使用默认地址。",
+          "placeholder": "Provider 默认接口地址"
+        },
+        "custom": {
+          "name": {
+            "label": "名称",
+            "description": "这个自定义搜索 provider 的显示名称。"
+          },
+          "auth": {
+            "label": "鉴权方式",
+            "description": "自定义 provider 接收 API Key 的方式。",
+            "bearer": "Bearer header",
+            "bodyApiKey": "API Key 放在 JSON body",
+            "queryApiKey": "API Key 放在 query string",
+            "none": "不使用 API Key"
+          },
+          "method": {
+            "label": "HTTP 方法",
+            "description": "请求自定义 provider 使用的方法。"
+          },
+          "params": {
+            "label": "参数名",
+            "description": "左侧是查询参数/body 字段名，右侧是 API Key 参数/body 字段名。"
+          },
+          "mapping": {
+            "label": "结果字段映射",
+            "description": "用点路径读取结果数组，以及每条结果里的标题、URL、摘要、来源和发布时间。"
+          }
         },
         "test": {
           "button": "测试连接",

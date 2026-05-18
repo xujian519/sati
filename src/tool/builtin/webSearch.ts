@@ -7,56 +7,34 @@ import type {
 } from "../protocol/types.js";
 
 /**
- * `web_search` calls SerpAPI (https://serpapi.com) — the canonical Google
- * search-as-an-API service. SerpAPI uses a single REST endpoint that takes
- * the API key as a `?api_key=...` query parameter and returns JSON with
- * `organic_results`, `knowledge_graph`, `answer_box`, `top_stories`, etc.
- *
- * Why SerpAPI as the only built-in provider?
- *   - It's the de-facto standard a model would expect to integrate against.
- *   - One canonical surface keeps tool semantics deterministic across
- *     deployments — provider-specific quirks (different keys, request
- *     shapes, response field renames) live behind one well-documented API.
- *
- * If a deployment needs a self-hosted SerpAPI-compatible proxy (e.g.
- * serp.hk for in-China access), pass `endpoint` to override the base URL.
- *
- * Two on-the-wire dialects are supported and auto-selected from the
- * endpoint hostname:
- *   - **query** (default — `serpapi.com`): `GET ?engine=…&q=…&api_key=…`.
- *   - **bearer** (`*.serp.hk`, `*.serp.global`): `POST` with
- *     `Authorization: Bearer <key>` and `{q}` JSON body. serp.hk migrated
- *     away from the legacy `?api_key=` GET path; using it with a current
- *     serp.hk key returns `code=3103 未授权`.
- *
- * Override `authMode` to force a dialect (e.g. when targeting a custom
- * proxy whose hostname doesn't match the heuristic).
- *
- * API key resolution order (first non-empty wins):
- *   1. `options.apiKey`
- *   2. context env var `SERP_API_KEY` (legacy fallback)
- *
- * Without a key the tool is still registered but `execute()` returns the
- * canonical `unsupported_tool` error so the model gets a deterministic
- * "configure SERP_API_KEY" hint rather than a silent failure.
+ * `web_search` is a local PilotDeck tool backed by exactly one configured
+ * provider. The model still sees one stable tool surface; provider-specific
+ * request/response shapes stay behind this adapter.
  */
-/** How the provider authenticates and ships the query. See file header. */
-export type WebSearchAuthMode = "query" | "bearer" | "tavily";
+export type WebSearchProvider = "glm" | "tavily" | "custom";
+export type WebSearchCustomAuth = "bearer" | "bodyApiKey" | "queryApiKey" | "none";
+export type WebSearchCustomMethod = "GET" | "POST";
+
+export type WebSearchCustomProviderConfig = {
+  name?: string;
+  auth?: WebSearchCustomAuth;
+  method?: WebSearchCustomMethod;
+  queryParam?: string;
+  apiKeyParam?: string;
+  resultsPath?: string;
+  titleField?: string;
+  urlField?: string;
+  snippetField?: string;
+  sourceField?: string;
+  publishedAtField?: string;
+};
 
 export type CreateWebSearchToolOptions = {
+  provider?: WebSearchProvider;
   apiKey?: string;
-  /** Override the SerpAPI endpoint (default `https://serpapi.com/search`). */
+  /** Override provider endpoint. GLM defaults to Z.AI web_search; Tavily defaults to api.tavily.com. */
   endpoint?: string;
-  /** Override the search engine (default `google`). SerpAPI also supports `bing`, `duckduckgo`, etc. */
-  engine?: string;
-  /**
-   * Override the auth dialect. When unset, auto-detected from
-   * `endpoint`'s hostname (`*.serp.hk` / `*.serp.global` → `bearer`,
-   * `api.tavily.com` → `tavily`, everything else → `query`).
-   */
-  authMode?: WebSearchAuthMode;
-  /** Tavily API key — when set, automatically switches to tavily mode. */
-  tavilyApiKey?: string;
+  customProvider?: WebSearchCustomProviderConfig;
   /** Override fetch (testing). */
   fetchImpl?: typeof fetch;
   /** Override timeout (default 30s). */
@@ -79,6 +57,7 @@ export type WebSearchOrganicResult = {
   link?: string;
   snippet?: string;
   source?: string;
+  publishedAt?: string;
 };
 
 export type WebSearchOutput = {
@@ -89,37 +68,30 @@ export type WebSearchOutput = {
   topStories?: Array<Record<string, unknown>>;
 };
 
-const DEFAULT_ENDPOINT = "https://serpapi.com/search";
+const DEFAULT_GLM_ENDPOINT = "https://api.z.ai/api/paas/v4/web_search";
 const DEFAULT_TAVILY_ENDPOINT = "https://api.tavily.com/search";
-const DEFAULT_ENGINE = "google";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_ORGANIC_LIMIT = 8;
-const DEFAULT_TOP_STORIES_LIMIT = 5;
 
 export function createWebSearchTool(
   options: CreateWebSearchToolOptions = {},
 ): PilotDeckToolDefinition<WebSearchInput, WebSearchOutput> {
-  const hasTavily = Boolean(options.tavilyApiKey?.trim());
-  const endpoint = options.endpoint ?? (hasTavily ? DEFAULT_TAVILY_ENDPOINT : DEFAULT_ENDPOINT);
-  const engine = options.engine ?? DEFAULT_ENGINE;
-  const authMode = options.authMode ?? (hasTavily ? "tavily" as WebSearchAuthMode : detectAuthMode(endpoint));
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const organicLimit = options.organicLimit ?? DEFAULT_ORGANIC_LIMIT;
-  const topStoriesLimit = options.topStoriesLimit ?? DEFAULT_TOP_STORIES_LIMIT;
 
   return {
     name: "web_search",
     aliases: ["WebSearch"],
-    description: `- Searches the web for current information using SerpAPI-compatible or Tavily-compatible endpoints
+    description: `- Searches the web for current information using the configured GLM/Z.AI, Tavily, or custom provider
 - Takes a search query and optional country code (\`gl\`) as input
-- Returns structured search data including organic results and, when available, knowledge graph, answer box, and top stories
+- Returns structured search data including organic results and, when available, answer box content
 - Use this tool for current events, recent documentation, and information beyond the model's knowledge cutoff
 
 Usage notes:
-  - Requires \`TAVILY_API_KEY\` or \`SERP_API_KEY\`, or \`tools.webSearch.apiKey\` / \`tools.webSearch.tavilyApiKey\` in \`pilotdeck.yaml\`
-  - Supports localized results via the optional \`gl\` parameter (default: \`us\`; use \`cn\` for China-localized results)
-  - Supports SerpAPI-compatible endpoint overrides; auth mode is auto-detected for Tavily, \`*.serp.hk\`, and \`*.serp.global\`, and can also be configured explicitly
+  - Configure \`tools.webSearch.provider\` as \`glm\`, \`tavily\`, or \`custom\` in \`pilotdeck.yaml\`
+  - Requires \`tools.webSearch.apiKey\`, \`GLM_WEB_SEARCH_API_KEY\`/\`ZAI_API_KEY\`, \`TAVILY_API_KEY\`, or \`CUSTOM_WEB_SEARCH_API_KEY\` unless custom auth is \`none\`
+  - The optional \`gl\` parameter is forwarded only by providers that support localization
   - This tool is read-only and does not modify files`,
     kind: "network",
     inputSchema: {
@@ -164,76 +136,103 @@ Usage notes:
       },
     }),
     execute: async (input, context) => {
-      const apiKey = resolveApiKey(options.apiKey, context, options.tavilyApiKey);
-      if (!apiKey) {
+      const provider = resolveProvider(options.provider, options.apiKey, context);
+      const apiKey = resolveApiKey(options.apiKey, provider, context);
+      const custom = normalizeCustomProviderConfig(options.customProvider);
+      if (!apiKey && !(provider === "custom" && custom.auth === "none")) {
         throw new PilotDeckToolRuntimeError(
           "unsupported_tool",
-          "web_search is not configured. Set TAVILY_API_KEY or SERP_API_KEY env var, or set tools.webSearch.apiKey / tavilyApiKey in pilotdeck.yaml.",
+          "web_search is not configured. Set tools.webSearch.provider to glm, tavily, or custom and provide tools.webSearch.apiKey, or set GLM_WEB_SEARCH_API_KEY/ZAI_API_KEY/TAVILY_API_KEY/CUSTOM_WEB_SEARCH_API_KEY.",
         );
       }
-      const isTavily = authMode === "tavily"
-        || apiKey.startsWith("tvly-")
-        || Boolean((context.env ?? process.env).TAVILY_API_KEY?.trim());
-      if (isTavily) {
+      if (provider === "custom") {
+        if (!options.endpoint?.trim()) {
+          throw new PilotDeckToolRuntimeError(
+            "unsupported_tool",
+            "web_search custom provider requires tools.webSearch.endpoint.",
+          );
+        }
+        return performCustomSearch({
+          input,
+          context,
+          apiKey: apiKey ?? "",
+          endpoint: options.endpoint,
+          fetchImpl,
+          timeoutMs,
+          organicLimit,
+          custom,
+        });
+      }
+      if (provider === "tavily") {
         return performTavilySearch({
           input,
           context,
-          apiKey,
-          endpoint: endpoint.includes("tavily") ? endpoint : DEFAULT_TAVILY_ENDPOINT,
+          apiKey: apiKey ?? "",
+          endpoint: options.endpoint ?? DEFAULT_TAVILY_ENDPOINT,
           fetchImpl,
           timeoutMs,
           organicLimit,
         });
       }
-      return performSearch({
+      return performGlmSearch({
         input,
         context,
-        apiKey,
-        endpoint,
-        engine,
-        authMode,
+        apiKey: apiKey ?? "",
+        endpoint: options.endpoint ?? readEnv(context, "GLM_WEB_SEARCH_ENDPOINT") ?? DEFAULT_GLM_ENDPOINT,
         fetchImpl,
         timeoutMs,
         organicLimit,
-        topStoriesLimit,
       });
     },
   };
 }
 
-/**
- * Pick the on-the-wire dialect from the endpoint's hostname.
- *
- * `*.serp.hk` and `*.serp.global` no longer accept the legacy `?api_key=`
- * GET shape; using it returns `code=3103 未授权` regardless of whether the
- * key is valid. Default to `query` for `serpapi.com` and anything else.
- */
-function detectAuthMode(endpoint: string): WebSearchAuthMode {
-  try {
-    const host = new URL(endpoint).hostname.toLowerCase();
-    if (host === "api.tavily.com" || host.endsWith(".tavily.com")) return "tavily";
-    if (host === "serp.hk" || host.endsWith(".serp.hk")) return "bearer";
-    if (host === "serp.global" || host.endsWith(".serp.global")) return "bearer";
-  } catch {
-    // fall through
-  }
-  return "query";
+function resolveProvider(
+  optionProvider: WebSearchProvider | undefined,
+  optionApiKey: string | undefined,
+  context: PilotDeckToolRuntimeContext,
+): WebSearchProvider {
+  if (optionProvider) return optionProvider;
+  if (optionApiKey?.trim()) return "glm";
+  if (readEnv(context, "TAVILY_API_KEY")) return "tavily";
+  return "glm";
 }
 
 function resolveApiKey(
   optionApiKey: string | undefined,
+  provider: WebSearchProvider,
   context: PilotDeckToolRuntimeContext,
-  tavilyApiKey?: string,
 ): string | undefined {
-  if (tavilyApiKey?.trim()) return tavilyApiKey.trim();
   const fromOption = optionApiKey?.trim();
   if (fromOption) {
     return fromOption;
   }
-  const fromTavilyEnv = (context.env ?? process.env).TAVILY_API_KEY?.trim();
-  if (fromTavilyEnv && fromTavilyEnv.length > 0) return fromTavilyEnv;
-  const fromEnv = (context.env ?? process.env).SERP_API_KEY?.trim();
-  return fromEnv && fromEnv.length > 0 ? fromEnv : undefined;
+  if (provider === "tavily") return readEnv(context, "TAVILY_API_KEY");
+  if (provider === "custom") return readEnv(context, "CUSTOM_WEB_SEARCH_API_KEY");
+  return readEnv(context, "GLM_WEB_SEARCH_API_KEY") ?? readEnv(context, "ZAI_API_KEY");
+}
+
+function normalizeCustomProviderConfig(
+  config: WebSearchCustomProviderConfig | undefined,
+): Required<WebSearchCustomProviderConfig> {
+  return {
+    auth: config?.auth ?? "bearer",
+    name: config?.name?.trim() || "custom",
+    method: config?.method ?? "POST",
+    queryParam: config?.queryParam?.trim() || "query",
+    apiKeyParam: config?.apiKeyParam?.trim() || "api_key",
+    resultsPath: config?.resultsPath?.trim() || "",
+    titleField: config?.titleField?.trim() || "title",
+    urlField: config?.urlField?.trim() || "url",
+    snippetField: config?.snippetField?.trim() || "snippet",
+    sourceField: config?.sourceField?.trim() || "source",
+    publishedAtField: config?.publishedAtField?.trim() || "publishedAt",
+  };
+}
+
+function readEnv(context: PilotDeckToolRuntimeContext, name: string): string | undefined {
+  const value = (context.env ?? process.env)[name]?.trim();
+  return value && value.length > 0 ? value : undefined;
 }
 
 type PerformTavilySearchInput = {
@@ -339,33 +338,27 @@ async function performTavilySearch(
   };
 }
 
-type PerformSearchInput = {
+type PerformGlmSearchInput = {
   input: WebSearchInput;
   context: PilotDeckToolRuntimeContext;
   apiKey: string;
   endpoint: string;
-  engine: string;
-  authMode: WebSearchAuthMode;
   fetchImpl: typeof fetch;
   timeoutMs: number;
   organicLimit: number;
-  topStoriesLimit: number;
 };
 
-async function performSearch(
-  args: PerformSearchInput,
+async function performGlmSearch(
+  args: PerformGlmSearchInput,
 ): Promise<PilotDeckToolExecutionOutput<WebSearchOutput>> {
   const {
     input,
     context,
     apiKey,
     endpoint,
-    engine,
-    authMode,
     fetchImpl,
     timeoutMs,
     organicLimit,
-    topStoriesLimit,
   } = args;
   const query = input.query.trim();
   if (!query) {
@@ -375,12 +368,12 @@ async function performSearch(
     );
   }
 
-  const requestUrl: string =
-    authMode === "bearer" ? endpoint : buildQueryModeUrl({ endpoint, engine, apiKey, query, gl: input.gl });
-  const requestInit: RequestInit =
-    authMode === "bearer"
-      ? buildBearerModeInit({ apiKey, engine, query, gl: input.gl })
-      : { method: "GET", headers: { Accept: "application/json" } };
+  const body: Record<string, unknown> = {
+    search_engine: "search-prime",
+    search_query: query,
+    count: Math.max(1, Math.min(organicLimit, 50)),
+    search_recency_filter: "noLimit",
+  };
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -388,8 +381,14 @@ async function performSearch(
 
   let response: Response;
   try {
-    response = await fetchImpl(requestUrl, {
-      ...requestInit,
+    response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
   } catch (error) {
@@ -401,7 +400,7 @@ async function performSearch(
     }
     throw new PilotDeckToolRuntimeError(
       "tool_execution_failed",
-      `web_search request failed: ${error instanceof Error ? error.message : String(error)}`,
+      `web_search (glm) request failed: ${error instanceof Error ? error.message : String(error)}`,
     );
   } finally {
     clearTimeout(timeout);
@@ -412,50 +411,27 @@ async function performSearch(
     const detail = await response.text().catch(() => response.statusText);
     throw new PilotDeckToolRuntimeError(
       "tool_execution_failed",
-      `SerpAPI error (${response.status}): ${truncate(detail, 500)}`,
+      `GLM web search error (${response.status}): ${truncate(detail, 500)}`,
     );
   }
 
   const raw = (await response.json()) as Record<string, unknown>;
-  // SerpAPI returns `{ error: "..." }` on logical failures with a 200 status
-  // (e.g. "Invalid API key", quota issues). Surface those explicitly.
   if (typeof raw.error === "string" && raw.error.length > 0) {
     throw new PilotDeckToolRuntimeError(
       "tool_execution_failed",
-      `SerpAPI error: ${raw.error}`,
+      `GLM web search error: ${raw.error}`,
     );
   }
-
-  // Some SerpAPI-compatible proxies wrap the payload as `{ code, msg, result }`.
-  // Unwrap when present so the same parser works for both shapes.
   const proxyCode = raw.code;
   if (typeof proxyCode === "number" && proxyCode !== 0) {
     const message = typeof raw.msg === "string" ? raw.msg : "search proxy error";
     throw new PilotDeckToolRuntimeError(
       "tool_execution_failed",
-      `SerpAPI error code=${proxyCode}: ${message}`,
+      `GLM web search error code=${proxyCode}: ${message}`,
     );
   }
-  const result = (isRecord(raw.result) ? raw.result : raw) as Record<string, unknown>;
-
-  // SerpAPI canonical key is `organic_results`; some compatible proxies
-  // (serp.hk-style) call it `organic`. Accept both.
-  const organicSource = result.organic_results ?? result.organic;
-  const organic = parseOrganic(organicSource, organicLimit);
+  const organic = parseGlmResults(extractResultItems(raw), organicLimit);
   const output: WebSearchOutput = { query, organic };
-  if (isRecord(result.knowledge_graph)) {
-    output.knowledgeGraph = result.knowledge_graph;
-  }
-  if (isRecord(result.answer_box)) {
-    output.answerBox = result.answer_box;
-  }
-  const topStoriesSource = result.top_stories;
-  if (Array.isArray(topStoriesSource) && topStoriesSource.length > 0) {
-    output.topStories = (topStoriesSource as Array<Record<string, unknown>>).slice(
-      0,
-      topStoriesLimit,
-    );
-  }
 
   return {
     content: [
@@ -464,65 +440,188 @@ async function performSearch(
     ],
     data: output,
     metadata: {
-      provider: "serpapi",
+      provider: "glm",
       endpoint,
-      engine,
       organicCount: organic.length,
     },
   };
 }
 
-function buildQueryModeUrl(args: {
+type PerformCustomSearchInput = {
+  input: WebSearchInput;
+  context: PilotDeckToolRuntimeContext;
+  apiKey: string | undefined;
   endpoint: string;
-  engine: string;
-  apiKey: string;
-  query: string;
-  gl?: string;
-}): string {
-  // SerpAPI takes everything via query string. Build it deterministically
-  // so tests can assert on the URL shape.
-  const url = new URL(args.endpoint);
-  url.searchParams.set("engine", args.engine);
-  url.searchParams.set("q", args.query);
-  if (args.gl && args.gl.trim().length > 0) {
-    url.searchParams.set("gl", args.gl.trim());
-  }
-  url.searchParams.set("api_key", args.apiKey);
-  url.searchParams.set("output", "json");
-  return url.toString();
-}
+  fetchImpl: typeof fetch;
+  timeoutMs: number;
+  organicLimit: number;
+  custom: Required<WebSearchCustomProviderConfig>;
+};
 
-function buildBearerModeInit(args: {
-  apiKey: string;
-  engine: string;
-  query: string;
-  gl?: string;
-}): RequestInit {
-  // serp.hk-style: POST + Bearer auth + JSON body. The proxy infers the
-  // engine and locale defaults itself; we still forward them when the
-  // caller specified non-defaults so behaviour matches the query-mode path.
-  const body: Record<string, unknown> = { q: args.query };
-  if (args.engine && args.engine !== DEFAULT_ENGINE) body.engine = args.engine;
-  if (args.gl && args.gl.trim().length > 0) body.gl = args.gl.trim();
+async function performCustomSearch(
+  args: PerformCustomSearchInput,
+): Promise<PilotDeckToolExecutionOutput<WebSearchOutput>> {
+  const { input, context, apiKey, endpoint, fetchImpl, timeoutMs, organicLimit, custom } = args;
+  const query = input.query.trim();
+  if (!query) {
+    throw new PilotDeckToolRuntimeError(
+      "invalid_tool_input",
+      "web_search requires a non-empty `query`.",
+    );
+  }
+
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    throw new PilotDeckToolRuntimeError(
+      "invalid_tool_input",
+      `web_search custom provider endpoint is not a valid URL: ${endpoint}`,
+    );
+  }
+  const headers: Record<string, string> = { Accept: "application/json" };
+  const body: Record<string, unknown> = {};
+  const method = custom.method;
+
+  if (method === "GET") {
+    url.searchParams.set(custom.queryParam, query);
+    if (input.gl?.trim()) url.searchParams.set("gl", input.gl.trim());
+  } else {
+    headers["Content-Type"] = "application/json";
+    body[custom.queryParam] = query;
+    if (input.gl?.trim()) body.gl = input.gl.trim();
+  }
+
+  if (custom.auth === "bearer" && apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  } else if (custom.auth === "queryApiKey" && apiKey) {
+    url.searchParams.set(custom.apiKeyParam, apiKey);
+  } else if (custom.auth === "bodyApiKey" && apiKey) {
+    if (method === "GET") {
+      url.searchParams.set(custom.apiKeyParam, apiKey);
+    } else {
+      body[custom.apiKeyParam] = apiKey;
+    }
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const detachAbort = forwardAbort(context.abortSignal, controller);
+
+  let response: Response;
+  try {
+    response = await fetchImpl(url.toString(), {
+      method,
+      headers,
+      ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted && context.abortSignal?.aborted !== true) {
+      throw new PilotDeckToolRuntimeError(
+        "tool_timeout",
+        `web_search (custom) timed out after ${timeoutMs}ms.`,
+      );
+    }
+    throw new PilotDeckToolRuntimeError(
+      "tool_execution_failed",
+      `web_search (custom) request failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  } finally {
+    clearTimeout(timeout);
+    detachAbort?.();
+  }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => response.statusText);
+    throw new PilotDeckToolRuntimeError(
+      "tool_execution_failed",
+      `Custom web search error (${response.status}): ${truncate(detail, 500)}`,
+    );
+  }
+
+  const raw = (await response.json()) as Record<string, unknown>;
+  if (typeof raw.error === "string" && raw.error.length > 0) {
+    throw new PilotDeckToolRuntimeError(
+      "tool_execution_failed",
+      `Custom web search error: ${raw.error}`,
+    );
+  }
+  const proxyCode = raw.code;
+  if (typeof proxyCode === "number" && proxyCode !== 0) {
+    const message = typeof raw.msg === "string" ? raw.msg : "search provider error";
+    throw new PilotDeckToolRuntimeError(
+      "tool_execution_failed",
+      `Custom web search error code=${proxyCode}: ${message}`,
+    );
+  }
+
+  const resultValue = custom.resultsPath ? readPath(raw, custom.resultsPath) : extractResultItems(raw);
+  const organic = parseMappedResults(resultValue, organicLimit, custom);
+  const output: WebSearchOutput = { query, organic };
+
   return {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${args.apiKey}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
+    content: [
+      { type: "text", text: formatTextSummary(output) },
+      { type: "json", value: output },
+    ],
+    data: output,
+    metadata: {
+      provider: "custom",
+      providerName: custom.name,
+      endpoint,
+      organicCount: organic.length,
     },
-    body: JSON.stringify(body),
   };
 }
 
-function parseOrganic(value: unknown, limit: number): WebSearchOrganicResult[] {
+function extractResultItems(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (!isRecord(value)) return [];
+  for (const key of ["search_result", "results", "items", "webPages", "data"]) {
+    const child = value[key];
+    if (Array.isArray(child)) return child;
+    if (isRecord(child)) {
+      const nested = extractResultItems(child);
+      if (nested.length > 0) return nested;
+    }
+  }
+  return [];
+}
+
+function parseGlmResults(value: unknown, limit: number): WebSearchOrganicResult[] {
   if (!Array.isArray(value)) return [];
   return (value as Array<Record<string, unknown>>).slice(0, limit).map((entry) => ({
-    title: readString(entry.title),
-    link: readString(entry.link),
-    snippet: readString(entry.snippet),
-    source: readString(entry.source) ?? readString(entry.displayed_link),
+    title: readString(entry.title) ?? readString(entry.name),
+    link: readString(entry.url) ?? readString(entry.link) ?? readString(entry.href),
+    snippet: readString(entry.snippet) ?? readString(entry.summary) ?? readString(entry.content) ?? readString(entry.text),
+    source: readString(entry.source) ?? readString(entry.site) ?? readString(entry.media),
+    publishedAt: readString(entry.publishedAt) ?? readString(entry.published_at) ?? readString(entry.publish_date) ?? readString(entry.date),
   }));
+}
+
+function parseMappedResults(
+  value: unknown,
+  limit: number,
+  mapping: Required<WebSearchCustomProviderConfig>,
+): WebSearchOrganicResult[] {
+  if (!Array.isArray(value)) return [];
+  return (value as Array<Record<string, unknown>>).slice(0, limit).map((entry) => ({
+    title: readString(readPath(entry, mapping.titleField)),
+    link: readString(readPath(entry, mapping.urlField)),
+    snippet: readString(readPath(entry, mapping.snippetField)),
+    source: readString(readPath(entry, mapping.sourceField)),
+    publishedAt: readString(readPath(entry, mapping.publishedAtField)),
+  }));
+}
+
+function readPath(value: unknown, path: string): unknown {
+  const trimmed = path.trim();
+  if (!trimmed) return undefined;
+  return trimmed.split(".").reduce<unknown>((current, segment) => {
+    if (!isRecord(current)) return undefined;
+    return current[segment];
+  }, value);
 }
 
 function readString(value: unknown): string | undefined {

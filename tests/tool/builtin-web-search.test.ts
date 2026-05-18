@@ -39,9 +39,9 @@ test("web_search registers basic schema and metadata", () => {
   assert.equal(tool.kind, "network");
   assert.equal(tool.isReadOnly({ query: "x" }), true);
   assert.equal(tool.isConcurrencySafe({ query: "x" }), true);
-  assert.match(tool.description, /SerpAPI-compatible or Tavily-compatible endpoints/);
+  assert.match(tool.description, /GLM\/Z\.AI, Tavily, or custom provider/);
   assert.match(tool.description, /Returns structured search data including organic results/);
-  assert.match(tool.description, /Requires `TAVILY_API_KEY` or `SERP_API_KEY`/);
+  assert.match(tool.description, /GLM_WEB_SEARCH_API_KEY/);
   assert.equal(
     tool.inputSchema.properties?.query?.description,
     "Search query string. Be specific, and include versions or the current year when looking for recent documentation, releases, or current events.",
@@ -52,109 +52,18 @@ test("web_search registers basic schema and metadata", () => {
   );
 });
 
-test("web_search throws unsupported_tool when no API key configured", async () => {
+test("web_search throws unsupported_tool when no selected-provider API key is configured", async () => {
   const tool = createWebSearchTool({ fetchImpl: fakeFetch({}) });
   await assert.rejects(
     () => tool.execute({ query: "hello" }, makeContext({})),
     (error: unknown) =>
       error instanceof PilotDeckToolRuntimeError &&
       error.code === "unsupported_tool" &&
-      /SERP_API_KEY/.test(error.message),
+      /GLM_WEB_SEARCH_API_KEY/.test(error.message),
   );
 });
 
-test("web_search reads SERP_API_KEY from context env and calls SerpAPI via GET", async () => {
-  let capturedUrl: string | undefined;
-  let capturedMethod: string | undefined;
-  const mock: typeof fetch = (async (url, init) => {
-    capturedUrl = String(url);
-    capturedMethod = init?.method;
-    return new Response(JSON.stringify({ organic_results: [] }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
-  }) as typeof fetch;
-  const tool = createWebSearchTool({ fetchImpl: mock });
-  const out = await tool.execute({ query: "kimi k2.6" }, makeContext({ SERP_API_KEY: "test-key" }));
-  assert.equal(capturedMethod, "GET");
-  assert.match(capturedUrl!, /^https:\/\/serpapi\.com\/search\?/);
-  const parsed = new URL(capturedUrl!);
-  assert.equal(parsed.searchParams.get("engine"), "google");
-  assert.equal(parsed.searchParams.get("q"), "kimi k2.6");
-  assert.equal(parsed.searchParams.get("api_key"), "test-key");
-  assert.equal(parsed.searchParams.get("output"), "json");
-  assert.equal((out.data as WebSearchOutput).query, "kimi k2.6");
-  assert.equal((out.metadata as { provider: string }).provider, "serpapi");
-});
-
-test("web_search forwards optional gl parameter", async () => {
-  let capturedUrl: string | undefined;
-  const mock: typeof fetch = (async (url) => {
-    capturedUrl = String(url);
-    return new Response(JSON.stringify({ organic_results: [] }), { status: 200 });
-  }) as typeof fetch;
-  const tool = createWebSearchTool({ apiKey: "k", fetchImpl: mock });
-  await tool.execute({ query: "foo", gl: "US" } satisfies WebSearchInput, makeContext({}));
-  const parsed = new URL(capturedUrl!);
-  assert.equal(parsed.searchParams.get("q"), "foo");
-  assert.equal(parsed.searchParams.get("gl"), "US");
-});
-
-test("web_search parses organic_results + knowledge_graph + answer_box + top_stories", async () => {
-  const apiPayload = {
-    organic_results: [
-      { title: "Result 1", link: "https://a.example/1", snippet: "sn1", source: "a" },
-      { title: "Result 2", link: "https://a.example/2", snippet: "sn2" },
-    ],
-    knowledge_graph: { name: "Foo", type: "Thing" },
-    answer_box: { answer: "42" },
-    top_stories: [{ title: "Story", link: "https://news.example/1" }],
-  };
-  const tool = createWebSearchTool({ apiKey: "k", fetchImpl: fakeFetch(apiPayload) });
-  const out = await tool.execute({ query: "life" }, makeContext({}));
-  const data = out.data as WebSearchOutput;
-  assert.equal(data.organic.length, 2);
-  assert.equal(data.organic[0]?.title, "Result 1");
-  assert.deepEqual(data.knowledgeGraph, { name: "Foo", type: "Thing" });
-  assert.deepEqual(data.answerBox, { answer: "42" });
-  assert.equal(data.topStories?.length, 1);
-});
-
-test("web_search also accepts the legacy `organic` key for compatible proxies", async () => {
-  // Some SerpAPI-compatible proxies (older serp.hk-style) wrap in
-  // `{ result: { organic: [...] } }` and use `organic` instead of
-  // `organic_results`. The parser should still cope so users who set
-  // `endpoint` to such a proxy don't break.
-  const apiPayload = {
-    result: {
-      organic: [{ title: "Proxy hit", link: "https://x.example/1", snippet: "via proxy" }],
-    },
-  };
-  const tool = createWebSearchTool({
-    apiKey: "k",
-    endpoint: "https://my-proxy.example/serp",
-    fetchImpl: fakeFetch(apiPayload),
-  });
-  const out = await tool.execute({ query: "x" }, makeContext({}));
-  assert.equal((out.data as WebSearchOutput).organic.length, 1);
-  assert.equal((out.data as WebSearchOutput).organic[0]?.title, "Proxy hit");
-});
-
-test("web_search caps organic results to organicLimit", async () => {
-  const organic_results = Array.from({ length: 20 }, (_, i) => ({
-    title: `R${i}`,
-    link: `https://x.example/${i}`,
-  }));
-  const tool = createWebSearchTool({
-    apiKey: "k",
-    organicLimit: 3,
-    fetchImpl: fakeFetch({ organic_results }),
-  });
-  const out = await tool.execute({ query: "x" }, makeContext({}));
-  assert.equal((out.data as WebSearchOutput).organic.length, 3);
-});
-
-test("web_search auto-selects bearer mode for serp.hk endpoint (POST + Authorization)", async () => {
+test("web_search defaults to GLM and calls Z.AI web_search with Bearer auth", async () => {
   let capturedUrl: string | undefined;
   let capturedInit: RequestInit | undefined;
   const mock: typeof fetch = (async (url, init) => {
@@ -162,66 +71,188 @@ test("web_search auto-selects bearer mode for serp.hk endpoint (POST + Authoriza
     capturedInit = init;
     return new Response(
       JSON.stringify({
-        code: 0,
-        msg: "成功",
-        result: { organic: [{ title: "via bearer", link: "https://x" }] },
+        search_result: [
+          {
+            title: "Z.AI News",
+            link: "https://example.com/zai",
+            content: "Z.AI current evidence",
+            media: "example.com",
+            publish_date: "2026-05-07",
+          },
+        ],
       }),
       { status: 200, headers: { "content-type": "application/json" } },
     );
   }) as typeof fetch;
-  const tool = createWebSearchTool({
-    apiKey: "hk-key",
-    endpoint: "https://api.serp.hk/serp/google/search/advanced",
-    fetchImpl: mock,
-  });
-  const out = await tool.execute({ query: "kimi" }, makeContext({}));
+
+  const tool = createWebSearchTool({ apiKey: "glm-key", fetchImpl: mock });
+  const out = await tool.execute({ query: "current risk" }, makeContext({}));
+
+  assert.equal(capturedUrl, "https://api.z.ai/api/paas/v4/web_search");
   assert.equal(capturedInit?.method, "POST");
-  assert.equal(capturedUrl, "https://api.serp.hk/serp/google/search/advanced");
-  // No `?api_key=` in the URL — serp.hk takes the key via Bearer header.
-  assert.ok(!capturedUrl?.includes("api_key="), "bearer mode must not put api_key in the URL");
   const headers = capturedInit?.headers as Record<string, string>;
-  assert.equal(headers["Authorization"], "Bearer hk-key");
-  assert.equal(headers["Content-Type"], "application/json");
-  assert.deepEqual(JSON.parse(String(capturedInit?.body)), { q: "kimi" });
-  assert.equal((out.data as WebSearchOutput).organic[0]?.title, "via bearer");
-});
-
-test("web_search explicit authMode override beats the hostname heuristic", async () => {
-  // A custom proxy with a non-serp.hk hostname that still expects Bearer.
-  let capturedInit: RequestInit | undefined;
-  const mock: typeof fetch = (async (_url, init) => {
-    capturedInit = init;
-    return new Response(JSON.stringify({ organic_results: [] }), { status: 200 });
-  }) as typeof fetch;
-  const tool = createWebSearchTool({
-    apiKey: "k",
-    endpoint: "https://custom-proxy.example.com/search",
-    authMode: "bearer",
-    fetchImpl: mock,
+  assert.equal(headers.Authorization, "Bearer glm-key");
+  assert.deepEqual(JSON.parse(String(capturedInit?.body)), {
+    search_engine: "search-prime",
+    search_query: "current risk",
+    count: 8,
+    search_recency_filter: "noLimit",
   });
-  await tool.execute({ query: "x" }, makeContext({}));
-  assert.equal(capturedInit?.method, "POST");
-  assert.equal((capturedInit?.headers as Record<string, string>)["Authorization"], "Bearer k");
+  assert.equal((out.metadata as { provider: string }).provider, "glm");
+  assert.equal((out.data as WebSearchOutput).organic[0]?.title, "Z.AI News");
+  assert.equal((out.data as WebSearchOutput).organic[0]?.link, "https://example.com/zai");
+  assert.equal((out.data as WebSearchOutput).organic[0]?.snippet, "Z.AI current evidence");
 });
 
-test("web_search defaults to https://serpapi.com/search and honors endpoint override", async () => {
+test("web_search reads GLM key and endpoint from context env", async () => {
   let capturedUrl: string | undefined;
   const mock: typeof fetch = (async (url) => {
     capturedUrl = String(url);
-    return new Response(JSON.stringify({ organic_results: [] }), { status: 200 });
+    return new Response(JSON.stringify({ search_result: [] }), { status: 200 });
+  }) as typeof fetch;
+  const tool = createWebSearchTool({ fetchImpl: mock });
+  await tool.execute({ query: "x" }, makeContext({
+    GLM_WEB_SEARCH_API_KEY: "env-key",
+    GLM_WEB_SEARCH_ENDPOINT: "https://glm.example/search",
+  }));
+  assert.equal(capturedUrl, "https://glm.example/search");
+});
+
+test("web_search uses Tavily when provider is selected", async () => {
+  let capturedUrl: string | undefined;
+  let capturedInit: RequestInit | undefined;
+  const mock: typeof fetch = (async (url, init) => {
+    capturedUrl = String(url);
+    capturedInit = init;
+    return new Response(
+      JSON.stringify({
+        answer: "summary",
+        results: [{ title: "Found", url: "https://x.example", content: "yes" }],
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }) as typeof fetch;
+  const tool = createWebSearchTool({ provider: "tavily", apiKey: "tvly-key", fetchImpl: mock });
+  const out = await tool.execute({ query: "foo" } satisfies WebSearchInput, makeContext({}));
+  assert.equal(capturedUrl, "https://api.tavily.com/search");
+  assert.equal(capturedInit?.method, "POST");
+  assert.deepEqual(JSON.parse(String(capturedInit?.body)), {
+    api_key: "tvly-key",
+    query: "foo",
+    max_results: 8,
+    include_answer: true,
+    search_depth: "basic",
+  });
+  assert.equal((out.metadata as { provider: string }).provider, "tavily");
+  assert.equal((out.data as WebSearchOutput).organic[0]?.link, "https://x.example");
+  assert.deepEqual((out.data as WebSearchOutput).answerBox, { answer: "summary" });
+});
+
+test("web_search supports a custom POST provider with mapped result fields", async () => {
+  let capturedUrl: string | undefined;
+  let capturedInit: RequestInit | undefined;
+  const mock: typeof fetch = (async (url, init) => {
+    capturedUrl = String(url);
+    capturedInit = init;
+    return new Response(
+      JSON.stringify({
+        data: {
+          hits: [
+            {
+              headline: "Custom hit",
+              target: "https://custom.example/1",
+              body: "custom snippet",
+              site: "custom.example",
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
   }) as typeof fetch;
 
-  const defaultTool = createWebSearchTool({ apiKey: "k", fetchImpl: mock });
-  await defaultTool.execute({ query: "x" }, makeContext({}));
-  assert.match(capturedUrl!, /^https:\/\/serpapi\.com\/search\?/);
-
-  const proxyTool = createWebSearchTool({
-    apiKey: "k",
-    endpoint: "https://my-proxy.example/serp",
+  const tool = createWebSearchTool({
+    provider: "custom",
+    apiKey: "custom-key",
+    endpoint: "https://custom.example/search",
+    customProvider: {
+      name: "My Search",
+      auth: "bodyApiKey",
+      method: "POST",
+      queryParam: "q",
+      apiKeyParam: "token",
+      resultsPath: "data.hits",
+      titleField: "headline",
+      urlField: "target",
+      snippetField: "body",
+      sourceField: "site",
+    },
     fetchImpl: mock,
   });
-  await proxyTool.execute({ query: "x" }, makeContext({}));
-  assert.match(capturedUrl!, /^https:\/\/my-proxy\.example\/serp\?/);
+  const out = await tool.execute({ query: "custom query" }, makeContext({}));
+
+  assert.equal(capturedUrl, "https://custom.example/search");
+  assert.equal(capturedInit?.method, "POST");
+  assert.deepEqual(JSON.parse(String(capturedInit?.body)), {
+    q: "custom query",
+    token: "custom-key",
+  });
+  assert.equal((out.metadata as { provider: string }).provider, "custom");
+  assert.equal((out.metadata as { providerName: string }).providerName, "My Search");
+  assert.deepEqual((out.data as WebSearchOutput).organic[0], {
+    title: "Custom hit",
+    link: "https://custom.example/1",
+    snippet: "custom snippet",
+    source: "custom.example",
+    publishedAt: undefined,
+  });
+});
+
+test("web_search supports a custom GET provider with query-string auth", async () => {
+  let capturedUrl: string | undefined;
+  const mock: typeof fetch = (async (url) => {
+    capturedUrl = String(url);
+    return new Response(JSON.stringify({ results: [] }), { status: 200 });
+  }) as typeof fetch;
+
+  const tool = createWebSearchTool({
+    provider: "custom",
+    apiKey: "custom-key",
+    endpoint: "https://custom.example/search",
+    customProvider: {
+      auth: "queryApiKey",
+      method: "GET",
+      queryParam: "text",
+      apiKeyParam: "key",
+    },
+    fetchImpl: mock,
+  });
+  await tool.execute({ query: "hello", gl: "CN" }, makeContext({}));
+
+  const url = new URL(capturedUrl!);
+  assert.equal(url.searchParams.get("text"), "hello");
+  assert.equal(url.searchParams.get("key"), "custom-key");
+  assert.equal(url.searchParams.get("gl"), "CN");
+});
+
+test("web_search caps GLM count and returned organic results to organicLimit", async () => {
+  let capturedBody: Record<string, unknown> | undefined;
+  const search_result = Array.from({ length: 20 }, (_, i) => ({
+    title: `R${i}`,
+    link: `https://x.example/${i}`,
+  }));
+  const mock: typeof fetch = (async (_url, init) => {
+    capturedBody = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({ search_result }), { status: 200 });
+  }) as typeof fetch;
+  const tool = createWebSearchTool({
+    apiKey: "k",
+    organicLimit: 3,
+    fetchImpl: mock,
+  });
+  const out = await tool.execute({ query: "x" }, makeContext({}));
+  assert.equal(capturedBody?.count, 3);
+  assert.equal((out.data as WebSearchOutput).organic.length, 3);
 });
 
 test("web_search reports HTTP non-2xx as tool_execution_failed", async () => {
@@ -232,14 +263,14 @@ test("web_search reports HTTP non-2xx as tool_execution_failed", async () => {
     (error: unknown) =>
       error instanceof PilotDeckToolRuntimeError &&
       error.code === "tool_execution_failed" &&
-      /SerpAPI error \(500\)/.test(error.message),
+      /GLM web search error \(500\)/.test(error.message),
   );
 });
 
-test("web_search reports SerpAPI 200-with-error payload as tool_execution_failed", async () => {
+test("web_search reports provider error payloads as tool_execution_failed", async () => {
   const tool = createWebSearchTool({
     apiKey: "k",
-    fetchImpl: fakeFetch({ error: "Invalid API key. Your API key should be here: ..." }),
+    fetchImpl: fakeFetch({ error: "Invalid API key." }),
   });
   await assert.rejects(
     () => tool.execute({ query: "x" }, makeContext({})),
@@ -295,7 +326,7 @@ test("web_search returns text content suitable for tool_result", async () => {
   const tool = createWebSearchTool({
     apiKey: "k",
     fetchImpl: fakeFetch({
-      organic_results: [{ title: "Found", link: "https://x.example", snippet: "yes" }],
+      search_result: [{ title: "Found", link: "https://x.example", content: "yes" }],
     }),
   });
   const out = await tool.execute({ query: "hi" }, makeContext({}));

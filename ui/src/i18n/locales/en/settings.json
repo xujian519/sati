@@ -498,7 +498,7 @@
       },
       "tools": {
         "label": "Search",
-        "description": "Web search provider (SerpAPI key & endpoint)"
+        "description": "Web search provider"
       },
       "customEnv": {
         "label": "Env Vars",
@@ -569,16 +569,49 @@
       },
       "tools": {
         "title": "Search",
-        "description": "Web search backing the agent's `web_search` tool. Defaults to SerpAPI; any SerpAPI-compatible proxy works (e.g. serp.hk for in-China access).",
+        "description": "Web search backing the agent's `web_search` tool. Select exactly one provider; inactive providers are ignored.",
+        "provider": {
+          "label": "Provider",
+          "description": "Choose the single search provider used by the agent.",
+          "glm": "GLM / Z.AI Web Search",
+          "tavily": "Tavily",
+          "custom": "Custom"
+        },
         "apiKey": {
           "label": "API key",
-          "description": "Stored in pilotdeck.yaml under tools.webSearch.apiKey. Falls back to the SERP_API_KEY env var when empty.",
-          "placeholder": "serpapi key"
+          "description": "Stored in pilotdeck.yaml under tools.webSearch.apiKey for the selected provider.",
+          "placeholder": "provider API key"
         },
         "endpoint": {
           "label": "Endpoint",
-          "description": "Defaults to https://serpapi.com/search. Override when using a SerpAPI-compatible proxy (e.g. https://api.serp.hk/serp/google/search/advanced).",
-          "placeholder": "https://serpapi.com/search"
+          "description": "Optional override for the selected provider endpoint. Leave empty to use the provider default.",
+          "placeholder": "Provider default endpoint"
+        },
+        "custom": {
+          "name": {
+            "label": "Name",
+            "description": "Display name for this custom search provider."
+          },
+          "auth": {
+            "label": "Auth",
+            "description": "How the custom provider receives the API key.",
+            "bearer": "Bearer header",
+            "bodyApiKey": "API key in JSON body",
+            "queryApiKey": "API key in query string",
+            "none": "No API key"
+          },
+          "method": {
+            "label": "HTTP method",
+            "description": "Request method for the custom provider."
+          },
+          "params": {
+            "label": "Parameter names",
+            "description": "Left: query parameter/body field. Right: API key parameter/body field."
+          },
+          "mapping": {
+            "label": "Result mapping",
+            "description": "Dot-paths used to read the results array and each result's title, URL, snippet, source, and publish time."
+          }
         },
         "test": {
           "button": "Test connection",

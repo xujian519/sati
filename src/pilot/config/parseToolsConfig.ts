@@ -3,6 +3,9 @@ import type {
   PilotConfigDiagnostic,
   PilotToolsConfig,
   PilotWebSearchConfig,
+  PilotWebSearchCustomAuth,
+  PilotWebSearchCustomMethod,
+  PilotWebSearchProvider,
 } from "./types.js";
 
 /**
@@ -10,8 +13,9 @@ import type {
  *
  *   tools:
  *     webSearch:
- *       apiKey: "..."                           # SerpAPI key
- *       endpoint: https://serpapi.com/search    # optional override
+ *       provider: glm                    # glm | tavily | custom
+ *       apiKey: "..."
+ *       endpoint: https://api.z.ai/api/paas/v4/web_search
  *
  * Unknown fields produce non-fatal warnings so future additions don't break
  * older deployments.  Returns `undefined` when the section is missing or
@@ -75,6 +79,20 @@ function parseWebSearch(
 
   const result: PilotWebSearchConfig = {};
 
+  if (raw.provider !== undefined) {
+    if (raw.provider !== "glm" && raw.provider !== "tavily" && raw.provider !== "custom") {
+      diagnostics.push({
+        code: "TOOLS_WEB_SEARCH_PROVIDER_INVALID",
+        severity: "fatal",
+        message: "tools.webSearch.provider must be \"glm\", \"tavily\", or \"custom\".",
+        path: "tools.webSearch.provider",
+        recoverable: false,
+      });
+    } else {
+      result.provider = raw.provider as PilotWebSearchProvider;
+    }
+  }
+
   if (raw.apiKey !== undefined) {
     if (typeof raw.apiKey !== "string" || raw.apiKey.trim().length === 0) {
       diagnostics.push({
@@ -103,37 +121,36 @@ function parseWebSearch(
     }
   }
 
-  if (raw.tavilyApiKey !== undefined) {
-    if (typeof raw.tavilyApiKey !== "string" || raw.tavilyApiKey.trim().length === 0) {
-      diagnostics.push({
-        code: "TOOLS_WEB_SEARCH_TAVILY_KEY_INVALID",
-        severity: "fatal",
-        message: "tools.webSearch.tavilyApiKey must be a non-empty string.",
-        path: "tools.webSearch.tavilyApiKey",
-        recoverable: false,
-      });
-    } else {
-      result.tavilyApiKey = raw.tavilyApiKey.trim();
-    }
+  const customProvider = parseCustomProvider(raw.customProvider, diagnostics);
+  if (customProvider) {
+    result.customProvider = customProvider;
   }
 
-  // Soft-deprecate the old `region` field (used by the dropped serp.hk
-  // multi-region driver). Emit a warning + ignore so existing yamls don't
-  // break — users can clean it up at their leisure.
+  // Soft-deprecate removed legacy fields. Emit warnings + ignore so existing
+  // yamls don't break during migration to provider/apiKey/endpoint.
   if (raw.region !== undefined) {
     diagnostics.push({
       code: "TOOLS_WEB_SEARCH_REGION_DEPRECATED",
       severity: "warning",
       message:
-        "tools.webSearch.region has been removed (web_search now uses SerpAPI). " +
-        "Delete the field, or set tools.webSearch.endpoint if you need a SerpAPI-compatible proxy.",
+        "tools.webSearch.region has been removed. Select tools.webSearch.provider instead.",
       path: "tools.webSearch.region",
+      recoverable: true,
+    });
+  }
+  if (raw.tavilyApiKey !== undefined) {
+    diagnostics.push({
+      code: "TOOLS_WEB_SEARCH_TAVILY_KEY_DEPRECATED",
+      severity: "warning",
+      message:
+        "tools.webSearch.tavilyApiKey has been removed. Set tools.webSearch.provider: tavily and use tools.webSearch.apiKey.",
+      path: "tools.webSearch.tavilyApiKey",
       recoverable: true,
     });
   }
 
   for (const key of Object.keys(raw)) {
-    if (key !== "apiKey" && key !== "endpoint" && key !== "region" && key !== "tavilyApiKey") {
+    if (key !== "provider" && key !== "apiKey" && key !== "endpoint" && key !== "customProvider" && key !== "region" && key !== "tavilyApiKey") {
       diagnostics.push({
         code: "TOOLS_WEB_SEARCH_UNKNOWN_FIELD",
         severity: "warning",
@@ -145,4 +162,123 @@ function parseWebSearch(
   }
 
   return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function parseCustomProvider(
+  raw: unknown,
+  diagnostics: PilotConfigDiagnostic[],
+): NonNullable<PilotWebSearchConfig["customProvider"]> | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) {
+    diagnostics.push({
+      code: "TOOLS_WEB_SEARCH_CUSTOM_PROVIDER_INVALID",
+      severity: "fatal",
+      message: "tools.webSearch.customProvider must be an object.",
+      path: "tools.webSearch.customProvider",
+      recoverable: false,
+    });
+    return undefined;
+  }
+
+  const result: NonNullable<PilotWebSearchConfig["customProvider"]> = {};
+  const auth = parseEnumField<PilotWebSearchCustomAuth>(
+    raw.auth,
+    ["bearer", "bodyApiKey", "queryApiKey", "none"],
+    "tools.webSearch.customProvider.auth",
+    "TOOLS_WEB_SEARCH_CUSTOM_AUTH_INVALID",
+    diagnostics,
+  );
+  if (auth) result.auth = auth;
+
+  const method = parseEnumField<PilotWebSearchCustomMethod>(
+    raw.method,
+    ["GET", "POST"],
+    "tools.webSearch.customProvider.method",
+    "TOOLS_WEB_SEARCH_CUSTOM_METHOD_INVALID",
+    diagnostics,
+  );
+  if (method) result.method = method;
+
+  for (const field of [
+    "name",
+    "queryParam",
+    "apiKeyParam",
+    "resultsPath",
+    "titleField",
+    "urlField",
+    "snippetField",
+    "sourceField",
+    "publishedAtField",
+  ] as const) {
+    const parsed = parseOptionalStringField(raw[field], `tools.webSearch.customProvider.${field}`, diagnostics);
+    if (parsed !== undefined) {
+      result[field] = parsed;
+    }
+  }
+
+  for (const key of Object.keys(raw)) {
+    if (
+      key !== "auth" &&
+      key !== "name" &&
+      key !== "method" &&
+      key !== "queryParam" &&
+      key !== "apiKeyParam" &&
+      key !== "resultsPath" &&
+      key !== "titleField" &&
+      key !== "urlField" &&
+      key !== "snippetField" &&
+      key !== "sourceField" &&
+      key !== "publishedAtField"
+    ) {
+      diagnostics.push({
+        code: "TOOLS_WEB_SEARCH_CUSTOM_PROVIDER_UNKNOWN_FIELD",
+        severity: "warning",
+        message: `Unknown tools.webSearch.customProvider field ${key}.`,
+        path: `tools.webSearch.customProvider.${key}`,
+        recoverable: true,
+      });
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function parseEnumField<T extends string>(
+  raw: unknown,
+  allowed: readonly T[],
+  path: string,
+  code: string,
+  diagnostics: PilotConfigDiagnostic[],
+): T | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== "string" || !allowed.includes(raw as T)) {
+    diagnostics.push({
+      code,
+      severity: "fatal",
+      message: `${path} must be one of: ${allowed.join(", ")}.`,
+      path,
+      recoverable: false,
+    });
+    return undefined;
+  }
+  return raw as T;
+}
+
+function parseOptionalStringField(
+  raw: unknown,
+  path: string,
+  diagnostics: PilotConfigDiagnostic[],
+): string | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    diagnostics.push({
+      code: "TOOLS_WEB_SEARCH_CUSTOM_STRING_INVALID",
+      severity: "fatal",
+      message: `${path} must be a non-empty string.`,
+      path,
+      recoverable: false,
+    });
+    return undefined;
+  }
+  return raw.trim();
 }
