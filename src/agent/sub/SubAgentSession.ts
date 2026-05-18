@@ -23,7 +23,11 @@ import type {
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
 import { ToolRegistry } from "../../tool/registry/ToolRegistry.js";
-import type { PilotDeckToolDefinition } from "../../tool/index.js";
+import type {
+  PilotDeckReadFileStateMap,
+  PilotDeckToolDefinition,
+  PilotDeckWriteSnapshotMap,
+} from "../../tool/index.js";
 import { ConcurrentToolScheduler } from "../../tool/scheduler/ConcurrentToolScheduler.js";
 import { ToolRuntime } from "../../tool/execution/ToolRuntime.js";
 import { PermissionRuntime } from "../../permission/index.js";
@@ -34,7 +38,11 @@ import {
   buildSubagentSystemPrompt,
   type SubagentDefinition,
 } from "./builtinSubagentTypes.js";
-import { applySystemPromptFilters } from "./contextInheritance.js";
+import {
+  applySystemPromptFilters,
+  cloneReadFileState,
+  cloneWriteSnapshots,
+} from "./contextInheritance.js";
 import { filterIncompleteToolCalls } from "./filterIncompleteToolCalls.js";
 
 const SUMMARY_FIELDS = ["Scope", "Result", "Key files", "Files changed", "Issues"] as const;
@@ -55,6 +63,10 @@ export type SubAgentSessionOptions = {
   parentConfig: AgentRuntimeConfig;
   /** Parent agent's runtime dependencies (model, scheduler factory, ...). */
   parentDependencies: AgentRuntimeDependencies;
+  /** Parent agent's read-file deduplication cache (cloned into the child). */
+  parentReadFileState?: PilotDeckReadFileStateMap;
+  /** Parent agent's write snapshots (cloned into the child). */
+  parentWriteSnapshots?: PilotDeckWriteSnapshotMap;
   /** New session id for the fork's transcript writer (C3 sidechain hook). */
   subagentSessionId: string;
   /** Stable subagent UUID — mirrors C3 sidechain naming. */
@@ -106,7 +118,10 @@ export class SubAgentSession {
     const subDependencies = this.cloneDependencies(subRegistry);
     const subConfig = this.buildConfig();
 
-    const loop = new AgentLoop(subConfig, subDependencies);
+    const loop = new AgentLoop(subConfig, subDependencies, {
+      readFileState: cloneReadFileState(this.options.parentReadFileState),
+      writeSnapshots: cloneWriteSnapshots(this.options.parentWriteSnapshots),
+    });
 
     let last: AgentLoopRunResult | undefined;
     const turnId = `${this.options.subagentId}-t0`;

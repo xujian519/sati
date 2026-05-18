@@ -15,6 +15,7 @@ import {
   parsePdfPageRange,
 } from "./filesystem/fileTypeSafety.js";
 import { readNotebook } from "./filesystem/readNotebook.js";
+import { recordWriteSnapshot } from "./filesystem/writeSnapshots.js";
 import { countTokens } from "../../context/budget/tokenizer.js";
 
 export type ReadFileInput = {
@@ -36,12 +37,18 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
     name: "read_file",
     aliases: ["Read"],
     description:
-      "Read a file from the current workspace.\n\nUsage:\n- Supports text, images, PDF files, and Jupyter notebooks.\n"
-      + "- Provide file_path as a workspace-relative path or an absolute path that resolves inside the workspace.\n"
-      + "- offset is 1-based and defaults to 1.\n- Text-like output is formatted with cat -n style line numbers.\n"
-      + "- Use limit to read a specific range, and pages for PDF page-range validation (for example: \"1-5\").\n"
-      + "- This tool reads files, not directories.\n- If the target does not exist, is outside the workspace, or "
-      + "violates safety constraints, the tool returns a controlled error.",
+      "Reads a file from the current workspace. You can access workspace files directly by using this tool.\n"
+      + "If the User provides a path to a file, assume that path is valid as long as it resolves inside the current workspace. "
+      + "It is okay to read a file that does not exist; an error will be returned.\n\nUsage:\n"
+      + "- The file_path parameter may be a workspace-relative path or an absolute path, but it must resolve inside the current workspace\n"
+      + "- By default, offset is 1 and the tool reads from the beginning of the file\n"
+      + "- You can optionally specify offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters\n"
+      + "- Results are returned using cat -n format, with line numbers starting at 1\n"
+      + "- This tool allows PilotDeck to read images (eg PNG, JPG, etc). When reading an image file the contents are presented visually when the current model supports image input\n"
+      + "- This tool can read PDF files (.pdf). For large PDFs, provide the pages parameter to validate specific page ranges (e.g., pages: \"1-5\"). Maximum 20 pages per request\n"
+      + "- This tool can read Jupyter notebooks (.ipynb files) and returns a text rendering of notebook cells and outputs\n"
+      + "- This tool can only read files, not directories\n"
+      + "- If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents",
     kind: "filesystem",
     inputSchema: {
       type: "object",
@@ -51,22 +58,22 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         file_path: {
           type: "string",
           description:
-            "Relative or absolute path of the text file to read. The path must resolve inside the current workspace.",
+            "The relative or absolute path to the file to read. The path must resolve inside the current workspace.",
         },
         offset: {
           type: "integer",
           description:
-            "1-based line number to start reading from for text and notebook output. Defaults to 1.",
+            "The 1-based line number to start reading from. Only provide if the file is too large to read at once.",
         },
         limit: {
           type: "integer",
           description:
-            "Maximum number of lines to return for text and notebook output. Omit to read the entire file, or provide it to target a specific portion.",
+            "The number of lines to read. Only provide if the file is too large to read at once.",
         },
         pages: {
           type: "string",
           description:
-            "Optional PDF page range to validate, such as \"1-5\" or \"3\". Maximum 20 pages per request.",
+            "Page range for PDF files (e.g., \"1-5\", \"3\", \"10-20\"). Only applicable to PDF files. Maximum 20 pages per request.",
         },
       },
     },
@@ -292,6 +299,9 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         limit: input.limit,
         pages: input.pages,
       });
+      if (offset === 1 && input.limit === undefined) {
+        recordWriteSnapshot(context, resolved.absolutePath, ranged.content, ranged.mtimeMs);
+      }
       return {
         content: [{ type: "text", text }],
         data: {

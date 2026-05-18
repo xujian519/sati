@@ -2,6 +2,7 @@ import type { CanonicalMessage, CanonicalModelEvent, CanonicalModelRequest } fro
 import type {
   PilotDeckElicitationChannel,
   PilotDeckToolAuditRecorder,
+  PilotDeckFileUpdateNotifier,
   PilotDeckToolFileHistorySink,
   PilotDeckToolScheduler,
   ToolRegistry,
@@ -95,6 +96,12 @@ export type AgentRuntimeDependencies = {
    * `FileHistoryStore` directly satisfies this contract.
    */
   fileHistory?: PilotDeckToolFileHistorySink;
+  /**
+   * Optional sink for propagating successful file writes to editor / LSP
+   * integrations. When absent, write_file still succeeds and performs no
+   * post-write host notifications.
+   */
+  fileUpdateNotifier?: PilotDeckFileUpdateNotifier;
   /**
    * Plan file manager — creates / reads the per-session plan file used by
    * `enter_plan_mode` / `exit_plan_mode`. Absent in headless / test runtimes.

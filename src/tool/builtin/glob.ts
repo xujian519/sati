@@ -1,9 +1,7 @@
-import path from "node:path";
 import type { PilotDeckToolDefinition } from "../protocol/types.js";
 import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
-import { globPatternToRegExp } from "./filesystem/globPattern.js";
 import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
-import { walkFiles } from "./filesystem/walk.js";
+import { ripgrepFiles } from "./filesystem/ripgrepFiles.js";
 
 export type GlobInput = {
   pattern: string;
@@ -16,7 +14,7 @@ export function createGlobTool(): PilotDeckToolDefinition<GlobInput> {
     name: "glob",
     aliases: ["Glob"],
     description:
-      "Find workspace files matching a glob pattern.\n\nUsage:\n- Supports glob patterns like \"**/*.js\" or \"src/**/*.ts\".\n- Use this tool when you need to find files by name or wildcard pattern.\n- Provide the optional path parameter to restrict the search to a subdirectory.\n- Use this tool to narrow down candidate files before reading or editing them.",
+      "Fast file pattern matching tool scoped to the workspace.\n\nUsage:\n- Supports glob patterns like \"**/*.js\" or \"src/**/*.ts\".\n- Use this tool when you need to find files by name patterns.\n- Provide the optional path parameter to restrict the search to a subdirectory inside the workspace.\n- Returns matching file paths in stable sorted order.\n- Use this tool to narrow down candidate files before reading or editing them.",
     kind: "filesystem",
     inputSchema: {
       type: "object",
@@ -30,12 +28,12 @@ export function createGlobTool(): PilotDeckToolDefinition<GlobInput> {
         path: {
           type: "string",
           description:
-            "The directory to search in. If not specified, the workspace root will be used. Must resolve to a directory inside the workspace if provided.",
+            "The directory to search in. If not specified, the workspace root will be used. Omit this field to use the default directory. Must resolve to a directory inside the workspace if provided.",
         },
         limit: {
           type: "integer",
           description:
-            "Maximum number of file paths to return. This is a PilotDeck-specific output cap; defaults to 1000.",
+            "Maximum number of file paths to return. This is a PilotDeck-specific output cap; defaults to 1000. Results remain stable and sorted before truncation.",
         },
       },
     },
@@ -48,26 +46,24 @@ export function createGlobTool(): PilotDeckToolDefinition<GlobInput> {
         throw new PilotDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
       }
 
-      const matcher = globPatternToRegExp(input.pattern);
-      const limit = input.limit ?? 1_000;
-      const files = (await walkFiles(resolved.absolutePath))
-        .map((file) => file.split(path.sep).join("/"))
-        .filter((file) => matcher.test(file))
-        .sort();
-      const selected = files.slice(0, limit);
-      const workspaceFiles = selected.map((file) =>
-        path.join(resolved.relativePath === "." ? "" : resolved.relativePath, file).split(path.sep).join("/"),
-      );
-      const truncated = selected.length < files.length;
+      const result = await ripgrepFiles({
+        cwd: resolved.absolutePath,
+        pattern: input.pattern,
+        limit: input.limit,
+        env: context.env,
+        signal: context.abortSignal,
+      });
+      const workspacePrefix = resolved.relativePath === "." ? "" : `${resolved.relativePath}/`;
+      const workspaceFiles = result.files.map((file) => `${workspacePrefix}${file}`);
 
       return {
         content: [{ type: "text", text: workspaceFiles.join("\n") }],
         data: {
           files: workspaceFiles,
-          count: files.length,
-          truncated,
+          count: result.count,
+          truncated: result.truncated,
         },
-        metadata: { truncated },
+        metadata: { truncated: result.truncated },
       };
     },
   };

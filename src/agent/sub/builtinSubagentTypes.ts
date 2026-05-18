@@ -93,7 +93,7 @@ export const SUBAGENT_DEFINITIONS: Record<SubagentDefinitionId, SubagentDefiniti
     omitGitStatus: true,
     isReadOnly: true,
     systemPromptSuffix:
-      "Read-only mode: you may inspect files (`read_file`), search (`grep` / `glob`), and run safe shell commands (`bash`), but never write or delete. Do not propose `edit_file` / `write_file` / network calls — those will be rejected.",
+      "Read-only mode: you may inspect files (`read_file`), search (`grep` / `glob`), and run safe shell commands (`bash`), but never write or delete. Prefer `grep` for content search and `glob` for file discovery; do not fall back to `bash` `grep` / `rg` unless the dedicated tools cannot express the task. Do not propose `edit_file` / `write_file` / network calls — those will be rejected.",
   },
   plan: {
     id: "plan",
@@ -104,7 +104,7 @@ export const SUBAGENT_DEFINITIONS: Record<SubagentDefinitionId, SubagentDefiniti
     omitGitStatus: true,
     isReadOnly: true,
     systemPromptSuffix:
-      "Planning mode: produce a numbered, actionable plan. You may inspect code (`read_file` / `grep` / `glob`) but you may NOT execute shell commands or modify files.",
+      "Planning mode: produce a numbered, actionable plan. You may inspect code (`read_file` / `grep` / `glob`) but you may NOT execute shell commands or modify files. Prefer `grep` for content search and `glob` for file discovery instead of describing shell-based search workarounds.",
   },
   verify: {
     id: "verify",

@@ -15,6 +15,7 @@ import type {
   PilotDeckSubagentForkApi,
   PilotDeckToolResult,
   PilotDeckToolRuntimeContext,
+  PilotDeckWriteSnapshotMap,
 } from "../../tool/index.js";
 import {
   SUBAGENT_DEFINITIONS,
@@ -51,13 +52,23 @@ export type AgentLoopRunResult = {
   messages: CanonicalMessage[];
 };
 
+export type AgentLoopSeedState = {
+  readFileState?: PilotDeckReadFileStateMap;
+  writeSnapshots?: PilotDeckWriteSnapshotMap;
+};
+
 export class AgentLoop {
-  private readonly readFileState: PilotDeckReadFileStateMap = new Map();
+  private readonly readFileState: PilotDeckReadFileStateMap;
+  private readonly writeSnapshots: PilotDeckWriteSnapshotMap;
 
   constructor(
     private readonly config: AgentRuntimeConfig,
     private readonly dependencies: AgentRuntimeDependencies,
-  ) {}
+    seedState?: AgentLoopSeedState,
+  ) {
+    this.readFileState = cloneReadFileStateMap(seedState?.readFileState);
+    this.writeSnapshots = cloneWriteSnapshotMap(seedState?.writeSnapshots);
+  }
 
   async *run(input: AgentLoopInput): AsyncGenerator<AgentEvent, AgentLoopRunResult, unknown> {
     this.applyPermissionOverrides(input.permissionMode, input.permissionRules);
@@ -679,6 +690,8 @@ export class AgentLoop {
       modelMultimodal: this.config.modelMultimodal,
       maxOutputTokens: this.config.maxOutputTokens,
       readFileState: this.readFileState,
+      writeSnapshots: this.writeSnapshots,
+      fileUpdateNotifier: this.dependencies.fileUpdateNotifier,
     };
   }
 
@@ -743,6 +756,8 @@ export class AgentLoop {
             isSubagent: true,
           },
           parentDependencies: this.dependencies,
+          parentReadFileState: this.readFileState,
+          parentWriteSnapshots: this.writeSnapshots,
           subagentSessionId,
           subagentId,
           abortSignal: composedAbort.signal,
@@ -931,6 +946,28 @@ function cloneMessages(messages: CanonicalMessage[]): CanonicalMessage[] {
     ...message,
     content: message.content.map((block) => ({ ...block })),
   }));
+}
+
+function cloneReadFileStateMap(
+  state: PilotDeckReadFileStateMap | undefined,
+): PilotDeckReadFileStateMap {
+  const out: PilotDeckReadFileStateMap = new Map();
+  if (!state) return out;
+  for (const [key, value] of state.entries()) {
+    out.set(key, { ...value });
+  }
+  return out;
+}
+
+function cloneWriteSnapshotMap(
+  state: PilotDeckWriteSnapshotMap | undefined,
+): PilotDeckWriteSnapshotMap {
+  const out: PilotDeckWriteSnapshotMap = new Map();
+  if (!state) return out;
+  for (const [key, value] of state.entries()) {
+    out.set(key, { ...value });
+  }
+  return out;
 }
 
 const OUTPUT_TOKEN_RETRY_DEFAULT = 4_096;

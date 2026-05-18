@@ -16,23 +16,30 @@
  */
 
 import type { SubagentDefinition } from "./builtinSubagentTypes.js";
+import type { PilotDeckReadFileStateMap, PilotDeckWriteSnapshotMap } from "../../tool/index.js";
 
 /** Read-file freshness cache contract. Match the shape used by `read_file`. */
-export type ReadFileStateMap = Map<string, ReadFileStateEntry>;
-
-export type ReadFileStateEntry = {
-  /** Last modified time (ms epoch) the agent observed when reading the file. */
-  mtimeMs: number;
-  /** Optional content hash captured at last read. */
-  contentHash?: string;
-};
+export type ReadFileStateMap = PilotDeckReadFileStateMap;
+export type ReadFileStateEntry = ReadFileStateMap extends Map<string, infer T> ? T : never;
+export type WriteSnapshotMap = PilotDeckWriteSnapshotMap;
+export type WriteSnapshotEntry = WriteSnapshotMap extends Map<string, infer T> ? T : never;
 
 /** S5 — deep clone the parent's read-file cache. */
 export function cloneReadFileState(parent: ReadFileStateMap | undefined): ReadFileStateMap {
   if (!parent) return new Map();
   const out: ReadFileStateMap = new Map();
   for (const [key, value] of parent.entries()) {
-    out.set(key, { mtimeMs: value.mtimeMs, contentHash: value.contentHash });
+    out.set(key, { ...value });
+  }
+  return out;
+}
+
+/** Deep clone the parent's write snapshot cache. */
+export function cloneWriteSnapshots(parent: WriteSnapshotMap | undefined): WriteSnapshotMap {
+  if (!parent) return new Map();
+  const out: WriteSnapshotMap = new Map();
+  for (const [key, value] of parent.entries()) {
+    out.set(key, { ...value });
   }
   return out;
 }

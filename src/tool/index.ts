@@ -32,6 +32,8 @@ export type {
   PilotDeckToolCall,
   PilotDeckToolDefinition,
   PilotDeckToolExecutionOutput,
+  PilotDeckFileUpdateNotification,
+  PilotDeckFileUpdateNotifier,
   PilotDeckToolFileHistorySink,
   PilotDeckToolKind,
   PilotDeckToolModelClient,
@@ -42,6 +44,8 @@ export type {
   PilotDeckToolResultContent,
   PilotDeckToolRuntimeContext,
   PilotDeckSubagentForkApi,
+  PilotDeckWriteSnapshotEntry,
+  PilotDeckWriteSnapshotMap,
 } from "./protocol/types.js";
 export { ToolRegistry } from "./registry/ToolRegistry.js";
 export { createBuiltinRegistry, type CreateBuiltinRegistryOptions } from "./registry/createBuiltinRegistry.js";
@@ -62,7 +66,7 @@ export { createReadSkillTool, type ReadSkillDeps, type ReadSkillInput } from "./
 export { createGlobTool, type GlobInput } from "./builtin/glob.js";
 export { createGrepTool, type GrepInput } from "./builtin/grep.js";
 export { createEditFileTool, type EditFileInput } from "./builtin/editFile.js";
-export { createWriteFileTool, type WriteFileInput } from "./builtin/writeFile.js";
+export { createWriteFileTool, type WriteFileInput, type WriteFileOutput } from "./builtin/writeFile.js";
 export {
   createBashTool,
   type BashInput,

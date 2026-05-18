@@ -8,9 +8,11 @@ import {
   type PilotDeckToolAuditRecorder,
   type PilotDeckToolDefinition,
   type PilotDeckToolExecutionOutput,
+  type PilotDeckFileUpdateNotifier,
   type PilotDeckToolFileHistorySink,
   type PilotDeckToolInputSchema,
   type PilotDeckToolRuntimeContext,
+  type PilotDeckWriteSnapshotMap,
 } from "../../src/tool/index.js";
 
 export function createPilotDeckTestTool(options: {
@@ -52,9 +54,11 @@ export function createPilotDeckToolRuntimeFixture(options?: {
   lifecycle?: LifecycleRuntime;
   elicitation?: PilotDeckElicitationChannel;
   fileHistory?: PilotDeckToolFileHistorySink;
+  fileUpdateNotifier?: PilotDeckFileUpdateNotifier;
   messageId?: string;
   modelMultimodal?: MultimodalConstraints;
   maxOutputTokens?: number;
+  writeSnapshots?: PilotDeckWriteSnapshotMap;
 }): {
   registry: ToolRegistry;
   permissionRuntime: PermissionRuntime;
@@ -84,9 +88,11 @@ export function createPilotDeckToolRuntimeFixture(options?: {
     now: () => new Date("2026-01-01T00:00:00.000Z"),
     elicitation: options?.elicitation,
     fileHistory: options?.fileHistory,
+    fileUpdateNotifier: options?.fileUpdateNotifier,
     messageId: options?.messageId,
     modelMultimodal: options?.modelMultimodal,
     maxOutputTokens: options?.maxOutputTokens,
+    writeSnapshots: options?.writeSnapshots,
   };
 
   return { registry, permissionRuntime, toolRuntime, context };

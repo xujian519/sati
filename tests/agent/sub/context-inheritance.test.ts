@@ -7,13 +7,13 @@ import {
 } from "../../../src/agent/sub/index.js";
 
 test("C2.S5 cloneReadFileState produces a deep copy", () => {
-  const parent = new Map<string, { mtimeMs: number; contentHash?: string }>([
-    ["/a.txt", { mtimeMs: 1, contentHash: "h1" }],
+  const parent = new Map<string, { mtimeMs: number; kind: "text" }>([
+    ["/a.txt", { mtimeMs: 1, kind: "text" }],
   ]);
   const cloned = cloneReadFileState(parent);
   assert.notEqual(cloned, parent);
   assert.deepEqual(cloned.get("/a.txt"), parent.get("/a.txt"));
-  cloned.set("/b.txt", { mtimeMs: 2 });
+  cloned.set("/b.txt", { mtimeMs: 2, kind: "text" });
   assert.equal(parent.get("/b.txt"), undefined);
 });
 
