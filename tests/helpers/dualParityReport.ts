@@ -2,6 +2,7 @@ import {
   createAskUserQuestionTool,
   createBashTool,
   createEditFileTool,
+  createEditNotebookTool,
   createGlobTool,
   createGrepTool,
   createListMcpResourcesTool,
@@ -28,6 +29,7 @@ export function createPilotDeckContractReport(): DualParityContractReport[] {
       createGlobTool(),
       createGrepTool(),
       createEditFileTool(),
+      createEditNotebookTool(),
       createWriteFileTool(),
       createBashTool({
         runner: {

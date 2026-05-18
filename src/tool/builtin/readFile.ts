@@ -325,6 +325,9 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
           limit: input.limit,
           pages: input.pages,
         });
+        if (offset === 1 && input.limit === undefined) {
+          recordWriteSnapshot(context, resolved.absolutePath, await readFile(resolved.absolutePath, "utf8"), fileStat.mtimeMs);
+        }
         return {
           content: [{ type: "text", text: numbered }],
           data: {

@@ -45,7 +45,7 @@ export function formatValidationError(
   const label = errorParts.length > 1 ? "issues" : "issue";
   let message = `${toolName} failed due to the following ${label}:\n${errorParts.join("\n")}`;
 
-  const FILE_TOOLS = new Set(["write_file", "edit_file", "bash"]);
+  const FILE_TOOLS = new Set(["write_file", "edit_file", "edit_notebook", "bash"]);
   const hasRequiredMissing = issues.some((i) => i.code === "required");
   const tokenBudget = options?.maxOutputTokens;
   const tokenInfo = tokenBudget ? ` (current max_output_tokens: ${tokenBudget})` : "";

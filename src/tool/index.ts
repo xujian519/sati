@@ -66,6 +66,11 @@ export { createReadSkillTool, type ReadSkillDeps, type ReadSkillInput } from "./
 export { createGlobTool, type GlobInput } from "./builtin/glob.js";
 export { createGrepTool, type GrepInput } from "./builtin/grep.js";
 export { createEditFileTool, type EditFileInput } from "./builtin/editFile.js";
+export {
+  createEditNotebookTool,
+  type EditNotebookInput,
+  type EditNotebookOutput,
+} from "./builtin/editNotebook.js";
 export { createWriteFileTool, type WriteFileInput, type WriteFileOutput } from "./builtin/writeFile.js";
 export {
   createBashTool,

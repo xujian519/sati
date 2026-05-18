@@ -19,6 +19,7 @@ test("creates a builtin registry with first implementation tools", () => {
       "ask_user_question",
       "bash",
       "edit_file",
+      "edit_notebook",
       "enter_plan_mode",
       "exit_plan_mode",
       "glob",
@@ -32,6 +33,7 @@ test("creates a builtin registry with first implementation tools", () => {
   );
   assert.equal(registry.get("Read")?.name, "read_file");
   assert.equal(registry.get("Bash")?.name, "bash");
+  assert.equal(registry.get("NotebookEdit")?.name, "edit_notebook");
   assert.equal(registry.get("WebSearch")?.name, "web_search");
   assert.equal(registry.get("WebFetch")?.name, "web_fetch");
   assert.equal(registry.get("Agent")?.name, "agent");

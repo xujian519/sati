@@ -22,6 +22,7 @@ const TOOL_NAME_ALIASES = new Map<string, string>([
   ["Read", "read_file"],
   ["Write", "write_file"],
   ["Edit", "edit_file"],
+  ["NotebookEdit", "edit_notebook"],
   ["MultiEdit", "edit_file"],
   ["Glob", "glob"],
   ["Grep", "grep"],

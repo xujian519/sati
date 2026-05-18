@@ -3,6 +3,7 @@ import { createAgentTool, type CreateAgentToolOptions } from "../builtin/agent.j
 import { createAskUserQuestionTool } from "../builtin/askUserQuestion.js";
 import { createBashTool, type CreateBashToolOptions } from "../builtin/bash.js";
 import { createEditFileTool } from "../builtin/editFile.js";
+import { createEditNotebookTool } from "../builtin/editNotebook.js";
 import { createGlobTool } from "../builtin/glob.js";
 import { createGrepTool } from "../builtin/grep.js";
 import { createReadFileTool } from "../builtin/readFile.js";
@@ -88,6 +89,7 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
   registry.register(createGlobTool());
   registry.register(createGrepTool());
   registry.register(createEditFileTool());
+  registry.register(createEditNotebookTool());
   registry.register(createWriteFileTool());
   registry.register(createBashTool(options?.bash));
   if (options?.webSearch !== false) {

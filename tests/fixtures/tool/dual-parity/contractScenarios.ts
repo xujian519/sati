@@ -144,11 +144,13 @@ export const dualParityContractScenarios: DualParityContractScenario[] = [
   },
   {
     id: "notebook-edit-contract",
-    status: "deferred",
-    legacy: { toolName: "NotebookEdit", input: { notebook_path: "__ABS_NOTEBOOK__", cell_id: "0", new_source: "" } },
-    pilotdeck: { toolName: "edit_notebook", input: { notebookPath: "notebook.ipynb", cellId: "0", newSource: "" } },
-    compareFields: ["readOnly", "concurrencySafe"],
-    reason: "PilotDeck has not implemented notebook editing; it is deferred until notebook attachment support exists.",
+    status: "compare",
+    legacy: { toolName: "NotebookEdit", input: { notebook_path: "__ABS_NOTEBOOK__", cell_id: "cell-0", new_source: "" } },
+    pilotdeck: {
+      toolName: "edit_notebook",
+      input: { notebook_path: "notebook.ipynb", cell_id: "cell-0", new_source: "" },
+    },
+    compareFields: ["readOnly", "concurrencySafe", "destructive"],
   },
   {
     id: "todo-write-contract",

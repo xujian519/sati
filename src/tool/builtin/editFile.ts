@@ -1,6 +1,7 @@
 import { stat } from "node:fs/promises";
 import type { PilotDeckToolDefinition } from "../protocol/types.js";
 import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
+import { isNotebookPath } from "./filesystem/fileTypeSafety.js";
 import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
 import { readTextFile } from "./filesystem/readTextFile.js";
 import { writeTextFile } from "./filesystem/writeTextFile.js";
@@ -61,6 +62,17 @@ export function createEditFileTool(): PilotDeckToolDefinition<EditFileInput> {
             path: "file_path",
             code: "invalid_schema",
             message: resolved.error.message,
+          }],
+        };
+      }
+
+      if (isNotebookPath(resolved.absolutePath)) {
+        return {
+          ok: false,
+          issues: [{
+            path: "file_path",
+            code: "invalid_schema",
+            message: "File is a Jupyter notebook. Use edit_notebook to edit this file.",
           }],
         };
       }
