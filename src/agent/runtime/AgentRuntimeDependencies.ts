@@ -8,6 +8,7 @@ import type {
   ToolRegistry,
 } from "../../tool/index.js";
 import type { PlanFileManager } from "../../tool/builtin/planFile.js";
+import type { PlanTodoStateManager } from "./PlanTodoState.js";
 import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
 import type { RouterRuntime } from "../../router/index.js";
@@ -107,6 +108,8 @@ export type AgentRuntimeDependencies = {
    * `enter_plan_mode` / `exit_plan_mode`. Absent in headless / test runtimes.
    */
   planFileManager?: PlanFileManager;
+  /** Session-scoped state tracking required `todo_write` calls after plan approval. */
+  planTodoManager?: PlanTodoStateManager;
   eventEmitter?: AgentEventEmitter;
   drainEvents?: () => AgentEvent[];
 };

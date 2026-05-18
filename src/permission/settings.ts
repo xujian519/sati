@@ -28,7 +28,7 @@ const TOOL_NAME_ALIASES = new Map<string, string>([
   ["Grep", "grep"],
   ["Bash", "bash"],
   ["Task", "agent"],
-  ["TodoWrite", "task_create"],
+  ["TodoWrite", "todo_write"],
   ["WebFetch", "web_fetch"],
   ["WebSearch", "web_search"],
 ]);

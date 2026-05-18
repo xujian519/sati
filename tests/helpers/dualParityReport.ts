@@ -11,6 +11,7 @@ import {
   createReadMcpResourceTool,
   createEnterPlanModeTool,
   createStructuredOutputTool,
+  createTodoWriteTool,
   createWebFetchTool,
   createWebSearchTool,
   createWriteFileTool,
@@ -43,6 +44,7 @@ export function createPilotDeckContractReport(): DualParityContractReport[] {
       createReadMcpResourceTool(),
       createEnterPlanModeTool(),
       createStructuredOutputTool(),
+      createTodoWriteTool(),
       createMcpTool({ serverId: "server", toolName: "tool" }),
     ].map((tool) => [tool.name, tool]),
   );

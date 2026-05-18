@@ -27,6 +27,7 @@ import {
 } from "../context/index.js";
 import { FileHistoryStore } from "../session/filesystem/FileHistoryStore.js";
 import type { AgentSubagentTranscriptHooks } from "../agent/runtime/AgentRuntimeDependencies.js";
+import { createPlanTodoStateManager } from "../agent/runtime/PlanTodoState.js";
 import { HookRuntime, PluginRuntime } from "../extension/index.js";
 import { LifecycleRuntime } from "../lifecycle/index.js";
 import {
@@ -884,12 +885,14 @@ class ProjectRuntimeRegistry {
         },
       };
       const planFileManager = createPlanFileManager({ projectRoot });
+      const planTodoManager = createPlanTodoStateManager();
       return {
         context: contextRuntime,
         fileHistory,
         subagentTranscript,
         elicitation,
         planFileManager,
+        planTodoManager,
       };
     };
     return {
@@ -965,7 +968,7 @@ function mergeSessionDependencies(
   extension: Partial<
     Pick<
       AgentRuntimeDependencies,
-      "context" | "fileHistory" | "subagentTranscript" | "elicitation" | "eventEmitter" | "drainEvents" | "planFileManager"
+      "context" | "fileHistory" | "subagentTranscript" | "elicitation" | "eventEmitter" | "drainEvents" | "planFileManager" | "planTodoManager"
     >
   >,
 ): CreateAgentSessionOptions["dependencies"] {
@@ -978,6 +981,7 @@ function mergeSessionDependencies(
     ...(extension.eventEmitter ? { eventEmitter: extension.eventEmitter } : {}),
     ...(extension.drainEvents ? { drainEvents: extension.drainEvents } : {}),
     ...(extension.planFileManager ? { planFileManager: extension.planFileManager } : {}),
+    ...(extension.planTodoManager ? { planTodoManager: extension.planTodoManager } : {}),
   };
 }
 

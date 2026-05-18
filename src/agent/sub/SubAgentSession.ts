@@ -275,6 +275,7 @@ export class SubAgentSession {
       auditRecorder: this.options.parentDependencies.auditRecorder,
       lifecycle: this.options.parentDependencies.lifecycle,
       subagentTranscript: this.options.parentDependencies.subagentTranscript,
+      planTodoManager: this.options.parentDependencies.planTodoManager,
     };
   }
 

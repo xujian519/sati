@@ -26,6 +26,7 @@ test("creates a builtin registry with first implementation tools", () => {
       "grep",
       "read_file",
       "structured_output",
+      "todo_write",
       "web_fetch",
       "web_search",
       "write_file",
@@ -42,6 +43,7 @@ test("creates a builtin registry with first implementation tools", () => {
   assert.equal(registry.get("AskUserQuestion")?.name, "ask_user_question");
   assert.equal(registry.get("EnterPlanMode")?.name, "enter_plan_mode");
   assert.equal(registry.get("ExitPlanMode")?.name, "exit_plan_mode");
+  assert.equal(registry.get("TodoWrite")?.name, "todo_write");
 });
 
 test("createBuiltinRegistry can opt out of structured_output", () => {

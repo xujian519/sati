@@ -34,11 +34,14 @@ export type {
   PilotDeckToolExecutionOutput,
   PilotDeckFileUpdateNotification,
   PilotDeckFileUpdateNotifier,
+  PilotDeckPlanTodoStateHandle,
+  PilotDeckPlanTodoStateSnapshot,
   PilotDeckToolFileHistorySink,
   PilotDeckToolKind,
   PilotDeckToolModelClient,
   PilotDeckToolProgressEvent,
   PilotDeckToolProgressSink,
+  PilotDeckTodoItem,
   PilotDeckReadFileStateEntry,
   PilotDeckReadFileStateMap,
   PilotDeckToolResultContent,
@@ -184,3 +187,9 @@ export {
   type TaskStopInput,
   type TaskStopResult,
 } from "./builtin/taskTools.js";
+export {
+  createTodoWriteTool,
+  parseTodoMarkdown,
+  type TodoWriteInput,
+  type TodoWriteOutput,
+} from "./builtin/todoWrite.js";

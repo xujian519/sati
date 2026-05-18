@@ -8,6 +8,12 @@
 
 import type { WebGatewayEvent } from "./protocol.js";
 
+function normalizeToolDisplayName(name: string): string {
+  if (name === "todo_write") return "TodoWrite";
+  if (name === "todo_read") return "TodoRead";
+  return name;
+}
+
 export type WebMessageRole =
   | "user"
   | "assistant"
@@ -176,7 +182,7 @@ export function applyWebGatewayEvent(
         role: "tool",
         kind: "tool_use",
         toolCallId: event.toolCallId,
-        toolName: event.name,
+        toolName: normalizeToolDisplayName(event.name),
         text: event.argsPreview,
         source: "live",
       };

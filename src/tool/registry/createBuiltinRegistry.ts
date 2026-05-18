@@ -9,6 +9,7 @@ import { createGrepTool } from "../builtin/grep.js";
 import { createReadFileTool } from "../builtin/readFile.js";
 import { createEnterPlanModeTool, createExitPlanModeTool } from "../builtin/planMode.js";
 import { createStructuredOutputTool } from "../builtin/structuredOutput.js";
+import { createTodoWriteTool } from "../builtin/todoWrite.js";
 import {
   createTaskCreateTool,
   createTaskListTool,
@@ -119,6 +120,7 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(createEnterPlanModeTool());
     registry.register(createExitPlanModeTool());
   }
+  registry.register(createTodoWriteTool());
   if (options?.readSkill) {
     registry.register(createReadSkillTool(options.readSkill));
   }

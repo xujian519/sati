@@ -76,7 +76,8 @@ function buildApprovedPlanResult(plan: string, planFilePath: string | undefined)
     : [];
   return [
     "User has approved your plan. You can now start coding.",
-    "Start with updating your todo list if applicable.",
+    "Before using any non-read-only tool, you MUST call todo_write with a markdown checklist derived from the approved plan.",
+    "After each completed implementation step, call todo_write again to refresh the checklist and mark completed items with `- [x]`.",
     "",
     ...locationSection,
     "## Approved Plan",
@@ -217,6 +218,7 @@ export function createExitPlanModeTool(): PilotDeckToolDefinition<ExitPlanModeIn
       }
 
       if (action === EXIT_PLAN_MODE_EXECUTE) {
+        context.planTodo?.markPlanApproved(plan);
         return {
           content: [{
             type: "text",

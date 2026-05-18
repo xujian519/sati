@@ -140,6 +140,30 @@ export type PilotDeckToolProgressEvent = {
 
 export type PilotDeckToolProgressSink = (event: PilotDeckToolProgressEvent) => void;
 
+export type PilotDeckTodoItem = {
+  id?: string;
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+  priority?: string;
+};
+
+export type PilotDeckPlanTodoStateSnapshot = {
+  approvedPlan?: string;
+  requiresInitialization: boolean;
+  requiresRefresh: boolean;
+  lastMarkdown?: string;
+  todos: PilotDeckTodoItem[];
+};
+
+export type PilotDeckPlanTodoStateHandle = {
+  getSnapshot(): PilotDeckPlanTodoStateSnapshot;
+  markPlanApproved(plan: string): void;
+  recordTodoWrite(markdown: string, todos: PilotDeckTodoItem[]): void;
+  markToolProgressChanged(toolName: string): void;
+  buildPromptAddendum(): string | undefined;
+  blockingMessageFor(toolName: string, isReadOnly: boolean): string | undefined;
+};
+
 export type PilotDeckToolRuntimeContext = {
   sessionId: string;
   turnId: string;
@@ -213,6 +237,13 @@ export type PilotDeckToolRuntimeContext = {
     path: string;
     read(): string | undefined;
   };
+  /**
+   * Optional session-scoped todo state used by plan execution flows. The
+   * `todo_write` tool records checklist updates here; the runtime can enforce
+   * that side-effecting tools do not run before the checklist is initialized
+   * or refreshed after progress changes.
+   */
+  planTodo?: PilotDeckPlanTodoStateHandle;
   /**
    * Multimodal constraints of the model driving this agent session.
    * Absent when the model config doesn't declare multimodal capabilities

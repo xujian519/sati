@@ -105,7 +105,7 @@ function getToolCategory(toolName: string): string {
   if (['Edit', 'Write', 'ApplyPatch'].includes(toolName)) return 'edit';
   if (['Grep', 'Glob'].includes(toolName)) return 'search';
   if (toolName === 'Bash') return 'bash';
-  if (['TodoWrite', 'TodoRead'].includes(toolName)) return 'todo';
+  if (['TodoWrite', 'TodoRead', 'todo_write', 'todo_read'].includes(toolName)) return 'todo';
   if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'].includes(toolName)) return 'task';
   if (toolName === 'Task' || toolName === 'agent' || toolName === 'Agent') return 'agent';
   if (toolName === 'exit_plan_mode' || toolName === 'ExitPlanMode') return 'plan';

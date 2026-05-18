@@ -41,6 +41,50 @@ export interface ToolDisplayConfig {
   };
 }
 
+type ParsedTodoItem = {
+  id: string;
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed';
+};
+
+const TODO_LINE_PATTERN = /^\s*[-*]\s+\[( |x|X)\]\s+(.*?)\s*$/u;
+
+function parseTodoMarkdown(markdown: unknown): ParsedTodoItem[] {
+  if (typeof markdown !== 'string' || markdown.trim().length === 0) {
+    return [];
+  }
+
+  const parsed: Array<{ checked: boolean; content: string }> = [];
+  for (const line of markdown.split(/\r?\n/u)) {
+    const match = TODO_LINE_PATTERN.exec(line);
+    if (!match) continue;
+    const content = match[2]?.trim();
+    if (!content) continue;
+    parsed.push({
+      checked: match[1].toLowerCase() === 'x',
+      content,
+    });
+  }
+
+  let assignedInProgress = false;
+  return parsed.map((todo, index) => {
+    let status: ParsedTodoItem['status'];
+    if (todo.checked) {
+      status = 'completed';
+    } else if (!assignedInProgress) {
+      status = 'in_progress';
+      assignedInProgress = true;
+    } else {
+      status = 'pending';
+    }
+    return {
+      id: `todo-${index + 1}`,
+      content: todo.content,
+      status,
+    };
+  });
+}
+
 export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   // ============================================================================
   // COMMAND TOOLS
@@ -241,7 +285,24 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       defaultOpen: false,
       contentType: 'todo-list',
       getContentProps: (input) => ({
-        todos: input.todos
+        todos: parseTodoMarkdown(input.markdown)
+      })
+    },
+    result: {
+      type: 'collapsible',
+      contentType: 'success-message',
+      getMessage: () => 'Todo list updated'
+    }
+  },
+
+  todo_write: {
+    input: {
+      type: 'collapsible',
+      title: 'Updating todo list',
+      defaultOpen: false,
+      contentType: 'todo-list',
+      getContentProps: (input) => ({
+        todos: parseTodoMarkdown(input.markdown)
       })
     },
     result: {

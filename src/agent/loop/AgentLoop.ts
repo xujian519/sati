@@ -622,6 +622,7 @@ export class AgentLoop {
     input: AgentLoopInput,
   ): Promise<CanonicalModelRequest> {
     const contextRuntime = this.dependencies.context ?? new NullContextRuntime();
+    const planTodo = this.dependencies.planTodoManager?.forSession(input.sessionId);
     const prepared = await contextRuntime.prepareForModel({
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -634,6 +635,7 @@ export class AgentLoop {
       tools: this.dependencies.tools.registry.toCanonicalSchemas(),
       maxMessages: this.config.maxContextMessages,
       customSystemPrompt: this.config.systemPrompt,
+      appendSystemPrompt: planTodo?.buildPromptAddendum(),
       abortSignal: input.abortSignal,
     });
 
@@ -669,6 +671,7 @@ export class AgentLoop {
   ): PilotDeckToolRuntimeContext {
     const planTitle = extractFirstUserTitle(messages);
     const planFilePath = this.dependencies.planFileManager?.ensurePlanFile(input.sessionId, planTitle);
+    const planTodo = this.dependencies.planTodoManager?.forSession(input.sessionId);
     const permissionContext = {
       ...this.config.permissionContext,
       cwd: this.config.cwd,
@@ -714,6 +717,7 @@ export class AgentLoop {
       readFileState: this.readFileState,
       writeSnapshots: this.writeSnapshots,
       fileUpdateNotifier: this.dependencies.fileUpdateNotifier,
+      ...(planTodo ? { planTodo } : {}),
       ...(planFilePath
         ? {
             planFile: {

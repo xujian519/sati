@@ -154,11 +154,10 @@ export const dualParityContractScenarios: DualParityContractScenario[] = [
   },
   {
     id: "todo-write-contract",
-    status: "deferred",
-    legacy: { toolName: "TodoWrite", input: { todos: [] } },
-    pilotdeck: { toolName: "todo_write", input: { todos: [] } },
+    status: "compare",
+    legacy: { toolName: "TodoWrite", input: { markdown: "- [ ] task" } },
+    pilotdeck: { toolName: "todo_write", input: { markdown: "- [ ] task" } },
     compareFields: ["readOnly", "concurrencySafe"],
-    reason: "PilotDeck has not implemented session todo tools.",
   },
   {
     id: "agent-contract",

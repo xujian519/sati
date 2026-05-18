@@ -105,6 +105,21 @@ export class ToolRuntime {
       );
     }
 
+    const todoGateMessage = context.planTodo?.blockingMessageFor(
+      tool.name,
+      tool.isReadOnly(executeInput),
+    );
+    if (todoGateMessage) {
+      return this.errorResult(
+        call.id,
+        tool.name,
+        "tool_execution_failed",
+        todoGateMessage,
+        startedAt,
+        context,
+      );
+    }
+
     let decision = await this.permissionRuntime.decide(tool, executeInput, context, call.id);
     if (decision.type === "ask") {
       const permissionHookResult = await this.dispatchLifecycle("PermissionRequest", tool.name, call.id, executeInput, context, {
@@ -205,6 +220,9 @@ export class ToolRuntime {
         startedAt,
         completedAt,
       };
+      if (!tool.isReadOnly(executeInput) && tool.name !== "todo_write") {
+        context.planTodo?.markToolProgressChanged(tool.name);
+      }
       await this.recordToolAudit(result, context, startedAtDate);
       return result;
     } catch (error) {

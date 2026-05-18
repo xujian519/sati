@@ -78,6 +78,12 @@ const GATEWAY_CONNECT_TIMEOUT_MS = 30_000;
 const GATEWAY_CONNECT_RETRY_INTERVAL_MS = 250;
 const subagentActivityStarts = new Map();
 
+function normalizeToolDisplayName(name) {
+    if (name === 'todo_write') return 'TodoWrite';
+    if (name === 'todo_read') return 'TodoRead';
+    return name;
+}
+
 /**
  * Default permission mode for sessions started from the Web UI. We use
  * `default` so PilotDeck's `Permission.decide()` fully evaluates rules
@@ -327,7 +333,7 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                     ...base,
                     kind: 'tool_use',
                     toolId: event.toolCallId,
-                    toolName: event.name,
+                    toolName: normalizeToolDisplayName(event.name),
                     toolInput: tryParseJson(event.argsPreview),
                 }),
             ];
