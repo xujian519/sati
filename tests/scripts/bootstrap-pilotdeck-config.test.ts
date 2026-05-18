@@ -35,7 +35,7 @@ test("bootstrap writes config and symlinks repo skills on first init", async () 
   }
 });
 
-test("bootstrap skips repo skill sync when config already exists", async () => {
+test("bootstrap syncs repo skills even when config already exists", async () => {
   const fixture = await createBootstrapFixture({
     skills: [{ category: "xiaohongshu", slug: "xhs-orchestrator" }],
   });
@@ -45,7 +45,10 @@ test("bootstrap skips repo skill sync when config already exists", async () => {
 
     runBootstrap(fixture.repoRoot, fixture.pilotHome);
 
-    assert.equal(pathExists(path.join(fixture.pilotHome, "skills", "xhs-orchestrator")), false);
+    const targetPath = path.join(fixture.pilotHome, "skills", "xhs-orchestrator");
+    assert.equal(lstatSync(targetPath).isSymbolicLink(), true);
+    assert.equal(realpathSync(targetPath), realpathSync(fixture.skills[0].sourcePath));
+    assert.equal(readFileSync(path.join(fixture.pilotHome, "pilotdeck.yaml"), "utf8"), "schemaVersion: 1\n");
   } finally {
     cleanupFixture(fixture.root);
   }

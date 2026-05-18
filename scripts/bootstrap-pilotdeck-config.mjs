@@ -2,11 +2,14 @@
 /**
  * Bootstrap ~/.pilotdeck/pilotdeck.yaml when it doesn't exist yet, so the
  * gateway can boot and the Web UI can run the onboarding flow that fills in
- * real provider details.
+ * real provider details. On every startup, also sync repo-provided skills
+ * into ~/.pilotdeck/skills without overwriting existing targets.
  *
  * Behaviour:
- *   1. If $PILOT_HOME/pilotdeck.yaml already exists -> do nothing (idempotent).
- *   2. Otherwise write a minimal V2 yaml that:
+ *   1. Every run: discover repo skills and symlink missing slugs into
+ *      $PILOT_HOME/skills, skipping existing targets.
+ *   2. If $PILOT_HOME/pilotdeck.yaml already exists -> skip config bootstrap.
+ *   3. Otherwise write a minimal V2 yaml that:
  *        - has a valid agent.model that resolves to a catalog provider/model,
  *          so the engine's parseModelConfig won't crash on startup
  *        - uses a sentinel apiKey ("PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE")
@@ -131,6 +134,14 @@ function main() {
 
   const pilotHome = resolvePilotHome();
   const configPath = join(pilotHome, 'pilotdeck.yaml');
+  const skillSync = syncRepoSkillsToPilotHome(pilotHome);
+  if (skillSync.created > 0 || skillSync.skippedExisting > 0 || skillSync.skippedDuplicateSlug > 0) {
+    console.log(
+      `[pilotdeck] Synced repo skills into ${join(pilotHome, 'skills')}: ` +
+        `${skillSync.created} linked, ${skillSync.skippedExisting} skipped existing, ` +
+        `${skillSync.skippedDuplicateSlug} skipped duplicate slug.`,
+    );
+  }
 
   if (existsSync(configPath)) {
     return;
@@ -139,17 +150,9 @@ function main() {
   try {
     mkdirSync(dirname(configPath), { recursive: true });
     writeFileSync(configPath, BOOTSTRAP_YAML, 'utf8');
-    const skillSync = syncRepoSkillsToPilotHome(pilotHome);
     console.log(
       `[pilotdeck] No config at ${configPath}; wrote a placeholder so the gateway can boot.`,
     );
-    if (skillSync.created > 0 || skillSync.skippedExisting > 0 || skillSync.skippedDuplicateSlug > 0) {
-      console.log(
-        `[pilotdeck] Imported repo skills into ${join(pilotHome, 'skills')}: ` +
-          `${skillSync.created} linked, ${skillSync.skippedExisting} skipped existing, ` +
-          `${skillSync.skippedDuplicateSlug} skipped duplicate slug.`,
-      );
-    }
     console.log('[pilotdeck] Open the Web UI to finish onboarding (provider + API key).');
   } catch (error) {
     console.warn(
