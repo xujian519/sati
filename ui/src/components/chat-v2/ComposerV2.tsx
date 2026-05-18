@@ -16,7 +16,6 @@ import {
   Check,
   ChevronDown,
   CircleGauge,
-  Command,
   Hand,
   ListChecks,
   Loader2,
@@ -274,7 +273,6 @@ export default function ComposerV2({
   frequentCommands,
   onToggleCommandMenu: _onToggleCommandMenu,
   onInsertMention,
-  onInsertSlash,
   getRootProps,
   getInputProps,
   isDragActive,
@@ -590,14 +588,6 @@ export default function ComposerV2({
                     title={t('input.mentionFile', { defaultValue: 'Mention a file' }) as string}
                   >
                     <AtSign className="h-4 w-4" strokeWidth={1.75} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onInsertSlash}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-                    title={t('input.slashCommand', { defaultValue: 'Run a command' }) as string}
-                  >
-                    <Command className="h-4 w-4" strokeWidth={1.75} />
                   </button>
                     <div
                       className="relative"

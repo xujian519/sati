@@ -927,18 +927,18 @@ export default function SidebarV2({
           }}
           aria-label="PilotDeck"
           title="PilotDeck"
-          className="-ml-1 flex min-w-0 shrink items-center gap-2 rounded-md p-1 transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300 dark:focus-visible:ring-neutral-700"
+          className="flex min-w-0 shrink items-center gap-2 rounded-md p-1 transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300 dark:focus-visible:ring-neutral-700"
         >
           <img
             src={pilotdeckLogoLight}
             alt="PilotDeck"
-            className="h-8 w-auto max-w-[170px] select-none object-contain dark:hidden"
+            className="h-7 w-auto max-w-[150px] select-none object-contain dark:hidden"
             draggable={false}
           />
           <img
             src={pilotdeckLogoDark}
             alt="PilotDeck"
-            className="hidden h-8 w-auto max-w-[170px] select-none object-contain dark:block"
+            className="hidden h-7 w-auto max-w-[150px] select-none object-contain dark:block"
             draggable={false}
           />
         </button>

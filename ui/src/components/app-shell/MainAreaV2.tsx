@@ -158,13 +158,16 @@ export default function MainAreaV2(props: MainAreaV2Props) {
           </button>
         ) : null}
         <div className="flex min-w-0 flex-1 items-center gap-2 text-[13px]">
-          <span className="text-neutral-500 dark:text-neutral-400">
+          <span className="shrink-0 text-neutral-500 dark:text-neutral-400">
             {selectedProject ? projectDisplayName(selectedProject) : t('home', { defaultValue: 'Home' })}
           </span>
-          <span className="text-neutral-400/60 dark:text-neutral-500/60">/</span>
-          <span className="font-medium">{tabLabel}</span>
+          <span className="shrink-0 text-neutral-400/60 dark:text-neutral-500/60">/</span>
+          <span className="shrink-0 font-medium">{tabLabel}</span>
           {sessionSummary ? (
-            <span className="ml-2 truncate font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+            <span
+              className="ml-2 min-w-0 max-w-[28rem] truncate font-mono text-[11px] text-neutral-500 dark:text-neutral-400"
+              title={sessionSummary}
+            >
               {sessionSummary}
             </span>
           ) : null}
