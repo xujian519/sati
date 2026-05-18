@@ -273,7 +273,7 @@ function MessageRowV2({
       {message.isStreaming && !formattedContent ? (
         <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
       ) : (
-        <Markdown>{formattedContent}</Markdown>
+        <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-hr:my-4 prose-table:my-0 prose-pre:my-3">{formattedContent}</Markdown>
       )}
     </div>,
   );
