@@ -148,6 +148,7 @@ test("write_file rejects stale writes, updates write snapshots, and notifies fil
     { id: "call-1", name: "read_file", input: { file_path: existingPath } },
     context,
   );
+  await waitForFreshMtimeTick();
   await workspace.write("existing.txt", "user change");
   const stale = await toolRuntime.execute(
     { id: "call-2", name: "write_file", input: { file_path: existingPath, content: "agent change" } },
@@ -160,6 +161,7 @@ test("write_file rejects stale writes, updates write snapshots, and notifies fil
     assert.equal(stale.error.code, "invalid_tool_input");
   }
 
+  await waitForFreshMtimeTick();
   const reread = await toolRuntime.execute(
     { id: "call-3", name: "read_file", input: { file_path: existingPath } },
     context,
@@ -178,3 +180,7 @@ test("write_file rejects stale writes, updates write snapshots, and notifies fil
   ]);
   assert.equal(context.writeSnapshots?.get(existingPath)?.absolutePath, existingPath);
 });
+
+async function waitForFreshMtimeTick(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 20));
+}

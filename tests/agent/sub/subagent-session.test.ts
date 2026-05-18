@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { stat } from "node:fs/promises";
+import path from "node:path";
 import {
   SUBAGENT_DEFINITIONS,
   SubAgentSession,
@@ -18,6 +21,13 @@ import {
 } from "../../../src/permission/index.js";
 import type { AgentRuntimeConfig } from "../../../src/agent/runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../../../src/agent/runtime/AgentRuntimeDependencies.js";
+import {
+  createReadFileTool,
+  createWriteFileTool,
+  type PilotDeckReadFileStateMap,
+  type PilotDeckWriteSnapshotMap,
+} from "../../../src/tool/index.js";
+import { createPilotDeckTempWorkspace } from "../../helpers/filesystem.js";
 
 class ScriptedModel {
   readonly requests: CanonicalModelRequest[] = [];
@@ -185,3 +195,80 @@ test("C2.E2E SubAgentSession returns empty markdown when no assistant text produ
   assert.equal(report.markdown, "");
   assert.equal(report.parsed, undefined);
 });
+
+test("C2.E2E SubAgentSession inherits parent read/write state one-way", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({ "existing.txt": "old" });
+  t.after(() => workspace.cleanup());
+  const existingPath = path.join(workspace.cwd, "existing.txt");
+  const existingStat = await stat(existingPath);
+  const existingMtimeMs = Math.floor(existingStat.mtimeMs);
+  const parentReadFileState: PilotDeckReadFileStateMap = new Map([
+    [`${existingPath}::text::1::all::`, {
+      mtimeMs: existingMtimeMs,
+      kind: "text",
+    }],
+  ]);
+  const parentWriteSnapshots: PilotDeckWriteSnapshotMap = new Map([
+    [existingPath, {
+      absolutePath: existingPath,
+      mtimeMs: existingMtimeMs,
+      contentHash: hashText("old"),
+    }],
+  ]);
+  const writeReport = [
+    "Scope: Updated the inherited file.",
+    "Result: Wrote the requested contents.",
+    "Key files: existing.txt",
+    "Files changed: existing.txt",
+    "Issues: none",
+  ].join("\n");
+  const events: CanonicalModelEvent[] = [
+    { type: "message_start", role: "assistant" },
+    {
+      type: "tool_call_end",
+      toolCall: {
+        id: "call-1",
+        name: "write_file",
+        input: { file_path: existingPath, content: "child write" },
+      },
+    },
+    { type: "message_end", finishReason: "tool_call" },
+    { type: "message_start", role: "assistant" },
+    { type: "text_delta", text: writeReport },
+    { type: "message_end", finishReason: "stop" },
+  ];
+  const model = new ScriptedModel(events);
+  const registry = new ToolRegistry();
+  registry.register(createReadFileTool());
+  registry.register(createWriteFileTool());
+  const config = buildConfig(workspace.cwd);
+  config.permissionMode = "acceptEdits";
+  config.permissionContext = createDefaultPermissionContext({
+    cwd: workspace.cwd,
+    mode: "acceptEdits",
+    canPrompt: false,
+  });
+  const deps = buildDeps(model, registry);
+  const session = new SubAgentSession({
+    definition: SUBAGENT_DEFINITIONS["general-purpose"],
+    directive: "Rewrite the inherited file.",
+    parentMessages: [{ role: "assistant", content: [{ type: "text", text: "trigger" }] }],
+    parentConfig: config,
+    parentDependencies: deps,
+    parentReadFileState,
+    parentWriteSnapshots,
+    subagentSessionId: "sub-4",
+    subagentId: "uuid-4",
+  });
+
+  const report = await session.run();
+
+  assert.equal(report.markdown.trim(), writeReport);
+  assert.equal(await workspace.read("existing.txt"), "child write");
+  assert.equal(parentReadFileState.get(`${existingPath}::text::1::all::`)?.mtimeMs, existingMtimeMs);
+  assert.equal(parentWriteSnapshots.get(existingPath)?.contentHash, hashText("old"));
+});
+
+function hashText(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
