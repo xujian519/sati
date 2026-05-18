@@ -527,7 +527,6 @@ export default function AppShellV2() {
       isLoading={isLoadingProjects}
       processingSessions={processingSessions}
       unreadSessionIds={unreadSessionIds}
-      onSelectTab={handleSelectTab}
       onSelectProject={handleSelectProject}
       onSelectSession={handleSelectSession}
 	      onStartNewSession={handleStartNewSession}
@@ -597,7 +596,6 @@ export default function AppShellV2() {
           onStartNewSession={handleNewSession}
           onSelectSession={handleSelectSession}
           onShowSettings={onShowSettings}
-          onDeselectProject={handleDeselectProject}
           onSelectProjectByName={(name: string) => {
             const target = sidebarSharedProps.projects.find((p) => p.name === name);
             if (target) {

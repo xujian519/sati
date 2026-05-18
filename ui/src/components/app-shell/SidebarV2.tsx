@@ -11,12 +11,13 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Folder,
   MessageSquarePlus,
   PanelLeftClose,
   Pencil,
   Plus,
-  BarChart3,
   Settings as SettingsIcon,
   Trash2,
 } from 'lucide-react';
@@ -195,7 +196,6 @@ export type SidebarV2Props = {
   isLoading: boolean;
   processingSessions?: Set<string>;
   unreadSessionIds?: Set<string>;
-  onSelectTab: (tab: AppTab) => void;
   onSelectProject: (project: Project) => void;
   onSelectSession: (project: Project, sessionId: string) => void;
   onStartNewSession: (project: Project | null) => void;
@@ -258,7 +258,6 @@ export default function SidebarV2({
   onCollapse,
   onLoadMoreSessions,
   loadingMoreProjectIds,
-  onSelectTab,
 }: SidebarV2Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -271,6 +270,7 @@ export default function SidebarV2({
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   const [contextMenu, setContextMenu] = useState<SidebarContextMenu | null>(null);
   const [collapsedSessionProjects, setCollapsedSessionProjects] = useState<Set<string>>(new Set());
+  const [draftSessionProjectName, setDraftSessionProjectName] = useState<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
 
   // Segmented toggle between the Projects list and the General workspace.
@@ -384,6 +384,13 @@ export default function SidebarV2({
     });
   }, [selectedProject?.name]);
 
+  useEffect(() => {
+    if (!draftSessionProjectName) return;
+    if (!selectedProject || selectedSession || selectedProject.name !== draftSessionProjectName) {
+      setDraftSessionProjectName(null);
+    }
+  }, [draftSessionProjectName, selectedProject, selectedSession]);
+
   const generalProject =
     safeProjects.find((project) => project.name === 'general' || project.displayName === 'general') ?? null;
 
@@ -423,6 +430,10 @@ export default function SidebarV2({
     );
   }, [safeProjects, generalProject, projectSortOrder]);
 
+  const allProjectGroupsExpanded = otherProjects.length > 0 && otherProjects.every((project) =>
+    expandedGroups.has(project.name),
+  );
+
   const navToProject = useCallback(
     (name: string) => navigate(`/p/${encodeURIComponent(name)}`),
     [navigate],
@@ -458,6 +469,18 @@ export default function SidebarV2({
     });
   }, []);
 
+  const toggleAllProjectGroups = useCallback(() => {
+    setExpandedGroups((previous) => {
+      const next = new Set(previous);
+      if (allProjectGroupsExpanded) {
+        otherProjects.forEach((project) => next.delete(project.name));
+      } else {
+        otherProjects.forEach((project) => next.add(project.name));
+      }
+      return next;
+    });
+  }, [allProjectGroupsExpanded, otherProjects]);
+
   const ensureExpanded = useCallback((project: Project) => {
     setExpandedGroups((previous) => {
       if (previous.has(project.name)) return previous;
@@ -470,16 +493,15 @@ export default function SidebarV2({
   const handleProjectClick = useCallback(
     (project: Project) => {
       if (renamingProject === project.name) return;
-      onSelectProject(project);
       toggleProjectExpanded(project);
-      navToProject(project.name);
     },
-    [navToProject, onSelectProject, renamingProject, toggleProjectExpanded],
+    [renamingProject, toggleProjectExpanded],
   );
 
   const handleSessionClick = useCallback(
     (project: Project, sessionId: string) => {
       if (renamingSession === sessionId) return;
+      setDraftSessionProjectName(null);
       onSelectSession(project, sessionId);
       ensureExpanded(project);
     },
@@ -489,6 +511,7 @@ export default function SidebarV2({
   const handleNewSession = useCallback(
     (event: MouseEvent, project: Project) => {
       event.stopPropagation();
+      setDraftSessionProjectName(project.name);
       ensureExpanded(project);
       onStartNewSession(project);
       navToProject(project.name);
@@ -621,7 +644,10 @@ export default function SidebarV2({
     const sessions = isCollapsed ? allSessions.slice(0, COLLAPSED_SESSION_LIMIT) : allSessions;
     const hiddenLoadedCount = isCollapsed ? Math.max(0, allSessions.length - COLLAPSED_SESSION_LIMIT) : 0;
     const showDraftSession =
-      selectedProject?.name === project.name && activeTab === 'chat' && !selectedSession;
+      draftSessionProjectName === project.name &&
+      selectedProject?.name === project.name &&
+      activeTab === 'chat' &&
+      !selectedSession;
     const hasMoreSessions = Boolean(project.sessionMeta?.hasMore);
     const isLoadingMore = Boolean(loadingMoreProjectIds?.has(project.name));
     const totalSessions =
@@ -984,6 +1010,28 @@ export default function SidebarV2({
               </span>
               <button
                 type="button"
+                onClick={toggleAllProjectGroups}
+                disabled={otherProjects.length === 0}
+                aria-label={
+                  allProjectGroupsExpanded
+                    ? t('sidebar:projects.collapseAll', { defaultValue: 'Collapse all projects' }) as string
+                    : t('sidebar:projects.expandAll', { defaultValue: 'Expand all projects' }) as string
+                }
+                title={
+                  allProjectGroupsExpanded
+                    ? t('sidebar:projects.collapseAll', { defaultValue: 'Collapse all projects' }) as string
+                    : t('sidebar:projects.expandAll', { defaultValue: 'Expand all projects' }) as string
+                }
+                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-40 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+              >
+                {allProjectGroupsExpanded ? (
+                  <ChevronsDownUp className="h-3.5 w-3.5" strokeWidth={1.75} />
+                ) : (
+                  <ChevronsUpDown className="h-3.5 w-3.5" strokeWidth={1.75} />
+                )}
+              </button>
+              <button
+                type="button"
                 onClick={onCreateProject}
                 aria-label={t('sidebar:projects.newProject', { defaultValue: 'New Project' }) as string}
                 title={t('sidebar:projects.newProject', { defaultValue: 'New Project' }) as string}
@@ -1037,19 +1085,6 @@ export default function SidebarV2({
       </div>
 
       <div className="border-t border-neutral-200 px-2 py-2 dark:border-neutral-800">
-        <button
-          type="button"
-          onClick={() => {
-            onDeselectProject?.();
-            onSelectTab('dashboard');
-          }}
-          aria-label={t('sidebar:actions.dashboard', { defaultValue: 'Dashboard' }) as string}
-          title={t('sidebar:actions.dashboard', { defaultValue: 'Dashboard' }) as string}
-          className="flex h-9 w-full items-center justify-start gap-2 rounded-lg px-6 text-[13px] font-medium text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-        >
-          <BarChart3 className="h-4 w-4" strokeWidth={1.75} />
-          <span>{t('sidebar:actions.dashboard', { defaultValue: 'Dashboard' })}</span>
-        </button>
         <button
           type="button"
           onClick={onShowSettings}

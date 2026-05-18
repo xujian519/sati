@@ -1,10 +1,9 @@
 import type { ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Activity,
   AlertCircle,
-  ArrowLeft,
   ChevronDown,
   ChevronRight,
   DollarSign,
@@ -171,6 +170,8 @@ type ProjectGroup = {
   allSessions: DashboardSession[];
 };
 
+type DashboardScope = 'project' | 'total';
+
 function buildProjectGroups(
   data: DashboardData,
 ): { groups: ProjectGroup[]; generalGroup: ProjectGroup | null } {
@@ -264,12 +265,20 @@ export type DashboardV2Props = {
   projectFilter?: string | null;
   projectFullPath?: string | null;
   onSelectProject?: (projectName: string) => void;
-  onDeselectProject?: () => void;
 };
 
-export default function DashboardV2({ projectFilter, projectFullPath, onSelectProject, onDeselectProject }: DashboardV2Props = {}) {
+export default function DashboardV2({ projectFilter, projectFullPath, onSelectProject }: DashboardV2Props = {}) {
   const { t } = useTranslation('routing');
   const { data, loading, error, refresh } = useRoutingDashboard();
+  const [scope, setScope] = useState<DashboardScope>(() => (projectFilter ? 'project' : 'total'));
+  const hasProjectScope = Boolean(projectFilter);
+  const activeScope: DashboardScope = hasProjectScope ? scope : 'total';
+  const effectiveProjectFilter = activeScope === 'project' ? projectFilter : null;
+  const effectiveProjectFullPath = activeScope === 'project' ? projectFullPath : null;
+
+  useEffect(() => {
+    setScope(projectFilter ? 'project' : 'total');
+  }, [projectFilter, projectFullPath]);
 
   const { groups, generalGroup, recent, filteredOverall } = useMemo(() => {
     if (!data)
@@ -281,11 +290,11 @@ export default function DashboardV2({ projectFilter, projectFullPath, onSelectPr
     let filteredGeneral = gg;
     let computedOverall = data.overall;
 
-    if (projectFilter) {
+    if (effectiveProjectFilter) {
       const matchesProject = (grp: ProjectGroup) =>
-        grp.name === projectFilter ||
-        grp.displayName === projectFilter ||
-        (projectFullPath && grp.fullPath === projectFullPath);
+        grp.name === effectiveProjectFilter ||
+        grp.displayName === effectiveProjectFilter ||
+        (effectiveProjectFullPath && grp.fullPath === effectiveProjectFullPath);
 
       filteredGroups = g.filter(matchesProject);
       filteredGeneral = null;
@@ -302,15 +311,15 @@ export default function DashboardV2({ projectFilter, projectFullPath, onSelectPr
       }
     }
 
-    const recentProjects = projectFilter
+    const recentProjects = effectiveProjectFilter
       ? data.projects.filter(
           (p) =>
-            p.name === projectFilter ||
-            p.displayName === projectFilter ||
-            (projectFullPath && p.fullPath === projectFullPath),
+            p.name === effectiveProjectFilter ||
+            p.displayName === effectiveProjectFilter ||
+            (effectiveProjectFullPath && p.fullPath === effectiveProjectFullPath),
         )
       : data.projects;
-    const recentUnmatched = projectFilter ? undefined : data.unmatchedSessions;
+    const recentUnmatched = effectiveProjectFilter ? undefined : data.unmatchedSessions;
 
     return {
       groups: filteredGroups,
@@ -318,7 +327,7 @@ export default function DashboardV2({ projectFilter, projectFullPath, onSelectPr
       recent: collectRecentRoutes(recentProjects, recentUnmatched),
       filteredOverall: computedOverall,
     };
-  }, [data, projectFilter, projectFullPath]);
+  }, [data, effectiveProjectFilter, effectiveProjectFullPath]);
 
   if (loading && !data) {
     return (
@@ -362,10 +371,10 @@ export default function DashboardV2({ projectFilter, projectFullPath, onSelectPr
     groups.reduce((sum, g) => sum + g.aggregated.routedSessionCount, 0) +
     (generalGroup?.aggregated.routedSessionCount ?? 0);
 
-  const projectDisplayName = projectFilter && groups.length > 0
+  const projectDisplayName = effectiveProjectFilter && groups.length > 0
     ? groups[0].displayName
-    : projectFilter;
-  const subtitle = projectFilter
+    : effectiveProjectFilter;
+  const subtitle = effectiveProjectFilter
     ? `Routing stats for ${projectDisplayName}.`
     : t('dashboard.subtitle', { defaultValue: 'Usage across all projects and sessions.' });
 
@@ -373,32 +382,51 @@ export default function DashboardV2({ projectFilter, projectFullPath, onSelectPr
     <div className="h-full overflow-y-auto bg-white dark:bg-neutral-950">
       <div className="mx-auto w-full max-w-[960px] px-8 py-8">
         {/* Header */}
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            {projectFilter && onDeselectProject ? (
-              <button
-                type="button"
-                onClick={onDeselectProject}
-                className="mb-1 inline-flex items-center gap-1 text-[13px] text-neutral-500 transition hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
-                <span>Overview</span>
-              </button>
-            ) : null}
             <h2 className="text-[20px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
               {t('dashboard.title', { defaultValue: 'Dashboard' })}
             </h2>
             <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">{subtitle}</p>
           </div>
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={loading}
-            className="text-xxs inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 px-2.5 text-neutral-600 transition hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-          >
-            <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} strokeWidth={1.75} />
-            <span>{t('dashboard.refresh', { defaultValue: 'Refresh' })}</span>
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {hasProjectScope ? (
+              <div
+                role="tablist"
+                aria-label={t('dashboard.scope.label', { defaultValue: 'Dashboard scope' }) as string}
+                className="flex h-8 rounded-md bg-neutral-100 p-0.5 dark:bg-neutral-900"
+              >
+                {(['project', 'total'] as DashboardScope[]).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeScope === item}
+                    onClick={() => setScope(item)}
+                    className={cn(
+                      'rounded px-2.5 text-[12px] font-medium transition-colors',
+                      activeScope === item
+                        ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-neutral-100'
+                        : 'text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200',
+                    )}
+                  >
+                    {item === 'project'
+                      ? t('dashboard.scope.project', { defaultValue: 'Project' })
+                      : t('dashboard.scope.total', { defaultValue: 'Total' })}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={loading}
+              className="text-xxs inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 px-2.5 text-neutral-600 transition hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} strokeWidth={1.75} />
+              <span>{t('dashboard.refresh', { defaultValue: 'Refresh' })}</span>
+            </button>
+          </div>
         </div>
 
         {/* Overall stat cards */}
@@ -413,7 +441,7 @@ export default function DashboardV2({ projectFilter, projectFullPath, onSelectPr
                 : undefined
             }
             hint={
-              !projectFilter && overall.projectCount
+              !effectiveProjectFilter && overall.projectCount
                 ? (
                     <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
                       <TrendingUp className="h-3 w-3" strokeWidth={1.75} />
@@ -462,7 +490,7 @@ export default function DashboardV2({ projectFilter, projectFullPath, onSelectPr
         </div>
 
         {/* Project-filtered: flat session list */}
-        {projectFilter && (
+        {effectiveProjectFilter && (
           <div className="mt-6 space-y-2">
             <div className="text-xxs uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
               Sessions
@@ -484,7 +512,7 @@ export default function DashboardV2({ projectFilter, projectFullPath, onSelectPr
         )}
 
         {/* Global view: project cost cards grid + recent routes */}
-        {!projectFilter && (
+        {!effectiveProjectFilter && (
           <>
             {(groups.length > 0 || generalGroup) && (
               <div className="mt-6 space-y-3">

@@ -135,7 +135,6 @@ function MainContent({
   onStartNewSession,
   onSelectSession,
   onShowSettings,
-  onDeselectProject,
   onSelectProjectByName,
   externalMessageUpdate,
 }: MainContentProps) {
@@ -769,7 +768,6 @@ function MainContent({
           applyAndLaunchPlan={applyAndLaunchPlan}
           handleOpenExecutionSession={handleOpenExecutionSession}
           editorExpanded={editorExpanded}
-          onDeselectProject={onDeselectProject}
           onSelectProjectByName={onSelectProjectByName}
         />
 
@@ -840,7 +838,6 @@ type SplitBodyProps = {
   applyAndLaunchPlan: (projectName: string, planId: string) => Promise<void>;
   handleOpenExecutionSession: (projectKey: string, runId: string, projectName?: string) => void;
   editorExpanded: boolean;
-  onDeselectProject?: () => void;
   onSelectProjectByName?: (projectName: string) => void;
 };
 
@@ -878,7 +875,6 @@ function SplitBody(props: SplitBodyProps) {
     applyAndLaunchPlan,
     handleOpenExecutionSession,
     editorExpanded,
-    onDeselectProject,
     onSelectProjectByName,
   } = props;
 
@@ -982,7 +978,7 @@ function SplitBody(props: SplitBodyProps) {
         />
       );
     }
-    if (activeTab === 'dashboard') return <DashboardV2 projectFilter={selectedProject?.name} projectFullPath={selectedProject?.fullPath} onSelectProject={onSelectProjectByName} onDeselectProject={onDeselectProject} />;
+    if (activeTab === 'dashboard') return <DashboardV2 projectFilter={selectedProject?.name} projectFullPath={selectedProject?.fullPath} onSelectProject={onSelectProjectByName} />;
     if (activeTab === 'memory') return <MemoryPanel selectedProject={selectedProject} />;
     if (activeTab === 'skills') return <SkillsV2 selectedProject={selectedProject} />;
     if (renderTasksAsTool) return <TasksV2 isVisible />;
