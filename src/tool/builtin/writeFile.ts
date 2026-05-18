@@ -1,4 +1,3 @@
-import path from "node:path";
 import { stat } from "node:fs/promises";
 import type { PilotDeckToolDefinition } from "../protocol/types.js";
 import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
@@ -37,7 +36,7 @@ export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput, W
     name: "write_file",
     aliases: ["Write"],
     description:
-      "Writes a UTF-8 text file inside the workspace.\n\nUsage:\n- The file_path parameter must be an absolute path, not a relative path, and it must resolve inside the workspace.\n- This tool will overwrite the existing file if there is one at the provided path.\n- If this is an existing file, you MUST use the read_file tool first to read the file's contents. This tool will fail if you did not read the file first.\n- If the target file changed after the last full read, this tool will fail and you must read it again before writing.\n- Prefer the edit_file tool for modifying existing files. Only use this tool to create new files or for complete rewrites.\n- NEVER create documentation files (*.md) or README files unless explicitly requested by the User.\n- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.",
+      "Writes a UTF-8 text file inside the workspace.\n\nUsage:\n- The file_path parameter may be relative to the current workspace or an absolute path, but it must resolve inside the workspace.\n- This tool will overwrite the existing file if there is one at the provided path.\n- If this is an existing file, you MUST use the read_file tool first to read the file's contents. This tool will fail if you did not read the file first.\n- If the target file changed after the last full read, this tool will fail and you must read it again before writing.\n- Prefer the edit_file tool for modifying existing files. Only use this tool to create new files or for complete rewrites.\n- The returned filePath is always the resolved absolute path.\n- NEVER create documentation files (*.md) or README files unless explicitly requested by the User.\n- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.",
     kind: "filesystem",
     inputSchema: {
       type: "object",
@@ -47,7 +46,7 @@ export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput, W
         file_path: {
           type: "string",
           description:
-            "The absolute path to the file to write (must be absolute, not relative, and must resolve inside the workspace).",
+            "The path to the file to write. It may be relative to the current workspace or absolute, but it must resolve inside the workspace.",
         },
         content: {
           type: "string",
@@ -105,17 +104,6 @@ export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput, W
     isConcurrencySafe: () => false,
     isDestructive: () => true,
     validateInput: async (input, context) => {
-      if (!path.isAbsolute(input.file_path)) {
-        return {
-          ok: false,
-          issues: [{
-            path: "file_path",
-            code: "invalid_schema",
-            message: "file_path must be an absolute path.",
-          }],
-        };
-      }
-
       const resolved = resolvePilotDeckWorkspacePath(input.file_path, context, { forWrite: true });
       if (!resolved.ok) {
         return {

@@ -38,7 +38,7 @@ test("edit_file replaces one exact occurrence and replace_all replaces all", asy
   assert.equal(await workspace.read("a.txt"), "1 two 1");
 });
 
-test("write_file creates files, requires absolute paths, and overwrites only after full read", async (t) => {
+test("write_file accepts relative paths and overwrites only after full read", async (t) => {
   const workspace = await createPilotDeckTempWorkspace({ "existing.txt": "old" });
   t.after(() => workspace.cleanup());
   const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
@@ -49,52 +49,64 @@ test("write_file creates files, requires absolute paths, and overwrites only aft
   const newFilePath = path.join(workspace.cwd, "new.txt");
   const existingPath = path.join(workspace.cwd, "existing.txt");
 
-  const invalidPath = await toolRuntime.execute(
+  const createdFromRelative = await toolRuntime.execute(
     { id: "call-0", name: "write_file", input: { file_path: "new.txt", content: "new" } },
     context,
   );
-  const created = await toolRuntime.execute(
+  const updatedFromAbsolute = await toolRuntime.execute(
     { id: "call-1", name: "write_file", input: { file_path: newFilePath, content: "new" } },
     context,
   );
   const unread = await toolRuntime.execute(
-    { id: "call-2", name: "write_file", input: { file_path: existingPath, content: "new" } },
+    { id: "call-2", name: "write_file", input: { file_path: "existing.txt", content: "new" } },
     context,
   );
   const partialRead = await toolRuntime.execute(
-    { id: "call-3", name: "read_file", input: { file_path: existingPath, offset: 1, limit: 1 } },
+    { id: "call-3", name: "read_file", input: { file_path: "existing.txt", offset: 1, limit: 1 } },
     context,
   );
   const afterPartialRead = await toolRuntime.execute(
-    { id: "call-4", name: "write_file", input: { file_path: existingPath, content: "new" } },
+    { id: "call-4", name: "write_file", input: { file_path: "existing.txt", content: "new" } },
     context,
   );
   const fullRead = await toolRuntime.execute(
-    { id: "call-5", name: "read_file", input: { file_path: existingPath } },
+    { id: "call-5", name: "read_file", input: { file_path: "existing.txt" } },
     context,
   );
   const overwritten = await toolRuntime.execute(
-    { id: "call-6", name: "write_file", input: { file_path: existingPath, content: "new" } },
+    { id: "call-6", name: "write_file", input: { file_path: "existing.txt", content: "new" } },
+    context,
+  );
+  const outside = await toolRuntime.execute(
+    { id: "call-7", name: "write_file", input: { file_path: "../outside.txt", content: "bad" } },
     context,
   );
 
-  assert.equal(invalidPath.type, "error");
-  assert.equal(created.type, "success");
+  assert.equal(createdFromRelative.type, "success");
+  assert.equal(updatedFromAbsolute.type, "success");
   assert.equal(unread.type, "error");
   assert.equal(partialRead.type, "success");
   assert.equal(afterPartialRead.type, "error");
   assert.equal(fullRead.type, "success");
   assert.equal(overwritten.type, "success");
+  assert.equal(outside.type, "error");
+  assert.equal(await workspace.read("new.txt"), "new");
   assert.equal(await workspace.read("existing.txt"), "new");
-  if (invalidPath.type === "error") assert.equal(invalidPath.error.code, "invalid_tool_input");
   if (unread.type === "error") assert.equal(unread.error.code, "invalid_tool_input");
   if (afterPartialRead.type === "error") assert.equal(afterPartialRead.error.code, "invalid_tool_input");
-  if (created.type === "success") {
-    const data = created.data as WriteFileOutput | undefined;
+  if (outside.type === "error") assert.equal(outside.error.code, "invalid_tool_input");
+  if (createdFromRelative.type === "success") {
+    const data = createdFromRelative.data as WriteFileOutput | undefined;
     assert.equal(data?.filePath, newFilePath);
     assert.equal(data?.type, "create");
     assert.equal(data?.originalFile, null);
     assert.ok(Array.isArray(data?.structuredPatch));
+  }
+  if (updatedFromAbsolute.type === "success") {
+    const data = updatedFromAbsolute.data as WriteFileOutput | undefined;
+    assert.equal(data?.filePath, newFilePath);
+    assert.equal(data?.type, "update");
+    assert.equal(data?.originalFile, "new");
   }
   if (overwritten.type === "success") {
     const data = overwritten.data as WriteFileOutput | undefined;
@@ -145,13 +157,13 @@ test("write_file rejects stale writes, updates write snapshots, and notifies fil
   const existingPath = path.join(workspace.cwd, "existing.txt");
 
   const read = await toolRuntime.execute(
-    { id: "call-1", name: "read_file", input: { file_path: existingPath } },
+    { id: "call-1", name: "read_file", input: { file_path: "existing.txt" } },
     context,
   );
   await waitForFreshMtimeTick();
   await workspace.write("existing.txt", "user change");
   const stale = await toolRuntime.execute(
-    { id: "call-2", name: "write_file", input: { file_path: existingPath, content: "agent change" } },
+    { id: "call-2", name: "write_file", input: { file_path: "existing.txt", content: "agent change" } },
     context,
   );
 
@@ -163,11 +175,11 @@ test("write_file rejects stale writes, updates write snapshots, and notifies fil
 
   await waitForFreshMtimeTick();
   const reread = await toolRuntime.execute(
-    { id: "call-3", name: "read_file", input: { file_path: existingPath } },
+    { id: "call-3", name: "read_file", input: { file_path: "existing.txt" } },
     context,
   );
   const success = await toolRuntime.execute(
-    { id: "call-4", name: "write_file", input: { file_path: existingPath, content: "agent change" } },
+    { id: "call-4", name: "write_file", input: { file_path: "existing.txt", content: "agent change" } },
     context,
   );
 
