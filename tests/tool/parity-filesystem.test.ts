@@ -1,3 +1,5 @@
+import { utimes } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
 import {
   createEditFileTool,
@@ -39,8 +41,16 @@ test("filesystem search parity scenarios match legacy gates", async (t) => {
   const workspace = await createPilotDeckTempWorkspace({
     "src/a.ts": "const value = 'needle';",
     "src/b.ts": "const value = 'hay';",
+    "src/c.ts": "const value = 'needle';",
   });
   t.after(() => workspace.cleanup());
+  const now = new Date();
+  await utimes(
+    path.join(workspace.cwd, "src/a.ts"),
+    new Date(now.getTime() - 60_000),
+    new Date(now.getTime() - 60_000),
+  );
+  await utimes(path.join(workspace.cwd, "src/c.ts"), now, now);
   const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
     tools: [createGlobTool(), createGrepTool()],
     cwd: workspace.cwd,
