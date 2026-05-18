@@ -36,6 +36,7 @@ const getAttachmentAccent = (name?: string, mimeType?: string): string => {
 type MessageRowV2Props = {
   message: ChatMessage;
   prevMessage: ChatMessage | null;
+  nextMessage?: ChatMessage | null;
   beforeProcessAttachments?: ProcessAttachment[];
   afterProcessAttachments?: ProcessAttachment[];
   provider: SessionProvider;
@@ -70,6 +71,7 @@ const shouldDelegate = (message: ChatMessage): boolean => {
 function MessageRowV2({
   message,
   prevMessage,
+  nextMessage,
   beforeProcessAttachments = [],
   afterProcessAttachments = [],
   provider,
@@ -288,7 +290,8 @@ function MessageRowV2({
       ) : (
         <>
           <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-pre:my-3 prose-ol:my-2 prose-ul:my-2 prose-table:my-0 prose-hr:my-4">{formattedContent}</Markdown>
-          {formattedContent.trim() ? (
+          {formattedContent.trim() &&
+           (!nextMessage || nextMessage.type === 'user' || nextMessage.type === 'error') ? (
             <div className="mt-1.5 flex justify-end">
               <CopyMarkdownButton content={formattedContent} />
             </div>

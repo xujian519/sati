@@ -470,6 +470,7 @@ export default function MessagesPaneV2({
         key={`${groupId}-${getMessageKey(message, index)}`}
         message={message}
         prevMessage={index > 0 ? detailMessages[index - 1] : null}
+        nextMessage={index < detailMessages.length - 1 ? detailMessages[index + 1] : null}
         provider={provider}
         selectedProject={selectedProject}
         createDiff={createDiff}
@@ -526,6 +527,9 @@ export default function MessagesPaneV2({
 
   const renderMessageItem = useCallback((item: KeyedRenderableMessageItem) => {
     const previousMessage = item.renderIndex > 0 ? keyedMessageItems[item.renderIndex - 1].message : null;
+    const nextMessage = item.renderIndex < keyedMessageItems.length - 1
+      ? keyedMessageItems[item.renderIndex + 1].message
+      : null;
     const isLast = !isAssistantWorking && item.renderIndex === keyedMessageItems.length - 1;
     const anchoredLiveGroups = liveProcessGroupsByAnchor.get(item.originalIndex) || [];
     const rendersLiveHeaderAfterItem = item.renderIndex === liveProcessHeaderIndex - 1;
@@ -551,6 +555,7 @@ export default function MessagesPaneV2({
           <MessageRowV2
             message={item.message}
             prevMessage={previousMessage}
+            nextMessage={nextMessage}
             beforeProcessAttachments={item.beforeProcessAttachments}
             afterProcessAttachments={item.afterProcessAttachments}
             provider={provider}

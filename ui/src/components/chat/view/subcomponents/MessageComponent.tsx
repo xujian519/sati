@@ -43,7 +43,6 @@ type InteractiveOption = {
 };
 
 type PermissionGrantState = 'idle' | 'granted' | 'error';
-const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
 
 const stringifyMessageContent = (content: unknown): string => {
   if (typeof content === 'string') return content;
@@ -116,13 +115,10 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
   const assistantCopyContent = message.isToolUse
     ? stringifyMessageContent(message.displayText || message.content)
     : formattedMessageContent;
-  const isCommandOrFileEditToolResponse = Boolean(
-    message.isToolUse && COPY_HIDDEN_TOOL_NAMES.has(String(message.toolName || ''))
-  );
   const shouldShowUserCopyControl = message.type === 'user' && userCopyContent.trim().length > 0;
   const shouldShowAssistantCopyControl = message.type === 'assistant' &&
     assistantCopyContent.trim().length > 0 &&
-    !isCommandOrFileEditToolResponse;
+    !message.isToolUse;
 
 
   useEffect(() => {
