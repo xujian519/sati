@@ -162,6 +162,20 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
             </div>
           )}
         </div>
+      ) : message.isCompactBoundary ? (
+        <div className="my-2 flex w-full items-center justify-center gap-2 px-3 sm:px-0">
+          <span className="h-px flex-1 bg-emerald-200/70 dark:bg-emerald-900/50" />
+          <span className="rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-300">
+            {t('compact.label')}
+          </span>
+          {typeof message.preTokens === 'number' && (
+            <span className="text-[11px] tabular-nums text-muted-foreground">
+              {t('compact.tokens', { tokens: message.preTokens.toLocaleString() })}
+            </span>
+          )}
+          <span className="text-[11px] tabular-nums text-muted-foreground">{formattedTime}</span>
+          <span className="h-px flex-1 bg-emerald-200/70 dark:bg-emerald-900/50" />
+        </div>
       ) : message.isInterruptedNotice ? (
         <div className="my-1 flex w-full items-center justify-center gap-2 px-3 sm:px-0">
           <span className="h-px flex-1 bg-border/60" />

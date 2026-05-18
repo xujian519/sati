@@ -445,9 +445,19 @@ export function useChatRealtimeHandlers({
             text: msg.text,
             tokens: msg.tokens || 0,
             can_interrupt: msg.canInterrupt !== undefined ? msg.canInterrupt : true,
+            compactProgress: msg.compactProgress || msg.compact_progress || null,
           });
           setIsLoading(true);
           setCanAbortSession(msg.canInterrupt !== false);
+        }
+        break;
+      }
+
+      case 'compact_boundary': {
+        if (isForActiveView) {
+          setClaudeStatus(null);
+          setIsLoading(true);
+          setCanAbortSession(true);
         }
         break;
       }

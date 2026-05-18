@@ -138,13 +138,13 @@ function getStepIcon(step: ProcessTraceStep): LucideIcon {
   if (step.state === 'failed' || step.severity === 'error' || step.severity === 'warning') {
     return AlertCircle;
   }
-  if (step.phase === 'rag' || /search|grep|glob|find/.test(haystack)) {
+  if (step.phase === 'rag' || /search|grep|glob|find|检索|搜索/.test(haystack)) {
     return Search;
   }
-  if (/edit|write|patch|update|create|modify/.test(haystack)) {
+  if (/edit|write|patch|update|create|modify|修改|编辑|写入|创建/.test(haystack)) {
     return Pencil;
   }
-  if (/bash|shell|terminal|command|exec|run/.test(haystack)) {
+  if (/bash|shell|terminal|command|exec|run|命令|运行/.test(haystack)) {
     return Terminal;
   }
   if (step.phase === 'tool' || step.phase === 'subtask' || step.toolName) {

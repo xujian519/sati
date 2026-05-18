@@ -23,11 +23,34 @@
   "interrupted": {
     "label": "已被用户暂停"
   },
+  "compact": {
+    "label": "上下文已压缩",
+    "level": "{{level}} 级",
+    "tokens": "压缩前 {{tokens}} tokens",
+    "stages": {
+      "context_collapse": "上下文折叠",
+      "session_memory": "会话记忆压缩",
+      "summary": "摘要压缩",
+      "reactive": "响应式压缩",
+      "overflow_recovery": "溢出恢复重试"
+    }
+  },
   "working": {
     "default": "处理中",
     "processing": "处理中",
     "thinking": "思考中",
-    "waitingForPermission": "等待授权"
+    "generating": "正在生成回复",
+    "waitingForPermission": "等待授权",
+    "compacting": "正在压缩上下文…",
+    "compactingLevel": "正在触发 {{level}} 级压缩：{{label}}"
+  },
+  "process": {
+    "waitingForModel": "正在请求模型",
+    "live": {
+      "compactCompleted": "已压缩上下文",
+      "subagentCompleted": "子代理已完成",
+      "thoughtCompleted": "已完成思考"
+    }
   },
   "tools": {
     "settings": "工具设置",
