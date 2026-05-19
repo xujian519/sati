@@ -101,9 +101,12 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
     setUploadMenuOpen(false);
   }, [selectedProject?.name]);
 
-  useEffect(() => {
-    folderInputRef.current?.setAttribute('webkitdirectory', '');
-    folderInputRef.current?.setAttribute('directory', '');
+  const setFolderInputRef = useCallback((el: HTMLInputElement | null) => {
+    folderInputRef.current = el;
+    if (el) {
+      el.setAttribute('webkitdirectory', '');
+      el.setAttribute('directory', '');
+    }
   }, []);
 
   useEffect(() => {
@@ -554,14 +557,14 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
               <div className="absolute left-0 top-8 z-20 w-36 rounded-md border border-neutral-200 bg-white py-1 text-[12px] shadow-lg dark:border-neutral-800 dark:bg-neutral-950">
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={(e) => { e.stopPropagation(); setUploadMenuOpen(false); fileInputRef.current?.click(); }}
                   className="block w-full px-3 py-1.5 text-left text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-900"
                 >
                   {t('fileTree.uploadFiles', { defaultValue: 'Upload files' })}
                 </button>
                 <button
                   type="button"
-                  onClick={() => folderInputRef.current?.click()}
+                  onClick={(e) => { e.stopPropagation(); setUploadMenuOpen(false); folderInputRef.current?.click(); }}
                   className="block w-full px-3 py-1.5 text-left text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-900"
                 >
                   {t('fileTree.uploadFolder', { defaultValue: 'Upload folder' })}
@@ -579,7 +582,7 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
               }}
             />
             <input
-              ref={folderInputRef}
+              ref={setFolderInputRef}
               type="file"
               multiple
               className="hidden"
