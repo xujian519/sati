@@ -142,15 +142,15 @@ echo ""
 
 echo "Checking ripgrep..."
 if command -v rg >/dev/null 2>&1; then
-  ok "ripgrep found"
+  ok "ripgrep $(rg --version | head -1) found"
 else
   warn "ripgrep not found. Installing..."
   if command -v brew >/dev/null 2>&1; then
     brew install ripgrep </dev/null
-    ok "ripgrep installed"
   else
-    fail "ripgrep is not installed and Homebrew is unavailable. Install ripgrep first: brew install ripgrep"
+    fail "ripgrep (rg) is required but not installed. Please install it: brew install ripgrep"
   fi
+  ok "ripgrep installed"
 fi
 echo ""
 

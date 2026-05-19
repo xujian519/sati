@@ -70,6 +70,9 @@ function mapWebMessageToNormalized(message, sessionId) {
         kind: 'text',
         role: message.role === 'user' ? 'user' : 'assistant',
         content: message.text || '',
+        ...(Array.isArray(message.images) && message.images.length > 0
+          ? { images: message.images.map((image) => image?.data).filter(Boolean) }
+          : {}),
       });
     case 'thinking':
       return createNormalizedMessage({ ...base, kind: 'thinking', content: message.text || '' });

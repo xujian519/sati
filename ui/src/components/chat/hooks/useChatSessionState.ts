@@ -348,15 +348,16 @@ export function useChatSessionState({
   /*  addMessage / clearMessages / rewindMessages                     */
   /* ---------------------------------------------------------------- */
 
-  const addMessage = useCallback((msg: ChatMessage) => {
-    if (!activeSessionId) {
+  const addMessage = useCallback((msg: ChatMessage, targetSessionId?: string | null) => {
+    const sessionId = targetSessionId !== undefined ? targetSessionId : activeSessionId;
+    if (!sessionId) {
       // No session yet — show as pending until the backend creates one
       setPendingUserMessage(msg);
       return;
     }
-    const normalized = chatMessageToNormalized(msg, activeSessionId, 'pilotdeck' as SessionProvider);
+    const normalized = chatMessageToNormalized(msg, sessionId, 'pilotdeck' as SessionProvider);
     if (normalized) {
-      sessionStore.appendRealtime(activeSessionId, normalized);
+      sessionStore.appendRealtime(sessionId, normalized);
     }
   }, [activeSessionId, sessionStore]);
 

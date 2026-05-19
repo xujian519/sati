@@ -64,6 +64,7 @@ import { BackgroundTaskRuntime } from "../task/runtime/BackgroundTaskRuntime.js"
 import { createBuiltinRegistry, createPlanFileManager } from "../tool/index.js";
 import type { PilotDeckToolDefinition, ToolRegistry, PilotDeckElicitationChannel } from "../tool/index.js";
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
+import { SessionRouterStore } from "../router/session/SessionRouterStore.js";
 import type { RouterEventBus, RouterEvent } from "../router/protocol/events.js";
 import type { EdgeClawMemoryProvider } from "../context/index.js";
 import { loadBuiltinPlugins } from "../extension/plugins/builtin/loadBuiltinPlugins.js";
@@ -352,6 +353,9 @@ class ProjectRuntimeRegistry {
 
   private _extraTools: PilotDeckToolDefinition[];
   private _sessionOverrides: SessionConfigOverrides | undefined;
+  private readonly sharedSessionStore = new SessionRouterStore({
+    now: () => this.options.now().getTime(),
+  });
 
   constructor(private readonly options: ProjectRuntimeRegistryOptions) {
     this._extraTools = options.extraTools ? [...options.extraTools] : [];
@@ -506,6 +510,7 @@ class ProjectRuntimeRegistry {
       customRouterRegistry: pluginRuntime,
       loadSkillPrompt: (extensionId) => pluginRuntime.loadSkillPrompt(extensionId),
       events: this.buildRouterEventBus(),
+      sessionStore: this.sharedSessionStore,
     });
     const backgroundTasks = new BackgroundTaskRuntime({ now: this.options.now });
     const webSearchConfig = snapshot.config.tools?.webSearch;

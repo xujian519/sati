@@ -59,6 +59,33 @@ function getExplicitSessionId(msg: LatestChatMessage): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
 }
 
+function resolveSessionId(
+  msg: LatestChatMessage,
+  fallbackSessionId?: string | null,
+): string | null {
+  const explicit = getExplicitSessionId(msg);
+  if (explicit) return explicit;
+  if (typeof fallbackSessionId === 'string' && fallbackSessionId.trim()) {
+    return fallbackSessionId.trim();
+  }
+  return null;
+}
+
+function warnDroppedFrame(msg: LatestChatMessage): void {
+  console.warn('[chat] Dropped WS frame without sessionId', {
+    kind: msg.kind,
+    type: msg.type,
+  });
+}
+
+function warnResolvedSessionId(msg: LatestChatMessage, fallbackSessionId: string): void {
+  console.warn('[chat] Resolved missing sessionId from parent context', {
+    kind: msg.kind,
+    type: msg.type,
+    fallbackSessionId,
+  });
+}
+
 function getOrCreateSmoother(
   map: StreamSmootherMap,
   sessionId: string,
@@ -123,7 +150,7 @@ export function useChatRealtimeHandlers({
   const streamBySessionRef = useRef<StreamSmootherMap>(new Map());
   const thinkingBySessionRef = useRef<StreamSmootherMap>(new Map());
 
-  const handleMessage = useCallback((latestMessage: LatestChatMessage) => {
+  const handleMessage = useCallback((latestMessage: LatestChatMessage, fallbackSessionId?: string | null) => {
     if (!latestMessage) return;
 
     const pendingSessionId = pendingViewSessionRef.current?.sessionId ?? null;
@@ -190,12 +217,17 @@ export function useChatRealtimeHandlers({
 
           if (isCurrentSession && Array.isArray(msg.activeTurnMessages) && msg.activeTurnMessages.length > 0) {
             for (const activeTurnMessage of msg.activeTurnMessages) {
-              handleMessage(activeTurnMessage);
+              handleMessage(activeTurnMessage, statusSessionId);
             }
           }
 
           if (isCurrentSession && Array.isArray(msg.activitySnapshot)) {
-            sessionStore.setActivities?.(statusSessionId, msg.activitySnapshot as NormalizedMessage[]);
+            const activities = msg.activitySnapshot.map((activity) => {
+              const normalized = activity as NormalizedMessage;
+              if (getExplicitSessionId(normalized)) return normalized;
+              return { ...normalized, sessionId: statusSessionId };
+            });
+            sessionStore.setActivities?.(statusSessionId, activities);
           }
 
           const status = msg.status;
@@ -243,25 +275,29 @@ export function useChatRealtimeHandlers({
     /*  NormalizedMessage handling (has `kind` field)                    */
     /* ---------------------------------------------------------------- */
 
-    const explicitSessionId = getExplicitSessionId(msg);
-    const sid = explicitSessionId || activeViewSessionId;
+    const sid = resolveSessionId(msg, fallbackSessionId);
+    if (!sid) {
+      warnDroppedFrame(msg);
+      return;
+    }
+    if (!getExplicitSessionId(msg) && fallbackSessionId) {
+      warnResolvedSessionId(msg, sid);
+    }
+
     const isForActiveView =
-      Boolean(sid) &&
-      (sid === currentSessionId ||
-        sid === selectedSession?.id ||
-        sid === activeViewSessionId);
+      sid === currentSessionId ||
+      sid === selectedSession?.id ||
+      sid === activeViewSessionId;
 
     if (msg.kind === 'agent_activity') {
-      if (sid) {
-        sessionStore.upsertActivity?.(sid, msg as NormalizedMessage);
-      }
+      sessionStore.upsertActivity?.(sid, msg as NormalizedMessage);
       return;
     }
 
     // --- Streaming: buffer for performance ---
     if (msg.kind === 'stream_delta') {
       const text = msg.content || '';
-      if (!text || !sid) return;
+      if (!text) return;
       // Flush this session's thinking before its assistant text starts.
       flushThinking(sid, true);
       const state = getOrCreateSmoother(
@@ -279,7 +315,7 @@ export function useChatRealtimeHandlers({
     // --- Thinking: accumulate into a single message like stream_delta ---
     if (msg.kind === 'thinking') {
       const text = msg.content || '';
-      if (!text || !sid) return;
+      if (!text) return;
       const state = getOrCreateSmoother(
         thinkingBySessionRef.current,
         sid,
@@ -293,15 +329,13 @@ export function useChatRealtimeHandlers({
     }
 
     if (msg.kind === 'stream_end') {
-      if (sid) flushStream(sid, true);
+      flushStream(sid, true);
       return;
     }
 
     // --- Turn boundary: finalize in-flight streaming before non-stream msgs ---
-    if (sid) {
-      flushThinking(sid, true);
-      flushStream(sid, true);
-    }
+    flushThinking(sid, true);
+    flushStream(sid, true);
 
     // --- All other messages: route to store ---
     // Skip assistant text messages that duplicate finalized streaming content.
@@ -309,11 +343,11 @@ export function useChatRealtimeHandlers({
     // already creates a text message in realtimeMessages. If the backend also
     // sends a standalone 'text' message with the same content, skip it.
     const isDuplicateStreamText =
-      msg.kind === 'text' && msg.role === 'assistant' && sid &&
+      msg.kind === 'text' && msg.role === 'assistant' &&
       sessionStore.getSessionSlot?.(sid)?.realtimeMessages.some(
         (m) => m.kind === 'text' && m.role === 'assistant' && m.content === (msg as NormalizedMessage).content,
       );
-    if (sid && !isDuplicateStreamText) {
+    if (!isDuplicateStreamText) {
       sessionStore.appendRealtime(sid, msg as NormalizedMessage);
     }
 
@@ -406,12 +440,7 @@ export function useChatRealtimeHandlers({
 
       case 'permission_request': {
         if (!msg.requestId) break;
-        const permSid = getExplicitSessionId(msg);
-        const isForCurrentSession =
-          Boolean(permSid) &&
-          (permSid === currentSessionId ||
-            permSid === selectedSession?.id ||
-            permSid === activeViewSessionId);
+        const isForCurrentSession = isForActiveView;
         if (!isForCurrentSession) break;
         setPendingPermissionRequests((prev) => {
           if (prev.some((r: PendingPermissionRequest) => r.requestId === msg.requestId)) return prev;
@@ -420,7 +449,7 @@ export function useChatRealtimeHandlers({
             toolName: msg.toolName || 'UnknownTool',
             input: msg.input,
             context: msg.context,
-            sessionId: permSid || null,
+            sessionId: sid,
             receivedAt: new Date(),
             isElicitation: Boolean((msg as { isElicitation?: boolean }).isElicitation),
           }];

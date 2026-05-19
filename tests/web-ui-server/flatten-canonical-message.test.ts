@@ -60,6 +60,45 @@ test("user tool_result message becomes a tool result WebMessage", () => {
   assert.equal(out[0].text, "ok");
 });
 
+test("flattens user text and images into one text WebMessage", () => {
+  const message: CanonicalMessage = {
+    role: "user",
+    content: [
+      { type: "text", text: "please inspect this" },
+      { type: "image", source: "base64", mimeType: "image/png", data: "abc123", bytes: 6 },
+    ],
+  };
+
+  const out = flattenCanonicalMessage(message, ctx);
+
+  assert.equal(out.length, 1);
+  assert.equal(out[0].role, "user");
+  assert.equal(out[0].kind, "text");
+  assert.equal(out[0].text, "please inspect this");
+  assert.deepEqual(out[0].images, [
+    { data: "data:image/png;base64,abc123", mimeType: "image/png" },
+  ]);
+});
+
+test("flattens image-only user messages so history can render the bubble", () => {
+  const message: CanonicalMessage = {
+    role: "user",
+    content: [
+      { type: "image", source: "base64", mimeType: "image/jpeg", data: "xyz" },
+    ],
+  };
+
+  const out = flattenCanonicalMessage(message, ctx);
+
+  assert.equal(out.length, 1);
+  assert.equal(out[0].role, "user");
+  assert.equal(out[0].kind, "text");
+  assert.equal(out[0].text, "");
+  assert.deepEqual(out[0].images, [
+    { data: "data:image/jpeg;base64,xyz", mimeType: "image/jpeg" },
+  ]);
+});
+
 test("isError tool_result yields ok=false", () => {
   const message: CanonicalMessage = {
     role: "user",

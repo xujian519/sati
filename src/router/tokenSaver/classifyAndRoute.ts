@@ -46,6 +46,13 @@ export async function classifyAndRoute(
     };
   }
 
+  if (input.previousTier && isShortContinuation(userMessage)) {
+    const prevSelection = config.tiers[input.previousTier]?.model;
+    if (prevSelection) {
+      return { tier: input.previousTier, selection: prevSelection, resolvedFrom: "judge" };
+    }
+  }
+
   const knownTiers = Object.keys(config.tiers);
   const prompt = generateJudgePrompt({ userMessage, config, previousTier: input.previousTier });
   const judgeRequest: CanonicalModelRequest = {
@@ -152,4 +159,24 @@ export async function classifyAndRoute(
 
 class TokenSaverTimeoutError extends Error {
   readonly name = "TokenSaverTimeoutError";
+}
+
+const SHORT_CONTINUATION_MAX_CHARS = 30;
+
+const CONTINUATION_PATTERNS = [
+  /^(go|ok|yes|y|sure|do it|proceed|continue|next|done|start|run|好|好的|继续|开始|可以|行|嗯|对|是的|没问题|来吧|冲|走|执行|开搞|干|上)$/i,
+];
+
+/**
+ * Detect short acknowledgment / continuation messages that should inherit the
+ * previous turn's tier rather than being re-classified by the judge. Small LLMs
+ * reliably mis-classify these as "simple" because they match the "confirmations"
+ * tier description.
+ */
+export function isShortContinuation(message: string): boolean {
+  const trimmed = message.trim();
+  if (trimmed.length > SHORT_CONTINUATION_MAX_CHARS) {
+    return false;
+  }
+  return CONTINUATION_PATTERNS.some((pattern) => pattern.test(trimmed));
 }

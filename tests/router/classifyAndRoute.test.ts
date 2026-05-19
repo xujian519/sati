@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyAndRoute } from "../../src/router/tokenSaver/classifyAndRoute.js";
+import { classifyAndRoute, isShortContinuation } from "../../src/router/tokenSaver/classifyAndRoute.js";
 import type { RouterTokenSaverConfig } from "../../src/router/config/schema.js";
 import type { CanonicalModelResponse, ModelRuntime } from "../../src/model/index.js";
 
@@ -197,7 +197,7 @@ test("classifyAndRoute uses last user message from multi-turn messages", async (
   assert.ok(!judgePromptText.includes("first question"));
 });
 
-test("classifyAndRoute forwards previousTier to judge prompt", async () => {
+test("classifyAndRoute forwards previousTier to judge prompt for non-continuation messages", async () => {
   let capturedRequest: unknown;
   const spyJudge: ModelRuntime = {
     ...makeJudge("<tier>COMPLEX</tier>"),
@@ -212,7 +212,7 @@ test("classifyAndRoute forwards previousTier to judge prompt", async () => {
   };
   await classifyAndRoute({
     config: makeConfig(),
-    messages: userMessages("继续"),
+    messages: userMessages("now add error handling"),
     judgeRuntime: spyJudge,
     previousTier: "COMPLEX",
   });
@@ -242,4 +242,76 @@ test("classifyAndRoute omits previousTier from judge prompt when not provided", 
   const req = capturedRequest as { messages: Array<{ content: Array<{ text: string }> }> };
   const judgePromptText = req.messages[0].content[0].text;
   assert.ok(!judgePromptText.includes("Previous turn"));
+});
+
+// --- isShortContinuation tests ---
+
+test("isShortContinuation matches common continuation phrases", () => {
+  for (const phrase of ["go", "Go", "GO", "ok", "OK", "yes", "continue", "继续", "好的", "开始", "冲", "可以"]) {
+    assert.ok(isShortContinuation(phrase), `expected "${phrase}" to be a short continuation`);
+  }
+});
+
+test("isShortContinuation rejects substantive messages", () => {
+  for (const phrase of [
+    "refactor the authentication module",
+    "帮我重构整个代码库",
+    "please add unit tests for all functions",
+  ]) {
+    assert.ok(!isShortContinuation(phrase), `expected "${phrase}" NOT to be a short continuation`);
+  }
+});
+
+test("isShortContinuation rejects short but non-continuation messages", () => {
+  assert.ok(!isShortContinuation("hello"));
+  assert.ok(!isShortContinuation("help me"));
+  assert.ok(!isShortContinuation("what is this"));
+});
+
+test("classifyAndRoute uses previousTier directly for short continuations", async () => {
+  let judgeCalled = false;
+  const spyJudge: ModelRuntime = {
+    ...makeJudge("<tier>SIMPLE</tier>"),
+    complete: async () => {
+      judgeCalled = true;
+      return {
+        role: "assistant",
+        content: [{ type: "text", text: "<tier>SIMPLE</tier>" }],
+        finishReason: "stop",
+      };
+    },
+  };
+  const result = await classifyAndRoute({
+    config: makeConfig(),
+    messages: userMessages("go"),
+    judgeRuntime: spyJudge,
+    previousTier: "COMPLEX",
+  });
+  assert.ok(result);
+  assert.equal(result.tier, "COMPLEX");
+  assert.equal(result.selection.model, "expensive");
+  assert.equal(judgeCalled, false, "judge should NOT be called for short continuation with previousTier");
+});
+
+test("classifyAndRoute calls judge normally for short continuations without previousTier", async () => {
+  let judgeCalled = false;
+  const spyJudge: ModelRuntime = {
+    ...makeJudge("<tier>SIMPLE</tier>"),
+    complete: async () => {
+      judgeCalled = true;
+      return {
+        role: "assistant",
+        content: [{ type: "text", text: "<tier>SIMPLE</tier>" }],
+        finishReason: "stop",
+      };
+    },
+  };
+  const result = await classifyAndRoute({
+    config: makeConfig(),
+    messages: userMessages("go"),
+    judgeRuntime: spyJudge,
+  });
+  assert.ok(result);
+  assert.equal(result.tier, "SIMPLE");
+  assert.equal(judgeCalled, true, "judge SHOULD be called without previousTier");
 });

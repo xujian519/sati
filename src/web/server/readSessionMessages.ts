@@ -19,6 +19,7 @@
 import {
   flattenToolResultBlockText,
   type CanonicalContentBlock,
+  type CanonicalImageBlock,
   type CanonicalMessage,
 } from "../../model/index.js";
 import { listProjectSessions, readTranscript, findLastCompactBoundaryIndex, type SessionInfo } from "../../session/index.js";
@@ -214,9 +215,10 @@ export function flattenCanonicalMessage(
   const out: WebMessage[] = [];
   const role: WebMessageRole = message.role === "user" ? "user" : "assistant";
   let textBuffer = "";
+  let pendingImages: NonNullable<WebMessage["images"]> = [];
 
   const flushText = (): void => {
-    if (!textBuffer) return;
+    if (!textBuffer && pendingImages.length === 0) return;
     out.push({
       id: `${context.sessionKey}-msg-${context.index}-${out.length}`,
       sessionKey: context.sessionKey,
@@ -226,9 +228,11 @@ export function flattenCanonicalMessage(
       role,
       kind: "text",
       text: textBuffer,
+      ...(pendingImages.length > 0 ? { images: pendingImages } : {}),
       source: "history",
     });
     textBuffer = "";
+    pendingImages = [];
   };
 
   for (const block of message.content) {
@@ -236,6 +240,8 @@ export function flattenCanonicalMessage(
       flushText();
     }, (chunk) => {
       textBuffer += chunk;
+    }, (image) => {
+      pendingImages.push(toWebMessageImage(image));
     });
   }
   flushText();
@@ -250,6 +256,7 @@ function flushBlock(
   role: WebMessageRole,
   flushText: () => void,
   appendText: (chunk: string) => void,
+  appendImage: (image: CanonicalImageBlock) => void,
 ): void {
   switch (block.type) {
     case "text":
@@ -329,6 +336,24 @@ function flushBlock(
       });
       return;
     case "image":
+      if (role === "user") {
+        appendImage(block);
+        return;
+      }
+      flushText();
+      out.push({
+        id: `${context.sessionKey}-attachment-${context.index}-${out.length}`,
+        sessionKey: context.sessionKey,
+        projectKey: context.projectKey,
+        createdAt: stamp,
+        provider: "pilotdeck",
+        role,
+        kind: "status",
+        text: `[${block.type} attachment]`,
+        payload: { mimeType: block.mimeType, bytes: "bytes" in block ? block.bytes : undefined },
+        source: "history",
+      });
+      return;
     case "pdf":
     case "audio":
       flushText();
@@ -347,6 +372,13 @@ function flushBlock(
       });
       return;
   }
+}
+
+function toWebMessageImage(block: CanonicalImageBlock): NonNullable<WebMessage["images"]>[number] {
+  return {
+    data: block.source === "url" ? block.data : `data:${block.mimeType};base64,${block.data}`,
+    mimeType: block.mimeType,
+  };
 }
 
 /**

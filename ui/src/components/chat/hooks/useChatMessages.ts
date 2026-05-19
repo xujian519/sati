@@ -33,7 +33,6 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
           ...(storedAttachments || []),
           ...parsedUserContent.attachments,
         ];
-        if (!content.trim() && (!userAttachments || userAttachments.length === 0)) continue;
 
         if (msg.role === 'user') {
           // `NormalizedMessage.images` carries data URLs as strings (see
@@ -46,6 +45,7 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
                 .filter((d) => typeof d === 'string' && d.length > 0)
                 .map((d) => ({ data: d, name: '' }))
             : undefined;
+          if (!content.trim() && userAttachments.length === 0 && (!userImages || userImages.length === 0)) continue;
           converted.push({
             id: msg.id,
             type: 'user',
