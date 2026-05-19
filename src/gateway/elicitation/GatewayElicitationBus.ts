@@ -48,6 +48,11 @@ export class GatewayElicitationBus {
     return entry;
   }
 
+  /** True while a host response is still expected for this request. */
+  hasPending(sessionKey: string, requestId: string): boolean {
+    return this.bySession.get(sessionKey)?.has(requestId) ?? false;
+  }
+
   /**
    * Reject and drop every pending entry for a session. Called when a turn
    * ends (success / error / abort) so leaked askUser promises are surfaced

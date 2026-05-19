@@ -47,6 +47,10 @@ export class GatewayPermissionBus {
     return entry;
   }
 
+  hasPending(sessionKey: string, requestId: string): boolean {
+    return this.bySession.get(sessionKey)?.has(requestId) ?? false;
+  }
+
   rejectSession(sessionKey: string, reason: string): void {
     const bucket = this.bySession.get(sessionKey);
     if (!bucket) return;

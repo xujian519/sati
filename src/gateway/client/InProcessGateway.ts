@@ -396,7 +396,9 @@ export class InProcessGateway implements Gateway {
       active: true,
       sessionKey: replay.sessionKey,
       runId: replay.runId,
-      events: replay.events.map((event) => cloneGatewayEvent(event)),
+      events: replay.events
+        .filter((event) => this.shouldReplayActiveTurnEvent(input.sessionKey, event))
+        .map((event) => cloneGatewayEvent(event)),
       ...(replay.truncated ? { truncated: true } : {}),
     };
   }
@@ -558,6 +560,19 @@ export class InProcessGateway implements Gateway {
       throw new Error("Cron runtime is not configured.");
     }
     return this.options.cron;
+  }
+
+  private shouldReplayActiveTurnEvent(sessionKey: string, event: GatewayEvent): boolean {
+    if (event.type === "permission_request") {
+      return this.permissionBus.hasPending(sessionKey, event.requestId);
+    }
+    if (event.type === "elicitation_request") {
+      return this.elicitationBus.hasPending(sessionKey, event.requestId);
+    }
+    if (event.type === "elicitation_cancelled") {
+      return false;
+    }
+    return true;
   }
 
   private recordActiveTurnEvent(sessionKey: string, event: GatewayEvent): void {

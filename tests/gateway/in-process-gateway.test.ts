@@ -241,6 +241,143 @@ test("InProcessGateway exposes replayable active turn snapshot while a turn is s
   assert.deepEqual(inactive, { active: false, sessionKey: "session-1", events: [] });
 });
 
+test("InProcessGateway active turn snapshot only replays pending interactive requests", async () => {
+  let release!: () => void;
+  const blocker = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const router = new SessionRouter({
+    createSession: async () =>
+      ({
+        abort: () => release(),
+        snapshot: () => ({
+          sessionId: "session-1",
+          messages: [],
+          usage: {},
+          permissionDenials: [],
+          status: "idle",
+          abortController: new AbortController(),
+        }),
+        replay: async function* () {},
+        submit: async function* () {
+          yield { type: "turn_started", sessionId: "session-1", turnId: "run-1" } satisfies AgentEvent;
+          await blocker;
+        },
+      }) as unknown as AgentSession,
+  });
+  const gateway = new InProcessGateway(router, { uuid: () => "run-1" });
+  const iterator = gateway.submitTurn({
+    sessionKey: "session-1",
+    channelKey: "web",
+    message: "one",
+    runId: "run-1",
+  })[Symbol.asyncIterator]();
+
+  assert.deepEqual(await iterator.next(), { done: false, value: { type: "turn_started", runId: "run-1" } });
+
+  gateway.getPermissionBus().register("session-1", {
+    requestId: "perm-1",
+    toolCallId: "tool-1",
+    toolName: "Shell",
+    resolve: () => undefined,
+    reject: () => undefined,
+  });
+  gateway.getPermissionBus().register("session-1", {
+    requestId: "perm-2",
+    toolCallId: "tool-2",
+    toolName: "ReadFile",
+    resolve: () => undefined,
+    reject: () => undefined,
+  });
+  gateway.getElicitationBus().register("session-1", {
+    requestId: "ask-1",
+    toolCallId: "tool-3",
+    toolName: "ask_user_question",
+    resolve: () => undefined,
+    reject: () => undefined,
+  });
+  gateway.getElicitationBus().register("session-1", {
+    requestId: "ask-2",
+    toolCallId: "tool-4",
+    toolName: "ask_user_question",
+    resolve: () => undefined,
+    reject: () => undefined,
+  });
+
+  assert.equal(gateway.emitForSession("session-1", {
+    type: "permission_request",
+    requestId: "perm-1",
+    toolName: "Shell",
+    payload: { command: "date" },
+  }), true);
+  assert.equal(gateway.emitForSession("session-1", {
+    type: "permission_request",
+    requestId: "perm-2",
+    toolName: "ReadFile",
+    payload: { path: "README.md" },
+  }), true);
+  assert.equal(gateway.emitForSession("session-1", {
+    type: "elicitation_request",
+    requestId: "ask-1",
+    toolCallId: "tool-3",
+    toolName: "ask_user_question",
+    questions: [],
+  }), true);
+  assert.equal(gateway.emitForSession("session-1", {
+    type: "elicitation_request",
+    requestId: "ask-2",
+    toolCallId: "tool-4",
+    toolName: "ask_user_question",
+    questions: [],
+  }), true);
+
+  assert.deepEqual(
+    (await gateway.getActiveTurnSnapshot({ sessionKey: "session-1" })).events.map((event) =>
+      event.type === "permission_request" || event.type === "elicitation_request"
+        ? `${event.type}:${event.requestId}`
+        : event.type
+    ),
+    [
+      "turn_started",
+      "permission_request:perm-1",
+      "permission_request:perm-2",
+      "elicitation_request:ask-1",
+      "elicitation_request:ask-2",
+    ],
+  );
+
+  await gateway.permissionDecide({ sessionKey: "session-1", requestId: "perm-1", decision: "allow" });
+  await gateway.respondElicitation({
+    sessionKey: "session-1",
+    requestId: "ask-1",
+    answer: { type: "answered", answers: {} },
+  });
+  assert.equal(gateway.emitForSession("session-1", {
+    type: "elicitation_cancelled",
+    requestId: "ask-1",
+    reason: "answered",
+  }), true);
+
+  assert.deepEqual(
+    (await gateway.getActiveTurnSnapshot({ sessionKey: "session-1" })).events.map((event) =>
+      event.type === "permission_request" || event.type === "elicitation_request"
+        ? `${event.type}:${event.requestId}`
+        : event.type
+    ),
+    [
+      "turn_started",
+      "permission_request:perm-2",
+      "elicitation_request:ask-2",
+    ],
+  );
+
+  release();
+  for (;;) {
+    const result = await iterator.next();
+    if (result.done) break;
+  }
+});
+
 test("mapAgentEvent does not surface transient model errors before turn_failed", () => {
   const frames = mapAgentEvent({
     type: "model_event",
