@@ -191,13 +191,22 @@ export function useChatComposerState({
           });
           break;
 
-        case 'model':
+        case 'model': {
+          const modelLines = [`**Current Model**: ${data.current.model}`, '', '**Available Models**:'];
+          if (data.available && typeof data.available === 'object') {
+            for (const [provider, models] of Object.entries(data.available)) {
+              if (Array.isArray(models) && models.length) {
+                modelLines.push('', `${provider}: ${models.join(', ')}`);
+              }
+            }
+          }
           addMessage({
             type: 'assistant',
-            content: `**Current Model**: ${data.current.model}\n\n**Available Models**:\n\nClaude: ${data.available.claude.join(', ')}\n\nCursor: ${data.available.cursor.join(', ')}`,
+            content: modelLines.join('\n'),
             timestamp: Date.now(),
           });
           break;
+        }
 
         case 'cost': {
           const costMessage = `**Token Usage**: ${data.tokenUsage.used.toLocaleString()} / ${data.tokenUsage.total.toLocaleString()} (${data.tokenUsage.percentage}%)\n\n**Estimated Cost**:\n- Input: $${data.cost.input}\n- Output: $${data.cost.output}\n- **Total**: $${data.cost.total}\n\n**Model**: ${data.model}`;
@@ -316,7 +325,7 @@ export function useChatComposerState({
           }
           if (data.installed) {
             lines.push('');
-            lines.push('_New skill is on disk — open a fresh chat (or `/clear-caches`) to make Claude Code see it. The UI slash menu picks it up next time you open `/`._');
+            lines.push('_New skill is on disk — open a fresh chat (or `/clear-caches`) to make PilotDeck see it. The UI slash menu picks it up next time you open `/`._');
           }
           addMessage({
             type: 'assistant',

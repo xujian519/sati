@@ -8,6 +8,7 @@ import { promisify } from 'util';
 import { CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
 import { parseFrontmatter } from '../utils/frontmatter.js';
 import { getClaudeRuntimeModelConfig, getClaudeRuntimeModelValues } from '../utils/claude-runtime-config.js';
+import { readPilotDeckConfigFile, resolveModel } from '../services/pilotdeckConfig.js';
 import { executeAlwaysOnSlashCommand } from '../always-on-slash.js';
 import { executeTurnkeySlashCommand } from '../turnkey-slash.js';
 
@@ -41,13 +42,13 @@ const BUNDLED_SKILL_STUBS = [
   {
     name: '/projects',
     description:
-      'List every Claude Code project visible to the TUI, gateway, and claudecodeui (read from ~/.claude/projects and ~/.claude/project-config.json).',
+      'List every PilotDeck project visible to the TUI, gateway, and UI.',
     metadata: { type: 'bundled-skill' },
   },
   {
     name: '/switch-project',
     description:
-      'Switch the active project for the current gateway/IM conversation (no-op in TUI / claudecodeui — those manage active project themselves).',
+      'Switch the active project for the current gateway/IM conversation (no-op in TUI — those manage active project themselves).',
     metadata: { type: 'bundled-skill', argumentHint: '<project name>' },
   },
 ];
@@ -189,7 +190,7 @@ async function scanSkillsDirectory(dir, namespace) {
 const builtInCommands = [
   {
     name: '/help',
-    description: 'Show help documentation for Claude Code',
+    description: 'Show help documentation for PilotDeck',
     namespace: 'builtin',
     metadata: { type: 'builtin' }
   },
@@ -213,7 +214,7 @@ const builtInCommands = [
   },
   {
     name: '/memory',
-    description: 'Open CLAUDE.md memory file for editing',
+    description: 'Open PILOTDECK.md memory file for editing',
     namespace: 'builtin',
     metadata: { type: 'builtin' }
   },
@@ -256,7 +257,7 @@ const builtInCommands = [
   {
     name: '/skill_install',
     description:
-      'Install a skill from clawhub.com. Auto-targets ~/.claude/skills/<slug> in general chat and <project>/.claude/skills/<slug> when a project is active. Use --global / --project to override.',
+      'Install a skill from clawhub.com. Auto-targets ~/.pilotdeck/skills/<slug> in general chat and <project>/.pilotdeck/skills/<slug> when a project is active. Use --global / --project to override.',
     namespace: 'builtin',
     metadata: {
       type: 'builtin',
@@ -271,7 +272,7 @@ const builtInCommands = [
  */
 const builtInHandlers = {
   '/help': async (args, context) => {
-    const helpText = `# Claude Code Commands
+    const helpText = `# PilotDeck Commands
 
 ## Built-in Commands
 
@@ -282,8 +283,8 @@ ${cmd.description}
 ## Custom Commands
 
 Custom commands can be created in:
-- Project: \`.claude/commands/\` (project-specific)
-- User: \`~/.claude/commands/\` (available in all projects)
+- Project: \`.pilotdeck/commands/\` (project-specific)
+- User: \`~/.pilotdeck/commands/\` (available in all projects)
 
 ### Command Syntax
 
@@ -319,26 +320,29 @@ Custom commands can be created in:
   },
 
   '/model': async (args, context) => {
-    const claudeRuntimeConfig = getClaudeRuntimeModelConfig();
-    // Read available models from centralized constants
-    const availableModels = {
-      claude: getClaudeRuntimeModelValues(),
-      cursor: CURSOR_MODELS.OPTIONS.map(o => o.value),
-      codex: CODEX_MODELS.OPTIONS.map(o => o.value)
-    };
+    const { config } = readPilotDeckConfigFile();
+    const mainRef = config?.agent?.model || '';
+    const resolved = resolveModel(config, mainRef, { allowMissing: true });
+    const currentModel = resolved ? resolved.id : mainRef || '(not configured)';
 
-    const currentProvider = context?.provider || 'claude';
-    const currentModel = context?.model || claudeRuntimeConfig.defaultModel;
+    const providers = config?.model?.providers || {};
+    const available = {};
+    for (const [pid, provider] of Object.entries(providers)) {
+      const models = provider.models;
+      if (models && typeof models === 'object') {
+        available[pid] = Object.keys(models);
+      }
+    }
 
     return {
       type: 'builtin',
       action: 'model',
       data: {
         current: {
-          provider: currentProvider,
+          provider: resolved?.providerId || '',
           model: currentModel
         },
-        available: availableModels,
+        available,
         message: args.length > 0
           ? `Switching to model: ${args[0]}`
           : `Current model: ${currentModel}`
@@ -348,14 +352,11 @@ Custom commands can be created in:
 
   '/cost': async (args, context) => {
     const tokenUsage = context?.tokenUsage || {};
-    const provider = context?.provider || 'claude';
-    const model =
-      context?.model ||
-      (provider === 'cursor'
-        ? CURSOR_MODELS.DEFAULT
-        : provider === 'codex'
-          ? CODEX_MODELS.DEFAULT
-          : getClaudeRuntimeModelConfig().defaultModel);
+    const { config: pdConfig } = readPilotDeckConfigFile();
+    const mainRef = pdConfig?.agent?.model || '';
+    const resolvedMain = resolveModel(pdConfig, mainRef, { allowMissing: true });
+    const provider = context?.provider || resolvedMain?.providerId || 'unknown';
+    const model = context?.model || (resolvedMain ? resolvedMain.id : mainRef || '(not configured)');
 
     const used = Number(tokenUsage.used ?? tokenUsage.totalUsed ?? tokenUsage.total_tokens ?? 0) || 0;
     const total =
@@ -427,10 +428,9 @@ Custom commands can be created in:
   },
 
   '/status': async (args, context) => {
-    // Read version from package.json
     const packageJsonPath = path.join(path.dirname(__dirname), '..', 'package.json');
     let version = 'unknown';
-    let packageName = 'claude-code-ui';
+    let packageName = 'pilotdeck';
 
     try {
       const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
@@ -439,6 +439,10 @@ Custom commands can be created in:
     } catch (err) {
       console.error('Error reading package.json:', err);
     }
+
+    const { config } = readPilotDeckConfigFile();
+    const mainRef = config?.agent?.model || '';
+    const resolved = resolveModel(config, mainRef, { allowMissing: true });
 
     const uptime = process.uptime();
     const uptimeMinutes = Math.floor(uptime / 60);
@@ -455,8 +459,8 @@ Custom commands can be created in:
         packageName,
         uptime: uptimeFormatted,
         uptimeSeconds: Math.floor(uptime),
-        model: context?.model || 'claude-sonnet-4.5',
-        provider: context?.provider || 'claude',
+        model: resolved ? resolved.id : mainRef || '(not configured)',
+        provider: resolved?.providerId || '',
         nodeVersion: process.version,
         platform: process.platform
       }
@@ -472,14 +476,14 @@ Custom commands can be created in:
         action: 'memory',
         data: {
           error: 'No project selected',
-          message: 'Please select a project to access its CLAUDE.md file'
+          message: 'Please select a project to access its PILOTDECK.md file'
         }
       };
     }
 
-    const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
+    const claudeMdPath = path.join(projectPath, 'PILOTDECK.md');
 
-    // Check if CLAUDE.md exists
+    // Check if PILOTDECK.md exists
     let exists = false;
     try {
       await fs.access(claudeMdPath);
@@ -495,8 +499,8 @@ Custom commands can be created in:
         path: claudeMdPath,
         exists,
         message: exists
-          ? `Opening CLAUDE.md at ${claudeMdPath}`
-          : `CLAUDE.md not found at ${claudeMdPath}. Create it to store project-specific instructions.`
+          ? `Opening PILOTDECK.md at ${claudeMdPath}`
+          : `PILOTDECK.md not found at ${claudeMdPath}. Create it to store project-specific instructions.`
       }
     };
   },

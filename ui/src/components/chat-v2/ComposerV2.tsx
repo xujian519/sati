@@ -25,7 +25,6 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { ChatRunMode, PendingPermissionRequest, PermissionMode } from '../chat/types/types';
-import CommandMenu from '../chat/view/subcomponents/CommandMenu';
 import PermissionRequestsBanner from '../chat/view/subcomponents/PermissionRequestsBanner';
 import ImageAttachment from '../chat/view/subcomponents/ImageAttachment';
 import { cn } from '../../lib/utils.js';
@@ -265,12 +264,12 @@ export default function ComposerV2({
   filteredFiles,
   selectedFileIndex,
   onSelectFile,
-  filteredCommands,
-  selectedCommandIndex,
-  onCommandSelect,
-  onCloseCommandMenu,
-  isCommandMenuOpen,
-  frequentCommands,
+  filteredCommands: _filteredCommands,
+  selectedCommandIndex: _selectedCommandIndex,
+  onCommandSelect: _onCommandSelect,
+  onCloseCommandMenu: _onCloseCommandMenu,
+  isCommandMenuOpen: _isCommandMenuOpen,
+  frequentCommands: _frequentCommands,
   onToggleCommandMenu: _onToggleCommandMenu,
   onInsertMention,
   getRootProps,
@@ -307,13 +306,6 @@ export default function ComposerV2({
   const hasBlockingPermissionPanel = pendingPermissionRequests.some(
     (request) => BLOCKING_PERMISSION_TOOLS.has(request.toolName),
   );
-
-  const textareaRect = textareaRef.current?.getBoundingClientRect();
-  const commandMenuPosition = {
-    top: textareaRect ? Math.max(16, textareaRect.top - 316) : 0,
-    left: textareaRect ? textareaRect.left : 16,
-    bottom: textareaRect ? window.innerHeight - textareaRect.top + 8 : 90,
-  };
 
   const hasDraftContent = input.trim().length > 0 || attachedImages.length > 0;
   const hasUploadingImages = uploadingImages.size > 0;
@@ -414,16 +406,6 @@ export default function ComposerV2({
                 ))}
               </div>
             ) : null}
-
-            <CommandMenu
-              commands={filteredCommands}
-              selectedIndex={selectedCommandIndex}
-              onSelect={onCommandSelect}
-              onClose={onCloseCommandMenu}
-              position={commandMenuPosition}
-              isOpen={isCommandMenuOpen}
-              frequentCommands={frequentCommands}
-            />
 
             <div
               {...getRootProps()}
@@ -566,7 +548,7 @@ export default function ComposerV2({
                                   <span className="block truncate text-[11px] text-neutral-500 dark:text-neutral-400">
                                     {optionDisabled
                                       ? t('input.runModes.planUnavailable', {
-                                          defaultValue: 'Plan mode is only available for Claude.',
+                                          defaultValue: 'Plan mode is only available for Anthropic models.',
                                         })
                                       : description}
                                   </span>

@@ -168,7 +168,7 @@
     }
   },
   "usageLimit": {
-    "resetAt": "Claude usage limit reached. Your limit will reset at **{{time}} {{timezone}}** - {{date}}"
+    "resetAt": "Usage limit reached. Your limit will reset at **{{time}} {{timezone}}** - {{date}}"
   },
   "codex": {
     "permissionMode": "Permission Mode",

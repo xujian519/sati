@@ -4,7 +4,7 @@ export const thinkingModes = [
   {
     id: 'none',
     name: 'Standard',
-    description: 'Regular Claude response',
+    description: 'Regular response',
     icon: null,
     prefix: '',
     color: 'text-gray-600'

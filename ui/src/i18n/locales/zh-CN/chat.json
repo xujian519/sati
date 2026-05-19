@@ -168,7 +168,7 @@
     }
   },
   "usageLimit": {
-    "resetAt": "Claude 使用限制已达到。您的限制将在 **{{time}} {{timezone}}** - {{date}} 重置"
+    "resetAt": "使用限制已达到。您的限制将在 **{{time}} {{timezone}}** - {{date}} 重置"
   },
   "codex": {
     "permissionMode": "权限模式",

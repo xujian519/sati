@@ -310,42 +310,10 @@ export function useSlashCommands({
   }, [showCommandMenu, slashCommands, textareaRef]);
 
   const handleCommandInputChange = useCallback(
-    (newValue: string, cursorPos: number) => {
-      if (!newValue.trim()) {
-        resetCommandMenuState();
-        return;
-      }
-
-      const textBeforeCursor = newValue.slice(0, cursorPos);
-      const backticksBefore = (textBeforeCursor.match(/```/g) || []).length;
-      const inCodeBlock = backticksBefore % 2 === 1;
-
-      if (inCodeBlock) {
-        resetCommandMenuState();
-        return;
-      }
-
-      const slashPattern = /(^|\s)\/(\S*)$/;
-      const match = textBeforeCursor.match(slashPattern);
-
-      if (!match) {
-        resetCommandMenuState();
-        return;
-      }
-
-      const slashPos = (match.index || 0) + match[1].length;
-      const query = match[2];
-
-      setSlashPosition(slashPos);
-      setShowCommandMenu(true);
-      setSelectedCommandIndex(-1);
-
-      clearCommandQueryTimer();
-      commandQueryTimerRef.current = window.setTimeout(() => {
-        setCommandQuery(query);
-      }, COMMAND_QUERY_DEBOUNCE_MS);
+    () => {
+      resetCommandMenuState();
     },
-    [resetCommandMenuState, clearCommandQueryTimer],
+    [resetCommandMenuState],
   );
 
   const handleCommandMenuKeyDown = useCallback(

@@ -50,7 +50,7 @@ const getProviderCommand = ({
 };
 
 const getProviderTitle = (provider: CliProvider) => {
-  if (provider === 'claude') return 'Claude CLI Login';
+  if (provider === 'claude') return 'Anthropic API Login';
   if (provider === 'cursor') return 'Cursor CLI Login';
   if (provider === 'codex') return 'Codex CLI Login';
   return 'Gemini CLI Configuration';
