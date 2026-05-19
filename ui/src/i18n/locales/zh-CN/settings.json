@@ -473,7 +473,25 @@
     "actions": {
       "opening": "正在打开...",
       "revealFile": "显示文件",
-      "refresh": "刷新"
+      "refresh": "刷新",
+      "reloadCurrent": "重新加载",
+      "saving": "保存中...",
+      "saveAndReload": "保存并重载",
+      "remove": "移除",
+      "removeModel": "移除模型",
+      "add": "添加",
+      "dismiss": "忽略"
+    },
+    "rawYaml": {
+      "configValid": "配置有效",
+      "unsaved": "（未保存）",
+      "configInvalid": "配置存在校验错误",
+      "configInvalidSeeBelow": "配置存在校验错误——见下方",
+      "errors": "错误",
+      "warnings": "警告",
+      "yamlParseError": "磁盘上的 YAML 解析失败——切换到原始 YAML 以修复。",
+      "cannotParse": "无法解析磁盘上的 YAML。切换到{{rawYaml}}以检查和修复。",
+      "rawYaml": "原始 YAML"
     },
     "sections": {
       "runtime": {
@@ -498,7 +516,7 @@
       },
       "tools": {
         "label": "搜索",
-        "description": "Web 搜索 provider"
+        "description": "Web 搜索提供商"
       },
       "customEnv": {
         "label": "环境变量",
@@ -516,85 +534,150 @@
     "panels": {
       "runtime": {
         "title": "运行时（高级）",
-        "description": "UI server 使用的端口、路径与超时。一般用户不需要改。"
+        "description": "UI 服务器使用的端口、路径与超时。一般用户不需要改。",
+        "fields": {
+          "host": { "label": "主机", "description": "HTTP/WebSocket 服务器的绑定接口。" },
+          "serverPort": { "label": "服务器端口", "description": "Express + WebSocket 端口。" },
+          "vitePort": { "label": "Vite 端口", "description": "前端开发服务器（仅在运行 npm run dev 时使用）。" },
+          "proxyPort": { "label": "代理端口", "description": "本地 LLM 代理（PilotDeck 智能体目标）。" },
+          "apiTimeout": { "label": "API 超时（毫秒）", "description": "每次请求的上游超时。" },
+          "databasePath": { "label": "数据库路径", "description": "SQLite 认证/项目数据库（~ 展开为主目录）。" },
+          "workspacesRoot": { "label": "工作区根目录", "description": "项目扫描的根目录。" },
+          "httpsProxy": { "label": "HTTPS 代理", "description": "出站 HTTPS 代理 URL（HTTPS_PROXY / https_proxy）。" }
+        }
       },
       "models": {
         "title": "模型",
-        "description": "配置 LLM 提供商。Catalog 会自动填入 protocol、URL 和模型能力——你只需要贴一个 API key 并勾选要启用的模型。"
+        "description": "配置 LLM 提供商。目录会自动填入协议、URL 和模型能力——你只需要贴一个 API Key 并勾选要启用的模型。"
       },
       "agents": {
         "title": "智能体",
-        "description": "选择主对话智能体使用哪一个 provider/model。"
+        "description": "选择主对话智能体使用哪一个提供商/模型。",
+        "mainModel": {
+          "label": "主智能体模型",
+          "description": "主对话智能体使用的模型。从「模型」区域选择一个已启用的提供商/模型。"
+        },
+        "capabilities": {
+          "title": "当前模型能力",
+          "imageInput": "图片输入",
+          "enabled": "已启用",
+          "disabled": "已禁用",
+          "resetCatalog": "重置为目录默认值",
+          "overrideActive": "覆盖已生效——你的 YAML 明确定义了此模型的 multimodal.input。",
+          "catalogSupportsImage": "来自目录的默认值：支持图片输入。",
+          "catalogTextOnly": "来自目录的默认值：仅文本。",
+          "noCatalog": "无目录条目——默认仅文本。切换以覆盖。",
+          "imageWarning": "如果上游模型服务器实际不支持图片，启用此项将在请求时产生上游错误。",
+          "maxOutputTokens": "最大输出 Token 数",
+          "override": "覆盖",
+          "default": "默认",
+          "resetDefault": "重置为默认值",
+          "maxOutputDescription": "模型每轮可生成的最大 Token 数（作为 max_tokens 发送到上游）。留空则使用目录或协议默认值（OpenAI 通常为 8192）。对于长文本创作任务或推理模型需增大此值——过小会导致响应中途截断，界面看起来像是卡住了。",
+          "maxContextTokens": "最大上下文 Token 数",
+          "maxContextDescription": "覆盖模型的上下文窗口大小以控制自动压缩。智能体在使用量达到此预算的 80%（警告）或 95%（阻塞）时自动压缩对话历史。留空使用目录默认值。设置较小值可提前触发压缩——适用于代理提供商或降低单轮成本。"
+        },
+        "subagents": {
+          "show": "显示",
+          "hide": "隐藏",
+          "toggle": "子智能体设置",
+          "label": "子智能体默认模型",
+          "description": "工具生成的子智能体使用的模型（例如任务）。"
+        }
       },
       "customEnv": {
         "title": "环境变量",
-        "description": "注入到每个智能体会话里的自定义环境变量。持久化到 config.yaml，切换会话不必重新配置。"
+        "description": "注入到每个智能体会话里的自定义环境变量。持久化到配置文件，切换会话不必重新配置。",
+        "empty": "未配置自定义环境变量。",
+        "existingValueKept": "保留现有值——输入新值以替换",
+        "addVariable": "添加变量",
+        "valueHidden": "值已隐藏；保持原样以保留，重新输入以替换。",
+        "quickAddKeys": "快速添加常用密钥：",
+        "add": "添加"
       },
       "alwaysOn": {
         "title": "Always-On",
-        "description": "配置全局自动 discovery，并按工作区单独开关。",
+        "description": "配置全局自动发现，并按工作区单独开关。",
+        "enabled": { "label": "启用", "description": "常驻后台智能体的总开关。" },
         "trigger": {
           "title": "触发",
-          "description": "控制 discovery 何时、多久触发一次。"
+          "description": "控制自动发现何时、多久触发一次。",
+          "autoDiscovery": { "label": "自动发现", "description": "启用后，常驻模式会定期检查已接入的工作区并提出后续计划。" },
+          "tickInterval": { "label": "检查间隔（分钟）", "description": "守护进程检查已接入工作区的频率。" },
+          "cooldown": { "label": "冷却时间（分钟）", "description": "每个工作区两次发现运行之间的最短间隔。" },
+          "dailyBudget": { "label": "每日预算", "description": "每个工作区每天最多自动发现运行次数。" },
+          "heartbeatStale": { "label": "心跳过期（秒）", "description": "超过此时间的心跳视为过期。" },
+          "recentUserMsg": { "label": "最近用户消息（分钟）", "description": "仅在用户于此时间窗口内发送过消息时触发。" },
+          "preferChannel": { "label": "首选频道", "description": "发现智能体偏好使用的交互频道。" }
         },
         "dormancy": {
           "title": "休眠",
-          "description": "文件系统监听：用户正在活跃编辑时暂停 discovery。"
+          "description": "文件系统监听：用户正在活跃编辑时暂停自动发现。",
+          "enabled": { "label": "启用", "description": "当工作区有近期文件变更时暂停发现触发。" },
+          "debounce": { "label": "防抖（毫秒）", "description": "最后一次文件变更后等待此时长再恢复。" },
+          "ignoreGlobs": { "label": "忽略匹配模式", "description": "不参与休眠检测的文件匹配模式，每行一个。" }
         },
         "workspace": {
           "title": "工作区",
-          "description": "Always-On 跑批的工作区隔离策略。"
+          "description": "常驻模式跑批的工作区隔离策略。",
+          "gitWorktree": { "label": "Git 工作树根目录", "description": "基于 Git 工作树隔离的根目录。" },
+          "snapshotDir": { "label": "快照根目录", "description": "基于快照隔离的根目录。" },
+          "snapshotMaxBytes": { "label": "快照最大字节数", "description": "工作区快照的最大大小。" },
+          "gitLfs": { "label": "Git LFS", "description": "在工作区快照中包含 Git LFS 对象。" }
         },
         "execution": {
           "title": "执行",
-          "description": "每次 Always-On 跑批的安全上限。"
+          "description": "每次常驻模式跑批的安全上限。",
+          "maxTurns": { "label": "最大轮次", "description": "每次运行的最大智能体轮次数。" },
+          "maxToolCalls": { "label": "最大工具调用数", "description": "每次运行的最大工具调用总数。" },
+          "timeout": { "label": "超时（分钟）", "description": "每次运行的硬性超时。" }
         },
         "workspaceOptIn": {
           "title": "工作区接入",
-          "description": "只有勾选的工作区会收到 Always-On 心跳和定时 discovery 检查。"
+          "description": "只有勾选的工作区会收到常驻模式心跳和定时发现检查。",
+          "empty": "尚未识别到项目。请先添加或打开一个工作区。"
         }
       },
       "memory": {
         "title": "记忆",
-        "description": "PilotDeck 记忆服务 —— embedding 与摘要管线。",
+        "description": "PilotDeck 记忆服务 —— 嵌入向量与摘要管线。",
         "enabled": {
           "label": "启用",
           "description": "启用记忆服务的总开关。"
         },
         "model": {
           "label": "记忆服务模型",
-          "description": "记忆管线使用的 provider/model。",
+          "description": "记忆管线使用的提供商/模型。",
           "inherit": "继承（使用主智能体模型）"
         }
       },
       "tools": {
         "title": "搜索",
-        "description": "agent 的 `web_search` 工具背后的搜索 provider。只能选择一个 provider，未选中的 provider 不会生效。",
+        "description": "智能体的 web_search 工具背后的搜索提供商。只能选择一个提供商，未选中的提供商不会生效。",
         "provider": {
           "label": "Provider",
-          "description": "选择 agent 使用的唯一搜索 provider。",
+          "description": "选择智能体使用的唯一搜索提供商。",
           "glm": "GLM / Z.AI Web Search",
           "tavily": "Tavily",
           "custom": "自定义"
         },
         "apiKey": {
           "label": "API Key",
-          "description": "保存到 pilotdeck.yaml 的 tools.webSearch.apiKey，作用于当前选择的 provider。",
+          "description": "保存到 pilotdeck.yaml 的 tools.webSearch.apiKey，作用于当前选择的提供商。",
           "placeholder": "provider API key"
         },
         "endpoint": {
           "label": "接口地址",
-          "description": "当前 provider 的接口地址覆盖项。留空时使用默认地址。",
-          "placeholder": "Provider 默认接口地址"
+          "description": "当前提供商的接口地址覆盖项。留空时使用默认地址。",
+          "placeholder": "提供商默认接口地址"
         },
         "custom": {
           "name": {
             "label": "名称",
-            "description": "这个自定义搜索 provider 的显示名称。"
+            "description": "这个自定义搜索提供商的显示名称。"
           },
           "auth": {
             "label": "鉴权方式",
-            "description": "自定义 provider 接收 API Key 的方式。",
+            "description": "自定义提供商接收 API Key 的方式。",
             "bearer": "Bearer header",
             "bodyApiKey": "API Key 放在 JSON body",
             "queryApiKey": "API Key 放在 query string",
@@ -602,7 +685,7 @@
           },
           "method": {
             "label": "HTTP 方法",
-            "description": "请求自定义 provider 使用的方法。"
+            "description": "请求自定义提供商使用的方法。"
           },
           "params": {
             "label": "参数名",
@@ -617,17 +700,76 @@
           "button": "测试连接",
           "testing": "测试中…",
           "needsKey": "先填一个 API Key。",
-          "success": "连通 —— {{count}} 条 organic 结果，{{latency}}ms。",
+          "success": "连通 —— {{count}} 条自然搜索结果，{{latency}}ms。",
           "failedPrefix": "失败：{{error}}"
         }
       },
       "router": {
         "title": "PilotDeck Router",
-        "description": "内嵌路由器，跨 provider 路由分发（按 tier 分流、token saver、auto-orchestrate）。"
+        "description": "内嵌路由器，跨提供商路由分发（按层级分流、Token 节省、自动编排）。",
+        "enabled": { "label": "启用", "description": "启用后，智能体通过路由器而非直接使用配置的提供商。" },
+        "zeroUsageRetry": {
+          "label": "零用量重试",
+          "description": "当上游返回零 Token 用量的响应时自动重试。",
+          "maxAttempts": { "label": "最大重试次数", "description": "放弃前的最大重试次数。" }
+        },
+        "tokenSaver": {
+          "title": "Token 节省",
+          "description": "轻量级判定器将每轮对话分类到对应层级，并路由到成本适合的模型。",
+          "judgeModel": "判定模型",
+          "defaultTier": "默认层级",
+          "judgeTimeout": { "label": "判定超时（毫秒）", "description": "等待判定结果的最长时间。" },
+          "subagentPolicy": { "label": "子智能体策略", "description": "子智能体的路由方式：'judge' 重新评估每个子智能体轮次，'inherit' 复用父级层级。" }
+        },
+        "autoOrchestrate": {
+          "title": "自动编排",
+          "description": "当判定器分配到特定层级时，自动将复杂轮次展开为并行子智能体。",
+          "triggerTiers": "触发层级",
+          "slimPrompt": { "label": "精简系统提示", "description": "为编排的子智能体使用更短的系统提示以节省 Token。" }
+        },
+        "stats": { "label": "统计收集", "description": "跟踪每个会话的 Token 用量和成本。为仪表板提供数据。" },
+        "pricing": {
+          "title": "模型定价",
+          "description": "每个模型的自定义定价（$/百万 Token）。在 API 不报告成本时使用。",
+          "keyFormat": "键格式：",
+          "empty": "未配置自定义定价。内置默认值覆盖常见模型（DeepSeek、Claude、GPT、Gemini、GLM、Qwen、Llama 等）。",
+          "inputPerM": "输入 $/M",
+          "outputPerM": "输出 $/M",
+          "cachePerM": "缓存 $/M",
+          "addTitle": "添加模型定价",
+          "add": "添加"
+        },
+        "scenarios": {
+          "title": "场景",
+          "description": "将场景名称映射到模型。default 是主要路由。",
+          "empty": "未配置场景。",
+          "add": "添加"
+        },
+        "fallback": {
+          "title": "回退链",
+          "description": "每个场景的有序回退模型。如果主模型失败，路由器尝试下一个。",
+          "empty": "未配置回退链。",
+          "addModel": "添加回退模型",
+          "add": "添加"
+        },
+        "tiers": {
+          "title": "层级",
+          "description": "判定器可路由到的复杂度层级。为每个层级选择模型——描述已预填。",
+          "placeholder": "描述判定器何时应选择此层级…",
+          "add": "添加"
+        },
+        "rules": {
+          "title": "判定规则",
+          "empty": "无自定义规则。判定器仅使用层级描述。",
+          "placeholder": "为判定器添加规则…",
+          "add": "添加"
+        }
       },
       "gateway": {
         "title": "网关",
-        "description": "消息网关（飞书 / Telegram / Discord / Slack）—— 频道级密钥建议用 Raw YAML 编辑。"
+        "description": "消息网关（飞书 / Telegram / Discord / Slack）—— 频道级密钥建议用原始 YAML 编辑。",
+        "enabled": { "label": "启用", "description": "启用后，网关主目录将被生成，配有凭据的频道将上线。" },
+        "home": { "label": "网关主目录", "description": "网关状态和各频道配置的工作目录。" }
       },
       "subsystemReload": {
         "title": "子系统重载状态",

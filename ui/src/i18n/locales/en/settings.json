@@ -473,7 +473,25 @@
     "actions": {
       "opening": "Opening...",
       "revealFile": "Reveal File",
-      "refresh": "Refresh"
+      "refresh": "Refresh",
+      "reloadCurrent": "Reload current",
+      "saving": "Saving...",
+      "saveAndReload": "Save & reload",
+      "remove": "Remove",
+      "removeModel": "Remove model",
+      "add": "Add",
+      "dismiss": "Dismiss"
+    },
+    "rawYaml": {
+      "configValid": "Config is valid",
+      "unsaved": "(unsaved)",
+      "configInvalid": "Config has validation errors",
+      "configInvalidSeeBelow": "Config has validation errors — see below",
+      "errors": "Errors",
+      "warnings": "Warnings",
+      "yamlParseError": "YAML on disk failed to parse — switch to Raw YAML to fix it.",
+      "cannotParse": "Could not parse the YAML on disk. Switch to {{rawYaml}} to inspect and fix it.",
+      "rawYaml": "Raw YAML"
     },
     "sections": {
       "runtime": {
@@ -516,7 +534,17 @@
     "panels": {
       "runtime": {
         "title": "Advanced (Runtime)",
-        "description": "Ports, paths, and timeouts the UI server uses. Most users never need to touch these."
+        "description": "Ports, paths, and timeouts the UI server uses. Most users never need to touch these.",
+        "fields": {
+          "host": { "label": "Host", "description": "Bind interface for the HTTP/WebSocket server." },
+          "serverPort": { "label": "Server port", "description": "Express + WebSocket port." },
+          "vitePort": { "label": "Vite port", "description": "Frontend dev server (only used when running `npm run dev`)." },
+          "proxyPort": { "label": "Proxy port", "description": "Local LLM proxy (PilotDeck agent target)." },
+          "apiTimeout": { "label": "API timeout (ms)", "description": "Per-request upstream timeout." },
+          "databasePath": { "label": "Database path", "description": "SQLite auth/projects database (~ expands to home)." },
+          "workspacesRoot": { "label": "Workspaces root", "description": "Directory under which projects are scanned." },
+          "httpsProxy": { "label": "HTTPS proxy", "description": "Outbound HTTPS proxy URL (HTTPS_PROXY / https_proxy)." }
+        }
       },
       "models": {
         "title": "Models",
@@ -524,34 +552,89 @@
       },
       "agents": {
         "title": "Agents",
-        "description": "Pick which provider/model the chat agent runs on."
+        "description": "Pick which provider/model the chat agent runs on.",
+        "mainModel": {
+          "label": "Main agent model",
+          "description": "Used by the primary chat agent. Reference an enabled provider/model from the Models section."
+        },
+        "capabilities": {
+          "title": "Active model capabilities",
+          "imageInput": "Image input",
+          "enabled": "Enabled",
+          "disabled": "Disabled",
+          "resetCatalog": "reset to catalog default",
+          "overrideActive": "Override active — your YAML explicitly defines this model's multimodal.input.",
+          "catalogSupportsImage": "Default from catalog: supports image input.",
+          "catalogTextOnly": "Default from catalog: text only.",
+          "noCatalog": "No catalog entry — defaulting to text only. Toggle to override.",
+          "imageWarning": "If the upstream model server doesn't actually accept images, enabling this will produce upstream errors at request time.",
+          "maxOutputTokens": "Max output tokens",
+          "override": "Override",
+          "default": "Default",
+          "resetDefault": "reset to default",
+          "maxOutputDescription": "Cap on tokens the model may generate per turn (sent as max_tokens to upstream). Leave empty to fall back to the catalog or protocol default (typically 8192 for openai). Increase this for long-form creative tasks or thinking models that burn output budget while reasoning — too small a value cuts the response off mid-stream and the UI then appears stuck.",
+          "maxContextTokens": "Max context tokens",
+          "maxContextDescription": "Override the model's context window size for auto-compaction. The agent automatically compresses conversation history when usage reaches 80% (warning) or 95% (blocking) of this budget. Leave empty to use the catalog default. Set a smaller value to trigger compaction earlier — useful for proxy providers or to reduce per-turn cost."
+        },
+        "subagents": {
+          "show": "Show",
+          "hide": "Hide",
+          "toggle": "subagent settings",
+          "label": "Subagents default",
+          "description": "Used by tool-spawned subagents (e.g. tasks)."
+        }
       },
       "customEnv": {
         "title": "Environment Variables",
-        "description": "Custom env vars injected into every agent session. Persisted in config.yaml — no need to reconfigure after switching sessions."
+        "description": "Custom env vars injected into every agent session. Persisted in config.yaml — no need to reconfigure after switching sessions.",
+        "empty": "No custom environment variables configured.",
+        "existingValueKept": "Existing value kept — type to replace",
+        "valueHidden": "Value hidden; leave as-is to keep, retype to replace.",
+        "addVariable": "Add variable",
+        "quickAddKeys": "Quick add common keys:",
+        "add": "Add"
       },
       "alwaysOn": {
         "title": "Always-On",
         "description": "Configure automatic discovery globally and opt individual workspaces in.",
+        "enabled": { "label": "Enabled", "description": "Master switch for Always-On background agent." },
         "trigger": {
           "title": "Trigger",
-          "description": "Controls when and how often discovery runs fire."
+          "description": "Controls when and how often discovery runs fire.",
+          "autoDiscovery": { "label": "Auto discovery", "description": "When enabled, Always-On periodically inspects opted-in workspaces and proposes follow-up plans." },
+          "tickInterval": { "label": "Tick interval (minutes)", "description": "How often the daemon checks opted-in workspaces." },
+          "cooldown": { "label": "Cooldown (minutes)", "description": "Minimum time between discovery runs per workspace." },
+          "dailyBudget": { "label": "Daily budget", "description": "Maximum automatic discovery runs per workspace per day." },
+          "heartbeatStale": { "label": "Heartbeat stale (seconds)", "description": "Heartbeats older than this are considered stale." },
+          "recentUserMsg": { "label": "Recent user msg (minutes)", "description": "Only fire if the user sent a message within this window." },
+          "preferChannel": { "label": "Preferred channel", "description": "Channel the discovery agent prefers to interact through." }
         },
         "dormancy": {
           "title": "Dormancy",
-          "description": "File-system watcher that pauses discovery while the user is actively editing."
+          "description": "File-system watcher that pauses discovery while the user is actively editing.",
+          "enabled": { "label": "Enabled", "description": "Suppress discovery fires while the workspace has recent file changes." },
+          "debounce": { "label": "Debounce (ms)", "description": "Wait this long after the last file change before resuming." },
+          "ignoreGlobs": { "label": "Ignore globs", "description": "File patterns excluded from dormancy detection, one per line." }
         },
         "workspace": {
           "title": "Workspace",
-          "description": "Isolated workspace strategy for Always-On runs."
+          "description": "Isolated workspace strategy for Always-On runs.",
+          "gitWorktree": { "label": "Git worktree base dir", "description": "Root directory for git worktree-based isolation." },
+          "snapshotDir": { "label": "Snapshot base dir", "description": "Root directory for snapshot-based isolation." },
+          "snapshotMaxBytes": { "label": "Snapshot max bytes", "description": "Maximum size of a workspace snapshot." },
+          "gitLfs": { "label": "Git LFS", "description": "Include Git LFS objects in workspace snapshots." }
         },
         "execution": {
           "title": "Execution",
-          "description": "Safety limits for each Always-On run."
+          "description": "Safety limits for each Always-On run.",
+          "maxTurns": { "label": "Max turns", "description": "Maximum number of agent turns per run." },
+          "maxToolCalls": { "label": "Max tool calls", "description": "Maximum total tool calls per run." },
+          "timeout": { "label": "Timeout (minutes)", "description": "Hard timeout for each run." }
         },
         "workspaceOptIn": {
           "title": "Workspace opt-in",
-          "description": "Only enabled workspaces receive Always-On heartbeats and scheduled discovery checks."
+          "description": "Only enabled workspaces receive Always-On heartbeats and scheduled discovery checks.",
+          "empty": "No recognized projects yet. Add or open a workspace first."
         }
       },
       "memory": {
@@ -623,11 +706,70 @@
       },
       "router": {
         "title": "PilotDeck Router",
-        "description": "Embedded router for fan-out across providers (tier-based routing, token saver, auto-orchestrate)."
+        "description": "Embedded router for fan-out across providers (tier-based routing, token saver, auto-orchestrate).",
+        "enabled": { "label": "Enabled", "description": "When on, agents use the router instead of the configured provider directly." },
+        "zeroUsageRetry": {
+          "label": "Zero-usage retry",
+          "description": "Automatically retry when the upstream returns a response with zero tokens used.",
+          "maxAttempts": { "label": "Max attempts", "description": "Maximum retry attempts before giving up." }
+        },
+        "tokenSaver": {
+          "title": "Token Saver",
+          "description": "A lightweight judge classifies each turn into a tier and routes it to a cost-appropriate model.",
+          "judgeModel": "Judge model",
+          "defaultTier": "Default tier",
+          "judgeTimeout": { "label": "Judge timeout (ms)", "description": "Maximum time to wait for the judge decision." },
+          "subagentPolicy": { "label": "Sub-agent policy", "description": "How sub-agents are routed: 'judge' re-evaluates each sub-agent turn, 'inherit' reuses the parent tier." }
+        },
+        "autoOrchestrate": {
+          "title": "Auto Orchestrate",
+          "description": "Automatically fan out complex turns into parallel sub-agents when the judge assigns certain tiers.",
+          "triggerTiers": "Trigger tiers",
+          "slimPrompt": { "label": "Slim system prompt", "description": "Use a shorter system prompt for orchestrated sub-agents to save tokens." }
+        },
+        "stats": { "label": "Stats collection", "description": "Track token usage and cost per session. Powers the Dashboard tab." },
+        "pricing": {
+          "title": "Model Pricing",
+          "description": "Custom pricing per model ($/million tokens). Used when the API doesn't report cost.",
+          "keyFormat": "Key format:",
+          "empty": "No custom pricing configured. Built-in defaults cover common models (DeepSeek, Claude, GPT, Gemini, GLM, Qwen, Llama, etc).",
+          "inputPerM": "Input $/M",
+          "outputPerM": "Output $/M",
+          "cachePerM": "Cache $/M",
+          "addTitle": "Add model pricing",
+          "add": "Add"
+        },
+        "scenarios": {
+          "title": "Scenarios",
+          "description": "Map scenario names to models. default is the primary route.",
+          "empty": "No scenarios configured.",
+          "add": "Add"
+        },
+        "fallback": {
+          "title": "Fallback Chains",
+          "description": "Ordered fallback models per scenario. If the primary fails, the router tries the next.",
+          "empty": "No fallback chains configured.",
+          "addModel": "Add fallback model",
+          "add": "Add"
+        },
+        "tiers": {
+          "title": "Tiers",
+          "description": "Complexity tiers the judge can route to. Pick a model for each — descriptions are pre-filled.",
+          "placeholder": "Describe when the judge should pick this tier…",
+          "add": "Add"
+        },
+        "rules": {
+          "title": "Judge Rules",
+          "empty": "No custom rules. The judge uses tier descriptions only.",
+          "placeholder": "Add a rule for the judge…",
+          "add": "Add"
+        }
       },
       "gateway": {
         "title": "Gateway",
-        "description": "Messaging gateway (Feishu / Telegram / Discord / Slack) — channel-level secrets are best edited via Raw YAML."
+        "description": "Messaging gateway (Feishu / Telegram / Discord / Slack) — channel-level secrets are best edited via Raw YAML.",
+        "enabled": { "label": "Enabled", "description": "When on, the gateway home is generated and channels with credentials come online." },
+        "home": { "label": "Gateway home", "description": "Working directory for gateway state and per-channel configs." }
       },
       "subsystemReload": {
         "title": "Subsystem reload status",
