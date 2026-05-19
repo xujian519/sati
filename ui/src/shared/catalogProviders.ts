@@ -98,16 +98,6 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
       { id: 'MiniMax-M2.7-highspeed', displayName: 'MiniMax M2.7 Highspeed', maxContextTokens: 1000000 },
     ],
   },
-  {
-    id: 'yeysai',
-    displayName: 'THUNLP',
-    protocol: 'openai',
-    defaultUrl: 'https://yeysai.com/v1',
-    models: [
-      { id: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro Preview', supportsImage: true, maxContextTokens: 1048576 },
-      { id: 'kimi-k2.6', displayName: 'Kimi K2.6', supportsImage: true, maxContextTokens: 262144 },
-    ],
-  },
 ];
 
 export function findCatalogProviderById(id: string): CatalogProvider | undefined {

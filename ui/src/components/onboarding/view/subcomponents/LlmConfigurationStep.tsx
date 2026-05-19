@@ -9,6 +9,9 @@ type LlmConfigurationStepProps = {
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 
+const PLACEHOLDER_API_KEY = 'PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE';
+const MASKED_SECRET = '********';
+
 // Sentinel id for the "+" tile. When selected, the form swaps in extra inputs
 // (provider id, protocol, base URL) so the user can describe a provider that
 // isn't in the catalog.
@@ -22,9 +25,24 @@ const CUSTOM_PROVIDER: CatalogProvider = {
   models: [],
 };
 
+const DEFAULT_PROVIDER = CATALOG_PROVIDERS.find((provider) => provider.id === 'openrouter') ?? CATALOG_PROVIDERS[0];
+
+function defaultModelForProvider(provider: CatalogProvider | null) {
+  if (!provider) return '';
+  return provider.models.find((model) => model.id === 'deepseek/deepseek-v4-flash')?.id
+    ?? provider.models[0]?.id
+    ?? '';
+}
+
+function hasUsableApiKey(value: unknown) {
+  if (typeof value !== 'string') return false;
+  const key = value.trim();
+  return Boolean(key) && key !== PLACEHOLDER_API_KEY && key !== MASKED_SECRET && !key.startsWith('PLACEHOLDER_');
+}
+
 export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepProps) {
-  const [selectedProvider, setSelectedProvider] = useState<CatalogProvider | null>(null);
-  const [selectedModelId, setSelectedModelId] = useState('');
+  const [selectedProvider, setSelectedProvider] = useState<CatalogProvider | null>(DEFAULT_PROVIDER);
+  const [selectedModelId, setSelectedModelId] = useState(() => defaultModelForProvider(DEFAULT_PROVIDER));
   const [customModelId, setCustomModelId] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [customUrl, setCustomUrl] = useState('');
@@ -33,32 +51,14 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
   const [testMessage, setTestMessage] = useState('');
   const [saving, setSaving] = useState(false);
-  // Count of providers the user has added in this onboarding session.
-  const [addedCount, setAddedCount] = useState(0);
-  // Number of usable (non-placeholder) providers already in the YAML when the
-  // step mounted. Drives the footer so users coming back to onboarding with an
-  // existing setup can either add another or continue right away.
-  const [preExistingCount, setPreExistingCount] = useState(0);
-  const [finishing, setFinishing] = useState(false);
 
   // Inputs that are only relevant when the user picks the "+" (custom) tile.
   const [customProviderId, setCustomProviderId] = useState('');
   const [customProtocol, setCustomProtocol] = useState<'openai' | 'anthropic'>('openai');
 
   const isCustomMode = selectedProvider?.id === CUSTOM_PROVIDER_ID;
-
-  const resetForm = useCallback(() => {
-    setSelectedProvider(null);
-    setSelectedModelId('');
-    setCustomModelId('');
-    setApiKey('');
-    setCustomUrl('');
-    setShowAdvanced(false);
-    setTestStatus('idle');
-    setTestMessage('');
-    setCustomProviderId('');
-    setCustomProtocol('openai');
-  }, []);
+  const selectedModels = selectedProvider?.models ?? [];
+  const selectedDefaultUrl = selectedProvider?.defaultUrl ?? '';
 
   useEffect(() => {
     (async () => {
@@ -69,38 +69,17 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
         if (!data.exists || !data.provider) return;
 
         const p = data.provider;
-        if (p.apiKey) setApiKey(p.apiKey);
+        const existingKeyIsUsable = hasUsableApiKey(p.apiKey);
+        if (!existingKeyIsUsable) return;
+        setApiKey(p.apiKey);
         if (p.baseUrl) {
           const match = findCatalogProviderByUrl(p.baseUrl);
           if (match) {
             setSelectedProvider(match);
-            if (p.model) setSelectedModelId(p.model);
+            setSelectedModelId(p.model || defaultModelForProvider(match));
           }
         }
       } catch { /* no existing config */ }
-
-      // Independently count usable providers already in the YAML so the "Add
-      // another" / "Continue" footer can appear immediately when the user
-      // re-enters onboarding with a non-empty config.
-      try {
-        const raw = await authenticatedFetch('/api/config');
-        if (!raw.ok) return;
-        const { raw: yamlText } = await raw.json();
-        if (!yamlText) return;
-        const { parse: parseYaml } = await import('yaml');
-        const parsed = parseYaml(yamlText) || {};
-        const providers = ((parsed as Record<string, unknown>).model as Record<string, unknown> | undefined)?.providers;
-        if (!providers || typeof providers !== 'object') return;
-        let count = 0;
-        for (const value of Object.values(providers)) {
-          const apiKey = (value as Record<string, unknown>)?.apiKey;
-          if (typeof apiKey !== 'string') continue;
-          if (!apiKey.trim()) continue;
-          if (apiKey.startsWith('PLACEHOLDER_')) continue;
-          count += 1;
-        }
-        if (count > 0) setPreExistingCount(count);
-      } catch { /* ignore */ }
     })();
   }, []);
 
@@ -128,7 +107,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
       }
       return provider;
     });
-    setSelectedModelId(provider.models[0]?.id ?? '');
+    setSelectedModelId(defaultModelForProvider(provider));
     setCustomModelId('');
     setCustomUrl('');
     setCustomProviderId('');
@@ -234,17 +213,14 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
         throw new Error(err.error || 'Failed to save configuration');
       }
 
-      // Stay on this step so the user can add more providers. The footer
-      // shows a "Continue" button once at least one has been saved.
-      setAddedCount((c) => c + 1);
-      resetForm();
+      await onSaved();
     } catch (err) {
       setTestStatus('error');
       setTestMessage(err instanceof Error ? err.message : 'Failed to save.');
     } finally {
       setSaving(false);
     }
-  }, [selectedProvider, effectiveUrl, effectiveModelId, apiKey, effectiveProtocol, effectiveProviderId, resetForm]);
+  }, [selectedProvider, effectiveUrl, effectiveModelId, apiKey, effectiveProtocol, effectiveProviderId, onSaved]);
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-8">
@@ -304,8 +280,6 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
         </div>
       </div>
 
-      {selectedProvider && (
-        <>
           {isCustomMode && (
             <div className="space-y-3 rounded-lg border border-dashed border-border/60 bg-muted/20 p-4">
               <div>
@@ -385,7 +359,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
             <label htmlFor="llm-model" className="mb-1 block text-sm font-medium text-foreground">
               Model
             </label>
-            {selectedProvider.models.length > 0 ? (
+            {selectedModels.length > 0 ? (
               <div className="relative">
                 <select
                   id="llm-model"
@@ -393,7 +367,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
                   onChange={(e) => { setSelectedModelId(e.target.value); setCustomModelId(''); setTestStatus('idle'); setTestMessage(''); }}
                   className="w-full appearance-none rounded-lg border border-border bg-background px-3 py-2.5 pr-8 text-sm text-foreground focus:border-foreground/40 focus:outline-none"
                 >
-                  {selectedProvider.models.map((m) => (
+                  {selectedModels.map((m) => (
                     <option key={m.id} value={m.id}>{m.displayName} ({m.id})</option>
                   ))}
                 </select>
@@ -411,7 +385,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
                 spellCheck={false}
               />
             )}
-            {selectedProvider.models.length > 0 && (
+            {selectedModels.length > 0 && (
               <div className="mt-2">
                 <input
                   type="text"
@@ -447,14 +421,14 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
                     type="text"
                     value={customUrl}
                     onChange={(e) => { setCustomUrl(e.target.value); setTestStatus('idle'); setTestMessage(''); }}
-                    placeholder={selectedProvider.defaultUrl}
+                    placeholder={selectedDefaultUrl}
                     className="w-full rounded-lg border border-border/60 bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-foreground/40 focus:outline-none"
                     autoComplete="off"
                     spellCheck={false}
                   />
                 </div>
                 <div className="text-[11px] text-muted-foreground">
-                  Protocol: <span className="font-mono">{selectedProvider.protocol}</span> &middot; Default URL: <span className="font-mono">{selectedProvider.defaultUrl}</span>
+                  Protocol: <span className="font-mono">{selectedProvider?.protocol ?? customProtocol}</span> &middot; Default URL: <span className="font-mono">{selectedDefaultUrl}</span>
                 </div>
               </div>
             )}
@@ -507,31 +481,6 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
               {testStatus === 'success' ? '✓ ' : '✗ '}{testMessage}
             </div>
           )}
-        </>
-      )}
-
-      {(addedCount > 0 || preExistingCount > 0) && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-6">
-          <span className="text-xs text-muted-foreground">
-            {addedCount + preExistingCount} provider{addedCount + preExistingCount === 1 ? '' : 's'} configured. Tap a tile to add another, or:
-          </span>
-          <button
-            type="button"
-            onClick={async () => { setFinishing(true); try { await onSaved(); } finally { setFinishing(false); } }}
-            disabled={finishing}
-            className="rounded-lg bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
-          >
-            {finishing ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Continuing...
-              </span>
-            ) : (
-              'Continue'
-            )}
-          </button>
-        </div>
-      )}
     </div>
   );
 }
