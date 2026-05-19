@@ -67,6 +67,29 @@ const projectsHaveChanges = (
 const getProjectSessions = (project: Project): ProjectSession[] =>
   project.sessions ?? [];
 
+const preserveLoadedSessions = (prevProjects: Project[], nextProjects: Project[]): Project[] =>
+  nextProjects.map((updated) => {
+    const prev = prevProjects.find((p) => p.name === updated.name);
+    if (!prev) return updated;
+    const prevSessions = prev.sessions ?? [];
+    const updatedSessions = updated.sessions ?? [];
+    if (prevSessions.length <= updatedSessions.length) return updated;
+    const updatedIds = new Set(updatedSessions.map((s) => s.id));
+    const merged = [
+      ...updatedSessions,
+      ...prevSessions.filter((s) => !updatedIds.has(s.id)),
+    ];
+    return {
+      ...updated,
+      sessions: merged,
+      sessionMeta: {
+        ...updated.sessionMeta,
+        hasMore: prev.sessionMeta?.hasMore ?? updated.sessionMeta?.hasMore,
+        total: prev.sessionMeta?.total ?? updated.sessionMeta?.total,
+      },
+    };
+  });
+
 const resetProjectSessionPreview = (project: Project): Project => {
   const sessions = project.sessions ?? [];
   if (sessions.length <= PROJECT_SESSION_PREVIEW_LIMIT) {
@@ -219,9 +242,11 @@ export function useProjectsState({
           return projectData;
         }
 
-        return projectsHaveChanges(prevProjects, projectData, true)
-          ? projectData
-          : prevProjects;
+        if (!projectsHaveChanges(prevProjects, projectData, true)) {
+          return prevProjects;
+        }
+
+        return preserveLoadedSessions(prevProjects, projectData);
       });
     } catch (error) {
       console.error('Error fetching projects:', error);
@@ -317,7 +342,10 @@ export function useProjectsState({
       return;
     }
 
-    setProjects(updatedProjects);
+    setProjects((prevProjects) => {
+      if (prevProjects.length === 0) return updatedProjects;
+      return preserveLoadedSessions(prevProjects, updatedProjects);
+    });
 
     if (!selectedProject) {
       return;
@@ -549,9 +577,10 @@ export function useProjectsState({
       const response = await api.projects();
       const freshProjects = (await response.json()) as Project[];
 
-      setProjects((prevProjects) =>
-        projectsHaveChanges(prevProjects, freshProjects, true) ? freshProjects : prevProjects,
-      );
+      setProjects((prevProjects) => {
+        if (!projectsHaveChanges(prevProjects, freshProjects, true)) return prevProjects;
+        return preserveLoadedSessions(prevProjects, freshProjects);
+      });
 
       if (!selectedProject) {
         return;
