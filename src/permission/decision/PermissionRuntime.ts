@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import type { PilotDeckToolDefinition, PilotDeckToolRuntimeContext } from "../../tool/index.js";
 import { matchPermissionRule } from "../policy/matchPermissionRule.js";
 import type {
@@ -51,13 +51,13 @@ export class PermissionRuntime {
     const allowRule = findMatchingRule(permissionContext.rules.allow, tool.name, input);
     if (allowRule) {
       // Plan mode deny takes precedence over user allow rules for
-      // non-readonly tools (except plan file writes). Without this guard,
+      // non-readonly tools (except plan-directory markdown writes). Without this guard,
       // a user who previously allowed write_file/bash can inadvertently
       // bypass plan mode's read-only constraint.
       if (
         permissionContext.mode === "plan" &&
         !tool.isReadOnly(input) &&
-        !(permissionContext.planFilePath && isPlanFileWrite(tool, input, permissionContext))
+        !isPlanDirectoryWrite(tool, input, permissionContext)
       ) {
         // Fall through to mode-level deny below.
       } else {
@@ -182,11 +182,11 @@ function decideByMode(
       });
     }
 
-    if (context.planFilePath && isPlanFileWrite(tool, input, context)) {
+    if (isPlanDirectoryWrite(tool, input, context)) {
       return allow({
         type: "mode",
         mode: "plan",
-        message: `Plan mode allows writing to plan file.`,
+        message: `Plan mode allows writing markdown plans under the plan directory.`,
       });
     }
 
@@ -332,18 +332,28 @@ function summarizeInput(input: unknown): string {
 
 /**
  * Returns true when a filesystem write tool (write_file / edit_file) targets
- * exactly the plan file. Resolves relative paths against the permission
- * context cwd so `./plan.md` and the absolute path both match.
+ * a markdown file under the project-local `.pilotdeck/plans` directory.
+ * Resolves relative paths against the permission context cwd so `./foo.md`
+ * and the absolute path both match.
  */
-function isPlanFileWrite(
+function isPlanDirectoryWrite(
   tool: PilotDeckToolDefinition,
   input: unknown,
   context: PermissionContext,
 ): boolean {
-  if (tool.kind !== "filesystem") return false;
+  if (tool.kind !== "filesystem" || !context.planDirectoryPath) return false;
   const record = input as Record<string, unknown> | null;
   const filePath = record?.file_path ?? record?.filePath;
   if (typeof filePath !== "string") return false;
   const absolute = resolve(context.cwd, filePath);
-  return absolute === context.planFilePath;
+  if (!absolute.toLowerCase().endsWith(".md")) {
+    return false;
+  }
+  const relativeToPlanDir = relative(context.planDirectoryPath, absolute);
+  return (
+    relativeToPlanDir !== ""
+    && !isAbsolute(relativeToPlanDir)
+    && !relativeToPlanDir.startsWith("..")
+    && !relativeToPlanDir.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
+  );
 }

@@ -244,9 +244,12 @@ test("structured_output and plan skeleton tools produce stable results", async (
       }),
     },
   });
-  context.planFile = {
-    path: `${workspace.cwd}/.pilotdeck/plans/test-session.md`,
-    read: () => "Do the work.",
+  const planFilePath = `${workspace.cwd}/.pilotdeck/plans/test-session.md`;
+  await workspace.write(".pilotdeck/plans/test-session.md", "Do the work.\n");
+  context.planDirectory = {
+    path: `${workspace.cwd}/.pilotdeck/plans`,
+    resolve: (filePath) => filePath === "test-session.md" || filePath === planFilePath ? planFilePath : undefined,
+    read: (filePath) => filePath === "test-session.md" || filePath === planFilePath ? "Do the work." : undefined,
   };
 
   const structured = await toolRuntime.execute(
@@ -255,7 +258,7 @@ test("structured_output and plan skeleton tools produce stable results", async (
   );
   const enter = await toolRuntime.execute({ id: "call-2", name: "enter_plan_mode", input: {} }, context);
   const exit = await toolRuntime.execute(
-    { id: "call-3", name: "exit_plan_mode", input: {} },
+    { id: "call-3", name: "exit_plan_mode", input: { plan_file_path: "test-session.md" } },
     context,
   );
 
@@ -272,6 +275,7 @@ test("structured_output and plan skeleton tools produce stable results", async (
   assert.match(executeText, /User has approved your plan/i);
   assert.match(executeText, /start coding/i);
   assert.match(executeText, /## Approved Plan/i);
+  assert.match(enter.type === "success" ? enter.content.map((item) => ("text" in item ? item.text : "")).join("\n") : "", /## Plan Directory/i);
 });
 
 test("exit_plan_mode keeps plan mode when user wants more planning", async (t) => {
@@ -293,13 +297,16 @@ test("exit_plan_mode keeps plan mode when user wants more planning", async (t) =
       }),
     },
   });
-  context.planFile = {
-    path: `${workspace.cwd}/.pilotdeck/plans/test-session.md`,
-    read: () => "Draft plan",
+  const planFilePath = `${workspace.cwd}/.pilotdeck/plans/test-session.md`;
+  await workspace.write(".pilotdeck/plans/test-session.md", "Draft plan\n");
+  context.planDirectory = {
+    path: `${workspace.cwd}/.pilotdeck/plans`,
+    resolve: (filePath) => filePath === "test-session.md" || filePath === planFilePath ? planFilePath : undefined,
+    read: (filePath) => filePath === "test-session.md" || filePath === planFilePath ? "Draft plan" : undefined,
   };
 
   const exit = await toolRuntime.execute(
-    { id: "call-1", name: "exit_plan_mode", input: {} },
+    { id: "call-1", name: "exit_plan_mode", input: { plan_file_path: "test-session.md" } },
     context,
   );
 
@@ -320,6 +327,64 @@ test("exit_plan_mode keeps plan mode when user wants more planning", async (t) =
   assert.match(continueText, /User feedback:\nAdd a test plan section\./i);
 });
 
+test("exit_plan_mode rejects invalid or empty submitted plan files", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({});
+  t.after(() => workspace.cleanup());
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
+    tools: [createExitPlanModeTool()],
+    cwd: workspace.cwd,
+    canPrompt: true,
+    elicitation: {
+      askUser: async () => ({
+        type: "answered",
+        answers: { "What should happen next?": "execute_plan" },
+      }),
+    },
+  });
+  await workspace.write(".pilotdeck/plans/empty.md", "\n");
+  context.planDirectory = {
+    path: `${workspace.cwd}/.pilotdeck/plans`,
+    resolve: (filePath) => {
+      if (filePath === "empty.md") return `${workspace.cwd}/.pilotdeck/plans/empty.md`;
+      if (filePath === "missing.md") return `${workspace.cwd}/.pilotdeck/plans/missing.md`;
+      return undefined;
+    },
+    read: () => undefined,
+  };
+
+  const outside = await toolRuntime.execute(
+    { id: "call-1", name: "exit_plan_mode", input: { plan_file_path: "../README.md" } },
+    context,
+  );
+  const empty = await toolRuntime.execute(
+    { id: "call-2", name: "exit_plan_mode", input: { plan_file_path: "empty.md" } },
+    context,
+  );
+  const missing = await toolRuntime.execute(
+    { id: "call-3", name: "exit_plan_mode", input: { plan_file_path: "missing.md" } },
+    context,
+  );
+
+  assert.equal(outside.type, "error");
+  assert.equal(empty.type, "error");
+  assert.equal(missing.type, "error");
+  if (outside.type === "error") {
+    assert.equal(outside.error.code, "invalid_tool_input");
+    assert.match(outside.content[0]?.type === "text" ? outside.content[0].text : "", /must point to a markdown file/i);
+  }
+  if (empty.type === "error") {
+    assert.equal(empty.error.code, "invalid_tool_input");
+    assert.match(empty.content[0]?.type === "text" ? empty.content[0].text : "", /Plan file is empty/i);
+  }
+  if (missing.type === "error") {
+    assert.equal(missing.error.code, "invalid_tool_input");
+    assert.match(
+      missing.content[0]?.type === "text" ? missing.content[0].text : "",
+      /does not exist or could not be read/i,
+    );
+  }
+});
+
 test("enter_plan_mode returns an error when already in plan mode", async (t) => {
   const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
@@ -328,8 +393,9 @@ test("enter_plan_mode returns an error when already in plan mode", async (t) => 
     cwd: workspace.cwd,
     permissionMode: "plan",
   });
-  context.planFile = {
-    path: `${workspace.cwd}/.pilotdeck/plans/test-session.md`,
+  context.planDirectory = {
+    path: `${workspace.cwd}/.pilotdeck/plans`,
+    resolve: () => undefined,
     read: () => undefined,
   };
 

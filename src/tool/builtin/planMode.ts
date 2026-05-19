@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
 import type { PilotDeckElicitationAnswer, PilotDeckElicitationRequest } from "../elicitation/PilotDeckElicitationChannel.js";
 import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
 import type { PilotDeckToolDefinition } from "../protocol/types.js";
 
-export type ExitPlanModeInput = Record<string, never>;
+export type ExitPlanModeInput = {
+  plan_file_path: string;
+};
 export type ExitPlanModeOutput = {
   plan: string;
   requestedMode?: "default";
@@ -25,40 +28,44 @@ const ENTER_PLAN_MODE_DESCRIPTION =
 
 const EXIT_PLAN_MODE_DESCRIPTION =
   "Signal that your plan is complete and ready for user review. " +
-  "This tool reads the plan from the plan file you wrote during plan mode. " +
+  "Pass the plan_file_path for the markdown plan you want to submit from `.pilotdeck/plans`. " +
   "Do NOT use ask_user_question to ask about plan approval — that is exactly what this tool does.";
 
-function buildEnterPlanModeResult(planFilePath: string | undefined): string {
-  const planFileSection = planFilePath
-    ? `## Plan File\nYour plan file is at: ${planFilePath}\nThis is the ONLY file you may write to. DO NOT edit any other files.\n`
+function buildEnterPlanModeResult(planDirectoryPath: string | undefined): string {
+  const planDirectorySection = planDirectoryPath
+    ? `## Plan Directory\nCreate your plan as a markdown file under: ${planDirectoryPath}\nYou may name the file yourself, but it must live under this directory.\n`
     : "";
 
   return [
     "Plan mode activated. You are now in a read-only exploration and planning phase.",
     "",
-    planFileSection,
+    planDirectorySection,
     "## What To Do",
     "1. Explore the codebase using read_file, grep, glob to understand existing patterns and structure",
     "2. Identify the key files, functions, and data flows relevant to the task",
     "3. Design your implementation approach — consider trade-offs between alternatives",
-    ...(planFilePath ? ["4. Write your plan incrementally to the plan file above"] : []),
-    `${planFilePath ? "5" : "4"}. When your plan is ready, call exit_plan_mode to present it for user approval`,
+    ...(planDirectoryPath
+      ? [
+          "4. Create and refine your own markdown plan file under the plan directory above",
+          "5. When your plan is ready, call exit_plan_mode with the plan_file_path you want to submit",
+        ]
+      : ["4. When your plan is ready, call exit_plan_mode to present it for user approval"]),
     "",
     "## Rules",
-    `- DO NOT call write_file, edit_file, or bash (non-readonly) on any file${planFilePath ? " except the plan file" : ""}`,
+    `- DO NOT call write_file, edit_file, or bash (non-readonly) on any file${planDirectoryPath ? " except markdown plan files under the designated plan directory" : ""}`,
     "- You MAY use ask_user_question to clarify requirements or choose between approaches",
     "- Focus on understanding before proposing — read first, plan second",
   ].join("\n");
 }
 
-function buildAlreadyInPlanModeResult(planFilePath: string | undefined): string {
+function buildAlreadyInPlanModeResult(planDirectoryPath: string | undefined): string {
   return [
     "Plan mode is already active.",
     "",
-    ...(planFilePath
+    ...(planDirectoryPath
       ? [
-          `Your plan file is at: ${planFilePath}`,
-          "Continue refining that file. It remains the only file you may write while plan mode is active.",
+          `Your plan directory is: ${planDirectoryPath}`,
+          "Continue refining markdown plan files under that directory, then submit one explicitly with exit_plan_mode(plan_file_path).",
           "",
         ]
       : []),
@@ -69,7 +76,7 @@ function buildAlreadyInPlanModeResult(planFilePath: string | undefined): string 
 function buildApprovedPlanResult(plan: string, planFilePath: string | undefined): string {
   const locationSection = planFilePath
     ? [
-        `Your plan file is at: ${planFilePath}`,
+        `Submitted plan file: ${planFilePath}`,
         "You can refer back to it during implementation if needed.",
         "",
       ]
@@ -141,10 +148,10 @@ export function createEnterPlanModeTool(): PilotDeckToolDefinition<Record<string
       if (context?.permissionMode === "plan") {
         throw new PilotDeckToolRuntimeError(
           "tool_execution_failed",
-          buildAlreadyInPlanModeResult(context?.planFile?.path),
+          buildAlreadyInPlanModeResult(context?.planDirectory?.path),
         );
       }
-      const text = buildEnterPlanModeResult(context?.planFile?.path);
+      const text = buildEnterPlanModeResult(context?.planDirectory?.path);
       return {
         content: [{ type: "text", text }],
         data: { requestedMode: "plan" },
@@ -161,13 +168,19 @@ export function createExitPlanModeTool(): PilotDeckToolDefinition<ExitPlanModeIn
     kind: "session",
     inputSchema: {
       type: "object",
+      required: ["plan_file_path"],
       additionalProperties: false,
-      properties: {},
+      properties: {
+        plan_file_path: {
+          type: "string",
+          description: "Path to the markdown plan file to submit from the current project's `.pilotdeck/plans` directory.",
+        },
+      },
     },
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     requiresUserInteraction: () => true,
-    execute: async (_input, context) => {
+    execute: async (input, context) => {
       const channel = context?.elicitation;
       if (!channel) {
         throw new PilotDeckToolRuntimeError(
@@ -175,7 +188,28 @@ export function createExitPlanModeTool(): PilotDeckToolDefinition<ExitPlanModeIn
           "exit_plan_mode requires a connected user interaction channel.",
         );
       }
-      const plan = context?.planFile?.read() ?? "(no plan file content)";
+      const resolvedPlanFilePath = context?.planDirectory?.resolve(input.plan_file_path);
+      if (!resolvedPlanFilePath) {
+        throw new PilotDeckToolRuntimeError(
+          "invalid_tool_input",
+          "plan_file_path must point to a markdown file under the current project's .pilotdeck/plans directory.",
+        );
+      }
+      let plan: string;
+      try {
+        plan = readFileSync(resolvedPlanFilePath, "utf8").trim();
+      } catch {
+        throw new PilotDeckToolRuntimeError(
+          "invalid_tool_input",
+          `Plan file does not exist or could not be read: ${resolvedPlanFilePath}`,
+        );
+      }
+      if (!plan) {
+        throw new PilotDeckToolRuntimeError(
+          "invalid_tool_input",
+          "Plan file is empty. Write your plan first before calling exit_plan_mode.",
+        );
+      }
       const request: PilotDeckElicitationRequest = {
         toolCallId: context.turnId,
         toolName: "exit_plan_mode",
@@ -199,7 +233,7 @@ export function createExitPlanModeTool(): PilotDeckToolDefinition<ExitPlanModeIn
         metadata: {
           source: "exit_plan_mode",
           plan,
-          planFilePath: context.planFile?.path,
+          planFilePath: resolvedPlanFilePath,
         },
         ...(context.abortSignal ? { signal: context.abortSignal } : {}),
       };
@@ -222,7 +256,7 @@ export function createExitPlanModeTool(): PilotDeckToolDefinition<ExitPlanModeIn
         return {
           content: [{
             type: "text",
-            text: buildApprovedPlanResult(plan, context.planFile?.path),
+            text: buildApprovedPlanResult(plan, resolvedPlanFilePath),
           }],
           data: { plan, action, requestedMode: "default" },
         };

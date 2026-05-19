@@ -27,7 +27,7 @@ test("plan mode allows writing only the configured plan file", async () => {
   const runtime = new PermissionRuntime();
   const writeTool = createPilotDeckTestTool({ name: "write_file", readOnly: false, kind: "filesystem" });
   const { context } = createPilotDeckToolRuntimeFixture({ permissionMode: "plan" });
-  context.permissionContext.planFilePath = "/tmp/demo/.pilotdeck/plans/plan.md";
+  context.permissionContext.planDirectoryPath = "/tmp/demo/.pilotdeck/plans";
 
   const allowed = await runtime.decide(
     writeTool,
@@ -41,9 +41,16 @@ test("plan mode allows writing only the configured plan file", async () => {
     context,
     "call-denied",
   );
+  const deniedNonMarkdown = await runtime.decide(
+    writeTool,
+    { filePath: "/tmp/demo/.pilotdeck/plans/plan.txt" },
+    context,
+    "call-denied-non-markdown",
+  );
 
   assert.equal(allowed.type, "allow");
   assert.equal(denied.type, "deny");
+  assert.equal(deniedNonMarkdown.type, "deny");
 });
 
 test("acceptEdits allows filesystem edit tools", async () => {

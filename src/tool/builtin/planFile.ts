@@ -1,74 +1,53 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, readFileSync } from "node:fs";
+import { isAbsolute, relative, resolve } from "node:path";
 import { PILOT_PROJECT_DIR_NAME } from "../../pilot/index.js";
-import { sanitizeSessionIdForPath } from "../../session/storage/ProjectSessionStorage.js";
 
 export type PlanFileManager = {
-  getPlanFilePath(sessionId: string): string;
-  ensurePlanFile(sessionId: string, title?: string): string;
-  readPlan(sessionId: string): string | undefined;
+  getPlanDirectoryPath(): string;
+  resolvePlanFilePath(filePath: string, cwd: string): string | undefined;
+  readPlanFile(filePath: string, cwd: string): string | undefined;
 };
-
-/**
- * Slugify a plan title for use as a filename. Keeps CJK / latin characters,
- * collapses whitespace/punctuation into hyphens, and trims to 60 chars.
- */
-function slugifyTitle(title: string): string {
-  return title
-    .trim()
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60) || "plan";
-}
 
 export function createPlanFileManager(options: {
   projectRoot: string;
 }): PlanFileManager {
   const planDir = resolve(options.projectRoot, PILOT_PROJECT_DIR_NAME, "plans");
 
-  // sessionId → absolute file path (populated on ensurePlanFile)
-  const pathsBySession = new Map<string, string>();
-
-  function getPlanFilePath(sessionId: string): string {
-    const cached = pathsBySession.get(sessionId);
-    if (cached) return cached;
-    const safeId = sanitizeSessionIdForPath(sessionId);
-    return resolve(planDir, `${safeId}.md`);
-  }
-
-  function ensurePlanFile(sessionId: string, title?: string): string {
-    const cached = pathsBySession.get(sessionId);
-    if (cached) return cached;
-
+  function getPlanDirectoryPath(): string {
     mkdirSync(planDir, { recursive: true });
-
-    const safeId = sanitizeSessionIdForPath(sessionId);
-    let filePath: string;
-    if (title) {
-      const slug = slugifyTitle(title);
-      const shortId = safeId.slice(0, 12);
-      filePath = resolve(planDir, `${slug}-${shortId}.md`);
-    } else {
-      filePath = resolve(planDir, `${safeId}.md`);
-    }
-
-    if (!existsSync(filePath)) {
-      writeFileSync(filePath, "", "utf8");
-    }
-    pathsBySession.set(sessionId, filePath);
-    return filePath;
+    return planDir;
   }
 
-  function readPlan(sessionId: string): string | undefined {
-    const filePath = getPlanFilePath(sessionId);
+  function resolvePlanFilePath(filePath: string, cwd: string): string | undefined {
+    if (!filePath.trim()) return undefined;
+    const absolutePath = resolve(isAbsolute(filePath) ? filePath : resolve(cwd, filePath));
+    const relativeToPlanDir = relative(planDir, absolutePath);
+    if (
+      isAbsolute(relativeToPlanDir)
+      || relativeToPlanDir.startsWith("..")
+      || relativeToPlanDir.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
+      || relativeToPlanDir === ""
+    ) {
+      return undefined;
+    }
+    if (!absolutePath.toLowerCase().endsWith(".md")) {
+      return undefined;
+    }
+    return absolutePath;
+  }
+
+  function readPlanFile(filePath: string, cwd: string): string | undefined {
+    const absolutePath = resolvePlanFilePath(filePath, cwd);
+    if (!absolutePath) {
+      return undefined;
+    }
     try {
-      const content = readFileSync(filePath, "utf8");
+      const content = readFileSync(absolutePath, "utf8");
       return content.trim() || undefined;
     } catch {
       return undefined;
     }
   }
 
-  return { getPlanFilePath, ensurePlanFile, readPlan };
+  return { getPlanDirectoryPath, resolvePlanFilePath, readPlanFile };
 }

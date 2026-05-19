@@ -269,7 +269,7 @@ test("C2.E2E SubAgentSession strips plan-mode tools and context from general-pur
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     execute: async (_input, context) => {
-      capturedPlanFile = Boolean(context.planFile);
+      capturedPlanFile = Boolean(context.planDirectory);
       capturedPlanTodo = Boolean(context.planTodo);
       return { content: [{ type: "text", text: "probed" }] };
     },
@@ -292,9 +292,10 @@ test("C2.E2E SubAgentSession strips plan-mode tools and context from general-pur
   });
   const deps = buildDeps(model, registry, undefined, {
     planFileManager: {
-      getPlanFilePath: () => "/tmp/proj/.cursor/plans/parent.plan.md",
-      ensurePlanFile: () => "/tmp/proj/.cursor/plans/parent.plan.md",
-      readPlan: () => "parent plan",
+      getPlanDirectoryPath: () => "/tmp/proj/.cursor/plans",
+      resolvePlanFilePath: (filePath) =>
+        filePath === "parent.plan.md" ? "/tmp/proj/.cursor/plans/parent.plan.md" : undefined,
+      readPlanFile: () => "parent plan",
     } as NonNullable<AgentRuntimeDependencies["planFileManager"]>,
     planTodoManager: {
       forSession: () => ({

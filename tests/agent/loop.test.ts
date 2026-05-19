@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { writeFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
   AgentLoop,
@@ -534,16 +533,16 @@ test("AgentLoop consumes requested plan mode changes from plan tools", async () 
   assert.ok(values.some((event) => event.type === "mode_change_requested"));
 });
 
-test("AgentLoop injects plan file context when planFileManager is configured", async (t) => {
+test("AgentLoop injects plan directory context when planFileManager is configured", async (t) => {
   const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
-  let seenPlanFilePath: string | undefined;
-  let seenPermissionPlanFilePath: string | undefined;
+  let seenPlanDirectoryPath: string | undefined;
+  let seenPermissionPlanDirectoryPath: string | undefined;
   const inspectTool = createPilotDeckTestTool({
     name: "inspect_plan_context",
     execute: async (_input, context) => {
-      seenPlanFilePath = context.planFile?.path;
-      seenPermissionPlanFilePath = context.permissionContext.planFilePath;
+      seenPlanDirectoryPath = context.planDirectory?.path;
+      seenPermissionPlanDirectoryPath = context.permissionContext.planDirectoryPath;
       return { content: [{ type: "text", text: "ok" }] };
     },
   });
@@ -573,20 +572,20 @@ test("AgentLoop injects plan file context when planFileManager is configured", a
     }),
   );
 
-  const expected = planFileManager.getPlanFilePath("session-1");
-  assert.equal(seenPlanFilePath, expected);
-  assert.equal(seenPermissionPlanFilePath, expected);
-  assert.match(expected, /inspect-session-1\.md$/);
+  const expected = planFileManager.getPlanDirectoryPath();
+  assert.equal(seenPlanDirectoryPath, expected);
+  assert.equal(seenPermissionPlanDirectoryPath, expected);
+  assert.match(expected, /\.pilotdeck[\\/]+plans$/);
 });
 
-test("AgentLoop falls back to session id plan file name when no user title exists", async (t) => {
+test("AgentLoop still exposes the plan directory when no user title exists", async (t) => {
   const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
-  let seenPlanFilePath: string | undefined;
+  let seenPlanDirectoryPath: string | undefined;
   const inspectTool = createPilotDeckTestTool({
     name: "inspect_plan_context",
     execute: async (_input, context) => {
-      seenPlanFilePath = context.planFile?.path;
+      seenPlanDirectoryPath = context.planDirectory?.path;
       return { content: [{ type: "text", text: "ok" }] };
     },
   });
@@ -616,7 +615,7 @@ test("AgentLoop falls back to session id plan file name when no user title exist
     }),
   );
 
-  assert.match(seenPlanFilePath ?? "", /session-1\.md$/);
+  assert.match(seenPlanDirectoryPath ?? "", /\.pilotdeck[\\/]+plans$/);
 });
 
 test("approved exit_plan_mode result is projected into the next model request", async (t) => {
@@ -629,7 +628,14 @@ test("approved exit_plan_mode result is projected into the next model request", 
     scripts: [
       [
         { type: "message_start", role: "assistant" },
-        { type: "tool_call_end", toolCall: { id: "call-1", name: "exit_plan_mode", input: {} } },
+        {
+          type: "tool_call_end",
+          toolCall: {
+            id: "call-1",
+            name: "exit_plan_mode",
+            input: { plan_file_path: ".pilotdeck/plans/selected-plan.md" },
+          },
+        },
         { type: "message_end", finishReason: "tool_call" },
       ],
       [
@@ -640,8 +646,7 @@ test("approved exit_plan_mode result is projected into the next model request", 
     ],
   });
   const planFileManager = createPlanFileManager({ projectRoot: workspace.cwd });
-  const planFilePath = planFileManager.ensurePlanFile("session-1");
-  await writeFile(planFilePath, "Plan step 1\nPlan step 2\n", "utf8");
+  await workspace.write(".pilotdeck/plans/selected-plan.md", "Plan step 1\nPlan step 2\n");
   const loop = new AgentLoop(fixture.config, {
     ...fixture.dependencies,
     planFileManager,

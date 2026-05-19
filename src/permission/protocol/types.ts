@@ -24,8 +24,8 @@ export type PermissionContext = {
   additionalWorkingDirectories: string[];
   canPrompt: boolean;
   bypassAvailable: boolean;
-  /** Absolute path of the plan file that plan mode is allowed to write to. */
-  planFilePath?: string;
+  /** Absolute path of the project-local `.pilotdeck/plans` directory. */
+  planDirectoryPath?: string;
 };
 
 export type PermissionDecisionReason =
@@ -88,6 +88,7 @@ export function createDefaultPermissionContext(options: {
   canPrompt?: boolean;
   bypassAvailable?: boolean;
   additionalWorkingDirectories?: string[];
+  planDirectoryPath?: string;
   rules?: Partial<PermissionRuleSet>;
 }): PermissionContext {
   return {
@@ -96,6 +97,7 @@ export function createDefaultPermissionContext(options: {
     bypassAvailable: options.bypassAvailable ?? false,
     cwd: options.cwd,
     additionalWorkingDirectories: options.additionalWorkingDirectories ?? [],
+    ...(options.planDirectoryPath ? { planDirectoryPath: options.planDirectoryPath } : {}),
     rules: {
       ...emptyPermissionRuleSet(),
       ...options.rules,

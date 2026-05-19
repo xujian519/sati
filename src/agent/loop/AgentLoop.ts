@@ -669,13 +669,12 @@ export class AgentLoop {
     input: AgentLoopInput,
     messages: CanonicalMessage[],
   ): PilotDeckToolRuntimeContext {
-    const planTitle = extractFirstUserTitle(messages);
-    const planFilePath = this.dependencies.planFileManager?.ensurePlanFile(input.sessionId, planTitle);
+    const planDirectoryPath = this.dependencies.planFileManager?.getPlanDirectoryPath();
     const planTodo = this.dependencies.planTodoManager?.forSession(input.sessionId);
     const permissionContext = {
       ...this.config.permissionContext,
       cwd: this.config.cwd,
-      ...(planFilePath ? { planFilePath } : {}),
+      ...(planDirectoryPath ? { planDirectoryPath } : {}),
     };
     return {
       sessionId: input.sessionId,
@@ -718,11 +717,14 @@ export class AgentLoop {
       writeSnapshots: this.writeSnapshots,
       fileUpdateNotifier: this.dependencies.fileUpdateNotifier,
       ...(planTodo ? { planTodo } : {}),
-      ...(planFilePath
+      ...(planDirectoryPath
         ? {
-            planFile: {
-              path: planFilePath,
-              read: () => this.dependencies.planFileManager?.readPlan(input.sessionId),
+            planDirectory: {
+              path: planDirectoryPath,
+              resolve: (filePath: string) =>
+                this.dependencies.planFileManager?.resolvePlanFilePath(filePath, this.config.cwd),
+              read: (filePath: string) =>
+                this.dependencies.planFileManager?.readPlanFile(filePath, this.config.cwd),
             },
           }
         : {}),
@@ -1102,20 +1104,6 @@ function textFromMessage(message: CanonicalMessage): string {
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
-}
-
-function extractFirstUserTitle(messages: CanonicalMessage[]): string | undefined {
-  for (const message of messages) {
-    if (message.role !== "user") {
-      continue;
-    }
-    const text = textFromMessage(message).trim();
-    if (text.length === 0) {
-      continue;
-    }
-    return text.split("\n")[0]?.trim().slice(0, 80) || undefined;
-  }
-  return undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

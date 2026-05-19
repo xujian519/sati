@@ -228,14 +228,16 @@ export type PilotDeckToolRuntimeContext = {
    */
   subagent?: PilotDeckSubagentForkApi;
   /**
-   * Plan file handle for plan-mode tools (`enter_plan_mode` /
-   * `exit_plan_mode`). When plan mode is active the model is allowed to
-   * write only this file. Absent when PlanFileManager is not configured
-   * (e.g. headless / test runtimes).
+   * Plan directory handle for plan-mode tools (`enter_plan_mode` /
+   * `exit_plan_mode`). When plan mode is active the model may create and
+   * edit markdown files under this directory, then submit one explicitly
+   * via `exit_plan_mode(plan_file_path)`. Absent when PlanFileManager is
+   * not configured (e.g. headless / test runtimes).
    */
-  planFile?: {
+  planDirectory?: {
     path: string;
-    read(): string | undefined;
+    resolve(filePath: string): string | undefined;
+    read(filePath: string): string | undefined;
   };
   /**
    * Optional session-scoped todo state used by plan execution flows. The
