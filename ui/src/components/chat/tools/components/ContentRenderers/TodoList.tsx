@@ -3,7 +3,6 @@ import { CheckCircle2, Circle, Clock, type LucideIcon } from 'lucide-react';
 import { Badge } from '../../../../../shared/view/ui';
 
 type TodoStatus = 'completed' | 'in_progress' | 'pending';
-type TodoPriority = 'high' | 'medium' | 'low';
 
 export type TodoItem = {
   id?: string;
@@ -16,7 +15,6 @@ type NormalizedTodoItem = {
   id?: string;
   content: string;
   status: TodoStatus;
-  priority: TodoPriority;
 };
 
 type StatusConfig = {
@@ -51,26 +49,12 @@ const STATUS_CONFIG: Record<TodoStatus, StatusConfig> = {
   },
 };
 
-const PRIORITY_BADGE_CLASS: Record<TodoPriority, string> = {
-  high: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800',
-  medium:
-    'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800',
-  low: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700',
-};
-
 // Incoming tool payloads can vary; normalize to supported UI states.
 const normalizeStatus = (status: string): TodoStatus => {
   if (status === 'completed' || status === 'in_progress') {
     return status;
   }
   return 'pending';
-};
-
-const normalizePriority = (priority?: string): TodoPriority => {
-  if (priority === 'high' || priority === 'medium') {
-    return priority;
-  }
-  return 'low';
 };
 
 const TodoRow = memo(
@@ -89,12 +73,6 @@ const TodoRow = memo(
               {todo.content}
             </p>
             <div className="flex flex-shrink-0 gap-1">
-              <Badge
-                variant="outline"
-                className={`px-1.5 py-px text-[10px] ${PRIORITY_BADGE_CLASS[todo.priority]}`}
-              >
-                {todo.priority}
-              </Badge>
               <Badge
                 variant="outline"
                 className={`px-1.5 py-px text-[10px] ${statusConfig.badgeClassName}`}
@@ -124,7 +102,6 @@ const TodoList = memo(
           id: todo.id,
           content: todo.content,
           status: normalizeStatus(todo.status),
-          priority: normalizePriority(todo.priority),
         })),
       [todos]
     );
