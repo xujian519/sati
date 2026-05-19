@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -296,6 +296,13 @@ export default function ComposerV2({
   const [isContextPopoverOpen, setIsContextPopoverOpen] = useState(false);
   const [isRunModeMenuOpen, setIsRunModeMenuOpen] = useState(false);
   const [isPermissionMenuOpen, setIsPermissionMenuOpen] = useState(false);
+  const permissionSelectorDisabled = runMode === 'plan';
+
+  useEffect(() => {
+    if (permissionSelectorDisabled) {
+      setIsPermissionMenuOpen(false);
+    }
+  }, [permissionSelectorDisabled]);
 
   const hasBlockingPermissionPanel = pendingPermissionRequests.some(
     (request) => BLOCKING_PERMISSION_TOOLS.has(request.toolName),
@@ -600,18 +607,24 @@ export default function ComposerV2({
                   >
                     <button
                       type="button"
-                      onClick={() => setIsPermissionMenuOpen((open) => !open)}
+                      disabled={permissionSelectorDisabled}
+                      onClick={() => {
+                        if (permissionSelectorDisabled) return;
+                        setIsPermissionMenuOpen((open) => !open);
+                      }}
                       className={cn(
                         'inline-flex h-7 max-w-[132px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[190px]',
-                        permissionMode === 'bypassPermissions'
-                          ? 'text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30'
-                          : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800',
+                        permissionSelectorDisabled
+                          ? 'cursor-not-allowed text-neutral-400 opacity-45 dark:text-neutral-500'
+                          : permissionMode === 'bypassPermissions'
+                            ? 'text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30'
+                            : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800',
                       )}
                       title={t('input.permissions.change', {
                         defaultValue: 'Select permission mode',
                       }) as string}
                       aria-haspopup="menu"
-                      aria-expanded={isPermissionMenuOpen}
+                      aria-expanded={permissionSelectorDisabled ? false : isPermissionMenuOpen}
                     >
                       <SelectedPermissionIcon className="h-4 w-4 shrink-0" strokeWidth={1.9} />
                       <span className="truncate">{selectedPermissionLabel}</span>
