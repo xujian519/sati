@@ -74,11 +74,12 @@ export function parseSessionInfoFromLite(
   projectRoot?: string,
 ): SessionInfo | null {
   const source = `${lite.head}\n${lite.tail}`;
-  const customTitle = lastJsonStringField(source, "title");
-  const aiTitle = lastJsonStringField(source, "aiTitle");
-  const tag = lastJsonStringField(source, "tag");
+  const customTitle = lastMetadataStringField(source, "title");
+  const aiTitle = lastMetadataStringField(source, "aiTitle");
+  const tag = lastMetadataStringField(source, "tag");
   const firstPrompt = firstAcceptedInputText(lite.head);
-  const summary = customTitle ?? aiTitle ?? firstPrompt;
+  const lastPrompt = lastAcceptedInputText(lite.tail) ?? firstPrompt;
+  const summary = customTitle ?? aiTitle ?? lastPrompt;
   if (!summary) {
     return null;
   }
@@ -118,6 +119,27 @@ function firstAcceptedInputText(head: string): string | undefined {
   return undefined;
 }
 
+function lastAcceptedInputText(tail: string): string | undefined {
+  let last: string | undefined;
+  for (const line of tail.split(/\r?\n/)) {
+    if (!line.includes('"type":"accepted_input"')) {
+      continue;
+    }
+    try {
+      const entry = JSON.parse(line) as {
+        messages?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
+      };
+      const text = entry.messages?.flatMap((message) => message.content ?? []).find((block) => block.type === "text")?.text;
+      if (text?.trim()) {
+        last = text.trim();
+      }
+    } catch {
+      // partial line at tail boundary — skip
+    }
+  }
+  return last;
+}
+
 function firstJsonStringField(source: string, field: string): string | undefined {
   const match = source.match(new RegExp(`"${escapeRegExp(field)}"\\s*:\\s*"((?:\\\\.|[^"])*)"`));
   return match?.[1] ? unescapeJsonString(match[1]) : undefined;
@@ -128,6 +150,27 @@ function lastJsonStringField(source: string, field: string): string | undefined 
   let value: string | undefined;
   for (const match of source.matchAll(regex)) {
     if (match[1]) {
+      value = unescapeJsonString(match[1]);
+    }
+  }
+  return value;
+}
+
+/**
+ * Like {@link lastJsonStringField} but restricted to JSONL lines whose
+ * `"type"` is `"session_metadata"`. The old approach scanned the entire
+ * raw head+tail text for `"title"`, which would pick up stray `"title"`
+ * keys from tool-call inputs, web-search results, or activity frames —
+ * causing the sidebar to display an intermediate tool argument instead
+ * of the actual session title.
+ */
+function lastMetadataStringField(source: string, field: string): string | undefined {
+  const fieldRegex = new RegExp(`"${escapeRegExp(field)}"\\s*:\\s*"((?:\\\\.|[^"])*)"`);
+  let value: string | undefined;
+  for (const line of source.split(/\r?\n/)) {
+    if (!line.includes('"session_metadata"')) continue;
+    const match = line.match(fieldRegex);
+    if (match?.[1]) {
       value = unescapeJsonString(match[1]);
     }
   }

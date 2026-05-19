@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { listAllSessions, searchSessionsByTitle } from "../../../src/session/storage/SessionList.js";
+import { listAllSessions, parseSessionInfoFromLite, searchSessionsByTitle } from "../../../src/session/storage/SessionList.js";
+import { readSessionLite } from "../../../src/session/storage/SessionLiteReader.js";
 
 function createPilotHome() {
   const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-list-"));
@@ -118,6 +119,125 @@ test("searchSessionsByTitle is case insensitive", async () => {
 
     const results = await searchSessionsByTitle({ projectRoot, pilotHome, query: "api gateway" });
     assert.equal(results.length, 1);
+  } finally {
+    rmSync(pilotHome, { recursive: true, force: true });
+  }
+});
+
+function toolCallLine(toolName: string, input: Record<string, unknown>): string {
+  return JSON.stringify({
+    type: "assistant_message",
+    sessionId: "s",
+    turnId: "t",
+    sequence: 3,
+    createdAt: "2026-01-01T00:00:02.000Z",
+    message: {
+      role: "assistant",
+      content: [{
+        type: "tool_call",
+        id: "toolu_01",
+        name: toolName,
+        input,
+      }],
+    },
+  });
+}
+
+test("parseSessionInfoFromLite uses the latest user question as summary", async () => {
+  const pilotHome = createPilotHome();
+  try {
+    writeSession(pilotHome, "proj", "s1", [
+      acceptedInputLine("help me build a todo app"),
+      toolCallLine("AskQuestion", { title: "Pick a framework", questions: [] }),
+      acceptedInputLine("now add dark mode support"),
+    ]);
+
+    const chatDir = join(pilotHome, "projects", "proj", "chats");
+    const lite = await readSessionLite(join(chatDir, "s1.jsonl"));
+    assert.ok(lite, "lite file should be readable");
+    const info = parseSessionInfoFromLite("s1", lite);
+    assert.ok(info, "session info should be parsed");
+    assert.equal(info.summary, "now add dark mode support");
+    assert.equal(info.customTitle, undefined);
+    assert.equal(info.firstPrompt, "help me build a todo app");
+  } finally {
+    rmSync(pilotHome, { recursive: true, force: true });
+  }
+});
+
+test("parseSessionInfoFromLite ignores 'title' inside tool call arguments", async () => {
+  const pilotHome = createPilotHome();
+  try {
+    writeSession(pilotHome, "proj", "s1", [
+      acceptedInputLine("help me build a todo app"),
+      toolCallLine("AskQuestion", { title: "Pick a framework", questions: [] }),
+    ]);
+
+    const chatDir = join(pilotHome, "projects", "proj", "chats");
+    const lite = await readSessionLite(join(chatDir, "s1.jsonl"));
+    assert.ok(lite, "lite file should be readable");
+    const info = parseSessionInfoFromLite("s1", lite);
+    assert.ok(info, "session info should be parsed");
+    assert.equal(info.summary, "help me build a todo app");
+    assert.equal(info.customTitle, undefined);
+    assert.equal(info.firstPrompt, "help me build a todo app");
+  } finally {
+    rmSync(pilotHome, { recursive: true, force: true });
+  }
+});
+
+test("parseSessionInfoFromLite prefers session_metadata title over firstPrompt", async () => {
+  const pilotHome = createPilotHome();
+  try {
+    writeSession(pilotHome, "proj", "s1", [
+      acceptedInputLine("initial question"),
+      metadataLine("My Custom Title"),
+      toolCallLine("WebSearch", { title: "some search result title" }),
+    ]);
+
+    const chatDir = join(pilotHome, "projects", "proj", "chats");
+    const lite = await readSessionLite(join(chatDir, "s1.jsonl"));
+    assert.ok(lite);
+    const info = parseSessionInfoFromLite("s1", lite);
+    assert.ok(info);
+    assert.equal(info.summary, "My Custom Title");
+    assert.equal(info.customTitle, "My Custom Title");
+  } finally {
+    rmSync(pilotHome, { recursive: true, force: true });
+  }
+});
+
+test("parseSessionInfoFromLite ignores 'title' in tool results and activity frames", async () => {
+  const pilotHome = createPilotHome();
+  try {
+    const activityLine = JSON.stringify({
+      type: "assistant_message",
+      sessionId: "s",
+      turnId: "t",
+      sequence: 4,
+      createdAt: "2026-01-01T00:00:03.000Z",
+      message: {
+        role: "assistant",
+        content: [{
+          type: "text",
+          text: "Here is the result with a title field",
+        }],
+      },
+      title: "Activity: reading files",
+    });
+
+    writeSession(pilotHome, "proj", "s1", [
+      acceptedInputLine("fix the login bug"),
+      activityLine,
+    ]);
+
+    const chatDir = join(pilotHome, "projects", "proj", "chats");
+    const lite = await readSessionLite(join(chatDir, "s1.jsonl"));
+    assert.ok(lite);
+    const info = parseSessionInfoFromLite("s1", lite);
+    assert.ok(info);
+    assert.equal(info.summary, "fix the login bug");
+    assert.equal(info.customTitle, undefined);
   } finally {
     rmSync(pilotHome, { recursive: true, force: true });
   }
