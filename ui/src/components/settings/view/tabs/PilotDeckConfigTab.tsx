@@ -349,6 +349,24 @@ function replaceRouterModelRefs(config: PilotDeckConfig, oldRef: string, newRef:
 
 const MASK = '********';
 
+function isMaskedSecret(value: string | undefined): boolean {
+  return value === MASK;
+}
+
+/** Password fields must not bind MASK/placeholders as value — browsers render them as bullets. */
+function secretDisplayValue(value: string | undefined): string {
+  if (!value) return '';
+  if (isMaskedSecret(value)) return '';
+  if (value === 'PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE') return '';
+  if (value.startsWith('PLACEHOLDER_')) return '';
+  return value;
+}
+
+function hasUsableSecret(value: string | undefined): boolean {
+  const trimmed = (value ?? '').trim();
+  return Boolean(trimmed) && !isMaskedSecret(trimmed) && trimmed !== 'PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE' && !trimmed.startsWith('PLACEHOLDER_');
+}
+
 // ── Reusable inputs ────────────────────────────────────────────────────
 
 function TextInput({
@@ -379,6 +397,34 @@ function TextInput({
         monospace && 'font-mono text-xs',
         className,
       )}
+    />
+  );
+}
+
+function SecretTextInput({
+  value,
+  onChange,
+  placeholder,
+  emptyPlaceholder,
+  className,
+  monospace,
+}: {
+  value: string | undefined;
+  onChange: (next: string) => void;
+  placeholder?: string;
+  emptyPlaceholder?: string;
+  className?: string;
+  monospace?: boolean;
+}) {
+  const masked = isMaskedSecret(value);
+  return (
+    <TextInput
+      type="password"
+      value={secretDisplayValue(value)}
+      placeholder={placeholder ?? (masked ? 'Existing key kept — type to replace' : emptyPlaceholder)}
+      monospace={monospace}
+      className={className}
+      onChange={onChange}
     />
   );
 }
@@ -543,7 +589,7 @@ function ProviderCard({
   activeModelRef: string;
   onSetActive: (modelRef: string) => void;
 }) {
-  const isMaskedKey = provider.apiKey === MASK;
+  const isMaskedKey = isMaskedSecret(provider.apiKey);
   const protocol = provider.protocol ?? catalogEntry?.protocol ?? 'openai';
   const effectiveUrl = provider.url || catalogEntry?.defaultUrl || '';
   const enabledModels = Object.keys(provider.models ?? {});
@@ -658,10 +704,9 @@ function ProviderCard({
       {/* API key — the only required field */}
       <label className="block text-xs text-muted-foreground">
         <span className="mb-1 block">API key</span>
-        <TextInput
-          type="password"
+        <SecretTextInput
           value={provider.apiKey}
-          placeholder={isMaskedKey ? 'Existing key kept — type to replace' : 'sk-...'}
+          emptyPlaceholder="sk-..."
           onChange={(v) => update({ apiKey: v })}
         />
         {isMaskedKey && (
@@ -1432,7 +1477,7 @@ function CustomEnvSection({ config, onChange }: { config: PilotDeckConfig; onCha
           </div>
         )}
         {entries.map(([key, value]) => {
-          const isMasked = value === MASK;
+          const isMasked = isMaskedSecret(value);
           return (
             <div key={key} className="space-y-1">
               <div className="flex items-center gap-2">
@@ -1442,10 +1487,9 @@ function CustomEnvSection({ config, onChange }: { config: PilotDeckConfig; onCha
                   className="w-[200px] shrink-0 rounded-md border border-border bg-muted px-2 py-1.5 font-mono text-xs text-foreground outline-none"
                 />
                 <span className="text-muted-foreground">=</span>
-                <TextInput
-                  type="password"
+                <SecretTextInput
                   value={value}
-                  placeholder={isMasked ? 'Existing value kept — type to replace' : 'value'}
+                  emptyPlaceholder="value"
                   monospace
                   className="min-w-0 flex-1"
                   onChange={(v) => setEnv(key, v)}
@@ -1891,7 +1935,7 @@ function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange:
   };
 
   const handleTest = async () => {
-    const trimmedKey = apiKey.trim();
+    const trimmedKey = hasUsableSecret(apiKey) ? apiKey.trim() : '';
     if (!trimmedKey) {
       setTestStatus('error');
       setTestMessage(t('edgeClawConfig.panels.tools.test.needsKey'));
@@ -1953,13 +1997,18 @@ function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange:
           label={t('edgeClawConfig.panels.tools.apiKey.label')}
           description={t('edgeClawConfig.panels.tools.apiKey.description')}
         >
-          <TextInput
-            type="password"
+          <SecretTextInput
             value={apiKey}
-            placeholder={t('edgeClawConfig.panels.tools.apiKey.placeholder')}
+            emptyPlaceholder={t('edgeClawConfig.panels.tools.apiKey.placeholder')}
             monospace
             onChange={(v) => setField('apiKey', v)}
           />
+          {isMaskedSecret(apiKey) && (
+            <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+              <Info className="h-3 w-3" />
+              Key hidden; leave as-is to keep, retype to replace.
+            </p>
+          )}
         </FormRow>
         <FormRow
           label={t('edgeClawConfig.panels.tools.endpoint.label')}
@@ -2052,7 +2101,7 @@ function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange:
               variant="outline"
               size="sm"
               onClick={handleTest}
-              disabled={testStatus === 'testing' || !apiKey.trim()}
+              disabled={testStatus === 'testing' || !hasUsableSecret(apiKey)}
             >
               {testStatus === 'testing' ? (
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
