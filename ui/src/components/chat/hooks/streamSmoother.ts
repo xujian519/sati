@@ -7,6 +7,7 @@ type SmoothTextStreamOptions = {
   scheduleFrame?: (callback: () => void) => FrameHandle;
   cancelFrame?: (handle: FrameHandle) => void;
   frameMs?: number;
+  fallbackFrameMs?: number;
   targetLagMs?: number;
   maxLagMs?: number;
   minCharsPerFrame?: number;
@@ -27,6 +28,7 @@ const DEFAULT_MAX_LAG_MS = 650;
 const DEFAULT_MIN_CHARS_PER_FRAME = 1;
 const DEFAULT_MAX_CHARS_PER_FRAME = 36;
 const DEFAULT_AVERAGE_CHARS_PER_SECOND = 90;
+const DEFAULT_FALLBACK_FRAME_MS = 80;
 const RATE_ALPHA = 0.22;
 
 function clamp(value: number, min: number, max: number): number {
@@ -65,6 +67,7 @@ export class SmoothTextStream {
   private targetContent = '';
   private renderedContent = '';
   private frame: FrameHandle | null = null;
+  private fallbackTimer: ReturnType<typeof setTimeout> | null = null;
   private lastChunkAtMs: number | null = null;
   private lastFrameAtMs: number | null = null;
   private averageCharsPerSecond = DEFAULT_AVERAGE_CHARS_PER_SECOND;
@@ -82,6 +85,7 @@ export class SmoothTextStream {
     }
     this.lastChunkAtMs = now;
     this.targetContent += text;
+    this.emitInitialContent();
     this.schedulePump();
   }
 
@@ -135,18 +139,62 @@ export class SmoothTextStream {
   }
 
   private cancelScheduledFrame(): void {
-    if (this.frame == null) return;
-    this.cancelFrame(this.frame);
-    this.frame = null;
+    if (this.frame != null) {
+      this.cancelFrame(this.frame);
+      this.frame = null;
+    }
+    this.cancelFallbackTimer();
+  }
+
+  private cancelFallbackTimer(): void {
+    if (this.fallbackTimer == null) return;
+    clearTimeout(this.fallbackTimer);
+    this.fallbackTimer = null;
   }
 
   private schedulePump(): void {
     if (this.frame != null) return;
     this.frame = this.scheduleFrame(() => this.pump());
+    this.scheduleFallbackPump();
+  }
+
+  private scheduleFallbackPump(): void {
+    // Browser rAF can be delayed or paused by WebView/tab throttling. The first
+    // chunk is emitted synchronously; this timeout keeps the rest moving without
+    // giving up smooth per-frame rendering when rAF is healthy.
+    if (this.options.scheduleFrame || this.fallbackTimer != null || typeof window === 'undefined') {
+      return;
+    }
+    this.fallbackTimer = window.setTimeout(() => {
+      this.fallbackTimer = null;
+      if (this.frame == null) return;
+      this.cancelFrame(this.frame);
+      this.frame = null;
+      this.pump();
+    }, this.options.fallbackFrameMs ?? DEFAULT_FALLBACK_FRAME_MS);
+  }
+
+  private emitInitialContent(): void {
+    if (this.renderedContent.length > 0 || this.targetContent.length === 0) {
+      return;
+    }
+
+    const charsToRender = this.getCharsForFrame(this.targetContent.length);
+    const minNextLength = Math.min(this.targetContent.length, this.minCharsPerFrame);
+    const maxNextLength = Math.min(this.targetContent.length, this.maxCharsPerFrame);
+    const nextLength = findBoundary(
+      this.targetContent,
+      minNextLength,
+      charsToRender,
+      maxNextLength,
+    );
+    this.renderedContent = this.targetContent.slice(0, nextLength);
+    this.options.emit(this.renderedContent);
   }
 
   private pump(): void {
     this.frame = null;
+    this.cancelFallbackTimer();
 
     const now = this.now();
     if (this.lastFrameAtMs != null && now - this.lastFrameAtMs < this.frameMs * 0.8) {

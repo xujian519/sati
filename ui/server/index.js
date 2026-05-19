@@ -1886,9 +1886,20 @@ class WebSocketWriter {
     }
 
     send(data) {
+        const message = JSON.stringify(data);
         if (this.ws.readyState === 1) { // WebSocket.OPEN
-            this.ws.send(JSON.stringify(data));
+            this.ws.send(message);
+            return;
         }
+
+        // A chat turn can outlive the browser WebSocket that submitted it
+        // (refresh, reconnect, dev-client hiccup). Keep the gateway stream live
+        // by handing subsequent frames to the user's replacement connection.
+        connectedClients.forEach((client) => {
+            if (client.readyState !== 1) return; // WebSocket.OPEN
+            if (client.__pilotdeckUserId !== this.userId) return;
+            client.send(message);
+        });
     }
 
     updateWebSocket(newRawWs) {
@@ -1909,6 +1920,8 @@ function handleChatConnection(ws, request) {
     console.log('[INFO] Chat WebSocket connected');
 
     // Add to connected clients for project updates
+    const userId = request?.user?.id ?? request?.user?.userId ?? null;
+    ws.__pilotdeckUserId = userId;
     connectedClients.add(ws);
     // NOTE: the legacy claude-code-main cron-daemon client lease was retired
     // here. PilotDeck's cron runtime now lives inside `pilotdeck server`
@@ -1918,7 +1931,7 @@ function handleChatConnection(ws, request) {
     let cleanedUp = false;
 
     // Wrap WebSocket with writer for consistent interface with SSEStreamWriter
-    const writer = new WebSocketWriter(ws, request?.user?.id ?? request?.user?.userId ?? null);
+    const writer = new WebSocketWriter(ws, userId);
 
     ws.on('message', async (message) => {
         try {
@@ -2022,8 +2035,9 @@ function handleChatConnection(ws, request) {
         void alwaysOnHeartbeat.clearPresence(ws);
     };
 
-    ws.on('close', () => {
-        console.log('🔌 Chat client disconnected');
+    ws.on('close', (code, reason) => {
+        const reasonText = reason?.toString?.() || '';
+        console.log(`🔌 Chat client disconnected code=${code}${reasonText ? ` reason=${reasonText}` : ''}`);
         cleanup();
     });
     ws.on('error', () => {

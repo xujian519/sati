@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SmoothTextStream } from './streamSmoother';
 
 function createManualFrameScheduler(onFrame?: () => void) {
@@ -57,7 +57,9 @@ describe('SmoothTextStream', () => {
 
     stream.append(text);
 
-    expect(emitted).toEqual([]);
+    expect(emitted.length).toBe(1);
+    expect(emitted[0].length).toBeGreaterThan(0);
+    expect(emitted[0].length).toBeLessThan(text.length);
     expect(stream.getSnapshot().targetLength).toBe(text.length);
 
     scheduler.runNext();
@@ -97,7 +99,8 @@ describe('SmoothTextStream', () => {
 
     const snapshot = stream.getSnapshot();
     expect(snapshot.averageCharsPerSecond).toBeGreaterThan(400);
-    expect(snapshot.pendingChars).toBe(84);
+    expect(snapshot.pendingChars).toBeGreaterThan(0);
+    expect(snapshot.pendingChars).toBeLessThan(84);
   });
 
   it('prefers whitespace and punctuation boundaries without exceeding the frame cap', () => {
@@ -143,10 +146,40 @@ describe('SmoothTextStream', () => {
     stream.append('streaming output');
     stream.flush(true);
 
-    expect(emitted).toEqual(['streaming output']);
+    expect(emitted.at(-1)).toBe('streaming output');
     expect(finalized).toBe(1);
     expect(stream.getSnapshot().targetLength).toBe(0);
     expect(stream.getSnapshot().renderedLength).toBe(0);
     expect(scheduler.size).toBe(0);
+  });
+
+  it('falls back when requestAnimationFrame does not run promptly', () => {
+    vi.useFakeTimers();
+    const requestAnimationFrameSpy = vi.fn(() => 1);
+    const cancelAnimationFrameSpy = vi.fn();
+    vi.stubGlobal('window', {
+      requestAnimationFrame: requestAnimationFrameSpy,
+      cancelAnimationFrame: cancelAnimationFrameSpy,
+      setTimeout: globalThis.setTimeout,
+    });
+    const emitted: string[] = [];
+
+    try {
+      const stream = new SmoothTextStream({
+        emit: (content) => emitted.push(content),
+        fallbackFrameMs: 10,
+      });
+
+      stream.append('abcdefghijklmnopqrstuvwxyz '.repeat(4));
+
+      expect(emitted.length).toBe(1);
+      vi.advanceTimersByTime(10);
+
+      expect(cancelAnimationFrameSpy).toHaveBeenCalledWith(1);
+      expect(emitted.length).toBeGreaterThan(1);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
   });
 });
