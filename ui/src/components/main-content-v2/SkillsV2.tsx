@@ -5,6 +5,7 @@ import { markdown } from '@codemirror/lang-markdown';
 import { EditorView } from '@codemirror/view';
 import {
   AlertTriangle,
+  ArrowRightLeft,
   CheckCircle2,
   Download,
   Folder,
@@ -31,6 +32,7 @@ import { cn } from '../../lib/utils.js';
 
 type SkillsV2Props = {
   selectedProject: Project | null;
+  projects: Project[];
 };
 
 type Skill = {
@@ -96,7 +98,7 @@ async function api<T>(url: string, body: unknown): Promise<T> {
 
 // ---------------------------------------------------------------------------
 
-export default function SkillsV2({ selectedProject }: SkillsV2Props) {
+export default function SkillsV2({ selectedProject, projects }: SkillsV2Props) {
   const { t } = useTranslation();
   const { isDarkMode } = useTheme() as { isDarkMode: boolean };
 
@@ -269,6 +271,13 @@ export default function SkillsV2({ selectedProject }: SkillsV2Props) {
           activeScope={activeScope}
           generalCwd={generalCwd}
           onSelect={handleSelect}
+          selectedSkill={activeSkill}
+          effectiveProjectPath={effectiveProjectPath}
+          projects={projects}
+          refresh={refresh}
+          flashToast={flashToast}
+          setActiveSlug={setActiveSlug}
+          setActiveScope={setActiveScope}
           t={t}
         />
         <div className="flex min-h-0 flex-1 flex-col border-l border-neutral-200 dark:border-neutral-800">
@@ -375,6 +384,8 @@ function Header({
   );
 }
 
+type MoveTarget = { scope: 'user'; projectPath: null } | { scope: 'project'; projectPath: string };
+
 function SkillsList({
   skills,
   loading,
@@ -382,6 +393,13 @@ function SkillsList({
   activeScope,
   generalCwd,
   onSelect,
+  selectedSkill,
+  effectiveProjectPath,
+  projects,
+  refresh,
+  flashToast,
+  setActiveSlug,
+  setActiveScope,
   t,
 }: {
   skills: SkillsListResponse | null;
@@ -390,8 +408,82 @@ function SkillsList({
   activeScope: 'user' | 'project' | null;
   generalCwd: boolean;
   onSelect: (s: Skill) => void;
+  selectedSkill: Skill | null;
+  effectiveProjectPath: string | null;
+  projects: Project[];
+  refresh: () => Promise<void>;
+  flashToast: (t: ToastState, ms?: number) => void;
+  setActiveSlug: (slug: string | null) => void;
+  setActiveScope: (scope: 'user' | 'project' | null) => void;
   t: ReturnType<typeof useTranslation>['t'];
 }) {
+  const handleDeleteSkill = useCallback(async (skill: Skill) => {
+    if (!window.confirm(t('skillsTab.confirmUninstall', { defaultValue: 'Uninstall "{{name}}"? This will remove the entire skill folder.', name: skill.name }) as string)) {
+      return;
+    }
+    try {
+      await api('/api/skills/delete', {
+        skillPath: skill.skillDir,
+        projectPath: effectiveProjectPath,
+      });
+      if (selectedSkill?.slug === skill.slug && selectedSkill?.scope === skill.scope) {
+        setActiveSlug(null);
+        setActiveScope(null);
+      }
+      await refresh();
+      flashToast({ kind: 'success', text: t('skillsTab.uninstallSuccess', { defaultValue: 'Uninstalled "{{name}}"', name: skill.name }) as string });
+    } catch (e) {
+      flashToast({ kind: 'error', text: (e as Error).message });
+    }
+  }, [effectiveProjectPath, selectedSkill, refresh, flashToast, setActiveSlug, setActiveScope, t]);
+
+  const handleMoveSkill = useCallback(async (skill: Skill, target: MoveTarget) => {
+    try {
+      await api('/api/skills/import', {
+        sourcePath: skill.skillDir,
+        slug: skill.slug,
+        scope: target.scope,
+        projectPath: target.projectPath,
+        mode: 'copy',
+        force: false,
+      });
+      await api('/api/skills/delete', {
+        skillPath: skill.skillDir,
+        projectPath: effectiveProjectPath,
+      });
+      if (selectedSkill?.slug === skill.slug && selectedSkill?.scope === skill.scope) {
+        setActiveScope(target.scope);
+      }
+      await refresh();
+      const label = target.scope === 'user' ? 'User' : target.projectPath.split('/').pop() || 'Project';
+      flashToast({
+        kind: 'success',
+        text: t('skillsTab.moveSuccess', {
+          defaultValue: 'Moved "{{name}}" to {{scope}}',
+          name: skill.name,
+          scope: label,
+        }) as string,
+      });
+    } catch (e) {
+      flashToast({ kind: 'error', text: (e as Error).message });
+    }
+  }, [effectiveProjectPath, selectedSkill, refresh, flashToast, setActiveScope, t]);
+
+  const moveTargets = useMemo((): { label: string; target: MoveTarget }[] => {
+    const targets: { label: string; target: MoveTarget }[] = [];
+    targets.push({ label: 'User (global)', target: { scope: 'user', projectPath: null } });
+    for (const project of projects) {
+      const path = project.fullPath || project.path || null;
+      if (!path) continue;
+      if (path.endsWith('/Claude/general') || path.endsWith('/.claude-gateway/general')) continue;
+      targets.push({
+        label: project.displayName || project.name,
+        target: { scope: 'project', projectPath: path },
+      });
+    }
+    return targets;
+  }, [projects]);
+
   return (
     <div className="flex w-72 shrink-0 flex-col border-r border-neutral-200 dark:border-neutral-800">
       <div className="min-h-0 flex-1 overflow-y-auto py-2 text-[13px]">
@@ -408,6 +500,11 @@ function SkillsList({
                 items={skills.project}
                 activeSlug={activeScope === 'project' ? activeSlug : null}
                 onSelect={onSelect}
+                onDelete={handleDeleteSkill}
+                onMove={handleMoveSkill}
+                moveTargets={moveTargets}
+                currentProjectPath={effectiveProjectPath}
+                t={t}
               />
             ) : null}
             {skills?.user && skills.user.length > 0 ? (
@@ -416,6 +513,11 @@ function SkillsList({
                 items={skills.user}
                 activeSlug={activeScope === 'user' ? activeSlug : null}
                 onSelect={onSelect}
+                onDelete={handleDeleteSkill}
+                onMove={handleMoveSkill}
+                moveTargets={moveTargets}
+                currentProjectPath={effectiveProjectPath}
+                t={t}
               />
             ) : null}
             {skills && skills.user.length === 0 && (generalCwd || skills.project.length === 0) ? (
@@ -430,17 +532,71 @@ function SkillsList({
   );
 }
 
+type ContextMenuState = { skill: Skill; x: number; y: number } | null;
+
 function ListSection({
   title,
   items,
   activeSlug,
   onSelect,
+  onDelete,
+  onMove,
+  moveTargets,
+  currentProjectPath,
+  t,
 }: {
   title: string;
   items: Skill[];
   activeSlug: string | null;
   onSelect: (s: Skill) => void;
+  onDelete: (s: Skill) => void;
+  onMove: (s: Skill, target: MoveTarget) => void;
+  moveTargets: { label: string; target: MoveTarget }[];
+  currentProjectPath: string | null;
+  t: ReturnType<typeof useTranslation>['t'];
 }) {
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuState>(null);
+  const [showMoveSubmenu, setShowMoveSubmenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const handleClose = (e: MouseEvent | KeyboardEvent) => {
+      if (e instanceof KeyboardEvent && e.key === 'Escape') {
+        setCtxMenu(null);
+        setShowMoveSubmenu(false);
+        return;
+      }
+      if (e instanceof MouseEvent && menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setCtxMenu(null);
+        setShowMoveSubmenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClose);
+    document.addEventListener('keydown', handleClose);
+    return () => {
+      document.removeEventListener('mousedown', handleClose);
+      document.removeEventListener('keydown', handleClose);
+    };
+  }, [ctxMenu]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, skill: Skill) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ skill, x: e.clientX, y: e.clientY });
+    setShowMoveSubmenu(false);
+  }, []);
+
+  const filteredMoveTargets = useMemo(() => {
+    if (!ctxMenu) return [];
+    const skill = ctxMenu.skill;
+    return moveTargets.filter((mt) => {
+      if (skill.scope === 'user' && mt.target.scope === 'user') return false;
+      if (skill.scope === 'project' && mt.target.scope === 'project' && mt.target.projectPath === currentProjectPath) return false;
+      return true;
+    });
+  }, [ctxMenu, moveTargets, currentProjectPath]);
+
   return (
     <div className="mb-2">
       <div className="px-4 py-1 text-xxs uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
@@ -450,12 +606,13 @@ function ListSection({
         {items.map((s) => {
           const isActive = activeSlug === s.slug;
           return (
-            <li key={`${s.scope}:${s.slug}`}>
+            <li key={`${s.scope}:${s.slug}`} className="group relative">
               <button
                 type="button"
                 onClick={() => onSelect(s)}
+                onContextMenu={(e) => handleContextMenu(e, s)}
                 className={cn(
-                  'block w-full truncate rounded-md px-2 py-1.5 text-left text-[13px] transition-colors',
+                  'block w-full truncate rounded-md px-2 py-1.5 pr-8 text-left text-[13px] transition-colors',
                   isActive
                     ? 'bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'
                     : 'text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-900/60',
@@ -476,10 +633,85 @@ function ListSection({
                   </div>
                 ) : null}
               </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(s);
+                }}
+                className="absolute right-1.5 top-1/2 hidden h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-neutral-400 hover:bg-red-50 hover:text-red-600 group-hover:inline-flex dark:text-neutral-500 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                title={t('skillsTab.delete', { defaultValue: 'Delete' }) as string}
+              >
+                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+              </button>
             </li>
           );
         })}
       </ul>
+
+      {ctxMenu ? (
+        <div
+          ref={menuRef}
+          className="fixed z-[100] min-w-[180px] rounded-lg border border-neutral-200 bg-white py-1 shadow-xl dark:border-neutral-700 dark:bg-neutral-900"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+        >
+          {filteredMoveTargets.length > 0 ? (
+            <div className="relative">
+              <button
+                type="button"
+                onMouseEnter={() => setShowMoveSubmenu(true)}
+                onClick={() => setShowMoveSubmenu(!showMoveSubmenu)}
+                className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-[12px] text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800"
+              >
+                <span className="flex items-center gap-2">
+                  <ArrowRightLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  <span>{t('skillsTab.moveTo', { defaultValue: 'Move to…' })}</span>
+                </span>
+                <span className="text-neutral-400">›</span>
+              </button>
+              {showMoveSubmenu ? (
+                <div
+                  className="absolute left-full top-0 z-[101] ml-1 min-w-[160px] max-h-[240px] overflow-y-auto rounded-lg border border-neutral-200 bg-white py-1 shadow-xl dark:border-neutral-700 dark:bg-neutral-900"
+                >
+                  {filteredMoveTargets.map((mt) => (
+                    <button
+                      key={mt.target.scope + ':' + (mt.target.projectPath || 'user')}
+                      type="button"
+                      onClick={() => {
+                        const skill = ctxMenu.skill;
+                        setCtxMenu(null);
+                        setShowMoveSubmenu(false);
+                        onMove(skill, mt.target);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                    >
+                      {mt.target.scope === 'user' ? (
+                        <Globe className="h-3.5 w-3.5 shrink-0 text-amber-500" strokeWidth={1.75} />
+                      ) : (
+                        <Folder className="h-3.5 w-3.5 shrink-0 text-blue-500" strokeWidth={1.75} />
+                      )}
+                      <span className="truncate">{mt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              const skill = ctxMenu.skill;
+              setCtxMenu(null);
+              setShowMoveSubmenu(false);
+              onDelete(skill);
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+          >
+            <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+            <span>{t('skillsTab.delete', { defaultValue: 'Delete' })}</span>
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

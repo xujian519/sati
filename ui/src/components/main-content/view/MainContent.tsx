@@ -737,6 +737,7 @@ function MainContent({
     <div className="relative flex h-full flex-col bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <SplitBody
+          projects={projects}
           selectedProject={selectedProject}
           selectedSession={selectedSession}
           activeTab={activeTab}
@@ -808,6 +809,7 @@ function MainContent({
 // and existing transcripts. Files can pair with Agent in split view; focused
 // tools such as Always-On, Dashboard, Tasks, and Memory render full-screen.
 type SplitBodyProps = {
+  projects: Project[];
   selectedProject: Project | null;
   selectedSession: any;
   activeTab: string;
@@ -846,6 +848,7 @@ type SplitBodyProps = {
 
 function SplitBody(props: SplitBodyProps) {
   const {
+    projects,
     selectedProject,
     selectedSession,
     activeTab,
@@ -996,7 +999,7 @@ function SplitBody(props: SplitBodyProps) {
     }
     if (activeTab === 'dashboard') return <DashboardV2 projectFilter={selectedProject?.name} projectFullPath={selectedProject?.fullPath} onSelectProject={onSelectProjectByName} />;
     if (activeTab === 'memory') return <MemoryPanel selectedProject={selectedProject} />;
-    if (activeTab === 'skills') return <SkillsV2 selectedProject={selectedProject} />;
+    if (activeTab === 'skills') return <SkillsV2 selectedProject={selectedProject} projects={projects} />;
     if (renderTasksAsTool) return <TasksV2 isVisible />;
     if (isPlugin) {
       return (
