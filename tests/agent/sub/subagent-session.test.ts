@@ -19,6 +19,7 @@ import {
   PermissionRuntime,
   createDefaultPermissionContext,
 } from "../../../src/permission/index.js";
+import type { PermissionResult, PermissionRule } from "../../../src/permission/index.js";
 import type { AgentRuntimeConfig } from "../../../src/agent/runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../../../src/agent/runtime/AgentRuntimeDependencies.js";
 import type { AgentEvent } from "../../../src/agent/protocol/events.js";
@@ -424,6 +425,86 @@ test("C2.E2E SubAgentSession inherits parent read/write state one-way", async (t
   assert.equal(await workspace.read("existing.txt"), "child write");
   assert.equal(parentReadFileState.get(`${existingPath}::text::1::all::`)?.mtimeMs, existingMtimeMs);
   assert.equal(parentWriteSnapshots.get(existingPath)?.contentHash, hashText("old"));
+});
+
+test("C2.E2E SubAgentSession inherits parent session allow rules as live references", async () => {
+  const allowRule: PermissionRule = {
+    source: "session",
+    behavior: "allow",
+    toolName: "needs_session_allow",
+  };
+  const events: CanonicalModelEvent[] = [
+    { type: "message_start", role: "assistant" },
+    {
+      type: "tool_call_end",
+      toolCall: {
+        id: "call-session-allow",
+        name: "needs_session_allow",
+        input: {},
+      },
+    },
+    { type: "message_end", finishReason: "tool_call" },
+    { type: "message_start", role: "assistant" },
+    { type: "text_delta", text: finalReport },
+    { type: "message_end", finishReason: "stop" },
+  ];
+  const model = new ScriptedModel(events);
+  const registry = new ToolRegistry();
+  let executed = false;
+  let allowRulesShared = false;
+  registry.register({
+    name: "needs_session_allow",
+    description: "Requires session allow",
+    kind: "session",
+    inputSchema: { type: "object", properties: {}, additionalProperties: true },
+    isReadOnly: () => false,
+    isConcurrencySafe: () => false,
+    checkPermissions: async (): Promise<PermissionResult> => ({
+      type: "ask",
+      reason: {
+        type: "tool",
+        toolName: "needs_session_allow",
+        message: "This tool normally asks for permission.",
+      },
+      request: {
+        toolCallId: "",
+        toolName: "needs_session_allow",
+        inputSummary: "session-allow test",
+        reason: {
+          type: "tool",
+          toolName: "needs_session_allow",
+          message: "This tool normally asks for permission.",
+        },
+        options: [
+          { id: "allow_once", label: "Allow once" },
+          { id: "deny", label: "Deny" },
+        ],
+      },
+    }),
+    execute: async (_input, context) => {
+      executed = true;
+      allowRulesShared = context.permissionContext.rules.allow === config.permissionContext.rules.allow;
+      return { content: [{ type: "text", text: "allowed via session rule" }] };
+    },
+  });
+  const config = buildConfig("/tmp/proj");
+  config.permissionContext.rules.allow.push(allowRule);
+  const session = new SubAgentSession({
+    definition: SUBAGENT_DEFINITIONS["general-purpose"],
+    directive: "Use the inherited session allow rule.",
+    parentMessages: [{ role: "assistant", content: [{ type: "text", text: "trigger" }] }],
+    parentConfig: config,
+    parentDependencies: buildDeps(model, registry),
+    parentSessionId: "parent-session",
+    parentTurnId: "parent-turn",
+    subagentSessionId: "sub-session-allow",
+    subagentId: "uuid-session-allow",
+  });
+
+  await session.run();
+
+  assert.equal(executed, true);
+  assert.equal(allowRulesShared, true);
 });
 
 function hashText(value: string): string {

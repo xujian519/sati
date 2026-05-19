@@ -293,6 +293,14 @@ export class SubAgentSession {
       : subagentSystem;
     return {
       ...parent,
+      permissionContext: {
+        ...parent.permissionContext,
+        rules: {
+          allow: parent.permissionContext.rules.allow,
+          deny: parent.permissionContext.rules.deny,
+          ask: parent.permissionContext.rules.ask,
+        },
+      },
       systemPrompt,
       stopOnStructuredOutput: false,
       metadata: {
