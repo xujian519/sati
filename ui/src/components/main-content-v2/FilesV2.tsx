@@ -25,6 +25,7 @@ import type { FileTreeNode } from '../file-tree/types/types';
 import { getFileIconData } from '../file-tree/constants/fileIcons';
 import { cn } from '../../lib/utils.js';
 import { api } from '../../utils/api';
+import { copyTextToClipboard } from '../../utils/clipboard';
 
 type FilesV2Props = {
   selectedProject: Project | null;
@@ -324,7 +325,7 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
   const handleCopyPath = useCallback(
     (node: FileTreeNode) => {
       closeContextMenu();
-      navigator.clipboard.writeText(node.path).catch(() => {});
+      void copyTextToClipboard(node.path);
     },
     [closeContextMenu],
   );

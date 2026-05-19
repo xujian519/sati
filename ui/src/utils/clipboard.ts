@@ -34,7 +34,12 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
   let copied = false;
 
   try {
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    if (
+      typeof window !== 'undefined' &&
+      window.isSecureContext &&
+      typeof navigator !== 'undefined' &&
+      navigator.clipboard?.writeText
+    ) {
       await navigator.clipboard.writeText(text);
       copied = true;
     }
