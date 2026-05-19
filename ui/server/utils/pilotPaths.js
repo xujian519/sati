@@ -14,6 +14,7 @@
  */
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 
 export const DEFAULT_PILOT_HOME = '~/.pilotdeck';
 
@@ -36,21 +37,26 @@ export function resolvePilotHome(env = process.env) {
 }
 
 /**
- * Encode an absolute project path into the on-disk project ID used
- * under `~/.pilotdeck/projects/<id>/`. Lossy — both `/` and literal
- * `-` collapse to `-`, so two different absolute paths can produce the
- * same ID; we work around that by writing a `.cwd` marker that records
- * the original path verbatim.
+ * Encode an absolute project path into the on-disk project ID used under
+ * `~/.pilotdeck/projects/<id>/`.
+ *
+ * This is the legacy lossy encoding. New UI-created projects use
+ * `createCollisionResistantProjectId()` only when this id is already claimed
+ * by a different `.cwd` marker.
  *
  * @param {string} projectRoot Absolute filesystem path.
  * @returns {string} Encoded project ID.
  */
 export function createProjectId(projectRoot) {
     const normalizedRoot = resolve(projectRoot);
-    return (
-        normalizedRoot.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') ||
-        'project'
-    );
+    return createLegacyProjectId(normalizedRoot);
+}
+
+export function createCollisionResistantProjectId(projectRoot) {
+    const normalizedRoot = resolve(projectRoot);
+    const legacyId = createLegacyProjectId(normalizedRoot);
+    const digest = createHash('sha1').update(normalizedRoot).digest('hex').slice(0, 10);
+    return `${legacyId}--${digest}`;
 }
 
 /**
@@ -70,3 +76,8 @@ export function createProjectId(projectRoot) {
 export function sanitizeSessionIdForPath(sessionId) {
     return sessionId.replace(/[\\/]+/g, '-').replace(/^-+|-+$/g, '') || 'session';
 }
+
+function createLegacyProjectId(projectRoot) {
+    return projectRoot.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
+}
+

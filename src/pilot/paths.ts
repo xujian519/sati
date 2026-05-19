@@ -1,5 +1,7 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { findCanonicalProjectRoot } from "../session/worktree/findCanonicalProjectRoot.js";
 
 export type PilotPathEnv = Record<string, string | undefined>;
@@ -32,7 +34,8 @@ export function getPilotMemoryRootDir(pilotHome: string): string {
 }
 
 export function getPilotProjectChatDir(projectRoot: string, pilotHome: string): string {
-  return resolve(pilotHome, "projects", createProjectId(projectRoot), "chats");
+  const projectId = resolveStoredProjectId(projectRoot, pilotHome) ?? createProjectId(projectRoot);
+  return resolve(pilotHome, "projects", projectId, "chats");
 }
 
 /**
@@ -46,7 +49,8 @@ export async function getPilotProjectChatDirAsync(
   pilotHome: string,
 ): Promise<string> {
   const canonical = await findCanonicalProjectRoot(projectRoot);
-  return resolve(pilotHome, "projects", createProjectId(canonical), "chats");
+  const projectId = resolveStoredProjectId(canonical, pilotHome) ?? createProjectId(canonical);
+  return resolve(pilotHome, "projects", projectId, "chats");
 }
 
 export function getPilotExtensionPaths(projectRoot: string, pilotHome: string): PilotExtensionPaths {
@@ -60,7 +64,14 @@ export function getPilotExtensionPaths(projectRoot: string, pilotHome: string): 
 
 export function createProjectId(projectRoot: string): string {
   const normalizedRoot = resolve(projectRoot);
-  return normalizedRoot.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "project";
+  return createLegacyProjectId(normalizedRoot);
+}
+
+export function createCollisionResistantProjectId(projectRoot: string): string {
+  const normalizedRoot = resolve(projectRoot);
+  const legacyId = createLegacyProjectId(normalizedRoot);
+  const digest = createHash("sha1").update(normalizedRoot).digest("hex").slice(0, 10);
+  return `${legacyId}--${digest}`;
 }
 
 /**
@@ -82,4 +93,43 @@ function normalizeHomePath(path: string): string {
   }
 
   return resolve(path);
+}
+
+function createLegacyProjectId(projectRoot: string): string {
+  return projectRoot.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "project";
+}
+
+function resolveStoredProjectId(projectRoot: string, pilotHome: string): string | null {
+  const projectsDir = resolve(pilotHome, "projects");
+  if (!existsSync(projectsDir)) {
+    return null;
+  }
+  const target = resolve(projectRoot);
+  try {
+    for (const entry of readdirSync(projectsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      const markerPath = resolve(projectsDir, entry.name, ".cwd");
+      let marker: string;
+      try {
+        marker = readFileSync(markerPath, "utf8").trim();
+      } catch {
+        continue;
+      }
+      if (!marker || resolve(marker) !== target) {
+        continue;
+      }
+      try {
+        if (statSync(marker).isDirectory()) {
+          return entry.name;
+        }
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }

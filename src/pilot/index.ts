@@ -4,6 +4,7 @@ export {
   PILOT_PROJECT_DIR_NAME,
   createProjectId,
   createProjectIdAsync,
+  createCollisionResistantProjectId,
   getPilotConfigFilePath,
   getPilotExtensionPaths,
   getPilotProjectConfigFilePath,

@@ -10,7 +10,7 @@
  * appended even if it has no chats yet.
  */
 
-import { readdir, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { resolve, basename } from "node:path";
 import { listProjectSessions } from "../../session/index.js";
 import { createProjectId } from "../../pilot/index.js";
@@ -45,7 +45,7 @@ export async function listWebProjects(
       isDir = false;
     }
     if (!isDir) continue;
-    const fullPath = await tryDecodeProjectId(id);
+    const fullPath = await resolveProjectPathFromId(projectsDir, id);
     if (!fullPath) {
       // Encoded id no longer maps to an existing absolute path on disk
       // (typical for stale dirs created by older runs that resolve()'d a
@@ -97,13 +97,27 @@ async function summarizeProject(
   };
 }
 
+async function resolveProjectPathFromId(projectsDir: string, projectId: string): Promise<string | null> {
+  const markerPath = resolve(projectsDir, projectId, ".cwd");
+  try {
+    const marker = (await readFile(markerPath, "utf8")).trim();
+    if (!marker) {
+      return null;
+    }
+    const markerStat = await stat(marker);
+    if (markerStat.isDirectory()) {
+      return marker;
+    }
+  } catch {
+    // No marker (or stale marker) — fall back to legacy id decoding.
+  }
+  return tryDecodeProjectId(projectId);
+}
+
 /**
- * `createProjectId` strips leading dashes after replacing path separators
- * with `-`, so the recovered absolute path is ambiguous in general. We
- * try the most common shape (treat `-` as `/`, prepend `/`) and verify
- * the result against the filesystem + `createProjectId` round-trip. Any
- * id that does not survive the round-trip is returned as `null` so the
- * caller can drop it from the project list.
+ * Legacy project IDs are path-slug encodings where separators become `-`.
+ * Recovery is heuristic-only; we keep this for backwards compatibility
+ * when `.cwd` markers are missing.
  */
 async function tryDecodeProjectId(id: string): Promise<string | null> {
   // Walk every `-` and treat it as a `/` boundary. Validate by checking

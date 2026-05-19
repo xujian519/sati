@@ -27,7 +27,12 @@ import {
     getPilotDeckGateway,
 } from './pilotdeck-bridge.js';
 import { mapLegacySessionPresentation } from '../../src/web/server/legacySessionPresentation.js';
-import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from './utils/pilotPaths.js';
+import {
+    resolvePilotHome,
+    createProjectId,
+    createCollisionResistantProjectId,
+    sanitizeSessionIdForPath,
+} from './utils/pilotPaths.js';
 import { mapCronRunOutcome } from '../../src/cron/protocol/types.js';
 import sessionManager from './sessionManager.js';
 import { applyCustomSessionNames } from './database/db.js';
@@ -133,6 +138,9 @@ async function getProjects(progressCallback = null) {
     const gateway = await getPilotDeckGateway();
     const { projects: webProjects } = await gateway.listProjects();
     const markedProjects = await readMarkedProjectPaths();
+    const markedProjectIdsByPath = new Map(
+        [...markedProjects.entries()].map(([id, cwd]) => [path.resolve(cwd), id]),
+    );
 
     // Dedupe by `createProjectId(fullPath)` rather than raw path string.
     // The gateway's heuristic decoder for project ids (which collapses
@@ -151,19 +159,20 @@ async function getProjects(progressCallback = null) {
     for (const project of webProjects) {
         const fullPath = project.fullPath || project.projectKey;
         if (!fullPath) continue;
-        const id = createProjectId(fullPath);
+        const id = markedProjectIdsByPath.get(path.resolve(fullPath)) || createProjectId(fullPath);
         if (!byId.has(id)) {
-            byId.set(id, project);
+            byId.set(id, { ...project, __projectId: id });
         }
     }
-    for (const [, markedCwd] of markedProjects) {
-        const id = createProjectId(markedCwd);
+    for (const [id, markedCwd] of markedProjects) {
         const existing = byId.get(id);
         if (existing) {
             existing.fullPath = markedCwd;
             existing.projectKey = markedCwd;
+            existing.__projectId = id;
         } else {
             byId.set(id, {
+                __projectId: id,
                 fullPath: markedCwd,
                 projectKey: markedCwd,
                 sessionCount: 0,
@@ -177,7 +186,7 @@ async function getProjects(progressCallback = null) {
     for (let index = 0; index < dedupedProjects.length; index += 1) {
         const project = dedupedProjects[index];
         const fullPath = project.fullPath || project.projectKey;
-        const name = createProjectId(fullPath);
+        const name = project.__projectId || createProjectId(fullPath);
         rememberProjectDirectory(name, fullPath);
 
         if (progressCallback) {
@@ -329,6 +338,12 @@ async function extractProjectDirectory(projectName) {
     if (cached) {
         return cached;
     }
+    const markedProjects = await readMarkedProjectPaths();
+    const marked = markedProjects.get(projectName);
+    if (marked) {
+        rememberProjectDirectory(projectName, marked);
+        return marked;
+    }
     if (projectName.startsWith('-')) {
         // Legacy dash-encoding heuristic: `-Users-miwi-foo` → `/Users/miwi/foo`.
         const decoded = '/' + projectName.replace(/^-+/, '').replace(/-/g, '/');
@@ -343,7 +358,8 @@ async function addProjectManually(projectPath, _displayName = null) {
         throw new Error('projectPath is required');
     }
     const absolute = path.resolve(projectPath);
-    const name = createProjectId(absolute);
+    const pilotHome = resolvePilotHome(process.env);
+    const name = await allocateProjectIdForPath(absolute, pilotHome);
     rememberProjectDirectory(name, absolute);
 
     // Materialize a PilotDeck project directory and drop a `.cwd` marker
@@ -356,7 +372,6 @@ async function addProjectManually(projectPath, _displayName = null) {
     // existing directory — which would silently lose workspaces whose
     // real path contains a dash. getProjects() reads `.cwd` to backfill
     // any project listProjects() couldn't recover.
-    const pilotHome = resolvePilotHome(process.env);
     const projectDir = path.join(pilotHome, 'projects', name);
     try {
         await fs.mkdir(projectDir, { recursive: true });
@@ -376,6 +391,33 @@ async function addProjectManually(projectPath, _displayName = null) {
     };
 }
 
+async function allocateProjectIdForPath(absolutePath, pilotHome) {
+    const legacyId = createProjectId(absolutePath);
+    const legacyDir = path.join(pilotHome, 'projects', legacyId);
+    try {
+        await fs.access(legacyDir);
+    } catch (error) {
+        if (error?.code === 'ENOENT') {
+            return legacyId;
+        }
+        throw error;
+    }
+
+    const markerPath = path.join(legacyDir, '.cwd');
+    try {
+        const marker = (await fs.readFile(markerPath, 'utf8')).trim();
+        if (marker && path.resolve(marker) === absolutePath) {
+            return legacyId;
+        }
+    } catch (error) {
+        if (error?.code !== 'ENOENT') {
+            throw error;
+        }
+    }
+
+    return createCollisionResistantProjectId(absolutePath);
+}
+
 async function renameProject(_projectName, _displayName) {
     // PilotDeck does not yet expose a rename API. Display names are derived
     // from the project's basename today, so this is a no-op.
@@ -385,7 +427,7 @@ async function renameProject(_projectName, _displayName) {
 async function deleteSession(projectName, sessionId, _options = {}) {
     const fullPath = await extractProjectDirectory(projectName);
     const pilotHome = resolvePilotHome(process.env);
-    const projectId = createProjectId(fullPath);
+    const projectId = await resolveProjectIdForPathOrName(projectName, fullPath);
     // Try the sanitized filename first (current storage layout), then the
     // raw form (legacy files written before the sanitize fix).
     const safeId = sanitizeSessionIdForPath(sessionId);
@@ -414,7 +456,7 @@ async function deleteSession(projectName, sessionId, _options = {}) {
 async function deleteProject(projectName, force = false) {
     const fullPath = await extractProjectDirectory(projectName);
     const pilotHome = resolvePilotHome(process.env);
-    const projectId = createProjectId(fullPath);
+    const projectId = await resolveProjectIdForPathOrName(projectName, fullPath);
     const projectDir = path.join(pilotHome, 'projects', projectId);
     try {
         await fs.rm(projectDir, { recursive: true, force });
@@ -426,6 +468,20 @@ async function deleteProject(projectName, force = false) {
         }
         throw error;
     }
+}
+
+async function resolveProjectIdForPathOrName(projectName, fullPath) {
+    const markedProjects = await readMarkedProjectPaths();
+    if (projectName && !path.isAbsolute(projectName) && markedProjects.has(projectName)) {
+        return projectName;
+    }
+    const resolved = path.resolve(fullPath);
+    for (const [id, cwd] of markedProjects) {
+        if (path.resolve(cwd) === resolved) {
+            return id;
+        }
+    }
+    return createProjectId(fullPath);
 }
 
 async function getProjectCronJobsOverview(_projectName) {
