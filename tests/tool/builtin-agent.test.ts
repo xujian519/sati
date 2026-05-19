@@ -6,7 +6,7 @@ import {
   type AgentToolOutput,
 } from "../../src/tool/builtin/agent.js";
 import { PilotDeckToolRuntimeError } from "../../src/tool/index.js";
-import { createDefaultPermissionContext } from "../../src/permission/index.js";
+import { PermissionRuntime, createDefaultPermissionContext } from "../../src/permission/index.js";
 import type {
   CanonicalModelEvent,
   CanonicalModelRequest,
@@ -31,13 +31,17 @@ class ScriptedModel implements PilotDeckToolModelClient {
 
 const cwd = "/tmp/proj";
 
-function makeContext(model?: PilotDeckToolModelClient, signal?: AbortSignal): PilotDeckToolRuntimeContext {
+function makeContext(
+  model?: PilotDeckToolModelClient,
+  signal?: AbortSignal,
+  mode: "default" | "plan" = "default",
+): PilotDeckToolRuntimeContext {
   return {
     sessionId: "session-1",
     turnId: "turn-1",
     cwd,
-    permissionMode: "default",
-    permissionContext: createDefaultPermissionContext({ cwd, mode: "default", canPrompt: true }),
+    permissionMode: mode,
+    permissionContext: createDefaultPermissionContext({ cwd, mode, canPrompt: true }),
     abortSignal: signal,
     model,
   };
@@ -85,6 +89,18 @@ test("agent tool canonical schema exports expanded description", () => {
   const schema = registry.toCanonicalSchemas().find((entry) => entry.name === "agent");
   assert.ok(schema);
   assert.match(schema.description ?? "", /Launch a new subagent/);
+});
+
+test("agent tool permission checks allow invocation without prompting in default and plan modes", async () => {
+  const tool = createAgentTool();
+  const runtime = new PermissionRuntime();
+  const input = { description: "delegate", prompt: "investigate" };
+
+  const defaultDecision = await runtime.decide(tool, input, makeContext(undefined, undefined, "default"), "call-default");
+  const planDecision = await runtime.decide(tool, input, makeContext(undefined, undefined, "plan"), "call-plan");
+
+  assert.equal(defaultDecision.type, "allow");
+  assert.equal(planDecision.type, "allow");
 });
 
 test("agent tool default subagentType is general-purpose", async () => {

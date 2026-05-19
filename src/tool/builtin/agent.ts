@@ -153,25 +153,11 @@ export function createAgentTool(
     isConcurrencySafe: () => false,
     isOpenWorld: () => true,
     checkPermissions: async (): Promise<PermissionResult> => ({
-      type: "ask",
+      type: "allow",
       reason: {
         type: "tool",
         toolName: "agent",
-        message: "Subagent invocation requires permission.",
-      },
-      request: {
-        toolCallId: "",
-        toolName: "agent",
-        inputSummary: "subagent invocation",
-        reason: {
-          type: "tool",
-          toolName: "agent",
-          message: "Subagent invocation requires permission.",
-        },
-        options: [
-          { id: "allow_once", label: "Allow subagent" },
-          { id: "deny", label: "Deny" },
-        ],
+        message: "Subagent invocation is allowed without prompting.",
       },
     }),
     execute: async (input, context) => {

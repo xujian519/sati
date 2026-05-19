@@ -128,6 +128,13 @@ test("WIRING B1 ask_user_question tool is registered in the production builtin r
   );
 });
 
+test("WIRING plan-mode tools can be disabled when building a scoped registry", () => {
+  const registry = createBuiltinRegistry({ planMode: false });
+  const names = registry.list().map((t) => t.name);
+  assert.ok(!names.includes("enter_plan_mode"));
+  assert.ok(!names.includes("exit_plan_mode"));
+});
+
 test("WIRING B1 elicitation channel is wired into the AgentLoop tool runtime context", () => {
   // ask_user_question.execute() reads context.elicitation. Even if the tool
   // is registered, the wire is broken unless AgentLoop populates

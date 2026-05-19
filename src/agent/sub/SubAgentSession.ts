@@ -211,6 +211,9 @@ export class SubAgentSession {
     const allowedSet = new Set(this.options.definition.allowedTools);
     const wildcard = allowedSet.has("*");
     for (const tool of this.options.parentDependencies.tools.registry.list()) {
+      if (tool.name === "enter_plan_mode" || tool.name === "exit_plan_mode") {
+        continue; // Subagents must not participate in the plan-mode workflow.
+      }
       if (this.options.definition.id !== "general-purpose" && tool.name === "agent") {
         continue; // S? — explore/plan must not nest-fork
       }
@@ -275,7 +278,6 @@ export class SubAgentSession {
       auditRecorder: this.options.parentDependencies.auditRecorder,
       lifecycle: this.options.parentDependencies.lifecycle,
       subagentTranscript: this.options.parentDependencies.subagentTranscript,
-      planTodoManager: this.options.parentDependencies.planTodoManager,
     };
   }
 

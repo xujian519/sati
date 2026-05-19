@@ -43,6 +43,7 @@ function buildDeps(
   model: ScriptedModel,
   registry: ToolRegistry,
   eventEmitter?: (event: AgentEvent) => void,
+  overrides: Partial<AgentRuntimeDependencies> = {},
 ): AgentRuntimeDependencies {
   const permissions = new PermissionRuntime();
   const toolRuntime = new ToolRuntime(registry, permissions);
@@ -53,7 +54,7 @@ function buildDeps(
   const router = {
     stream: (request: CanonicalModelRequest) => model.stream(request),
   };
-  return { router, tools: { scheduler, registry }, eventEmitter };
+  return { router, tools: { scheduler, registry }, eventEmitter, ...overrides };
 }
 
 function buildConfig(cwd: string): AgentRuntimeConfig {
@@ -219,6 +220,103 @@ test("C2.E2E SubAgentSession scopes the tool registry per definition.allowedTool
   const toolNames = (request?.tools ?? []).map((t) => t.name);
   assert.ok(toolNames.includes("read_file"));
   assert.ok(!toolNames.includes("edit_file"));
+});
+
+test("C2.E2E SubAgentSession strips plan-mode tools and context from general-purpose children", async () => {
+  const events: CanonicalModelEvent[] = [
+    { type: "message_start", role: "assistant" },
+    {
+      type: "tool_call_end",
+      toolCall: {
+        id: "call-probe",
+        name: "probe_context",
+        input: {},
+      },
+    },
+    { type: "message_end", finishReason: "tool_call" },
+    { type: "message_start", role: "assistant" },
+    { type: "text_delta", text: finalReport },
+    { type: "message_end", finishReason: "stop" },
+  ];
+  const model = new ScriptedModel(events);
+  const registry = new ToolRegistry();
+  let capturedPlanFile = false;
+  let capturedPlanTodo = false;
+  registry.register({
+    name: "enter_plan_mode",
+    description: "Enter plan",
+    kind: "session",
+    inputSchema: { type: "object", properties: {}, additionalProperties: true },
+    isReadOnly: () => true,
+    isConcurrencySafe: () => true,
+    execute: async () => ({ content: [{ type: "text", text: "enter" }] }),
+  });
+  registry.register({
+    name: "exit_plan_mode",
+    description: "Exit plan",
+    kind: "session",
+    inputSchema: { type: "object", properties: {}, additionalProperties: true },
+    isReadOnly: () => true,
+    isConcurrencySafe: () => true,
+    execute: async () => ({ content: [{ type: "text", text: "exit" }] }),
+  });
+  registry.register({
+    name: "probe_context",
+    description: "Probe tool context",
+    kind: "session",
+    inputSchema: { type: "object", properties: {}, additionalProperties: true },
+    isReadOnly: () => true,
+    isConcurrencySafe: () => true,
+    execute: async (_input, context) => {
+      capturedPlanFile = Boolean(context.planFile);
+      capturedPlanTodo = Boolean(context.planTodo);
+      return { content: [{ type: "text", text: "probed" }] };
+    },
+  });
+  const config = buildConfig("/tmp/proj");
+  config.permissionMode = "plan";
+  config.permissionContext = createDefaultPermissionContext({
+    cwd: "/tmp/proj",
+    mode: "plan",
+    canPrompt: false,
+  });
+  const deps = buildDeps(model, registry, undefined, {
+    planFileManager: {
+      getPlanFilePath: () => "/tmp/proj/.cursor/plans/parent.plan.md",
+      ensurePlanFile: () => "/tmp/proj/.cursor/plans/parent.plan.md",
+      readPlan: () => "parent plan",
+    } as NonNullable<AgentRuntimeDependencies["planFileManager"]>,
+    planTodoManager: {
+      forSession: () => ({
+        getSnapshot: () => ({ requiresInitialization: false, requiresRefresh: false, todos: [] }),
+        markPlanApproved: () => {},
+        recordTodoWrite: () => {},
+        markToolProgressChanged: () => {},
+        buildPromptAddendum: () => undefined,
+        blockingMessageFor: () => undefined,
+      }),
+    } as NonNullable<AgentRuntimeDependencies["planTodoManager"]>,
+  });
+  const session = new SubAgentSession({
+    definition: SUBAGENT_DEFINITIONS["general-purpose"],
+    directive: "Inspect your tool context.",
+    parentMessages: [{ role: "assistant", content: [{ type: "text", text: "trigger" }] }],
+    parentConfig: config,
+    parentDependencies: deps,
+    parentSessionId: "parent-session",
+    parentTurnId: "parent-turn",
+    subagentSessionId: "sub-planless",
+    subagentId: "uuid-planless",
+  });
+
+  await session.run();
+
+  assert.equal(capturedPlanFile, false);
+  assert.equal(capturedPlanTodo, false);
+  const toolNames = (model.requests[0]?.tools ?? []).map((tool) => tool.name);
+  assert.ok(toolNames.includes("probe_context"));
+  assert.ok(!toolNames.includes("enter_plan_mode"));
+  assert.ok(!toolNames.includes("exit_plan_mode"));
 });
 
 test("C2.E2E SubAgentSession returns empty markdown when no assistant text produced", async () => {
