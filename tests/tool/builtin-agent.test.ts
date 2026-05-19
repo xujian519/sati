@@ -72,6 +72,7 @@ test("agent tool publishes expanded description and public subagent_type docs", 
   assert.match(tool.description, /Launch a new subagent/);
   assert.match(tool.description, /Available built-in subagent types:/);
   assert.match(tool.description, /general-purpose/);
+  assert.match(tool.description, /except nested agent launch/);
   assert.match(tool.description, /Scope`, `Result`, `Key files`, `Files changed`, and `Issues`/);
   assert.match(
     String(tool.inputSchema.properties?.subagent_type?.description),

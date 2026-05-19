@@ -273,6 +273,15 @@ test("C2.E2E SubAgentSession strips plan-mode tools and context from general-pur
       return { content: [{ type: "text", text: "probed" }] };
     },
   });
+  registry.register({
+    name: "agent",
+    description: "Nested subagent launch",
+    kind: "agent",
+    inputSchema: { type: "object", properties: {}, additionalProperties: true },
+    isReadOnly: () => false,
+    isConcurrencySafe: () => false,
+    execute: async () => ({ content: [{ type: "text", text: "nested" }] }),
+  });
   const config = buildConfig("/tmp/proj");
   config.permissionMode = "plan";
   config.permissionContext = createDefaultPermissionContext({
@@ -315,6 +324,7 @@ test("C2.E2E SubAgentSession strips plan-mode tools and context from general-pur
   assert.equal(capturedPlanTodo, false);
   const toolNames = (model.requests[0]?.tools ?? []).map((tool) => tool.name);
   assert.ok(toolNames.includes("probe_context"));
+  assert.ok(!toolNames.includes("agent"));
   assert.ok(!toolNames.includes("enter_plan_mode"));
   assert.ok(!toolNames.includes("exit_plan_mode"));
 });

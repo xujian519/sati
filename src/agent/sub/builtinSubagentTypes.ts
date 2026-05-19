@@ -2,7 +2,8 @@
  * Built-in subagent presets, mirroring legacy `src/tools/AgentTool/built-in/*Agent.ts`.
  *
  * Four presets:
- *   - `general-purpose` — full tool access, claudeMd retained, full read/write.
+ *   - `general-purpose` — broad parent-tool access except nested `agent`
+ *                         dispatch; claudeMd retained, full read/write.
  *   - `explore`         — read-only file inspection (read / grep / glob / bash);
  *                         omits claudeMd & gitStatus from system context.
  *   - `plan`            — read-only planning (read / grep / glob, no bash);
@@ -76,7 +77,7 @@ export const SUBAGENT_DEFINITIONS: Record<SubagentDefinitionId, SubagentDefiniti
   "general-purpose": {
     id: "general-purpose",
     description:
-      "General-purpose subagent for complex research/synthesis tasks. Has full tool access.",
+      "General-purpose subagent for complex research/synthesis tasks. Has broad parent-tool access except nested subagent launch.",
     allowedTools: ["*"],
     omitClaudeMd: false,
     omitGitStatus: false,

@@ -201,7 +201,7 @@ function buildAgentToolDescription(): string {
       const definition = SUBAGENT_DEFINITIONS[id];
       const tools =
         definition.allowedTools[0] === "*"
-          ? "all parent tools"
+          ? "all parent tools except nested agent launch"
           : definition.allowedTools.join(", ");
       return `- ${id}: ${definition.description} Tools: ${tools}.`;
     })

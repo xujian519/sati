@@ -214,8 +214,8 @@ export class SubAgentSession {
       if (tool.name === "enter_plan_mode" || tool.name === "exit_plan_mode") {
         continue; // Subagents must not participate in the plan-mode workflow.
       }
-      if (this.options.definition.id !== "general-purpose" && tool.name === "agent") {
-        continue; // S? — explore/plan must not nest-fork
+      if (tool.name === "agent") {
+        continue; // Subagents must never nest-fork.
       }
       if (this.options.definition.isReadOnly && tool.isDestructive?.({} as never) === true) {
         continue; // S9 — read-only subagents reject destructive tools outright
