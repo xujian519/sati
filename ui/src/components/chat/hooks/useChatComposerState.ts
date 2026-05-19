@@ -60,7 +60,7 @@ interface UseChatComposerStateArgs {
   onLaunchAlwaysOnPlanExecution?: ((execution: ExecuteDiscoveryPlanResponse) => void | Promise<void>) | null;
   pendingViewSessionRef: { current: PendingViewSession | null };
   scrollToBottom: () => void;
-  addMessage: (msg: ChatMessage) => void;
+  addMessage: (msg: ChatMessage, targetSessionId?: string | null) => void;
   clearMessages: () => void;
   rewindMessages: (count: number) => void;
   setIsLoading: (loading: boolean) => void;
@@ -639,6 +639,17 @@ export function useChatComposerState({
         messageContent = `${selectedThinkingMode.prefix}: ${userVisibleInput}`;
       }
 
+      // Pin the target session before any await so attachment upload cannot
+      // race with a sidebar session switch and leak the optimistic bubble.
+      const pendingSessionIdAtSubmit = pendingViewSessionRef.current?.sessionId ?? null;
+      const canResumeCurrentSession =
+        Boolean(currentSessionId) &&
+        (Boolean(selectedSession?.id) || pendingSessionIdAtSubmit === currentSessionId);
+      const submitTargetSessionId =
+        selectedSession?.id ||
+        (canResumeCurrentSession ? currentSessionId : null);
+      const submitSelectedSession = selectedSession;
+
       let uploadedImages: unknown[] = [];
       let uploadedFiles: UploadedAttachmentFile[] = [];
       if (attachedImages.length > 0) {
@@ -668,20 +679,14 @@ export function useChatComposerState({
             type: 'error',
             content: `Failed to upload attachments: ${message}`,
             timestamp: new Date(),
-          });
+          }, submitTargetSessionId);
           return;
         }
       }
 
       messageContent = `${messageContent}${buildAttachmentPathNote(uploadedFiles)}`;
 
-      const pendingSessionId = pendingViewSessionRef.current?.sessionId ?? null;
-      const canResumeCurrentSession =
-        Boolean(currentSessionId) &&
-        (Boolean(selectedSession?.id) || pendingSessionId === currentSessionId);
-      const effectiveSessionId =
-        selectedSession?.id ||
-        (canResumeCurrentSession ? currentSessionId : null);
+      const effectiveSessionId = submitTargetSessionId;
       const sessionToActivate = effectiveSessionId || createTemporarySessionId();
 
       const userMessage: ChatMessage = {
@@ -692,7 +697,7 @@ export function useChatComposerState({
         timestamp: new Date(),
       };
 
-      addMessage(userMessage);
+      addMessage(userMessage, submitTargetSessionId);
       setIsLoading(true); // Processing banner starts
       setCanAbortSession(true);
       setClaudeStatus({
@@ -704,7 +709,7 @@ export function useChatComposerState({
       setIsUserScrolledUp(false);
       setTimeout(() => scrollToBottom(), 100);
 
-      if (!effectiveSessionId && !selectedSession?.id) {
+      if (!effectiveSessionId && !submitSelectedSession?.id) {
         if (typeof window !== 'undefined') {
           // Reset stale pending IDs from previous interrupted runs before creating a new one.
           sessionStorage.removeItem('pendingSessionId');
@@ -738,7 +743,7 @@ export function useChatComposerState({
       };
 
       const toolsSettings = getToolsSettings();
-      const sessionSummary = getNotificationSessionSummary(selectedSession, userVisibleInput);
+      const sessionSummary = getNotificationSessionSummary(submitSelectedSession, userVisibleInput);
 
       startSessionCommand({
         sendMessage,

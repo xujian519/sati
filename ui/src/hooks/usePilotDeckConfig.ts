@@ -57,40 +57,71 @@ export function usePilotDeckConfig() {
   // Users may be typing in the <textarea> when an external edit arrives.
   // Track local edits so we don't clobber unsaved input.
   const savedRawRef = useRef<string>('');
-  const [isDirty, setIsDirty] = useState(false);
-  // Mirror `isDirty` into a ref so the WS-message effect can read the
-  // current value WITHOUT subscribing to it. Subscribing would re-run
-  // the effect every time the user types one character, which would
-  // re-apply the last cached `config:reloaded` payload and silently
-  // revert their unsaved edits — exactly the "form fields stop
-  // accepting input + unsaved badge flickers" bug.
+  const rawRef = useRef(raw);
+  rawRef.current = raw;
+
+  // Derive dirty from the draft vs last-saved snapshot so the Save button
+  // can't desync from the textarea (especially in Raw YAML mode).
+  const isDirty = raw !== savedRawRef.current;
+
+  // Mirror dirty into a ref so the WS-message effect can read the current
+  // value WITHOUT subscribing to `raw` (which would re-apply stale payloads
+  // on every keystroke).
   const isDirtyRef = useRef(isDirty);
-  useEffect(() => {
-    isDirtyRef.current = isDirty;
-  }, [isDirty]);
+  isDirtyRef.current = isDirty;
 
   const { latestMessage } = useWebSocket();
-  // Apply each `config:reloaded` broadcast exactly once. Without this,
-  // any unrelated re-render that re-evaluates the deps below would
-  // re-run applyResponse against a stale-but-still-current
-  // `latestMessage` object reference.
+  const latestMessageRef = useRef(latestMessage);
+  latestMessageRef.current = latestMessage;
+
+  // Apply each `config:reloaded` broadcast exactly once.
   const lastAppliedMessageRef = useRef<unknown>(null);
+  const initialLoadDoneRef = useRef(false);
+  const validateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const pinLatestConfigReloadMessage = useCallback(() => {
+    const message = latestMessageRef.current;
+    if (message?.type === 'config:reloaded') {
+      lastAppliedMessageRef.current = message;
+    }
+  }, []);
 
   const applyResponse = useCallback((data: ConfigResponse, source: ReloadSource = 'refresh') => {
     setPath(data.path);
     setRaw(data.raw);
     savedRawRef.current = data.raw;
-    setIsDirty(false);
     setExists(data.exists);
     setValidation(data.validation);
     setReload((data.reload as ConfigReload | undefined) ?? null);
     setLastReloadInfo({ source, at: Date.now() });
   }, []);
 
+  const scheduleValidation = useCallback((value: string) => {
+    if (validateTimerRef.current) {
+      clearTimeout(validateTimerRef.current);
+    }
+    validateTimerRef.current = setTimeout(() => {
+      void (async () => {
+        try {
+          const response = await authenticatedFetch('/api/config/validate', {
+            method: 'POST',
+            body: JSON.stringify({ raw: value }),
+          });
+          const data = await response.json();
+          if (data && typeof data.valid === 'boolean') {
+            setValidation(data as ConfigValidation);
+          }
+        } catch {
+          // Validation is advisory for the editor — save still goes to PUT.
+        }
+      })();
+    }, 400);
+  }, []);
+
   const updateRaw = useCallback((value: string) => {
     setRaw(value);
-    setIsDirty(value !== savedRawRef.current);
-  }, []);
+    scheduleValidation(value);
+  }, [scheduleValidation]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -100,23 +131,28 @@ export function usePilotDeckConfig() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to load config');
       applyResponse(data, 'refresh');
+      initialLoadDoneRef.current = true;
+      pinLatestConfigReloadMessage();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to load config');
     } finally {
       setLoading(false);
     }
-  }, [applyResponse]);
+  }, [applyResponse, pinLatestConfigReloadMessage]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => () => {
+    if (validateTimerRef.current) {
+      clearTimeout(validateTimerRef.current);
+    }
+  }, []);
+
   useEffect(() => {
+    if (!initialLoadDoneRef.current) return;
     if (!latestMessage || latestMessage.type !== 'config:reloaded') return;
-    // Each new WS frame produces a new object reference; if we've
-    // already applied this one, skip — otherwise we'd re-write `raw`
-    // every time a sibling state (e.g. isDirty, focus state) caused a
-    // re-render and React re-evaluated this effect's body.
     if (lastAppliedMessageRef.current === latestMessage) return;
     lastAppliedMessageRef.current = latestMessage;
 
@@ -126,14 +162,10 @@ export function usePilotDeckConfig() {
     };
     const source: ReloadSource = payload.source ?? 'watcher';
 
-    // If the user has unsaved changes, preserve them and just surface a notice.
-    // Read isDirty via ref so this effect doesn't subscribe to it (see
-    // isDirtyRef declaration above for why).
     if (isDirtyRef.current && source === 'watcher') {
       setExternalChangeNotice(
         'Config was changed on disk by an external edit. Your unsaved draft is kept — click Refresh to discard and load the new version.',
       );
-      // Still update validation/reload summary (non-destructive fields)
       setValidation(payload.validation);
       setReload((payload.reload as ConfigReload | undefined) ?? null);
       setPath(payload.path);
@@ -160,17 +192,19 @@ export function usePilotDeckConfig() {
   }, [latestMessage, applyResponse]);
 
   const save = useCallback(async () => {
+    const draft = rawRef.current;
     setSaving(true);
     setError(null);
     setMessage(null);
     try {
       const response = await authenticatedFetch('/api/config', {
         method: 'PUT',
-        body: JSON.stringify({ raw }),
+        body: JSON.stringify({ raw: draft }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || data.validation?.errors?.join(', ') || 'Failed to save config');
       applyResponse(data, 'ui-save');
+      pinLatestConfigReloadMessage();
       setMessage('Saved and reloaded');
       setExternalChangeNotice(null);
     } catch (caught) {
@@ -178,7 +212,7 @@ export function usePilotDeckConfig() {
     } finally {
       setSaving(false);
     }
-  }, [applyResponse, raw]);
+  }, [applyResponse, pinLatestConfigReloadMessage]);
 
   const reloadConfig = useCallback(async () => {
     setSaving(true);
@@ -189,13 +223,14 @@ export function usePilotDeckConfig() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to reload config');
       applyResponse(data, 'ui-reload');
+      pinLatestConfigReloadMessage();
       setMessage('Reloaded current config');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to reload config');
     } finally {
       setSaving(false);
     }
-  }, [applyResponse]);
+  }, [applyResponse, pinLatestConfigReloadMessage]);
 
   const openFile = useCallback(async () => {
     setOpening(true);
