@@ -1,5 +1,15 @@
 export { SkillManager, SkillManagerError, SkillValidationError } from "./SkillManager.js";
 export type { SkillManagerOptions } from "./SkillManager.js";
+export { migrateSkillsToPilotDeck } from "./migrateSkills.js";
+export type {
+  MigrateSkillsToPilotDeckOptions,
+  SkillMigrationConflictMode,
+  SkillMigrationItem,
+  SkillMigrationItemStatus,
+  SkillMigrationReport,
+  SkillMigrationSource,
+  SkillMigrationSourceKind,
+} from "./migrateSkills.js";
 export type {
   SkillAddressInput,
   SkillCreateInput,

@@ -3,7 +3,8 @@
  * Smoke test: connect to the running PilotDeck Gateway server via the same
  * `RemoteGateway` path the TUI uses, run one turn, dump every event we see.
  * If this prints a `turn_completed`, the entire wire (WS frames →
- * SessionRouter → AgentSession → AgentLoop → ModelRuntime → yeysai) is healthy.
+ * SessionRouter → AgentSession → AgentLoop → ModelRuntime → upstream provider)
+ * is healthy.
  */
 import { connectRemoteGatewayIfAvailable } from "../dist/src/gateway/index.js";
 

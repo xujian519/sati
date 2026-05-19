@@ -4,6 +4,12 @@ import { createAlwaysOnManager, type AlwaysOnManager, type AlwaysOnConfig } from
 import { createCronRuntime, type CronRuntime, type CronConfig } from "../cron/index.js";
 import { connectRemoteGatewayIfAvailable, type Gateway, type GatewayEvent, type GatewaySubmitTurnInput } from "../gateway/index.js";
 import { CliChannel, TuiChannel, FeishuChannel } from "../adapters/index.js";
+import {
+  migrateSkillsToPilotDeck,
+  type SkillMigrationConflictMode,
+  type SkillMigrationItem,
+  type SkillMigrationSourceKind,
+} from "../extension/skills/index.js";
 import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
 import { createLocalGateway } from "./createLocalGateway.js";
 import { startPilotDeckServer } from "./pilotdeckServer.js";
@@ -191,6 +197,11 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
+  if (command === "skills") {
+    await handleSkillsCommand(argv.slice(1));
+    return;
+  }
+
   if (command === "tui") {
     if (!process.stdin.isTTY) {
       console.error("pilotdeck tui requires an interactive terminal.");
@@ -288,6 +299,97 @@ async function handleCronCommand(argv: string[]): Promise<void> {
   process.exitCode = 1;
 }
 
+async function handleSkillsCommand(argv: string[]): Promise<void> {
+  const command = argv[0];
+  if (command !== "migrate") {
+    console.error("Usage: pilotdeck skills migrate [--execute] [--from cc,openclaw,hermes] [--source <dir>] [--overwrite|--rename]");
+    process.exitCode = 1;
+    return;
+  }
+
+  const from = parseSkillMigrationSources(readStringFlag(argv, "--from"));
+  const conflictMode: SkillMigrationConflictMode = argv.includes("--overwrite")
+    ? "overwrite"
+    : argv.includes("--rename")
+      ? "rename"
+      : "skip";
+  const projectRoot = readStringFlag(argv, "--project") ?? process.cwd();
+  const pilotHome = readStringFlag(argv, "--pilot-home") ?? resolvePilotHome(process.env);
+  const report = await migrateSkillsToPilotDeck({
+    pilotHome,
+    projectRoot,
+    include: from,
+    customSources: readRepeatedStringFlag(argv, "--source"),
+    execute: argv.includes("--execute"),
+    conflictMode,
+  });
+
+  if (argv.includes("--json")) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+
+  printSkillMigrationReport(report);
+  if (report.summary.error > 0) {
+    process.exitCode = 1;
+  }
+}
+
+function parseSkillMigrationSources(value: string | undefined): Array<Exclude<SkillMigrationSourceKind, "custom">> | undefined {
+  if (!value) return undefined;
+  const sources: Array<Exclude<SkillMigrationSourceKind, "custom">> = [];
+  for (const raw of value.split(",")) {
+    const normalized = raw.trim().toLowerCase();
+    if (!normalized) continue;
+    if (normalized === "cc" || normalized === "claude" || normalized === "claude-code") {
+      sources.push("claude-code");
+    } else if (normalized === "openclaw") {
+      sources.push("openclaw");
+    } else if (normalized === "hermes") {
+      sources.push("hermes");
+    } else if (normalized === "all") {
+      sources.push("claude-code", "openclaw", "hermes");
+    } else {
+      throw new Error(`Unknown skills source "${raw}". Use cc, openclaw, hermes, or all.`);
+    }
+  }
+  return sources.length > 0 ? [...new Set(sources)] : undefined;
+}
+
+function printSkillMigrationReport(report: Awaited<ReturnType<typeof migrateSkillsToPilotDeck>>): void {
+  const mode = report.mode === "execute" ? "EXECUTED" : "DRY RUN";
+  console.log(`PilotDeck skills migration (${mode})`);
+  console.log(`Target: ${report.targetRoot}`);
+  console.log(
+    `Summary: migrated=${report.summary.migrated} would_migrate=${report.summary.would_migrate} ` +
+      `conflict=${report.summary.conflict} skipped=${report.summary.skipped} error=${report.summary.error}`,
+  );
+
+  const actionable = report.items.filter((item) => item.status !== "skipped");
+  if (actionable.length > 0) {
+    console.log("");
+    for (const item of actionable) {
+      console.log(`${formatSkillMigrationStatus(item)} ${item.sourceLabel}: ${item.slug || "(n/a)"}`);
+      console.log(`  ${item.sourcePath}`);
+      if (item.destinationPath) console.log(`  -> ${item.destinationPath}`);
+      if (item.reason) console.log(`  ${item.reason}`);
+    }
+  }
+
+  if (report.mode === "dry-run") {
+    console.log("");
+    console.log("This was a dry run. Add --execute to copy skills.");
+  }
+}
+
+function formatSkillMigrationStatus(item: SkillMigrationItem): string {
+  if (item.status === "migrated") return "+";
+  if (item.status === "would_migrate") return "?";
+  if (item.status === "conflict") return "!";
+  if (item.status === "error") return "x";
+  return "-";
+}
+
 function readPort(argv: string[]): number | undefined {
   const index = argv.indexOf("--port");
   if (index === -1) {
@@ -305,6 +407,16 @@ function readStringFlag(argv: string[], flag: string): string | undefined {
   }
   const value = argv[index + 1];
   return value && !value.startsWith("--") ? value : undefined;
+}
+
+function readRepeatedStringFlag(argv: string[], flag: string): string[] {
+  const values: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] !== flag) continue;
+    const value = argv[i + 1];
+    if (value && !value.startsWith("--")) values.push(value);
+  }
+  return values;
 }
 
 function readNumberFlag(argv: string[], flag: string): number | undefined {
