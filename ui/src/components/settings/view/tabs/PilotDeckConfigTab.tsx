@@ -541,28 +541,28 @@ function AdvancedSection({ config, onChange }: { config: PilotDeckConfig; onChan
       description={t('edgeClawConfig.panels.runtime.description')}
     >
       <SettingsCard divided>
-        <FormRow label="Host" description="Bind interface for the HTTP/WebSocket server.">
+        <FormRow label={t('edgeClawConfig.panels.runtime.fields.host.label')} description={t('edgeClawConfig.panels.runtime.fields.host.description')}>
           <TextInput value={r.host} placeholder="0.0.0.0" onChange={(v) => set('host', v)} />
         </FormRow>
-        <FormRow label="Server port" description="Express + WebSocket port.">
+        <FormRow label={t('edgeClawConfig.panels.runtime.fields.serverPort.label')} description={t('edgeClawConfig.panels.runtime.fields.serverPort.description')}>
           <NumberInput value={r.serverPort} placeholder="3001" onChange={(v) => set('serverPort', v)} />
         </FormRow>
-        <FormRow label="Vite port" description="Frontend dev server (only used when running `npm run dev`).">
+        <FormRow label={t('edgeClawConfig.panels.runtime.fields.vitePort.label')} description={t('edgeClawConfig.panels.runtime.fields.vitePort.description')}>
           <NumberInput value={r.vitePort} placeholder="5173" onChange={(v) => set('vitePort', v)} />
         </FormRow>
-        <FormRow label="Proxy port" description="Local LLM proxy (PilotDeck agent target).">
+        <FormRow label={t('edgeClawConfig.panels.runtime.fields.proxyPort.label')} description={t('edgeClawConfig.panels.runtime.fields.proxyPort.description')}>
           <NumberInput value={r.proxyPort} placeholder="18080" onChange={(v) => set('proxyPort', v)} />
         </FormRow>
-        <FormRow label="API timeout (ms)" description="Per-request upstream timeout.">
+        <FormRow label={t('edgeClawConfig.panels.runtime.fields.apiTimeout.label')} description={t('edgeClawConfig.panels.runtime.fields.apiTimeout.description')}>
           <NumberInput value={r.apiTimeoutMs} placeholder="120000" onChange={(v) => set('apiTimeoutMs', v)} />
         </FormRow>
-        <FormRow label="Database path" description="SQLite auth/projects database (~ expands to home).">
+        <FormRow label={t('edgeClawConfig.panels.runtime.fields.databasePath.label')} description={t('edgeClawConfig.panels.runtime.fields.databasePath.description')}>
           <TextInput value={r.databasePath} placeholder="~/.pilotdeck/auth.db" monospace onChange={(v) => set('databasePath', v)} />
         </FormRow>
-        <FormRow label="Workspaces root" description="Directory under which projects are scanned.">
+        <FormRow label={t('edgeClawConfig.panels.runtime.fields.workspacesRoot.label')} description={t('edgeClawConfig.panels.runtime.fields.workspacesRoot.description')}>
           <TextInput value={r.workspacesRoot} placeholder="~" monospace onChange={(v) => set('workspacesRoot', v)} />
         </FormRow>
-        <FormRow label="HTTPS proxy" description="Outbound HTTPS proxy URL (HTTPS_PROXY / https_proxy).">
+        <FormRow label={t('edgeClawConfig.panels.runtime.fields.httpsProxy.label')} description={t('edgeClawConfig.panels.runtime.fields.httpsProxy.description')}>
           <TextInput value={r.httpsProxy} placeholder="http://127.0.0.1:7890" monospace onChange={(v) => set('httpsProxy', v)} />
         </FormRow>
       </SettingsCard>
@@ -589,6 +589,7 @@ function ProviderCard({
   activeModelRef: string;
   onSetActive: (modelRef: string) => void;
 }) {
+  const { t } = useTranslation('settings');
   const isMaskedKey = isMaskedSecret(provider.apiKey);
   const protocol = provider.protocol ?? catalogEntry?.protocol ?? 'openai';
   const effectiveUrl = provider.url || catalogEntry?.defaultUrl || '';
@@ -807,7 +808,7 @@ function ProviderCard({
                 type="button"
                 onClick={() => removeModel(mid)}
                 className="text-muted-foreground hover:text-destructive"
-                title="Remove"
+                title={t('edgeClawConfig.actions.remove')}
               >
                 <Trash2 className="h-3 w-3" />
               </button>
@@ -1254,7 +1255,7 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
       description={t('edgeClawConfig.panels.agents.description')}
     >
       <SettingsCard divided>
-        <FormRow label="Main agent model" description="Used by the primary chat agent. Reference an enabled provider/model from the Models section.">
+        <FormRow label={t('edgeClawConfig.panels.agents.mainModel.label')} description={t('edgeClawConfig.panels.agents.mainModel.description')}>
           <Select
             value={mainRef}
             options={mainOptions}
@@ -1266,12 +1267,12 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
           <div className="px-4 py-3">
             <div className="rounded-md border border-border/60 bg-muted/30 p-3">
               <div className="mb-2 text-xs font-medium text-foreground">
-                Active model capabilities
+                {t('edgeClawConfig.panels.agents.capabilities.title')}
               </div>
               <div className="flex flex-wrap items-center gap-3 text-xs">
                 <span className="inline-flex items-center gap-1.5">
                   <ImageIcon className="h-3.5 w-3.5" />
-                  Image input
+                  {t('edgeClawConfig.panels.agents.capabilities.imageInput')}
                 </span>
                 <label className="inline-flex items-center gap-2">
                   <input
@@ -1286,7 +1287,7 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
                       ? 'border border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300'
                       : 'border border-border bg-muted text-muted-foreground',
                   )}>
-                    {supportsImageEffective ? 'Enabled' : 'Disabled'}
+                    {supportsImageEffective ? t('edgeClawConfig.panels.agents.capabilities.enabled') : t('edgeClawConfig.panels.agents.capabilities.disabled')}
                   </span>
                 </label>
                 {userOverrideActive && (
@@ -1295,24 +1296,24 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
                     onClick={clearOverride}
                     className="text-[10px] text-muted-foreground underline hover:text-foreground"
                   >
-                    reset to catalog default
+                    {t('edgeClawConfig.panels.agents.capabilities.resetCatalog')}
                   </button>
                 )}
               </div>
               <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
                 {userOverrideActive
-                  ? 'Override active — your yaml explicitly defines this model\'s multimodal.input.'
+                  ? t('edgeClawConfig.panels.agents.capabilities.overrideActive')
                   : caps.catalogModel
-                    ? `Default from catalog: ${caps.catalogModel.supportsImage ? 'supports image input.' : 'text only.'}`
-                    : 'No catalog entry — defaulting to text only. Toggle to override.'}
-                {' '}If the upstream model server doesn\'t actually accept images, enabling this will produce upstream errors at request time.
+                    ? (caps.catalogModel.supportsImage ? t('edgeClawConfig.panels.agents.capabilities.catalogSupportsImage') : t('edgeClawConfig.panels.agents.capabilities.catalogTextOnly'))
+                    : t('edgeClawConfig.panels.agents.capabilities.noCatalog')}
+                {' '}{t('edgeClawConfig.panels.agents.capabilities.imageWarning')}
               </p>
 
               <div className="mt-3 border-t border-border/60 pt-3">
                 <div className="flex flex-wrap items-center gap-3 text-xs">
                   <span className="inline-flex items-center gap-1.5">
                     <Gauge className="h-3.5 w-3.5" />
-                    Max output tokens
+                    {t('edgeClawConfig.panels.agents.capabilities.maxOutputTokens')}
                   </span>
                   <input
                     type="number"
@@ -1333,7 +1334,7 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
                       ? 'border border-foreground/30 bg-foreground/10 text-foreground'
                       : 'border border-border bg-muted text-muted-foreground',
                   )}>
-                    {caps.maxOutputTokensOverride !== undefined ? 'Override' : 'Default'}
+                    {caps.maxOutputTokensOverride !== undefined ? t('edgeClawConfig.panels.agents.capabilities.override') : t('edgeClawConfig.panels.agents.capabilities.default')}
                   </span>
                   {caps.maxOutputTokensOverride !== undefined && (
                     <button
@@ -1341,12 +1342,12 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
                       onClick={() => setMaxOutputTokens(undefined)}
                       className="text-[10px] text-muted-foreground underline hover:text-foreground"
                     >
-                      reset to default
+                      {t('edgeClawConfig.panels.agents.capabilities.resetDefault')}
                     </button>
                   )}
                 </div>
                 <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-                  Cap on tokens the model may generate per turn (sent as <code className="font-mono">max_tokens</code> to upstream). Leave empty to fall back to the catalog or protocol default (typically 8192 for openai). Increase this for long-form creative tasks or thinking models that burn output budget while reasoning — too small a value cuts the response off mid-stream and the UI then appears stuck.
+                  {t('edgeClawConfig.panels.agents.capabilities.maxOutputDescription')}
                 </p>
               </div>
 
@@ -1354,7 +1355,7 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
                 <div className="flex flex-wrap items-center gap-3 text-xs">
                   <span className="inline-flex items-center gap-1.5">
                     <Gauge className="h-3.5 w-3.5" />
-                    Max context tokens
+                    {t('edgeClawConfig.panels.agents.capabilities.maxContextTokens')}
                   </span>
                   <input
                     type="number"
@@ -1382,7 +1383,7 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
                       ? 'border border-foreground/30 bg-foreground/10 text-foreground'
                       : 'border border-border bg-muted text-muted-foreground',
                   )}>
-                    {config.agent?.maxContextTokens !== undefined ? 'Override' : 'Default'}
+                    {config.agent?.maxContextTokens !== undefined ? t('edgeClawConfig.panels.agents.capabilities.override') : t('edgeClawConfig.panels.agents.capabilities.default')}
                   </span>
                   {config.agent?.maxContextTokens !== undefined && (
                     <button
@@ -1394,12 +1395,12 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
                       }}
                       className="text-[10px] text-muted-foreground underline hover:text-foreground"
                     >
-                      reset to default
+                      {t('edgeClawConfig.panels.agents.capabilities.resetDefault')}
                     </button>
                   )}
                 </div>
                 <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-                  Override the model&apos;s context window size for auto-compaction. The agent automatically compresses conversation history when usage reaches 80% (warning) or 95% (blocking) of this budget. Leave empty to use the catalog default. Set a smaller value to trigger compaction earlier — useful for proxy providers or to reduce per-turn cost.
+                  {t('edgeClawConfig.panels.agents.capabilities.maxContextDescription')}
                 </p>
               </div>
             </div>
@@ -1412,11 +1413,11 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
             onClick={() => setShowSubagents(!showSubagents)}
             className="text-xs text-muted-foreground hover:text-foreground"
           >
-            {showSubagents ? 'Hide' : 'Show'} subagent settings
+            {showSubagents ? t('edgeClawConfig.panels.agents.subagents.hide') : t('edgeClawConfig.panels.agents.subagents.show')} {t('edgeClawConfig.panels.agents.subagents.toggle')}
           </button>
         </div>
         {showSubagents && (
-          <FormRow label="Subagents default" description="Used by tool-spawned subagents (e.g. tasks).">
+          <FormRow label={t('edgeClawConfig.panels.agents.subagents.label')} description={t('edgeClawConfig.panels.agents.subagents.description')}>
             <Select
               value={subDefault}
               options={subOptions}
@@ -1473,7 +1474,7 @@ function CustomEnvSection({ config, onChange }: { config: PilotDeckConfig; onCha
       <SettingsCard className="space-y-3 p-4">
         {entries.length === 0 && (
           <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-            No custom environment variables configured.
+            {t('edgeClawConfig.panels.customEnv.empty')}
           </div>
         )}
         {entries.map(([key, value]) => {
@@ -1489,7 +1490,7 @@ function CustomEnvSection({ config, onChange }: { config: PilotDeckConfig; onCha
                 <span className="text-muted-foreground">=</span>
                 <SecretTextInput
                   value={value}
-                  emptyPlaceholder="value"
+                  placeholder={isMasked ? t('edgeClawConfig.panels.customEnv.existingValueKept') : 'value'}
                   monospace
                   className="min-w-0 flex-1"
                   onChange={(v) => setEnv(key, v)}
@@ -1498,7 +1499,7 @@ function CustomEnvSection({ config, onChange }: { config: PilotDeckConfig; onCha
                   type="button"
                   onClick={() => removeEnv(key)}
                   className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                  title="Remove"
+                  title={t('edgeClawConfig.actions.remove')}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -1506,7 +1507,7 @@ function CustomEnvSection({ config, onChange }: { config: PilotDeckConfig; onCha
               {isMasked && (
                 <div className="ml-[216px] flex items-center gap-1 text-[11px] text-muted-foreground">
                   <Info className="h-3 w-3" />
-                  Value hidden; leave as-is to keep, retype to replace.
+                  {t('edgeClawConfig.panels.customEnv.valueHidden')}
                 </div>
               )}
             </div>
@@ -1514,7 +1515,7 @@ function CustomEnvSection({ config, onChange }: { config: PilotDeckConfig; onCha
         })}
 
         <div className="border-t border-border pt-3">
-          <div className="mb-2 text-xs font-medium text-foreground">Add variable</div>
+          <div className="mb-2 text-xs font-medium text-foreground">{t('edgeClawConfig.panels.customEnv.addVariable')}</div>
           <div className="flex items-center gap-2">
             <input
               value={newKey}
@@ -1533,14 +1534,14 @@ function CustomEnvSection({ config, onChange }: { config: PilotDeckConfig; onCha
             />
             <Button variant="outline" size="sm" className="shrink-0" onClick={addEntry} disabled={!newKey.trim()}>
               <Plus className="mr-1 h-3.5 w-3.5" />
-              Add
+              {t('edgeClawConfig.panels.customEnv.add')}
             </Button>
           </div>
         </div>
 
         {unusedWellKnown.length > 0 && (
           <div className="border-t border-border pt-3">
-            <div className="mb-2 text-xs text-muted-foreground">Quick add common keys:</div>
+            <div className="mb-2 text-xs text-muted-foreground">{t('edgeClawConfig.panels.customEnv.quickAddKeys')}</div>
             <div className="flex flex-wrap gap-1.5">
               {unusedWellKnown.map((wk) => (
                 <button
@@ -1592,12 +1593,12 @@ function AlwaysOnSection({
         {/* General */}
         <SettingsCard>
           <SettingsRow
-            label="Enabled"
-            description="Master switch for Always-On background agent."
+            label={t('edgeClawConfig.panels.alwaysOn.enabled.label')}
+            description={t('edgeClawConfig.panels.alwaysOn.enabled.description')}
           >
             <SettingsToggle
               checked={enabled}
-              ariaLabel="Toggle Always-On"
+              ariaLabel={t('edgeClawConfig.panels.alwaysOn.enabled.label')}
               onChange={(value) => onChange(patch(config, ['alwaysOn', 'enabled'], value))}
             />
           </SettingsRow>
@@ -1612,51 +1613,51 @@ function AlwaysOnSection({
             >
               <SettingsCard divided>
                 <SettingsRow
-                  label="Auto discovery"
-                  description="When enabled, Always-On periodically inspects opted-in workspaces and proposes follow-up plans."
+                  label={t('edgeClawConfig.panels.alwaysOn.trigger.autoDiscovery.label')}
+                  description={t('edgeClawConfig.panels.alwaysOn.trigger.autoDiscovery.description')}
                 >
                   <SettingsToggle
                     checked={trigger.enabled === true}
-                    ariaLabel="Toggle automatic discovery"
+                    ariaLabel={t('edgeClawConfig.panels.alwaysOn.trigger.autoDiscovery.label')}
                     onChange={(value) => onChange(patch(config, ['alwaysOn', 'trigger', 'enabled'], value))}
                   />
                 </SettingsRow>
-                <FormRow label="Tick interval (minutes)" description="How often the daemon checks opted-in workspaces.">
+                <FormRow label={t('edgeClawConfig.panels.alwaysOn.trigger.tickInterval.label')} description={t('edgeClawConfig.panels.alwaysOn.trigger.tickInterval.description')}>
                   <NumberInput
                     value={trigger.tickIntervalMinutes}
                     placeholder="5"
                     onChange={(value) => onChange(patch(config, ['alwaysOn', 'trigger', 'tickIntervalMinutes'], value))}
                   />
                 </FormRow>
-                <FormRow label="Cooldown (minutes)" description="Minimum time between discovery runs per workspace.">
+                <FormRow label={t('edgeClawConfig.panels.alwaysOn.trigger.cooldown.label')} description={t('edgeClawConfig.panels.alwaysOn.trigger.cooldown.description')}>
                   <NumberInput
                     value={trigger.cooldownMinutes}
                     placeholder="60"
                     onChange={(value) => onChange(patch(config, ['alwaysOn', 'trigger', 'cooldownMinutes'], value))}
                   />
                 </FormRow>
-                <FormRow label="Daily budget" description="Maximum automatic discovery runs per workspace per day.">
+                <FormRow label={t('edgeClawConfig.panels.alwaysOn.trigger.dailyBudget.label')} description={t('edgeClawConfig.panels.alwaysOn.trigger.dailyBudget.description')}>
                   <NumberInput
                     value={trigger.dailyBudget}
                     placeholder="4"
                     onChange={(value) => onChange(patch(config, ['alwaysOn', 'trigger', 'dailyBudget'], value))}
                   />
                 </FormRow>
-                <FormRow label="Heartbeat stale (seconds)" description="Heartbeats older than this are considered stale.">
+                <FormRow label={t('edgeClawConfig.panels.alwaysOn.trigger.heartbeatStale.label')} description={t('edgeClawConfig.panels.alwaysOn.trigger.heartbeatStale.description')}>
                   <NumberInput
                     value={trigger.heartbeatStaleSeconds}
                     placeholder="90"
                     onChange={(value) => onChange(patch(config, ['alwaysOn', 'trigger', 'heartbeatStaleSeconds'], value))}
                   />
                 </FormRow>
-                <FormRow label="Recent user msg (minutes)" description="Only fire if the user sent a message within this window.">
+                <FormRow label={t('edgeClawConfig.panels.alwaysOn.trigger.recentUserMsg.label')} description={t('edgeClawConfig.panels.alwaysOn.trigger.recentUserMsg.description')}>
                   <NumberInput
                     value={trigger.recentUserMsgMinutes}
                     placeholder="5"
                     onChange={(value) => onChange(patch(config, ['alwaysOn', 'trigger', 'recentUserMsgMinutes'], value))}
                   />
                 </FormRow>
-                <FormRow label="Preferred channel" description="Channel the discovery agent prefers to interact through.">
+                <FormRow label={t('edgeClawConfig.panels.alwaysOn.trigger.preferChannel.label')} description={t('edgeClawConfig.panels.alwaysOn.trigger.preferChannel.description')}>
                   <Select
                     value={trigger.preferChannel}
                     onChange={(value) => onChange(patch(config, ['alwaysOn', 'trigger', 'preferChannel'], value))}
@@ -1676,23 +1677,23 @@ function AlwaysOnSection({
             >
               <SettingsCard divided>
                 <SettingsRow
-                  label="Enabled"
-                  description="Suppress discovery fires while the workspace has recent file changes."
+                  label={t('edgeClawConfig.panels.alwaysOn.dormancy.enabled.label')}
+                  description={t('edgeClawConfig.panels.alwaysOn.dormancy.enabled.description')}
                 >
                   <SettingsToggle
                     checked={dormancy.enabled !== false}
-                    ariaLabel="Toggle dormancy"
+                    ariaLabel={t('edgeClawConfig.panels.alwaysOn.dormancy.enabled.label')}
                     onChange={(value) => onChange(patch(config, ['alwaysOn', 'dormancy', 'enabled'], value))}
                   />
                 </SettingsRow>
-                <FormRow label="Debounce (ms)" description="Wait this long after the last file change before resuming.">
+                <FormRow label={t('edgeClawConfig.panels.alwaysOn.dormancy.debounce.label')} description={t('edgeClawConfig.panels.alwaysOn.dormancy.debounce.description')}>
                   <NumberInput
                     value={dormancy.debounceMs}
                     placeholder="2000"
                     onChange={(value) => onChange(patch(config, ['alwaysOn', 'dormancy', 'debounceMs'], value))}
                   />
                 </FormRow>
-                <FormRow label="Ignore globs" description="File patterns excluded from dormancy detection, one per line.">
+                <FormRow label={t('edgeClawConfig.panels.alwaysOn.dormancy.ignoreGlobs.label')} description={t('edgeClawConfig.panels.alwaysOn.dormancy.ignoreGlobs.description')}>
                   <textarea
                     value={(dormancy.ignoreGlobs ?? []).join('\n')}
                     placeholder={"**/.git/**\n**/node_modules/**\n**/.pilotdeck/**\n**/dist/**\n**/.DS_Store"}
@@ -1713,7 +1714,7 @@ function AlwaysOnSection({
               description={t('edgeClawConfig.panels.alwaysOn.workspace.description')}
             >
               <SettingsCard divided>
-                <FormRow label="Git worktree base dir" description="Root directory for git worktree-based isolation.">
+                <FormRow label={t('edgeClawConfig.panels.alwaysOn.workspace.gitWorktree.label')} description={t('edgeClawConfig.panels.alwaysOn.workspace.gitWorktree.description')}>
                   <TextInput
                     value={workspace.gitWorktreeBaseDir}
                     placeholder="(auto)"
@@ -1721,7 +1722,7 @@ function AlwaysOnSection({
                     onChange={(v) => onChange(patch(config, ['alwaysOn', 'workspace', 'gitWorktreeBaseDir'], v || undefined))}
                   />
                 </FormRow>
-                <FormRow label="Snapshot base dir" description="Root directory for snapshot-based isolation.">
+                <FormRow label={t('edgeClawConfig.panels.alwaysOn.workspace.snapshotDir.label')} description={t('edgeClawConfig.panels.alwaysOn.workspace.snapshotDir.description')}>
                   <TextInput
                     value={workspace.snapshotBaseDir}
                     placeholder="(auto)"
@@ -1729,7 +1730,7 @@ function AlwaysOnSection({
                     onChange={(v) => onChange(patch(config, ['alwaysOn', 'workspace', 'snapshotBaseDir'], v || undefined))}
                   />
                 </FormRow>
-                <FormRow label="Snapshot max bytes" description="Maximum size of a workspace snapshot.">
+                <FormRow label={t('edgeClawConfig.panels.alwaysOn.workspace.snapshotMaxBytes.label')} description={t('edgeClawConfig.panels.alwaysOn.workspace.snapshotMaxBytes.description')}>
                   <NumberInput
                     value={workspace.snapshotMaxBytes}
                     placeholder="1073741824"
@@ -1737,12 +1738,12 @@ function AlwaysOnSection({
                   />
                 </FormRow>
                 <SettingsRow
-                  label="Git LFS"
-                  description="Include Git LFS objects in workspace snapshots."
+                  label={t('edgeClawConfig.panels.alwaysOn.workspace.gitLfs.label')}
+                  description={t('edgeClawConfig.panels.alwaysOn.workspace.gitLfs.description')}
                 >
                   <SettingsToggle
                     checked={workspace.gitLfs === true}
-                    ariaLabel="Toggle Git LFS"
+                    ariaLabel={t('edgeClawConfig.panels.alwaysOn.workspace.gitLfs.label')}
                     onChange={(value) => onChange(patch(config, ['alwaysOn', 'workspace', 'gitLfs'], value))}
                   />
                 </SettingsRow>
@@ -1755,21 +1756,21 @@ function AlwaysOnSection({
               description={t('edgeClawConfig.panels.alwaysOn.execution.description')}
             >
               <SettingsCard divided>
-                <FormRow label="Max turns" description="Maximum number of agent turns per run.">
+                <FormRow label={t('edgeClawConfig.panels.alwaysOn.execution.maxTurns.label')} description={t('edgeClawConfig.panels.alwaysOn.execution.maxTurns.description')}>
                   <NumberInput
                     value={execution.maxTurns}
                     placeholder="30"
                     onChange={(value) => onChange(patch(config, ['alwaysOn', 'execution', 'maxTurns'], value))}
                   />
                 </FormRow>
-                <FormRow label="Max tool calls" description="Maximum total tool calls per run.">
+                <FormRow label={t('edgeClawConfig.panels.alwaysOn.execution.maxToolCalls.label')} description={t('edgeClawConfig.panels.alwaysOn.execution.maxToolCalls.description')}>
                   <NumberInput
                     value={execution.maxToolCalls}
                     placeholder="200"
                     onChange={(value) => onChange(patch(config, ['alwaysOn', 'execution', 'maxToolCalls'], value))}
                   />
                 </FormRow>
-                <FormRow label="Timeout (minutes)" description="Hard timeout for each run.">
+                <FormRow label={t('edgeClawConfig.panels.alwaysOn.execution.timeout.label')} description={t('edgeClawConfig.panels.alwaysOn.execution.timeout.description')}>
                   <NumberInput
                     value={execution.timeoutMinutes}
                     placeholder="20"
@@ -1787,7 +1788,7 @@ function AlwaysOnSection({
               <SettingsCard divided>
                 {projectRows.length === 0 ? (
                   <div className="px-4 py-6 text-sm text-muted-foreground">
-                    No recognized projects yet. Add or open a workspace first.
+                    {t('edgeClawConfig.panels.alwaysOn.workspaceOptIn.empty')}
                   </div>
                 ) : (
                   projectRows.map(({ project, root }) => (
@@ -2132,6 +2133,7 @@ function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange:
 }
 
 function ModelPricingEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
   const pricing = config.router?.stats?.modelPricing ?? {};
   const keys = Object.keys(pricing);
   const [newKey, setNewKey] = useState('');
@@ -2155,16 +2157,15 @@ function ModelPricingEditor({ config, onChange }: { config: PilotDeckConfig; onC
   return (
     <SettingsCard className="space-y-3 p-4">
       <div>
-        <div className="text-sm font-semibold text-foreground">Model Pricing</div>
+        <div className="text-sm font-semibold text-foreground">{t('edgeClawConfig.panels.router.pricing.title')}</div>
         <div className="mt-0.5 text-xs text-muted-foreground">
-          Custom pricing per model ($/million tokens). Used when the API doesn't report cost.
-          Key format: <code className="rounded bg-muted px-1 text-[11px]">provider/model</code> or partial model name.
+          {t('edgeClawConfig.panels.router.pricing.description')}
         </div>
       </div>
 
       {keys.length === 0 && (
         <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-          No custom pricing configured. Built-in defaults cover common models (DeepSeek, Claude, GPT, Gemini, GLM, Qwen, Llama, etc).
+          {t('edgeClawConfig.panels.router.pricing.empty')}
         </div>
       )}
 
@@ -2178,22 +2179,22 @@ function ModelPricingEditor({ config, onChange }: { config: PilotDeckConfig; onC
                 type="button"
                 onClick={() => removePricing(key)}
                 className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                title="Remove"
+                title={t('edgeClawConfig.actions.remove')}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <label className="text-xs text-muted-foreground">
-                <span className="mb-1 block">Input $/M</span>
+                <span className="mb-1 block">{t('edgeClawConfig.panels.router.pricing.inputPerM')}</span>
                 <NumberInput value={entry.input} placeholder="0.50" onChange={(v) => setPricing(key, 'input', v)} />
               </label>
               <label className="text-xs text-muted-foreground">
-                <span className="mb-1 block">Output $/M</span>
+                <span className="mb-1 block">{t('edgeClawConfig.panels.router.pricing.outputPerM')}</span>
                 <NumberInput value={entry.output} placeholder="1.50" onChange={(v) => setPricing(key, 'output', v)} />
               </label>
               <label className="text-xs text-muted-foreground">
-                <span className="mb-1 block">Cache $/M</span>
+                <span className="mb-1 block">{t('edgeClawConfig.panels.router.pricing.cachePerM')}</span>
                 <NumberInput value={entry.cacheRead} placeholder="0" onChange={(v) => setPricing(key, 'cacheRead', v)} />
               </label>
             </div>
@@ -2202,7 +2203,7 @@ function ModelPricingEditor({ config, onChange }: { config: PilotDeckConfig; onC
       })}
 
       <div className="border-t border-border pt-3">
-        <div className="mb-2 text-xs font-medium text-foreground">Add model pricing</div>
+        <div className="mb-2 text-xs font-medium text-foreground">{t('edgeClawConfig.panels.router.pricing.addTitle')}</div>
         <div className="flex items-center gap-2">
           <input
             value={newKey}
@@ -2213,7 +2214,7 @@ function ModelPricingEditor({ config, onChange }: { config: PilotDeckConfig; onC
           />
           <Button variant="outline" size="sm" className="shrink-0" onClick={addPricing} disabled={!newKey.trim()}>
             <Plus className="mr-1 h-3.5 w-3.5" />
-            Add
+            {t('edgeClawConfig.panels.router.pricing.add')}
           </Button>
         </div>
       </div>
@@ -2222,6 +2223,7 @@ function ModelPricingEditor({ config, onChange }: { config: PilotDeckConfig; onC
 }
 
 function RouterScenarioEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
   const scenarios = config.router?.scenarios ?? {};
   const entries = Object.entries(scenarios);
   const modelOpts = buildModelRefOptions(config);
@@ -2244,14 +2246,14 @@ function RouterScenarioEditor({ config, onChange }: { config: PilotDeckConfig; o
   return (
     <SettingsCard className="space-y-3 p-4">
       <div>
-        <div className="text-sm font-semibold text-foreground">Scenarios</div>
+        <div className="text-sm font-semibold text-foreground">{t('edgeClawConfig.panels.router.scenarios.title')}</div>
         <div className="mt-0.5 text-xs text-muted-foreground">
-          Map scenario names to models. <code className="rounded bg-muted px-1 text-[11px]">default</code> is the primary route.
+          {t('edgeClawConfig.panels.router.scenarios.description')}
         </div>
       </div>
       {entries.length === 0 && (
         <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-          No scenarios configured.
+          {t('edgeClawConfig.panels.router.scenarios.empty')}
         </div>
       )}
       {entries.map(([key, model]) => (
@@ -2264,7 +2266,7 @@ function RouterScenarioEditor({ config, onChange }: { config: PilotDeckConfig; o
             type="button"
             onClick={() => removeScenario(key)}
             className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            title="Remove"
+            title={t('edgeClawConfig.actions.remove')}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -2281,7 +2283,7 @@ function RouterScenarioEditor({ config, onChange }: { config: PilotDeckConfig; o
           />
           <Button variant="outline" size="sm" className="shrink-0" onClick={addScenario} disabled={!newKey.trim()}>
             <Plus className="mr-1 h-3.5 w-3.5" />
-            Add
+            {t('edgeClawConfig.panels.router.scenarios.add')}
           </Button>
         </div>
       </div>
@@ -2290,6 +2292,7 @@ function RouterScenarioEditor({ config, onChange }: { config: PilotDeckConfig; o
 }
 
 function RouterFallbackEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
   const fallback = config.router?.fallback ?? {};
   const entries = Object.entries(fallback);
   const modelOpts = buildModelRefOptions(config);
@@ -2312,14 +2315,14 @@ function RouterFallbackEditor({ config, onChange }: { config: PilotDeckConfig; o
   return (
     <SettingsCard className="space-y-3 p-4">
       <div>
-        <div className="text-sm font-semibold text-foreground">Fallback Chains</div>
+        <div className="text-sm font-semibold text-foreground">{t('edgeClawConfig.panels.router.fallback.title')}</div>
         <div className="mt-0.5 text-xs text-muted-foreground">
-          Ordered fallback models per scenario. If the primary fails, the router tries the next.
+          {t('edgeClawConfig.panels.router.fallback.description')}
         </div>
       </div>
       {entries.length === 0 && (
         <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-          No fallback chains configured.
+          {t('edgeClawConfig.panels.router.fallback.empty')}
         </div>
       )}
       {entries.map(([scenario, chain]) => (
@@ -2330,7 +2333,7 @@ function RouterFallbackEditor({ config, onChange }: { config: PilotDeckConfig; o
               type="button"
               onClick={() => removeChain(scenario)}
               className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              title="Remove"
+              title={t('edgeClawConfig.actions.remove')}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -2354,7 +2357,7 @@ function RouterFallbackEditor({ config, onChange }: { config: PilotDeckConfig; o
                   type="button"
                   onClick={() => setChain(scenario, chain.filter((_, i) => i !== idx))}
                   className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                  title="Remove model"
+                  title={t('edgeClawConfig.actions.removeModel')}
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>
@@ -2366,7 +2369,7 @@ function RouterFallbackEditor({ config, onChange }: { config: PilotDeckConfig; o
               className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
             >
               <Plus className="h-3 w-3" />
-              Add fallback model
+              {t('edgeClawConfig.panels.router.fallback.addModel')}
             </button>
           </div>
         </div>
@@ -2382,7 +2385,7 @@ function RouterFallbackEditor({ config, onChange }: { config: PilotDeckConfig; o
           />
           <Button variant="outline" size="sm" className="shrink-0" onClick={addChain} disabled={!newKey.trim()}>
             <Plus className="mr-1 h-3.5 w-3.5" />
-            Add
+            {t('edgeClawConfig.panels.router.fallback.add')}
           </Button>
         </div>
       </div>
@@ -2405,6 +2408,7 @@ const DEFAULT_RULES: string[] = [
 ];
 
 function TokenSaverTierEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
   const tiers = config.router?.tokenSaver?.tiers ?? {};
   const entries = Object.entries(tiers);
   const modelOpts = buildModelRefOptions(config);
@@ -2431,9 +2435,9 @@ function TokenSaverTierEditor({ config, onChange }: { config: PilotDeckConfig; o
   return (
     <div className="space-y-3">
       <div>
-        <div className="text-xs font-semibold text-foreground">Tiers</div>
+        <div className="text-xs font-semibold text-foreground">{t('edgeClawConfig.panels.router.tiers.title')}</div>
         <div className="mt-0.5 text-[11px] text-muted-foreground">
-          Complexity tiers the judge can route to. Pick a model for each — descriptions are pre-filled.
+          {t('edgeClawConfig.panels.router.tiers.description')}
         </div>
       </div>
       {entries.map(([key, tier]) => (
@@ -2447,7 +2451,7 @@ function TokenSaverTierEditor({ config, onChange }: { config: PilotDeckConfig; o
               type="button"
               onClick={() => removeTier(key)}
               className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              title="Remove"
+              title={t('edgeClawConfig.actions.remove')}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -2455,7 +2459,7 @@ function TokenSaverTierEditor({ config, onChange }: { config: PilotDeckConfig; o
           <textarea
             value={tier.description ?? ''}
             onChange={(e) => setTier(key, 'description', e.target.value)}
-            placeholder="Describe when the judge should pick this tier…"
+            placeholder={t('edgeClawConfig.panels.router.tiers.placeholder')}
             rows={2}
             className="w-full resize-y rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
           />
@@ -2472,7 +2476,7 @@ function TokenSaverTierEditor({ config, onChange }: { config: PilotDeckConfig; o
           />
           <Button variant="outline" size="sm" className="shrink-0" onClick={addTier} disabled={!newKey.trim()}>
             <Plus className="mr-1 h-3.5 w-3.5" />
-            Add
+            {t('edgeClawConfig.panels.router.tiers.add')}
           </Button>
         </div>
       </div>
@@ -2481,6 +2485,7 @@ function TokenSaverTierEditor({ config, onChange }: { config: PilotDeckConfig; o
 }
 
 function TokenSaverRulesEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
   const rules = config.router?.tokenSaver?.rules ?? [];
   const [newRule, setNewRule] = useState('');
 
@@ -2500,10 +2505,10 @@ function TokenSaverRulesEditor({ config, onChange }: { config: PilotDeckConfig; 
 
   return (
     <div className="space-y-2">
-      <div className="text-xs font-semibold text-foreground">Judge Rules</div>
+      <div className="text-xs font-semibold text-foreground">{t('edgeClawConfig.panels.router.rules.title')}</div>
       {rules.length === 0 && (
         <div className="rounded-md border border-dashed border-border px-3 py-3 text-center text-xs text-muted-foreground">
-          No custom rules. The judge uses tier descriptions only.
+          {t('edgeClawConfig.panels.router.rules.empty')}
         </div>
       )}
       {rules.map((rule, idx) => (
@@ -2518,7 +2523,7 @@ function TokenSaverRulesEditor({ config, onChange }: { config: PilotDeckConfig; 
             type="button"
             onClick={() => removeRule(idx)}
             className="mt-1 shrink-0 rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            title="Remove"
+            title={t('edgeClawConfig.actions.remove')}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -2528,13 +2533,13 @@ function TokenSaverRulesEditor({ config, onChange }: { config: PilotDeckConfig; 
         <input
           value={newRule}
           onChange={(e) => setNewRule(e.target.value)}
-          placeholder="Add a rule for the judge…"
+          placeholder={t('edgeClawConfig.panels.router.rules.placeholder')}
           className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
           onKeyDown={(e) => { if (e.key === 'Enter') addRule(); }}
         />
         <Button variant="outline" size="sm" className="shrink-0" onClick={addRule} disabled={!newRule.trim()}>
           <Plus className="mr-1 h-3.5 w-3.5" />
-          Add
+          {t('edgeClawConfig.panels.router.rules.add')}
         </Button>
       </div>
     </div>
@@ -2564,12 +2569,12 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
         {/* ── Master toggle ─────────────────────────────────────────── */}
         <SettingsCard divided>
           <SettingsRow
-            label="Enabled"
-            description="When on, agents use the router instead of the configured provider directly."
+            label={t('edgeClawConfig.panels.router.enabled.label')}
+            description={t('edgeClawConfig.panels.router.enabled.description')}
           >
             <SettingsToggle
               checked={enabled}
-              ariaLabel="Toggle router"
+              ariaLabel={t('edgeClawConfig.panels.router.enabled.label')}
               onChange={(v) => {
                 let next = patch(config, ['router', 'enabled'], v);
                 // Seed `scenarios.default` on enable if missing so the
@@ -2602,17 +2607,17 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
             {/* ── Zero-usage retry ───────────────────────────────────── */}
             <SettingsCard divided>
               <SettingsRow
-                label="Zero-usage retry"
-                description="Automatically retry when the upstream returns a response with zero tokens used."
+                label={t('edgeClawConfig.panels.router.zeroUsageRetry.label')}
+                description={t('edgeClawConfig.panels.router.zeroUsageRetry.description')}
               >
                 <SettingsToggle
                   checked={Boolean(zr.enabled)}
-                  ariaLabel="Toggle zero-usage retry"
+                  ariaLabel={t('edgeClawConfig.panels.router.zeroUsageRetry.label')}
                   onChange={(v) => onChange(patch(config, ['router', 'zeroUsageRetry', 'enabled'], v))}
                 />
               </SettingsRow>
               {zr.enabled && (
-                <FormRow label="Max attempts" description="Maximum retry attempts before giving up.">
+                <FormRow label={t('edgeClawConfig.panels.router.zeroUsageRetry.maxAttempts.label')} description={t('edgeClawConfig.panels.router.zeroUsageRetry.maxAttempts.description')}>
                   <NumberInput
                     value={zr.maxAttempts}
                     placeholder="5"
@@ -2626,14 +2631,14 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
             <SettingsCard className="space-y-4 p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm font-semibold text-foreground">Token Saver</div>
+                  <div className="text-sm font-semibold text-foreground">{t('edgeClawConfig.panels.router.tokenSaver.title')}</div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
-                    A lightweight judge classifies each turn into a tier and routes it to a cost-appropriate model.
+                    {t('edgeClawConfig.panels.router.tokenSaver.description')}
                   </div>
                 </div>
                 <SettingsToggle
                   checked={Boolean(ts.enabled)}
-                  ariaLabel="Toggle token saver"
+                  ariaLabel={t('edgeClawConfig.panels.router.tokenSaver.title')}
                   onChange={(v) => {
                     let next = patch(config, ['router', 'tokenSaver', 'enabled'], v);
                     if (v && Object.keys(next.router?.tokenSaver?.tiers ?? {}).length === 0) {
@@ -2662,7 +2667,7 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
                 <div className="space-y-4 border-t border-border pt-4">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-foreground">Judge model</label>
+                      <label className="mb-1 block text-xs font-medium text-foreground">{t('edgeClawConfig.panels.router.tokenSaver.judgeModel')}</label>
                       <ModelRefInput
                         value={ts.judge ?? ''}
                         options={modelOpts}
@@ -2670,7 +2675,7 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-foreground">Default tier</label>
+                      <label className="mb-1 block text-xs font-medium text-foreground">{t('edgeClawConfig.panels.router.tokenSaver.defaultTier')}</label>
                       <Select
                         value={ts.defaultTier ?? 'medium'}
                         options={
@@ -2682,14 +2687,14 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
                       />
                     </div>
                   </div>
-                  <FormRow label="Judge timeout (ms)" description="Maximum time to wait for the judge decision.">
+                  <FormRow label={t('edgeClawConfig.panels.router.tokenSaver.judgeTimeout.label')} description={t('edgeClawConfig.panels.router.tokenSaver.judgeTimeout.description')}>
                     <NumberInput
                       value={ts.judgeTimeoutMs}
                       placeholder="15000"
                       onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'judgeTimeoutMs'], v))}
                     />
                   </FormRow>
-                  <FormRow label="Sub-agent policy" description="How sub-agents are routed: 'judge' re-evaluates each sub-agent turn, 'inherit' reuses the parent tier.">
+                  <FormRow label={t('edgeClawConfig.panels.router.tokenSaver.subagentPolicy.label')} description={t('edgeClawConfig.panels.router.tokenSaver.subagentPolicy.description')}>
                     <Select
                       value={ts.subagent?.policy ?? 'judge'}
                       options={[
@@ -2710,14 +2715,14 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
             <SettingsCard className="space-y-4 p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm font-semibold text-foreground">Auto Orchestrate</div>
+                  <div className="text-sm font-semibold text-foreground">{t('edgeClawConfig.panels.router.autoOrchestrate.title')}</div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
-                    Automatically fan out complex turns into parallel sub-agents when the judge assigns certain tiers.
+                    {t('edgeClawConfig.panels.router.autoOrchestrate.description')}
                   </div>
                 </div>
                 <SettingsToggle
                   checked={Boolean(ao.enabled)}
-                  ariaLabel="Toggle auto orchestrate"
+                  ariaLabel={t('edgeClawConfig.panels.router.autoOrchestrate.title')}
                   onChange={(v) => onChange(patch(config, ['router', 'autoOrchestrate', 'enabled'], v))}
                 />
               </div>
@@ -2725,7 +2730,7 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
               {ao.enabled && (
                 <div className="space-y-3 border-t border-border pt-4">
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-foreground">Trigger tiers</label>
+                    <label className="mb-1 block text-xs font-medium text-foreground">{t('edgeClawConfig.panels.router.autoOrchestrate.triggerTiers')}</label>
                     <div className="mt-1 flex flex-wrap gap-2">
                       {(availableTierNames.length > 0 ? availableTierNames : [...TIER_PRESETS]).map((tier) => {
                         const active = (ao.triggerTiers ?? []).includes(tier);
@@ -2752,12 +2757,12 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
                     </div>
                   </div>
                   <SettingsRow
-                    label="Slim system prompt"
-                    description="Use a shorter system prompt for orchestrated sub-agents to save tokens."
+                    label={t('edgeClawConfig.panels.router.autoOrchestrate.slimPrompt.label')}
+                    description={t('edgeClawConfig.panels.router.autoOrchestrate.slimPrompt.description')}
                   >
                     <SettingsToggle
                       checked={Boolean(ao.slimSystemPrompt)}
-                      ariaLabel="Toggle slim system prompt"
+                      ariaLabel={t('edgeClawConfig.panels.router.autoOrchestrate.slimPrompt.label')}
                       onChange={(v) => onChange(patch(config, ['router', 'autoOrchestrate', 'slimSystemPrompt'], v))}
                     />
                   </SettingsRow>
@@ -2768,12 +2773,12 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
             {/* ── Stats ──────────────────────────────────────────────── */}
             <SettingsCard divided>
               <SettingsRow
-                label="Stats collection"
-                description="Track token usage and cost per session. Powers the Dashboard tab."
+                label={t('edgeClawConfig.panels.router.stats.label')}
+                description={t('edgeClawConfig.panels.router.stats.description')}
               >
                 <SettingsToggle
                   checked={statsEnabled}
-                  ariaLabel="Toggle stats"
+                  ariaLabel={t('edgeClawConfig.panels.router.stats.label')}
                   onChange={(v) => onChange(patch(config, ['router', 'stats', 'enabled'], v))}
                 />
               </SettingsRow>
@@ -2796,15 +2801,15 @@ function GatewaySection({ config, onChange }: { config: PilotDeckConfig; onChang
       description={t('edgeClawConfig.panels.gateway.description')}
     >
       <SettingsCard divided>
-        <SettingsRow label="Enabled" description="When on, the gateway home is generated and channels with credentials come online.">
+        <SettingsRow label={t('edgeClawConfig.panels.gateway.enabled.label')} description={t('edgeClawConfig.panels.gateway.enabled.description')}>
           <SettingsToggle
             checked={Boolean(g.enabled)}
-            ariaLabel="Toggle gateway"
+            ariaLabel={t('edgeClawConfig.panels.gateway.enabled.label')}
             onChange={(v) => onChange(patch(config, ['gateway', 'enabled'], v))}
           />
         </SettingsRow>
         {g.enabled && (
-          <FormRow label="Gateway home" description="Working directory for gateway state and per-channel configs.">
+          <FormRow label={t('edgeClawConfig.panels.gateway.home.label')} description={t('edgeClawConfig.panels.gateway.home.description')}>
             <TextInput value={g.home} placeholder="~/.pilotdeck/gateway" monospace onChange={(v) => onChange(patch(config, ['gateway', 'home'], v))} />
           </FormRow>
         )}
@@ -2827,6 +2832,7 @@ function RawYamlView({
   externalChangeNotice: string | null;
   dismissExternalNotice: () => void;
 }) {
+  const { t } = useTranslation('settings');
   return (
     <div className="space-y-4">
       {externalChangeNotice && (
@@ -2837,7 +2843,7 @@ function RawYamlView({
             onClick={dismissExternalNotice}
             className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide hover:bg-amber-500/20"
           >
-            Dismiss
+            {t('edgeClawConfig.actions.dismiss')}
           </button>
         </div>
       )}
@@ -2854,19 +2860,19 @@ function RawYamlView({
         {validation?.valid ? (
           <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            Config is valid {isDirty && <span className="text-muted-foreground">(unsaved)</span>}
+            {t('edgeClawConfig.rawYaml.configValid')} {isDirty && <span className="text-muted-foreground">{t('edgeClawConfig.rawYaml.unsaved')}</span>}
           </div>
         ) : (
           <div className="flex items-center gap-2 text-xs text-destructive">
             <AlertCircle className="h-3.5 w-3.5" />
-            Config has validation errors
+            {t('edgeClawConfig.rawYaml.configInvalid')}
           </div>
         )}
       </div>
 
       {validation && validation.errors.length > 0 && (
         <div className="text-destructive">
-          <div className="mb-1 text-xs font-semibold">Errors</div>
+          <div className="mb-1 text-xs font-semibold">{t('edgeClawConfig.rawYaml.errors')}</div>
           <ul className="list-disc space-y-1 pl-4 text-xs">
             {validation.errors.map((item) => <li key={item}>{item}</li>)}
           </ul>
@@ -2874,7 +2880,7 @@ function RawYamlView({
       )}
       {validation && validation.warnings.length > 0 && (
         <div className="text-amber-600 dark:text-amber-400">
-          <div className="mb-1 text-xs font-semibold">Warnings</div>
+          <div className="mb-1 text-xs font-semibold">{t('edgeClawConfig.rawYaml.warnings')}</div>
           <ul className="list-disc space-y-1 pl-4 text-xs">
             {validation.warnings.map((item) => <li key={item}>{item}</li>)}
           </ul>
@@ -3025,13 +3031,13 @@ export default function PilotDeckConfigTab({ projects = [] }: { projects?: Setti
               onClick={dismissExternalNotice}
               className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide hover:bg-amber-500/20"
             >
-              Dismiss
+              {t('edgeClawConfig.actions.dismiss')}
             </button>
           </div>
         )}
         {parseError && view === 'form' && (
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-            YAML on disk failed to parse — switch to Raw YAML to fix it.
+            {t('edgeClawConfig.rawYaml.yamlParseError')}
           </div>
         )}
       </SettingsCard>
@@ -3075,7 +3081,7 @@ export default function PilotDeckConfigTab({ projects = [] }: { projects?: Setti
               </>
             ) : (
               <SettingsCard className="p-6 text-sm text-muted-foreground">
-                Could not parse the YAML on disk. Switch to <strong className="font-medium text-foreground">Raw YAML</strong> to inspect and fix it.
+                {t('edgeClawConfig.rawYaml.cannotParse', { rawYaml: '' })}<strong className="font-medium text-foreground">{t('edgeClawConfig.rawYaml.rawYaml')}</strong>
               </SettingsCard>
             )}
 
@@ -3087,12 +3093,12 @@ export default function PilotDeckConfigTab({ projects = [] }: { projects?: Setti
               {validation?.valid ? (
                 <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  Config is valid {isDirty && <span className="text-muted-foreground">(unsaved)</span>}
+                  {t('edgeClawConfig.rawYaml.configValid')} {isDirty && <span className="text-muted-foreground">{t('edgeClawConfig.rawYaml.unsaved')}</span>}
                 </div>
               ) : (
                 <div className="flex items-center gap-2 text-xs text-destructive">
                   <AlertCircle className="h-3.5 w-3.5" />
-                  Config has validation errors — see below
+                  {t('edgeClawConfig.rawYaml.configInvalidSeeBelow')}
                 </div>
               )}
               {validation && validation.errors.length > 0 && (
@@ -3146,11 +3152,11 @@ export default function PilotDeckConfigTab({ projects = [] }: { projects?: Setti
         <div className="pointer-events-none min-h-9 flex-1" aria-hidden />
         <Button type="button" variant="outline" size="sm" onClick={reloadConfig} disabled={saving}>
           <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-          Reload current
+          {t('edgeClawConfig.actions.reloadCurrent')}
         </Button>
         <Button type="button" size="sm" onClick={save} disabled={saving || !isDirty}>
           <Save className="mr-1.5 h-3.5 w-3.5" />
-          {saving ? 'Saving...' : 'Save & reload'}
+          {saving ? t('edgeClawConfig.actions.saving') : t('edgeClawConfig.actions.saveAndReload')}
         </Button>
       </div>
     </div>
