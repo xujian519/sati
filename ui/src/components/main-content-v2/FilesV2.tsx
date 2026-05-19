@@ -106,6 +106,13 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
     folderInputRef.current?.setAttribute('directory', '');
   }, []);
 
+  useEffect(() => {
+    if (!uploadMenuOpen) return;
+    const dismiss = () => setUploadMenuOpen(false);
+    window.addEventListener('click', dismiss);
+    return () => window.removeEventListener('click', dismiss);
+  }, [uploadMenuOpen]);
+
   const flat = useMemo(() => flatten(files, expanded), [files, expanded]);
 
   const projectName = selectedProject?.name ?? '';
@@ -531,7 +538,7 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
           <div className="relative">
             <button
               type="button"
-              onClick={() => setUploadMenuOpen((open) => !open)}
+              onClick={(e) => { e.stopPropagation(); setUploadMenuOpen((open) => !open); }}
               disabled={uploadingProject}
               className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-50 dark:text-neutral-300 dark:hover:bg-neutral-900"
               title={t('fileTree.upload', { defaultValue: 'Upload files or folder' }) as string}
@@ -544,7 +551,7 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
               )}
             </button>
             {uploadMenuOpen ? (
-              <div className="absolute right-0 top-8 z-20 w-36 overflow-hidden rounded-md border border-neutral-200 bg-white py-1 text-[12px] shadow-lg dark:border-neutral-800 dark:bg-neutral-950">
+              <div className="absolute left-0 top-8 z-20 w-36 rounded-md border border-neutral-200 bg-white py-1 text-[12px] shadow-lg dark:border-neutral-800 dark:bg-neutral-950">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
