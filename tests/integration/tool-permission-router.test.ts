@@ -98,6 +98,44 @@ test("plan mode allows read-only tools", async () => {
   assert.deepEqual(calls, ["read"]);
 });
 
+test("plan mode allows read-only tools that hardcode checkPermissions ask", async () => {
+  const calls: string[] = [];
+  const readTool = createPilotDeckTestTool({
+    name: "web_search",
+    readOnly: true,
+    kind: "network",
+    permissionResult: {
+      type: "ask",
+      reason: { type: "tool", toolName: "web_search", message: "Network search requires permission." },
+      request: {
+        toolCallId: "",
+        toolName: "web_search",
+        inputSummary: "web search",
+        reason: { type: "tool", toolName: "web_search", message: "Network search requires permission." },
+        options: [
+          { id: "allow_once", label: "Allow once" },
+          { id: "deny", label: "Deny" },
+        ],
+      },
+    },
+    execute: async () => { calls.push("search"); return { content: [{ type: "text", text: "results" }] }; },
+  });
+  const { loop } = createAgentLoopFixture({
+    scripts: toolCallThenReply("web_search", {}, "here are the results"),
+    tools: [readTool],
+    permissionMode: "plan",
+    canPrompt: false,
+  });
+  const { result } = await collectAsyncGenerator(
+    loop.run({
+      sessionId: "s1", turnId: "t1", maxTurns: 3,
+      messages: [{ role: "user", content: [{ type: "text", text: "search the web" }] }],
+    }),
+  );
+  assert.equal(result.result.type, "success");
+  assert.deepEqual(calls, ["search"]);
+});
+
 test("plan mode blocks write tools", async () => {
   const writeTool = createPilotDeckTestTool({
     name: "write_file",

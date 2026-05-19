@@ -90,6 +90,13 @@ export class PermissionRuntime {
             message: `Permission mode ${permissionContext.mode} overrides ${tool.name}.checkPermissions ask.`,
           });
         }
+        if (permissionContext.mode === "plan" && tool.isReadOnly(input)) {
+          return allow({
+            type: "mode",
+            mode: "plan",
+            message: `Plan mode allows read-only tool ${tool.name} despite .checkPermissions ask.`,
+          });
+        }
         return finalizeAsk(toolDecision, permissionContext);
       }
       return toolDecision;

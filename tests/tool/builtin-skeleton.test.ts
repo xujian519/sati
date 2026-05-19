@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  __setWebFetchHookForTesting,
   buildMcpToolWireName,
+  clearWebFetchCache,
   createAskUserQuestionTool,
   createEnterPlanModeTool,
   createExitPlanModeTool,
@@ -76,6 +78,54 @@ test("web skeleton tools ask for network permission without provider execution",
   assert.equal(searchResult.type, "error");
   if (fetchResult.type === "error") assert.equal(fetchResult.error.code, "permission_required");
   if (searchResult.type === "error") assert.equal(searchResult.error.code, "permission_required");
+});
+
+test("web skeleton tools execute in plan mode without permission_required", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({});
+  t.after(() => workspace.cleanup());
+  clearWebFetchCache();
+  __setWebFetchHookForTesting(async () => ({
+    status: 200,
+    statusText: "OK",
+    headers: { "content-type": "text/html" },
+    arrayBuffer: async () => new TextEncoder().encode("<h1>Hello</h1><p>world</p>").buffer,
+  }));
+  t.after(() => {
+    clearWebFetchCache();
+    __setWebFetchHookForTesting(null);
+  });
+  const fakeSearchFetch: typeof fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        search_result: [{ title: "Found", link: "https://x.example", content: "yes" }],
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    )) as typeof fetch;
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
+    tools: [
+      createWebFetchTool(),
+      createWebSearchTool({ apiKey: "test-key", fetchImpl: fakeSearchFetch }),
+    ],
+    cwd: workspace.cwd,
+    permissionMode: "plan",
+    canPrompt: false,
+  });
+
+  const fetchResult = await toolRuntime.execute(
+    {
+      id: "call-1",
+      name: "web_fetch",
+      input: { url: "https://example.com", prompt: "summarize" },
+    },
+    context,
+  );
+  const searchResult = await toolRuntime.execute(
+    { id: "call-2", name: "web_search", input: { query: "pilotdeck" } },
+    context,
+  );
+
+  assert.equal(fetchResult.type, "success");
+  assert.equal(searchResult.type, "success");
 });
 
 test("mcp tool uses stable wire names and standard unsupported behavior", async (t) => {

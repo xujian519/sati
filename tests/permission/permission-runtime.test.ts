@@ -192,6 +192,33 @@ test("bypassPermissions overrides a tool's hardcoded checkPermissions ask", asyn
   assert.equal(decision.type, "allow");
 });
 
+test("plan mode overrides a read-only tool's hardcoded checkPermissions ask", async () => {
+  const runtime = new PermissionRuntime();
+  const tool = createPilotDeckTestTool({
+    name: "web_search",
+    readOnly: true,
+    kind: "network",
+    permissionResult: {
+      type: "ask",
+      reason: { type: "tool", toolName: "web_search", message: "Network search requires permission." },
+      request: {
+        toolCallId: "",
+        toolName: "web_search",
+        inputSummary: "web search",
+        reason: { type: "tool", toolName: "web_search", message: "Network search requires permission." },
+        options: [
+          { id: "allow_once", label: "Allow once" },
+          { id: "deny", label: "Deny" },
+        ],
+      },
+    },
+  });
+  const { context } = createPilotDeckToolRuntimeFixture({ permissionMode: "plan", canPrompt: true });
+
+  const decision = await runtime.decide(tool, {}, context, "call-1");
+  assert.equal(decision.type, "allow");
+});
+
 test("default mode still respects a tool's hardcoded checkPermissions ask", async () => {
   const runtime = new PermissionRuntime();
   const tool = createPilotDeckTestTool({
