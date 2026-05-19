@@ -14,6 +14,7 @@ const DENY_PATTERNS: RegExp[] = [
 const SAFE_READ_PATTERNS: RegExp[] = [
   /^\s*pwd\s*$/,
   /^\s*ls(?:\s|$)/,
+  /^\s*wc\s+-l(?:\s+["'][^"']+["']|\s+[^\s;&|<>`]+)+\s*$/,
   /^\s*git\s+status(?:\s|$)/,
   /^\s*git\s+diff(?:\s|$)/,
   /^\s*git\s+log(?:\s|$)/,

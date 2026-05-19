@@ -6,6 +6,7 @@ import {
   type PilotDeckCommandResult,
   type PilotDeckCommandRunner,
 } from "../../src/tool/index.js";
+import { isReadOnlyShellCommand } from "../../src/tool/builtin/bash/permissions.js";
 import { createPilotDeckTempWorkspace } from "../helpers/filesystem.js";
 import { createPilotDeckToolRuntimeFixture } from "../helpers/tool.js";
 
@@ -84,6 +85,12 @@ test("bash exposes Claude-aligned timeout field in schema and drops timeoutMs", 
   assert.match(tool.description, /Read-only shell commands/i);
 });
 
+test("bash treats wc -l as a read-only command", () => {
+  assert.equal(isReadOnlyShellCommand("wc -l index.html"), true);
+  assert.equal(isReadOnlyShellCommand("wc -l '/tmp/my file.txt'"), true);
+  assert.equal(isReadOnlyShellCommand("wc -l index.html; rm -rf /"), false);
+});
+
 test("bash reads timeout input and forwards it to runner", async (t) => {
   const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
@@ -100,4 +107,21 @@ test("bash reads timeout input and forwards it to runner", async (t) => {
 
   assert.equal(result.type, "success");
   assert.equal(runner.received?.timeoutMs, 1234);
+});
+
+test("bash allows wc -l in plan mode", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({});
+  t.after(() => workspace.cleanup());
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
+    tools: [createBashTool({ runner: new FakeRunner({ exitCode: 0, stdout: "12 index.html\n", stderr: "", timedOut: false, durationMs: 2 }) })],
+    cwd: workspace.cwd,
+    permissionMode: "plan",
+  });
+
+  const result = await toolRuntime.execute(
+    { id: "call-1", name: "bash", input: { command: "wc -l index.html" } },
+    context,
+  );
+
+  assert.equal(result.type, "success");
 });
