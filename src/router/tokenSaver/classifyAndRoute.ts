@@ -46,13 +46,6 @@ export async function classifyAndRoute(
     };
   }
 
-  if (input.previousTier && isShortContinuation(userMessage)) {
-    const prevSelection = config.tiers[input.previousTier]?.model;
-    if (prevSelection) {
-      return { tier: input.previousTier, selection: prevSelection, resolvedFrom: "judge" };
-    }
-  }
-
   const knownTiers = Object.keys(config.tiers);
   const prompt = generateJudgePrompt({ userMessage, config, previousTier: input.previousTier });
   const judgeRequest: CanonicalModelRequest = {

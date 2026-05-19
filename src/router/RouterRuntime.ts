@@ -45,6 +45,11 @@ export type RouterRuntimeDeps = {
   loadSkillPrompt?: (extensionId: string) => Promise<string | undefined>;
   events?: RouterEventBus;
   now?: () => Date;
+  /**
+   * Externally-owned session store that survives config-reload cycles.
+   * When provided, `shutdown()` will NOT clear it.
+   */
+  sessionStore?: SessionRouterStore;
 };
 
 export type InvalidateStickyResult = {
@@ -86,7 +91,8 @@ export function createRouterRuntime(
       ? { provider: config.scenarios.default.provider, model: config.scenarios.default.model }
       : config.stats?.baselineModel,
   });
-  const sessionStore = new SessionRouterStore({
+  const externalStore = !!deps.sessionStore;
+  const sessionStore = deps.sessionStore ?? new SessionRouterStore({
     now: () => (deps.now?.() ?? new Date()).getTime(),
   });
   const usageCache = new SessionUsageCache();
@@ -655,7 +661,7 @@ export function createRouterRuntime(
       await stats.flush();
       stats.dispose();
       disposeTokenizer();
-      sessionStore.clear();
+      if (!externalStore) sessionStore.clear();
       usageCache.clear();
     },
   };
