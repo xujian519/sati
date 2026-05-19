@@ -17,10 +17,32 @@ import { processSummaryToTrace, type ProcessAttachment } from './processGrouping
 
 type DiffLine = { type: string; content: string; lineNum: number };
 
+const MIME_FRIENDLY_LABELS: Record<string, string> = {
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
+  'application/msword': 'DOC',
+  'application/vnd.ms-excel': 'XLS',
+  'application/vnd.ms-powerpoint': 'PPT',
+  'application/pdf': 'PDF',
+  'application/zip': 'ZIP',
+  'text/plain': 'TXT',
+  'text/csv': 'CSV',
+  'text/markdown': 'MD',
+  'application/json': 'JSON',
+};
+
 const getAttachmentTypeLabel = (name?: string, mimeType?: string): string => {
   const ext = String(name || '').split('.').pop()?.toUpperCase();
   if (ext && ext !== String(name || '').toUpperCase()) return ext;
-  if (mimeType?.includes('/')) return mimeType.split('/').pop()?.toUpperCase() || 'FILE';
+  if (mimeType) {
+    const friendly = MIME_FRIENDLY_LABELS[mimeType.toLowerCase()];
+    if (friendly) return friendly;
+    if (mimeType.includes('/')) {
+      const sub = mimeType.split('/').pop() || '';
+      if (sub.length <= 10 && !sub.includes('.')) return sub.toUpperCase();
+    }
+  }
   return 'FILE';
 };
 

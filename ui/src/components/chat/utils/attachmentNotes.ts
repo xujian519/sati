@@ -5,10 +5,17 @@ const ATTACHMENT_NOTE_MARKER = '[Files attached by user and available for readin
 function inferAttachmentMimeType(name: string, filePath: string): string | undefined {
   const source = `${name || filePath}`.toLowerCase();
   if (source.endsWith('.pdf')) return 'application/pdf';
+  if (source.endsWith('.doc')) return 'application/msword';
+  if (source.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (source.endsWith('.xls')) return 'application/vnd.ms-excel';
+  if (source.endsWith('.xlsx')) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  if (source.endsWith('.ppt')) return 'application/vnd.ms-powerpoint';
+  if (source.endsWith('.pptx')) return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
   if (source.endsWith('.txt')) return 'text/plain';
   if (source.endsWith('.md') || source.endsWith('.markdown')) return 'text/markdown';
   if (source.endsWith('.json')) return 'application/json';
   if (source.endsWith('.csv')) return 'text/csv';
+  if (source.endsWith('.xml')) return 'application/xml';
   if (source.endsWith('.png')) return 'image/png';
   if (source.endsWith('.jpg') || source.endsWith('.jpeg')) return 'image/jpeg';
   if (source.endsWith('.gif')) return 'image/gif';
