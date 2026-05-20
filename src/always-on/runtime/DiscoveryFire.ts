@@ -3,6 +3,7 @@ import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Gateway, GatewayChannelKey, GatewayEvent } from "../../gateway/index.js";
 import { getPilotProjectChatDir } from "../../pilot/paths.js";
+import { buildChatDigest } from "../context/ChatDigestBuilder.js";
 import type { AlwaysOnConfig } from "../config/parseAlwaysOnConfig.js";
 import { buildFallbackReport, type ReportMetadata } from "../contracts/ReportContract.js";
 import { AlwaysOnError } from "../protocol/errors.js";
@@ -252,6 +253,22 @@ export class DiscoveryFire {
       excludeTools: ALWAYS_ON_EXCLUDED_TOOLS,
     });
 
+    const chatDigest = await buildChatDigest({
+      projectRoot: this.deps.projectKey,
+      pilotHome: this.deps.paths.pilotHome,
+      maxSessions: 10,
+      maxPromptsPerSession: 8,
+      maxPromptLength: 500,
+    });
+
+    const planIndex = await this.deps.planStore.readIndex();
+    const existingPlans = planIndex.plans.map((p) => ({
+      id: p.id,
+      title: p.title,
+      dedupeKey: p.dedupeKey,
+      status: p.status,
+    }));
+
     let discoveryEvents: GatewayEvent[];
     try {
       discoveryEvents = await this.drainTurn({
@@ -266,6 +283,8 @@ export class DiscoveryFire {
           workspace: existingWorkspace
             ? { cwd: existingWorkspace.cwd, strategy: existingWorkspace.strategy }
             : undefined,
+          chatDigest,
+          existingPlans,
         }),
         mode: "bypassPermissions",
       });

@@ -1,8 +1,17 @@
 import type { AlwaysOnCurrentWorkspaceRef, DiscoveryPlanRecord } from "../protocol/types.js";
 import type { WorkspaceDiff } from "../workspace/WorkspaceApply.js";
+import type { ChatDigest } from "../context/ChatDigestBuilder.js";
 import { ALWAYS_ON_PLAN_TOOL_NAME } from "../tool/AlwaysOnDiscoveryPlanTool.js";
 import { ALWAYS_ON_REPORT_TOOL_NAME } from "../tool/AlwaysOnReportTool.js";
 import { ALWAYS_ON_WORKSPACE_TOOL_NAME } from "../tool/AlwaysOnWorkspaceTool.js";
+import { ALWAYS_ON_CHAT_HISTORY_TOOL_NAME } from "../tool/AlwaysOnChatHistoryTool.js";
+
+export type ExistingPlanSummary = {
+  id: string;
+  title: string;
+  dedupeKey: string;
+  status: string;
+};
 
 export type BuildDiscoveryPromptInput = {
   projectRoot: string;
@@ -13,6 +22,10 @@ export type BuildDiscoveryPromptInput = {
   chatDir: string;
   /** When an isolated workspace from a previous run still exists on disk, discovery runs inside it. */
   workspace?: { cwd: string; strategy: string };
+  /** Pre-built digest of recent user chat sessions. */
+  chatDigest?: ChatDigest;
+  /** Summaries of previously created Always-On plans. */
+  existingPlans?: ExistingPlanSummary[];
 };
 
 export function buildDiscoveryPrompt(input: BuildDiscoveryPromptInput): string {
@@ -27,20 +40,26 @@ export function buildDiscoveryPrompt(input: BuildDiscoveryPromptInput): string {
         `Read the project root at ${input.projectRoot} using read_file / glob / bash freely.`,
       ];
 
-  return [
+  const lines: string[] = [
     `You are running an autonomous Always-On discovery for project: ${input.projectRoot}`,
     "",
-    "Goal: identify AT MOST ONE concrete, automatically-verifiable improvement to propose.",
+    "Goal: identify AT MOST ONE concrete improvement to propose.",
+    "Improvements may range from bug fixes and code quality to new features,",
+    "content additions, or UX enhancements discussed in user chat history.",
+    "Each plan must include at least one automatically-checkable verification step",
+    "(e.g. file exists, grep pattern matches, HTML parses without error).",
     "If nothing actionable is found, do not call any tool — just respond with a short note explaining why.",
     "",
     "Permissions: this turn runs in `bypassPermissions` mode — every tool call is auto-allowed.",
     ...codeAccessLines,
+  ];
+
+  lines.push("", ...formatChatDigestSection(input.chatDigest));
+  lines.push("", ...formatExistingPlansSection(input.existingPlans));
+
+  lines.push(
     "",
-    `Project chat history (PilotDeck transcripts) lives at: ${input.chatDir}`,
-    "Use read_file / glob / bash on that directory to skim recent user-agent conversations",
-    "when looking for valuable, automatically-verifiable improvements.",
-    "",
-    `If you do find one, call \`${ALWAYS_ON_PLAN_TOOL_NAME}\` exactly once with a strictly-formatted markdown plan.`,
+    `If you do find one improvement, call \`${ALWAYS_ON_PLAN_TOOL_NAME}\` exactly once with a strictly-formatted markdown plan.`,
     "Required plan structure (top to bottom):",
     "  - Level-1 heading: # <plan title>",
     "  - Metadata blockquote, first line `Always-On Discovery Plan`, then keyed lines:",
@@ -59,7 +78,55 @@ export function buildDiscoveryPrompt(input: BuildDiscoveryPromptInput): string {
     `  - Calling \`${ALWAYS_ON_PLAN_TOOL_NAME}\` more than once returns plan_quota_exhausted.`,
     "  - Plans missing or reordering required sections, or containing fuzzy 'TODO' wording, will be rejected.",
     "  - Do not include Risks or Rollback sections.",
-  ].join("\n");
+  );
+
+  return lines.join("\n");
+}
+
+function formatChatDigestSection(digest?: ChatDigest): string[] {
+  if (!digest || digest.sessions.length === 0) {
+    return [
+      "No recent user conversations found. Focus on code-level improvements.",
+    ];
+  }
+
+  const lines: string[] = [
+    "## Recent user conversations",
+    "",
+    "Below is a structured digest of recent user-agent chat sessions.",
+    "These are primary signals for what improvements the user cares about.",
+    `To see the full conversation of a session, call \`${ALWAYS_ON_CHAT_HISTORY_TOOL_NAME}\` with its sessionId.`,
+    "",
+  ];
+
+  for (const session of digest.sessions) {
+    const ts = session.lastModified.replace(/\.\d{3}Z$/, "Z");
+    lines.push(`- [${ts}] "${session.title}" (sessionId: ${session.sessionId})`);
+    for (const prompt of session.userPrompts) {
+      const oneLiner = prompt.replace(/\n/g, " ").trim();
+      lines.push(`  > ${oneLiner}`);
+    }
+    lines.push("");
+  }
+
+  return lines;
+}
+
+function formatExistingPlansSection(plans?: ExistingPlanSummary[]): string[] {
+  if (!plans || plans.length === 0) {
+    return [];
+  }
+
+  const lines: string[] = [
+    "## Existing Always-On plans (do NOT duplicate these topics)",
+    "",
+  ];
+
+  for (const plan of plans) {
+    lines.push(`- [${plan.status}] "${plan.title}" (dedupeKey: ${plan.dedupeKey})`);
+  }
+
+  return lines;
 }
 
 export type BuildWorkspacePromptInput = {
