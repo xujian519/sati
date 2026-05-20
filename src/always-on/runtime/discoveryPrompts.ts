@@ -167,14 +167,12 @@ export type BuildApplyPromptInput = {
 
 export function buildApplyPrompt(input: BuildApplyPromptInput): string {
   const { plan, projectName, projectRoot, diff } = input;
+  const isGitWorktree = plan.workspace?.strategy === "git-worktree";
+
   const header = [
     `Always-On apply for project "${projectName}".`,
     "",
     "Your job is to merge changes from the isolated workspace into the project root.",
-    "Apply each change carefully using Edit or Write tools.",
-    "If a file in the project root has been modified since the plan was executed,",
-    "merge both sets of changes intelligently — do not blindly overwrite.",
-    "If you cannot resolve a conflict, leave standard conflict markers (<<<< / ==== / >>>>).",
     "",
     "Do not enter Plan Mode.",
     "Do not create a new plan — apply the existing changes directly.",
@@ -188,6 +186,38 @@ export function buildApplyPrompt(input: BuildApplyPromptInput): string {
   }
 
   header.push("");
+
+  if (isGitWorktree) {
+    header.push(
+      "## Apply strategy",
+      "",
+      "The workspace is a **git worktree**. Use git to apply changes efficiently:",
+      "",
+      "1. In the workspace, stage all changes: `git -C <workspace> add -A`",
+      "2. Generate a binary-safe patch: `git -C <workspace> diff --cached HEAD --binary`",
+      "3. Apply the patch to the project root with three-way merge: pipe the patch into `git -C <project_root> apply --3way`",
+      "",
+      "If `git apply --3way` succeeds (exit code 0), the apply is complete.",
+      "",
+      "If `git apply` fails (e.g. conflicts that --3way cannot auto-resolve),",
+      "fall back to applying each changed file manually using Edit or Write tools.",
+      "When merging manually, if the project root file has diverged, merge both",
+      "sets of changes intelligently — do not blindly overwrite.",
+      "If you cannot resolve a conflict, leave standard conflict markers (<<<< / ==== / >>>>).",
+      "",
+    );
+  } else {
+    header.push(
+      "## Apply strategy",
+      "",
+      "The workspace is a **snapshot copy** (not a git worktree).",
+      "Apply each change carefully using Edit or Write tools.",
+      "If a file in the project root has been modified since the plan was executed,",
+      "merge both sets of changes intelligently — do not blindly overwrite.",
+      "If you cannot resolve a conflict, leave standard conflict markers (<<<< / ==== / >>>>).",
+      "",
+    );
+  }
 
   if (!diff.diff.trim()) {
     header.push("No differences detected in the workspace. Nothing to apply.");

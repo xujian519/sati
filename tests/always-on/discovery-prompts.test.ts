@@ -5,6 +5,7 @@ import {
   buildExecutionPrompt,
   buildWorkspacePrompt,
   buildReportPrompt,
+  buildApplyPrompt,
 } from "../../src/always-on/runtime/discoveryPrompts.js";
 import { ALWAYS_ON_PLAN_TOOL_NAME } from "../../src/always-on/tool/AlwaysOnDiscoveryPlanTool.js";
 import { ALWAYS_ON_REPORT_TOOL_NAME } from "../../src/always-on/tool/AlwaysOnReportTool.js";
@@ -112,4 +113,52 @@ test("buildReportPrompt includes plan, workspace, and report tool name", () => {
   assert.ok(prompt.includes(ALWAYS_ON_REPORT_TOOL_NAME));
   assert.ok(prompt.includes("Test Plan"));
   assert.ok(prompt.includes("git diff --stat"));
+});
+
+// ---- buildApplyPrompt -------------------------------------------------------
+
+test("buildApplyPrompt uses git apply --3way strategy for git-worktree", () => {
+  const prompt = buildApplyPrompt({
+    plan: { id: "plan-1", title: "Test", workspace: { cwd: "/ws/foo", strategy: "git-worktree" } },
+    projectName: "foo",
+    projectRoot: "/projects/foo",
+    diff: { diff: "diff --git a/f.txt b/f.txt\n", fileCount: 1, truncated: false },
+  });
+  assert.ok(prompt.includes("git worktree"));
+  assert.ok(prompt.includes("git apply --3way"));
+  assert.ok(prompt.includes("git -C <workspace> add -A"));
+  assert.ok(!prompt.includes("snapshot copy"));
+});
+
+test("buildApplyPrompt uses Edit/Write strategy for snapshot-copy", () => {
+  const prompt = buildApplyPrompt({
+    plan: { id: "plan-1", title: "Test", workspace: { cwd: "/ws/foo", strategy: "snapshot-copy" } },
+    projectName: "foo",
+    projectRoot: "/projects/foo",
+    diff: { diff: "diff -ruN a/f.txt b/f.txt\n", fileCount: 1, truncated: false },
+  });
+  assert.ok(prompt.includes("snapshot copy"));
+  assert.ok(prompt.includes("Edit or Write tools"));
+  assert.ok(!prompt.includes("git apply"));
+});
+
+test("buildApplyPrompt handles empty diff", () => {
+  const prompt = buildApplyPrompt({
+    plan: { id: "plan-1", title: "Test", workspace: { cwd: "/ws/foo", strategy: "git-worktree" } },
+    projectName: "foo",
+    projectRoot: "/projects/foo",
+    diff: { diff: "", fileCount: 0, truncated: false },
+  });
+  assert.ok(prompt.includes("Nothing to apply"));
+});
+
+test("buildApplyPrompt includes fallback to manual apply when git fails", () => {
+  const prompt = buildApplyPrompt({
+    plan: { id: "plan-1", title: "Test", workspace: { cwd: "/ws/foo", strategy: "git-worktree" } },
+    projectName: "foo",
+    projectRoot: "/projects/foo",
+    diff: { diff: "some diff content\n", fileCount: 1, truncated: false },
+  });
+  assert.ok(prompt.includes("fall back"));
+  assert.ok(prompt.includes("Edit or Write tools"));
 });
