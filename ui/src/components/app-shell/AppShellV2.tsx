@@ -138,6 +138,7 @@ export default function AppShellV2() {
     setSelectedProject,
     loadMoreSessions,
     loadingMoreProjectIds,
+    bumpSessionActivity,
   } = useProjectsState({
     sessionId,
     navigate,
@@ -587,6 +588,7 @@ export default function AppShellV2() {
           onSessionInactive={markSessionAsInactive}
           onSessionProcessing={markSessionAsProcessing}
           onSessionNotProcessing={markSessionAsNotProcessing}
+          onSessionActivityBump={bumpSessionActivity}
           processingSessions={processingSessions}
           onReplaceTemporarySession={replaceTemporarySession}
           onNavigateToSession={(sid: string) => {

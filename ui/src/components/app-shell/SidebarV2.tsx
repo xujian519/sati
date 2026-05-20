@@ -643,11 +643,19 @@ export default function SidebarV2({
     const isCollapsed = collapsedSessionProjects.has(project.name);
     const sessions = isCollapsed ? allSessions.slice(0, COLLAPSED_SESSION_LIMIT) : allSessions;
     const hiddenLoadedCount = isCollapsed ? Math.max(0, allSessions.length - COLLAPSED_SESSION_LIMIT) : 0;
+    // If `useProjectsState.bumpSessionActivity` has prepended an optimistic
+    // `new-session-*` placeholder for this project, suppress the legacy
+    // "+ New Session — not saved yet" draft button so we don't show two
+    // stacked rows for the same in-flight session.
+    const hasOptimisticSession = allSessions.some(({ session }) =>
+      typeof session.id === 'string' && session.id.startsWith('new-session-'),
+    );
     const showDraftSession =
       draftSessionProjectName === project.name &&
       selectedProject?.name === project.name &&
       activeTab === 'chat' &&
-      !selectedSession;
+      !selectedSession &&
+      !hasOptimisticSession;
     const hasMoreSessions = Boolean(project.sessionMeta?.hasMore);
     const isLoadingMore = Boolean(loadingMoreProjectIds?.has(project.name));
     const totalSessions =
@@ -684,11 +692,21 @@ export default function SidebarV2({
               selectedSession?.id === sessionId &&
               activeTab === 'chat';
             const isSessionRenaming = renamingSession === sessionId;
-            const indicatorStatus: SessionIndicatorStatus = processingSessions?.has(sessionId)
+            // Optimistic placeholder rows are not yet backed by a real
+            // session id on the server, so clicking / renaming / deleting
+            // them is meaningless until the server's `projects_updated`
+            // swaps in the real id (typically within ~300ms).
+            const isOptimisticRow =
+              typeof sessionId === 'string' && sessionId.startsWith('new-session-');
+            // Optimistic rows always appear "processing" — the user just
+            // submitted; the agent is always running for them.
+            const indicatorStatus: SessionIndicatorStatus = isOptimisticRow
               ? 'processing'
-              : unreadSessionIds?.has(sessionId)
-                ? 'unread'
-                : 'idle';
+              : processingSessions?.has(sessionId)
+                ? 'processing'
+                : unreadSessionIds?.has(sessionId)
+                  ? 'unread'
+                  : 'idle';
             const indicatorLabel =
               indicatorStatus === 'processing'
                 ? t('sidebar:sessions.processing', { defaultValue: 'Agent is running' })
@@ -699,7 +717,9 @@ export default function SidebarV2({
             return (
               <div
                 key={sessionId}
-                onContextMenu={(event) => openSessionContextMenu(event, project, session)}
+                onContextMenu={(event) =>
+                  isOptimisticRow ? undefined : openSessionContextMenu(event, project, session)
+                }
                 className={cn(
                   'group/session relative w-full rounded-md transition-colors',
                   isSessionActive
@@ -723,8 +743,16 @@ export default function SidebarV2({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => handleSessionClick(project, sessionId)}
-                    className="flex w-full items-start gap-2 px-2 py-1 text-left"
+                    onClick={
+                      isOptimisticRow
+                        ? undefined
+                        : () => handleSessionClick(project, sessionId)
+                    }
+                    disabled={isOptimisticRow}
+                    className={cn(
+                      'flex w-full items-start gap-2 px-2 py-1 text-left',
+                      isOptimisticRow && 'cursor-default',
+                    )}
                   >
                     <span className="flex h-[18px] w-3 shrink-0 items-center justify-center pt-[3px]">
                       <SessionStatusIndicator
@@ -733,11 +761,18 @@ export default function SidebarV2({
                       />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[12.5px] text-neutral-900 dark:text-neutral-100">
+                      <div
+                        className={cn(
+                          'truncate text-[12.5px] text-neutral-900 dark:text-neutral-100',
+                          isOptimisticRow && 'italic text-neutral-600 dark:text-neutral-300',
+                        )}
+                      >
                         {sessionDisplayTitle(session)}
                       </div>
                       <div className="text-[11px] text-neutral-500 dark:text-neutral-400">
-                        {formatRelative(lastActivity, t)}
+                        {isOptimisticRow
+                          ? t('sidebar:sessions.sending', { defaultValue: 'Sending…' })
+                          : formatRelative(lastActivity, t)}
                       </div>
                     </div>
                   </button>

@@ -54,6 +54,11 @@ interface UseChatComposerStateArgs {
   sendByCtrlEnter?: boolean;
   onSessionActive?: (sessionId?: string | null) => void;
   onSessionProcessing?: (sessionId?: string | null) => void;
+  onSessionActivityBump?: (
+    projectName: string,
+    sessionId: string,
+    optimisticTitle?: string,
+  ) => void;
   onInputFocusChange?: (focused: boolean) => void;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
@@ -132,6 +137,7 @@ export function useChatComposerState({
   sendByCtrlEnter,
   onSessionActive,
   onSessionProcessing,
+  onSessionActivityBump,
   onInputFocusChange,
   onFileOpen,
   onShowSettings,
@@ -659,6 +665,23 @@ export function useChatComposerState({
         (canResumeCurrentSession ? currentSessionId : null);
       const submitSelectedSession = selectedSession;
 
+      // Optimistic sidebar refresh — fire BEFORE the attachment upload so
+      // the sidebar reorders/spawns the row the instant the user clicks
+      // send, not after the network round-trip. We resolve a stable
+      // session id here (real id when resuming; otherwise a temporary
+      // `new-session-*` placeholder that will be replaced by
+      // `preserveLoadedSessions` once the server's `projects_updated`
+      // arrives with the real id).
+      const optimisticSessionId =
+        submitTargetSessionId || createTemporarySessionId();
+      if (selectedProject?.name) {
+        onSessionActivityBump?.(
+          selectedProject.name,
+          optimisticSessionId,
+          userVisibleInput,
+        );
+      }
+
       let uploadedImages: unknown[] = [];
       let uploadedFiles: UploadedAttachmentFile[] = [];
       if (attachedImages.length > 0) {
@@ -696,7 +719,7 @@ export function useChatComposerState({
       messageContent = `${messageContent}${buildAttachmentPathNote(uploadedFiles)}`;
 
       const effectiveSessionId = submitTargetSessionId;
-      const sessionToActivate = effectiveSessionId || createTemporarySessionId();
+      const sessionToActivate = effectiveSessionId || optimisticSessionId;
 
       const userMessage: ChatMessage = {
         type: 'user',
@@ -790,6 +813,7 @@ export function useChatComposerState({
       executeCommand,
       isLoading,
       onSessionActive,
+      onSessionActivityBump,
       onSessionProcessing,
       pendingViewSessionRef,
       permissionMode,

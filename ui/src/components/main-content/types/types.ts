@@ -48,6 +48,12 @@ export type MainContentProps = {
   onSessionInactive: SessionLifecycleHandler;
   onSessionProcessing: SessionLifecycleHandler;
   onSessionNotProcessing: SessionLifecycleHandler;
+  // See ChatInterfaceProps.onSessionActivityBump.
+  onSessionActivityBump?: (
+    projectName: string,
+    sessionId: string,
+    optimisticTitle?: string,
+  ) => void;
   processingSessions: Set<string>;
   onReplaceTemporarySession: SessionLifecycleHandler;
   onNavigateToSession: (targetSessionId: string) => void;

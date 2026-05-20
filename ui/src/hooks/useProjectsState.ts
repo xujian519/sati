@@ -67,17 +67,28 @@ const projectsHaveChanges = (
 const getProjectSessions = (project: Project): ProjectSession[] =>
   project.sessions ?? [];
 
+// Local-only placeholders we prepend to a project's session list the moment
+// the user submits a new-session message, so the sidebar reflects it without
+// waiting for the server's debounced `projects_updated` round-trip. They are
+// dropped on the next server-driven refresh (their real counterpart will be
+// in the incoming sessions list with a non-temp id).
+const isTemporarySessionId = (id: unknown): boolean =>
+  typeof id === 'string' && id.startsWith('new-session-');
+
 const preserveLoadedSessions = (prevProjects: Project[], nextProjects: Project[]): Project[] =>
   nextProjects.map((updated) => {
     const prev = prevProjects.find((p) => p.name === updated.name);
     if (!prev) return updated;
     const prevSessions = prev.sessions ?? [];
     const updatedSessions = updated.sessions ?? [];
-    if (prevSessions.length <= updatedSessions.length) return updated;
+    // Always drop any client-side optimistic placeholders — the server is
+    // now authoritative for what's in the list.
+    const prevRealSessions = prevSessions.filter((s) => !isTemporarySessionId(s.id));
+    if (prevRealSessions.length <= updatedSessions.length) return updated;
     const updatedIds = new Set(updatedSessions.map((s) => s.id));
     const merged = [
       ...updatedSessions,
-      ...prevSessions.filter((s) => !updatedIds.has(s.id)),
+      ...prevRealSessions.filter((s) => !updatedIds.has(s.id)),
     ];
     return {
       ...updated,
@@ -335,17 +346,26 @@ export function useProjectsState({
 
     const updatedProjects = projectsMessage.projects;
 
-    if (
+    // While a session is streaming we must NOT replace `selectedProject` /
+    // `selectedSession` mid-flight (the chat pane and downstream hooks key
+    // off the session reference and would re-load / re-render unexpectedly).
+    // However, we DO still want the sidebar to reflect the new `updated_at`
+    // / `lastActivity` for the streaming session — that's the whole point
+    // of broadcasting `projects_updated`. The earlier implementation bailed
+    // out of the entire handler here, which left the sidebar stale until
+    // the user manually refreshed.
+    const skipSelectedReplacement =
       hasActiveSession &&
-      !isUpdateAdditive(projects, updatedProjects, selectedProject, selectedSession)
-    ) {
-      return;
-    }
+      !isUpdateAdditive(projects, updatedProjects, selectedProject, selectedSession);
 
     setProjects((prevProjects) => {
       if (prevProjects.length === 0) return updatedProjects;
       return preserveLoadedSessions(prevProjects, updatedProjects);
     });
+
+    if (skipSelectedReplacement) {
+      return;
+    }
 
     if (!selectedProject) {
       return;
@@ -633,6 +653,62 @@ export function useProjectsState({
     navigate('/');
   }, [navigate]);
 
+  // Optimistic sidebar update for the moment a user submits a message.
+  // We do NOT wait for the server's chokidar-debounced `projects_updated`
+  // round-trip — instead we either bump the existing session's lastActivity
+  // (so "sort by date" reorders immediately) or prepend a placeholder
+  // entry for a brand-new session. The placeholder uses a `new-session-*`
+  // id and is filtered out automatically the next time `preserveLoadedSessions`
+  // runs against a server payload.
+  const bumpSessionActivity = useCallback(
+    (projectName: string, sessionId: string, optimisticTitle?: string) => {
+      if (!projectName || !sessionId) return;
+      const now = new Date().toISOString();
+
+      const apply = (project: Project): Project => {
+        if (project.name !== projectName) return project;
+        const sessions = project.sessions ?? [];
+        const idx = sessions.findIndex((s) => s.id === sessionId);
+
+        if (idx >= 0) {
+          const bumped: ProjectSession = {
+            ...sessions[idx],
+            updated_at: now,
+            lastActivity: now,
+          };
+          const reordered = [bumped, ...sessions.slice(0, idx), ...sessions.slice(idx + 1)];
+          return { ...project, sessions: reordered };
+        }
+
+        const trimmedTitle = (optimisticTitle ?? '').replace(/\s+/g, ' ').trim();
+        const placeholder: ProjectSession = {
+          id: sessionId,
+          title: trimmedTitle ? trimmedTitle.slice(0, 80) : 'New session',
+          created_at: now,
+          updated_at: now,
+          lastActivity: now,
+          messageCount: 0,
+          __projectName: projectName,
+        };
+        return {
+          ...project,
+          sessions: [placeholder, ...sessions],
+          sessionMeta: {
+            ...(project.sessionMeta ?? {}),
+            total:
+              typeof project.sessionMeta?.total === 'number'
+                ? project.sessionMeta.total + 1
+                : project.sessionMeta?.total,
+          },
+        };
+      };
+
+      setProjects((prev) => prev.map(apply));
+      setSelectedProject((prev) => (prev && prev.name === projectName ? apply(prev) : prev));
+    },
+    [],
+  );
+
   const handleResetProjectSessionPreview = useCallback((projectName: string) => {
     setProjects((prevProjects) =>
       prevProjects.map((project) =>
@@ -713,5 +789,6 @@ export function useProjectsState({
     handleSidebarRefresh,
     loadMoreSessions,
     loadingMoreProjectIds,
+    bumpSessionActivity,
   };
 }

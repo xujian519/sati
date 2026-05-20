@@ -42,6 +42,7 @@
     "renameSession": "Rename Session",
     "noSessions": "No sessions yet",
     "unsaved": "Not saved yet",
+    "sending": "Sending…",
     "loadingSessions": "Loading sessions...",
     "unnamed": "Unnamed",
     "loading": "Loading...",

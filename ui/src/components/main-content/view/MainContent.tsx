@@ -130,6 +130,7 @@ function MainContent({
   onSessionInactive,
   onSessionProcessing,
   onSessionNotProcessing,
+  onSessionActivityBump,
   processingSessions,
   onReplaceTemporarySession,
   onNavigateToSession,
@@ -753,6 +754,7 @@ function MainContent({
           onSessionInactive={onSessionInactive}
           onSessionProcessing={onSessionProcessing}
           onSessionNotProcessing={onSessionNotProcessing}
+          onSessionActivityBump={onSessionActivityBump}
           processingSessions={processingSessions}
           onReplaceTemporarySession={onReplaceTemporarySession}
           onNavigateToSession={onNavigateToSession}
@@ -825,6 +827,11 @@ type SplitBodyProps = {
   onSessionInactive: any;
   onSessionProcessing: any;
   onSessionNotProcessing: any;
+  onSessionActivityBump?: (
+    projectName: string,
+    sessionId: string,
+    optimisticTitle?: string,
+  ) => void;
   processingSessions: any;
   onReplaceTemporarySession: any;
   onNavigateToSession: (sessionId: string) => void;
@@ -864,6 +871,7 @@ function SplitBody(props: SplitBodyProps) {
     onSessionInactive,
     onSessionProcessing,
     onSessionNotProcessing,
+    onSessionActivityBump,
     processingSessions,
     onReplaceTemporarySession,
     onNavigateToSession,
@@ -1059,6 +1067,7 @@ function SplitBody(props: SplitBodyProps) {
             onSessionInactive={onSessionInactive}
             onSessionProcessing={onSessionProcessing}
             onSessionNotProcessing={onSessionNotProcessing}
+            onSessionActivityBump={onSessionActivityBump}
             processingSessions={processingSessions}
             onReplaceTemporarySession={onReplaceTemporarySession}
             onNavigateToSession={onNavigateToSession}

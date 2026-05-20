@@ -186,6 +186,14 @@ export interface ChatInterfaceProps {
   onSessionInactive?: (sessionId?: string | null) => void;
   onSessionProcessing?: (sessionId?: string | null) => void;
   onSessionNotProcessing?: (sessionId?: string | null) => void;
+  // Optimistic sidebar refresh fired the instant the user submits a
+  // message — lets the sidebar reorder / show a placeholder row without
+  // waiting on the server's debounced `projects_updated` round-trip.
+  onSessionActivityBump?: (
+    projectName: string,
+    sessionId: string,
+    optimisticTitle?: string,
+  ) => void;
   processingSessions?: Set<string>;
   onReplaceTemporarySession?: (sessionId?: string | null) => void;
   onNavigateToSession?: (targetSessionId: string) => void;
