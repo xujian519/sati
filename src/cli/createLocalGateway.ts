@@ -679,7 +679,20 @@ class ProjectRuntimeRegistry {
     const maxInstances = runtime.snapshot.config.gateway?.maxPerSessionMcpInstances ?? 5;
     if (perSpecs && perSpecs.length > 0 && this.sessionMcpRuntimes.size < maxInstances) {
       this.evictSessionMcp(context.sessionKey);
-      const sessionMcp = new McpRuntime(perSpecs);
+      const patchedPerSpecs = perSpecs.map((spec) => {
+        if (spec.transport === "stdio" && spec.id === "browser-use") {
+          const outDir = joinPath(
+            runtime.projectRoot,
+            ".pilotdeck",
+            "browser_screenshots",
+            context.sessionKey,
+          );
+          mkdirSyncFs(outDir, { recursive: true });
+          return { ...spec, args: [...(spec.args ?? []), `--output-dir=${outDir}`] };
+        }
+        return spec;
+      });
+      const sessionMcp = new McpRuntime(patchedPerSpecs);
       this.sessionMcpRuntimes.set(context.sessionKey, sessionMcp);
       try {
         await sessionMcp.start();
