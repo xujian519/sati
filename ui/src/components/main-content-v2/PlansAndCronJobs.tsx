@@ -34,6 +34,7 @@ type PlanDisplayStatus =
   | 'executing'
   | 'completedWaiting'
   | 'failed'
+  | 'applyFailed'
   | 'applying'
   | 'applied'
   | 'archived';
@@ -50,6 +51,8 @@ function mapPlanStatus(status: DiscoveryPlanStatus): PlanDisplayStatus {
       return 'completedWaiting';
     case 'failed':
       return 'failed';
+    case 'apply_failed':
+      return 'applyFailed';
     case 'applying':
       return 'applying';
     case 'applied':
@@ -67,6 +70,7 @@ const PLAN_STATUS_STYLE: Record<PlanDisplayStatus, string> = {
   executing: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
   completedWaiting: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
   failed: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  applyFailed: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
   archived: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400',
   applying: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
   applied: 'bg-teal-100 text-teal-600 dark:bg-teal-900/40 dark:text-teal-400',
@@ -78,6 +82,7 @@ const PLAN_STATUS_LABEL: Record<PlanDisplayStatus, { key: string; defaultValue: 
   executing: { key: 'plansCron.status.executing', defaultValue: 'Executing' },
   completedWaiting: { key: 'plansCron.status.completedWaiting', defaultValue: 'Completed' },
   failed: { key: 'plansCron.status.failed', defaultValue: 'Failed' },
+  applyFailed: { key: 'plansCron.status.applyFailed', defaultValue: 'Apply Failed' },
   archived: { key: 'plansCron.status.archived', defaultValue: 'Archived' },
   applying: { key: 'plansCron.status.applying', defaultValue: 'Applying' },
   applied: { key: 'plansCron.status.applied', defaultValue: 'Applied' },
@@ -451,7 +456,7 @@ function ItemRow({
     statusStyle = CRON_STATUS_STYLE[cs];
   }
 
-  const showApply = isPlan && displayStatus === 'completedWaiting';
+  const showApply = isPlan && (displayStatus === 'completedWaiting' || displayStatus === 'applyFailed');
   const showRetry = isPlan && displayStatus === 'failed';
   const canDelete = isPlan && displayStatus !== 'executing' && displayStatus !== 'preparingWorkspace' && displayStatus !== 'applying';
 

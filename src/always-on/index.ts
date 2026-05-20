@@ -131,6 +131,7 @@ export {
   type AlwaysOnWorkspaceOutput,
   type CreateAlwaysOnWorkspaceToolOptions,
 } from "./tool/AlwaysOnWorkspaceTool.js";
+export { createApplyHandler, type CreateApplyHandlerDeps } from "./runtime/createApplyHandler.js";
 export type { WorkspaceProvider, WorkspaceProviderId, WorkspacePrepareInput, WorkspacePublishOutput } from "./workspace/WorkspaceProvider.js";
 
 // Web-facing presentation & lifecycle services (shared by UI/CLI/SDK)

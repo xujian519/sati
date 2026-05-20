@@ -173,3 +173,69 @@ test("archive marks a plan as archived", async () => {
     env.cleanup();
   }
 });
+
+// ---- apply_failed / queueApply ----------------------------------------------
+
+test("queueApply accepts apply_failed plan without throwing", async () => {
+  const env = makeTestEnv();
+  try {
+    writePlanIndex(env.plansDir, [
+      {
+        id: "p1",
+        title: "Apply-failed plan",
+        status: "apply_failed",
+        planFilePath: "plans/p1.md",
+        workspace: { cwd: "/tmp/ws", strategy: "snapshot-copy", handle: "/tmp/ws" },
+      },
+    ]);
+    writePlanBody(env.plansDir, "p1", "Plan content");
+
+    const result = await env.service.queueApply("test-project", "p1");
+    assert.equal(result.plan.status, "applying");
+    assert.ok(result.executionToken);
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("queueApply rejects failed (execution-failed) plan", async () => {
+  const env = makeTestEnv();
+  try {
+    writePlanIndex(env.plansDir, [
+      { id: "p1", title: "Exec-failed plan", status: "failed", planFilePath: "plans/p1.md" },
+    ]);
+    writePlanBody(env.plansDir, "p1", "Plan content");
+    await assert.rejects(
+      () => env.service.queueApply("test-project", "p1"),
+      (error: Error & { code?: string }) => error.code === "INVALID_STATE",
+    );
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("updateExecution transitions applying+failed to apply_failed", async () => {
+  const env = makeTestEnv();
+  try {
+    writePlanIndex(env.plansDir, [
+      {
+        id: "p1",
+        title: "Applying plan",
+        status: "applying",
+        planFilePath: "plans/p1.md",
+        executionToken: "tok-1",
+        workspace: { cwd: "/tmp/ws", strategy: "snapshot-copy", handle: "/tmp/ws" },
+      },
+    ]);
+    writePlanBody(env.plansDir, "p1", "Plan content");
+
+    const result = await env.service.updateExecution("test-project", "p1", {
+      status: "failed",
+      latestSummary: "merge conflict",
+      executionToken: "tok-1",
+    });
+    assert.equal(result.status, "apply_failed");
+  } finally {
+    env.cleanup();
+  }
+});

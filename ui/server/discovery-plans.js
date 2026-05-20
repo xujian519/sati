@@ -101,7 +101,7 @@ export async function applyProjectDiscoveryPlan(projectName, planId) {
     });
   } catch (err) {
     const finalPlan = await getService().updateExecution(projectName, planId, {
-      status: 'failed',
+      status: 'apply_failed',
       latestSummary: (err && err.message) || 'Apply failed due to unexpected error',
       executionToken: result.executionToken,
     });
@@ -113,7 +113,7 @@ export async function applyProjectDiscoveryPlan(projectName, planId) {
 
   if (applyResult.error) {
     const finalPlan = await getService().updateExecution(projectName, planId, {
-      status: 'failed',
+      status: 'apply_failed',
       latestSummary: applyResult.error.message || 'Apply failed',
       executionToken: result.executionToken,
     });

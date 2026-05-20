@@ -18,6 +18,7 @@ export type WebPlanStatus =
   | "completed"
   | "applying"
   | "applied"
+  | "apply_failed"
   | "archived";
 
 export type WebPlanRecord = {
@@ -72,6 +73,7 @@ export const PLAN_STATUS_ORDER: Record<string, number> = {
   queued: 2,
   ready: 3,
   failed: 4,
+  apply_failed: 4,
   completed: 5,
   applied: 6,
   archived: 7,
@@ -84,6 +86,7 @@ export function computeExecutionStatus(
 ): string {
   if (plan.status === "archived" || plan.status === "applied") return "";
 
+  if (plan.status === "apply_failed") return "apply_failed";
   if (plan.status === "applying") return "applying";
 
   if (plan.executionSessionId && isSessionActive(plan.executionSessionId)) {
@@ -122,6 +125,7 @@ export function computePlanStatus(
 ): string {
   if (plan.status === "archived") return "archived";
   if (plan.status === "applied") return "applied";
+  if (plan.status === "apply_failed") return "apply_failed";
   const execStatus = computeExecutionStatus(plan, session, isSessionActive);
   if (execStatus) return execStatus;
   return normalizeString(plan.status, "ready");

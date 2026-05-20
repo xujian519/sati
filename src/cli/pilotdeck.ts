@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
-import { createAlwaysOnManager, type AlwaysOnManager, type AlwaysOnConfig } from "../always-on/index.js";
+import { createAlwaysOnManager, createApplyHandler, SessionConfigOverrides, type AlwaysOnManager, type AlwaysOnConfig } from "../always-on/index.js";
 import { createCronRuntime, type CronRuntime, type CronConfig } from "../cron/index.js";
 import { connectRemoteGatewayIfAvailable, type Gateway, type GatewayEvent, type GatewaySubmitTurnInput } from "../gateway/index.js";
 import { CliChannel, TuiChannel, FeishuChannel } from "../adapters/index.js";
@@ -85,16 +85,27 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       cron,
     });
 
+    const standaloneApply = createApplyHandler({
+      gateway,
+      pilotHome,
+      sessionOverrides: alwaysOn?.getSessionOverrides() ?? new SessionConfigOverrides(),
+      onTurnEvent: (sessionKey, channelKey, event) => {
+        deferredBroadcast?.("always-on:turn-event", { sessionKey, channelKey, event });
+      },
+    });
+
     if (alwaysOn) {
       alwaysOn.bindGateway(gateway, { isProjectBusy });
       await alwaysOn.start();
-      updateSubsystems({
-        extraTools: [...(alwaysOn?.getTools() ?? []), ...(cron?.getTools() ?? [])],
-        sessionOverrides: alwaysOn?.getSessionOverrides(),
-        cron,
-        alwaysOnApply: (input) => alwaysOn!.applyPlan(input),
-      });
     }
+    updateSubsystems({
+      extraTools: [...(alwaysOn?.getTools() ?? []), ...(cron?.getTools() ?? [])],
+      sessionOverrides: alwaysOn?.getSessionOverrides(),
+      cron,
+      alwaysOnApply: alwaysOn
+        ? (input) => alwaysOn!.applyPlan(input)
+        : standaloneApply,
+    });
     if (cron) {
       cron.bindGateway(gateway);
       await cron.start();
@@ -140,11 +151,20 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         await alwaysOn.start();
       }
 
+      const fallbackApply = createApplyHandler({
+        gateway,
+        pilotHome,
+        sessionOverrides: alwaysOn?.getSessionOverrides() ?? new SessionConfigOverrides(),
+        onTurnEvent: (sessionKey, channelKey, event) => {
+          deferredBroadcast?.("always-on:turn-event", { sessionKey, channelKey, event });
+        },
+      });
+
       updateSubsystems({
         extraTools: [...(alwaysOn?.getTools() ?? []), ...(cron?.getTools() ?? [])],
         sessionOverrides: alwaysOn?.getSessionOverrides(),
         cron,
-        alwaysOnApply: alwaysOn ? (input) => alwaysOn!.applyPlan(input) : undefined,
+        alwaysOnApply: alwaysOn ? (input) => alwaysOn!.applyPlan(input) : fallbackApply,
       });
       if (cronChanged && cron) {
         cron.bindGateway(gateway);

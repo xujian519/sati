@@ -526,9 +526,9 @@ export class DiscoveryPlanService {
     // dispose the workspace.
     if (
       plan.status === "applying" &&
-      (normalizedStatus === "completed" || normalizedStatus === "failed")
+      (normalizedStatus === "completed" || normalizedStatus === "failed" || normalizedStatus === "apply_failed")
     ) {
-      const finalStatus = normalizedStatus === "completed" ? "applied" : "failed";
+      const finalStatus = normalizedStatus === "completed" ? "applied" : "apply_failed";
 
       if (finalStatus === "applied" && nextPlan.workspace?.cwd && this.deps.workspace) {
         try {
@@ -616,9 +616,9 @@ export class DiscoveryPlanService {
     const isActive = (id: string) => this.deps.activity.isSessionActive(id);
     const planStatus = computePlanStatus(plan, null, isActive);
 
-    if (planStatus !== "completed") {
+    if (planStatus !== "completed" && planStatus !== "apply_failed") {
       throw makeError(
-        `Plan must be in completed status to apply (current: ${planStatus})`,
+        `Plan must be in completed or apply_failed status to apply (current: ${planStatus})`,
         "INVALID_STATE",
       );
     }
