@@ -4,6 +4,7 @@ import {
   assembleAssistantMessage,
   createModelMessageAssemblerState,
   type CanonicalToolCall,
+  type CanonicalToolSchema,
   PROMPT_TOO_LONG_ANTHROPIC_PATTERN,
   PROMPT_TOO_LONG_OPENAI_PATTERN,
   REQUEST_TOO_LARGE_PATTERN,
@@ -23,6 +24,7 @@ import {
   SUBAGENT_DEFINITIONS,
   getSubagentDefinition,
 } from "../sub/builtinSubagentTypes.js";
+import { buildPlanModeAgentToolSchema } from "../../tool/builtin/agent.js";
 import { agentError } from "../protocol/errors.js";
 import type { AgentEvent } from "../protocol/events.js";
 import type { AgentPermissionDenial, AgentTurnResult } from "../protocol/result.js";
@@ -634,6 +636,11 @@ export class AgentLoop {
   ): Promise<CanonicalModelRequest> {
     const contextRuntime = this.dependencies.context ?? new NullContextRuntime();
     const planTodo = this.dependencies.planTodoManager?.forSession(input.sessionId);
+    let tools = this.dependencies.tools.registry.toCanonicalSchemas();
+    if (this.config.permissionMode === "plan") {
+      tools = applyPlanModeToolOverrides(tools);
+    }
+
     const prepared = await contextRuntime.prepareForModel({
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -643,7 +650,7 @@ export class AgentLoop {
       permissionMode: this.config.permissionMode,
       additionalWorkingDirectories: this.config.permissionContext.additionalWorkingDirectories,
       messages: cloneMessages(messages),
-      tools: this.dependencies.tools.registry.toCanonicalSchemas(),
+      tools,
       maxMessages: this.config.maxContextMessages,
       customSystemPrompt: this.config.systemPrompt,
       appendSystemPrompt: planTodo?.buildPromptAddendum(),
@@ -1084,6 +1091,14 @@ export class AgentLoop {
   }
 
   private readonly now = (): Date => this.dependencies.now?.() ?? new Date();
+}
+
+function applyPlanModeToolOverrides(tools: CanonicalToolSchema[]): CanonicalToolSchema[] {
+  const override = buildPlanModeAgentToolSchema();
+  return tools.map((tool) => {
+    if (tool.name !== "agent") return tool;
+    return { ...tool, description: override.description, inputSchema: override.inputSchema };
+  });
 }
 
 function mergeUserRules(target: PermissionRule[], userRules: PermissionRule[] | undefined): void {
