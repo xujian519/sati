@@ -139,6 +139,8 @@ export default function AppShellV2() {
     loadMoreSessions,
     loadingMoreProjectIds,
     bumpSessionActivity,
+    replaceOptimisticInProjects,
+    dropOptimisticInProjects,
   } = useProjectsState({
     sessionId,
     navigate,
@@ -519,6 +521,28 @@ export default function AppShellV2() {
     [handleNewSession, navigate, selectedProject, setActiveTab],
   );
 
+  // Wrap the two session-lifecycle callbacks coming out of useSessionProtection
+  // so they also reconcile the optimistic placeholder rows in the sidebar:
+  //  · `session_created` → swap `new-session-*` in projects.sessions for the
+  //    real id in-place (no flicker).
+  //  · `complete` / `error` → drop any leftover `new-session-*` placeholder
+  //    that was never replaced (agent never emitted session_created).
+  const handleReplaceTemporarySession = useCallback(
+    (realSessionId?: string | null) => {
+      replaceTemporarySession(realSessionId);
+      if (realSessionId) replaceOptimisticInProjects(realSessionId);
+    },
+    [replaceTemporarySession, replaceOptimisticInProjects],
+  );
+
+  const handleSessionInactive = useCallback(
+    (sessionId?: string | null) => {
+      markSessionAsInactive(sessionId);
+      if (sessionId) dropOptimisticInProjects(sessionId);
+    },
+    [markSessionAsInactive, dropOptimisticInProjects],
+  );
+
   const sidebar = (
     <SidebarV2
       projects={sidebarSharedProps.projects}
@@ -585,12 +609,12 @@ export default function AppShellV2() {
           isLoading={isLoadingProjects}
           onInputFocusChange={setIsInputFocused}
           onSessionActive={markSessionAsActive}
-          onSessionInactive={markSessionAsInactive}
+          onSessionInactive={handleSessionInactive}
           onSessionProcessing={markSessionAsProcessing}
           onSessionNotProcessing={markSessionAsNotProcessing}
           onSessionActivityBump={bumpSessionActivity}
           processingSessions={processingSessions}
-          onReplaceTemporarySession={replaceTemporarySession}
+          onReplaceTemporarySession={handleReplaceTemporarySession}
           onNavigateToSession={(sid: string) => {
             setSelectedSession((prev) => prev?.id === sid ? prev : { id: sid } as ProjectSession);
             navigate(`/session/${sid}`);

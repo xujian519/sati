@@ -70,8 +70,11 @@ const getProjectSessions = (project: Project): ProjectSession[] =>
 // Local-only placeholders we prepend to a project's session list the moment
 // the user submits a new-session message, so the sidebar reflects it without
 // waiting for the server's debounced `projects_updated` round-trip. They are
-// dropped on the next server-driven refresh (their real counterpart will be
-// in the incoming sessions list with a non-temp id).
+// carried forward across `projects_updated` events (so an unrelated update
+// fired between submit and chokidar can't flicker them away) and replaced
+// in-place via `replaceOptimisticInProjects` once the real id arrives via
+// `session_created`, or dropped via `dropOptimisticInProjects` on
+// completion/abort if no real id was ever assigned.
 const isTemporarySessionId = (id: unknown): boolean =>
   typeof id === 'string' && id.startsWith('new-session-');
 
@@ -81,12 +84,27 @@ const preserveLoadedSessions = (prevProjects: Project[], nextProjects: Project[]
     if (!prev) return updated;
     const prevSessions = prev.sessions ?? [];
     const updatedSessions = updated.sessions ?? [];
-    // Always drop any client-side optimistic placeholders — the server is
-    // now authoritative for what's in the list.
-    const prevRealSessions = prevSessions.filter((s) => !isTemporarySessionId(s.id));
-    if (prevRealSessions.length <= updatedSessions.length) return updated;
     const updatedIds = new Set(updatedSessions.map((s) => s.id));
+    // Carry forward any in-flight optimistic placeholders (`new-session-*`)
+    // that the server payload doesn't yet know about. They're explicitly
+    // dropped by `replaceOptimisticInProjects` / `dropOptimisticInProjects`
+    // once the real session id arrives. Without this we'd flicker the
+    // placeholder away on the first `projects_updated` that happens to fire
+    // before the new file shows up in the server's session list (~300ms
+    // chokidar debounce vs unbounded agent start latency).
+    const optimisticToKeep = prevSessions.filter(
+      (s) => isTemporarySessionId(s.id) && !updatedIds.has(s.id),
+    );
+    const prevRealSessions = prevSessions.filter((s) => !isTemporarySessionId(s.id));
+    if (prevRealSessions.length <= updatedSessions.length) {
+      if (optimisticToKeep.length === 0) return updated;
+      return {
+        ...updated,
+        sessions: [...optimisticToKeep, ...updatedSessions],
+      };
+    }
     const merged = [
+      ...optimisticToKeep,
       ...updatedSessions,
       ...prevRealSessions.filter((s) => !updatedIds.has(s.id)),
     ];
@@ -709,6 +727,50 @@ export function useProjectsState({
     [],
   );
 
+  // Swap a `new-session-*` placeholder for the real id the server just
+  // assigned (fired on `session_created`). We replace in-place so the row
+  // doesn't flicker, and dedupe if `projects_updated` already brought the
+  // real session in.
+  const replaceOptimisticInProjects = useCallback((realSessionId: string) => {
+    if (!realSessionId || isTemporarySessionId(realSessionId)) return;
+    const apply = (project: Project): Project => {
+      const sessions = project.sessions ?? [];
+      const tempIdx = sessions.findIndex((s) => isTemporarySessionId(s.id));
+      if (tempIdx < 0) return project;
+      const realExists = sessions.some((s) => s.id === realSessionId);
+      if (realExists) {
+        return {
+          ...project,
+          sessions: sessions.filter((s) => !isTemporarySessionId(s.id)),
+        };
+      }
+      const replaced: ProjectSession = { ...sessions[tempIdx], id: realSessionId };
+      return {
+        ...project,
+        sessions: sessions.map((s, i) => (i === tempIdx ? replaced : s)),
+      };
+    };
+    setProjects((prev) => prev.map(apply));
+    setSelectedProject((prev) => (prev ? apply(prev) : prev));
+  }, []);
+
+  // Drop any optimistic placeholders for a given session id. Used when a
+  // session goes inactive without ever receiving a real id (errors, aborts
+  // before the agent emitted `session_created`).
+  const dropOptimisticInProjects = useCallback((sessionId: string) => {
+    if (!sessionId || !isTemporarySessionId(sessionId)) return;
+    const apply = (project: Project): Project => {
+      const sessions = project.sessions ?? [];
+      if (!sessions.some((s) => s.id === sessionId)) return project;
+      return {
+        ...project,
+        sessions: sessions.filter((s) => s.id !== sessionId),
+      };
+    };
+    setProjects((prev) => prev.map(apply));
+    setSelectedProject((prev) => (prev ? apply(prev) : prev));
+  }, []);
+
   const handleResetProjectSessionPreview = useCallback((projectName: string) => {
     setProjects((prevProjects) =>
       prevProjects.map((project) =>
@@ -790,5 +852,7 @@ export function useProjectsState({
     loadMoreSessions,
     loadingMoreProjectIds,
     bumpSessionActivity,
+    replaceOptimisticInProjects,
+    dropOptimisticInProjects,
   };
 }
