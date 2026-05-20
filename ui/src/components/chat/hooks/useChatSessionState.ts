@@ -51,6 +51,46 @@ export function isScrollNearBottom(
   return scrollHeight - scrollTop - clientHeight < thresholdPx;
 }
 
+/**
+ * Whether the session-loading effect is entering a different session than
+ * the one it last loaded for. Lives next to `lastLoadedSessionKeyRef` because
+ * it must NOT consult `currentSessionId` — that piece of React state is
+ * eagerly mirrored to `selectedSession.id` during render to keep the OLD
+ * session's messages from bleeding into a freshly-cleared view, which means
+ * by the time effects run it is already equal to `selectedSession.id`.
+ * Using it for change-detection would always evaluate to false on a real
+ * session-to-session switch and leak `claudeStatus` / `isLoading` /
+ * `tokenBudget` from the previous session into the new view.
+ */
+export function didLoadedSessionChange(
+  lastLoadedSessionKey: string | null,
+  incomingSessionKey: string,
+): boolean {
+  return lastLoadedSessionKey !== null && lastLoadedSessionKey !== incomingSessionKey;
+}
+
+/**
+ * Whether the optimistic "pending user message" bubble should render in the
+ * currently active view. The pending bubble is hook-wide singleton state on
+ * `ChatInterfaceV2`; without this gate, switching sessions while it's queued
+ * would prepend the optimistic text onto the WRONG session's transcript —
+ * surfaced as "the latest query I just typed appears at the top of an
+ * unrelated session I just opened".
+ *
+ * It belongs here iff:
+ *   1. We are still on the welcome surface (no active session yet) — the
+ *      pending bubble is the only thing the user can see.
+ *   2. The active session id matches the session id `pendingViewSessionRef`
+ *      was bound to at submit time (stamped by `session_created`).
+ */
+export function shouldRenderPendingBubble(
+  activeSessionId: string | null,
+  pendingTargetSessionId: string | null,
+): boolean {
+  if (!activeSessionId) return true;
+  return pendingTargetSessionId !== null && pendingTargetSessionId === activeSessionId;
+}
+
 export function getStreamContentKey(messages: ChatMessage[]): string {
   const lastMessage = messages[messages.length - 1];
   if (!lastMessage) {
@@ -331,16 +371,40 @@ export function useChatSessionState({
     if (viewHiddenCount > 0) setViewHiddenCount(0);
   }
 
+  // `pendingViewSessionRef.current.sessionId` is the session the optimistic
+  // bubble was actually queued for. session_created stamps it. We read it
+  // here AND list it as a memo dep (via `pendingTargetSessionId`) so the
+  // memo recomputes when session_created upgrades the ref from null → real id.
+  const pendingTargetSessionId = pendingViewSessionRef.current?.sessionId ?? null;
+
   const chatMessages = useMemo(() => {
     const all = normalizedToChatMessages(storeMessages);
-    // Keep the optimistic user bubble visible even if the first backend frame
-    // is an error; otherwise attachment cards disappear on failed turns.
-    if (pendingUserMessage && !hasEquivalentUserMessage(all, pendingUserMessage)) {
+    // The optimistic user bubble must ONLY render in the session it was
+    // submitted into. Two valid surfaces:
+    //   1. The welcome surface itself (activeSessionId=null), while we are
+    //      still waiting for `session_created` to tell us the real id.
+    //   2. The exact session id that `pendingViewSessionRef` was bound to
+    //      at submit time.
+    // Without this gate, a sidebar click after a welcome submit (or any
+    // session switch while the bubble is queued) would prepend the
+    // optimistic text onto the WRONG session's transcript — surfaced as
+    // "the latest query I just typed appears at the top of an unrelated
+    // session I just opened". The handoff block above eventually pushes
+    // the bubble into the right store + clears it, but React's discard-
+    // and-rerender on render-phase setState isn't a guarantee under
+    // concurrent rendering / batched parent updates, so we also defend
+    // here at the read site.
+    const pendingBelongsHere = shouldRenderPendingBubble(activeSessionId, pendingTargetSessionId);
+    if (
+      pendingUserMessage &&
+      pendingBelongsHere &&
+      !hasEquivalentUserMessage(all, pendingUserMessage)
+    ) {
       return [pendingUserMessage, ...all];
     }
     if (viewHiddenCount > 0 && viewHiddenCount < all.length) return all.slice(0, -viewHiddenCount);
     return all;
-  }, [storeMessages, viewHiddenCount, pendingUserMessage]);
+  }, [storeMessages, viewHiddenCount, pendingUserMessage, activeSessionId, pendingTargetSessionId]);
 
   const activityMessages = normalizedToChatMessages(activityStoreMessages);
 
@@ -540,7 +604,10 @@ export function useChatSessionState({
       }
     }
 
-    const sessionChanged = currentSessionId !== null && currentSessionId !== selectedSession.id;
+    // See `didLoadedSessionChange` for why we don't compare `currentSessionId`
+    // against `selectedSession.id` here (the render-phase mirror nullifies
+    // that check on real session-to-session switches).
+    const sessionChanged = didLoadedSessionChange(lastLoadedSessionKeyRef.current, sessionKey);
     if (sessionChanged) {
       resetStreamingState();
       pendingViewSessionRef.current = null;
