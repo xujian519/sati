@@ -63,6 +63,14 @@ export interface NormalizedMessage {
   toolInput?: unknown;
   toolId?: string;
   toolResult?: { content: string; isError: boolean; toolUseResult?: unknown } | null;
+  /**
+   * Inline image payloads attached to a `tool_result` frame (e.g. `read_file`
+   * on a PNG). Object shape with `data` (data URL) and optional `mimeType` —
+   * distinct from `images?: string[]` above, which carries user-message
+   * upload data URLs. The bridge wraps gateway base64 as data URLs upstream
+   * so the UI can drop these straight into `<img src>` without re-parsing.
+   */
+  toolResultImages?: Array<{ data: string; mimeType?: string; name?: string }>;
   isError?: boolean;
   /**
    * `PilotDeckToolErrorCode` from the gateway when `kind === 'tool_result'`

@@ -53,6 +53,19 @@ export type WebGatewayEvent =
       resultPreview?: string;
       /** Mirrors `GatewayEvent.tool_call_finished.errorCode`. */
       errorCode?: string;
+      /**
+       * Mirrors `GatewayEvent.tool_call_finished.images` — inline image
+       * results (e.g. `read_file` on a PNG) surfaced to web clients so
+       * they render alongside the tool row instead of in a stray
+       * user-side bubble. Base64 payloads stay raw; the web reducer
+       * wraps them as data URLs before they reach React state.
+       */
+      images?: Array<{
+        mimeType: string;
+        data: string;
+        bytes?: number;
+        detail?: "auto" | "low" | "high";
+      }>;
     }
   | {
       type: "permission_request";

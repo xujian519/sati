@@ -36,6 +36,12 @@ export interface ToolResult {
   errorCode?: string;
   timestamp?: string | number | Date;
   toolUseResult?: unknown;
+  /**
+   * Inline images returned by the tool (e.g. `read_file` on a PNG/JPG, PDF
+   * page renders). Each entry's `data` is a ready-to-render data URL. These
+   * render alongside the tool row instead of in a stray user-side bubble.
+   */
+  images?: ChatImage[];
   [key: string]: unknown;
 }
 

@@ -63,6 +63,29 @@ test("pairs tool_call_started with tool_call_finished by toolCallId", () => {
   assert.equal(message.text, "ok");
 });
 
+test("tool_call_finished carries through inline image payloads as data URLs", () => {
+  const opts = options();
+  const result = reduce(
+    createWebMessageReducerState(),
+    [
+      { type: "tool_call_started", toolCallId: "t1", name: "read_file", argsPreview: "{path:'a.png'}" },
+      {
+        type: "tool_call_finished",
+        toolCallId: "t1",
+        ok: true,
+        resultPreview: "[Image file]",
+        images: [{ mimeType: "image/png", data: "abc123" }],
+      },
+    ],
+    opts,
+  );
+  const message = result.messages[0];
+  assert.equal(message.kind, "tool_result");
+  assert.deepEqual(message.images, [
+    { data: "data:image/png;base64,abc123", mimeType: "image/png" },
+  ]);
+});
+
 test("permission_request becomes a permission message with requestId", () => {
   const opts = options();
   const result = reduce(

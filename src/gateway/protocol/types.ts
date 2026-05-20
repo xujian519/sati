@@ -86,6 +86,20 @@ export type GatewayEvent =
       toolName?: string;
       resultPath?: string;
       /**
+       * Inline image results — emitted when the tool returns one or more
+       * `PilotDeckToolResultContent { type: "image" }` blocks (e.g. `read_file`
+       * on a PNG/JPG, or PDF-page rendering). Hosts render these alongside
+       * the tool's row so the user sees the picture next to the call site
+       * instead of in a stray user-side bubble. Empty when no images were
+       * returned. Base64 payloads should already be size-budgeted by the tool.
+       */
+      images?: Array<{
+        mimeType: string;
+        data: string;
+        bytes?: number;
+        detail?: "auto" | "low" | "high";
+      }>;
+      /**
        * `PilotDeckToolErrorCode` of the underlying failure when `ok === false`.
        * Hosts use this to render type-specific affordances — e.g. the Web UI
        * only surfaces the "Add to Allowed Tools" suggestion for

@@ -87,12 +87,22 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
           }
         }
 
+        const toolResultImages = tr && Array.isArray((tr as any).toolResultImages)
+          ? ((tr as any).toolResultImages as Array<{ data?: unknown; mimeType?: unknown; name?: unknown }>)
+              .filter((image) => image && typeof image.data === 'string' && image.data.length > 0)
+              .map((image) => ({
+                data: image.data as string,
+                name: typeof image.name === 'string' ? image.name : '',
+                ...(typeof image.mimeType === 'string' ? { mimeType: image.mimeType } : {}),
+              }))
+          : undefined;
         const toolResult = tr
           ? {
               content: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
               isError: Boolean(tr.isError),
               toolUseResult: (tr as any).toolUseResult,
               errorCode: (tr as any).errorCode,
+              ...(toolResultImages && toolResultImages.length > 0 ? { images: toolResultImages } : {}),
             }
           : null;
 

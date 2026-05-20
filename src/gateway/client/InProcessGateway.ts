@@ -631,6 +631,22 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
         })();
       }
 
+      // Surface inline image blocks (e.g. read_file on a PNG) so hosts can
+      // render them next to the tool row. Without this the picture only
+      // appears on session reload via the persisted canonical message — and
+      // it ends up in the "user" bubble because the wire role for tool
+      // results is `user`. See `projectToolResults`.
+      const images = event.result.content.flatMap((item) =>
+        item.type === "image"
+          ? [{
+              mimeType: item.mimeType,
+              data: item.data,
+              ...(item.bytes !== undefined ? { bytes: item.bytes } : {}),
+              ...(item.detail ? { detail: item.detail } : {}),
+            }]
+          : [],
+      );
+
       return [
         {
           type: "tool_call_finished",
@@ -641,6 +657,7 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
           resultBytes: totalBytes,
           toolName: event.result.toolName,
           resultPath,
+          ...(images.length > 0 ? { images } : {}),
           ...(event.result.type === "error" && { errorCode: event.result.error.code }),
         },
       ];

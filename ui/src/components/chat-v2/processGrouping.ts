@@ -3,12 +3,30 @@ import type { ChatMessage, ChatRunMode } from '../chat/types/types';
 import type { ProcessTraceMetric, ProcessTraceStep } from './ProcessTrace';
 import { formatProcessDuration } from './processTraceUtils';
 
+export type ProcessAttachmentImage = {
+  data: string;
+  name?: string;
+  mimeType?: string;
+  /** Origin of the image — currently always a tool result (e.g. read_file on a PNG). */
+  source: 'tool_result';
+  /** Source tool's id, useful as a stable React key. */
+  toolId?: string;
+};
+
 export type ProcessAttachment = {
   id: string;
   processSummary: ChatMessage;
   processDetailMessages: ChatMessage[];
   startIndex: number;
   endIndex: number;
+  /**
+   * Inline images returned by tools inside this collapsed segment (e.g.
+   * `read_file` on a PNG). Surfaced alongside the collapsed summary so the
+   * user can still see the picture without expanding the trace — otherwise
+   * the image hides behind the "Explored N files" pill, even though the
+   * model already replied "this is a 3D surface plot…" right after.
+   */
+  inlineImages: ProcessAttachmentImage[];
 };
 
 export type ProcessRunAttachment = {
@@ -551,6 +569,25 @@ function createSyntheticProcessSummary(
   };
 }
 
+function collectToolResultImages(messages: ChatMessage[]): ProcessAttachmentImage[] {
+  const images: ProcessAttachmentImage[] = [];
+  for (const message of messages) {
+    const list = (message.toolResult?.images ?? []) as Array<{ data?: unknown; name?: unknown; mimeType?: unknown }>;
+    if (!Array.isArray(list)) continue;
+    for (const image of list) {
+      if (!image || typeof image.data !== 'string' || image.data.length === 0) continue;
+      images.push({
+        data: image.data,
+        name: typeof image.name === 'string' && image.name.length > 0 ? image.name : undefined,
+        mimeType: typeof image.mimeType === 'string' ? image.mimeType : undefined,
+        source: 'tool_result',
+        toolId: typeof message.toolId === 'string' ? message.toolId : undefined,
+      });
+    }
+  }
+  return images;
+}
+
 function findNextHostIndex(messages: ChatMessage[], turn: MessageTurn, fromIndex: number): number | null {
   for (let index = fromIndex; index < turn.end; index += 1) {
     const message = messages[index];
@@ -735,6 +772,7 @@ export function buildRenderableMessageItems(
         processDetailMessages: segment.detailMessages,
         startIndex: segment.startIndex,
         endIndex: segment.endIndex,
+        inlineImages: collectToolResultImages(segment.messages),
       };
       const previousHost = segment.previousHostIndex == null
         ? null

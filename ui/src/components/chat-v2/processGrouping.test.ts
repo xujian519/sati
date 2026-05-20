@@ -97,6 +97,38 @@ describe('processGrouping', () => {
     expect(attachment?.processSummary.exploredFileCount).toBe(2);
     expect(attachment?.processSummary.ragSearchCount).toBe(1);
     expect(attachment?.processSummary.toolCallCount).toBe(3);
+    expect(attachment?.inlineImages).toEqual([]);
+  });
+
+  it('surfaces tool-result images outside the collapsed trace', () => {
+    const imageDataUrl = 'data:image/jpeg;base64,/9j/4AAQ';
+    const messages = [
+      user('u1'),
+      tool(
+        'read-1',
+        'Read',
+        { file_path: '/Users/me/Downloads/3D.jpg' },
+        100,
+        {
+          content: '[Image file]',
+          images: [{ data: imageDataUrl, name: '3D.jpg', mimeType: 'image/jpeg' }],
+        } as ChatMessage['toolResult'],
+      ),
+      assistant('a1', 'This is a 3D surface plot.', 200),
+    ];
+
+    const items = buildRenderableMessageItems(messages);
+    const attachment = processAttachments(items.find((item) => item.message.id === 'a1'))[0];
+
+    expect(attachment?.inlineImages).toEqual([
+      {
+        data: imageDataUrl,
+        name: '3D.jpg',
+        mimeType: 'image/jpeg',
+        source: 'tool_result',
+        toolId: 'read-1',
+      },
+    ]);
   });
 
   it('summarizes edit tools with unique edited file count', () => {

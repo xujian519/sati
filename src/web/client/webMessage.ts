@@ -203,6 +203,13 @@ export function applyWebGatewayEvent(
     }
 
     case "tool_call_finished": {
+      const eventImages =
+        Array.isArray(event.images) && event.images.length > 0
+          ? event.images.map((image) => ({
+              data: `data:${image.mimeType};base64,${image.data}`,
+              mimeType: image.mimeType,
+            }))
+          : undefined;
       const matchedId = state.toolMessageByCallId[event.toolCallId];
       if (matchedId) {
         return {
@@ -214,6 +221,7 @@ export function applyWebGatewayEvent(
                   kind: "tool_result",
                   ok: event.ok,
                   text: event.resultPreview ?? m.text,
+                  ...(eventImages ? { images: eventImages } : {}),
                   ...(event.errorCode && { errorCode: event.errorCode }),
                 }
               : m,
@@ -232,6 +240,7 @@ export function applyWebGatewayEvent(
         toolCallId: event.toolCallId,
         ok: event.ok,
         text: event.resultPreview,
+        ...(eventImages ? { images: eventImages } : {}),
         ...(event.errorCode && { errorCode: event.errorCode }),
         source: "live",
       };

@@ -115,6 +115,68 @@ test("isError tool_result yields ok=false", () => {
   assert.equal(out[0].ok, false);
 });
 
+test("tool_result followed by image attaches images to the tool_result, not a user bubble", () => {
+  const message: CanonicalMessage = {
+    role: "user",
+    content: [
+      {
+        type: "tool_result",
+        toolCallId: "tc-3",
+        content: [
+          { type: "text", text: "[Image file rendered.]" },
+          { type: "image", source: "base64", mimeType: "image/png", data: "img-bytes" },
+        ],
+      },
+      // `projectToolResults` also emits the image as a sibling block so the
+      // model gets the picture in its user message.
+      { type: "image", source: "base64", mimeType: "image/png", data: "img-bytes", bytes: 9 },
+    ],
+  };
+
+  const out = flattenCanonicalMessage(message, ctx);
+
+  assert.equal(out.length, 1);
+  assert.equal(out[0].kind, "tool_result");
+  assert.equal(out[0].role, "tool");
+  assert.deepEqual(out[0].images, [
+    { data: "data:image/png;base64,img-bytes", mimeType: "image/png" },
+  ]);
+});
+
+test("multiple tool_result blocks each receive their own image siblings", () => {
+  const message: CanonicalMessage = {
+    role: "user",
+    content: [
+      {
+        type: "tool_result",
+        toolCallId: "tc-a",
+        content: [{ type: "text", text: "first" }],
+      },
+      { type: "image", source: "base64", mimeType: "image/png", data: "first-img" },
+      {
+        type: "tool_result",
+        toolCallId: "tc-b",
+        content: [{ type: "text", text: "second" }],
+      },
+      { type: "image", source: "base64", mimeType: "image/jpeg", data: "second-img" },
+      { type: "image", source: "base64", mimeType: "image/jpeg", data: "second-img-2" },
+    ],
+  };
+
+  const out = flattenCanonicalMessage(message, ctx);
+
+  assert.equal(out.length, 2);
+  assert.equal(out[0].toolCallId, "tc-a");
+  assert.deepEqual(out[0].images, [
+    { data: "data:image/png;base64,first-img", mimeType: "image/png" },
+  ]);
+  assert.equal(out[1].toolCallId, "tc-b");
+  assert.deepEqual(out[1].images, [
+    { data: "data:image/jpeg;base64,second-img", mimeType: "image/jpeg" },
+    { data: "data:image/jpeg;base64,second-img-2", mimeType: "image/jpeg" },
+  ]);
+});
+
 test("thinking block is preserved as a separate assistant thinking message", () => {
   const message: CanonicalMessage = {
     role: "assistant",

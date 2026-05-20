@@ -92,6 +92,16 @@ function mapWebMessageToNormalized(message, sessionId) {
         content: message.text || '',
         isError: message.ok === false,
         ...(message.errorCode ? { errorCode: message.errorCode } : {}),
+        // Inline tool-result images (e.g. read_file on a PNG). The web
+        // server already wraps the bare base64 from canonical messages as
+        // data URLs in `toWebMessageImage`, so just pass them through.
+        ...(Array.isArray(message.images) && message.images.length > 0
+          ? {
+              toolResultImages: message.images
+                .filter((image) => image && typeof image.data === 'string')
+                .map((image) => ({ data: image.data, mimeType: image.mimeType })),
+            }
+          : {}),
       });
     case 'permission_request':
       return createNormalizedMessage({

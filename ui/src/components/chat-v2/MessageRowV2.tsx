@@ -10,6 +10,7 @@ import type {
   PermissionGrantResult,
 } from '../chat/types/types';
 import MessageComponent from '../chat/view/subcomponents/MessageComponent';
+import ImageLightbox, { type LightboxImage } from '../chat/view/subcomponents/ImageLightbox';
 import { Markdown } from '../chat/view/subcomponents/Markdown';
 import { formatUsageLimitText } from '../chat/utils/chatFormatting';
 import { ProcessTrace } from './ProcessTrace';
@@ -143,12 +144,10 @@ function MessageRowV2({
   }
 
   const renderProcessAttachment = (attachment: ProcessAttachment) => (
-    <ProcessSummaryRow
+    <ProcessAttachmentRow
       key={attachment.id}
-      message={attachment.processSummary}
-      processKey={attachment.id}
-      detailMessages={attachment.processDetailMessages}
-      renderDetailMessage={(detailMessage, index) => (
+      attachment={attachment}
+      renderDetail={(detailMessage, index) => (
         <MessageRowV2
           key={detailMessage.id || detailMessage.toolId || `${attachment.id || 'process-detail'}-${index}`}
           message={detailMessage}
@@ -209,9 +208,15 @@ function MessageRowV2({
 
   const isUser = message.type === 'user';
   const isError = message.type === 'error';
+  const [userImageLightbox, setUserImageLightbox] = useState<number | null>(null);
 
   // User: right-aligned grey bubble.
   if (isUser) {
+    const lightboxImages: LightboxImage[] = messageImages.map((image) => ({
+      data: image.data,
+      name: image.name,
+      mimeType: image.mimeType,
+    }));
     return withProcessRows(
       <div className="flex w-full justify-end">
         <div className="min-w-0 max-w-[78%] overflow-hidden rounded-[22px] bg-neutral-100 px-4 py-2.5 text-[14px] leading-relaxed text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100">
@@ -249,17 +254,20 @@ function MessageRowV2({
               {messageImages.length > 0 ? (
                 <div className={formattedContent ? 'mb-2 grid grid-cols-1 gap-2' : 'grid grid-cols-1 gap-2'}>
                   {messageImages.map((image, index) => (
-                    <div
+                    <button
+                      type="button"
                       key={`${image.name || 'image'}-${index}`}
-                      className="block w-72 max-w-full overflow-hidden rounded-xl border border-neutral-200 bg-white/70 dark:border-neutral-700 dark:bg-neutral-900/40"
+                      onClick={() => setUserImageLightbox(index)}
+                      className="block w-72 max-w-full overflow-hidden rounded-xl border border-neutral-200 bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-900/40"
+                      aria-label={image.name ? `Preview ${image.name}` : 'Preview image'}
                     >
                       <img
                         src={image.data}
                         alt={image.name || 'Uploaded image'}
-                        className="block h-auto max-h-64 w-full object-contain"
+                        className="block h-auto max-h-64 w-full cursor-zoom-in object-contain transition-opacity hover:opacity-90"
                         loading="lazy"
                       />
-                    </div>
+                    </button>
                   ))}
                 </div>
               ) : null}
@@ -269,6 +277,13 @@ function MessageRowV2({
             </>
           )}
         </div>
+        {userImageLightbox !== null && lightboxImages.length > 0 ? (
+          <ImageLightbox
+            images={lightboxImages}
+            startIndex={userImageLightbox}
+            onClose={() => setUserImageLightbox(null)}
+          />
+        ) : null}
       </div>,
     );
   }
@@ -394,5 +409,71 @@ function ProcessSummaryRow({
           )
         : null}
     </ProcessTrace>
+  );
+}
+
+function ProcessAttachmentRow({
+  attachment,
+  renderDetail,
+  isProcessExpanded,
+  onProcessExpandedChange,
+  t,
+}: {
+  attachment: ProcessAttachment;
+  renderDetail: (message: ChatMessage, index: number) => ReactNode;
+  isProcessExpanded?: (processKey: string, defaultExpanded?: boolean) => boolean;
+  onProcessExpandedChange?: (processKey: string, expanded: boolean) => void;
+  t: TFunction<'chat'>;
+}) {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const lightboxImages: LightboxImage[] = useMemo(
+    () =>
+      attachment.inlineImages.map((image) => ({
+        data: image.data,
+        name: image.name,
+        mimeType: image.mimeType,
+      })),
+    [attachment.inlineImages],
+  );
+
+  return (
+    <div className="flex min-w-0 flex-col items-start gap-2">
+      <ProcessSummaryRow
+        message={attachment.processSummary}
+        processKey={attachment.id}
+        detailMessages={attachment.processDetailMessages}
+        renderDetailMessage={renderDetail}
+        isProcessExpanded={isProcessExpanded}
+        onProcessExpandedChange={onProcessExpandedChange}
+        t={t}
+      />
+      {lightboxImages.length > 0 ? (
+        <div className="flex max-w-full flex-wrap gap-2">
+          {lightboxImages.map((image, idx) => (
+            <button
+              type="button"
+              key={`${attachment.inlineImages[idx].toolId || 'tool-image'}-${idx}`}
+              onClick={() => setLightboxIndex(idx)}
+              className="block overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-900"
+              aria-label={image.name ? `Preview ${image.name}` : 'Preview image'}
+            >
+              <img
+                src={image.data}
+                alt={image.name || 'Tool result image'}
+                className="block h-auto max-h-72 max-w-xs cursor-zoom-in object-contain"
+                loading="lazy"
+              />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {lightboxIndex !== null && lightboxImages.length > 0 ? (
+        <ImageLightbox
+          images={lightboxImages}
+          startIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      ) : null}
+    </div>
   );
 }

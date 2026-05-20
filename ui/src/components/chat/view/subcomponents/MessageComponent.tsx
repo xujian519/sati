@@ -14,6 +14,7 @@ import type { Project } from '../../../../types/app';
 import { ToolRenderer, shouldHideToolResult } from '../../tools';
 import { Markdown } from './Markdown';
 import MessageCopyControl from './MessageCopyControl';
+import ImageLightbox, { type LightboxImage } from './ImageLightbox';
 
 type DiffLine = {
   type: string;
@@ -107,6 +108,22 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
   const messageAttachments = Array.isArray(message.attachments)
     ? message.attachments.filter((attachment) => attachment && typeof attachment.name === 'string')
     : [];
+  const toolResultImages: LightboxImage[] = useMemo(
+    () => {
+      const list = (message.toolResult?.images ?? []) as Array<{ data?: unknown; name?: unknown; mimeType?: unknown }>;
+      return list
+        .filter((image) => image && typeof image.data === 'string' && image.data.length > 0)
+        .map((image) => ({
+          data: image.data as string,
+          name: typeof image.name === 'string' ? image.name : undefined,
+          mimeType: typeof image.mimeType === 'string' ? image.mimeType : undefined,
+        }));
+    },
+    [message.toolResult],
+  );
+  const [lightbox, setLightbox] = useState<{ images: LightboxImage[]; index: number } | null>(null);
+  const openLightbox = (images: LightboxImage[], index: number) => setLightbox({ images, index });
+  const closeLightbox = () => setLightbox(null);
   const userCopyContent = messageContent;
   const formattedMessageContent = useMemo(
     () => formatUsageLimitText(messageContent),
@@ -194,13 +211,19 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
             {messageImages.length > 0 && (
               <div className="mt-2 grid grid-cols-2 gap-2">
                 {messageImages.map((img, idx) => (
-                  <img
+                  <button
+                    type="button"
                     key={img.name || idx}
-                    src={img.data}
-                    alt={img.name}
-                    className="h-auto max-w-full cursor-pointer rounded-lg transition-opacity hover:opacity-90"
-                    onClick={() => window.open(img.data, '_blank')}
-                  />
+                    onClick={() => openLightbox(messageImages as LightboxImage[], idx)}
+                    className="block overflow-hidden rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                    aria-label={img.name ? `Preview ${img.name}` : 'Preview image'}
+                  >
+                    <img
+                      src={img.data}
+                      alt={img.name}
+                      className="h-auto max-w-full cursor-zoom-in rounded-lg transition-opacity hover:opacity-90"
+                    />
+                  </button>
                 ))}
               </div>
             )}
@@ -322,6 +345,31 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                     isSubagentContainer={message.isSubagentContainer}
                     subagentState={message.subagentState}
                   />
+                )}
+
+                {/* Tool-result inline images (read_file PNGs, rendered PDF pages, …).
+                    Rendered outside the legacy `Read` config (which sets `hidden: true`)
+                    so the picture appears on the assistant/tool side instead of leaking
+                    into a stray user-side bubble. */}
+                {toolResultImages.length > 0 && !message.toolResult?.isError && (
+                  <div className="my-1 flex flex-wrap gap-2">
+                    {toolResultImages.map((image, idx) => (
+                      <button
+                        type="button"
+                        key={`${image.name || 'tool-image'}-${idx}`}
+                        onClick={() => openLightbox(toolResultImages, idx)}
+                        className="block overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-900"
+                        aria-label={image.name ? `Preview ${image.name}` : 'Preview image'}
+                      >
+                        <img
+                          src={image.data}
+                          alt={image.name || 'Tool result image'}
+                          className="block h-auto max-h-72 max-w-xs cursor-zoom-in object-contain"
+                          loading="lazy"
+                        />
+                      </button>
+                    ))}
+                  </div>
                 )}
 
                 {/* Tool Result Section */}
@@ -625,6 +673,13 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
           </div>
         </div>
       )}
+      {lightbox ? (
+        <ImageLightbox
+          images={lightbox.images}
+          startIndex={lightbox.index}
+          onClose={closeLightbox}
+        />
+      ) : null}
     </div>
   );
 });

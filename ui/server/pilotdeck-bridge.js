@@ -351,6 +351,17 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                     // `file_not_found`, …) so the "Add to Allowed Tools"
                     // affordance only fires for the former.
                     ...(event.errorCode && { errorCode: event.errorCode }),
+                    // Inline tool-result images (e.g. read_file on a PNG).
+                    // The wire shape uses raw base64; we wrap as data URLs
+                    // here so the UI can drop them straight into <img src>.
+                    ...(Array.isArray(event.images) && event.images.length > 0
+                        ? {
+                              toolResultImages: event.images.map((image) => ({
+                                  data: `data:${image.mimeType};base64,${image.data}`,
+                                  mimeType: image.mimeType,
+                              })),
+                          }
+                        : {}),
                 }),
             ];
         case 'permission_request':

@@ -7,12 +7,15 @@ function makeToolResult(opts: {
   toolCallId?: string;
   toolName?: string;
   type?: "success" | "error";
-  content?: Array<{ type: "text"; text: string }>;
+  content?: Array<
+    | { type: "text"; text: string }
+    | { type: "image"; mimeType: string; data: string; bytes?: number; detail?: "auto" | "low" | "high" }
+  >;
 }): AgentEvent {
   const base = {
     toolCallId: opts.toolCallId ?? "tc1",
     toolName: opts.toolName ?? "bash",
-    content: opts.content ?? [{ type: "text", text: "hello world" }],
+    content: opts.content ?? [{ type: "text" as const, text: "hello world" }],
     startedAt: "2026-01-01T00:00:00Z",
     completedAt: "2026-01-01T00:00:01Z",
   };
@@ -75,6 +78,37 @@ test("tool_result: empty content returns empty preview", () => {
     assert.equal(ok[0]!.resultPreview, "");
     assert.equal(ok[0]!.resultLineCount, 1);
   }
+});
+
+test("tool_result: image content surfaces as inline images on tool_call_finished", () => {
+  const events = mapAgentEvent(
+    makeToolResult({
+      toolName: "read_file",
+      content: [
+        { type: "text", text: "[Image file: /tmp/a.png]" },
+        { type: "image", mimeType: "image/png", data: "abc", bytes: 3 },
+        { type: "image", mimeType: "image/jpeg", data: "def", bytes: 3, detail: "high" },
+      ],
+    }),
+    "run1",
+  );
+  const e = events[0]!;
+  if (e.type !== "tool_call_finished") {
+    throw new Error("expected tool_call_finished");
+  }
+  assert.deepEqual(e.images, [
+    { mimeType: "image/png", data: "abc", bytes: 3 },
+    { mimeType: "image/jpeg", data: "def", bytes: 3, detail: "high" },
+  ]);
+});
+
+test("tool_result: text-only output omits images field entirely", () => {
+  const events = mapAgentEvent(makeToolResult({ content: [{ type: "text", text: "ok" }] }), "run1");
+  const e = events[0]!;
+  if (e.type !== "tool_call_finished") {
+    throw new Error("expected tool_call_finished");
+  }
+  assert.equal(e.images, undefined);
 });
 
 test("tool_result: preserves toolName", () => {

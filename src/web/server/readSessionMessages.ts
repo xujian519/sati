@@ -206,6 +206,15 @@ type ProjectionContext = {
 /**
  * Flatten a CanonicalMessage's content blocks into one or more WebMessages.
  * Adjacent text blocks within the same canonical message merge.
+ *
+ * Tool-result images get special handling: when an `image` block immediately
+ * follows a `tool_result` block (as produced by `projectToolResults`), the
+ * image is attached to that tool_result WebMessage instead of being emitted as
+ * a separate user-role text message. Without this, read_file image responses
+ * would render as a "user" bubble on the right side of the chat — see
+ * https://github.com/ — the canonical wire format requires role=user, but the
+ * UI semantics want the picture rendered alongside the tool result on the
+ * assistant/tool side.
  */
 export function flattenCanonicalMessage(
   message: CanonicalMessage,
@@ -216,6 +225,7 @@ export function flattenCanonicalMessage(
   const role: WebMessageRole = message.role === "user" ? "user" : "assistant";
   let textBuffer = "";
   let pendingImages: NonNullable<WebMessage["images"]> = [];
+  let lastToolResultMessage: WebMessage | undefined;
 
   const flushText = (): void => {
     if (!textBuffer && pendingImages.length === 0) return;
@@ -236,6 +246,15 @@ export function flattenCanonicalMessage(
   };
 
   for (const block of message.content) {
+    if (block.type !== "image" && block.type !== "tool_result") {
+      // Any other block breaks the tool_result → image association.
+      lastToolResultMessage = undefined;
+    }
+    if (block.type === "image" && lastToolResultMessage && role === "user") {
+      const existing = lastToolResultMessage.images ?? [];
+      lastToolResultMessage.images = [...existing, toWebMessageImage(block)];
+      continue;
+    }
     flushBlock(block, out, context, stamp, role, () => {
       flushText();
     }, (chunk) => {
@@ -243,6 +262,9 @@ export function flattenCanonicalMessage(
     }, (image) => {
       pendingImages.push(toWebMessageImage(image));
     });
+    if (block.type === "tool_result") {
+      lastToolResultMessage = out[out.length - 1];
+    }
   }
   flushText();
   return out;
