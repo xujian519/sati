@@ -370,6 +370,18 @@ export default function MessagesPaneV2({
     }
     return keyedMessageItems.length > 0 ? 0 : -1;
   }, [isAssistantWorking, keyedMessageItems]);
+  // The current turn's "started at" is anchored to the latest user message's
+  // timestamp (set by the composer when the user submits). This is the only
+  // signal that survives a page refresh and reliably resets between turns —
+  // activity-based timing is unreliable because `activityMessages` accumulates
+  // across turns in the session store.
+  const liveProcessStartedAtMs = useMemo(() => {
+    if (!isAssistantWorking || liveProcessHeaderIndex <= 0) return null;
+    const anchorMessage = keyedMessageItems[liveProcessHeaderIndex - 1]?.message;
+    if (anchorMessage?.type !== 'user' || anchorMessage.timestamp == null) return null;
+    const parsed = Date.parse(String(anchorMessage.timestamp));
+    return Number.isFinite(parsed) ? parsed : null;
+  }, [isAssistantWorking, keyedMessageItems, liveProcessHeaderIndex]);
   const hasLiveAssistantContent = useMemo(() => {
     if (!isAssistantWorking || liveProcessHeaderIndex < 0) return false;
     return keyedMessageItems.slice(liveProcessHeaderIndex).some((item) => (
@@ -537,7 +549,11 @@ export default function MessagesPaneV2({
     return (
       <Fragment key={item.itemKey}>
         {liveProcessHeaderIndex === 0 && item.renderIndex === 0 ? (
-          <LiveProcessHeader activities={liveActivities} t={t} />
+          <LiveProcessHeader
+            activities={liveActivities}
+            startedAtMs={liveProcessStartedAtMs}
+            t={t}
+          />
         ) : null}
         <MeasuredMessageItem
           itemKey={item.itemKey}
@@ -571,7 +587,11 @@ export default function MessagesPaneV2({
             onProcessExpandedChange={handleProcessExpandedChange}
           />
           {rendersLiveHeaderAfterItem ? (
-            <LiveProcessHeader activities={liveActivities} t={t} />
+            <LiveProcessHeader
+              activities={liveActivities}
+              startedAtMs={liveProcessStartedAtMs}
+              t={t}
+            />
           ) : null}
           {item.afterRunAttachment ? (
             <CompletedProcessHeader
@@ -597,6 +617,7 @@ export default function MessagesPaneV2({
     keyedMessageItems,
     liveActivities,
     liveProcessHeaderIndex,
+    liveProcessStartedAtMs,
     liveProcessGroupsByAnchor,
     onFileOpen,
     onGrantSessionToolPermission,
@@ -751,7 +772,11 @@ export default function MessagesPaneV2({
           {isAssistantWorking &&
           liveProcessHeaderIndex === keyedMessageItems.length &&
           keyedMessageItems[liveProcessHeaderIndex - 1]?.message.type !== 'user' ? (
-            <LiveProcessHeader activities={liveActivities} t={t} />
+            <LiveProcessHeader
+              activities={liveActivities}
+              startedAtMs={liveProcessStartedAtMs}
+              t={t}
+            />
           ) : null}
 
           {shouldRenderBottomLiveStatus ? (
@@ -846,22 +871,36 @@ function getLiveStatusStep(
 }
 
 function getLiveProcessStartedAtMs(activities: ChatMessage[], fallbackStartedAtMs: number): number {
-  const byId = new Map<string, ChatMessage>();
-  for (const activity of activities) {
-    const key = activity.activityId || activity.id || `${activity.runId}-${activity.timestamp}`;
-    byId.set(key, activity);
+  if (activities.length === 0) return fallbackStartedAtMs;
+
+  // `activityMessages` accumulates across turns in the session store, so the
+  // raw list can include activities from previous runs. Scope the start time
+  // to the current run by anchoring on the most recently received activity's
+  // `runId` and picking the earliest start within that run.
+  const latestActivity = activities[activities.length - 1];
+  const latestRunId = latestActivity?.runId;
+  const currentRunActivities = latestRunId
+    ? activities.filter((activity) => activity.runId === latestRunId)
+    : activities;
+
+  let earliestMs = Number.POSITIVE_INFINITY;
+  for (const activity of currentRunActivities) {
+    const value = activity.startedAt || activity.timestamp;
+    const parsed = value ? Date.parse(String(value)) : NaN;
+    if (Number.isFinite(parsed) && parsed < earliestMs) {
+      earliestMs = parsed;
+    }
   }
-  const latest = Array.from(byId.values());
-  const startedAt = latest[0]?.startedAt || latest[0]?.timestamp;
-  const startedAtMs = startedAt ? Date.parse(String(startedAt)) : fallbackStartedAtMs;
-  return Number.isFinite(startedAtMs) ? startedAtMs : fallbackStartedAtMs;
+  return Number.isFinite(earliestMs) ? earliestMs : fallbackStartedAtMs;
 }
 
 function LiveProcessHeader({
   activities,
+  startedAtMs,
   t,
 }: {
   activities: ChatMessage[];
+  startedAtMs: number | null;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const fallbackStartedAtRef = useRef(Date.now());
@@ -872,10 +911,11 @@ function LiveProcessHeader({
     return () => window.clearInterval(timer);
   }, []);
 
-  const elapsedMs = useMemo(
-    () => nowMs - getLiveProcessStartedAtMs(activities, fallbackStartedAtRef.current),
-    [activities, nowMs],
-  );
+  const elapsedMs = useMemo(() => {
+    const effectiveStartedAtMs = startedAtMs
+      ?? getLiveProcessStartedAtMs(activities, fallbackStartedAtRef.current);
+    return Math.max(0, nowMs - effectiveStartedAtMs);
+  }, [activities, nowMs, startedAtMs]);
   const duration = formatProcessDuration(elapsedMs);
   const label = t('process.summary.processed', {
     duration,
