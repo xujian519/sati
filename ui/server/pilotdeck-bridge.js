@@ -656,6 +656,24 @@ export async function runChatViaGateway(
 
     const state = ensureSessionState(sessionKey, projectKey, channelKey);
 
+    // If a previous turn for this session is still in-flight (e.g. the
+    // browser reloaded while a permission prompt was pending), abort it
+    // before starting the new one. Without this the gateway rejects
+    // with session_busy because the old turn's inFlightTurns slot is
+    // still occupied.
+    if (state.active && state.runId) {
+        console.log(
+            `[pilotdeck-bridge] aborting stale turn ${state.runId} for ${sessionKey} before resubmit`,
+        );
+        try {
+            await gw.abortTurn({ sessionKey, runId: state.runId });
+        } catch (err) {
+            console.warn('[pilotdeck-bridge] stale abort failed (continuing):', err?.message || err);
+        }
+        state.active = false;
+        state.runId = undefined;
+    }
+
     if (isNewSession) {
         writer.send(
             createNormalizedMessage({

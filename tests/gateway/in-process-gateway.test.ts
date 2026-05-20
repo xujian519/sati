@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { InProcessGateway, SessionRouter, mapAgentEvent } from "../../src/gateway/index.js";
+import { InProcessGateway, SessionRouter, mapAgentEvent, PILOTDECK_GATEWAY_PROTOCOL_VERSION } from "../../src/gateway/index.js";
+import { GatewayWsConnection } from "../../src/gateway/server/GatewayWsConnection.js";
+import type { TextWebSocketConnection } from "../../src/gateway/server/websocket.js";
 import type { AgentEvent, AgentInput, AgentSession } from "../../src/agent/index.js";
 
 test("InProcessGateway maps a text turn to GatewayEvent stream", async () => {
@@ -798,4 +800,95 @@ test("InProcessGateway keeps text-only turns as a plain text input", async () =>
   }
 
   assert.deepEqual(capturedInputs, [{ type: "text", text: "hi" }]);
+});
+
+test("GatewayWsConnection aborts in-flight turns on WS close", async () => {
+  let release!: () => void;
+  const blocker = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  const router = new SessionRouter({
+    createSession: async () =>
+      ({
+        abort: () => release(),
+        snapshot: () => ({
+          sessionId: "session-1",
+          messages: [],
+          usage: {},
+          permissionDenials: [],
+          status: "idle",
+          abortController: new AbortController(),
+        }),
+        replay: async function* () {},
+        submit: async function* () {
+          yield { type: "turn_started", sessionId: "session-1", turnId: "run-1" } satisfies AgentEvent;
+          await blocker;
+        },
+      }) as unknown as AgentSession,
+  });
+  const gateway = new InProcessGateway(router, { uuid: () => "run-1" });
+
+  const closeHandlers: Array<() => void> = [];
+  const sentMessages: string[] = [];
+  const fakeWs = {
+    onMessage(_handler: (message: string) => void) {
+      (fakeWs as unknown as { _messageHandler: (m: string) => void })._messageHandler = _handler;
+    },
+    onClose(handler: () => void) {
+      closeHandlers.push(handler);
+    },
+    sendText(message: string) {
+      sentMessages.push(message);
+    },
+    close() {},
+  } as unknown as TextWebSocketConnection;
+
+  const conn = new GatewayWsConnection(fakeWs, {
+    gateway,
+    token: "test-token",
+    serverVersion: "0.0.0-test",
+  });
+  void conn;
+
+  const sendToConn = (fakeWs as unknown as { _messageHandler: (m: string) => void })._messageHandler;
+
+  sendToConn(
+    JSON.stringify({
+      type: "hello",
+      protocolVersion: PILOTDECK_GATEWAY_PROTOCOL_VERSION,
+      clientName: "test",
+      clientVersion: "1.0.0",
+      token: "test-token",
+    }),
+  );
+  await new Promise((r) => setImmediate(r));
+  assert.ok(sentMessages.some((m) => JSON.parse(m).type === "hello_ok"), "handshake must succeed");
+
+  sendToConn(
+    JSON.stringify({
+      type: "request",
+      id: "req-1",
+      method: "submit_turn",
+      params: { sessionKey: "session-1", channelKey: "cli", message: "hello", runId: "run-1" },
+    }),
+  );
+  await new Promise((r) => setImmediate(r));
+
+  for (const handler of closeHandlers) handler();
+  await new Promise((r) => setTimeout(r, 100));
+
+  const secondEvents = await collect(
+    gateway.submitTurn({
+      sessionKey: "session-1",
+      channelKey: "cli",
+      message: "two",
+      runId: "run-2",
+    }),
+  );
+  assert.equal(
+    secondEvents.some((e) => e.type === "error" && e.code === "session_busy"),
+    false,
+    "second submit must not be rejected as busy after WS close aborted the stale turn",
+  );
 });

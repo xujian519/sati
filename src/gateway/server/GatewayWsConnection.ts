@@ -12,12 +12,23 @@ export type GatewayWsConnectionOptions = {
 
 export class GatewayWsConnection {
   private authed = false;
+  private readonly inFlightSessions = new Set<string>();
 
   constructor(
     private readonly ws: TextWebSocketConnection,
     private readonly options: GatewayWsConnectionOptions,
   ) {
     ws.onMessage((message) => void this.handleMessage(message));
+    ws.onClose(() => this.abortInFlightTurns());
+  }
+
+  private abortInFlightTurns(): void {
+    for (const sessionKey of this.inFlightSessions) {
+      this.options.gateway
+        .abortTurn({ sessionKey })
+        .catch(() => undefined);
+    }
+    this.inFlightSessions.clear();
   }
 
   sendNotification(name: string, payload?: unknown): void {
@@ -77,13 +88,19 @@ export class GatewayWsConnection {
   private async handleRequest(frame: WsRequestFrame): Promise<void> {
     try {
       if (frame.method === "submit_turn") {
+        const sessionKey = (frame.params as { sessionKey?: string } | undefined)?.sessionKey;
+        if (sessionKey) this.inFlightSessions.add(sessionKey);
         let seq = 0;
         let lastCompleted: GatewayEvent | undefined;
-        for await (const event of this.options.gateway.submitTurn(frame.params as never)) {
-          if (event.type === "turn_completed") {
-            lastCompleted = event;
+        try {
+          for await (const event of this.options.gateway.submitTurn(frame.params as never)) {
+            if (event.type === "turn_completed") {
+              lastCompleted = event;
+            }
+            this.ws.sendText(JSON.stringify({ type: "event", id: frame.id, seq: seq++, final: false, event }));
           }
-          this.ws.sendText(JSON.stringify({ type: "event", id: frame.id, seq: seq++, final: false, event }));
+        } finally {
+          if (sessionKey) this.inFlightSessions.delete(sessionKey);
         }
         const usage = lastCompleted?.type === "turn_completed" ? lastCompleted.usage : {};
         const finishReason = lastCompleted?.type === "turn_completed" ? lastCompleted.finishReason : "completed";
