@@ -30,7 +30,6 @@ export type ReadFileInput = {
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_TEXT_TOKENS = 25_000;
-const MAX_IMAGE_TOKENS = 12_000;
 const MAX_PDF_PAGES_PER_REQUEST = 20;
 const FILE_UNCHANGED_STUB =
   "File unchanged since the last read. Refer to the earlier read_file result instead of re-reading it.";
@@ -174,12 +173,7 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         }
         const imageBuffer = await readFile(resolved.absolutePath);
         const maxImageBytes = Math.min(MAX_IMAGE_BYTES, context.modelMultimodal?.maxImageBytes ?? MAX_IMAGE_BYTES);
-        const compressed = await compressImageForBudget(
-          imageBuffer,
-          mimeType,
-          maxImageBytes,
-          MAX_IMAGE_TOKENS,
-        );
+        const compressed = await compressImageForBudget(imageBuffer, mimeType, maxImageBytes);
         readState.set(dedupKey, {
           mtimeMs: Math.floor(fileStat.mtimeMs),
           kind,
@@ -458,7 +452,6 @@ async function renderPdfPagesAsImages(
         imageBuffer,
         "image/jpeg",
         Math.min(MAX_IMAGE_BYTES, maxImageBytes),
-        MAX_IMAGE_TOKENS,
       );
       images.push({
         type: "image" as const,
@@ -512,15 +505,26 @@ function ensureTokenBudget(text: string, filePath: string): void {
   }
 }
 
+/**
+ * Multi-pass image compressor. We size against a single byte budget (which
+ * the model's own `maxImageBytes` constraint also enforces) — there's no
+ * separate "image token" cap because multimodal LLMs price images by
+ * dimensions or fixed tile cost, not by base64 length. A `bytes / 6`
+ * heuristic on top of that just rejects perfectly cheap images (e.g. a
+ * 250 KB JPEG that Claude charges ~700 tokens for).
+ *
+ * Cascade: pass 1 = format-appropriate 1600px / quality 80, pass 2 =
+ * 1200px JPEG quality 55, pass 3 = 800px JPEG quality 40. Only after all
+ * three fail to fit do we surface `result_too_large`.
+ */
 async function compressImageForBudget(
   buffer: Buffer,
   mimeType: string,
   maxBytes: number,
-  maxTokens: number,
 ): Promise<{ buffer: Buffer; mimeType: string }> {
   let output = buffer;
   let outputMimeType = mimeType;
-  if (output.byteLength > maxBytes || estimateBase64Tokens(output) > maxTokens) {
+  if (output.byteLength > maxBytes) {
     try {
       const sharpModule = await import("sharp");
       const sharp = sharpModule.default;
@@ -551,10 +555,18 @@ async function compressImageForBudget(
         outputMimeType = "image/jpeg";
       }
 
-      if (output.byteLength > maxBytes || estimateBase64Tokens(output) > maxTokens) {
+      if (output.byteLength > maxBytes) {
         output = await sharp(output)
           .resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true })
           .jpeg({ quality: 55 })
+          .toBuffer();
+        outputMimeType = "image/jpeg";
+      }
+
+      if (output.byteLength > maxBytes) {
+        output = await sharp(output)
+          .resize({ width: 800, height: 800, fit: "inside", withoutEnlargement: true })
+          .jpeg({ quality: 40 })
           .toBuffer();
         outputMimeType = "image/jpeg";
       }
@@ -563,16 +575,12 @@ async function compressImageForBudget(
     }
   }
 
-  if (output.byteLength > maxBytes || estimateBase64Tokens(output) > maxTokens) {
+  if (output.byteLength > maxBytes) {
     throw new PilotDeckToolRuntimeError(
       "result_too_large",
-      `Image content exceeds the read_file token budget after compression attempts (${mimeType}).`,
-      { mimeType: outputMimeType, bytes: output.byteLength, estimatedTokens: estimateBase64Tokens(output) },
+      `Image content exceeds the read_file byte budget after compression attempts (${mimeType}).`,
+      { mimeType: outputMimeType, bytes: output.byteLength, maxBytes },
     );
   }
   return { buffer: output, mimeType: outputMimeType };
-}
-
-function estimateBase64Tokens(buffer: Buffer): number {
-  return Math.ceil(buffer.toString("base64").length * 0.125);
 }
