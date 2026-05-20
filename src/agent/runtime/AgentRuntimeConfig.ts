@@ -17,6 +17,8 @@ export type AgentRuntimeConfig = {
   permissionMode: PermissionMode;
   /** Who last set the current mode: "user" (UI/CLI) or "tool" (enter_plan_mode). */
   permissionModeOrigin?: "user" | "tool";
+  /** Saved mode before entering plan mode, restored on exit. */
+  permissionModeBeforePlan?: PermissionMode;
   permissionContext: PermissionContext;
   env?: NodeJS.ProcessEnv;
   maxResultBytes?: number;

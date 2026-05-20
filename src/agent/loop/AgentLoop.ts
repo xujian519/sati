@@ -472,9 +472,20 @@ export class AgentLoop {
         }
         const requestedMode = readRequestedMode(result.type === "success" ? result.data : undefined);
         if (requestedMode) {
-          this.config.permissionMode = requestedMode;
-          this.config.permissionContext.mode = requestedMode;
-          yield { type: "mode_change_requested", sessionId: input.sessionId, turnId: input.turnId, mode: requestedMode };
+          let effectiveMode = requestedMode;
+
+          if (requestedMode === "plan" && this.config.permissionMode !== "plan") {
+            this.config.permissionModeBeforePlan = this.config.permissionMode;
+          } else if (this.config.permissionMode === "plan" && requestedMode !== "plan") {
+            if (this.config.permissionModeBeforePlan) {
+              effectiveMode = this.config.permissionModeBeforePlan;
+              this.config.permissionModeBeforePlan = undefined;
+            }
+          }
+
+          this.config.permissionMode = effectiveMode;
+          this.config.permissionContext.mode = effectiveMode;
+          yield { type: "mode_change_requested", sessionId: input.sessionId, turnId: input.turnId, mode: effectiveMode };
         }
         yield { type: "tool_result", sessionId: input.sessionId, turnId: input.turnId, result };
       }

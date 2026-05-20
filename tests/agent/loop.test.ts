@@ -618,6 +618,171 @@ test("AgentLoop still exposes the plan directory when no user title exists", asy
   assert.match(seenPlanDirectoryPath ?? "", /\.pilotdeck[\\/]+plans$/);
 });
 
+test("exit_plan_mode restores the pre-plan permissionMode", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({});
+  t.after(() => workspace.cleanup());
+  const fixture = createAgentLoopFixture({
+    tools: [createEnterPlanModeTool(), createExitPlanModeTool()],
+    permissionMode: "bypassPermissions",
+    config: { cwd: workspace.cwd },
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "tool_call_end", toolCall: { id: "call-1", name: "enter_plan_mode", input: {} } },
+        { type: "message_end", finishReason: "tool_call" },
+      ],
+      [
+        { type: "message_start", role: "assistant" },
+        {
+          type: "tool_call_end",
+          toolCall: {
+            id: "call-2",
+            name: "exit_plan_mode",
+            input: { plan_file_path: ".pilotdeck/plans/my-plan.md" },
+          },
+        },
+        { type: "message_end", finishReason: "tool_call" },
+      ],
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "text_delta", text: "Implementing." },
+        { type: "message_end", finishReason: "stop" },
+      ],
+    ],
+  });
+  const planFileManager = createPlanFileManager({ projectRoot: workspace.cwd });
+  await workspace.write(".pilotdeck/plans/my-plan.md", "Step 1\nStep 2\n");
+  const loop = new AgentLoop(fixture.config, {
+    ...fixture.dependencies,
+    planFileManager,
+    elicitation: {
+      askUser: async () => ({
+        type: "answered",
+        answers: { "What should happen next?": "execute_plan" },
+      }),
+    },
+  });
+
+  const { values } = await collectAsyncGenerator(
+    loop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "user", content: [{ type: "text", text: "plan then implement" }] }],
+    }),
+  );
+
+  assert.equal(fixture.config.permissionMode, "bypassPermissions");
+  assert.equal(fixture.config.permissionContext.mode, "bypassPermissions");
+  assert.equal(fixture.config.permissionModeBeforePlan, undefined);
+  const modeChanges = values.filter((e) => e.type === "mode_change_requested");
+  assert.equal(modeChanges.length, 2);
+  assert.equal((modeChanges[0] as any).mode, "plan");
+  assert.equal((modeChanges[1] as any).mode, "bypassPermissions");
+});
+
+test("exit_plan_mode falls back to default when no saved mode", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({});
+  t.after(() => workspace.cleanup());
+  const fixture = createAgentLoopFixture({
+    tools: [createExitPlanModeTool()],
+    permissionMode: "plan",
+    config: { cwd: workspace.cwd },
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        {
+          type: "tool_call_end",
+          toolCall: {
+            id: "call-1",
+            name: "exit_plan_mode",
+            input: { plan_file_path: ".pilotdeck/plans/my-plan.md" },
+          },
+        },
+        { type: "message_end", finishReason: "tool_call" },
+      ],
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "text_delta", text: "Implementing." },
+        { type: "message_end", finishReason: "stop" },
+      ],
+    ],
+  });
+  const planFileManager = createPlanFileManager({ projectRoot: workspace.cwd });
+  await workspace.write(".pilotdeck/plans/my-plan.md", "Step 1\n");
+  const loop = new AgentLoop(fixture.config, {
+    ...fixture.dependencies,
+    planFileManager,
+    elicitation: {
+      askUser: async () => ({
+        type: "answered",
+        answers: { "What should happen next?": "execute_plan" },
+      }),
+    },
+  });
+
+  await collectAsyncGenerator(
+    loop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "user", content: [{ type: "text", text: "execute" }] }],
+    }),
+  );
+
+  assert.equal(fixture.config.permissionMode, "default");
+  assert.equal(fixture.config.permissionContext.mode, "default");
+});
+
+test("cancelled exit_plan_mode preserves plan mode and saved mode", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({});
+  t.after(() => workspace.cleanup());
+  const fixture = createAgentLoopFixture({
+    tools: [createEnterPlanModeTool(), createExitPlanModeTool()],
+    permissionMode: "bypassPermissions",
+    config: { cwd: workspace.cwd },
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "tool_call_end", toolCall: { id: "call-1", name: "enter_plan_mode", input: {} } },
+        { type: "message_end", finishReason: "tool_call" },
+      ],
+      [
+        { type: "message_start", role: "assistant" },
+        {
+          type: "tool_call_end",
+          toolCall: {
+            id: "call-2",
+            name: "exit_plan_mode",
+            input: { plan_file_path: ".pilotdeck/plans/my-plan.md" },
+          },
+        },
+        { type: "message_end", finishReason: "tool_call" },
+      ],
+    ],
+  });
+  const planFileManager = createPlanFileManager({ projectRoot: workspace.cwd });
+  await workspace.write(".pilotdeck/plans/my-plan.md", "Step 1\n");
+  const loop = new AgentLoop(fixture.config, {
+    ...fixture.dependencies,
+    planFileManager,
+    elicitation: {
+      askUser: async () => ({ type: "cancelled" }),
+    },
+  });
+
+  await collectAsyncGenerator(
+    loop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "user", content: [{ type: "text", text: "plan" }] }],
+      maxTurns: 2,
+    }),
+  );
+
+  assert.equal(fixture.config.permissionMode, "plan");
+  assert.equal(fixture.config.permissionContext.mode, "plan");
+  assert.equal(fixture.config.permissionModeBeforePlan, "bypassPermissions");
+});
+
 test("approved exit_plan_mode result is projected into the next model request", async (t) => {
   const workspace = await createPilotDeckTempWorkspace({});
   t.after(() => workspace.cleanup());
