@@ -67,6 +67,20 @@ export class ToolRegistry {
   }
 
   /**
+   * Remove a tool (and its aliases) from the registry.
+   * Returns true if the tool was found and removed, false otherwise.
+   */
+  unregister(name: string): boolean {
+    const tool = this.toolsByName.get(name);
+    if (!tool) return false;
+    for (const alias of tool.aliases ?? []) {
+      this.aliases.delete(alias);
+    }
+    this.toolsByName.delete(name);
+    return true;
+  }
+
+  /**
    * Replace an existing tool definition in-place.  Unlike `register()`,
    * this overwrites the entry keyed by `tool.name` (which must already
    * exist).  Aliases from the *previous* definition are removed and

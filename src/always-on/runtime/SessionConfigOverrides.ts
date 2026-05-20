@@ -17,6 +17,12 @@ export type SessionConfigOverride = {
     deny?: PermissionRule[];
     ask?: PermissionRule[];
   };
+  /**
+   * Tool names to exclude from the session's tool registry. Used by
+   * Always-On phases to remove interactive/blocking tools (plan mode,
+   * ask_user_question) that cannot function without a human respondent.
+   */
+  excludeTools?: string[];
 };
 
 /**

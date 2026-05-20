@@ -722,6 +722,17 @@ class ProjectRuntimeRegistry {
       );
     }
 
+    // -- excludeTools filtering (Always-On headless sessions) -----------
+    const override = this._sessionOverrides?.get(context.sessionKey);
+    if (override?.excludeTools && override.excludeTools.length > 0) {
+      if (sessionTools === runtime.tools) {
+        sessionTools = runtime.tools.clone();
+      }
+      for (const name of override.excludeTools) {
+        sessionTools.unregister(name);
+      }
+    }
+
     // Inject the gateway's interactive permission hook so the agent's
     // PermissionRequest lifecycle is round-tripped through whichever
     // client is streaming this session (Web UI, TUI, etc.) instead of

@@ -56,6 +56,16 @@ const EXECUTION_CHANNEL: GatewayChannelKey = "always-on/execute";
 const REPORT_CHANNEL: GatewayChannelKey = "always-on/report";
 const APPLY_CHANNEL: GatewayChannelKey = "always-on/apply";
 
+/**
+ * Tools that require user interaction or could block an unattended session.
+ * Excluded from all Always-On agent loops via SessionConfigOverride.excludeTools.
+ */
+const ALWAYS_ON_EXCLUDED_TOOLS = [
+  "enter_plan_mode",
+  "exit_plan_mode",
+  "ask_user_question",
+];
+
 export type EnsureAlwaysOnWorkspaceInput = {
   state: AlwaysOnDiscoveryState;
   projectKey: string;
@@ -172,6 +182,7 @@ export class DiscoveryFire {
       permissionMode: "bypassPermissions",
       bypassAvailable: true,
       canPrompt: false,
+      excludeTools: ALWAYS_ON_EXCLUDED_TOOLS,
     });
 
     try {
@@ -238,6 +249,7 @@ export class DiscoveryFire {
       permissionMode: "bypassPermissions",
       bypassAvailable: true,
       canPrompt: false,
+      excludeTools: ALWAYS_ON_EXCLUDED_TOOLS,
     });
 
     let discoveryEvents: GatewayEvent[];
@@ -357,6 +369,7 @@ export class DiscoveryFire {
       permissionMode: "bypassPermissions",
       bypassAvailable: true,
       canPrompt: false,
+      excludeTools: ALWAYS_ON_EXCLUDED_TOOLS,
     });
 
     const executionCtx: ExecutionRunContext = {
@@ -450,6 +463,7 @@ export class DiscoveryFire {
       permissionMode: "bypassPermissions",
       bypassAvailable: true,
       canPrompt: false,
+      excludeTools: ALWAYS_ON_EXCLUDED_TOOLS,
     });
 
     const reportCtx: ReportRunContext = {
@@ -581,6 +595,7 @@ export class DiscoveryFire {
       permissionMode: "bypassPermissions",
       bypassAvailable: true,
       canPrompt: false,
+      excludeTools: ALWAYS_ON_EXCLUDED_TOOLS,
     });
 
     try {
