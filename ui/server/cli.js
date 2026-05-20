@@ -39,7 +39,7 @@ const c = {
 };
 
 function defaultDatabasePath() {
-  return path.join(os.homedir(), '.pilotdeck', 'auth.db');
+  return path.join(process.env.PILOT_HOME || path.join(os.homedir(), '.pilotdeck'), 'auth.db');
 }
 
 function getInstallDir() {

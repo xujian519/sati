@@ -23,7 +23,8 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 // schemas. UI server just round-trips them.
 
 const CONFIG_VERSION = 1;
-const DEFAULT_CONFIG_PATH = path.join(os.homedir(), '.pilotdeck', 'pilotdeck.yaml');
+const PILOT_HOME_DIR = process.env.PILOT_HOME || path.join(os.homedir(), '.pilotdeck');
+const DEFAULT_CONFIG_PATH = path.join(PILOT_HOME_DIR, 'pilotdeck.yaml');
 const MASK = '********';
 
 const SECRET_KEY_RE = /(api[_-]?key|token|secret|password|auth[_-]?token|access[_-]?token|bot[_-]?token|app[_-]?token|encoding[_-]?aes[_-]?key)$/i;
@@ -87,7 +88,7 @@ export function buildDefaultPilotDeckConfig() {
         proxyPort: 18080,
         apiTimeoutMs: 120000,
         httpsProxy: '',
-        databasePath: path.join(os.homedir(), '.pilotdeck', 'auth.db'),
+        databasePath: path.join(PILOT_HOME_DIR, 'auth.db'),
         workspacesRoot: os.homedir(),
       },
     },

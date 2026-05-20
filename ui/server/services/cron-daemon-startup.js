@@ -44,7 +44,7 @@ function getCronDaemonStartLockPath() {
 function resolveCronDaemonLogPath() {
   const override = process.env.PILOTDECK_CRON_DAEMON_LOG?.trim();
   if (override) return override;
-  return path.join(os.homedir(), '.pilotdeck', 'cron-daemon.log');
+  return path.join(process.env.PILOT_HOME || path.join(os.homedir(), '.pilotdeck'), 'cron-daemon.log');
 }
 
 function openCronDaemonLogFd() {

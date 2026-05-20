@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as os from "node:os";
 import type { CanonicalUsage } from "../../model/index.js";
 import type { RouterStatsConfig } from "../config/schema.js";
+import { resolvePilotHome } from "../../pilot/paths.js";
 import type { RouterDecision } from "../protocol/decision.js";
 
 export type RouterStatsRecord = {
@@ -70,7 +70,7 @@ export class TokenStatsCollector {
     if (this.enabled) {
       const routerDir = config?.filePath
         ? path.dirname(config.filePath)
-        : path.join(os.homedir(), ".pilotdeck", "router");
+        : path.join(resolvePilotHome(), "router");
       try { fs.mkdirSync(routerDir, { recursive: true }); } catch { /* ok */ }
 
       this.jsonlPath = path.join(routerDir, "stats.jsonl");

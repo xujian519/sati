@@ -510,7 +510,6 @@ class ProjectRuntimeRegistry {
       customRouterRegistry: pluginRuntime,
       loadSkillPrompt: (extensionId) => pluginRuntime.loadSkillPrompt(extensionId),
       events: this.buildRouterEventBus(),
-      sessionStore: this.sharedSessionStore,
     });
     const backgroundTasks = new BackgroundTaskRuntime({ now: this.options.now });
     const webSearchConfig = snapshot.config.tools?.webSearch;
