@@ -733,6 +733,25 @@ class ProjectRuntimeRegistry {
       }
     }
 
+    // -- Strip always_on_* tools from non-Always-On sessions -------------
+    // These tools require an AlwaysOnRunContext to execute; surfacing them
+    // in regular user sessions just pollutes the model's tool list.
+    const isAlwaysOnSession = override?.permissionMode === "bypassPermissions"
+      && override?.canPrompt === false;
+    if (!isAlwaysOnSession) {
+      const alwaysOnNames = this._extraTools
+        .filter((t) => t.name.startsWith("always_on_"))
+        .map((t) => t.name);
+      if (alwaysOnNames.length > 0) {
+        if (sessionTools === runtime.tools) {
+          sessionTools = runtime.tools.clone();
+        }
+        for (const name of alwaysOnNames) {
+          sessionTools.unregister(name);
+        }
+      }
+    }
+
     // Inject the gateway's interactive permission hook so the agent's
     // PermissionRequest lifecycle is round-tripped through whichever
     // client is streaming this session (Web UI, TUI, etc.) instead of

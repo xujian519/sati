@@ -168,7 +168,10 @@ export function createAgentTool(
 
       // Full fork path (C2): preferred when AgentLoop wired the fork API.
       if (context.subagent) {
-        const requestedType = explicit ?? "general-purpose";
+        let requestedType = explicit ?? "general-purpose";
+        if (context.permissionContext?.mode === "plan" && requestedType === "general-purpose") {
+          requestedType = "explore";
+        }
         return runFullFork({
           input,
           context,
@@ -177,7 +180,10 @@ export function createAgentTool(
           fork: context.subagent,
         });
       }
-      const requestedType = explicit ?? "general-purpose";
+      let requestedType = explicit ?? "general-purpose";
+      if (context.permissionContext?.mode === "plan" && requestedType === "general-purpose") {
+        requestedType = "explore";
+      }
 
       return runFallback({
         input,

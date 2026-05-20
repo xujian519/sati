@@ -210,6 +210,8 @@ export class SubAgentSession {
     const scoped = new ToolRegistry();
     const allowedSet = new Set(this.options.definition.allowedTools);
     const wildcard = allowedSet.has("*");
+    const forceReadOnly = this.options.definition.isReadOnly
+      || this.options.parentConfig.permissionMode === "plan";
     for (const tool of this.options.parentDependencies.tools.registry.list()) {
       if (tool.name === "enter_plan_mode" || tool.name === "exit_plan_mode") {
         continue; // Subagents must not participate in the plan-mode workflow.
@@ -217,7 +219,13 @@ export class SubAgentSession {
       if (tool.name === "agent") {
         continue; // Subagents must never nest-fork.
       }
-      if (this.options.definition.isReadOnly && tool.isDestructive?.({} as never) === true) {
+      if (tool.name.startsWith("always_on_")) {
+        continue; // Always-On tools require a RunContext unavailable in subagents.
+      }
+      if (tool.name === "ask_user_question") {
+        continue; // Subagents have no elicitation channel.
+      }
+      if (forceReadOnly && tool.isDestructive?.({} as never) === true) {
         continue; // S9 — read-only subagents reject destructive tools outright
       }
       if (!wildcard && !allowedSet.has(tool.name)) continue;
