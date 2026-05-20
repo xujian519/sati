@@ -360,10 +360,23 @@ export default function AppShellV2() {
   const [showNewProject, setShowNewProject] = useState(false);
   const handleOpenNewProject = useCallback(() => setShowNewProject(true), []);
   const handleCloseNewProject = useCallback(() => setShowNewProject(false), []);
-  const handleProjectCreated = useCallback(() => {
-    void refreshProjectsSilently();
+  const handleProjectCreated = useCallback((project?: Record<string, unknown>) => {
     setShowNewProject(false);
-  }, [refreshProjectsSilently]);
+    void refreshProjectsSilently();
+
+    // Auto-jump into the new project's empty new-conversation screen so the
+    // user doesn't accidentally keep chatting under the previously selected
+    // project (typically "general") after closing the wizard. The wizard
+    // hands back the freshly created project from POST /create-workspace
+    // (and the clone SSE complete event), which is the same `{ name,
+    // displayName, fullPath, path }` shape as the sidebar list entries.
+    const projectName = typeof project?.name === 'string' ? project.name : '';
+    if (!projectName) return;
+    const newProject = project as Project;
+    handleNewSession(newProject);
+    navigate(`/p/${encodeURIComponent(projectName)}`);
+    setActiveTab('chat');
+  }, [handleNewSession, navigate, refreshProjectsSilently, setActiveTab]);
 
   // Project deletion (V2): hover-revealed trash button on each row -> confirm dialog
   // -> DELETE /api/projects/:name (force=true). Reuses the shared cleanup callback
