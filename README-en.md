@@ -183,9 +183,9 @@ In black-box agents, mixing tasks in a shared context pool inevitably pollutes m
 <table width="100%">
 <thead>
 <tr>
-  <th align="left">Dimension</th>
-  <th align="left">Current AI Agents (black-box)</th>
-  <th align="left">PilotDeck (white-box)</th>
+  <th width="14%" align="left">Dimension</th>
+  <th width="41%" align="left">Current AI Agents (black-box)</th>
+  <th width="45%" align="left">PilotDeck (white-box)</th>
 </tr>
 </thead>
 <tbody>
@@ -240,7 +240,7 @@ PilotDeck ships an out-of-the-box Web UI with full WorkSpace management, white-b
 </tr>
 </table>
 
-#### iOS Game Development
+#### Mini-Game Development
 
 > *"Walk me through building an iOS AR mini-game Ball Finder in Vibe Coding mode."*
 
@@ -344,6 +344,14 @@ model:
 cd ui && npm run dev     # dev mode (HMR), visit http://localhost:5173
 # or
 cd ui && npm run start   # production mode, visit http://localhost:3001
+```
+
+### Option C: Docker Compose
+
+If Docker is installed, you can start PilotDeck with:
+
+```bash
+docker compose up -d
 ```
 
 ### 🍎 Desktop App (Apple Silicon)
