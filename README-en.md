@@ -260,16 +260,13 @@ PilotDeck ships an out-of-the-box Web UI with full WorkSpace management, white-b
 
 > *"Push this English podcast to a global audience in Chinese / Japanese / French / Korean / Spanish / Arabic."*
 
-<table width="100%">
-<tr>
-<td width="50%" align="center"><b>Process</b></td>
-<td width="50%" align="center"><b>Result</b></td>
-</tr>
-<tr>
-<td><img src="assets/en/podcast_en.gif" width="100%"/></td>
-<td><img src="assets/result/podcast_result.gif" width="100%"/></td>
-</tr>
-</table>
+**Process**
+
+<img src="assets/en/podcast_en.gif" width="100%"/>
+
+**Result (with audio)**
+
+https://github.com/Gucc111/PilotDeck/raw/feat/cleanup/assets/result/podcast_result.mp4
 
 ---
 
