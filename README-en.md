@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="PilotDeck Banner" width="55%">
+  <img src="assets/banner.png" alt="PilotDeck" width="55%">
 </p>
 
 <h3 align="center">
@@ -21,22 +21,11 @@ Redefining the agent's operational boundaries and memory evolution — one WorkS
   <a href="./README.md"><b>简体中文</b></a> &nbsp;|&nbsp; <b>English</b>
 </p>
 
-<p align="center">
-  <a href="http://58.57.119.12:52006/">Live Demo</a> ·
-  <a href="#-about-pilotdeck">About</a> ·
-  <a href="#-key-highlights">Highlights</a> ·
-  <a href="#-real-world-numbers">Numbers</a> ·
-  <a href="#use-cases">Use Cases</a> ·
-  <a href="#-installation--quick-start">Quick Start</a> ·
-  <a href="#-extension-protocol">Extension</a> ·
-  <a href="#-community">Community</a>
-</p>
-
 ---
 
 **News** 🔥
 
-- **[2026.05.28]** 🎉 **PilotDeck v0.1 public beta released!** Try it now at [http://58.57.119.12:52006/](http://58.57.119.12:52006/). The full WorkSpace cockpit plus the three pillars — White-box Memory, Smart Routing, and Always-on — shipped with the initial release.
+- **[2026.05.28]** PilotDeck v0.1 public beta released! Try it now at [http://58.57.119.12:52006/](http://58.57.119.12:52006/). The full WorkSpace cockpit plus the three pillars — White-box Memory, Smart Routing, and Always-on — shipped with the initial release.
 
 ---
 
@@ -55,42 +44,38 @@ When we shift the lens from "one-shot programming" or "immediate Q&A" to **long-
 
 PilotDeck is an incremental exploration around exactly these questions. It uses the WorkSpace as the fundamental unit — completely isolating files, memory and skills per project — and pairs it with three pillar capabilities: **White-box Memory**, **Smart Routing** and **Always-on**. The entire system natively supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) and behaves consistently across front-ends (Web / CLI / IM).
 
-<p align="center">
-  <img alt="PilotDeck vs Others" src="docs/assets/competitor-comparison.png" width=90%>
-</p>
-
 ### ✨ Key Highlights
 
-<table>
+<table width="100%">
 <tr>
 <td width="50%" valign="top">
 
-**📦 WorkSpace-Level Isolation & Accretion**
+**WorkSpace-Level Isolation & Accretion**
 
-**A pod per project.** Every project gets its own file system, memory store and skill set. Parallel work no longer interferes with itself, retrieval has a bounded scope, and skills accrete naturally as each task grows — no more global context pollution.
+Every project gets its own file system, memory store and skill set. Parallel work no longer interferes with itself, retrieval has a bounded scope, and skills accrete naturally as each task grows — no more global context pollution.
 
 </td>
 <td width="50%" valign="top">
 
-**🧠 Traceable White-box Memory**
+**Traceable White-box Memory**
 
-**Transparent and editable.** Memory generation, extraction, storage and retrieval are visible end-to-end. When the AI mis-remembers, you can pinpoint and fix the offending entry. Built-in **Dream Mode** consolidates memory in idle windows, and supports one-click rollback.
+Memory generation, extraction, storage and retrieval are visible end-to-end. When the AI mis-remembers, you can pinpoint and fix the offending entry. Built-in **Dream Mode** consolidates memory in idle windows, and supports one-click rollback.
 
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
 
-**⚡ Smart Routing & Cost Optimization**
+**Smart Routing & Cost Optimization**
 
-**Dynamic model dispatch.** Task difficulty is auto-detected; complex calls go to flagship models (e.g. Claude 3.5 Sonnet / GPT-4o), simple ones drop to lighter models. Through on-device / cloud co-orchestration and precise matching, token spend shrinks dramatically without sacrificing quality.
+Task difficulty is auto-detected; complex calls go to flagship models (e.g. Claude 3.5 Sonnet / GPT-4o), simple ones drop to lighter models. Through on-device / cloud co-orchestration and precise matching, token spend shrinks dramatically without sacrificing quality.
 
 </td>
 <td width="50%" valign="top">
 
-**🌙 Always-on Background Execution**
+**Always-on Background Execution**
 
-**Work keeps moving while you're away.** PilotDeck breaks the "you ask, it answers" loop: after you sign off, the agent keeps discovering candidate tasks, running long-horizon monitors, and finally lands deliverables as local files with a summary report waiting for you.
+PilotDeck breaks the "you ask, it answers" loop: after you sign off, the agent keeps discovering candidate tasks, running long-horizon monitors, and finally lands deliverables as local files with a summary report waiting for you.
 
 </td>
 </tr>
@@ -104,30 +89,30 @@ The three pillar capabilities have shown clear advantages in production-grade wo
 
 In Xiaohongshu-style social-media operations, enabling Smart Routing automatically demotes simple polishing / layout tasks to a sub-agent (e.g. Sonnet 4.5) and only invokes Opus 4.5 at planning checkpoints:
 
-<table>
+<table width="100%">
 <thead>
 <tr>
-  <th width="32%">Setup</th>
-  <th width="42%">Model configuration</th>
-  <th width="13%" align="right">Cost</th>
-  <th width="13%" align="right">Multiplier</th>
+  <th align="left">Setup</th>
+  <th align="left">Model configuration</th>
+  <th align="right">Cost</th>
+  <th align="right">Multiplier</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-  <td>✅&nbsp;<b>Smart Routing ON</b></td>
+  <td><b>Smart Routing ON</b></td>
   <td>Opus 4.5 (main) + Sonnet 4.5 (sub)</td>
   <td align="right"><b>$2.83</b></td>
   <td align="right"><b>1.1×</b></td>
 </tr>
 <tr>
-  <td>— Smart Routing OFF</td>
+  <td>Smart Routing OFF</td>
   <td>All Opus 4.5 (main + sub)</td>
   <td align="right">$12.58</td>
   <td align="right">5.0×</td>
 </tr>
 <tr>
-  <td>— Monolithic</td>
+  <td>Monolithic</td>
   <td>Single Opus 4.5 long-react (estimated)</td>
   <td align="right">$12.20</td>
   <td align="right">4.8×</td>
@@ -139,27 +124,27 @@ In Xiaohongshu-style social-media operations, enabling Smart Routing automatical
 
 The research team benchmarked 7 complex tasks (multilingual podcast push, multi-source data reports, domain-specific literature review, codebase architecture docs, etc.). The "strong main + light sub" routing setup matches or beats the frontier single-model setup at a fraction of the cost:
 
-<table>
+<table width="100%">
 <thead>
 <tr>
-  <th width="60%">Setting</th>
-  <th width="20%" align="right">Score</th>
-  <th width="20%" align="right">Cost</th>
+  <th align="left">Setting</th>
+  <th align="right">Score</th>
+  <th align="right">Cost</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-  <td>— MiniMax-M2.7 single-agent</td>
+  <td>MiniMax-M2.7 single-agent</td>
   <td align="right">37.1</td>
   <td align="right">$1.90</td>
 </tr>
 <tr>
-  <td>— Claude Sonnet 4.6 single-agent</td>
+  <td>Claude Sonnet 4.6 single-agent</td>
   <td align="right">69.1</td>
   <td align="right">$18.36</td>
 </tr>
 <tr>
-  <td>✅&nbsp;<b>Sonnet 4.6 (main) + MiniMax-M2.7 (sub)</b></td>
+  <td><b>Sonnet 4.6 (main) + MiniMax-M2.7 (sub)</b></td>
   <td align="right"><b>70.6</b></td>
   <td align="right"><b>$3.15</b></td>
 </tr>
@@ -170,12 +155,12 @@ The research team benchmarked 7 complex tasks (multilingual podcast push, multi-
 
 In black-box agents, mixing tasks in a shared context pool inevitably pollutes memory. PilotDeck's WorkSpace-scoped white-box memory addresses this end-to-end:
 
-<table>
+<table width="100%">
 <thead>
 <tr>
-  <th width="18%">Dimension</th>
-  <th width="40%">Current AI Agents (black-box)</th>
-  <th width="42%">PilotDeck (white-box)</th>
+  <th align="left">Dimension</th>
+  <th align="left">Current AI Agents (black-box)</th>
+  <th align="left">PilotDeck (white-box)</th>
 </tr>
 </thead>
 <tbody>
@@ -219,33 +204,61 @@ PilotDeck ships an out-of-the-box Web UI with full WorkSpace management, white-b
 
 > *"Survey the Chinese LLM application market and turn it into a formal HTML white paper."*
 
-| ▶ Process | ✅ Result |
-|:---:|:---:|
-| <img src="assets/en/ppt_en.gif" width="400"/> | <img src="assets/result/ppt_result_en.gif" width="400"/> |
+<table width="100%">
+<tr>
+<td width="50%" align="center"><b>Process</b></td>
+<td width="50%" align="center"><b>Result</b></td>
+</tr>
+<tr>
+<td><img src="assets/en/ppt_en.gif" width="100%"/></td>
+<td><img src="assets/result/ppt_result_en.gif" width="100%"/></td>
+</tr>
+</table>
 
 #### Vibe Coding → iOS AR mini-game "Ball Finder"
 
 > *"Walk me through building an iOS AR mini-game Ball Finder in Vibe Coding mode."*
 
-| ▶ Process | ✅ Result |
-|:---:|:---:|
-| <img src="assets/en/iosgame_en.gif" width="400"/> | <img src="assets/result/ios_game_result.gif" width="400"/> |
+<table width="100%">
+<tr>
+<td width="50%" align="center"><b>Process</b></td>
+<td width="50%" align="center"><b>Result</b></td>
+</tr>
+<tr>
+<td><img src="assets/en/iosgame_en.gif" width="100%"/></td>
+<td><img src="assets/result/ios_game_result.gif" width="100%"/></td>
+</tr>
+</table>
 
 #### Build a low-code embedding fine-tuning platform
 
 > *"Build a low-code embedding fine-tuning platform from scratch."*
 
-| ▶ Process | ✅ Result |
-|:---:|:---:|
-| <img src="assets/en/modeltraining_en.gif" width="400"/> | <img src="assets/result/modeltrainingresult_en.gif" width="400"/> |
+<table width="100%">
+<tr>
+<td width="50%" align="center"><b>Process</b></td>
+<td width="50%" align="center"><b>Result</b></td>
+</tr>
+<tr>
+<td><img src="assets/en/modeltraining_en.gif" width="100%"/></td>
+<td><img src="assets/result/modeltrainingresult_en.gif" width="100%"/></td>
+</tr>
+</table>
 
 #### English podcast → 6-language global push
 
 > *"Push this English podcast to a global audience in Chinese / Japanese / French / Korean / Spanish / Arabic."*
 
-| ▶ Process | ✅ Result |
-|:---:|:---:|
-| <img src="assets/en/podcast_en.gif" width="400"/> | <img src="assets/result/podcast_result.gif" width="400"/> |
+<table width="100%">
+<tr>
+<td width="50%" align="center"><b>Process</b></td>
+<td width="50%" align="center"><b>Result</b></td>
+</tr>
+<tr>
+<td><img src="assets/en/podcast_en.gif" width="100%"/></td>
+<td><img src="assets/result/podcast_result.gif" width="100%"/></td>
+</tr>
+</table>
 
 ---
 
@@ -341,9 +354,13 @@ cd ui && npx vitest run
 - For commercial collaboration, enterprise support, or open-source license discussions, please reach out via email: `team@pilotdeck.ai` <!-- TODO: replace with real contact email -->.
 - Join our community channels:
 
-|                       |                       |                          |
-| --------------------- | --------------------- | ------------------------ |
-| **WeChat Community**  | **Feishu Community**  | **Discord Community**    |
+<table width="100%">
+<tr>
+<td width="33%" align="center"><b>WeChat Community</b></td>
+<td width="33%" align="center"><b>Feishu Community</b></td>
+<td width="33%" align="center"><b>Discord Community</b></td>
+</tr>
+</table>
 
 ---
 
@@ -355,7 +372,7 @@ PilotDeck is jointly developed by Tsinghua University [THUNLP](https://nlp.csai.
 
 ## ⭐ Support Us
 
-If PilotDeck has been helpful in your work or research, please consider giving us a ⭐ on GitHub!
+If PilotDeck has been helpful in your work or research, please consider giving us a Star on GitHub!
 
 ---
 
