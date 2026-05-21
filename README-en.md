@@ -1,6 +1,5 @@
 <p align="center">
-  <!-- TODO[banner]: replace with PilotDeck logo or banner image (suggested 1600x400) -->
-  <img src="docs/assets/banner.png" alt="PilotDeck Banner" width="55%">
+  <img src="assets/banner.png" alt="PilotDeck Banner" width="55%">
 </p>
 
 <h3 align="center">

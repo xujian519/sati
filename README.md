@@ -1,10 +1,12 @@
-
+<p align="center">
+  <img src="assets/banner.png" alt="PilotDeck Banner" width="55%">
+</p>
 
 ### 面向任务制的 AI Agent 生产力平台
 
 #### 以 WorkSpace 为单位，重新定义智能体的操作边界与记忆演化
 
-     
+
 
 **简体中文**  |  **[English](./README-en.md)**
 
