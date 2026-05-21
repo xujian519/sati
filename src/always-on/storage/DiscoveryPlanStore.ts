@@ -77,7 +77,15 @@ export class DiscoveryPlanStore {
     const index = await this.readIndex();
     const target = index.plans.find((entry) => entry.id === planId);
     if (!target) return undefined;
-    if (update.status !== undefined) target.status = update.status;
+    if (update.status !== undefined) {
+      target.status = update.status;
+      // Sync the Web-side executionStatus field if it exists on this record,
+      // so the UI does not show a stale "queued" state after gateway completes.
+      const raw = target as Record<string, unknown>;
+      if ("executionStatus" in raw && (update.status === "completed" || update.status === "failed")) {
+        raw.executionStatus = update.status;
+      }
+    }
     if (update.reportFilePath !== undefined) {
       target.reportFilePath = relativeIfInsideRoot(update.reportFilePath, this.paths.projectDir);
     }
