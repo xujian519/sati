@@ -65,12 +65,20 @@ PilotDeck is an incremental exploration around exactly these questions. It uses 
 
 Every project gets its own file system, memory store and skill set. Parallel work no longer interferes with itself, retrieval has a bounded scope, and skills accrete naturally as each task grows — no more global context pollution.
 
+<p align="center">
+  <img src="assets/workspace.gif" width="100%" alt="WorkSpace isolation demo"/>
+</p>
+
 </td>
 <td width="50%" valign="top">
 
 **Traceable White-box Memory**
 
 Memory generation, extraction, storage and retrieval are visible end-to-end. When the AI mis-remembers, you can pinpoint and fix the offending entry. Built-in **Dream Mode** consolidates memory in idle windows, and supports one-click rollback.
+
+<p align="center">
+  <img src="assets/memory.gif" width="100%" alt="White-box memory demo"/>
+</p>
 
 </td>
 </tr>
@@ -81,12 +89,20 @@ Memory generation, extraction, storage and retrieval are visible end-to-end. Whe
 
 Task difficulty is auto-detected; complex calls go to flagship models (e.g. Claude 3.5 Sonnet / GPT-4o), simple ones drop to lighter models. Through on-device / cloud co-orchestration and precise matching, token spend shrinks dramatically without sacrificing quality.
 
+<p align="center">
+  <img src="assets/router.gif" width="100%" alt="Smart routing demo"/>
+</p>
+
 </td>
 <td width="50%" valign="top">
 
 **Always-on Background Execution**
 
 PilotDeck breaks the "you ask, it answers" loop: after you sign off, the agent keeps discovering candidate tasks, running long-horizon monitors, and finally lands deliverables as local files with a summary report waiting for you.
+
+<p align="center">
+  <img src="assets/awo.gif" width="100%" alt="Always-on execution demo"/>
+</p>
 
 </td>
 </tr>
@@ -209,7 +225,7 @@ PilotDeck ships an out-of-the-box Web UI with full WorkSpace management, white-b
 
 ### Use Cases
 
-#### Survey the Chinese LLM market → HTML white paper
+#### Work Document Generation
 
 > *"Survey the Chinese LLM application market and turn it into a formal HTML white paper."*
 
@@ -224,7 +240,7 @@ PilotDeck ships an out-of-the-box Web UI with full WorkSpace management, white-b
 </tr>
 </table>
 
-#### Vibe Coding → iOS AR mini-game "Ball Finder"
+#### iOS Game Development
 
 > *"Walk me through building an iOS AR mini-game Ball Finder in Vibe Coding mode."*
 
@@ -239,7 +255,7 @@ PilotDeck ships an out-of-the-box Web UI with full WorkSpace management, white-b
 </tr>
 </table>
 
-#### Build a low-code embedding fine-tuning platform
+#### AI Engineering Platform Development
 
 > *"Build a low-code embedding fine-tuning platform from scratch."*
 
@@ -254,7 +270,7 @@ PilotDeck ships an out-of-the-box Web UI with full WorkSpace management, white-b
 </tr>
 </table>
 
-#### English podcast → 6-language global push
+#### Audio-Video Editing & Social Media Operations
 
 > *"Push this English podcast to a global audience in Chinese / Japanese / French / Korean / Spanish / Arabic."*
 
