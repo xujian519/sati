@@ -219,61 +219,33 @@ PilotDeck ships an out-of-the-box Web UI with full WorkSpace management, white-b
 
 > *"Survey the Chinese LLM application market and turn it into a formal HTML white paper."*
 
-<table>
-<tr>
-<td width="50%" align="center"><b>▶ Process</b></td>
-<td width="50%" align="center"><b>✅ Result</b></td>
-</tr>
-<tr>
-<td><img src="assets/en/ppt_en.gif" width="100%"/></td>
-<td><img src="assets/result/ppt_result_en.gif" width="100%"/></td>
-</tr>
-</table>
+| ▶ Process | ✅ Result |
+|:---:|:---:|
+| <img src="assets/en/ppt_en.gif" width="400"/> | <img src="assets/result/ppt_result_en.gif" width="400"/> |
 
 #### Vibe Coding → iOS AR mini-game "Ball Finder"
 
 > *"Walk me through building an iOS AR mini-game Ball Finder in Vibe Coding mode."*
 
-<table>
-<tr>
-<td width="50%" align="center"><b>▶ Process</b></td>
-<td width="50%" align="center"><b>✅ Result</b></td>
-</tr>
-<tr>
-<td><img src="assets/en/iosgame_en.gif" width="100%"/></td>
-<td><i>(result video pending)</i></td>
-</tr>
-</table>
+| ▶ Process | ✅ Result |
+|:---:|:---:|
+| <img src="assets/en/iosgame_en.gif" width="400"/> | <img src="assets/result/ios_game_result.gif" width="400"/> |
 
 #### Build a low-code embedding fine-tuning platform
 
 > *"Build a low-code embedding fine-tuning platform from scratch."*
 
-<table>
-<tr>
-<td width="50%" align="center"><b>▶ Process</b></td>
-<td width="50%" align="center"><b>✅ Result</b></td>
-</tr>
-<tr>
-<td><img src="assets/en/modeltraining_en.gif" width="100%"/></td>
-<td><img src="assets/result/modeltrainingresult_en.gif" width="100%"/></td>
-</tr>
-</table>
+| ▶ Process | ✅ Result |
+|:---:|:---:|
+| <img src="assets/en/modeltraining_en.gif" width="400"/> | <img src="assets/result/modeltrainingresult_en.gif" width="400"/> |
 
 #### English podcast → 6-language global push
 
 > *"Push this English podcast to a global audience in Chinese / Japanese / French / Korean / Spanish / Arabic."*
 
-<table>
-<tr>
-<td width="50%" align="center"><b>▶ Process</b></td>
-<td width="50%" align="center"><b>✅ Result</b></td>
-</tr>
-<tr>
-<td><img src="assets/en/podcast_en.gif" width="100%"/></td>
-<td><video src="assets/result/podcast_result.mov" width="100%" controls></video></td>
-</tr>
-</table>
+| ▶ Process | ✅ Result |
+|:---:|:---:|
+| <img src="assets/en/podcast_en.gif" width="400"/> | <video src="https://github.com/Gucc111/PilotDeck/raw/feat/cleanup/assets/result/podcast_result.mp4" width="400" controls></video> |
 
 ---
 
