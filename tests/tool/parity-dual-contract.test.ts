@@ -51,8 +51,8 @@ function reportStatuses(report: DualParityContractReport[]): Array<Pick<DualPari
 
 function ensureLegacySiblingLink(root: string): void {
   const linkPath = path.join(root, "third-party/edgeclaw-memory-core");
-  const targetPath = path.join(root, "edgeclaw-memory-core");
+  const targetPath = path.join(root, "src/context/memory/edgeclaw-memory-core");
   if (!existsSync(linkPath) && existsSync(targetPath)) {
-    symlinkSync("../edgeclaw-memory-core", linkPath, "dir");
+    symlinkSync("../src/context/memory/edgeclaw-memory-core", linkPath, "dir");
   }
 }

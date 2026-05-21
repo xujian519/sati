@@ -27,7 +27,7 @@ products/                         ← 产品定制目录（不随开源发布）
   _shared/                        ← 多个客户共享但不适合开源的代码
     plugins/                      ← 共享的产品级插件
 
-edgeclaw-memory-core/             ← 独立包：记忆系统实现（可被 products/ 替换）
+src/context/memory/edgeclaw-memory-core/  ← 独立包：记忆系统实现（可被 products/ 替换）
 ui/                               ← Web UI（独立工作区）
 ```
 
@@ -187,7 +187,7 @@ main                ← 开源主分支，所有核心功能在这里
 
 ```
 products/
-edgeclaw-memory-core/    # 如果记忆系统单独发布
+src/context/memory/edgeclaw-memory-core/    # 如果记忆系统单独发布
 ```
 
 ### 6.3 CI 矩阵

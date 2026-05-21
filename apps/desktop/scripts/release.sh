@@ -39,7 +39,7 @@ PILOTDECKUI_DIR="${REPO_ROOT}/ui"
 # (src/, scripts/, node_modules/, package.json). The bundle tar name and runtime
 # extraction dir remain "pilotdeck-main" for server-manager.ts compatibility.
 PILOTDECK_MAIN_DIR="${REPO_ROOT}"
-MEMORY_CORE_DIR="${REPO_ROOT}/edgeclaw-memory-core"
+MEMORY_CORE_DIR="${REPO_ROOT}/src/context/memory/edgeclaw-memory-core"
 
 PDUI_BUNDLE="${RESOURCES}/pilotdeckui-bundle.tar"
 PDM_BUNDLE="${RESOURCES}/pilotdeck-main-bundle.tar"
@@ -371,7 +371,7 @@ done
 (cd "$PILOTDECK_MAIN_DIR" && tar cf "$PDM_BUNDLE" \
   "${NODE_MODULES_EXCLUDES[@]}" \
   --exclude='apps' --exclude='ui' --exclude='old_ui' \
-  --exclude='edgeclaw-memory-core' --exclude='docs' --exclude='tests' \
+  --exclude='docs' --exclude='tests' \
   --exclude='third-party' --exclude='dist/tests' --exclude='dist/scripts' \
   --exclude='.git' --exclude='packages' \
   "${PDM_ITEMS[@]}") \

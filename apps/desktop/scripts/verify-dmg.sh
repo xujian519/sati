@@ -229,18 +229,19 @@ SRV_LOG="$SANDBOX/server.log"
 
 # UI server files use relative imports that resolve outside the pilotdeckui/ dir:
 #   projects.js    → ../../dist/src/pilot/index.js  (→ $SANDBOX/dist/)
-#   routes/memory.js → ../../../../edgeclaw-memory-core/lib/index.js (→ $SANDBOX/edgeclaw-memory-core/)
+#   routes/memory.js → ../../../../src/context/memory/edgeclaw-memory-core/lib/index.js (→ $SANDBOX/src/context/memory/edgeclaw-memory-core/)
 # Create symlinks so these cross-bundle imports resolve in the sandbox.
 if [[ -d "$CCM_DIR/dist" ]]; then
   ln -sfn "$CCM_DIR/dist" "$SANDBOX/dist"
   pass "Symlinked \$SANDBOX/dist → pilotdeck-main/dist"
 fi
 if [[ -d "$MEM_DIR" ]]; then
-  ln -sfn "$MEM_DIR" "$SANDBOX/edgeclaw-memory-core"
+  mkdir -p "$SANDBOX/src/context/memory"
+  ln -sfn "$MEM_DIR" "$SANDBOX/src/context/memory/edgeclaw-memory-core"
   # Also expose as a node_modules package so bare `import 'edgeclaw-memory-core'` resolves
   mkdir -p "$CCM_DIR/node_modules"
   ln -sfn "$MEM_DIR" "$CCM_DIR/node_modules/edgeclaw-memory-core"
-  pass "Symlinked \$SANDBOX/edgeclaw-memory-core → pilotdeck-memory-core"
+  pass "Symlinked \$SANDBOX/src/context/memory/edgeclaw-memory-core → pilotdeck-memory-core"
 fi
 
 info "Spawning: node-bin/node $CCUI_DIR/server/index.js (port $PORT)"
