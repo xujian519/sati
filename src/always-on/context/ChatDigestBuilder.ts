@@ -29,6 +29,8 @@ const DEFAULT_MAX_SESSIONS = 10;
 const DEFAULT_MAX_PROMPTS_PER_SESSION = 8;
 const DEFAULT_MAX_PROMPT_LENGTH = 500;
 
+const DIGEST_EXCLUDED_PREFIXES = ["always-on-execute:"];
+
 /**
  * Build a structured digest of recent user chat sessions for injection
  * into the Always-On discovery prompt. Uses the lightweight head+tail
@@ -42,11 +44,14 @@ export async function buildChatDigest(
   const maxLen = options.maxPromptLength ?? DEFAULT_MAX_PROMPT_LENGTH;
   const now = (options.now ?? (() => new Date()))();
 
-  const sessions = await listProjectSessions({
+  const allSessions = await listProjectSessions({
     projectRoot: options.projectRoot,
     pilotHome: options.pilotHome,
     includeInternal: false,
   });
+  const sessions = allSessions.filter(
+    (s) => !DIGEST_EXCLUDED_PREFIXES.some((p) => s.sessionId.startsWith(p)),
+  );
 
   const chatDir = getPilotProjectChatDir(options.projectRoot, options.pilotHome);
   const digests: ChatSessionDigest[] = [];
