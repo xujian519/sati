@@ -102,10 +102,10 @@ In Xiaohongshu-style social-media operations, enabling Smart Routing automatical
 
 <table>
 <tr>
-<th align="left">Setup<img width="180" height="1" alt=""/></th>
-<th align="left">Model configuration<img width="340" height="1" alt=""/></th>
-<th align="left">Cost<img width="100" height="1" alt=""/></th>
-<th align="left">Multiplier<img width="80" height="1" alt=""/></th>
+<th align="left">Setup</th>
+<th align="left">Model configuration</th>
+<th align="left">Cost</th>
+<th align="left">Multiplier</th>
 </tr>
 <tr>
 <td><b>Smart Routing ON</b></td>
@@ -133,9 +133,9 @@ The research team benchmarked 7 complex tasks (multilingual podcast push, multi-
 
 <table>
 <tr>
-<th align="left">Setting<img width="460" height="1" alt=""/></th>
-<th align="left">Score<img width="120" height="1" alt=""/></th>
-<th align="left">Cost<img width="120" height="1" alt=""/></th>
+<th align="left">Setting</th>
+<th align="left">Score</th>
+<th align="left">Cost</th>
 </tr>
 <tr>
 <td>MiniMax-M2.7 single-agent</td>
@@ -258,7 +258,7 @@ PilotDeck ships an out-of-the-box Web UI with full WorkSpace management, white-b
 
 **Result (with audio)**
 
-https://github.com/Gucc111/PilotDeck/raw/feat/cleanup/assets/result/podcast_result.mp4
+[Watch the video with audio](assets/result/podcast_result.mp4)
 
 ---
 
