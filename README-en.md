@@ -100,12 +100,12 @@ The three pillar capabilities have shown clear advantages in production-grade wo
 
 In Xiaohongshu-style social-media operations, enabling Smart Routing automatically demotes simple polishing / layout tasks to a sub-agent (e.g. Sonnet 4.5) and only invokes Opus 4.5 at planning checkpoints:
 
-<table>
+<table width="100%">
 <tr>
-<th align="left">Setup</th>
-<th align="left">Model configuration</th>
-<th align="left">Cost</th>
-<th align="left">Multiplier</th>
+<th width="22%" align="left">Setup</th>
+<th width="48%" align="left">Model configuration</th>
+<th width="15%" align="left">Cost</th>
+<th width="15%" align="left">Multiplier</th>
 </tr>
 <tr>
 <td><b>Smart Routing ON</b></td>
@@ -131,11 +131,11 @@ In Xiaohongshu-style social-media operations, enabling Smart Routing automatical
 
 The research team benchmarked 7 complex tasks (multilingual podcast push, multi-source data reports, domain-specific literature review, codebase architecture docs, etc.). The "strong main + light sub" routing setup matches or beats the frontier single-model setup at a fraction of the cost:
 
-<table>
+<table width="100%">
 <tr>
-<th align="left">Setting</th>
-<th align="left">Score</th>
-<th align="left">Cost</th>
+<th width="70%" align="left">Setting</th>
+<th width="15%" align="left">Score</th>
+<th width="15%" align="left">Cost</th>
 </tr>
 <tr>
 <td>MiniMax-M2.7 single-agent</td>
@@ -229,7 +229,7 @@ PilotDeck ships an out-of-the-box Web UI with full WorkSpace management, white-b
 </tr>
 <tr>
 <td><img src="assets/en/iosgame_en.gif" width="100%"/></td>
-<td><img src="assets/result/ios_game_result.gif" width="100%"/></td>
+<td align="center"><img src="assets/result/ios_game_result.gif" width="60%"/></td>
 </tr>
 </table>
 
@@ -252,13 +252,20 @@ PilotDeck ships an out-of-the-box Web UI with full WorkSpace management, white-b
 
 > *"Push this English podcast to a global audience in Chinese / Japanese / French / Korean / Spanish / Arabic."*
 
-**Process**
-
-<img src="assets/en/podcast_en.gif" width="100%"/>
-
-**Result (with audio)**
+<table width="100%">
+<tr>
+<td width="50%" align="center"><b>Process</b></td>
+<td width="50%" align="center"><b>Result (with audio)</b></td>
+</tr>
+<tr>
+<td><img src="assets/en/podcast_en.gif" width="100%"/></td>
+<td>
 
 https://github.com/user-attachments/assets/a7245467-ee3c-4939-a055-c56576ac56d1
+
+</td>
+</tr>
+</table>
 
 ---
 
