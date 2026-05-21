@@ -89,6 +89,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       gateway,
       pilotHome,
       sessionOverrides: alwaysOn?.getSessionOverrides() ?? new SessionConfigOverrides(),
+      alwaysOnConfig: snapshot.config.alwaysOn,
       onTurnEvent: (sessionKey, channelKey, event) => {
         deferredBroadcast?.("always-on:turn-event", { sessionKey, channelKey, event });
       },
@@ -155,6 +156,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         gateway,
         pilotHome,
         sessionOverrides: alwaysOn?.getSessionOverrides() ?? new SessionConfigOverrides(),
+        alwaysOnConfig: config.alwaysOn,
         onTurnEvent: (sessionKey, channelKey, event) => {
           deferredBroadcast?.("always-on:turn-event", { sessionKey, channelKey, event });
         },

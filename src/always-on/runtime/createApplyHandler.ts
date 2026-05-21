@@ -10,13 +10,14 @@ import { DiscoveryReportStore } from "../storage/DiscoveryReportStore.js";
 import { AlwaysOnEventStore } from "../storage/AlwaysOnEventStore.js";
 import { WorkspaceProviderRegistry } from "../workspace/WorkspaceProviderRegistry.js";
 import { AlwaysOnRunContextRegistry } from "./AlwaysOnRunContextRegistry.js";
-import { defaultAlwaysOnConfig } from "../config/parseAlwaysOnConfig.js";
+import { defaultAlwaysOnConfig, type AlwaysOnConfig } from "../config/parseAlwaysOnConfig.js";
 
 export type CreateApplyHandlerDeps = {
   gateway: Gateway;
   pilotHome: string;
   sessionOverrides: SessionConfigOverrides;
   onTurnEvent?: DiscoveryFireDependencies["onTurnEvent"];
+  alwaysOnConfig?: AlwaysOnConfig;
 };
 
 /**
@@ -53,8 +54,9 @@ export function createApplyHandler(
       };
     }
 
+    const baseConfig = deps.alwaysOnConfig ?? defaultAlwaysOnConfig();
     const minimalDeps: DiscoveryFireDependencies = {
-      config: defaultAlwaysOnConfig(),
+      config: baseConfig,
       paths,
       projectKey: input.projectKey,
       gateway: deps.gateway,

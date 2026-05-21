@@ -276,3 +276,221 @@ test("buildDiscoveryPrompt header includes workspace path when workspace exists"
   assert.ok(prompt.includes("working inside isolated workspace: /worktrees/foo/run-1"));
   assert.ok(prompt.includes("/projects/foo"));
 });
+
+// ---- zh-CN language tests ---------------------------------------------------
+
+test("buildDiscoveryPrompt zh-CN renders Chinese prompt with correct structure", () => {
+  const prompt = buildDiscoveryPrompt({
+    projectRoot: "/projects/foo",
+    runId: "run-zh-1",
+    createdAt: "2026-05-20T12:00:00Z",
+    chatDir: "/chats/foo",
+    language: "zh-CN",
+  });
+  assert.ok(prompt.includes("自主 Always-On 发现任务"));
+  assert.ok(prompt.includes("/projects/foo"));
+  assert.ok(prompt.includes("最多提出一个有价值的任务"));
+  assert.ok(prompt.includes(ALWAYS_ON_PLAN_TOOL_NAME));
+  assert.ok(prompt.includes("bypassPermissions"));
+  assert.ok(prompt.includes("run-zh-1"));
+  assert.ok(!prompt.includes("You are running"));
+});
+
+test("buildDiscoveryPrompt zh-CN with workspace shows Chinese isolation description", () => {
+  const prompt = buildDiscoveryPrompt({
+    projectRoot: "/projects/foo",
+    runId: "run-zh-2",
+    createdAt: "2026-05-20T12:00:00Z",
+    chatDir: "/chats/foo",
+    workspace: { cwd: "/worktrees/foo/run-1", strategy: "git-worktree" },
+    language: "zh-CN",
+  });
+  assert.ok(prompt.includes("隔离工作区中"));
+  assert.ok(prompt.includes("/worktrees/foo/run-1"));
+  assert.ok(prompt.includes("隔离快照"));
+  assert.ok(prompt.includes("请勿 cd"));
+});
+
+test("buildDiscoveryPrompt zh-CN renders chat digest in Chinese", () => {
+  const prompt = buildDiscoveryPrompt({
+    projectRoot: "/projects/foo",
+    runId: "run-zh-3",
+    createdAt: "2026-05-20T12:00:00Z",
+    chatDir: "/chats/foo",
+    chatDigest: sampleDigest,
+    language: "zh-CN",
+  });
+  assert.ok(prompt.includes("## 近期用户对话"));
+  assert.ok(prompt.includes(ALWAYS_ON_CHAT_HISTORY_TOOL_NAME));
+  assert.ok(prompt.includes("chat_1"));
+  assert.ok(prompt.includes("丰富鸣人信息"));
+});
+
+test("buildDiscoveryPrompt zh-CN renders existing plans in Chinese", () => {
+  const prompt = buildDiscoveryPrompt({
+    projectRoot: "/projects/foo",
+    runId: "run-zh-4",
+    createdAt: "2026-05-20T12:00:00Z",
+    chatDir: "/chats/foo",
+    existingPlans: [
+      { id: "plan_1", title: "Fix wheel leak", dedupeKey: "wheel-fix", status: "completed" },
+    ],
+    language: "zh-CN",
+  });
+  assert.ok(prompt.includes("## 已有 Always-On 计划"));
+  assert.ok(prompt.includes("请勿重复"));
+  assert.ok(prompt.includes("[completed] \"Fix wheel leak\""));
+});
+
+test("buildDiscoveryPrompt zh-CN shows Chinese fallback when no digest", () => {
+  const prompt = buildDiscoveryPrompt({
+    projectRoot: "/projects/foo",
+    runId: "run-zh-5",
+    createdAt: "2026-05-20T12:00:00Z",
+    chatDir: "/chats/foo",
+    language: "zh-CN",
+  });
+  assert.ok(prompt.includes("未找到近期用户对话"));
+});
+
+test("buildWorkspacePrompt zh-CN renders Chinese workspace prompt", () => {
+  const prompt = buildWorkspacePrompt({
+    projectRoot: "/projects/foo",
+    runId: "run-zh-1",
+    language: "zh-CN",
+  });
+  assert.ok(prompt.includes("准备一个隔离工作区"));
+  assert.ok(prompt.includes("/projects/foo"));
+  assert.ok(prompt.includes(ALWAYS_ON_WORKSPACE_TOOL_NAME));
+  assert.ok(prompt.includes("git-worktree"));
+  assert.ok(prompt.includes("snapshot-copy"));
+  assert.ok(!prompt.includes("You are preparing"));
+});
+
+test("buildWorkspacePrompt zh-CN includes existing workspace info in Chinese", () => {
+  const prompt = buildWorkspacePrompt({
+    projectRoot: "/projects/foo",
+    runId: "run-zh-2",
+    currentWorkspace: {
+      runId: "run-1",
+      strategy: "git-worktree",
+      cwd: "/worktrees/foo/run-1",
+      metadata: {},
+    },
+    language: "zh-CN",
+  });
+  assert.ok(prompt.includes("上一次运行遗留的工作区"));
+  assert.ok(prompt.includes("/worktrees/foo/run-1"));
+});
+
+test("buildExecutionPrompt zh-CN renders Chinese execution prompt", () => {
+  const prompt = buildExecutionPrompt({
+    plan: {
+      id: "plan_run-1",
+      title: "Test Plan",
+      createdAt: "2026-05-10T12:00:00Z",
+      status: "executing",
+      summary: "A test plan",
+      rationale: "Because",
+      dedupeKey: "test",
+      sourceRunId: "run-1",
+      planFilePath: "/plans/plan.md",
+    },
+    planMarkdown: "# Test Plan\n\n## Summary\nA test plan",
+    workspaceCwd: "/worktrees/foo/run-1",
+    workspaceStrategy: "git-worktree",
+    language: "zh-CN",
+  });
+  assert.ok(prompt.includes("隔离工作区内执行"));
+  assert.ok(prompt.includes("/worktrees/foo/run-1"));
+  assert.ok(prompt.includes("Test Plan"));
+  assert.ok(prompt.includes("按顺序执行"));
+  assert.ok(!prompt.includes(ALWAYS_ON_REPORT_TOOL_NAME));
+  assert.ok(!prompt.includes("You are executing"));
+});
+
+test("buildReportPrompt zh-CN renders Chinese report prompt", () => {
+  const prompt = buildReportPrompt({
+    plan: {
+      id: "plan_run-1",
+      title: "Test Plan",
+      createdAt: "2026-05-10T12:00:00Z",
+      status: "completed",
+      summary: "A test plan",
+      rationale: "Because",
+      dedupeKey: "test",
+      sourceRunId: "run-1",
+      planFilePath: "/plans/plan.md",
+    },
+    planMarkdown: "# Test Plan\n\n## Summary\nA test plan",
+    workspaceCwd: "/worktrees/foo/run-1",
+    workspaceStrategy: "git-worktree",
+    language: "zh-CN",
+  });
+  assert.ok(prompt.includes("撰写工作报告"));
+  assert.ok(prompt.includes(ALWAYS_ON_REPORT_TOOL_NAME));
+  assert.ok(prompt.includes("Test Plan"));
+  assert.ok(prompt.includes("git diff --stat"));
+  assert.ok(!prompt.includes("You are writing"));
+});
+
+test("buildApplyPrompt zh-CN uses Chinese git worktree strategy", () => {
+  const prompt = buildApplyPrompt({
+    plan: { id: "plan-1", title: "Test", workspace: { cwd: "/ws/foo", strategy: "git-worktree" } },
+    projectName: "foo",
+    projectRoot: "/projects/foo",
+    diff: { diff: "diff --git a/f.txt b/f.txt\n", fileCount: 1, truncated: false },
+    language: "zh-CN",
+  });
+  assert.ok(prompt.includes("应用变更到项目"));
+  assert.ok(prompt.includes("git worktree"));
+  assert.ok(prompt.includes("git apply --3way"));
+  assert.ok(!prompt.includes("Your job is to merge"));
+});
+
+test("buildApplyPrompt zh-CN uses Chinese snapshot-copy strategy", () => {
+  const prompt = buildApplyPrompt({
+    plan: { id: "plan-1", title: "Test", workspace: { cwd: "/ws/foo", strategy: "snapshot-copy" } },
+    projectName: "foo",
+    projectRoot: "/projects/foo",
+    diff: { diff: "diff content\n", fileCount: 1, truncated: false },
+    language: "zh-CN",
+  });
+  assert.ok(prompt.includes("snapshot copy"));
+  assert.ok(prompt.includes("Edit 或 Write 工具"));
+  assert.ok(!prompt.includes("git apply"));
+});
+
+test("buildApplyPrompt zh-CN handles empty diff in Chinese", () => {
+  const prompt = buildApplyPrompt({
+    plan: { id: "plan-1", title: "Test", workspace: { cwd: "/ws/foo", strategy: "git-worktree" } },
+    projectName: "foo",
+    projectRoot: "/projects/foo",
+    diff: { diff: "", fileCount: 0, truncated: false },
+    language: "zh-CN",
+  });
+  assert.ok(prompt.includes("无需应用任何变更"));
+});
+
+test("buildDiscoveryPrompt defaults to English when language is undefined", () => {
+  const prompt = buildDiscoveryPrompt({
+    projectRoot: "/projects/foo",
+    runId: "run-default",
+    createdAt: "2026-05-20T12:00:00Z",
+    chatDir: "/chats/foo",
+  });
+  assert.ok(prompt.includes("You are running"));
+  assert.ok(!prompt.includes("自主 Always-On 发现任务"));
+});
+
+test("buildDiscoveryPrompt defaults to English when language is 'en'", () => {
+  const prompt = buildDiscoveryPrompt({
+    projectRoot: "/projects/foo",
+    runId: "run-en",
+    createdAt: "2026-05-20T12:00:00Z",
+    chatDir: "/chats/foo",
+    language: "en",
+  });
+  assert.ok(prompt.includes("You are running"));
+  assert.ok(!prompt.includes("自主 Always-On 发现任务"));
+});

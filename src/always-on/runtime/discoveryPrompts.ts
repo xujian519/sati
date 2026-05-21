@@ -5,6 +5,13 @@ import { ALWAYS_ON_PLAN_TOOL_NAME } from "../tool/AlwaysOnDiscoveryPlanTool.js";
 import { ALWAYS_ON_REPORT_TOOL_NAME } from "../tool/AlwaysOnReportTool.js";
 import { ALWAYS_ON_WORKSPACE_TOOL_NAME } from "../tool/AlwaysOnWorkspaceTool.js";
 import { ALWAYS_ON_CHAT_HISTORY_TOOL_NAME } from "../tool/AlwaysOnChatHistoryTool.js";
+import {
+  buildDiscoveryPromptZh,
+  buildWorkspacePromptZh,
+  buildExecutionPromptZh,
+  buildReportPromptZh,
+  buildApplyPromptZh,
+} from "./discoveryPrompts.zh.js";
 
 export type ExistingPlanSummary = {
   id: string;
@@ -26,9 +33,12 @@ export type BuildDiscoveryPromptInput = {
   chatDigest?: ChatDigest;
   /** Summaries of previously created Always-On plans. */
   existingPlans?: ExistingPlanSummary[];
+  /** Prompt language override. Defaults to English when absent. */
+  language?: string;
 };
 
 export function buildDiscoveryPrompt(input: BuildDiscoveryPromptInput): string {
+  if (input.language === "zh-CN") return buildDiscoveryPromptZh(input);
   const codeAccessLines: string[] = input.workspace
     ? [
         `Isolated workspace cwd: ${input.workspace.cwd}`,
@@ -138,9 +148,11 @@ export type BuildWorkspacePromptInput = {
   projectRoot: string;
   runId: string;
   currentWorkspace?: AlwaysOnCurrentWorkspaceRef;
+  language?: string;
 };
 
 export function buildWorkspacePrompt(input: BuildWorkspacePromptInput): string {
+  if (input.language === "zh-CN") return buildWorkspacePromptZh(input);
   const lines: string[] = [
     "You are preparing an isolated workspace for an Always-On plan execution.",
     "",
@@ -181,9 +193,11 @@ export type BuildExecutionPromptInput = {
   planMarkdown: string;
   workspaceCwd: string;
   workspaceStrategy: string;
+  language?: string;
 };
 
 export function buildExecutionPrompt(input: BuildExecutionPromptInput): string {
+  if (input.language === "zh-CN") return buildExecutionPromptZh(input);
   return [
     `You are executing an Always-On discovery plan inside an isolated workspace.`,
     `Workspace strategy: ${input.workspaceStrategy}.`,
@@ -207,9 +221,11 @@ export type BuildReportPromptInput = {
   planMarkdown: string;
   workspaceCwd: string;
   workspaceStrategy: string;
+  language?: string;
 };
 
 export function buildReportPrompt(input: BuildReportPromptInput): string {
+  if (input.language === "zh-CN") return buildReportPromptZh(input);
   return [
     "You are writing a work report for a completed Always-On plan execution.",
     `Workspace strategy: ${input.workspaceStrategy}.`,
@@ -235,9 +251,11 @@ export type BuildApplyPromptInput = {
   projectName: string;
   projectRoot: string;
   diff: WorkspaceDiff;
+  language?: string;
 };
 
 export function buildApplyPrompt(input: BuildApplyPromptInput): string {
+  if (input.language === "zh-CN") return buildApplyPromptZh(input);
   const { plan, projectName, projectRoot, diff } = input;
   const isGitWorktree = plan.workspace?.strategy === "git-worktree";
 
