@@ -245,7 +245,7 @@ PilotDeck ships an out-of-the-box Web UI with full WorkSpace management, white-b
 
 | ▶ Process | ✅ Result |
 |:---:|:---:|
-| <img src="assets/en/podcast_en.gif" width="400"/> | <video src="https://github.com/Gucc111/PilotDeck/raw/feat/cleanup/assets/result/podcast_result.mp4" width="400" controls></video> |
+| <img src="assets/en/podcast_en.gif" width="400"/> | <img src="assets/result/podcast_result.gif" width="400"/> |
 
 ---
 
