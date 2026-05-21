@@ -101,7 +101,7 @@ function formatChatDigestSection(digest?: ChatDigest): string[] {
 
   for (const session of digest.sessions) {
     const ts = session.lastModified.replace(/\.\d{3}Z$/, "Z");
-    lines.push(`- [${ts}] "${session.title}" (sessionId: ${session.sessionId})`);
+    lines.push(`- [${ts}] "${session.title}" (sessionId: ${session.alias})`);
     for (const prompt of session.userPrompts) {
       const oneLiner = prompt.replace(/\n/g, " ").trim();
       lines.push(`  > ${oneLiner}`);

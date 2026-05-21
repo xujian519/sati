@@ -5,6 +5,7 @@ import { readSessionLite } from "../../session/storage/SessionLiteReader.js";
 
 export type ChatSessionDigest = {
   sessionId: string;
+  alias: string;
   title: string;
   lastModified: string;
   userPrompts: string[];
@@ -13,6 +14,8 @@ export type ChatSessionDigest = {
 export type ChatDigest = {
   generatedAt: string;
   sessions: ChatSessionDigest[];
+  /** Short alias -> real sessionId, for tool input resolution. */
+  aliasMap: Map<string, string>;
 };
 
 export type BuildChatDigestOptions = {
@@ -55,6 +58,8 @@ export async function buildChatDigest(
 
   const chatDir = getPilotProjectChatDir(options.projectRoot, options.pilotHome);
   const digests: ChatSessionDigest[] = [];
+  const aliasMap = new Map<string, string>();
+  let aliasCounter = 0;
 
   for (const session of sessions.slice(0, maxSessions)) {
     const lite = await readSessionLite(join(chatDir, `${session.sessionId}.jsonl`));
@@ -63,8 +68,13 @@ export async function buildChatDigest(
     const prompts = extractAllUserPrompts(`${lite.head}\n${lite.tail}`, maxPrompts, maxLen);
     if (prompts.length === 0) continue;
 
+    aliasCounter += 1;
+    const alias = `chat_${aliasCounter}`;
+    aliasMap.set(alias, session.sessionId);
+
     digests.push({
       sessionId: session.sessionId,
+      alias,
       title: session.summary,
       lastModified: new Date(session.lastModified).toISOString(),
       userPrompts: prompts,
@@ -74,6 +84,7 @@ export async function buildChatDigest(
   return {
     generatedAt: now.toISOString(),
     sessions: digests,
+    aliasMap,
   };
 }
 

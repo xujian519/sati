@@ -172,20 +172,26 @@ const sampleDigest: ChatDigest = {
   sessions: [
     {
       sessionId: "web:s_abc123",
+      alias: "chat_1",
       title: "丰富鸣人信息",
       lastModified: "2026-05-20T11:26:00.000Z",
       userPrompts: ["请丰富现有模块的信息", "重新整理布局"],
     },
     {
       sessionId: "web:s_def456",
+      alias: "chat_2",
       title: "杀生丸页面",
       lastModified: "2026-05-20T10:00:00.000Z",
       userPrompts: ["我想做一个 HTML 网页"],
     },
   ],
+  aliasMap: new Map([
+    ["chat_1", "web:s_abc123"],
+    ["chat_2", "web:s_def456"],
+  ]),
 };
 
-test("buildDiscoveryPrompt renders chat digest sessions with tool reference", () => {
+test("buildDiscoveryPrompt renders chat digest sessions with aliases", () => {
   const prompt = buildDiscoveryPrompt({
     projectRoot: "/projects/foo",
     runId: "run-3",
@@ -195,10 +201,12 @@ test("buildDiscoveryPrompt renders chat digest sessions with tool reference", ()
   });
   assert.ok(prompt.includes("## Recent user conversations"));
   assert.ok(prompt.includes(ALWAYS_ON_CHAT_HISTORY_TOOL_NAME));
-  assert.ok(prompt.includes("web:s_abc123"));
+  assert.ok(prompt.includes("chat_1"));
+  assert.ok(prompt.includes("chat_2"));
+  assert.ok(!prompt.includes("web:s_abc123"), "raw sessionId should not appear in prompt");
+  assert.ok(!prompt.includes("web:s_def456"), "raw sessionId should not appear in prompt");
   assert.ok(prompt.includes("丰富鸣人信息"));
   assert.ok(prompt.includes("请丰富现有模块的信息"));
-  assert.ok(prompt.includes("web:s_def456"));
   assert.ok(prompt.includes("杀生丸页面"));
 });
 

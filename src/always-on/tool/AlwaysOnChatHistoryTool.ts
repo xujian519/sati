@@ -66,8 +66,10 @@ export function createAlwaysOnChatHistoryTool(
         );
       }
 
+      const realSessionId = ctx.chatSessionAliases?.get(input.sessionId) ?? input.sessionId;
+
       const chatDir = getPilotProjectChatDir(ctx.projectKey, ctx.paths.pilotHome);
-      const transcriptPath = join(chatDir, `${sanitizeSessionIdForPath(input.sessionId)}.jsonl`);
+      const transcriptPath = join(chatDir, `${sanitizeSessionIdForPath(realSessionId)}.jsonl`);
 
       const { entries, diagnostics } = await readTranscript(transcriptPath);
       if (entries.length === 0) {
@@ -87,8 +89,8 @@ export function createAlwaysOnChatHistoryTool(
         pilotHome: ctx.paths.pilotHome,
         includeInternal: false,
       });
-      const sessionInfo = sessions.find((s) => s.sessionId === input.sessionId);
-      const title = metadata.title ?? metadata.aiTitle ?? sessionInfo?.summary ?? input.sessionId;
+      const sessionInfo = sessions.find((s) => s.sessionId === realSessionId);
+      const title = metadata.title ?? metadata.aiTitle ?? sessionInfo?.summary ?? realSessionId;
 
       const conversation: AlwaysOnChatHistoryConversationEntry[] = [];
       for (const msg of messages) {
@@ -111,7 +113,7 @@ export function createAlwaysOnChatHistoryTool(
       }
 
       const data: AlwaysOnChatHistoryOutput = {
-        sessionId: input.sessionId,
+        sessionId: realSessionId,
         title,
         messageCount: conversation.length,
         conversation,

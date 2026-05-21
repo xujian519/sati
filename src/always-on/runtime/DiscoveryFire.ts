@@ -260,6 +260,7 @@ export class DiscoveryFire {
       maxPromptsPerSession: 8,
       maxPromptLength: 500,
     });
+    discoveryCtx.chatSessionAliases = chatDigest.aliasMap;
 
     const planIndex = await this.deps.planStore.readIndex();
     const existingPlans = planIndex.plans.map((p) => ({

@@ -17,6 +17,8 @@ export type DiscoveryRunContext = {
   plan?: { record: DiscoveryPlanRecord; markdown: string };
   /** Number of plan-tool calls in this fire (success and failure). */
   planCallCount: number;
+  /** Short alias -> real sessionId mapping for the chat history tool. */
+  chatSessionAliases?: Map<string, string>;
 };
 
 export type WorkspaceRunContext = {
