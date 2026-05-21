@@ -168,3 +168,13 @@ wcb-output/
 
 # Temporary download artifacts
 arxiv_response.xml
+
+# Bun artifacts (project uses npm)
+bun-bin/
+bun.lock
+
+# Test output
+test-results/
+
+# Auto-Research-Skills (local-only)
+Auto-Research-Skills/
