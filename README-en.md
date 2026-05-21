@@ -105,33 +105,108 @@ The three pillar capabilities have shown clear advantages in production-grade wo
 
 In Xiaohongshu-style social-media operations, enabling Smart Routing automatically demotes simple polishing / layout tasks to a sub-agent (e.g. Sonnet 4.5) and only invokes Opus 4.5 at planning checkpoints:
 
-| Setup                          | Model configuration                                | Cost       | Multiplier |
-| ------------------------------ | -------------------------------------------------- | ---------- | ---------- |
-| **🟢 Smart Routing ON**         | Opus 4.5 (main) + Sonnet 4.5 (sub) orchestration   | **$2.83**  | **1.1x**   |
-| ⚪ Smart Routing OFF            | All Opus 4.5 (main + sub)                          | $12.58     | 5.0x       |
-| ⚪ Monolithic                   | Single Opus 4.5 long-react (estimated)             | $12.20     | 4.8x       |
+<table>
+<thead>
+<tr>
+  <th width="32%">Setup</th>
+  <th width="42%">Model configuration</th>
+  <th width="13%" align="right">Cost</th>
+  <th width="13%" align="right">Multiplier</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>✅&nbsp;<b>Smart Routing ON</b></td>
+  <td>Opus 4.5 (main) + Sonnet 4.5 (sub)</td>
+  <td align="right"><b>$2.83</b></td>
+  <td align="right"><b>1.1×</b></td>
+</tr>
+<tr>
+  <td>— Smart Routing OFF</td>
+  <td>All Opus 4.5 (main + sub)</td>
+  <td align="right">$12.58</td>
+  <td align="right">5.0×</td>
+</tr>
+<tr>
+  <td>— Monolithic</td>
+  <td>Single Opus 4.5 long-react (estimated)</td>
+  <td align="right">$12.20</td>
+  <td align="right">4.8×</td>
+</tr>
+</tbody>
+</table>
 
 #### 2. Smart Routing — 1/6 the cost while beating frontier models on hard tasks
 
 The research team benchmarked 7 complex tasks (multilingual podcast push, multi-source data reports, domain-specific literature review, codebase architecture docs, etc.). The "strong main + light sub" routing setup matches or beats the frontier single-model setup at a fraction of the cost:
 
-| Setting                                                | Score    | Cost       |
-| ------------------------------------------------------ | -------- | ---------- |
-| MiniMax-M2.7 single-agent                              | 37.1     | $1.90      |
-| Claude Sonnet 4.6 single-agent                         | 69.1     | $18.36     |
-| **🟢 Claude Sonnet 4.6 (main) + MiniMax-M2.7 (sub)**    | **70.6** | **$3.15**  |
+<table>
+<thead>
+<tr>
+  <th width="60%">Setting</th>
+  <th width="20%" align="right">Score</th>
+  <th width="20%" align="right">Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>— MiniMax-M2.7 single-agent</td>
+  <td align="right">37.1</td>
+  <td align="right">$1.90</td>
+</tr>
+<tr>
+  <td>— Claude Sonnet 4.6 single-agent</td>
+  <td align="right">69.1</td>
+  <td align="right">$18.36</td>
+</tr>
+<tr>
+  <td>✅&nbsp;<b>Sonnet 4.6 (main) + MiniMax-M2.7 (sub)</b></td>
+  <td align="right"><b>70.6</b></td>
+  <td align="right"><b>$3.15</b></td>
+</tr>
+</tbody>
+</table>
 
 #### 3. White-box Memory — layout & tone never bleed across projects
 
 In black-box agents, mixing tasks in a shared context pool inevitably pollutes memory. PilotDeck's WorkSpace-scoped white-box memory addresses this end-to-end:
 
-| Memory dimension          | Current AI Agents (black-box)                                  | PilotDeck (white-box)                                                       |
-| ------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| **Visibility**            | You can't see what the AI remembers, only what it outputs       | View every memory entry: what was stored, when, and to which WorkSpace      |
-| **Controllability**       | Once written, memory can't be edited or removed — you wait it out | Manually edit / delete entries, pin critical decisions so they don't drift  |
-| **Traceability**          | When it goes wrong, you can't find the root cause               | Generation → extraction → storage → retrieval, every step is auditable      |
-| **Isolation**             | One shared pool — projects bleed into each other                | Scoped per WorkSpace; A's memory never reaches B; retrieval is bounded      |
-| **Reversible compaction** | After compression, the original is gone                          | Dream-mode consolidation supports **one-click rollback** to the prior state |
+<table>
+<thead>
+<tr>
+  <th width="18%">Dimension</th>
+  <th width="40%">Current AI Agents (black-box)</th>
+  <th width="42%">PilotDeck (white-box)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><b>Visibility</b></td>
+  <td>You can't see what the AI remembers, only what it outputs</td>
+  <td>View every memory entry: what was stored, when, and which WorkSpace</td>
+</tr>
+<tr>
+  <td><b>Control</b></td>
+  <td>Once written, memory can't be edited or removed</td>
+  <td>Edit / delete entries, pin critical decisions so they don't drift</td>
+</tr>
+<tr>
+  <td><b>Traceability</b></td>
+  <td>When it goes wrong, you can't find the root cause</td>
+  <td>Generation → extraction → storage → retrieval, all auditable</td>
+</tr>
+<tr>
+  <td><b>Isolation</b></td>
+  <td>One shared pool — projects bleed into each other</td>
+  <td>Scoped per WorkSpace; A's memory never reaches B</td>
+</tr>
+<tr>
+  <td><b>Reversible</b></td>
+  <td>After compression, the original is gone</td>
+  <td>Dream-mode supports <b>one-click rollback</b> to the prior state</td>
+</tr>
+</tbody>
+</table>
 
 ---
 
@@ -141,42 +216,63 @@ PilotDeck ships an out-of-the-box Web UI with full WorkSpace management, white-b
 
 ### Use Cases
 
-<table>
-<tr>
-<td width="50%" valign="top">
+#### Survey the Chinese LLM market → HTML white paper
 
 > *"Survey the Chinese LLM application market and turn it into a formal HTML white paper."*
 
-<!-- TODO[case-whitepaper]: replace with white-paper generation demo GIF -->
-<img src="docs/assets/case-whitepaper.gif" width="100%"/>
-
-</td>
-<td width="50%" valign="top">
-
-> *"Walk me through building an iOS AR mini-game *Ball Finder* in Vibe Coding mode."*
-
-<!-- TODO[case-ios-ar]: replace with iOS AR development demo GIF -->
-<img src="docs/assets/case-ios-ar.gif" width="100%"/>
-
-</td>
+<table>
+<tr>
+<td width="50%" align="center"><b>▶ Process</b></td>
+<td width="50%" align="center"><b>✅ Result</b></td>
 </tr>
 <tr>
-<td width="50%" valign="top">
+<td><img src="assets/en/ppt_en.gif" width="100%"/></td>
+<td><img src="assets/result/ppt_result_en.gif" width="100%"/></td>
+</tr>
+</table>
+
+#### Vibe Coding → iOS AR mini-game "Ball Finder"
+
+> *"Walk me through building an iOS AR mini-game Ball Finder in Vibe Coding mode."*
+
+<table>
+<tr>
+<td width="50%" align="center"><b>▶ Process</b></td>
+<td width="50%" align="center"><b>✅ Result</b></td>
+</tr>
+<tr>
+<td><img src="assets/en/iosgame_en.gif" width="100%"/></td>
+<td><i>(result video pending)</i></td>
+</tr>
+</table>
+
+#### Build a low-code embedding fine-tuning platform
 
 > *"Build a low-code embedding fine-tuning platform from scratch."*
 
-<!-- TODO[case-embedding]: replace with embedding platform demo GIF -->
-<img src="docs/assets/case-embedding.gif" width="100%"/>
+<table>
+<tr>
+<td width="50%" align="center"><b>▶ Process</b></td>
+<td width="50%" align="center"><b>✅ Result</b></td>
+</tr>
+<tr>
+<td><img src="assets/en/modeltraining_en.gif" width="100%"/></td>
+<td><img src="assets/result/modeltrainingresult_en.gif" width="100%"/></td>
+</tr>
+</table>
 
-</td>
-<td width="50%" valign="top">
+#### English podcast → 6-language global push
 
 > *"Push this English podcast to a global audience in Chinese / Japanese / French / Korean / Spanish / Arabic."*
 
-<!-- TODO[case-podcast]: replace with multilingual podcast push demo GIF -->
-<img src="docs/assets/case-podcast.gif" width="100%"/>
-
-</td>
+<table>
+<tr>
+<td width="50%" align="center"><b>▶ Process</b></td>
+<td width="50%" align="center"><b>✅ Result</b></td>
+</tr>
+<tr>
+<td><img src="assets/en/podcast_en.gif" width="100%"/></td>
+<td><video src="assets/result/podcast_result.mov" width="100%" controls></video></td>
 </tr>
 </table>
 
