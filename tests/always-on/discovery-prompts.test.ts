@@ -250,14 +250,29 @@ test("buildDiscoveryPrompt omits existing plans section when empty", () => {
   assert.ok(!prompt.includes("## Existing Always-On plans"));
 });
 
-test("buildDiscoveryPrompt includes updated Goal wording with broader scope", () => {
+test("buildDiscoveryPrompt includes neutral Goal wording without code bias", () => {
   const prompt = buildDiscoveryPrompt({
     projectRoot: "/projects/foo",
     runId: "run-7",
     createdAt: "2026-05-20T12:00:00Z",
     chatDir: "/chats/foo",
   });
-  assert.ok(prompt.includes("content additions"));
-  assert.ok(prompt.includes("UX enhancements"));
+  assert.ok(prompt.includes("worthwhile task"));
+  assert.ok(prompt.includes("enriching or adding content"));
+  assert.ok(prompt.includes("completing unfinished work"));
   assert.ok(prompt.includes("automatically-checkable verification step"));
+  assert.ok(!prompt.includes("bug fixes and code quality"));
+  assert.ok(!prompt.includes("code-level"));
+});
+
+test("buildDiscoveryPrompt header includes workspace path when workspace exists", () => {
+  const prompt = buildDiscoveryPrompt({
+    projectRoot: "/projects/foo",
+    runId: "run-8",
+    createdAt: "2026-05-20T12:00:00Z",
+    chatDir: "/chats/foo",
+    workspace: { cwd: "/worktrees/foo/run-1", strategy: "git-worktree" },
+  });
+  assert.ok(prompt.includes("working inside isolated workspace: /worktrees/foo/run-1"));
+  assert.ok(prompt.includes("/projects/foo"));
 });

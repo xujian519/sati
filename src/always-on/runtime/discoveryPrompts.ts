@@ -40,14 +40,19 @@ export function buildDiscoveryPrompt(input: BuildDiscoveryPromptInput): string {
         `Read the project root at ${input.projectRoot} using read_file / glob / bash freely.`,
       ];
 
+  const headerLine = input.workspace
+    ? `You are running an autonomous Always-On discovery for project: ${input.projectRoot} (working inside isolated workspace: ${input.workspace.cwd})`
+    : `You are running an autonomous Always-On discovery for project: ${input.projectRoot}`;
+
   const lines: string[] = [
-    `You are running an autonomous Always-On discovery for project: ${input.projectRoot}`,
+    headerLine,
     "",
-    "Goal: identify AT MOST ONE concrete improvement to propose.",
-    "Improvements may range from bug fixes and code quality to new features,",
-    "content additions, or UX enhancements discussed in user chat history.",
+    "Goal: identify AT MOST ONE worthwhile task to propose.",
+    "Tasks may include enriching or adding content, completing unfinished work,",
+    "improving structure or layout, fixing errors, enhancing user experience,",
+    "or anything valuable discussed in user chat history.",
     "Each plan must include at least one automatically-checkable verification step",
-    "(e.g. file exists, grep pattern matches, HTML parses without error).",
+    "(e.g. file exists, content matches expected pattern, page renders without error).",
     "If nothing actionable is found, do not call any tool — just respond with a short note explaining why.",
     "",
     "Permissions: this turn runs in `bypassPermissions` mode — every tool call is auto-allowed.",
@@ -59,7 +64,7 @@ export function buildDiscoveryPrompt(input: BuildDiscoveryPromptInput): string {
 
   lines.push(
     "",
-    `If you do find one improvement, call \`${ALWAYS_ON_PLAN_TOOL_NAME}\` exactly once with a strictly-formatted markdown plan.`,
+    `If you identify a task, call \`${ALWAYS_ON_PLAN_TOOL_NAME}\` exactly once with a strictly-formatted markdown plan.`,
     "Required plan structure (top to bottom):",
     "  - Level-1 heading: # <plan title>",
     "  - Metadata blockquote, first line `Always-On Discovery Plan`, then keyed lines:",
@@ -86,7 +91,7 @@ export function buildDiscoveryPrompt(input: BuildDiscoveryPromptInput): string {
 function formatChatDigestSection(digest?: ChatDigest): string[] {
   if (!digest || digest.sessions.length === 0) {
     return [
-      "No recent user conversations found. Focus on code-level improvements.",
+      "No recent user conversations found. Explore the workspace contents to find a worthwhile task.",
     ];
   }
 
@@ -94,7 +99,7 @@ function formatChatDigestSection(digest?: ChatDigest): string[] {
     "## Recent user conversations",
     "",
     "Below is a structured digest of recent user-agent chat sessions.",
-    "These are primary signals for what improvements the user cares about.",
+    "These are primary signals for what the user cares about.",
     `To see the full conversation of a session, call \`${ALWAYS_ON_CHAT_HISTORY_TOOL_NAME}\` with its sessionId.`,
     "",
   ];
