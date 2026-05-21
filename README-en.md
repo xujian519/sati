@@ -100,67 +100,21 @@ The three pillar capabilities have shown clear advantages in production-grade wo
 
 In Xiaohongshu-style social-media operations, enabling Smart Routing automatically demotes simple polishing / layout tasks to a sub-agent (e.g. Sonnet 4.5) and only invokes Opus 4.5 at planning checkpoints:
 
-<table width="100%">
-<thead>
-<tr>
-  <th align="left">Setup</th>
-  <th align="left">Model configuration</th>
-  <th align="right">Cost</th>
-  <th align="right">Multiplier</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-  <td><b>Smart Routing ON</b></td>
-  <td>Opus 4.5 (main) + Sonnet 4.5 (sub)</td>
-  <td align="right"><b>$2.83</b></td>
-  <td align="right"><b>1.1×</b></td>
-</tr>
-<tr>
-  <td>Smart Routing OFF</td>
-  <td>All Opus 4.5 (main + sub)</td>
-  <td align="right">$12.58</td>
-  <td align="right">5.0×</td>
-</tr>
-<tr>
-  <td>Monolithic</td>
-  <td>Single Opus 4.5 long-react (estimated)</td>
-  <td align="right">$12.20</td>
-  <td align="right">4.8×</td>
-</tr>
-</tbody>
-</table>
+| Setup | Model configuration | Cost | Multiplier |
+| :--- | :--- | ---: | ---: |
+| **Smart Routing ON** | Opus 4.5 (main) + Sonnet 4.5 (sub) | **$2.83** | **1.1×** |
+| Smart Routing OFF | All Opus 4.5 (main + sub) | $12.58 | 5.0× |
+| Monolithic | Single Opus 4.5 long-react (estimated) | $12.20 | 4.8× |
 
 #### 2. Smart Routing — 1/6 the cost while beating frontier models on hard tasks
 
 The research team benchmarked 7 complex tasks (multilingual podcast push, multi-source data reports, domain-specific literature review, codebase architecture docs, etc.). The "strong main + light sub" routing setup matches or beats the frontier single-model setup at a fraction of the cost:
 
-<table width="100%">
-<thead>
-<tr>
-  <th align="left">Setting</th>
-  <th align="right">Score</th>
-  <th align="right">Cost</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-  <td>MiniMax-M2.7 single-agent</td>
-  <td align="right">37.1</td>
-  <td align="right">$1.90</td>
-</tr>
-<tr>
-  <td>Claude Sonnet 4.6 single-agent</td>
-  <td align="right">69.1</td>
-  <td align="right">$18.36</td>
-</tr>
-<tr>
-  <td><b>Sonnet 4.6 (main) + MiniMax-M2.7 (sub)</b></td>
-  <td align="right"><b>70.6</b></td>
-  <td align="right"><b>$3.15</b></td>
-</tr>
-</tbody>
-</table>
+| Setting | Score | Cost |
+| :--- | ---: | ---: |
+| MiniMax-M2.7 single-agent | 37.1 | $1.90 |
+| Claude Sonnet 4.6 single-agent | 69.1 | $18.36 |
+| **Sonnet 4.6 (main) + MiniMax-M2.7 (sub)** | **70.6** | **$3.15** |
 
 #### 3. White-box Memory — layout & tone never bleed across projects
 
