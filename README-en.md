@@ -125,6 +125,9 @@ In Xiaohongshu-style social-media operations, enabling Smart Routing automatical
 <td>$12.20</td>
 <td>4.8×</td>
 </tr>
+<tr>
+<td colspan="4"><img width="840" height="1" alt=""/></td>
+</tr>
 </table>
 
 #### 2. Smart Routing — 1/6 the cost while beating frontier models on hard tasks
@@ -151,6 +154,9 @@ The research team benchmarked 7 complex tasks (multilingual podcast push, multi-
 <td><b>Sonnet 4.6 (main) + MiniMax-M2.7 (sub)</b></td>
 <td><b>70.6</b></td>
 <td><b>$3.15</b></td>
+</tr>
+<tr>
+<td colspan="3"><img width="840" height="1" alt=""/></td>
 </tr>
 </table>
 
