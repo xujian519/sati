@@ -1,24 +1,35 @@
 <p align="center">
-  <img src="assets/banner.png" alt="PilotDeck" width="55%">
-</p>
-
-<h3 align="center">
-Task-Oriented AI Agent Productivity Platform
-</h3>
-
-<h4 align="center">
-Redefining the agent's operational boundaries and memory evolution — one WorkSpace at a time
-</h4>
-
-<p align="center">
-  <a href="http://58.57.119.12:52006/"><img src="https://img.shields.io/badge/Live%20Demo-2EA44F?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Live Demo"/></a>&nbsp;
-  <a href="#-installation--quick-start"><img src="https://img.shields.io/badge/Get%20Started-6ABED8?style=for-the-badge&logo=bookstack&logoColor=white" alt="Get Started"/></a>&nbsp;
-  <a href="#-desktop-app-apple-silicon"><img src="https://img.shields.io/badge/Desktop%20App-DE8EA6?style=for-the-badge&logo=apple&logoColor=white" alt="Desktop App"/></a>&nbsp;
-  <a href="#-community"><img src="https://img.shields.io/badge/Join%20Community-A48BC8?style=for-the-badge&logo=discord&logoColor=white" alt="Community"/></a>
+  <img src="assets/banner.png" alt="PilotDeck" width="680"/>
 </p>
 
 <p align="center">
-  <a href="./README.md"><b>简体中文</b></a> &nbsp;|&nbsp; <b>English</b>
+  Task-oriented AI Agent productivity platform — redefining operational boundaries and memory evolution, one WorkSpace at a time.
+</p>
+
+<p align="center">
+  <a href="http://58.57.119.12:52006/"><img src="https://img.shields.io/badge/Demo-Live-brightgreen?style=flat-square" alt="Live Demo"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-TBD-blue.svg?style=flat-square" alt="License"/></a>
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-Native-6366F1?style=flat-square" alt="MCP Native"/></a>
+  <a href="#-desktop-app-apple-silicon"><img src="https://img.shields.io/badge/macOS-Desktop_App-000000?style=flat-square&logo=apple&logoColor=white" alt="Desktop App"/></a>
+  <a href="https://github.com/Gucc111/PilotDeck/stargazers"><img src="https://img.shields.io/github/stars/Gucc111/PilotDeck?style=flat-square" alt="Stars"/></a>
+  <br/>
+  <a href="#-community"><img src="https://img.shields.io/badge/Discord-Join_Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/></a>
+  &nbsp;
+  <a href="#-community"><img src="https://img.shields.io/badge/Feishu-Community-00D6B9?style=for-the-badge&logo=bytedance&logoColor=white" alt="Feishu"/></a>
+  &nbsp;
+  <a href="#-community"><img src="https://img.shields.io/badge/WeChat-Community-07C160?style=for-the-badge&logo=wechat&logoColor=white" alt="WeChat"/></a>
+  <br/>
+  <img src="https://img.shields.io/badge/Node.js-22-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js"/>
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript"/>
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React"/>
+  <img src="https://img.shields.io/badge/Vite-6-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite"/>
+  <img src="https://img.shields.io/badge/MCP-Protocol-6366F1?style=flat-square" alt="MCP"/>
+</p>
+
+<p align="center">
+  <b>English</b> | <a href="./README.md">简体中文</a>
+  <br/>
+  <a href="http://58.57.119.12:52006/">Live Demo</a> · <a href="#-installation--quick-start">Quick Start</a> · <a href="#-key-highlights">Highlights</a> · <a href="#use-cases">Use Cases</a> · <a href="#-community">Community</a>
 </p>
 
 ---

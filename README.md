@@ -1,24 +1,35 @@
 <p align="center">
-  <img src="assets/banner.png" alt="PilotDeck" width="55%">
-</p>
-
-<h3 align="center">
-面向任务制的 AI Agent 生产力平台
-</h3>
-
-<h4 align="center">
-以 WorkSpace 为单位，重新定义智能体的操作边界与记忆演化
-</h4>
-
-<p align="center">
-  <a href="http://58.57.119.12:52006/"><img src="https://img.shields.io/badge/在线体验-2EA44F?style=for-the-badge&logo=googlechrome&logoColor=white" alt="在线体验"/></a>&nbsp;
-  <a href="#-安装与快速开始"><img src="https://img.shields.io/badge/快速开始-6ABED8?style=for-the-badge&logo=bookstack&logoColor=white" alt="快速开始"/></a>&nbsp;
-  <a href="#-桌面端-app-apple-silicon"><img src="https://img.shields.io/badge/桌面端App-DE8EA6?style=for-the-badge&logo=apple&logoColor=white" alt="桌面端App"/></a>&nbsp;
-  <a href="#-联系我们"><img src="https://img.shields.io/badge/加入社区-A48BC8?style=for-the-badge&logo=discord&logoColor=white" alt="加入社区"/></a>
+  <img src="assets/banner.png" alt="PilotDeck" width="680"/>
 </p>
 
 <p align="center">
-  <b>简体中文</b> &nbsp;|&nbsp; <a href="./README-en.md"><b>English</b></a>
+  面向任务制的 AI Agent 生产力平台 —— 以 WorkSpace 为单位，重新定义智能体的操作边界与记忆演化。
+</p>
+
+<p align="center">
+  <a href="http://58.57.119.12:52006/"><img src="https://img.shields.io/badge/Demo-Live-brightgreen?style=flat-square" alt="Live Demo"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-TBD-blue.svg?style=flat-square" alt="License"/></a>
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-Native-6366F1?style=flat-square" alt="MCP Native"/></a>
+  <a href="#-桌面端-app-apple-silicon"><img src="https://img.shields.io/badge/macOS-Desktop_App-000000?style=flat-square&logo=apple&logoColor=white" alt="Desktop App"/></a>
+  <a href="https://github.com/Gucc111/PilotDeck/stargazers"><img src="https://img.shields.io/github/stars/Gucc111/PilotDeck?style=flat-square" alt="Stars"/></a>
+  <br/>
+  <a href="#-联系我们"><img src="https://img.shields.io/badge/Discord-Join_Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/></a>
+  &nbsp;
+  <a href="#-联系我们"><img src="https://img.shields.io/badge/飞书-交流群-00D6B9?style=for-the-badge&logo=bytedance&logoColor=white" alt="飞书群"/></a>
+  &nbsp;
+  <a href="#-联系我们"><img src="https://img.shields.io/badge/微信-交流群-07C160?style=for-the-badge&logo=wechat&logoColor=white" alt="微信群"/></a>
+  <br/>
+  <img src="https://img.shields.io/badge/Node.js-22-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js"/>
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript"/>
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React"/>
+  <img src="https://img.shields.io/badge/Vite-6-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite"/>
+  <img src="https://img.shields.io/badge/MCP-Protocol-6366F1?style=flat-square" alt="MCP"/>
+</p>
+
+<p align="center">
+  <a href="./README-en.md">English</a> | <b>简体中文</b>
+  <br/>
+  <a href="http://58.57.119.12:52006/">在线体验</a> · <a href="#-安装与快速开始">快速开始</a> · <a href="#-核心亮点">核心亮点</a> · <a href="#使用场景">使用场景</a> · <a href="#-联系我们">社区</a>
 </p>
 
 ---
