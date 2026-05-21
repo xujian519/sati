@@ -26,6 +26,7 @@ import type { AlwaysOnRunContextRegistry, ExecutionRunContext, DiscoveryRunConte
 import { generateWorkspaceDiff } from "../workspace/WorkspaceApply.js";
 import { buildDiscoveryPrompt, buildExecutionPrompt, buildWorkspacePrompt, buildReportPrompt, buildApplyPrompt } from "./discoveryPrompts.js";
 import type { SessionConfigOverrides } from "./SessionConfigOverrides.js";
+import type { PermissionRule } from "../../permission/index.js";
 
 export type DiscoveryFireDependencies = {
   config: AlwaysOnConfig;
@@ -65,6 +66,18 @@ const ALWAYS_ON_EXCLUDED_TOOLS = [
   "enter_plan_mode",
   "exit_plan_mode",
   "ask_user_question",
+];
+
+/**
+ * Deny rules injected into the execution phase session. These override
+ * `bypassPermissions` because deny rules always win in `PermissionRuntime.decide()`.
+ * Prevents the agent from pushing code or modifying remote configuration.
+ */
+export const ALWAYS_ON_EXECUTION_DENY_RULES: PermissionRule[] = [
+  { source: "policy", behavior: "deny", toolName: "bash", pattern: "git push*" },
+  { source: "policy", behavior: "deny", toolName: "bash", pattern: "git remote*" },
+  { source: "policy", behavior: "deny", toolName: "bash", pattern: "*git push*" },
+  { source: "policy", behavior: "deny", toolName: "bash", pattern: "*git remote*" },
 ];
 
 export type EnsureAlwaysOnWorkspaceInput = {
@@ -390,6 +403,9 @@ export class DiscoveryFire {
       bypassAvailable: true,
       canPrompt: false,
       excludeTools: ALWAYS_ON_EXCLUDED_TOOLS,
+      permissionRules: {
+        deny: ALWAYS_ON_EXECUTION_DENY_RULES,
+      },
     });
 
     const executionCtx: ExecutionRunContext = {
