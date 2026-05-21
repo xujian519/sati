@@ -1,30 +1,43 @@
 <p align="center">
   <!-- TODO[banner]: replace with PilotDeck logo or banner image (suggested 1600x400) -->
-  <img src="docs/assets/banner.png" alt="PilotDeck Banner" width="80%">
+  <img src="docs/assets/banner.png" alt="PilotDeck Banner" width="55%">
 </p>
 
 <h3 align="center">
-A WorkSpace-Centric Open-Source Agent Operating System
+Task-Oriented AI Agent Productivity Platform
 </h3>
 
+<h4 align="center">
+Redefining the agent's operational boundaries and memory evolution — one WorkSpace at a time
+</h4>
+
 <p align="center">
-  <a href="https://jcst.ict.ac.cn/en/article/doi/10.1007/s11390-025-6000-0"><img src="https://img.shields.io/badge/Paper-JCST'26-blue?style=flat-square" alt="Paper"/></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-TBD-lightgrey.svg?style=flat-square" alt="License"/></a>
-  <a href="http://58.57.119.12:52006/"><img src="https://img.shields.io/badge/Demo-Live-brightgreen?style=flat-square" alt="Live Demo"/></a>
-  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node-≥22-43853d.svg?style=flat-square" alt="Node"/></a>
-  <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-1.x-purple.svg?style=flat-square" alt="MCP"/></a>
-  <a href="https://github.com/Gucc111/PilotDeck/stargazers"><img src="https://img.shields.io/github/stars/Gucc111/PilotDeck?style=flat-square" alt="Stars"/></a>
-  <br/>
-  <a href="#-community"><img src="https://img.shields.io/badge/WeChat-Community-07C160?style=for-the-badge&logo=wechat&logoColor=white" alt="WeChat"/></a>
-  &nbsp;
-  <a href="#-community"><img src="https://img.shields.io/badge/Feishu-Community-00D6B9?style=for-the-badge&logo=bytedance&logoColor=white" alt="Feishu"/></a>
-  &nbsp;
-  <a href="#-community"><img src="https://img.shields.io/badge/Discord-Join_Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/></a>
+  <a href="http://58.57.119.12:52006/"><img src="https://img.shields.io/badge/Live%20Demo-2EA44F?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Live Demo"/></a>&nbsp;
+  <a href="#-installation--quick-start"><img src="https://img.shields.io/badge/Get%20Started-6ABED8?style=for-the-badge&logo=bookstack&logoColor=white" alt="Get Started"/></a>&nbsp;
+  <a href="#-desktop-app-apple-silicon"><img src="https://img.shields.io/badge/Desktop%20App-DE8EA6?style=for-the-badge&logo=apple&logoColor=white" alt="Desktop App"/></a>&nbsp;
+  <a href="#-community"><img src="https://img.shields.io/badge/Join%20Community-A48BC8?style=for-the-badge&logo=discord&logoColor=white" alt="Community"/></a>
 </p>
 
 <p align="center">
   <a href="./README.md"><b>简体中文</b></a> &nbsp;|&nbsp; <b>English</b>
 </p>
+
+<p align="center">
+  <a href="http://58.57.119.12:52006/">Live Demo</a> ·
+  <a href="#-about-pilotdeck">About</a> ·
+  <a href="#-key-highlights">Highlights</a> ·
+  <a href="#-real-world-numbers">Numbers</a> ·
+  <a href="#use-cases">Use Cases</a> ·
+  <a href="#-installation--quick-start">Quick Start</a> ·
+  <a href="#-extension-protocol">Extension</a> ·
+  <a href="#-community">Community</a>
+</p>
+
+---
+
+**News** 🔥
+
+- **[2026.05.28]** 🎉 **PilotDeck v0.1 public beta released!** Try it now at [http://58.57.119.12:52006/](http://58.57.119.12:52006/). The full WorkSpace cockpit plus the three pillars — White-box Memory, Smart Routing, and Always-on — shipped with the initial release.
 
 ---
 

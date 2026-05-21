@@ -1,8 +1,43 @@
-### 基于 WorkSpace 的开源智能体操作系统
+<p align="center">
+  <!-- TODO[banner]: 替换为 PilotDeck 的 Logo 或 Banner 图片 (建议尺寸 1600x400) -->
+  <img src="docs/assets/banner.png" alt="PilotDeck Banner" width="55%">
+</p>
 
-    
+<h3 align="center">
+面向任务制的 AI Agent 生产力平台
+</h3>
 
-**简体中文**  |  **[English](./README-en.md)**
+<h4 align="center">
+以 WorkSpace 为单位，重新定义智能体的操作边界与记忆演化
+</h4>
+
+<p align="center">
+  <a href="http://58.57.119.12:52006/"><img src="https://img.shields.io/badge/在线体验-2EA44F?style=for-the-badge&logo=googlechrome&logoColor=white" alt="在线体验"/></a>&nbsp;
+  <a href="#-安装与快速开始"><img src="https://img.shields.io/badge/教程文档-6ABED8?style=for-the-badge&logo=bookstack&logoColor=white" alt="教程文档"/></a>&nbsp;
+  <a href="#-桌面端-app-apple-silicon"><img src="https://img.shields.io/badge/桌面端%20App-DE8EA6?style=for-the-badge&logo=apple&logoColor=white" alt="桌面端 App"/></a>&nbsp;
+  <a href="#-联系我们"><img src="https://img.shields.io/badge/加入社区-A48BC8?style=for-the-badge&logo=discord&logoColor=white" alt="加入社区"/></a>
+</p>
+
+<p align="center">
+  <b>简体中文</b> &nbsp;|&nbsp; <a href="./README-en.md"><b>English</b></a>
+</p>
+
+<p align="center">
+  <a href="http://58.57.119.12:52006/">在线体验</a> ·
+  <a href="#-关于-pilotdeck">关于</a> ·
+  <a href="#-核心亮点">核心亮点</a> ·
+  <a href="#-核心能力实测数据">实测数据</a> ·
+  <a href="#使用场景">使用场景</a> ·
+  <a href="#-安装与快速开始">快速开始</a> ·
+  <a href="#-扩展与插件-extension-protocol">扩展协议</a> ·
+  <a href="#-联系我们">社区</a>
+</p>
+
+---
+
+**新闻动态** 🔥
+
+- **[2026.05.28]** 🎉 **PilotDeck v0.1 公测上线！** 在线体验地址 [http://58.57.119.12:52006/](http://58.57.119.12:52006/)，WorkSpace 工作舱 + 白盒记忆 / 智能路由 / Always-on 三大核心能力全部首发就位。
 
 ---
 
