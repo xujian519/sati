@@ -102,28 +102,28 @@ In Xiaohongshu-style social-media operations, enabling Smart Routing automatical
 
 <table>
 <tr>
-<th align="left"><img width="180" height="1"/><br/>Setup</th>
-<th align="left"><img width="340" height="1"/><br/>Model configuration</th>
-<th align="right"><img width="100" height="1"/><br/>Cost</th>
-<th align="right"><img width="80" height="1"/><br/>Multiplier</th>
+<th align="left">Setup<img width="180" height="1" alt=""/></th>
+<th align="left">Model configuration<img width="340" height="1" alt=""/></th>
+<th align="left">Cost<img width="100" height="1" alt=""/></th>
+<th align="left">Multiplier<img width="80" height="1" alt=""/></th>
 </tr>
 <tr>
 <td><b>Smart Routing ON</b></td>
 <td>Opus 4.5 (main) + Sonnet 4.5 (sub)</td>
-<td align="right"><b>$2.83</b></td>
-<td align="right"><b>1.1×</b></td>
+<td><b>$2.83</b></td>
+<td><b>1.1×</b></td>
 </tr>
 <tr>
 <td>Smart Routing OFF</td>
 <td>All Opus 4.5 (main + sub)</td>
-<td align="right">$12.58</td>
-<td align="right">5.0×</td>
+<td>$12.58</td>
+<td>5.0×</td>
 </tr>
 <tr>
 <td>Monolithic</td>
 <td>Single Opus 4.5 long-react (estimated)</td>
-<td align="right">$12.20</td>
-<td align="right">4.8×</td>
+<td>$12.20</td>
+<td>4.8×</td>
 </tr>
 </table>
 
@@ -133,24 +133,24 @@ The research team benchmarked 7 complex tasks (multilingual podcast push, multi-
 
 <table>
 <tr>
-<th align="left"><img width="460" height="1"/><br/>Setting</th>
-<th align="right"><img width="120" height="1"/><br/>Score</th>
-<th align="right"><img width="120" height="1"/><br/>Cost</th>
+<th align="left">Setting<img width="460" height="1" alt=""/></th>
+<th align="left">Score<img width="120" height="1" alt=""/></th>
+<th align="left">Cost<img width="120" height="1" alt=""/></th>
 </tr>
 <tr>
 <td>MiniMax-M2.7 single-agent</td>
-<td align="right">37.1</td>
-<td align="right">$1.90</td>
+<td>37.1</td>
+<td>$1.90</td>
 </tr>
 <tr>
 <td>Claude Sonnet 4.6 single-agent</td>
-<td align="right">69.1</td>
-<td align="right">$18.36</td>
+<td>69.1</td>
+<td>$18.36</td>
 </tr>
 <tr>
 <td><b>Sonnet 4.6 (main) + MiniMax-M2.7 (sub)</b></td>
-<td align="right"><b>70.6</b></td>
-<td align="right"><b>$3.15</b></td>
+<td><b>70.6</b></td>
+<td><b>$3.15</b></td>
 </tr>
 </table>
 
