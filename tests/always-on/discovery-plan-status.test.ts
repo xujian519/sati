@@ -162,24 +162,13 @@ test("normalizeStringList filters non-strings", () => {
   assert.deepEqual(normalizeStringList("not-array"), []);
 });
 
-// ---- apply_failed status ---------------------------------------------------
+// ---- cycle-level statuses removed from plans --------------------------------
 
-test("PLAN_STATUS_ORDER includes apply_failed", () => {
-  assert.equal(typeof PLAN_STATUS_ORDER["apply_failed"], "number");
-  assert.equal(PLAN_STATUS_ORDER["apply_failed"], PLAN_STATUS_ORDER["failed"]);
+test("PLAN_STATUS_ORDER does not include apply_failed (cycle-level now)", () => {
+  assert.equal(PLAN_STATUS_ORDER["apply_failed"], undefined);
 });
 
-test("computeExecutionStatus returns apply_failed for apply_failed plans", () => {
-  const plan = makePlan({ status: "apply_failed" });
-  assert.equal(computeExecutionStatus(plan, null, NEVER_ACTIVE), "apply_failed");
-});
-
-test("computePlanStatus returns apply_failed for apply_failed plans", () => {
-  const plan = makePlan({ status: "apply_failed" });
-  assert.equal(computePlanStatus(plan, null, NEVER_ACTIVE), "apply_failed");
-});
-
-test("computePlanStatus returns applied for applied plans", () => {
-  const plan = makePlan({ status: "applied" });
-  assert.equal(computePlanStatus(plan, null, NEVER_ACTIVE), "applied");
+test("computeExecutionStatus returns empty for archived status", () => {
+  const plan = makePlan({ status: "archived" });
+  assert.equal(computeExecutionStatus(plan, null, NEVER_ACTIVE), "");
 });

@@ -62,8 +62,6 @@ export type DiscoveryPlanStatus =
   | 'running'
   | 'completed'
   | 'failed'
-  | 'applying'
-  | 'applied'
   | 'archived';
 
 export interface DiscoveryPlanOverview {
@@ -74,10 +72,27 @@ export interface DiscoveryPlanOverview {
   approvalMode: DiscoveryPlanApprovalMode;
   status: DiscoveryPlanStatus;
   executionSessionId?: string;
+  workCycleId?: string;
 }
 
 export interface ProjectDiscoveryPlansResponse {
   plans: DiscoveryPlanOverview[];
+}
+
+export type WorkCycleStatus = 'active' | 'applying' | 'applied' | 'archived';
+
+export interface WorkCycleOverview {
+  id: string;
+  projectKey: string;
+  status: WorkCycleStatus;
+  workspace: {
+    strategy: string;
+    cwd: string;
+  };
+  planIds: string[];
+  createdAt: string;
+  appliedAt?: string;
+  archivedAt?: string;
 }
 
 export interface DiscoveryContextMemoryItem {

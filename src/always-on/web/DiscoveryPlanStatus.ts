@@ -16,9 +16,6 @@ export type WebPlanStatus =
   | "ready"
   | "failed"
   | "completed"
-  | "applying"
-  | "applied"
-  | "apply_failed"
   | "archived";
 
 export type WebPlanRecord = {
@@ -42,10 +39,26 @@ export type WebPlanRecord = {
   reportFilePath?: string;
   structureVersion: number;
   lastExecutionSource?: string;
+  workCycleId?: string;
+  /** @deprecated Retained for migration only. */
   workspace?: {
     strategy: string;
     cwd: string;
   };
+};
+
+export type WebCycleRecord = {
+  id: string;
+  projectKey: string;
+  status: string;
+  workspace: {
+    strategy: string;
+    cwd: string;
+  };
+  planIds: string[];
+  createdAt: string;
+  appliedAt?: string;
+  archivedAt?: string;
 };
 
 export type WebPlanContextRefs = {
@@ -69,13 +82,10 @@ export type WebPlanSession = {
 
 export const PLAN_STATUS_ORDER: Record<string, number> = {
   running: 0,
-  applying: 1,
   queued: 2,
   ready: 3,
   failed: 4,
-  apply_failed: 4,
   completed: 5,
-  applied: 6,
   archived: 7,
 };
 
@@ -84,10 +94,7 @@ export function computeExecutionStatus(
   session: WebPlanSession,
   isSessionActive: (sessionId: string) => boolean,
 ): string {
-  if (plan.status === "archived" || plan.status === "applied") return "";
-
-  if (plan.status === "apply_failed") return "apply_failed";
-  if (plan.status === "applying") return "applying";
+  if (plan.status === "archived") return "";
 
   if (plan.executionSessionId && isSessionActive(plan.executionSessionId)) {
     return "running";
@@ -124,8 +131,6 @@ export function computePlanStatus(
   isSessionActive: (sessionId: string) => boolean,
 ): string {
   if (plan.status === "archived") return "archived";
-  if (plan.status === "applied") return "applied";
-  if (plan.status === "apply_failed") return "apply_failed";
   const execStatus = computeExecutionStatus(plan, session, isSessionActive);
   if (execStatus) return execStatus;
   return normalizeString(plan.status, "ready");

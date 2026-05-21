@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AlertCircle,
+  Archive,
   ChevronDown,
   ChevronRight,
   FileText,
@@ -18,6 +19,7 @@ import type {
   DiscoveryPlanStatus,
   Project,
   ProjectDiscoveryPlansResponse,
+  WorkCycleOverview,
 } from '../../types/app';
 import { api } from '../../utils/api';
 import { cn } from '../../lib/utils.js';
@@ -34,9 +36,6 @@ type PlanDisplayStatus =
   | 'executing'
   | 'completedWaiting'
   | 'failed'
-  | 'applyFailed'
-  | 'applying'
-  | 'applied'
   | 'archived';
 
 function mapPlanStatus(status: DiscoveryPlanStatus): PlanDisplayStatus {
@@ -51,12 +50,6 @@ function mapPlanStatus(status: DiscoveryPlanStatus): PlanDisplayStatus {
       return 'completedWaiting';
     case 'failed':
       return 'failed';
-    case 'apply_failed':
-      return 'applyFailed';
-    case 'applying':
-      return 'applying';
-    case 'applied':
-      return 'applied';
     case 'archived':
       return 'archived';
     default:
@@ -70,10 +63,7 @@ const PLAN_STATUS_STYLE: Record<PlanDisplayStatus, string> = {
   executing: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
   completedWaiting: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
   failed: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-  applyFailed: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
   archived: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400',
-  applying: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
-  applied: 'bg-teal-100 text-teal-600 dark:bg-teal-900/40 dark:text-teal-400',
 };
 
 const PLAN_STATUS_LABEL: Record<PlanDisplayStatus, { key: string; defaultValue: string }> = {
@@ -82,10 +72,7 @@ const PLAN_STATUS_LABEL: Record<PlanDisplayStatus, { key: string; defaultValue: 
   executing: { key: 'plansCron.status.executing', defaultValue: 'Executing' },
   completedWaiting: { key: 'plansCron.status.completedWaiting', defaultValue: 'Completed' },
   failed: { key: 'plansCron.status.failed', defaultValue: 'Failed' },
-  applyFailed: { key: 'plansCron.status.applyFailed', defaultValue: 'Apply Failed' },
   archived: { key: 'plansCron.status.archived', defaultValue: 'Archived' },
-  applying: { key: 'plansCron.status.applying', defaultValue: 'Applying' },
-  applied: { key: 'plansCron.status.applied', defaultValue: 'Applied' },
 };
 
 const CRON_STATUS_STYLE: Record<'scheduled' | 'running', string> = {
@@ -141,18 +128,21 @@ const COL = {
 
 type PlansAndCronJobsProps = {
   onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
-  onApplyPlan?: (projectName: string, planId: string) => Promise<void>;
+  onApplyWorkCycle?: (projectName: string, cycleId: string) => Promise<void>;
   onOpenPlanDetail?: (planId: string, projectName: string, projectDisplayName: string) => void;
 };
 
-export default function PlansAndCronJobs({ onExecutePlan, onApplyPlan, onOpenPlanDetail }: PlansAndCronJobsProps) {
+export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOpenPlanDetail }: PlansAndCronJobsProps) {
   const { t } = useTranslation('alwaysOn');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [plansByProject, setPlansByProject] = useState<Map<string, DiscoveryPlanOverview[]>>(new Map());
+  const [cyclesByProject, setCyclesByProject] = useState<Map<string, WorkCycleOverview[]>>(new Map());
   const [cronJobs, setCronJobs] = useState<CronJobOverview[]>([]);
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
+  const [cycleBusy, setCycleBusy] = useState<string | null>(null);
+  const [confirmingArchiveCycle, setConfirmingArchiveCycle] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -163,9 +153,12 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyPlan, onOpenPla
       const projectsList: Project[] = await projectsRes.json();
       setProjects(projectsList);
 
-      const [cronRes, ...planResults] = await Promise.all([
+      const [cronRes, ...mixedResults] = await Promise.all([
         api.allCronJobs(),
-        ...projectsList.map((p) => api.projectDiscoveryPlans(p.name)),
+        ...projectsList.flatMap((p) => [
+          api.projectDiscoveryPlans(p.name),
+          api.projectWorkCycles(p.name),
+        ]),
       ]);
 
       if (cronRes.ok) {
@@ -176,16 +169,25 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyPlan, onOpenPla
       }
 
       const newPlansByProject = new Map<string, DiscoveryPlanOverview[]>();
+      const newCyclesByProject = new Map<string, WorkCycleOverview[]>();
       for (let i = 0; i < projectsList.length; i++) {
-        const res = planResults[i];
-        if (res && res.ok) {
-          const payload = (await res.json()) as ProjectDiscoveryPlansResponse;
+        const planRes = mixedResults[i * 2];
+        const cycleRes = mixedResults[i * 2 + 1];
+        if (planRes && planRes.ok) {
+          const payload = (await planRes.json()) as ProjectDiscoveryPlansResponse;
           if (Array.isArray(payload.plans) && payload.plans.length > 0) {
             newPlansByProject.set(projectsList[i]!.name, payload.plans);
           }
         }
+        if (cycleRes && cycleRes.ok) {
+          const payload = (await cycleRes.json()) as { cycles?: WorkCycleOverview[] };
+          if (Array.isArray(payload.cycles) && payload.cycles.length > 0) {
+            newCyclesByProject.set(projectsList[i]!.name, payload.cycles);
+          }
+        }
       }
       setPlansByProject(newPlansByProject);
+      setCyclesByProject(newCyclesByProject);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -378,19 +380,67 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyPlan, onOpenPla
                       </div>
                     </div>
 
-                    {/* Rows */}
+                    {/* Cycle-grouped rows */}
                     <div className="divide-y divide-neutral-100 dark:divide-neutral-900">
-                      {items.map((item) => (
-                        <ItemRow
-                          key={`${item.kind}-${item.data.id}`}
-                          item={item}
-                          t={t}
-                          onRefresh={refresh}
-                          onExecutePlan={onExecutePlan}
-                          onApplyPlan={onApplyPlan}
-                          onOpenPlanDetail={onOpenPlanDetail}
-                        />
-                      ))}
+                      {(() => {
+                        const planItems = items.filter((i) => i.kind === 'plan');
+                        const cronItems = items.filter((i) => i.kind === 'cron');
+                        const cycles = cyclesByProject.get(projectKey) ?? [];
+                        const plansByCycle = new Map<string, UnifiedItem[]>();
+                        const orphanPlans: UnifiedItem[] = [];
+
+                        for (const item of planItems) {
+                          const cycleId = (item.data as DiscoveryPlanOverview).workCycleId;
+                          if (cycleId) {
+                            if (!plansByCycle.has(cycleId)) plansByCycle.set(cycleId, []);
+                            plansByCycle.get(cycleId)!.push(item);
+                          } else {
+                            orphanPlans.push(item);
+                          }
+                        }
+
+                        return (
+                          <>
+                            {cycles.filter((c) => c.status === 'active' || c.status === 'applying').map((cycle) => (
+                              <CycleGroup
+                                key={cycle.id}
+                                cycle={cycle}
+                                plans={plansByCycle.get(cycle.id) ?? []}
+                                projectName={projectKey}
+                                t={t}
+                                onRefresh={refresh}
+                                onExecutePlan={onExecutePlan}
+                                onApplyWorkCycle={onApplyWorkCycle}
+                                onOpenPlanDetail={onOpenPlanDetail}
+                                busy={cycleBusy === cycle.id}
+                                setBusy={(b) => setCycleBusy(b ? cycle.id : null)}
+                                confirmingArchive={confirmingArchiveCycle === cycle.id}
+                                setConfirmingArchive={(b) => setConfirmingArchiveCycle(b ? cycle.id : null)}
+                              />
+                            ))}
+                            {orphanPlans.map((item) => (
+                              <ItemRow
+                                key={`plan-${item.data.id}`}
+                                item={item}
+                                t={t}
+                                onRefresh={refresh}
+                                onExecutePlan={onExecutePlan}
+                                onOpenPlanDetail={onOpenPlanDetail}
+                              />
+                            ))}
+                            {cronItems.map((item) => (
+                              <ItemRow
+                                key={`cron-${item.data.id}`}
+                                item={item}
+                                t={t}
+                                onRefresh={refresh}
+                                onExecutePlan={onExecutePlan}
+                                onOpenPlanDetail={onOpenPlanDetail}
+                              />
+                            ))}
+                          </>
+                        );
+                      })()}
                     </div>
                   </>
                 )}
@@ -404,7 +454,177 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyPlan, onOpenPla
 }
 
 // ---------------------------------------------------------------------------
-// Table row
+// Cycle group header + contained plan rows
+// ---------------------------------------------------------------------------
+
+const CYCLE_STATUS_STYLE: Record<string, string> = {
+  active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  applying: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+  applied: 'bg-teal-100 text-teal-600 dark:bg-teal-900/40 dark:text-teal-400',
+  archived: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400',
+};
+
+function CycleGroup({
+  cycle,
+  plans,
+  projectName,
+  t,
+  onRefresh,
+  onExecutePlan,
+  onApplyWorkCycle,
+  onOpenPlanDetail,
+  busy,
+  setBusy,
+  confirmingArchive,
+  setConfirmingArchive,
+}: {
+  cycle: WorkCycleOverview;
+  plans: UnifiedItem[];
+  projectName: string;
+  t: (key: string, opts?: Record<string, string>) => string;
+  onRefresh: () => Promise<void>;
+  onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
+  onApplyWorkCycle?: (projectName: string, cycleId: string) => Promise<void>;
+  onOpenPlanDetail?: (planId: string, projectName: string, projectDisplayName: string) => void;
+  busy: boolean;
+  setBusy: (b: boolean) => void;
+  confirmingArchive: boolean;
+  setConfirmingArchive: (b: boolean) => void;
+}) {
+  const canApply = cycle.status === 'active' && plans.some((p) => (p.data as DiscoveryPlanOverview).status === 'completed');
+  const canArchive = cycle.status === 'active';
+  const isApplying = cycle.status === 'applying';
+  const statusStyle = CYCLE_STATUS_STYLE[cycle.status] ?? CYCLE_STATUS_STYLE.active;
+
+  const handleApply = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (onApplyWorkCycle) {
+        await onApplyWorkCycle(projectName, cycle.id);
+      } else {
+        const res = await api.applyWorkCycle(projectName, cycle.id);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({})) as { error?: string };
+          throw new Error(body?.error || `HTTP ${res.status}`);
+        }
+      }
+      await onRefresh();
+    } catch {
+      // Visible via refresh.
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleArchive = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await api.archiveWorkCycle(projectName, cycle.id);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body?.error || `HTTP ${res.status}`);
+      }
+      await onRefresh();
+    } catch {
+      // Visible via refresh.
+    } finally {
+      setBusy(false);
+      setConfirmingArchive(false);
+    }
+  };
+
+  return (
+    <>
+      {/* Cycle header */}
+      <div className="flex items-center gap-3 bg-neutral-50/80 px-5 py-2 dark:bg-neutral-900/30">
+        <span className="text-xxs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+          {t('plansCron.workCycle', { defaultValue: 'Work Cycle' })}
+        </span>
+        <span className={cn('inline-block rounded-full px-2 py-0.5 text-[11px] font-medium', statusStyle)}>
+          {t(`plansCron.cycleStatus.${cycle.status}`, { defaultValue: cycle.status })}
+        </span>
+        <span className="text-xxs tabular-nums text-neutral-400 dark:text-neutral-500">
+          {cycle.planIds.length} {t('plansCron.plans', { defaultValue: 'plans' })}
+        </span>
+        <span className="text-xxs text-neutral-400 dark:text-neutral-500">
+          {cycle.workspace.strategy}
+        </span>
+        <div className="ml-auto flex items-center gap-1.5">
+          {isApplying && (
+            <span className="inline-flex items-center gap-1 text-xxs text-sky-600 dark:text-sky-400">
+              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
+              {t('plansCron.cycleStatus.applying', { defaultValue: 'Applying…' })}
+            </span>
+          )}
+          {canApply && !isApplying && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void handleApply()}
+              className="inline-flex h-7 items-center rounded-md bg-emerald-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50 dark:bg-emerald-700 dark:hover:bg-emerald-600"
+            >
+              {busy ? (
+                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
+              ) : (
+                t('plansCron.actions.applyCycle', { defaultValue: 'Apply All' })
+              )}
+            </button>
+          )}
+          {canArchive && !confirmingArchive && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirmingArchive(true)}
+              className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-neutral-500 transition hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-red-700 dark:hover:text-red-400"
+              title={t('plansCron.actions.archiveCycle', { defaultValue: 'Archive' })}
+            >
+              <Archive className="h-3.5 w-3.5" strokeWidth={1.75} />
+            </button>
+          )}
+          {confirmingArchive && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleArchive()}
+                className="inline-flex h-7 items-center rounded-md bg-red-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-red-700 disabled:opacity-50"
+              >
+                {busy ? (
+                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
+                ) : (
+                  t('plansCron.actions.archiveCycle', { defaultValue: 'Archive' })
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingArchive(false)}
+                className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-[11px] text-neutral-500 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      {/* Plans inside cycle */}
+      {plans.map((item) => (
+        <ItemRow
+          key={`plan-${item.data.id}`}
+          item={item}
+          t={t}
+          onRefresh={onRefresh}
+          onExecutePlan={onExecutePlan}
+          onOpenPlanDetail={onOpenPlanDetail}
+        />
+      ))}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Table row (plan or cron — no per-plan apply/archive buttons)
 // ---------------------------------------------------------------------------
 
 function ItemRow({
@@ -412,14 +632,12 @@ function ItemRow({
   t,
   onRefresh,
   onExecutePlan,
-  onApplyPlan,
   onOpenPlanDetail,
 }: {
   item: UnifiedItem;
   t: (key: string, opts?: Record<string, string>) => string;
   onRefresh: () => Promise<void>;
   onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
-  onApplyPlan?: (projectName: string, planId: string) => Promise<void>;
   onOpenPlanDetail?: (planId: string, projectName: string, projectDisplayName: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -456,30 +674,7 @@ function ItemRow({
     statusStyle = CRON_STATUS_STYLE[cs];
   }
 
-  const showApply = isPlan && (displayStatus === 'completedWaiting' || displayStatus === 'applyFailed');
   const showRetry = isPlan && displayStatus === 'failed';
-  const canDelete = isPlan && displayStatus !== 'executing' && displayStatus !== 'preparingWorkspace' && displayStatus !== 'applying';
-
-  const handleApply = async () => {
-    if (!plan || busy) return;
-    setBusy(true);
-    try {
-      if (onApplyPlan) {
-        await onApplyPlan(item.projectName, plan.id);
-      } else {
-        const res = await api.applyProjectDiscoveryPlan(item.projectName, plan.id);
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({})) as { error?: string };
-          throw new Error(body?.error || `HTTP ${res.status}`);
-        }
-      }
-      await onRefresh();
-    } catch {
-      // Errors are visible via the global refresh.
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const handleRetry = async () => {
     if (!plan || busy) return;
@@ -496,32 +691,24 @@ function ItemRow({
       }
       await onRefresh();
     } catch {
-      // Errors are visible via the global refresh.
+      // Visible via refresh.
     } finally {
       setBusy(false);
     }
   };
 
-  const handleDelete = async () => {
-    if (busy) return;
+  const handleCronDelete = async () => {
+    if (!job || busy) return;
     setBusy(true);
     try {
-      if (isPlan && plan) {
-        const res = await api.archiveProjectDiscoveryPlan(item.projectName, plan.id);
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({})) as { error?: string };
-          throw new Error(body?.error || `HTTP ${res.status}`);
-        }
-      } else if (job) {
-        const res = await api.cronDelete(job.id);
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({})) as { error?: string };
-          throw new Error(body?.error || `HTTP ${res.status}`);
-        }
+      const res = await api.cronDelete(job.id);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body?.error || `HTTP ${res.status}`);
       }
       await onRefresh();
     } catch {
-      // Errors are visible via the global refresh.
+      // Visible via refresh.
     } finally {
       setBusy(false);
       setConfirmingDelete(false);
@@ -539,7 +726,7 @@ function ItemRow({
       }
       await onRefresh();
     } catch {
-      // Errors are visible via the global refresh.
+      // Visible via refresh.
     } finally {
       setBusy(false);
     }
@@ -556,7 +743,7 @@ function ItemRow({
       }
       await onRefresh();
     } catch {
-      // Errors are visible via the global refresh.
+      // Visible via refresh.
     } finally {
       setBusy(false);
     }
@@ -604,20 +791,6 @@ function ItemRow({
       <div className={cn(COL.actions, 'flex items-center gap-1.5')}>
         {isPlan ? (
           <>
-            {showApply && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void handleApply()}
-                className="inline-flex h-7 items-center rounded-md bg-emerald-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50 dark:bg-emerald-700 dark:hover:bg-emerald-600"
-              >
-                {busy ? (
-                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
-                ) : (
-                  t('plansCron.actions.apply', { defaultValue: 'Apply' })
-                )}
-              </button>
-            )}
             {showRetry && (
               <button
                 type="button"
@@ -631,40 +804,6 @@ function ItemRow({
                   t('plansCron.actions.retry', { defaultValue: 'Retry' })
                 )}
               </button>
-            )}
-            {canDelete && !confirmingDelete && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setConfirmingDelete(true)}
-                className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-neutral-500 transition hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-red-700 dark:hover:text-red-400"
-                title={t('plansCron.actions.delete', { defaultValue: 'Delete' })}
-              >
-                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-              </button>
-            )}
-            {confirmingDelete && (
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void handleDelete()}
-                  className="inline-flex h-7 items-center rounded-md bg-red-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-red-700 disabled:opacity-50"
-                >
-                  {busy ? (
-                    <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
-                  ) : (
-                    t('plansCron.actions.delete', { defaultValue: 'Delete' })
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDelete(false)}
-                  className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-[11px] text-neutral-500 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800"
-                >
-                  ✕
-                </button>
-              </div>
             )}
           </>
         ) : (
@@ -718,7 +857,7 @@ function ItemRow({
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => void handleDelete()}
+                  onClick={() => void handleCronDelete()}
                   className="inline-flex h-7 items-center rounded-md bg-red-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-red-700 disabled:opacity-50"
                 >
                   {busy ? (

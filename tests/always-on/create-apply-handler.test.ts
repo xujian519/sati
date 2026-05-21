@@ -17,21 +17,24 @@ function makeTestEnv() {
   const projectId = createProjectId(projectRoot);
   const projectDir = join(pilotHome, "always-on", "projects", projectId);
   const plansDir = join(projectDir, "plans");
+  const cyclesDir = join(projectDir, "cycles");
   mkdirSync(plansDir, { recursive: true });
+  mkdirSync(cyclesDir, { recursive: true });
 
   return {
     pilotHome,
     projectRoot,
     projectDir,
     plansDir,
+    cyclesDir,
     cleanup: () => rmSync(pilotHome, { recursive: true, force: true }),
   };
 }
 
-function writePlanIndex(plansDir: string, plans: Array<Record<string, unknown>>) {
+function writeCycleIndex(cyclesDir: string, cycles: Array<Record<string, unknown>>) {
   writeFileSync(
-    join(plansDir, "index.json"),
-    JSON.stringify({ schemaVersion: 1, plans }),
+    join(cyclesDir, "index.json"),
+    JSON.stringify({ schemaVersion: 1, cycles }),
   );
 }
 
@@ -58,10 +61,10 @@ function makeDummyGateway() {
   };
 }
 
-test("createApplyHandler returns plan_not_found for missing plan", async () => {
+test("createApplyHandler returns cycle_not_found for missing cycle", async () => {
   const env = makeTestEnv();
   try {
-    writePlanIndex(env.plansDir, []);
+    writeCycleIndex(env.cyclesDir, []);
 
     const handler = createApplyHandler({
       gateway: makeDummyGateway() as never,
@@ -71,22 +74,30 @@ test("createApplyHandler returns plan_not_found for missing plan", async () => {
 
     const result = await handler({
       projectKey: env.projectRoot,
-      planId: "nonexistent",
+      workCycleId: "nonexistent",
       projectName: "test",
     });
 
     assert.ok(result.error);
-    assert.equal(result.error.code, "plan_not_found");
+    assert.equal(result.error.code, "cycle_not_found");
   } finally {
     env.cleanup();
   }
 });
 
-test("createApplyHandler returns missing_workspace for plan without workspace", async () => {
+test("createApplyHandler returns missing_workspace for cycle without workspace", async () => {
   const env = makeTestEnv();
   try {
-    writePlanIndex(env.plansDir, [
-      { id: "p1", title: "No workspace plan", status: "completed" },
+    writeCycleIndex(env.cyclesDir, [
+      {
+        id: "c1",
+        projectKey: env.projectRoot,
+        status: "active",
+        workspace: { strategy: "snapshot-copy", cwd: "", metadata: {} },
+        planIds: [],
+        createdAt: "2026-05-08T10:00:00Z",
+        createdByRunId: "run-1",
+      },
     ]);
 
     const handler = createApplyHandler({
@@ -97,7 +108,7 @@ test("createApplyHandler returns missing_workspace for plan without workspace", 
 
     const result = await handler({
       projectKey: env.projectRoot,
-      planId: "p1",
+      workCycleId: "c1",
       projectName: "test",
     });
 

@@ -71,7 +71,7 @@ export class DiscoveryPlanStore {
     update: {
       status?: DiscoveryPlanStatus;
       reportFilePath?: string;
-      workspace?: DiscoveryPlanRecord["workspace"];
+      workCycleId?: string;
     },
   ): Promise<DiscoveryPlanRecord | undefined> {
     const index = await this.readIndex();
@@ -79,8 +79,6 @@ export class DiscoveryPlanStore {
     if (!target) return undefined;
     if (update.status !== undefined) {
       target.status = update.status;
-      // Sync the Web-side executionStatus field if it exists on this record,
-      // so the UI does not show a stale "queued" state after gateway completes.
       const raw = target as Record<string, unknown>;
       if ("executionStatus" in raw && (update.status === "completed" || update.status === "failed")) {
         raw.executionStatus = update.status;
@@ -89,8 +87,9 @@ export class DiscoveryPlanStore {
     if (update.reportFilePath !== undefined) {
       target.reportFilePath = relativeIfInsideRoot(update.reportFilePath, this.paths.projectDir);
     }
-    if (update.workspace !== undefined) {
-      target.workspace = update.workspace;
+    if (update.workCycleId !== undefined) {
+      target.workCycleId = update.workCycleId;
+      delete target.workspace;
     }
     await this.writeIndex(index);
     return target;

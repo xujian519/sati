@@ -13,8 +13,9 @@ import {
   getProjectDiscoveryPlanReport,
   queueDiscoveryPlanExecution,
   updateProjectDiscoveryPlanExecution,
-  applyProjectDiscoveryPlan,
-  archiveProjectDiscoveryPlan,
+  getProjectWorkCycles,
+  applyWorkCycle,
+  archiveWorkCycle,
 } from '../discovery-plans.js';
 
 const router = express.Router();
@@ -297,34 +298,48 @@ router.get('/:projectName/discovery-plans/:planId/report', async (req, res) => {
   }
 });
 
-router.post('/:projectName/discovery-plans/:planId/apply', async (req, res) => {
+router.get('/:projectName/work-cycles', async (req, res) => {
   try {
     const projectName = getTrimmedParam(req.params?.projectName);
-    const planId = getTrimmedParam(req.params?.planId);
     if (!projectName) return res.status(400).json({ error: 'projectName is required' });
-    if (!planId) return res.status(400).json({ error: 'planId is required' });
 
-    const result = await applyProjectDiscoveryPlan(projectName, planId);
+    const result = await getProjectWorkCycles(projectName);
     return res.json(result);
   } catch (error) {
     return res.status(getDiscoveryPlanErrorStatus(error)).json({
-      error: getDiscoveryPlanErrorMessage(error, 'Failed to apply discovery plan')
+      error: getDiscoveryPlanErrorMessage(error, 'Failed to get work cycles')
     });
   }
 });
 
-router.post('/:projectName/discovery-plans/:planId/archive', async (req, res) => {
+router.post('/:projectName/work-cycles/:cycleId/apply', async (req, res) => {
   try {
     const projectName = getTrimmedParam(req.params?.projectName);
-    const planId = getTrimmedParam(req.params?.planId);
+    const cycleId = getTrimmedParam(req.params?.cycleId);
     if (!projectName) return res.status(400).json({ error: 'projectName is required' });
-    if (!planId) return res.status(400).json({ error: 'planId is required' });
+    if (!cycleId) return res.status(400).json({ error: 'cycleId is required' });
 
-    const result = await archiveProjectDiscoveryPlan(projectName, planId);
+    const result = await applyWorkCycle(projectName, cycleId);
     return res.json(result);
   } catch (error) {
     return res.status(getDiscoveryPlanErrorStatus(error)).json({
-      error: getDiscoveryPlanErrorMessage(error, 'Failed to archive discovery plan')
+      error: getDiscoveryPlanErrorMessage(error, 'Failed to apply work cycle')
+    });
+  }
+});
+
+router.post('/:projectName/work-cycles/:cycleId/archive', async (req, res) => {
+  try {
+    const projectName = getTrimmedParam(req.params?.projectName);
+    const cycleId = getTrimmedParam(req.params?.cycleId);
+    if (!projectName) return res.status(400).json({ error: 'projectName is required' });
+    if (!cycleId) return res.status(400).json({ error: 'cycleId is required' });
+
+    const result = await archiveWorkCycle(projectName, cycleId);
+    return res.json(result);
+  } catch (error) {
+    return res.status(getDiscoveryPlanErrorStatus(error)).json({
+      error: getDiscoveryPlanErrorMessage(error, 'Failed to archive work cycle')
     });
   }
 });

@@ -14,6 +14,9 @@ export type {
   DiscoveryFireResult,
   GateBlockReason,
   GateResult,
+  WorkCycleIndex,
+  WorkCycleRecord,
+  WorkCycleStatus,
   WorkspaceHandle,
   WorkspaceStrategyId,
 } from "./protocol/types.js";
@@ -39,6 +42,7 @@ export {
 } from "./storage/AlwaysOnPaths.js";
 export { DiscoveryStateStore, defaultDiscoveryState, getDayKey } from "./storage/DiscoveryStateStore.js";
 export { DiscoveryPlanStore } from "./storage/DiscoveryPlanStore.js";
+export { WorkCycleStore } from "./storage/WorkCycleStore.js";
 export { DiscoveryReportStore } from "./storage/DiscoveryReportStore.js";
 export { AlwaysOnEventStore } from "./storage/AlwaysOnEventStore.js";
 export {
@@ -78,12 +82,12 @@ export { SessionConfigOverrides, type SessionConfigOverride } from "./runtime/Se
 export {
   DiscoveryFire,
   acquireDiscoveryLock,
-  ensureAlwaysOnWorkspace,
+  ensureActiveWorkCycle,
   releaseDiscoveryLock,
   type DiscoveryFireDependencies,
   type DiscoveryFireRunInput,
-  type EnsureAlwaysOnWorkspaceInput,
-  type EnsureAlwaysOnWorkspaceResult,
+  type EnsureActiveWorkCycleInput,
+  type EnsureActiveWorkCycleResult,
 } from "./runtime/DiscoveryFire.js";
 export {
   DiscoveryScheduler,
@@ -147,6 +151,7 @@ export {
   truncateText,
   normalizeStringList,
   PLAN_STATUS_ORDER,
+  type WebCycleRecord,
   type WebPlanRecord,
   type WebPlanSession,
   type WebPlanContextRefs,

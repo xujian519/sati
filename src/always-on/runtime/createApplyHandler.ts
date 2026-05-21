@@ -3,6 +3,7 @@ import type { Gateway, GatewayEvent } from "../../gateway/index.js";
 import type { AlwaysOnApplyInput, AlwaysOnApplyResult } from "../../gateway/protocol/types.js";
 import { resolveAlwaysOnPaths } from "../storage/AlwaysOnPaths.js";
 import { DiscoveryPlanStore } from "../storage/DiscoveryPlanStore.js";
+import { WorkCycleStore } from "../storage/WorkCycleStore.js";
 import { DiscoveryFire, type DiscoveryFireDependencies } from "./DiscoveryFire.js";
 import { SessionConfigOverrides } from "./SessionConfigOverrides.js";
 import { DiscoveryStateStore } from "../storage/DiscoveryStateStore.js";
@@ -22,12 +23,9 @@ export type CreateApplyHandlerDeps = {
 
 /**
  * Build a lightweight apply handler that does NOT depend on
- * `AlwaysOnManager` or `DiscoveryScheduler`. It reads the plan from
+ * `AlwaysOnManager` or `DiscoveryScheduler`. It reads the cycle from
  * disk and delegates to `DiscoveryFire.runApplyPhase`, which only
- * requires `gateway`, `sessionOverrides`, and the plan record.
- *
- * Unused deps are stubbed out so the `DiscoveryFire` constructor is
- * satisfied — apply never touches stateStore / workspaceRegistry / etc.
+ * requires `gateway`, `sessionOverrides`, and the cycle record.
  */
 export function createApplyHandler(
   deps: CreateApplyHandlerDeps,
@@ -38,21 +36,27 @@ export function createApplyHandler(
       projectKey: input.projectKey,
     });
 
-    const planStore = new DiscoveryPlanStore(paths);
-    const plan = await planStore.getRecord(input.planId);
-    if (!plan) {
+    const cycleStore = new WorkCycleStore(paths);
+    const cycle = await cycleStore.getRecord(input.workCycleId);
+    if (!cycle) {
       return {
         sessionKey: "",
-        error: { code: "plan_not_found", message: `Plan ${input.planId} not found` },
+        error: { code: "cycle_not_found", message: `Work cycle ${input.workCycleId} not found` },
       };
     }
 
-    if (!plan.workspace?.cwd) {
+    if (!cycle.workspace?.cwd) {
       return {
         sessionKey: "",
-        error: { code: "missing_workspace", message: "Plan has no associated workspace to apply" },
+        error: { code: "missing_workspace", message: "Cycle has no associated workspace to apply" },
       };
     }
+
+    const planStore = new DiscoveryPlanStore(paths);
+    const planIndex = await planStore.readIndex();
+    const cyclePlans = planIndex.plans
+      .filter((p) => cycle.planIds.includes(p.id))
+      .map((p) => ({ id: p.id, title: p.title }));
 
     const baseConfig = deps.alwaysOnConfig ?? defaultAlwaysOnConfig();
     const minimalDeps: DiscoveryFireDependencies = {
@@ -65,6 +69,7 @@ export function createApplyHandler(
       sessionOverrides: deps.sessionOverrides,
       stateStore: new DiscoveryStateStore(paths),
       planStore,
+      cycleStore,
       reportStore: new DiscoveryReportStore(paths),
       eventStore: new AlwaysOnEventStore(paths),
       uuid: () => randomUUID(),
@@ -76,11 +81,8 @@ export function createApplyHandler(
     const runId = randomUUID();
     const result = await fire.runApplyPhase({
       runId,
-      plan: {
-        id: plan.id,
-        title: plan.title,
-        workspace: plan.workspace,
-      },
+      cycle,
+      plans: cyclePlans,
       projectName: input.projectName,
       projectRoot: input.projectKey,
     });

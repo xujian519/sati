@@ -69,11 +69,12 @@
       "actions": "操作"
     },
     "actions": {
-      "apply": "应用",
       "retry": "重新执行",
       "delete": "删除",
       "runNow": "立即运行",
-      "stop": "停止"
+      "stop": "停止",
+      "applyCycle": "全部应用",
+      "archiveCycle": "归档"
     },
     "type": {
       "plan": "计划",
@@ -86,10 +87,16 @@
       "completedWaiting": "执行完成",
       "failed": "执行失败",
       "archived": "已归档",
-      "applying": "正在应用",
-      "applied": "已应用",
       "scheduled": "已安排",
       "running": "运行中"
+    },
+    "workCycle": "工作周期",
+    "plans": "个计划",
+    "cycleStatus": {
+      "active": "活跃",
+      "applying": "正在应用…",
+      "applied": "已应用",
+      "archived": "已归档"
     }
   }
 }

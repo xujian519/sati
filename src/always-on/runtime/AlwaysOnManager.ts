@@ -128,17 +128,17 @@ export class AlwaysOnManager {
     }
   }
 
-  async applyPlan(input: {
+  async applyCycle(input: {
     projectKey: string;
-    planId: string;
+    workCycleId: string;
     projectName: string;
   }): Promise<{ sessionKey: string; error?: { code: string; message: string } }> {
     const runtime = this.runtimes.find((r) => r.projectKey === input.projectKey);
     if (!runtime) {
       return { sessionKey: "", error: { code: "project_not_found", message: `No Always-On runtime for project ${input.projectKey}` } };
     }
-    return runtime.applyPlan({
-      planId: input.planId,
+    return runtime.applyCycle({
+      workCycleId: input.workCycleId,
       projectRoot: input.projectKey,
       projectName: input.projectName,
     });

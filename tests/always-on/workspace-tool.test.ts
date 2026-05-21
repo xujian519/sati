@@ -8,6 +8,7 @@ import { AlwaysOnRunContextRegistry, type WorkspaceRunContext } from "../../src/
 import { createAlwaysOnWorkspaceTool, ALWAYS_ON_WORKSPACE_TOOL_NAME } from "../../src/always-on/tool/AlwaysOnWorkspaceTool.js";
 import { resolveAlwaysOnPaths } from "../../src/always-on/storage/AlwaysOnPaths.js";
 import { DiscoveryStateStore } from "../../src/always-on/storage/DiscoveryStateStore.js";
+import { WorkCycleStore } from "../../src/always-on/storage/WorkCycleStore.js";
 import { WorkspaceProviderRegistry } from "../../src/always-on/workspace/WorkspaceProviderRegistry.js";
 import type { WorkspaceHandle } from "../../src/always-on/protocol/types.js";
 import type {
@@ -55,6 +56,7 @@ function makeFixture() {
   const registry = new WorkspaceProviderRegistry();
   registry.add(provider);
   const stateStore = new DiscoveryStateStore(paths);
+  const cycleStore = new WorkCycleStore(paths);
   const runContexts = new AlwaysOnRunContextRegistry();
   const now = () => new Date("2026-05-10T12:00:00Z");
 
@@ -67,6 +69,7 @@ function makeFixture() {
     provider,
     registry,
     stateStore,
+    cycleStore,
     runContexts,
     now,
     tool,
@@ -86,6 +89,7 @@ test(`${ALWAYS_ON_WORKSPACE_TOOL_NAME} prepares a workspace and sets handle on c
       paths: fx.paths,
       workspaceRegistry: fx.registry,
       stateStore: fx.stateStore,
+      cycleStore: fx.cycleStore,
       now: fx.now,
     };
     fx.runContexts.register(ctx);
@@ -136,6 +140,7 @@ test(`${ALWAYS_ON_WORKSPACE_TOOL_NAME} rejects double invocation`, async () => {
       paths: fx.paths,
       workspaceRegistry: fx.registry,
       stateStore: fx.stateStore,
+      cycleStore: fx.cycleStore,
       now: fx.now,
     };
     fx.runContexts.register(ctx);

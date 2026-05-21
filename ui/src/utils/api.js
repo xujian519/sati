@@ -109,12 +109,14 @@ export const api = {
     }),
   discoveryPlanReport: (projectName, planId) =>
     authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-plans/${encodeURIComponent(planId)}/report`),
-  applyProjectDiscoveryPlan: (projectName, planId) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-plans/${encodeURIComponent(planId)}/apply`, {
+  projectWorkCycles: (projectName) =>
+    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/work-cycles`),
+  applyWorkCycle: (projectName, cycleId) =>
+    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/work-cycles/${encodeURIComponent(cycleId)}/apply`, {
       method: 'POST',
     }),
-  archiveProjectDiscoveryPlan: (projectName, planId) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-plans/${encodeURIComponent(planId)}/archive`, {
+  archiveWorkCycle: (projectName, cycleId) =>
+    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/work-cycles/${encodeURIComponent(cycleId)}/archive`, {
       method: 'POST',
     }),
   sessions: (projectName, limit = 5, offset = 0) =>

@@ -91,68 +91,29 @@ test("DiscoveryStateStore.markFireCompleted bumps consecutiveFailures only on fa
   }
 });
 
-test("DiscoveryStateStore.setCurrentWorkspace persists workspace handle round-trip", async () => {
+test("DiscoveryStateStore.setActiveWorkCycleId persists cycle id round-trip", async () => {
   const { store, cleanup } = makeStore();
   try {
     const now = new Date("2026-05-08T12:00:00Z");
-    const written = await store.setCurrentWorkspace(
-      {
-        runId: "run_001",
-        projectKey: "/tmp/projects/sample",
-        strategy: "git-worktree",
-        cwd: "/tmp/pilot/always-on/worktrees/sample/run_001",
-        metadata: { repoRoot: "/tmp/projects/sample", baseBranch: "main", baseCommit: "abc123" },
-      },
-      now,
-    );
-    assert.ok(written.currentWorkspace);
-    assert.equal(written.currentWorkspace?.runId, "run_001");
-    assert.equal(written.currentWorkspace?.strategy, "git-worktree");
-    assert.equal(written.currentWorkspace?.metadata.baseBranch, "main");
+    const written = await store.setActiveWorkCycleId("cycle-001", now);
+    assert.equal(written.activeWorkCycleId, "cycle-001");
 
     const reread = await store.read(now);
-    assert.deepEqual(reread.currentWorkspace, written.currentWorkspace);
+    assert.equal(reread.activeWorkCycleId, "cycle-001");
   } finally {
     cleanup();
   }
 });
 
-test("DiscoveryStateStore.clearCurrentWorkspace removes the workspace field", async () => {
+test("DiscoveryStateStore.clearActiveWorkCycleId removes the cycle id", async () => {
   const { store, cleanup } = makeStore();
   try {
     const now = new Date("2026-05-08T12:00:00Z");
-    await store.setCurrentWorkspace(
-      {
-        runId: "run_001",
-        projectKey: "/tmp/projects/sample",
-        strategy: "snapshot-copy",
-        cwd: "/tmp/pilot/always-on/snapshots/sample/run_001",
-        metadata: {},
-      },
-      now,
-    );
-    const cleared = await store.clearCurrentWorkspace(now);
-    assert.equal(cleared.currentWorkspace, undefined);
+    await store.setActiveWorkCycleId("cycle-001", now);
+    const cleared = await store.clearActiveWorkCycleId(now);
+    assert.equal(cleared.activeWorkCycleId, undefined);
     const reread = await store.read(now);
-    assert.equal(reread.currentWorkspace, undefined);
-  } finally {
-    cleanup();
-  }
-});
-
-test("DiscoveryStateStore drops malformed currentWorkspace on read", async () => {
-  const { store, cleanup, pilotHome } = makeStore();
-  try {
-    const now = new Date("2026-05-08T12:00:00Z");
-    await store.write({
-      schemaVersion: 1,
-      todayKey: "2026-05-08",
-      todayRunCount: 0,
-      consecutiveFailures: 0,
-    });
-    void pilotHome;
-    const reread = await store.read(now);
-    assert.equal(reread.currentWorkspace, undefined);
+    assert.equal(reread.activeWorkCycleId, undefined);
   } finally {
     cleanup();
   }

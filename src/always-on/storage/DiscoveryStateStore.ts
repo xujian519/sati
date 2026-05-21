@@ -4,7 +4,6 @@ import type {
   AlwaysOnCurrentWorkspaceRef,
   AlwaysOnDiscoveryOutcome,
   AlwaysOnDiscoveryState,
-  WorkspaceHandle,
   WorkspaceStrategyId,
 } from "../protocol/types.js";
 import type { AlwaysOnPaths } from "./AlwaysOnPaths.js";
@@ -81,29 +80,24 @@ export class DiscoveryStateStore {
     return next;
   }
 
-  async setCurrentWorkspace(handle: WorkspaceHandle, now: Date): Promise<AlwaysOnDiscoveryState> {
+  async setActiveWorkCycleId(cycleId: string, now: Date): Promise<AlwaysOnDiscoveryState> {
     const current = await this.read(now);
-    const ref: AlwaysOnCurrentWorkspaceRef = {
-      runId: handle.runId,
-      strategy: handle.strategy,
-      cwd: handle.cwd,
-      metadata: { ...handle.metadata },
-    };
     const next: AlwaysOnDiscoveryState = {
       ...current,
-      currentWorkspace: ref,
+      activeWorkCycleId: cycleId,
     };
+    delete next.currentWorkspace;
     await this.write(next);
     return next;
   }
 
-  async clearCurrentWorkspace(now: Date): Promise<AlwaysOnDiscoveryState> {
+  async clearActiveWorkCycleId(now: Date): Promise<AlwaysOnDiscoveryState> {
     const current = await this.read(now);
-    if (!current.currentWorkspace) {
+    if (!current.activeWorkCycleId) {
       return current;
     }
     const next: AlwaysOnDiscoveryState = { ...current };
-    delete next.currentWorkspace;
+    delete next.activeWorkCycleId;
     await this.write(next);
     return next;
   }
@@ -159,6 +153,7 @@ function normalizeState(value: unknown, now: Date): AlwaysOnDiscoveryState {
         ? candidate.consecutiveFailures
         : 0,
     dormant: normalizeDormant(candidate.dormant),
+    activeWorkCycleId: typeof candidate.activeWorkCycleId === "string" ? candidate.activeWorkCycleId : undefined,
     currentWorkspace: normalizeCurrentWorkspace(candidate.currentWorkspace),
   };
 }

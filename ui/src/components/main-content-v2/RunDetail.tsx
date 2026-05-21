@@ -89,7 +89,6 @@ export default function RunDetail(props: RunDetailProps) {
   const [reportMarkdown, setReportMarkdown] = useState('');
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [loadingReport, setLoadingReport] = useState(false);
-  const [actionLoading, setActionLoading] = useState<'apply' | 'archive' | null>(null);
   const [planOpen, setPlanOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
 
@@ -138,47 +137,6 @@ export default function RunDetail(props: RunDetailProps) {
       });
     return () => { cancelled = true; };
   }, [projectName, planId]);
-
-  const handleApply = useCallback(async () => {
-    if (!projectName || !planId) return;
-    setActionLoading('apply');
-    try {
-      const response = await api.applyProjectDiscoveryPlan(projectName, planId);
-      const body = await response.json().catch(() => ({})) as {
-        plan?: { status?: string };
-        error?: { code?: string; message?: string } | string;
-      };
-      if (!response.ok || body.error) {
-        setPlan((prev) => (prev ? { ...prev, status: 'failed' } : prev));
-        return;
-      }
-      const serverStatus = body.plan?.status;
-      setPlan((prev) =>
-        prev ? { ...prev, status: serverStatus || 'applying' } : prev,
-      );
-    } catch {
-      setPlan((prev) => (prev ? { ...prev, status: 'failed' } : prev));
-    } finally {
-      setActionLoading(null);
-    }
-  }, [projectName, planId]);
-
-  const handleArchive = useCallback(async () => {
-    if (!projectName || !planId) return;
-    setActionLoading('archive');
-    try {
-      await api.archiveProjectDiscoveryPlan(projectName, planId);
-      setPlan((prev) => (prev ? { ...prev, status: 'archived' } : prev));
-    } catch {
-      // swallow
-    } finally {
-      setActionLoading(null);
-    }
-  }, [projectName, planId]);
-
-  const canApply =
-    plan?.status === 'completed' || plan?.status === 'ready' || plan?.status === 'apply_failed';
-  const canArchive = plan != null && plan.status !== 'archived' && plan.status !== 'applying';
 
   const statusColor =
     STATUS_COLORS[plan?.status ?? ''] ??
@@ -346,33 +304,7 @@ export default function RunDetail(props: RunDetailProps) {
           )}
         </div>
 
-        {/* Action buttons */}
-        {plan && (
-          <div className="flex items-center gap-3 px-5 py-4">
-            <button
-              type="button"
-              onClick={() => void handleApply()}
-              disabled={!canApply || actionLoading != null}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3.5 text-[13px] font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
-            >
-              {actionLoading === 'apply' && (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
-              )}
-              {t('dashboard.runDetail.apply', { defaultValue: 'Apply to Main' })}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleArchive()}
-              disabled={!canArchive || actionLoading != null}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 px-3.5 text-[13px] font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-            >
-              {actionLoading === 'archive' && (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
-              )}
-              {t('dashboard.runDetail.archive', { defaultValue: 'Archive' })}
-            </button>
-          </div>
-        )}
+        {/* Per-plan apply/archive removed — use cycle-level actions in the plans list */}
       </div>
     </div>
   );

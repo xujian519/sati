@@ -249,7 +249,7 @@ export type ReloadConfigResult = {
 
 export type AlwaysOnApplyInput = {
   projectKey: string;
-  planId: string;
+  workCycleId: string;
   projectName: string;
 };
 

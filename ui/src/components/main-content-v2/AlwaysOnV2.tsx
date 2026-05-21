@@ -21,11 +21,11 @@ const SUB_TABS: { id: AlwaysOnSubTab; labelKey: string; defaultLabel: string; ic
 type AlwaysOnV2Props = {
   selectedProject: Project | null;
   onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
-  onApplyPlan?: (projectName: string, planId: string) => Promise<void>;
+  onApplyWorkCycle?: (projectName: string, cycleId: string) => Promise<void>;
   onOpenExecutionSession?: (projectKey: string, runId: string, projectName?: string) => void;
 };
 
-export default function AlwaysOnV2({ selectedProject, onExecutePlan, onApplyPlan, onOpenExecutionSession }: AlwaysOnV2Props) {
+export default function AlwaysOnV2({ selectedProject, onExecutePlan, onApplyWorkCycle, onOpenExecutionSession }: AlwaysOnV2Props) {
   const { t } = useTranslation('alwaysOn');
   const [subTab, setSubTab] = useState<AlwaysOnSubTab>('dashboard');
   const [planDetail, setPlanDetail] = useState<PlanDetailTarget | null>(null);
@@ -85,7 +85,7 @@ export default function AlwaysOnV2({ selectedProject, onExecutePlan, onApplyPlan
         ) : subTab === 'dashboard' ? (
           <AlwaysOnDashboard onOpenExecutionSession={onOpenExecutionSession} />
         ) : (
-          <PlansAndCronJobs onExecutePlan={onExecutePlan} onApplyPlan={onApplyPlan} onOpenPlanDetail={handleOpenPlanDetail} />
+          <PlansAndCronJobs onExecutePlan={onExecutePlan} onApplyWorkCycle={onApplyWorkCycle} onOpenPlanDetail={handleOpenPlanDetail} />
         )}
       </div>
     </div>

@@ -36,9 +36,10 @@ test("tool rejects workspace-phase sessions", async () => {
     sessionKey,
     runId: "r1",
     projectKey: "/projects/foo",
-    paths: { pilotHome: "/tmp", projectKey: "/projects/foo", projectId: "foo", rootDir: "/tmp/ao", projectDir: "/tmp/ao/projects/foo", plansDir: "/tmp/ao/plans", planIndexFile: "/tmp/ao/plans/index.json", worktreesDir: "/tmp/ao/wt", snapshotsDir: "/tmp/ao/snap", reportsDir: "/tmp/ao/reports", runsDir: "/tmp/ao/runs", runHistoryFile: "/tmp/ao/history.jsonl", eventsFile: "/tmp/ao/events.jsonl", stateFile: "/tmp/ao/state.json", locksDir: "/tmp/ao/locks", discoveryLockFile: "/tmp/ao/locks/discovery.lock" },
+    paths: { pilotHome: "/tmp", projectKey: "/projects/foo", projectId: "foo", rootDir: "/tmp/ao", projectDir: "/tmp/ao/projects/foo", plansDir: "/tmp/ao/plans", planIndexFile: "/tmp/ao/plans/index.json", worktreesDir: "/tmp/ao/wt", snapshotsDir: "/tmp/ao/snap", reportsDir: "/tmp/ao/reports", runsDir: "/tmp/ao/runs", runHistoryFile: "/tmp/ao/history.jsonl", eventsFile: "/tmp/ao/events.jsonl", stateFile: "/tmp/ao/state.json", locksDir: "/tmp/ao/locks", discoveryLockFile: "/tmp/ao/locks/discovery.lock", cyclesDir: "/tmp/ao/cycles", cycleIndexFile: "/tmp/ao/cycles/index.json" },
     workspaceRegistry: {} as never,
     stateStore: {} as never,
+    cycleStore: {} as never,
     now: () => new Date(),
   });
 

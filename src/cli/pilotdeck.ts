@@ -104,7 +104,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       sessionOverrides: alwaysOn?.getSessionOverrides(),
       cron,
       alwaysOnApply: alwaysOn
-        ? (input) => alwaysOn!.applyPlan(input)
+        ? (input) => alwaysOn!.applyCycle(input)
         : standaloneApply,
     });
     if (cron) {
@@ -166,7 +166,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         extraTools: [...(alwaysOn?.getTools() ?? []), ...(cron?.getTools() ?? [])],
         sessionOverrides: alwaysOn?.getSessionOverrides(),
         cron,
-        alwaysOnApply: alwaysOn ? (input) => alwaysOn!.applyPlan(input) : fallbackApply,
+        alwaysOnApply: alwaysOn ? (input) => alwaysOn!.applyCycle(input) : fallbackApply,
       });
       if (cronChanged && cron) {
         cron.bindGateway(gateway);
