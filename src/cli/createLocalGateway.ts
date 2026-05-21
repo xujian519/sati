@@ -56,7 +56,7 @@ import { createDefaultPermissionContext, type PermissionRule } from "../permissi
 import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
 import { createPilotConfigStoreSync, type PilotConfigStore } from "../pilot/config/PilotConfigStore.js";
 import type { PilotAgentModelSelection, PilotConfigSnapshot } from "../pilot/config/types.js";
-import type { RouterConfig } from "../router/config/schema.js";
+import { DEFAULT_JUDGE_TIMEOUT_MS, DEFAULT_SUBAGENT_MAX_TOKENS, DEFAULT_ALLOWED_TOOLS, DEFAULT_TRIGGER_TIERS, type RouterConfig } from "../router/config/schema.js";
 import { createAgentProjectSessionStorage, listProjectSessions, resumeAgentSession } from "../session/index.js";
 import { readWebSessionMessages } from "../web/server/readSessionMessages.js";
 import { describeWebProject, listWebProjects } from "../web/server/listProjects.js";
@@ -1091,6 +1091,8 @@ function ensureRouterConfig(
       ...router,
       scenarios: router.scenarios ?? { default: defaultRef },
       fallback: router.fallback ?? { default: [defaultRef] },
+      tokenSaver: router.tokenSaver ?? buildDefaultTokenSaver(defaultRef),
+      autoOrchestrate: router.autoOrchestrate ?? buildDefaultAutoOrchestrate(),
       stats: { enabled: true, baselineModel: defaultRef, ...(router.stats ?? {}) },
     };
   }
@@ -1098,6 +1100,33 @@ function ensureRouterConfig(
     scenarios: { default: defaultRef },
     fallback: { default: [defaultRef] },
     zeroUsageRetry: { enabled: true, maxAttempts: 2 },
+    tokenSaver: buildDefaultTokenSaver(defaultRef),
+    autoOrchestrate: buildDefaultAutoOrchestrate(),
     stats: { enabled: true, baselineModel: defaultRef },
+  };
+}
+
+function buildDefaultTokenSaver(defaultRef: { id: string; provider: string; model: string }) {
+  return {
+    enabled: false,
+    judge: defaultRef,
+    defaultTier: "medium",
+    judgeTimeoutMs: DEFAULT_JUDGE_TIMEOUT_MS,
+    tiers: {
+      simple: { model: defaultRef },
+      medium: { model: defaultRef },
+      complex: { model: defaultRef },
+      reasoning: { model: defaultRef },
+    },
+  };
+}
+
+function buildDefaultAutoOrchestrate() {
+  return {
+    enabled: false,
+    triggerTiers: [...DEFAULT_TRIGGER_TIERS],
+    slimSystemPrompt: true,
+    allowedTools: [...DEFAULT_ALLOWED_TOOLS],
+    subagentMaxTokens: DEFAULT_SUBAGENT_MAX_TOKENS,
   };
 }
