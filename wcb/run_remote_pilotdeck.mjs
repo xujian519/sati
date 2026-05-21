@@ -180,6 +180,142 @@ function flattenTree(nodes, parentRel) {
   return files;
 }
 
+// ── Pre-stage shared assets (large model files uploaded once) ─────────
+
+const SHARED_BASE_MODEL_PATH = `${REMOTE_BASE}/_shared/task_8d_base_model`;
+const SHARED_PROJECT_NAME = "home-liyishan-_shared-task_8d_base_model";
+
+async function preStageBaseModel(host, task) {
+  const execDir = join(task.workspacePath, "exec");
+  const srcDir = existsSync(execDir) ? execDir : task.workspacePath;
+  const baseModelDir = join(srcDir, "base_model");
+  if (!existsSync(baseModelDir)) {
+    log(task.taskId, "WARNING: base_model/ not found in workspace");
+    return false;
+  }
+
+  // Check if shared project already has the model (use config.json as marker)
+  const files = await listFiles(host, SHARED_PROJECT_NAME);
+  if (Array.isArray(files) && files.some(f => f.name === "config.json" || f.path?.endsWith("config.json"))) {
+    log(task.taskId, "Pre-staged base_model already exists, skipping upload");
+    return true;
+  }
+
+  // Create shared folder and project
+  log(task.taskId, "Pre-staging base_model to shared location...");
+  await api(host, "POST", "/api/create-folder", { path: SHARED_BASE_MODEL_PATH });
+  await api(host, "POST", "/api/projects/create", { path: SHARED_BASE_MODEL_PATH });
+
+  // Upload all base_model files
+  const uploadUrl = `${host}/api/projects/${encodeURIComponent(SHARED_PROJECT_NAME)}/files/upload`;
+  const modelFiles = readdirSync(baseModelDir, { withFileTypes: true });
+
+  for (const ent of modelFiles) {
+    if (ent.isDirectory()) {
+      // Handle subdirectories (e.g., 1_Pooling/)
+      const subDir = join(baseModelDir, ent.name);
+      await api(host, "POST", "/api/create-folder", { path: `${SHARED_BASE_MODEL_PATH}/${ent.name}` });
+      for (const subEnt of readdirSync(subDir, { withFileTypes: true })) {
+        if (!subEnt.isFile()) continue;
+        const subFile = join(subDir, subEnt.name);
+        await uploadWithRetry(host, uploadUrl, subFile, task.taskId);
+      }
+      continue;
+    }
+    if (!ent.isFile()) continue;
+    const filePath = join(baseModelDir, ent.name);
+    const fileSize = statSync(filePath).size;
+
+    if (fileSize > 45 * 1024 * 1024) {
+      // Large file: split into 20MB chunks, upload, reassemble via setup
+      const reassembleInfo = await uploadLargeFileChunked(host, uploadUrl, filePath, SHARED_BASE_MODEL_PATH, task.taskId);
+      if (reassembleInfo) task._preStageReassemble = reassembleInfo;
+    } else {
+      await uploadWithRetry(host, uploadUrl, filePath, task.taskId);
+    }
+  }
+
+  log(task.taskId, "Pre-stage base_model complete");
+  return true;
+}
+
+async function uploadWithRetry(host, uploadUrl, filePath, taskId, maxRetries = 3) {
+  const fname = basename(filePath);
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const curlOut = execSync(
+        `/usr/bin/curl -s -X POST -F "files=@${filePath}" "${uploadUrl}"`,
+        { timeout: 600_000, maxBuffer: 10 * 1024 * 1024 },
+      ).toString();
+      if (curlOut.includes('"success":true') || curlOut.includes('"success": true')) {
+        log(taskId, `  Uploaded: ${fname} (attempt ${attempt})`);
+        return true;
+      }
+      if (attempt < maxRetries) {
+        log(taskId, `  Upload ${fname} no success response, retrying (${attempt}/${maxRetries})...`);
+        await new Promise(r => setTimeout(r, 2000 * attempt));
+      }
+    } catch (e) {
+      if (attempt < maxRetries) {
+        log(taskId, `  Upload ${fname} error: ${e.message}, retrying (${attempt}/${maxRetries})...`);
+        await new Promise(r => setTimeout(r, 3000 * attempt));
+      } else {
+        log(taskId, `  Upload ${fname} FAILED after ${maxRetries} attempts`);
+        return false;
+      }
+    }
+  }
+  return false;
+}
+
+async function uploadLargeFileChunked(host, uploadUrl, filePath, remoteDir, taskId) {
+  const fname = basename(filePath);
+  const fileSize = statSync(filePath).size;
+  const CHUNK_SIZE = 20 * 1024 * 1024; // 20MB chunks
+  const chunkPrefix = `/tmp/wcb_prestage_${fname}_`;
+
+  log(taskId, `  Large file ${fname} (${(fileSize / 1024 / 1024).toFixed(0)}MB) → chunking to ${CHUNK_SIZE / 1024 / 1024}MB pieces`);
+  execSync(`split -b ${CHUNK_SIZE} "${filePath}" "${chunkPrefix}"`, { stdio: "pipe" });
+  const chunks = readdirSync("/tmp")
+    .filter(f => f.startsWith(`wcb_prestage_${fname}_`))
+    .sort()
+    .map(f => `/tmp/${f}`);
+
+  log(taskId, `  Split into ${chunks.length} chunks, uploading...`);
+  const chunkNames = [];
+  for (const chunk of chunks) {
+    const ok = await uploadWithRetry(host, uploadUrl, chunk, taskId);
+    if (!ok) {
+      log(taskId, `  FATAL: chunk upload failed for ${basename(chunk)}`);
+      for (const c of chunks) try { execSync(`rm -f "${c}"`); } catch {}
+      return false;
+    }
+    chunkNames.push(basename(chunk));
+  }
+
+  // Create reassembly script
+  const scriptContent = [
+    "#!/bin/bash",
+    "set -e",
+    `cd "${remoteDir}"`,
+    `cat ${chunkNames.join(" ")} > "${fname}"`,
+    `rm -f ${chunkNames.join(" ")}`,
+    `echo PRE_STAGE_DONE`,
+  ].join("\n") + "\n";
+  const scriptPath = `/tmp/wcb_prestage_reassemble.sh`;
+  writeFileSync(scriptPath, scriptContent);
+  await uploadWithRetry(host, uploadUrl, scriptPath, taskId);
+
+  // Cleanup local temp
+  for (const c of chunks) try { execSync(`rm -f "${c}"`); } catch {}
+  try { execSync(`rm -f "${scriptPath}"`); } catch {}
+  return {
+    script: `${remoteDir}/wcb_prestage_reassemble.sh`,
+    chunkNames,
+    targetFile: fname,
+  };
+}
+
 // ── Upload workspace ────────────────────────────────────────────────────
 
 async function uploadSkills(host, projectName, remoteWorkDir, task) {
@@ -269,7 +405,10 @@ async function uploadWorkspace(host, projectName, remoteWorkDir, task) {
   if (files.length > 50 || totalSize > 2_000_000) {
     log(task.taskId, "Large workspace → compressing to tar.gz");
     const tarPath = `/tmp/wcb_upload_${task.taskId}.tar.gz`;
-    execSync(`tar czfh ${tarPath} -C "${srcDir}" .`, { stdio: "pipe" });
+    const tarExclude = task._excludeFromTar
+      ? task._excludeFromTar.map(e => `--exclude="${e}"`).join(" ")
+      : "";
+    execSync(`tar czfh ${tarPath} ${tarExclude} -C "${srcDir}" .`, { stdio: "pipe" });
     const tarSize = statSync(tarPath).size;
     log(task.taskId, `Compressed: ${(tarSize / 1024 / 1024).toFixed(1)}MB`);
 
@@ -289,10 +428,10 @@ async function uploadWorkspace(host, projectName, remoteWorkDir, task) {
       return -1;
     }
 
-    // Tar too large — split into chunks, upload each, reassemble on remote
-    log(task.taskId, `Tar ${(tarSize / 1024 / 1024).toFixed(1)}MB exceeds upload limit, splitting...`);
+    // Tar too large — split into 20MB chunks, upload each with retry, reassemble on remote
+    log(task.taskId, `Tar ${(tarSize / 1024 / 1024).toFixed(1)}MB exceeds upload limit, splitting into 20MB chunks...`);
     const chunkPrefix = `/tmp/wcb_chunk_${task.taskId}_`;
-    execSync(`split -b 40m ${tarPath} ${chunkPrefix}`, { stdio: "pipe" });
+    execSync(`split -b 20m ${tarPath} ${chunkPrefix}`, { stdio: "pipe" });
     const chunks = readdirSync("/tmp")
       .filter((f) => f.startsWith(`wcb_chunk_${task.taskId}_`))
       .sort()
@@ -301,16 +440,12 @@ async function uploadWorkspace(host, projectName, remoteWorkDir, task) {
 
     const uploadUrl = `${host}/api/projects/${encodeURIComponent(projectName)}/files/upload`;
     for (const chunk of chunks) {
-      const chunkName = basename(chunk);
-      try {
-        const curlOut = execSync(
-          `/usr/bin/curl -s -X POST -F "files=@${chunk}" "${uploadUrl}"`,
-          { timeout: 1200_000, maxBuffer: 10 * 1024 * 1024 },
-        ).toString();
-        log(task.taskId, `Uploaded chunk ${chunkName}: ${curlOut.slice(0, 150)}`);
-      } catch (e) {
-        log(task.taskId, `Chunk upload error: ${chunkName} — ${e.message}`);
-        throw e;
+      const ok = await uploadWithRetry(host, uploadUrl, chunk, task.taskId);
+      if (!ok) {
+        log(task.taskId, `FATAL: chunk upload failed for ${basename(chunk)} after retries`);
+        for (const c of chunks) try { execSync(`rm -f "${c}"`); } catch {}
+        try { execSync(`rm -f ${tarPath}`); } catch {}
+        throw new Error(`Chunk upload failed: ${basename(chunk)}`);
       }
     }
     // Create a setup script for reassembly (avoids sending very long commands to LLM)
@@ -545,17 +680,46 @@ function runAgentViaWebSocket(host, projectPath, prompt, timeoutMs) {
 
 // ── Download results ────────────────────────────────────────────────────
 
-async function downloadResults(host, projectName, localDir) {
+async function downloadResults(host, projectName, localDir, task) {
   mkdirSync(localDir, { recursive: true });
 
   const tree = await listFiles(host, projectName);
   const allFiles = flattenTree(tree, "");
-  const resultFiles = allFiles.filter(f => f.rel.startsWith("results/"));
 
-  log("download", `Tree: ${allFiles.length} total, ${resultFiles.length} under results/`);
+  const SKIP_PATTERNS = [
+    /^\.pilotdeck\//,
+    /__pycache__\//,
+    /\.pyc$/,
+    /^base_model\//,
+    /^data\//,
+    /\.safetensors$/,
+    /\.tar\.gz$/,
+    /^wcb_upload_/,
+    /^wcb_chunk_/,
+    /^wcb_prestage_/,
+  ];
+
+  const downloadAll = task && (
+    task.taskId.includes("task_8") ||
+    task.taskId.includes("task_6") ||
+    task.taskId.includes("task_7") ||
+    task.taskId.includes("task_9")
+  );
+
+  let filesToDownload;
+  if (downloadAll) {
+    const MAX_FILE_SIZE = 512 * 1024;
+    filesToDownload = allFiles.filter(f =>
+      !SKIP_PATTERNS.some(p => p.test(f.rel)) && f.size <= MAX_FILE_SIZE
+    );
+    log("download", `Tree: ${allFiles.length} total, downloading ${filesToDownload.length} files (all, filtered)`);
+  } else {
+    filesToDownload = allFiles.filter(f => f.rel.startsWith("results/"));
+    log("download", `Tree: ${allFiles.length} total, ${filesToDownload.length} under results/`);
+  }
 
   let downloaded = 0;
-  for (const f of resultFiles) {
+  for (const f of filesToDownload) {
     const content = await downloadFile(host, projectName, f.rel);
     if (content) {
       const localPath = join(localDir, f.rel);
@@ -568,7 +732,7 @@ async function downloadResults(host, projectName, localDir) {
     }
   }
 
-  log("download", `Downloaded ${downloaded}/${resultFiles.length} result files → ${localDir}`);
+  log("download", `Downloaded ${downloaded}/${filesToDownload.length} files → ${localDir}`);
   return downloaded;
 }
 
@@ -669,6 +833,11 @@ async function runTask(task, args) {
   let uploadCount = 0;
   if (task.taskId.includes("task_5")) {
     log(task.taskId, "Skipping upload — will symlink to /home/liyishan/PilotDeck");
+  } else if (task.taskId.includes("task_8d")) {
+    // task_8d: pre-stage the large base_model separately, exclude from tar
+    await preStageBaseModel(host, task);
+    task._excludeFromTar = ["./base_model/model.safetensors"];
+    uploadCount = await uploadWorkspace(host, projectName, remoteWorkDir, task);
   } else {
     uploadCount = await uploadWorkspace(host, projectName, remoteWorkDir, task);
   }
@@ -704,6 +873,16 @@ async function runTask(task, args) {
     extraWarmup.push(
       `ln -sfn /home/liyishan/PilotDeck ${remoteWorkDir}/repo`,
     );
+  }
+  if (task.taskId.includes("task_8d")) {
+    // Symlink pre-staged base_model; also run reassembly script if model was just uploaded
+    extraWarmup.push(
+      `rm -rf ${remoteWorkDir}/base_model/model.safetensors && ln -sfn ${SHARED_BASE_MODEL_PATH}/model.safetensors ${remoteWorkDir}/base_model/model.safetensors`,
+    );
+    if (task._preStageReassemble) {
+      // Reassemble chunked model.safetensors on the shared location first
+      extraWarmup.unshift(`bash ${task._preStageReassemble.script}`);
+    }
   }
   if (task.taskId.includes("task_1")) {
     extraWarmup.push(
@@ -777,7 +956,7 @@ async function runTask(task, args) {
   // 6. Download results from remote
   const localWorkDir = join(runDir, "workspace");
   mkdirSync(localWorkDir, { recursive: true });
-  await downloadResults(host, projectName, localWorkDir);
+  await downloadResults(host, projectName, localWorkDir, task);
 
   // 6b. Copy ground truth from local WCB source for grading
   const localGt = join(task.workspacePath, "gt");
