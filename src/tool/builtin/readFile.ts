@@ -172,8 +172,9 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
           };
         }
         const imageBuffer = await readFile(resolved.absolutePath);
+        const validated = await validateAndRepairImage(imageBuffer, mimeType);
         const maxImageBytes = Math.min(MAX_IMAGE_BYTES, context.modelMultimodal?.maxImageBytes ?? MAX_IMAGE_BYTES);
-        const compressed = await compressImageForBudget(imageBuffer, mimeType, maxImageBytes);
+        const compressed = await compressImageForBudget(validated.buffer, validated.mimeType, maxImageBytes);
         readState.set(dedupKey, {
           mtimeMs: Math.floor(fileStat.mtimeMs),
           kind,
@@ -501,6 +502,50 @@ function ensureTokenBudget(text: string, filePath: string): void {
     throw new PilotDeckToolRuntimeError(
       "result_too_large",
       `File content from ${filePath} exceeds the text token budget. Use offset and limit to read a smaller portion.`,
+    );
+  }
+}
+
+/**
+ * Validate image integrity and attempt repair if truncated/corrupted.
+ * Fast path: complete JPEGs (with EOI marker and > 1KB) pass through unchanged.
+ * For suspicious images, attempt re-encode via sharp which can tolerate minor truncation.
+ * Throws PilotDeckToolRuntimeError if the image is unrecoverably corrupt.
+ */
+async function validateAndRepairImage(
+  buffer: Buffer,
+  mimeType: string,
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  const isJpeg = mimeType === "image/jpeg";
+  const hasEoi = isJpeg && buffer.length >= 2
+    && buffer[buffer.length - 2] === 0xff
+    && buffer[buffer.length - 1] === 0xd9;
+
+  if (isJpeg && hasEoi && buffer.length > 1000) {
+    return { buffer, mimeType };
+  }
+
+  if (!isJpeg && buffer.length > 1000) {
+    // For non-JPEG formats, do a quick decode check via sharp
+    try {
+      const sharpModule = await import("sharp");
+      const sharp = sharpModule.default;
+      await sharp(buffer).metadata();
+      return { buffer, mimeType };
+    } catch {
+      // Fall through to repair attempt
+    }
+  }
+
+  try {
+    const sharpModule = await import("sharp");
+    const sharp = sharpModule.default;
+    const repaired = await sharp(buffer).jpeg({ quality: 90 }).toBuffer();
+    return { buffer: repaired, mimeType: "image/jpeg" };
+  } catch {
+    throw new PilotDeckToolRuntimeError(
+      "invalid_tool_input",
+      `Image file appears truncated or corrupted (${buffer.length} bytes). Cannot decode.`,
     );
   }
 }

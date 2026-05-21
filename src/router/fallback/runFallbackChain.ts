@@ -40,6 +40,9 @@ export function isFallbackEligible(error: CanonicalModelError): boolean {
   if (error.recoverableViaCompact) {
     return false;
   }
+  if (error.recoverableViaImageStrip) {
+    return false;
+  }
   if (error.code === "prompt_too_long" || error.code === "request_too_large") {
     return false;
   }

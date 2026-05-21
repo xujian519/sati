@@ -339,6 +339,18 @@ export class AgentLoop {
           continue;
         }
 
+        if (reactive && reactive.type === "strip_images_and_retry") {
+          messages = stripTrailingErrorPair(messages);
+          messages = stripImagesFromMessages(messages);
+          yield {
+            type: "turn_continued",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            reason: "model_error",
+          };
+          continue;
+        }
+
         // `max_output_reached` (legacy: maximum output tokens hit).
         // Single-shot bump `maxOutputTokens` and retry; a second hit falls
         // through to RouterRuntime's fallback chain via `classifyModelError`.
@@ -1204,6 +1216,32 @@ function stripTrailingErrorPair(messages: CanonicalMessage[]): CanonicalMessage[
     out.pop();
   }
   return out;
+}
+
+/**
+ * Strip all image blocks from messages, replacing them with a text placeholder.
+ * Used as a recovery strategy when a multimodal processor fails on corrupted images.
+ */
+function stripImagesFromMessages(messages: CanonicalMessage[]): CanonicalMessage[] {
+  return messages.map((msg) => {
+    const newContent = msg.content.map((block) => {
+      if (block.type === "image") {
+        return { type: "text" as const, text: "[Image removed: multimodal processor error recovery]" };
+      }
+      if (block.type === "tool_result" && block.content.some((c) => c.type === "image")) {
+        return {
+          ...block,
+          content: block.content.map((c) =>
+            c.type === "image"
+              ? { type: "text" as const, text: "[Image removed: multimodal processor error recovery]" }
+              : c,
+          ),
+        };
+      }
+      return block;
+    });
+    return { ...msg, content: newContent };
+  });
 }
 
 function collectPermissionDenials(results: PilotDeckToolResult[]): AgentPermissionDenial[] {

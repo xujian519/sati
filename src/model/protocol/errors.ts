@@ -21,12 +21,15 @@ export type CanonicalModelError = {
   raw?: unknown;
   /** True for prompt-too-long errors that context recovery can attempt to resolve. */
   recoverableViaCompact?: boolean;
+  /** True for multimodal processor errors recoverable by stripping images from context. */
+  recoverableViaImageStrip?: boolean;
 };
 
 export const PROMPT_TOO_LONG_ANTHROPIC_PATTERN = /prompt is too long/i;
 export const PROMPT_TOO_LONG_OPENAI_PATTERN = /input length and max_tokens exceed context limit/i;
 export const REQUEST_TOO_LARGE_PATTERN = /request too large/i;
 export const MAX_OUTPUT_REACHED_PATTERN = /max(?:imum)? (?:output|completion) tokens? (?:exceeded|reached)/i;
+export const MULTIMODAL_PROCESSOR_PATTERN = /failed to apply.*processor/i;
 
 export class ModelConfigError extends Error {
   readonly name = "ModelConfigError";
