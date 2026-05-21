@@ -258,7 +258,7 @@ PilotDeck ships an out-of-the-box Web UI with full WorkSpace management, white-b
 
 **Result (with audio)**
 
-[Watch the video with audio](assets/result/podcast_result.mp4)
+https://github.com/user-attachments/assets/a7245467-ee3c-4939-a055-c56576ac56d1
 
 ---
 
