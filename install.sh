@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# PilotDeck one-line installer for macOS.
+# PilotDeck one-line installer for macOS and Linux.
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/Gucc111/PilotDeck/main/install.sh | bash
 
@@ -11,6 +11,7 @@ INSTALL_DIR="${PILOTDECK_INSTALL_DIR:-$HOME/.pilotdeck/app}"
 CONFIG_FILE="${PILOTDECK_CONFIG_PATH:-$HOME/.pilotdeck/pilotdeck.yaml}"
 BIN_LINK="${PILOTDECK_BIN_LINK:-/usr/local/bin/pilotdeck}"
 MAX_PORT_TRIES="${PILOTDECK_MAX_PORT_TRIES:-20}"
+APT_UPDATED=0
 
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -22,6 +23,105 @@ RESET='\033[0m'
 ok() { printf "  ${GREEN}✓${RESET} %s\n" "$1"; }
 warn() { printf "  ${YELLOW}→${RESET} %s\n" "$1"; }
 fail() { printf "  ${RED}✗${RESET} %s\n" "$1"; exit 1; }
+
+run_as_root() {
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+  else
+    fail "Need root privileges to install system packages. Please install sudo or run as root."
+  fi
+}
+
+install_linux_packages() {
+  local requested=("$@")
+  local apt_packages=()
+  local dnf_packages=()
+  local pacman_packages=()
+  local zypper_packages=()
+  local package
+
+  for package in "${requested[@]}"; do
+    case "$package" in
+      build-tools)
+        apt_packages+=(build-essential python3)
+        dnf_packages+=(gcc gcc-c++ make python3)
+        pacman_packages+=(base-devel python)
+        zypper_packages+=(gcc gcc-c++ make python3)
+        ;;
+      *)
+        apt_packages+=("$package")
+        dnf_packages+=("$package")
+        pacman_packages+=("$package")
+        zypper_packages+=("$package")
+        ;;
+    esac
+  done
+
+  if command -v apt-get >/dev/null 2>&1; then
+    if [[ "$APT_UPDATED" -eq 0 ]]; then
+      run_as_root apt-get update
+      APT_UPDATED=1
+    fi
+    run_as_root apt-get install -y "${apt_packages[@]}"
+  elif command -v dnf >/dev/null 2>&1; then
+    run_as_root dnf install -y "${dnf_packages[@]}"
+  elif command -v yum >/dev/null 2>&1; then
+    run_as_root yum install -y "${dnf_packages[@]}"
+  elif command -v pacman >/dev/null 2>&1; then
+    run_as_root pacman -Sy --needed --noconfirm "${pacman_packages[@]}"
+  elif command -v zypper >/dev/null 2>&1; then
+    run_as_root zypper --non-interactive install "${zypper_packages[@]}"
+  else
+    fail "Unsupported Linux package manager. Please install manually: ${requested[*]}"
+  fi
+}
+
+install_git() {
+  if [[ "$PLATFORM" == "linux" ]]; then
+    install_linux_packages git
+  else
+    fail "git is not installed. Please install Xcode Command Line Tools: xcode-select --install"
+  fi
+}
+
+install_ripgrep() {
+  if [[ "$PLATFORM" == "macos" ]] && command -v brew >/dev/null 2>&1; then
+    brew install ripgrep </dev/null
+  elif [[ "$PLATFORM" == "linux" ]]; then
+    install_linux_packages ripgrep
+  else
+    fail "ripgrep (rg) is required. On macOS, install Homebrew and run: brew install ripgrep"
+  fi
+}
+
+install_lsof() {
+  if [[ "$PLATFORM" == "linux" ]]; then
+    install_linux_packages lsof
+  else
+    fail "lsof is required but missing. Please install Xcode Command Line Tools: xcode-select --install"
+  fi
+}
+
+has_cxx_compiler() {
+  command -v g++ >/dev/null 2>&1 || command -v c++ >/dev/null 2>&1 || command -v clang++ >/dev/null 2>&1
+}
+
+ensure_native_build_tools() {
+  if command -v python3 >/dev/null 2>&1 && command -v make >/dev/null 2>&1 && has_cxx_compiler; then
+    ok "native build tools found"
+    return
+  fi
+
+  if [[ "$PLATFORM" == "linux" ]]; then
+    warn "native build tools not found. Installing build tools for node-pty/better-sqlite3..."
+    install_linux_packages build-tools
+    ok "native build tools installed"
+  else
+    fail "native build tools are missing. Please install Xcode Command Line Tools: xcode-select --install"
+  fi
+}
 
 is_port_free() {
   local port="$1"
@@ -92,10 +192,19 @@ echo "====================="
 echo ""
 
 echo "Checking system requirements..."
-if [[ "$(uname -s)" != "Darwin" ]]; then
-  fail "This installer currently supports macOS only."
-fi
-ok "macOS detected"
+case "$(uname -s)" in
+  Darwin)
+    PLATFORM="macos"
+    ok "macOS detected"
+    ;;
+  Linux)
+    PLATFORM="linux"
+    ok "Linux detected"
+    ;;
+  *)
+    fail "Unsupported OS: $(uname -s). This installer supports macOS and Linux."
+    ;;
+esac
 echo ""
 
 echo "Checking Node.js..."
@@ -135,7 +244,8 @@ echo ""
 
 echo "Checking git..."
 if ! command -v git >/dev/null 2>&1; then
-  fail "git is not installed. Please install Xcode Command Line Tools: xcode-select --install"
+  warn "git not found. Installing..."
+  install_git
 fi
 ok "git found"
 echo ""
@@ -145,13 +255,21 @@ if command -v rg >/dev/null 2>&1; then
   ok "ripgrep $(rg --version | head -1) found"
 else
   warn "ripgrep not found. Installing..."
-  if command -v brew >/dev/null 2>&1; then
-    brew install ripgrep </dev/null
-  else
-    fail "ripgrep (rg) is required but not installed. Please install it: brew install ripgrep"
-  fi
+  install_ripgrep
   ok "ripgrep installed"
 fi
+echo ""
+
+echo "Checking lsof..."
+if ! command -v lsof >/dev/null 2>&1; then
+  warn "lsof not found. Installing..."
+  install_lsof
+fi
+ok "lsof found"
+echo ""
+
+echo "Checking native build tools..."
+ensure_native_build_tools
 echo ""
 
 echo "Installing PilotDeck to ${DIM}${INSTALL_DIR}${RESET} ..."
