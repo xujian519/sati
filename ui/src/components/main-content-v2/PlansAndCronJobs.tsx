@@ -115,8 +115,7 @@ function formatAbsoluteTime(iso: string | number): string {
 // ---------------------------------------------------------------------------
 
 const COL = {
-  title: 'min-w-0 flex-1 max-w-[280px]',
-  type: 'w-[90px] shrink-0',
+  title: 'min-w-0 flex-1 max-w-[380px]',
   createdAt: 'w-[150px] shrink-0',
   status: 'w-[160px] shrink-0',
   actions: 'w-[140px] shrink-0',
@@ -350,76 +349,127 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOp
                   </span>
                 </button>
 
-                {!isCollapsed && (
-                  <>
-                    {/* Column headers */}
-                    <div className="flex items-center gap-4 border-t border-b border-neutral-200 bg-neutral-50 px-5 py-2 dark:border-neutral-800 dark:bg-neutral-900/50">
-                      <div className={COL.title}>
-                        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                          {t('plansCron.columns.title', { defaultValue: 'Title' })}
-                        </span>
-                      </div>
-                      <div className={COL.type}>
-                        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                          {t('plansCron.columns.type', { defaultValue: 'Type' })}
-                        </span>
-                      </div>
-                      <div className={COL.createdAt}>
-                        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                          {t('plansCron.columns.createdAt', { defaultValue: 'Created' })}
-                        </span>
-                      </div>
-                      <div className={COL.status}>
-                        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                          {t('plansCron.columns.status', { defaultValue: 'Status' })}
-                        </span>
-                      </div>
-                      <div className={COL.actions}>
-                        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                          {t('plansCron.columns.actions', { defaultValue: 'Actions' })}
-                        </span>
-                      </div>
-                    </div>
+                {!isCollapsed && (() => {
+                  const planItems = items.filter((i) => i.kind === 'plan');
+                  const cronItems = items.filter((i) => i.kind === 'cron');
+                  const cycles = cyclesByProject.get(projectKey) ?? [];
+                  const activeCycle = cycles.find((c) => c.status === 'active' || c.status === 'applying');
+                  const hasCompletedPlan = planItems.some((p) => (p.data as DiscoveryPlanOverview).status === 'completed');
+                  const canApply = !!activeCycle && activeCycle.status === 'active' && hasCompletedPlan;
+                  const canArchive = !!activeCycle && activeCycle.status === 'active';
+                  const isApplying = activeCycle?.status === 'applying';
+                  const busy = !!activeCycle && cycleBusy === activeCycle.id;
 
-                    {/* Cycle-grouped rows */}
-                    <div className="divide-y divide-neutral-100 dark:divide-neutral-900">
-                      {(() => {
-                        const planItems = items.filter((i) => i.kind === 'plan');
-                        const cronItems = items.filter((i) => i.kind === 'cron');
-                        const cycles = cyclesByProject.get(projectKey) ?? [];
-                        const plansByCycle = new Map<string, UnifiedItem[]>();
-                        const orphanPlans: UnifiedItem[] = [];
-
-                        for (const item of planItems) {
-                          const cycleId = (item.data as DiscoveryPlanOverview).workCycleId;
-                          if (cycleId) {
-                            if (!plansByCycle.has(cycleId)) plansByCycle.set(cycleId, []);
-                            plansByCycle.get(cycleId)!.push(item);
-                          } else {
-                            orphanPlans.push(item);
-                          }
+                  const handleApply = async () => {
+                    if (!activeCycle || busy) return;
+                    setCycleBusy(activeCycle.id);
+                    try {
+                      if (onApplyWorkCycle) {
+                        await onApplyWorkCycle(projectKey, activeCycle.id);
+                      } else {
+                        const res = await api.applyWorkCycle(projectKey, activeCycle.id);
+                        if (!res.ok) {
+                          const body = await res.json().catch(() => ({})) as { error?: string };
+                          throw new Error(body?.error || `HTTP ${res.status}`);
                         }
+                      }
+                      await refresh();
+                    } catch {
+                      // Visible via refresh.
+                    } finally {
+                      setCycleBusy(null);
+                    }
+                  };
 
-                        return (
-                          <>
-                            {cycles.filter((c) => c.status === 'active' || c.status === 'applying').map((cycle) => (
-                              <CycleGroup
-                                key={cycle.id}
-                                cycle={cycle}
-                                plans={plansByCycle.get(cycle.id) ?? []}
-                                projectName={projectKey}
-                                t={t}
-                                onRefresh={refresh}
-                                onExecutePlan={onExecutePlan}
-                                onApplyWorkCycle={onApplyWorkCycle}
-                                onOpenPlanDetail={onOpenPlanDetail}
-                                busy={cycleBusy === cycle.id}
-                                setBusy={(b) => setCycleBusy(b ? cycle.id : null)}
-                                confirmingArchive={confirmingArchiveCycle === cycle.id}
-                                setConfirmingArchive={(b) => setConfirmingArchiveCycle(b ? cycle.id : null)}
-                              />
-                            ))}
-                            {orphanPlans.map((item) => (
+                  const handleArchive = async () => {
+                    if (!activeCycle || busy) return;
+                    setCycleBusy(activeCycle.id);
+                    try {
+                      const res = await api.archiveWorkCycle(projectKey, activeCycle.id);
+                      if (!res.ok) {
+                        const body = await res.json().catch(() => ({})) as { error?: string };
+                        throw new Error(body?.error || `HTTP ${res.status}`);
+                      }
+                      await refresh();
+                    } catch {
+                      // Visible via refresh.
+                    } finally {
+                      setCycleBusy(null);
+                      setConfirmingArchiveCycle(null);
+                    }
+                  };
+
+                  const confirmingArchive = !!activeCycle && confirmingArchiveCycle === activeCycle.id;
+
+                  return (
+                    <>
+                      {/* Plans sub-section */}
+                      {planItems.length > 0 && (
+                        <>
+                          <div className="flex items-center gap-3 border-t border-neutral-200 bg-neutral-50/80 px-5 py-2 dark:border-neutral-800 dark:bg-neutral-900/30">
+                            <span className="text-xxs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                              {t('plansCron.type.plan', { defaultValue: 'Plans' })} ({planItems.length})
+                            </span>
+                            <div className="ml-auto flex items-center gap-1.5">
+                              {isApplying && (
+                                <span className="inline-flex items-center gap-1 text-xxs text-sky-600 dark:text-sky-400">
+                                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
+                                  {t('plansCron.cycleStatus.applying', { defaultValue: 'Applying…' })}
+                                </span>
+                              )}
+                              {canApply && !isApplying && (
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => void handleApply()}
+                                  className="inline-flex h-7 items-center rounded-md bg-emerald-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50 dark:bg-emerald-700 dark:hover:bg-emerald-600"
+                                >
+                                  {busy ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
+                                  ) : (
+                                    t('plansCron.actions.applyCycle', { defaultValue: 'Apply All' })
+                                  )}
+                                </button>
+                              )}
+                              {canArchive && !confirmingArchive && (
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => setConfirmingArchiveCycle(activeCycle!.id)}
+                                  className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-neutral-500 transition hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-red-700 dark:hover:text-red-400"
+                                  title={t('plansCron.actions.archiveCycle', { defaultValue: 'Archive' })}
+                                >
+                                  <Archive className="h-3.5 w-3.5" strokeWidth={1.75} />
+                                </button>
+                              )}
+                              {confirmingArchive && (
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() => void handleArchive()}
+                                    className="inline-flex h-7 items-center rounded-md bg-red-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-red-700 disabled:opacity-50"
+                                  >
+                                    {busy ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
+                                    ) : (
+                                      t('plansCron.actions.archiveCycle', { defaultValue: 'Archive' })
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmingArchiveCycle(null)}
+                                    className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-[11px] text-neutral-500 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <ColumnHeaders t={t} />
+                          <div className="divide-y divide-neutral-100 dark:divide-neutral-900">
+                            {planItems.map((item) => (
                               <ItemRow
                                 key={`plan-${item.data.id}`}
                                 item={item}
@@ -429,6 +479,20 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOp
                                 onOpenPlanDetail={onOpenPlanDetail}
                               />
                             ))}
+                          </div>
+                        </>
+                      )}
+
+                      {/* Cron Jobs sub-section */}
+                      {cronItems.length > 0 && (
+                        <>
+                          <div className="flex items-center gap-3 border-t border-neutral-200 bg-neutral-50/80 px-5 py-2 dark:border-neutral-800 dark:bg-neutral-900/30">
+                            <span className="text-xxs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                              {t('plansCron.type.cronJob', { defaultValue: 'Cron Jobs' })} ({cronItems.length})
+                            </span>
+                          </div>
+                          <ColumnHeaders t={t} />
+                          <div className="divide-y divide-neutral-100 dark:divide-neutral-900">
                             {cronItems.map((item) => (
                               <ItemRow
                                 key={`cron-${item.data.id}`}
@@ -439,12 +503,12 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOp
                                 onOpenPlanDetail={onOpenPlanDetail}
                               />
                             ))}
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </>
-                )}
+                          </div>
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             );
           })}
@@ -455,177 +519,38 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOp
 }
 
 // ---------------------------------------------------------------------------
-// Cycle group header + contained plan rows
+// Column headers (shared between Plans and Cron Jobs sub-sections)
 // ---------------------------------------------------------------------------
 
-const CYCLE_STATUS_STYLE: Record<string, string> = {
-  active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-  applying: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
-  applied: 'bg-teal-100 text-teal-600 dark:bg-teal-900/40 dark:text-teal-400',
-  archived: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400',
-};
-
-function CycleGroup({
-  cycle,
-  plans,
-  projectName,
-  t,
-  onRefresh,
-  onExecutePlan,
-  onApplyWorkCycle,
-  onOpenPlanDetail,
-  busy,
-  setBusy,
-  confirmingArchive,
-  setConfirmingArchive,
-}: {
-  cycle: WorkCycleOverview;
-  plans: UnifiedItem[];
-  projectName: string;
-  t: (key: string, opts?: Record<string, string>) => string;
-  onRefresh: () => Promise<void>;
-  onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
-  onApplyWorkCycle?: (projectName: string, cycleId: string) => Promise<void>;
-  onOpenPlanDetail?: (planId: string, projectName: string, projectDisplayName: string) => void;
-  busy: boolean;
-  setBusy: (b: boolean) => void;
-  confirmingArchive: boolean;
-  setConfirmingArchive: (b: boolean) => void;
-}) {
-  const canApply = cycle.status === 'active' && plans.some((p) => (p.data as DiscoveryPlanOverview).status === 'completed');
-  const canArchive = cycle.status === 'active';
-  const isApplying = cycle.status === 'applying';
-  const statusStyle = CYCLE_STATUS_STYLE[cycle.status] ?? CYCLE_STATUS_STYLE.active;
-
-  const handleApply = async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      if (onApplyWorkCycle) {
-        await onApplyWorkCycle(projectName, cycle.id);
-      } else {
-        const res = await api.applyWorkCycle(projectName, cycle.id);
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({})) as { error?: string };
-          throw new Error(body?.error || `HTTP ${res.status}`);
-        }
-      }
-      await onRefresh();
-    } catch {
-      // Visible via refresh.
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleArchive = async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const res = await api.archiveWorkCycle(projectName, cycle.id);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(body?.error || `HTTP ${res.status}`);
-      }
-      await onRefresh();
-    } catch {
-      // Visible via refresh.
-    } finally {
-      setBusy(false);
-      setConfirmingArchive(false);
-    }
-  };
-
+function ColumnHeaders({ t }: { t: (key: string, opts?: Record<string, string>) => string }) {
   return (
-    <>
-      {/* Cycle header */}
-      <div className="flex items-center gap-3 bg-neutral-50/80 px-5 py-2 dark:bg-neutral-900/30">
-        <span className="text-xxs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-          {t('plansCron.workCycle', { defaultValue: 'Work Cycle' })}
+    <div className="flex items-center gap-4 border-b border-neutral-200 bg-neutral-50 px-5 py-2 dark:border-neutral-800 dark:bg-neutral-900/50">
+      <div className={COL.title}>
+        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+          {t('plansCron.columns.title', { defaultValue: 'Title' })}
         </span>
-        <span className={cn('inline-block rounded-full px-2 py-0.5 text-[11px] font-medium', statusStyle)}>
-          {t(`plansCron.cycleStatus.${cycle.status}`, { defaultValue: cycle.status })}
-        </span>
-        <span className="text-xxs tabular-nums text-neutral-400 dark:text-neutral-500">
-          {cycle.planIds.length} {t('plansCron.plans', { defaultValue: 'plans' })}
-        </span>
-        <span className="text-xxs text-neutral-400 dark:text-neutral-500">
-          {cycle.workspace.strategy}
-        </span>
-        <div className="ml-auto flex items-center gap-1.5">
-          {isApplying && (
-            <span className="inline-flex items-center gap-1 text-xxs text-sky-600 dark:text-sky-400">
-              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
-              {t('plansCron.cycleStatus.applying', { defaultValue: 'Applying…' })}
-            </span>
-          )}
-          {canApply && !isApplying && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void handleApply()}
-              className="inline-flex h-7 items-center rounded-md bg-emerald-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50 dark:bg-emerald-700 dark:hover:bg-emerald-600"
-            >
-              {busy ? (
-                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
-              ) : (
-                t('plansCron.actions.applyCycle', { defaultValue: 'Apply All' })
-              )}
-            </button>
-          )}
-          {canArchive && !confirmingArchive && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => setConfirmingArchive(true)}
-              className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-neutral-500 transition hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-red-700 dark:hover:text-red-400"
-              title={t('plansCron.actions.archiveCycle', { defaultValue: 'Archive' })}
-            >
-              <Archive className="h-3.5 w-3.5" strokeWidth={1.75} />
-            </button>
-          )}
-          {confirmingArchive && (
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void handleArchive()}
-                className="inline-flex h-7 items-center rounded-md bg-red-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-red-700 disabled:opacity-50"
-              >
-                {busy ? (
-                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
-                ) : (
-                  t('plansCron.actions.archiveCycle', { defaultValue: 'Archive' })
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmingArchive(false)}
-                className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-[11px] text-neutral-500 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800"
-              >
-                ✕
-              </button>
-            </div>
-          )}
-        </div>
       </div>
-      {/* Plans inside cycle */}
-      {plans.map((item) => (
-        <ItemRow
-          key={`plan-${item.data.id}`}
-          item={item}
-          t={t}
-          onRefresh={onRefresh}
-          onExecutePlan={onExecutePlan}
-          onOpenPlanDetail={onOpenPlanDetail}
-        />
-      ))}
-    </>
+      <div className={COL.createdAt}>
+        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+          {t('plansCron.columns.createdAt', { defaultValue: 'Created' })}
+        </span>
+      </div>
+      <div className={COL.status}>
+        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+          {t('plansCron.columns.status', { defaultValue: 'Status' })}
+        </span>
+      </div>
+      <div className={COL.actions}>
+        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+          {t('plansCron.columns.actions', { defaultValue: 'Actions' })}
+        </span>
+      </div>
+    </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Table row (plan or cron — no per-plan apply/archive buttons)
+// Table row (plan or cron)
 // ---------------------------------------------------------------------------
 
 function ItemRow({
@@ -650,14 +575,6 @@ function ItemRow({
 
   const title = isPlan ? (plan!.title || '—') : (job!.prompt || '—');
   const fullTitle = isPlan ? (plan!.title || '') : (job!.prompt || '');
-
-  const typeLabel = isPlan
-    ? t('plansCron.type.plan', { defaultValue: 'Plan' })
-    : t('plansCron.type.cronJob', { defaultValue: 'Cron Job' });
-  const typeBg = isPlan
-    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
-    : 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300';
-
   const createdAt = isPlan ? plan!.createdAt : job!.createdAt;
 
   let statusLabel: string;
@@ -767,13 +684,6 @@ function ItemRow({
         ) : (
           title
         )}
-      </div>
-
-      {/* Type */}
-      <div className={COL.type}>
-        <span className={cn('inline-block rounded-full px-2 py-0.5 text-center text-[11px] font-medium', typeBg)}>
-          {typeLabel}
-        </span>
       </div>
 
       {/* Created */}
