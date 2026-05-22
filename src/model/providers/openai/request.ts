@@ -67,7 +67,11 @@ export function buildOpenAIRequest(
     tool_choice: toOpenAIToolChoice(request.toolChoice),
     temperature: request.temperature,
     stream: request.stream,
-    metadata: request.metadata,
+    metadata: request.metadata
+      ? Object.fromEntries(
+          Object.entries(request.metadata).map(([k, v]) => [k, String(v)]),
+        )
+      : undefined,
   };
 
   if (request.outputSchema) {
