@@ -48,12 +48,14 @@ export class GitWorktreeProvider implements WorkspaceProvider {
 
     const projectId = createProjectId(input.projectRoot);
     const worktreePath = resolve(this.options.baseDir, projectId, input.runId);
+    const branchName = `always-on/${input.runId}`;
     const add = await runGit(this.git(), [
       "-C",
       repoRoot,
       "worktree",
       "add",
-      "--detach",
+      "-b",
+      branchName,
       worktreePath,
       baseCommit,
     ]);
@@ -71,7 +73,7 @@ export class GitWorktreeProvider implements WorkspaceProvider {
       projectKey: input.projectRoot,
       strategy: this.id,
       cwd: worktreePath,
-      metadata: { repoRoot, baseBranch, baseCommit },
+      metadata: { repoRoot, baseBranch, baseCommit, branchName },
     };
   }
 
@@ -101,6 +103,10 @@ export class GitWorktreeProvider implements WorkspaceProvider {
     if (!remove || remove.exitCode !== 0) {
       await rm(handle.cwd, { recursive: true, force: true });
       await runGit(this.git(), ["-C", repoRoot, "worktree", "prune"]).catch(() => undefined);
+    }
+    const branchName = handle.metadata.branchName as string | undefined;
+    if (branchName) {
+      await runGit(this.git(), ["-C", repoRoot, "branch", "-D", branchName]).catch(() => undefined);
     }
   }
 

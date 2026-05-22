@@ -55,20 +55,14 @@ test("buildWorkspacePrompt includes project root and workspace tool name", () =>
   assert.ok(!prompt.includes("previous run"));
 });
 
-test("buildWorkspacePrompt includes existing workspace info when provided", () => {
+test("buildWorkspacePrompt does not mention reuse (reuse is code-driven)", () => {
   const prompt = buildWorkspacePrompt({
     projectRoot: "/projects/foo",
     runId: "run-2",
-    currentWorkspace: {
-      runId: "run-1",
-      strategy: "git-worktree",
-      cwd: "/worktrees/foo/run-1",
-      metadata: {},
-    },
   });
-  assert.ok(prompt.includes("/worktrees/foo/run-1"));
-  assert.ok(prompt.includes("previous run"));
-  assert.ok(prompt.includes("git-worktree"));
+  assert.ok(!prompt.includes("previous run"));
+  assert.ok(!prompt.includes("skip"));
+  assert.ok(prompt.includes(ALWAYS_ON_WORKSPACE_TOOL_NAME));
 });
 
 test("buildExecutionPrompt includes plan and workspace, excludes report tool instructions", () => {
@@ -119,29 +113,28 @@ test("buildReportPrompt includes plan, workspace, and report tool name", () => {
 
 // ---- buildApplyPrompt -------------------------------------------------------
 
-test("buildApplyPrompt uses git apply --3way strategy for git-worktree", () => {
+test("buildApplyPrompt includes generic merge approach and workspace info", () => {
   const prompt = buildApplyPrompt({
     plan: { id: "plan-1", title: "Test", workspace: { cwd: "/ws/foo", strategy: "git-worktree" } },
     projectName: "foo",
     projectRoot: "/projects/foo",
     diff: { diff: "diff --git a/f.txt b/f.txt\n", fileCount: 1, truncated: false },
   });
-  assert.ok(prompt.includes("git worktree"));
-  assert.ok(prompt.includes("git apply --3way"));
-  assert.ok(prompt.includes("git -C <workspace> add -A"));
-  assert.ok(!prompt.includes("snapshot copy"));
+  assert.ok(prompt.includes("Merge approach"));
+  assert.ok(prompt.includes("git merge"));
+  assert.ok(prompt.includes("cherry-pick"));
+  assert.ok(prompt.includes("/ws/foo"));
 });
 
-test("buildApplyPrompt uses Edit/Write strategy for snapshot-copy", () => {
+test("buildApplyPrompt includes branchName when provided", () => {
   const prompt = buildApplyPrompt({
-    plan: { id: "plan-1", title: "Test", workspace: { cwd: "/ws/foo", strategy: "snapshot-copy" } },
+    plan: { id: "plan-1", title: "Test", workspace: { cwd: "/ws/foo", strategy: "git-worktree" } },
     projectName: "foo",
     projectRoot: "/projects/foo",
-    diff: { diff: "diff -ruN a/f.txt b/f.txt\n", fileCount: 1, truncated: false },
+    diff: { diff: "diff content\n", fileCount: 1, truncated: false },
+    branchName: "always-on/run-123",
   });
-  assert.ok(prompt.includes("snapshot copy"));
-  assert.ok(prompt.includes("Edit or Write tools"));
-  assert.ok(!prompt.includes("git apply"));
+  assert.ok(prompt.includes("Workspace branch: always-on/run-123"));
 });
 
 test("buildApplyPrompt handles empty diff", () => {
@@ -154,15 +147,15 @@ test("buildApplyPrompt handles empty diff", () => {
   assert.ok(prompt.includes("Nothing to apply"));
 });
 
-test("buildApplyPrompt includes fallback to manual apply when git fails", () => {
+test("buildApplyPrompt includes conflict resolution guidance", () => {
   const prompt = buildApplyPrompt({
     plan: { id: "plan-1", title: "Test", workspace: { cwd: "/ws/foo", strategy: "git-worktree" } },
     projectName: "foo",
     projectRoot: "/projects/foo",
     diff: { diff: "some diff content\n", fileCount: 1, truncated: false },
   });
-  assert.ok(prompt.includes("fall back"));
-  assert.ok(prompt.includes("Edit or Write tools"));
+  assert.ok(prompt.includes("conflicts"));
+  assert.ok(prompt.includes("conflict markers"));
 });
 
 // ---- chat digest + existing plans in discovery prompt -----------------------
@@ -367,20 +360,15 @@ test("buildWorkspacePrompt zh-CN renders Chinese workspace prompt", () => {
   assert.ok(!prompt.includes("You are preparing"));
 });
 
-test("buildWorkspacePrompt zh-CN includes existing workspace info in Chinese", () => {
+test("buildWorkspacePrompt zh-CN does not mention reuse (reuse is code-driven)", () => {
   const prompt = buildWorkspacePrompt({
     projectRoot: "/projects/foo",
     runId: "run-zh-2",
-    currentWorkspace: {
-      runId: "run-1",
-      strategy: "git-worktree",
-      cwd: "/worktrees/foo/run-1",
-      metadata: {},
-    },
     language: "zh-CN",
   });
-  assert.ok(prompt.includes("上一次运行遗留的工作区"));
-  assert.ok(prompt.includes("/worktrees/foo/run-1"));
+  assert.ok(!prompt.includes("上一次运行遗留的工作区"));
+  assert.ok(!prompt.includes("跳过"));
+  assert.ok(prompt.includes(ALWAYS_ON_WORKSPACE_TOOL_NAME));
 });
 
 test("buildExecutionPrompt zh-CN renders Chinese execution prompt", () => {
@@ -434,7 +422,7 @@ test("buildReportPrompt zh-CN renders Chinese report prompt", () => {
   assert.ok(!prompt.includes("You are writing"));
 });
 
-test("buildApplyPrompt zh-CN uses Chinese git worktree strategy", () => {
+test("buildApplyPrompt zh-CN uses generic merge approach", () => {
   const prompt = buildApplyPrompt({
     plan: { id: "plan-1", title: "Test", workspace: { cwd: "/ws/foo", strategy: "git-worktree" } },
     projectName: "foo",
@@ -443,22 +431,22 @@ test("buildApplyPrompt zh-CN uses Chinese git worktree strategy", () => {
     language: "zh-CN",
   });
   assert.ok(prompt.includes("应用变更到项目"));
-  assert.ok(prompt.includes("git worktree"));
-  assert.ok(prompt.includes("git apply --3way"));
+  assert.ok(prompt.includes("合并方式"));
+  assert.ok(prompt.includes("git merge"));
+  assert.ok(prompt.includes("cherry-pick"));
   assert.ok(!prompt.includes("Your job is to merge"));
 });
 
-test("buildApplyPrompt zh-CN uses Chinese snapshot-copy strategy", () => {
+test("buildApplyPrompt zh-CN includes branchName when provided", () => {
   const prompt = buildApplyPrompt({
-    plan: { id: "plan-1", title: "Test", workspace: { cwd: "/ws/foo", strategy: "snapshot-copy" } },
+    plan: { id: "plan-1", title: "Test", workspace: { cwd: "/ws/foo", strategy: "git-worktree" } },
     projectName: "foo",
     projectRoot: "/projects/foo",
     diff: { diff: "diff content\n", fileCount: 1, truncated: false },
+    branchName: "always-on/run-456",
     language: "zh-CN",
   });
-  assert.ok(prompt.includes("snapshot copy"));
-  assert.ok(prompt.includes("Edit 或 Write 工具"));
-  assert.ok(!prompt.includes("git apply"));
+  assert.ok(prompt.includes("工作区分支: always-on/run-456"));
 });
 
 test("buildApplyPrompt zh-CN handles empty diff in Chinese", () => {

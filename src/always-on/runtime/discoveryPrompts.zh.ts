@@ -118,39 +118,23 @@ function formatExistingPlansSectionZh(plans?: ExistingPlanSummary[]): string[] {
 }
 
 export function buildWorkspacePromptZh(input: BuildWorkspacePromptInput): string {
-  const lines: string[] = [
+  return [
     "你正在为 Always-On 计划执行准备一个隔离工作区。",
     "",
     `项目根目录: ${input.projectRoot}`,
     "",
     "可用的工作区策略:",
-    "  - `git-worktree`: 创建分离的 git worktree。速度快、空间占用少 (使用硬链接)。",
+    "  - `git-worktree`: 在新分支上创建 git worktree。速度快、空间占用少 (使用硬链接)。",
     "    要求项目是 git 仓库且至少有一次提交, 工作区无未提交更改。",
     "  - `snapshot-copy`: 复制项目目录 (在 APFS/btrfs 上使用 CoW)。适用于任何目录,",
     "    但占用更多磁盘空间。默认忽略 .git、node_modules、dist。",
     "",
     "权限: 本轮运行在 `bypassPermissions` 模式下——所有工具调用均自动允许。",
-  ];
-
-  if (input.currentWorkspace) {
-    lines.push(
-      "",
-      `上一次运行遗留的工作区仍然存在: ${input.currentWorkspace.cwd}`,
-      `策略: ${input.currentWorkspace.strategy}`,
-      "如果该目录仍在磁盘上, 你可以跳过工作区创建,",
-      "直接回复说明即可, 无需调用工具。",
-    );
-  }
-
-  lines.push(
     "",
     "## 执行步骤",
     "1. 检查项目根目录状态 (如 git 仓库可执行 `git status --porcelain`, 否则执行 `ls`)。",
     `2. 调用 \`${ALWAYS_ON_WORKSPACE_TOOL_NAME}\`, 传入选定的策略, 或传入 \`auto\` 让运行时自动选择。`,
-    "3. 如果复用已有工作区, 仅需简短回复说明, 无需调用工具。",
-  );
-
-  return lines.join("\n");
+  ].join("\n");
 }
 
 export function buildExecutionPromptZh(input: BuildExecutionPromptInput): string {
@@ -194,10 +178,9 @@ export function buildReportPromptZh(input: BuildReportPromptInput): string {
 }
 
 export function buildApplyPromptZh(input: BuildApplyPromptInput): string {
-  const { plan, projectName, projectRoot, diff } = input;
-  const isGitWorktree = plan.workspace?.strategy === "git-worktree";
+  const { plan, projectName, projectRoot, diff, branchName } = input;
 
-  const header = [
+  const lines: string[] = [
     `Always-On 应用变更到项目 "${projectName}"。`,
     "",
     "你的任务是将隔离工作区中的变更合并到项目根目录。",
@@ -210,49 +193,36 @@ export function buildApplyPromptZh(input: BuildApplyPromptInput): string {
   ];
 
   if (plan.workspace?.cwd) {
-    header.push(`隔离工作区: ${plan.workspace.cwd} (${plan.workspace.strategy})`);
+    lines.push(`隔离工作区: ${plan.workspace.cwd} (${plan.workspace.strategy})`);
   }
 
-  header.push("");
-
-  if (isGitWorktree) {
-    header.push(
-      "## 应用策略",
-      "",
-      "工作区是 **git worktree**。使用 git 高效应用变更:",
-      "",
-      "1. 在工作区中暂存所有变更: `git -C <workspace> add -A`",
-      "2. 生成二进制安全的补丁: `git -C <workspace> diff --cached HEAD --binary`",
-      "3. 通过三方合并将补丁应用到项目根目录: 将补丁管道传入 `git -C <project_root> apply --3way`",
-      "",
-      "如果 `git apply --3way` 成功 (退出码 0), 则应用完成。",
-      "",
-      "如果 `git apply` 失败 (如 --3way 无法自动解决的冲突),",
-      "则回退为使用 Edit 或 Write 工具逐文件手动应用。",
-      "手动合并时, 如果项目根目录的文件已发生变化, 需智能合并双方的更改——不要盲目覆盖。",
-      "如果无法解决冲突, 保留标准冲突标记 (<<<< / ==== / >>>>)。",
-      "",
-    );
-  } else {
-    header.push(
-      "## 应用策略",
-      "",
-      "工作区是 **snapshot copy** (非 git worktree)。",
-      "使用 Edit 或 Write 工具逐项仔细应用变更。",
-      "如果项目根目录中的文件在计划执行后已被修改,",
-      "需智能合并双方的更改——不要盲目覆盖。",
-      "如果无法解决冲突, 保留标准冲突标记 (<<<< / ==== / >>>>)。",
-      "",
-    );
+  if (branchName) {
+    lines.push(`工作区分支: ${branchName}`);
   }
+
+  lines.push(
+    "",
+    "## 合并方式",
+    "",
+    "根据实际情况选择最佳的合并策略。你可以完全使用 git 和 shell 工具。",
+    "常见方式 (根据情况选择):",
+    "  - `git merge` / `git merge --no-ff` 如果工作区在命名分支上",
+    "  - `git cherry-pick` 针对单个提交",
+    "  - `git diff` + `git apply` 基于补丁的应用",
+    "  - 使用 Edit/Write 工具直接编辑文件, 适用于精确的小范围变更",
+    "",
+    "如果遇到冲突, 请智能解决——不要盲目覆盖。",
+    "如果无法解决冲突, 保留标准冲突标记 (<<<< / ==== / >>>>)。",
+    "",
+  );
 
   if (!diff.diff.trim()) {
-    header.push("工作区未检测到差异。无需应用任何变更。");
-    return header.join("\n");
+    lines.push("工作区未检测到差异。无需应用任何变更。");
+    return lines.join("\n");
   }
 
   if (diff.truncated) {
-    header.push(
+    lines.push(
       `差异较大 (${diff.fileCount} 个文件), 已截断。`,
       "请从工作区目录读取相关文件进行对比和应用。",
       "",
@@ -261,12 +231,12 @@ export function buildApplyPromptZh(input: BuildApplyPromptInput): string {
       diff.diff,
     );
   } else {
-    header.push(
+    lines.push(
       `变更内容 (${diff.fileCount} 个文件):`,
       "",
       diff.diff,
     );
   }
 
-  return header.join("\n");
+  return lines.join("\n");
 }

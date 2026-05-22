@@ -237,6 +237,7 @@ export class DiscoveryFire {
           projectName: input.projectName,
           projectRoot,
           diff,
+          branchName: cycle.workspace.metadata?.branchName as string | undefined,
           language: this.deps.config.language,
         }),
         mode: "bypassPermissions",
@@ -646,16 +647,36 @@ export class DiscoveryFire {
   }
 
   /**
-   * Phase 2: Run the workspace agent loop. If the agent calls the workspace
-   * tool, the handle is set on the context. If the agent does not call the
-   * tool (e.g. it detected an existing workspace and skipped), we fall back
-   * to `ensureActiveWorkCycle`.
+   * Phase 2: Ensure an isolated workspace exists for plan execution.
+   *
+   * The runtime decides deterministically whether to reuse an existing
+   * workspace or create a new one — the agent loop is only started when
+   * a fresh workspace is needed.
    */
   private async runWorkspacePhase(input: {
     runId: string;
     state: AlwaysOnDiscoveryState;
   }): Promise<{ handle: WorkspaceHandle; cycle: WorkCycleRecord }> {
     const { runId, state } = input;
+
+    // ── Deterministic reuse check ──
+    if (state.activeWorkCycleId) {
+      const activeCycle = await this.deps.cycleStore.getRecord(state.activeWorkCycleId);
+      if (activeCycle && activeCycle.status === "active" && existsSync(activeCycle.workspace.cwd)) {
+        return {
+          handle: {
+            runId: activeCycle.createdByRunId,
+            projectKey: this.deps.projectKey,
+            strategy: activeCycle.workspace.strategy,
+            cwd: activeCycle.workspace.cwd,
+            metadata: { ...activeCycle.workspace.metadata },
+          },
+          cycle: activeCycle,
+        };
+      }
+    }
+
+    // ── No reusable workspace — start agent loop to create one ──
     const workspaceSessionKey = DiscoveryFire.deriveWorkspaceSessionKey(this.deps.projectKey, runId);
 
     const workspaceCtx: WorkspaceRunContext = {
@@ -686,7 +707,6 @@ export class DiscoveryFire {
         message: buildWorkspacePrompt({
           projectRoot: this.deps.projectKey,
           runId,
-          currentWorkspace: state.currentWorkspace,
           language: this.deps.config.language,
         }),
         mode: "bypassPermissions",

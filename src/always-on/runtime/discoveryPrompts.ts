@@ -1,4 +1,4 @@
-import type { AlwaysOnCurrentWorkspaceRef, DiscoveryPlanRecord } from "../protocol/types.js";
+import type { DiscoveryPlanRecord } from "../protocol/types.js";
 import type { WorkspaceDiff } from "../workspace/WorkspaceApply.js";
 import type { ChatDigest } from "../context/ChatDigestBuilder.js";
 import { ALWAYS_ON_PLAN_TOOL_NAME } from "../tool/AlwaysOnDiscoveryPlanTool.js";
@@ -147,45 +147,28 @@ function formatExistingPlansSection(plans?: ExistingPlanSummary[]): string[] {
 export type BuildWorkspacePromptInput = {
   projectRoot: string;
   runId: string;
-  currentWorkspace?: AlwaysOnCurrentWorkspaceRef;
   language?: string;
 };
 
 export function buildWorkspacePrompt(input: BuildWorkspacePromptInput): string {
   if (input.language === "zh-CN") return buildWorkspacePromptZh(input);
-  const lines: string[] = [
+  return [
     "You are preparing an isolated workspace for an Always-On plan execution.",
     "",
     `Project root: ${input.projectRoot}`,
     "",
     "Available workspace strategies:",
-    "  - `git-worktree`: Creates a detached git worktree. Fast and space-efficient (hard-links).",
+    "  - `git-worktree`: Creates a git worktree on a new branch. Fast and space-efficient (hard-links).",
     "    Requires a git repo with at least one commit and a clean working tree (no uncommitted changes).",
     "  - `snapshot-copy`: Copies the project directory (CoW on APFS/btrfs). Works for any directory",
     "    but uses more disk space. Ignores .git, node_modules, dist by default.",
     "",
     "Permissions: this turn runs in `bypassPermissions` mode — every tool call is auto-allowed.",
-  ];
-
-  if (input.currentWorkspace) {
-    lines.push(
-      "",
-      `A workspace from a previous run already exists at: ${input.currentWorkspace.cwd}`,
-      `Strategy: ${input.currentWorkspace.strategy}`,
-      "If the directory still exists on disk, you may skip workspace creation entirely",
-      "by responding without calling the workspace tool.",
-    );
-  }
-
-  lines.push(
     "",
     "## What to do",
     "1. Check the project root state (e.g. `git status --porcelain` if it looks like a git repo, or `ls` otherwise).",
     `2. Call \`${ALWAYS_ON_WORKSPACE_TOOL_NAME}\` with the chosen strategy, or \`auto\` to let the runtime decide.`,
-    "3. If reusing an existing workspace, just respond with a short note and do not call the tool.",
-  );
-
-  return lines.join("\n");
+  ].join("\n");
 }
 
 export type BuildExecutionPromptInput = {
@@ -251,15 +234,15 @@ export type BuildApplyPromptInput = {
   projectName: string;
   projectRoot: string;
   diff: WorkspaceDiff;
+  branchName?: string;
   language?: string;
 };
 
 export function buildApplyPrompt(input: BuildApplyPromptInput): string {
   if (input.language === "zh-CN") return buildApplyPromptZh(input);
-  const { plan, projectName, projectRoot, diff } = input;
-  const isGitWorktree = plan.workspace?.strategy === "git-worktree";
+  const { plan, projectName, projectRoot, diff, branchName } = input;
 
-  const header = [
+  const lines: string[] = [
     `Always-On apply for project "${projectName}".`,
     "",
     "Your job is to merge changes from the isolated workspace into the project root.",
@@ -272,50 +255,36 @@ export function buildApplyPrompt(input: BuildApplyPromptInput): string {
   ];
 
   if (plan.workspace?.cwd) {
-    header.push(`Isolated workspace: ${plan.workspace.cwd} (${plan.workspace.strategy})`);
+    lines.push(`Isolated workspace: ${plan.workspace.cwd} (${plan.workspace.strategy})`);
   }
 
-  header.push("");
-
-  if (isGitWorktree) {
-    header.push(
-      "## Apply strategy",
-      "",
-      "The workspace is a **git worktree**. Use git to apply changes efficiently:",
-      "",
-      "1. In the workspace, stage all changes: `git -C <workspace> add -A`",
-      "2. Generate a binary-safe patch: `git -C <workspace> diff --cached HEAD --binary`",
-      "3. Apply the patch to the project root with three-way merge: pipe the patch into `git -C <project_root> apply --3way`",
-      "",
-      "If `git apply --3way` succeeds (exit code 0), the apply is complete.",
-      "",
-      "If `git apply` fails (e.g. conflicts that --3way cannot auto-resolve),",
-      "fall back to applying each changed file manually using Edit or Write tools.",
-      "When merging manually, if the project root file has diverged, merge both",
-      "sets of changes intelligently — do not blindly overwrite.",
-      "If you cannot resolve a conflict, leave standard conflict markers (<<<< / ==== / >>>>).",
-      "",
-    );
-  } else {
-    header.push(
-      "## Apply strategy",
-      "",
-      "The workspace is a **snapshot copy** (not a git worktree).",
-      "Apply each change carefully using Edit or Write tools.",
-      "If a file in the project root has been modified since the plan was executed,",
-      "merge both sets of changes intelligently — do not blindly overwrite.",
-      "If you cannot resolve a conflict, leave standard conflict markers (<<<< / ==== / >>>>).",
-      "",
-    );
+  if (branchName) {
+    lines.push(`Workspace branch: ${branchName}`);
   }
+
+  lines.push(
+    "",
+    "## Merge approach",
+    "",
+    "Choose the best merge strategy based on the situation. You have full access to git and shell tools.",
+    "Common approaches (pick whichever fits):",
+    "  - `git merge` / `git merge --no-ff` if the workspace is on a named branch",
+    "  - `git cherry-pick` for individual commits",
+    "  - `git diff` + `git apply` for patch-based application",
+    "  - Direct file edits via Edit/Write tools for surgical changes",
+    "",
+    "If you encounter conflicts, resolve them intelligently — do not blindly overwrite.",
+    "If you cannot resolve a conflict, leave standard conflict markers (<<<< / ==== / >>>>).",
+    "",
+  );
 
   if (!diff.diff.trim()) {
-    header.push("No differences detected in the workspace. Nothing to apply.");
-    return header.join("\n");
+    lines.push("No differences detected in the workspace. Nothing to apply.");
+    return lines.join("\n");
   }
 
   if (diff.truncated) {
-    header.push(
+    lines.push(
       `The diff is large (${diff.fileCount} files) and has been truncated.`,
       "Read the relevant files from the workspace directory to compare and apply.",
       "",
@@ -324,12 +293,12 @@ export function buildApplyPrompt(input: BuildApplyPromptInput): string {
       diff.diff,
     );
   } else {
-    header.push(
+    lines.push(
       `Changes (${diff.fileCount} file${diff.fileCount === 1 ? "" : "s"}):`,
       "",
       diff.diff,
     );
   }
 
-  return header.join("\n");
+  return lines.join("\n");
 }
