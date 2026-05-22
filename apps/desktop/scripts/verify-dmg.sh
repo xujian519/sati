@@ -8,7 +8,10 @@
 #   3. 代码签名通过 codesign --verify --deep --strict
 #   4. pilotdeckui-bundle.tar 解开后存在 server/index.js
 #   5. pilotdeck-main-bundle.tar 解开后存在 src/cli/pilotdeck.ts
-#   6. 用打包好的 node 直接 spawn server/index.js + 访问 /health
+#   6. 用打包好的 node spawn UI server + /health (V2 pilotdeck.yaml)
+#   7. Gateway 进程启动 + /health (18789)
+#   8. pilotdeck-bridge 连接 Gateway
+#   9. 新用户 onboarding YAML 与 loadPilotConfig 兼容 (monorepo)
 #
 # Usage:
 #   bash verify-dmg.sh <DMG_PATH> [signed|adhoc]
@@ -47,8 +50,9 @@ pass "Mounted at: $MOUNT_DIR"
 
 cleanup() {
   [[ -n "${MOUNT_DIR:-}" ]] && hdiutil detach "$MOUNT_DIR" >/dev/null 2>&1 || true
-  [[ -n "${SANDBOX:-}" && -d "${SANDBOX:-/dev/null}" ]] && rm -rf "$SANDBOX"
   [[ -n "${SRV_PID:-}" ]] && kill "$SRV_PID" 2>/dev/null || true
+  [[ -n "${GW_PID:-}" ]] && kill "$GW_PID" 2>/dev/null || true
+  [[ -n "${SANDBOX:-}" && -d "${SANDBOX:-/dev/null}" ]] && rm -rf "$SANDBOX"
 }
 trap cleanup EXIT INT TERM
 
@@ -89,6 +93,11 @@ RES="$APP/Contents/Resources"
                                         || fail "bun-bin/bun missing or not executable"
 [[ -f "$RES/pilotdeckui-bundle.tar" ]] && pass "pilotdeckui-bundle.tar present ($(du -sh "$RES/pilotdeckui-bundle.tar" | awk '{print $1}'))" \
                                         || fail "pilotdeckui-bundle.tar missing"
+if tar -xOf "$RES/pilotdeckui-bundle.tar" server/index.js 2>/dev/null | grep -q 'PILOTDECK_DESKTOP'; then
+  pass "ui server bundle skips browser auto-open when PILOTDECK_DESKTOP=1"
+else
+  fail "pilotdeckui-bundle.tar is stale: server/index.js still runs 'open' on listen — rebuild bundle from ui/"
+fi
 [[ -f "$RES/pilotdeck-main-bundle.tar" ]] && pass "pilotdeck-main-bundle.tar present ($(du -sh "$RES/pilotdeck-main-bundle.tar" | awk '{print $1}'))" \
                                         || fail "pilotdeck-main-bundle.tar missing"
 [[ -f "$RES/pilotdeck-memory-core-bundle.tar" ]] && pass "pilotdeck-memory-core-bundle.tar present ($(du -sh "$RES/pilotdeck-memory-core-bundle.tar" | awk '{print $1}'))" \
@@ -175,8 +184,10 @@ else
   exit 1
 fi
 
+[[ -f "$CCM_DIR/dist/src/cli/pilotdeck.js" ]] && pass "dist/src/cli/pilotdeck.js present" \
+  || fail "dist/src/cli/pilotdeck.js missing (Gateway entry)"
 [[ -f "$CCM_DIR/src/cli/pilotdeck.ts" ]] && pass "src/cli/pilotdeck.ts present" \
-  || fail "src/cli/pilotdeck.ts missing"
+  || warn "src/cli/pilotdeck.ts missing (source tree optional in bundle)"
 [[ -f "$CCM_DIR/preload.ts" ]] && pass "preload.ts present" \
   || warn "preload.ts missing"
 
@@ -192,40 +203,31 @@ fi
 [[ -f "$MEM_DIR/lib/index.js" ]] && pass "pilotdeck-memory-core/lib/index.js present" \
   || fail "pilotdeck-memory-core/lib/index.js missing"
 
-# ─────────────── pilotdeckui server smoke test ───────────────
-hdr "6. pilotdeckui server smoke test"
+# ─────────────── Runtime smoke (Gateway + UI + bridge) ───────────────
+hdr "6–8. Gateway + UI server + bridge smoke test"
 
 PORT="$(node -e 'const s=require("net").createServer();s.listen(0,()=>{console.log(s.address().port);s.close();});' 2>/dev/null || echo 28790)"
+GATEWAY_PORT=18789
 
-# Need a structured config file to satisfy assertRequiredPilotDeckEnv()
-# Schema: models.providers.<id>.{baseUrl,apiKey}, models.entries.<id>.{provider,name}, agents.main.model
-# Bake the dynamic SERVER_PORT into runtime.serverPort because applyConfigToProcessEnv
-# overrides whatever env was set when pilotdeckui boots.
-mkdir -p "$SANDBOX/home/.pilotdeck"
-cat > "$SANDBOX/home/.pilotdeck/pilotdeck.yaml" <<EOF
-version: 1
-runtime:
-  host: 127.0.0.1
-  serverPort: ${PORT}
-  vitePort: 0
-models:
+# V2 schema — must match loadPilotConfig() (schemaVersion + agent + model).
+PILOT_HOME="$SANDBOX/home/.pilotdeck"
+mkdir -p "$PILOT_HOME"
+cat > "$PILOT_HOME/pilotdeck.yaml" <<EOF
+schemaVersion: 1
+agent:
+  model: pilotdeck/claude-sonnet-4-5-20250929
+model:
   providers:
     pilotdeck:
-      type: anthropic
-      baseUrl: https://api.anthropic.com
+      protocol: anthropic
+      url: https://api.anthropic.com
       apiKey: smoke-test-not-real
-  entries:
-    default:
-      provider: pilotdeck
-      name: claude-sonnet-4-5-20250929
-agents:
-  main:
-    model: default
-memory:
-  enabled: false
+      models:
+        claude-sonnet-4-5-20250929: {}
 EOF
-pass "Stub pilotdeck.yaml created (serverPort=${PORT})"
+pass "Stub pilotdeck.yaml created (V2, UI port=${PORT})"
 SRV_LOG="$SANDBOX/server.log"
+GW_LOG="$SANDBOX/gateway.log"
 
 # UI server files use relative imports that resolve outside the pilotdeckui/ dir:
 #   projects.js    → ../../dist/src/pilot/index.js  (→ $SANDBOX/dist/)
@@ -235,6 +237,10 @@ if [[ -d "$CCM_DIR/dist" ]]; then
   ln -sfn "$CCM_DIR/dist" "$SANDBOX/dist"
   pass "Symlinked \$SANDBOX/dist → pilotdeck-main/dist"
 fi
+if [[ -d "$CCM_DIR/dist/src" ]]; then
+  ln -sfn "$CCM_DIR/dist/src" "$SANDBOX/src"
+  pass "Symlinked \$SANDBOX/src → pilotdeck-main/dist/src (TSX→JS bridge)"
+fi
 if [[ -d "$MEM_DIR" ]]; then
   ln -sfn "$MEM_DIR" "$SANDBOX/edgeclaw-memory-core"
   # Also expose as a node_modules package so bare `import 'edgeclaw-memory-core'` resolves
@@ -243,10 +249,12 @@ if [[ -d "$MEM_DIR" ]]; then
   pass "Symlinked \$SANDBOX/edgeclaw-memory-core → pilotdeck-memory-core"
 fi
 
-# node_modules: pilotdeckui imports hoisted deps (ws, express, …) from pilotdeck-main
-if [[ -d "$CCM_DIR/node_modules" && ! -e "$SANDBOX/node_modules" ]]; then
+# ESM resolution walks up from the importing file; pilotdeckui/server/index.js
+# needs to find hoisted packages (ws, express, etc.) that live in
+# pilotdeck-main/node_modules. A parent-level symlink emulates workspace hoisting.
+if [[ ! -e "$SANDBOX/node_modules" ]]; then
   ln -sfn "$CCM_DIR/node_modules" "$SANDBOX/node_modules"
-  pass "Symlinked \$SANDBOX/node_modules → pilotdeck-main/node_modules"
+  pass "Symlinked \$SANDBOX/node_modules → pilotdeck-main/node_modules (ESM resolve)"
 fi
 
 # src: ui/server imports ../../src/web/server/*.js — compiled JS lives in pilotdeck-main/dist/src
@@ -255,13 +263,72 @@ if [[ -d "$CCM_DIR/dist/src" && ! -e "$SANDBOX/src" ]]; then
   pass "Symlinked \$SANDBOX/src → pilotdeck-main/dist/src"
 fi
 
-info "Spawning: node-bin/node $CCUI_DIR/server/index.js (port $PORT)"
+# Reuse of port 18789 from a prior desktop run breaks token/bridge checks.
+GW_LISTENER="$(/usr/sbin/lsof -nP -t -iTCP:18789 -sTCP:LISTEN 2>/dev/null | head -1 || true)"
+if [[ -n "$GW_LISTENER" ]]; then
+  info "Stopping stale listener on :18789 (pid $GW_LISTENER)"
+  kill "$GW_LISTENER" 2>/dev/null || true
+  sleep 1
+fi
+
+# Step 7: Gateway must be up before UI bridge connects.
+GW_ENTRY="$CCM_DIR/dist/src/cli/pilotdeck.js"
+info "Spawning Gateway: $GW_ENTRY (port $GATEWAY_PORT)"
+(
+  cd "$CCM_DIR"
+  HOME="$SANDBOX/home" \
+  PILOT_HOME="$PILOT_HOME" \
+  PILOTDECK_GATEWAY_PORT="$GATEWAY_PORT" \
+  BUN_BIN="$RES/bun-bin/bun" \
+  NO_COLOR=1 FORCE_COLOR=0 \
+  "$RES/node-bin/node" "$GW_ENTRY" server \
+    > "$GW_LOG" 2>&1 &
+  echo $!
+) > "$SANDBOX/gw.pid"
+GW_PID="$(cat "$SANDBOX/gw.pid")"
+
+GW_OK=0
+for i in $(seq 1 90); do
+  if /usr/bin/curl -s -m 1 "http://127.0.0.1:${GATEWAY_PORT}/health" 2>/dev/null | grep -q '"ok":true'; then
+    GW_OK=1; break
+  fi
+  sleep 0.5
+  if ! kill -0 "$GW_PID" 2>/dev/null; then break; fi
+done
+
+if [[ "$GW_OK" == "1" ]]; then
+  pass "Gateway responding on http://127.0.0.1:${GATEWAY_PORT}/health"
+else
+  fail "Gateway did not respond within 45s"
+  echo "  ${DIM}Last 40 lines of gateway log:${RST}"
+  tail -40 "$GW_LOG" | sed 's/^/    /'
+fi
+
+TOKEN_OK=0
+for i in $(seq 1 20); do
+  if [[ -f "$PILOT_HOME/server-token" ]]; then
+    TOKEN_OK=1
+    break
+  fi
+  sleep 0.5
+done
+if [[ "$TOKEN_OK" == "1" ]]; then
+  pass "Gateway wrote server-token"
+else
+  fail "Missing $PILOT_HOME/server-token (bridge cannot authenticate)"
+  echo "  ${DIM}Last 30 lines of gateway log:${RST}"
+  tail -30 "$GW_LOG" | sed 's/^/    /'
+fi
+
+# Step 6: UI server
+info "Spawning UI server: $CCUI_DIR/server/index.js (port $PORT)"
 (
   cd "$CCUI_DIR"
   HOME="$SANDBOX/home" \
+  PILOT_HOME="$PILOT_HOME" \
   SERVER_PORT="$PORT" \
+  PILOTDECK_MAIN_DIR="$CCM_DIR" \
   BUN_BIN="$RES/bun-bin/bun" \
-  CLAUDE_CODE_MAIN_DIR="$CCM_DIR" \
   NO_COLOR=1 FORCE_COLOR=0 \
   "$RES/node-bin/node" server/index.js \
     > "$SRV_LOG" 2>&1 &
@@ -279,18 +346,67 @@ for i in $(seq 1 60); do
 done
 
 if [[ "$SRV_OK" == "1" ]]; then
-  pass "Server responding on http://127.0.0.1:${PORT}/health"
+  pass "UI server responding on http://127.0.0.1:${PORT}/health"
 else
-  fail "Server did not respond within 30s"
+  fail "UI server did not respond within 30s"
   echo "  ${DIM}Last 40 lines of server log:${RST}"
   tail -40 "$SRV_LOG" | sed 's/^/    /'
 fi
 
-if kill -0 "$SRV_PID" 2>/dev/null; then
-  kill "$SRV_PID" 2>/dev/null || true
-  sleep 1
-  kill -9 "$SRV_PID" 2>/dev/null || true
-  pass "Server terminated cleanly"
+# Step 8: bridge WebSocket to Gateway (lazy; may take up to GATEWAY_CONNECT_TIMEOUT_MS)
+# Nudge an API that calls getPilotDeckGateway().
+/usr/bin/curl -s -m 5 "http://127.0.0.1:${PORT}/api/projects" >/dev/null 2>&1 || true
+
+BRIDGE_OK=0
+for i in $(seq 1 90); do
+  if grep -q '\[pilotdeck-bridge\] connected' "$SRV_LOG" 2>/dev/null; then
+    BRIDGE_OK=1; break
+  fi
+  if grep -q 'gateway connect failed after' "$SRV_LOG" 2>/dev/null; then
+    break
+  fi
+  sleep 0.5
+done
+if [[ "$BRIDGE_OK" == "1" ]]; then
+  pass "pilotdeck-bridge connected to Gateway"
+else
+  fail "pilotdeck-bridge did not connect within 45s"
+  echo "  ${DIM}Last 40 lines of server log:${RST}"
+  tail -40 "$SRV_LOG" | sed 's/^/    /'
+fi
+
+for pid_var in SRV_PID GW_PID; do
+  pid="${!pid_var}"
+  if [[ -n "${pid:-}" ]] && kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    sleep 1
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+done
+pass "Gateway and UI server terminated cleanly"
+
+# ─────────────── Step 9: onboarding config compatibility ───────────────
+hdr "9. New-user onboarding config (loadPilotConfig)"
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+ONBOARD_TEST="${REPO_ROOT}/tests/desktop/onboarding-config-compat.test.ts"
+
+if [[ -f "$ONBOARD_TEST" ]]; then
+  info "Building apps/desktop (onboarding-config → dist/)…"
+  if ! (cd "${REPO_ROOT}/apps/desktop" && npm run build >/dev/null 2>&1); then
+    fail "apps/desktop tsc build failed (required for step 9)"
+  else
+    pass "apps/desktop built"
+    info "Running: node --import tsx --test $ONBOARD_TEST"
+    if (cd "$REPO_ROOT" && node --import tsx --test "$ONBOARD_TEST" 2>&1); then
+      pass "Onboarding V2 YAML passes loadPilotConfig"
+    else
+      fail "Onboarding config compatibility test failed"
+    fi
+  fi
+else
+  warn "Skipping step 9 (test file not found — run from monorepo checkout)"
 fi
 
 # ─────────────── Summary ───────────────

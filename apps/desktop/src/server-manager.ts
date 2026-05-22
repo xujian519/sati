@@ -28,9 +28,11 @@ import * as path from "node:path";
 const DEFAULT_PORT_START = 18790;
 const DEFAULT_PORT_END = 18799;
 const PROXY_PORT = 18080;
+const GATEWAY_PORT = 18789;
 const HEALTH_POLL_MS = 1500;
 const HEALTH_REQUEST_TIMEOUT_MS = 2000;
 const STARTUP_HEALTH_TIMEOUT_MS = 60_000;
+const GATEWAY_STARTUP_TIMEOUT_MS = 45_000;
 const SHUTDOWN_SIGTERM_WAIT_MS = 5000;
 const ORPHAN_TERM_WAIT_MS = 3000;
 const STABLE_RUN_RESET_MS = 60_000;
@@ -286,9 +288,6 @@ export type ServerManagerEvents = {
   progress: [phase: string];
 };
 
-const GATEWAY_PORT = 18789;
-const GATEWAY_STARTUP_TIMEOUT_MS = 30_000;
-
 export class ServerManager extends EventEmitter<ServerManagerEvents> {
   private readonly dev: boolean;
   private readonly devRepoRoot: string | undefined;
@@ -437,9 +436,10 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
           "bun-bin",
           "bun",
         ),
-        serverEntry: path.join(root, "pilotdeckui", "server", "index.js"),
-        serverCwd: path.join(root, "pilotdeckui"),
-        pilotDeckMainDir: path.join(root, "pilotdeck-main"),
+        // Repo UI lives at ui/ (bundle tar extracts as pilotdeckui/ at runtime).
+        serverEntry: path.join(root, "ui", "server", "index.js"),
+        serverCwd: path.join(root, "ui"),
+        pilotDeckMainDir: root,
       };
     }
     const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string })
@@ -694,9 +694,17 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
 
   private async cleanupOrphanRuntimeProcesses(): Promise<void> {
     // Order: proxy first (its parent is the cron daemon's child of the
-    // previous UI server), then cron daemon.
+    // previous UI server), then cron daemon, then orphan gateway.
     await this.killOrphanProxy();
     await this.killOrphanCronDaemon();
+    await this.killOrphanGateway();
+  }
+
+  private async killOrphanGateway(): Promise<void> {
+    const pid = this.listenerPidForPort(GATEWAY_PORT);
+    if (pid === null) return;
+    if (pid === process.pid) return;
+    await this.killPidGracefully(pid);
   }
 
   private clearStableTimer(): void {
@@ -873,6 +881,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       });
       this.gatewayChild = gwChild;
 
+      // Wait for gateway to start listening
       const gwDeadline = Date.now() + GATEWAY_STARTUP_TIMEOUT_MS;
       let gwReady = false;
       while (Date.now() < gwDeadline) {
@@ -1003,10 +1012,9 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     this.child = null;
     this.port = null;
 
-    if (this.gatewayChild) {
-      try { this.gatewayChild.kill("SIGTERM"); } catch { /* ignore */ }
-      this.gatewayChild = null;
-    }
+    // Stop the gateway process
+    await this.killGatewayGracefully();
+    this.gatewayChild = null;
 
     await this.removePidFile();
     // The ui-server's SIGTERM handler stops the proxy and (after our
@@ -1016,6 +1024,32 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     // remaining orphans now so quitting PilotDeck really leaves zero processes.
     await this.cleanupOrphanRuntimeProcesses();
     this.stopRequested = false;
+  }
+
+  private async killGatewayGracefully(): Promise<void> {
+    const proc = this.gatewayChild;
+    if (!proc || !proc.pid) return;
+    const pid = proc.pid;
+
+    try {
+      proc.kill("SIGTERM");
+    } catch {
+      /* ignore */
+    }
+
+    const deadline = Date.now() + SHUTDOWN_SIGTERM_WAIT_MS;
+    while (Date.now() < deadline) {
+      if (!processExists(pid)) return;
+      await sleep(50);
+    }
+
+    if (processExists(pid)) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   getPort(): number | null {

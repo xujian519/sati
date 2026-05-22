@@ -204,6 +204,22 @@ function checkKeyFormat(apiKey: string): Check {
 }
 
 export async function testProviderOnboarding(p: ProviderInput): Promise<TestResult> {
+  if (process.env.PILOTDECK_E2E_MOCK_PROVIDER === "1") {
+    const { url } = resolveEndpoint(p);
+    return {
+      endpoint: url,
+      overall: "ok",
+      checks: [
+        {
+          id: "e2eMock",
+          label: "E2E mock",
+          level: "ok",
+          detail: "PILOTDECK_E2E_MOCK_PROVIDER=1",
+        },
+      ],
+    };
+  }
+
   const { url } = resolveEndpoint(p);
   const network = await checkNetwork(p);
 
