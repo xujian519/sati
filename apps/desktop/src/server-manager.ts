@@ -286,12 +286,16 @@ export type ServerManagerEvents = {
   progress: [phase: string];
 };
 
+const GATEWAY_PORT = 18789;
+const GATEWAY_STARTUP_TIMEOUT_MS = 30_000;
+
 export class ServerManager extends EventEmitter<ServerManagerEvents> {
   private readonly dev: boolean;
   private readonly devRepoRoot: string | undefined;
   private readonly appVersion: string | undefined;
 
   private child: ChildProcess | null = null;
+  private gatewayChild: ChildProcess | null = null;
   private port: number | null = null;
   private stopRequested = false;
   private startPromise: Promise<{ port: number }> | null = null;
@@ -520,6 +524,29 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       !fsSync.existsSync(memNodeModLink)
     ) {
       fsSync.symlinkSync(memCoreDir, memNodeModLink);
+    }
+
+    // npm hoists shared deps (ws, express, etc.) into the root node_modules/
+    // which ends up inside pilotdeck-main-bundle.tar, not pilotdeckui-bundle.tar.
+    // ESM resolution walks up the directory tree looking for node_modules/ dirs.
+    // A symlink at <runtimeBaseDir>/node_modules → pilotdeck-main/node_modules
+    // lets the resolver find hoisted packages after exhausting pilotdeckui's own.
+    const hoistedLink = path.join(runtimeBaseDir, "node_modules");
+    const hoistedTarget = path.join(pilotDeckMainDir, "node_modules");
+    if (
+      fsSync.existsSync(hoistedTarget) &&
+      !fsSync.existsSync(hoistedLink)
+    ) {
+      fsSync.symlinkSync(hoistedTarget, hoistedLink);
+    }
+
+    // ui/server/ also imports `../../src/web/server/*.js` etc. In dev
+    // mode tsx resolves .js → .ts; in packaged mode we need actual .js
+    // files. Point src/ → pilotdeck-main/dist/src/ (compiled output).
+    const srcLink = path.join(runtimeBaseDir, "src");
+    const srcTarget = path.join(pilotDeckMainDir, "dist", "src");
+    if (fsSync.existsSync(srcTarget) && !fsSync.existsSync(srcLink)) {
+      fsSync.symlinkSync(srcTarget, srcLink);
     }
 
     return {
@@ -812,6 +839,61 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     await ensurePilotDeckDir();
     const logPath = getServerLogPath();
     const logStream = fsSync.createWriteStream(logPath, { flags: "a" });
+
+    // --- Start the Gateway process (port 18789) BEFORE the UI server ---
+    // The UI server's pilotdeck-bridge connects to ws://127.0.0.1:18789/ws
+    // within 30s. We must have the gateway listening before the UI server
+    // attempts its first WebSocket handshake.
+    const gatewayEntry = path.join(
+      pilotDeckMainDir,
+      "dist",
+      "src",
+      "cli",
+      "pilotdeck.js",
+    );
+    if (fsSync.existsSync(gatewayEntry)) {
+      this.emit("progress", "启动 PilotDeck Gateway…");
+      const gwLogStream = fsSync.createWriteStream(logPath, { flags: "a" });
+      gwLogStream.write(
+        `\n=== ${new Date().toISOString()} spawn gateway ${gatewayEntry} (port=${GATEWAY_PORT}) ===\n`,
+      );
+      const gwChild = spawn(nodeBin, [gatewayEntry, "server"], {
+        stdio: ["ignore", "pipe", "pipe"],
+        cwd: pilotDeckMainDir,
+        env: {
+          ...env,
+          PILOTDECK_GATEWAY_PORT: String(GATEWAY_PORT),
+        },
+        windowsHide: true,
+      });
+      gwChild.stdout?.pipe(gwLogStream, { end: false });
+      gwChild.stderr?.pipe(gwLogStream, { end: false });
+      gwChild.once("exit", () => {
+        gwLogStream.end();
+      });
+      this.gatewayChild = gwChild;
+
+      const gwDeadline = Date.now() + GATEWAY_STARTUP_TIMEOUT_MS;
+      let gwReady = false;
+      while (Date.now() < gwDeadline) {
+        if (gwChild.exitCode !== null) break;
+        const pid = this.listenerPidForPort(GATEWAY_PORT);
+        if (pid !== null) {
+          gwReady = true;
+          break;
+        }
+        await sleep(HEALTH_POLL_MS);
+      }
+      if (!gwReady) {
+        gwChild.kill("SIGTERM");
+        this.gatewayChild = null;
+        const tail = readTailSafe(logPath, 4000);
+        throw new Error(
+          `Gateway failed to start on port ${GATEWAY_PORT} within ${GATEWAY_STARTUP_TIMEOUT_MS}ms\n--- log tail ---\n${tail}`,
+        );
+      }
+    }
+
     logStream.write(
       `\n=== ${new Date().toISOString()} spawn ${serverEntry} (port=${chosenPort}) ===\n`,
     );
@@ -920,6 +1002,11 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     await this.killChildGracefully();
     this.child = null;
     this.port = null;
+
+    if (this.gatewayChild) {
+      try { this.gatewayChild.kill("SIGTERM"); } catch { /* ignore */ }
+      this.gatewayChild = null;
+    }
 
     await this.removePidFile();
     // The ui-server's SIGTERM handler stops the proxy and (after our

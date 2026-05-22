@@ -2998,11 +2998,18 @@ async function startServer() {
                     console.log(`${c.tip('[TIP]')}  Run "pilotdeck status" for full configuration details`);
                     console.log('');
 
-                    const serverUrl = `http://${DISPLAY_HOST === '0.0.0.0' ? 'localhost' : DISPLAY_HOST}:${SERVER_PORT}`;
-                    const openCmd = process.platform === 'darwin' ? 'open'
-                                  : process.platform === 'win32' ? 'start'
-                                  : 'xdg-open';
-                    exec(`${openCmd} "${serverUrl}"`, () => {});
+                    // Desktop shell loads the UI inside Electron; CLI/dev can opt in to
+                    // auto-open. PILOTDECK_DESKTOP=1 is set by apps/desktop server-manager.
+                    const skipAutoOpen =
+                        process.env.PILOTDECK_DESKTOP === '1'
+                        || process.env.PILOTDECK_SKIP_BROWSER_OPEN === '1';
+                    if (!skipAutoOpen) {
+                        const serverUrl = `http://${DISPLAY_HOST === '0.0.0.0' ? 'localhost' : DISPLAY_HOST}:${SERVER_PORT}`;
+                        const openCmd = process.platform === 'darwin' ? 'open'
+                                      : process.platform === 'win32' ? 'start'
+                                      : 'xdg-open';
+                        exec(`${openCmd} "${serverUrl}"`, () => {});
+                    }
 
                     // Start watching the projects folder for changes
                     await setupProjectsWatcher();
