@@ -24,7 +24,7 @@ class FakeWorktreeProvider implements WorkspaceProvider {
   readonly priority = 1;
   prepareCalls = 0;
 
-  constructor(private readonly baseDir: string, private readonly projectId: string) {}
+  constructor(private readonly baseDir: string) {}
 
   async isApplicable(): Promise<boolean> {
     return true;
@@ -32,7 +32,7 @@ class FakeWorktreeProvider implements WorkspaceProvider {
 
   async prepare(input: WorkspacePrepareInput): Promise<WorkspaceHandle> {
     this.prepareCalls += 1;
-    const cwd = join(this.baseDir, this.projectId, input.runId);
+    const cwd = join(this.baseDir, input.runId);
     await mkdir(cwd, { recursive: true });
     return {
       runId: input.runId,
@@ -56,7 +56,7 @@ function makeFixture() {
   const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-aon-fire-"));
   const projectKey = "/tmp/projects/sample";
   const paths = resolveAlwaysOnPaths({ pilotHome, projectKey });
-  const provider = new FakeWorktreeProvider(paths.worktreesDir, paths.projectId);
+  const provider = new FakeWorktreeProvider(paths.worktreesDir);
   const registry = new WorkspaceProviderRegistry();
   registry.add(provider);
   const stateStore = new DiscoveryStateStore(paths);

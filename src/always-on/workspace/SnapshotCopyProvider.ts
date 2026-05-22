@@ -3,7 +3,6 @@ import { cp, mkdir, rm, stat } from "node:fs/promises";
 import { platform } from "node:os";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
-import { createProjectId } from "../../pilot/paths.js";
 import { AlwaysOnError } from "../protocol/errors.js";
 import type { WorkspaceHandle } from "../protocol/types.js";
 import type { WorkspaceProvider, WorkspacePrepareInput, WorkspacePublishOutput } from "./WorkspaceProvider.js";
@@ -40,8 +39,7 @@ export class SnapshotCopyProvider implements WorkspaceProvider {
   }
 
   async prepare(input: WorkspacePrepareInput): Promise<WorkspaceHandle> {
-    const projectId = createProjectId(input.projectRoot);
-    const target = resolve(this.options.baseDir, projectId, input.runId);
+    const target = resolve(this.options.baseDir, input.runId);
 
     const sizeBytes = await estimateSize(input.projectRoot, this.ignoreSet());
     if (sizeBytes > this.options.maxBytes) {

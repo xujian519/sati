@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { createProjectId } from "../../pilot/paths.js";
 import { AlwaysOnError } from "../protocol/errors.js";
 import type { WorkspaceHandle } from "../protocol/types.js";
 import type { WorkspaceProvider, WorkspacePrepareInput, WorkspacePublishOutput } from "./WorkspaceProvider.js";
@@ -46,8 +45,7 @@ export class GitWorktreeProvider implements WorkspaceProvider {
     expectOk(commitRes, "git rev-parse HEAD");
     const baseCommit = commitRes.stdout.trim();
 
-    const projectId = createProjectId(input.projectRoot);
-    const worktreePath = resolve(this.options.baseDir, projectId, input.runId);
+    const worktreePath = resolve(this.options.baseDir, input.runId);
     const branchName = `always-on/${input.runId}`;
     const add = await runGit(this.git(), [
       "-C",
