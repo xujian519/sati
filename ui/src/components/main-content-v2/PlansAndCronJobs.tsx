@@ -142,6 +142,16 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOp
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [cycleBusy, setCycleBusy] = useState<string | null>(null);
   const [confirmingArchiveCycle, setConfirmingArchiveCycle] = useState<string | null>(null);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+
+  const toggleSection = (key: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -405,12 +415,13 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOp
                     <>
                       {/* Plans sub-section */}
                       {planItems.length > 0 && (
-                        <>
-                          <div className="flex items-center gap-3 border-t border-neutral-200 bg-neutral-50/80 px-5 py-2 dark:border-neutral-800 dark:bg-neutral-900/30">
-                            <span className="text-xxs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                              {t('plansCron.type.plan', { defaultValue: 'Plans' })} ({planItems.length})
-                            </span>
-                            <div className="ml-auto flex items-center gap-1.5">
+                        <SubSection
+                          sectionKey={`${projectKey}::plans`}
+                          label={`${t('plansCron.type.plan', { defaultValue: 'Plan' })} (${planItems.length})`}
+                          collapsedSections={collapsedSections}
+                          toggleSection={toggleSection}
+                          actions={
+                            <div className="flex items-center gap-1.5">
                               {isApplying && (
                                 <span className="inline-flex items-center gap-1 text-xxs text-sky-600 dark:text-sky-400">
                                   <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
@@ -466,7 +477,8 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOp
                                 </div>
                               )}
                             </div>
-                          </div>
+                          }
+                        >
                           <ColumnHeaders t={t} />
                           <div className="divide-y divide-neutral-100 dark:divide-neutral-900">
                             {planItems.map((item) => (
@@ -480,17 +492,17 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOp
                               />
                             ))}
                           </div>
-                        </>
+                        </SubSection>
                       )}
 
                       {/* Cron Jobs sub-section */}
                       {cronItems.length > 0 && (
-                        <>
-                          <div className="flex items-center gap-3 border-t border-neutral-200 bg-neutral-50/80 px-5 py-2 dark:border-neutral-800 dark:bg-neutral-900/30">
-                            <span className="text-xxs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                              {t('plansCron.type.cronJob', { defaultValue: 'Cron Jobs' })} ({cronItems.length})
-                            </span>
-                          </div>
+                        <SubSection
+                          sectionKey={`${projectKey}::crons`}
+                          label={`${t('plansCron.type.cronJob', { defaultValue: 'Cron Jobs' })} (${cronItems.length})`}
+                          collapsedSections={collapsedSections}
+                          toggleSection={toggleSection}
+                        >
                           <ColumnHeaders t={t} />
                           <div className="divide-y divide-neutral-100 dark:divide-neutral-900">
                             {cronItems.map((item) => (
@@ -504,7 +516,7 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOp
                               />
                             ))}
                           </div>
-                        </>
+                        </SubSection>
                       )}
                     </>
                   );
@@ -515,6 +527,48 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOp
         </div>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Collapsible sub-section (Plans / Cron Jobs within a project card)
+// ---------------------------------------------------------------------------
+
+function SubSection({
+  sectionKey,
+  label,
+  collapsedSections,
+  toggleSection,
+  actions,
+  children,
+}: {
+  sectionKey: string;
+  label: string;
+  collapsedSections: Set<string>;
+  toggleSection: (key: string) => void;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const isCollapsed = collapsedSections.has(sectionKey);
+  return (
+    <>
+      <div className="flex items-center gap-2 border-t border-neutral-200 bg-neutral-50/80 px-5 py-2 dark:border-neutral-800 dark:bg-neutral-900/30">
+        <button
+          type="button"
+          onClick={() => toggleSection(sectionKey)}
+          className="flex items-center gap-1.5 text-xxs font-semibold uppercase tracking-wider text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+        >
+          {isCollapsed ? (
+            <ChevronRight className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+          )}
+          {label}
+        </button>
+        {!isCollapsed && actions && <div className="ml-auto">{actions}</div>}
+      </div>
+      {!isCollapsed && children}
+    </>
   );
 }
 
