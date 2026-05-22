@@ -153,6 +153,9 @@ third-party/
 # Project-local PilotDeck overrides (per-project .pilotdeck/pilotdeck.yaml etc)
 .pilotdeck/
 
+# Cursor IDE local rules, skills, and workspace metadata
+.cursor/
+
 # Playwright MCP browser session artifacts (console / page snapshots)
 .playwright-mcp/
 
