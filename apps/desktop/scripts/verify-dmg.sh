@@ -243,6 +243,18 @@ if [[ -d "$MEM_DIR" ]]; then
   pass "Symlinked \$SANDBOX/edgeclaw-memory-core → pilotdeck-memory-core"
 fi
 
+# node_modules: pilotdeckui imports hoisted deps (ws, express, …) from pilotdeck-main
+if [[ -d "$CCM_DIR/node_modules" && ! -e "$SANDBOX/node_modules" ]]; then
+  ln -sfn "$CCM_DIR/node_modules" "$SANDBOX/node_modules"
+  pass "Symlinked \$SANDBOX/node_modules → pilotdeck-main/node_modules"
+fi
+
+# src: ui/server imports ../../src/web/server/*.js — compiled JS lives in pilotdeck-main/dist/src
+if [[ -d "$CCM_DIR/dist/src" && ! -e "$SANDBOX/src" ]]; then
+  ln -sfn "$CCM_DIR/dist/src" "$SANDBOX/src"
+  pass "Symlinked \$SANDBOX/src → pilotdeck-main/dist/src"
+fi
+
 info "Spawning: node-bin/node $CCUI_DIR/server/index.js (port $PORT)"
 (
   cd "$CCUI_DIR"
