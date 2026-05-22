@@ -230,6 +230,7 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOp
     const projectKeyToName = new Map<string, string>();
     for (const p of projects) {
       projectKeyToName.set(p.name, p.name);
+      if (p.fullPath) projectKeyToName.set(p.fullPath, p.name);
     }
 
     for (const job of activeCronJobs) {
