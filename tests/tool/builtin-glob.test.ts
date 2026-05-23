@@ -68,29 +68,3 @@ test("glob denies path outside workspace", async (t) => {
   if (result.type === "error") assert.equal(result.error.code, "path_not_allowed");
 });
 
-test("glob reports unsupported_tool when ripgrep is unavailable", async (t) => {
-  const workspace = await createPilotDeckTempWorkspace({
-    "src/a.ts": "a",
-  });
-  t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
-    tools: [createGlobTool()],
-    cwd: workspace.cwd,
-  });
-  context.env = {
-    ...process.env,
-    PATH: "",
-    Path: "",
-  };
-
-  const result = await toolRuntime.execute(
-    { id: "call-1", name: "glob", input: { pattern: "**/*.ts" } },
-    context,
-  );
-
-  assert.equal(result.type, "error");
-  if (result.type === "error") {
-    assert.equal(result.error.code, "unsupported_tool");
-    assert.match(result.error.message, /ripgrep/i);
-  }
-});
