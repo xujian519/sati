@@ -2,6 +2,7 @@ import type { PilotDeckToolValidationIssue } from "../protocol/schema.js";
 
 export type FormatValidationErrorOptions = {
   maxOutputTokens?: number;
+  outputTruncated?: boolean;
 };
 
 /**
@@ -51,13 +52,18 @@ export function formatValidationError(
   const tokenInfo = tokenBudget ? ` (current max_output_tokens: ${tokenBudget})` : "";
 
   if (hasRequiredMissing && FILE_TOOLS.has(toolName)) {
-    message += `\n\nNote: This may have been caused by your output being truncated before the tool call arguments were fully generated${tokenInfo}. `
-      + "Keep each tool call's arguments well within the output token budget.";
+    if (options?.outputTruncated) {
+      message += `\n\nThis was caused by your output being truncated (output token limit reached${tokenInfo}). `
+        + "Keep each tool call's arguments well within the output token budget.";
+    } else {
+      message += "\n\nPlease ensure all required parameters are provided in the tool call.";
+    }
   }
 
   if (
     toolName === "write_file" &&
     issues.some((i) => i.code === "required" && i.path.includes("content"))
+    && options?.outputTruncated
   ) {
     message +=
       "\n\nHint: Please use an incremental, multi-step approach to write large files:\n"

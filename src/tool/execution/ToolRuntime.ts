@@ -52,6 +52,7 @@ export class ToolRuntime {
         "invalid_tool_input",
         formatValidationError(tool.name, validation.issues, {
           maxOutputTokens: context.maxOutputTokens,
+          outputTruncated: context.outputTruncated,
         }),
         startedAt,
         context,

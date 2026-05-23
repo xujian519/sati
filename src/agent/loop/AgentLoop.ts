@@ -452,9 +452,13 @@ export class AgentLoop {
       }
       let results: PilotDeckToolResult[];
       try {
+        const toolContext = this.createToolContext(input, messages);
+        if (assembled.finishReason === "length") {
+          toolContext.outputTruncated = true;
+        }
         results = yield* this.executeToolsWithEventPump(
           toolCalls,
-          this.createToolContext(input, messages),
+          toolContext,
           input,
         );
       } catch (error) {
