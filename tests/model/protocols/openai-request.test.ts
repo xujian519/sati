@@ -94,7 +94,7 @@ test("tool_result_reference is converted to role:tool message with preview", () 
   );
 });
 
-test("tool_result preserves multimodal image and pdf blocks for OpenAI", () => {
+test("tool_result with pdf and image uses text fallback + visual user message", () => {
   const raw = validModelConfig();
   const providers = raw.providers as {
     "openai-main": {
@@ -134,10 +134,30 @@ test("tool_result preserves multimodal image and pdf blocks for OpenAI", () => {
 
   const toolMessage = body.messages.find((m: any) => m.role === "tool");
   assert.ok(toolMessage, "should emit a tool role message");
-  assert.ok(Array.isArray(toolMessage.content), "multimodal tool_result should stay structured");
-  assert.equal(toolMessage.content[0].type, "text");
-  assert.equal(toolMessage.content[1].type, "image_url");
-  assert.equal(toolMessage.content[2].type, "file");
+  assert.equal(
+    typeof toolMessage.content,
+    "string",
+    "tool message content should be a plain text string (Completions compatible)",
+  );
+  assert.ok(toolMessage.content.includes("preview"), "should contain text content");
+  assert.ok(toolMessage.content.includes("[Image:"), "should contain image placeholder");
+  assert.ok(toolMessage.content.includes("[PDF:"), "should contain pdf placeholder");
+
+  const userMessages = body.messages.filter((m: any) => m.role === "user");
+  const visualMsg = userMessages.find((m: any) =>
+    Array.isArray(m.content) && m.content.some((c: any) => c.type === "image_url"),
+  );
+  assert.ok(visualMsg, "should emit a visual user message for image and pdf content");
+  const imageUrlBlocks = visualMsg.content.filter((c: any) => c.type === "image_url");
+  assert.equal(imageUrlBlocks.length, 2, "visual message should contain both image and pdf as image_url");
+  assert.ok(
+    imageUrlBlocks.some((b: any) => b.image_url.url.startsWith("data:image/png;base64,")),
+    "should contain image data URI",
+  );
+  assert.ok(
+    imageUrlBlocks.some((b: any) => b.image_url.url.startsWith("data:application/pdf;base64,")),
+    "should contain pdf data URI",
+  );
 });
 
 test("tool_result_reference is excluded from normalContent (not duplicated)", () => {

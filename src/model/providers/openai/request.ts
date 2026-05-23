@@ -3,6 +3,7 @@ import type {
   CanonicalImageBlock,
   CanonicalMessage,
   CanonicalModelRequest,
+  CanonicalPdfBlock,
   CanonicalToolChoice,
   CanonicalToolSchema,
   ModelDefinition,
@@ -203,35 +204,10 @@ function toOpenAIUserMessages(message: CanonicalMessage): OpenAIMessage[] {
 function toOpenAIToolResultMessage(
   block: Extract<CanonicalContentBlock, { type: "tool_result" }>,
 ): OpenAIMessage {
-  const hasOnlyText = block.content.every((content) => content.type === "text");
-  const hasPdf = block.content.some((content) => content.type === "pdf");
   return {
     role: "tool",
     tool_call_id: block.toolCallId,
-    content: hasOnlyText || !hasPdf
-      ? flattenToolResultBlockText(block)
-      : block.content.map((content) => {
-          switch (content.type) {
-            case "text":
-              return { type: "text", text: content.text };
-            case "image":
-              return {
-                type: "image_url",
-                image_url: {
-                  url: `data:${content.mimeType};base64,${content.data}`,
-                  detail: content.detail,
-                },
-              };
-            case "pdf":
-              return {
-                type: "file",
-                file: {
-                  filename: "tool-result.pdf",
-                  file_data: `data:${content.mimeType};base64,${content.data}`,
-                },
-              };
-          }
-        }),
+    content: flattenToolResultBlockText(block),
   };
 }
 
@@ -253,8 +229,11 @@ function toOpenAIToolResultVisualMessages(
 
 function toolResultVisualContent(
   block: Extract<CanonicalContentBlock, { type: "tool_result" }>,
-): CanonicalImageBlock[] {
-  return block.content.filter((content) => content.type === "image");
+): (CanonicalImageBlock | CanonicalPdfBlock)[] {
+  return block.content.filter(
+    (content): content is CanonicalImageBlock | CanonicalPdfBlock =>
+      content.type === "image" || content.type === "pdf",
+  );
 }
 
 function toOpenAIToolResultReferenceMessage(
@@ -294,10 +273,9 @@ function toOpenAIContent(blocks: CanonicalContentBlock[]): string | unknown[] {
           : { type: "input_audio", input_audio: { data: block.data, format: block.mimeType } };
       case "pdf":
         return {
-          type: "file",
-          file: {
-            filename: "input.pdf",
-            file_data: `data:${block.mimeType};base64,${block.data}`,
+          type: "image_url",
+          image_url: {
+            url: `data:${block.mimeType};base64,${block.data}`,
           },
         };
       case "tool_call":
