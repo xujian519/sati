@@ -1,4 +1,8 @@
+import { execFile } from "node:child_process";
 import path from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 const IMAGE_MIME = new Map<string, string>([
   [".png", "image/png"],
@@ -104,8 +108,14 @@ export function parsePdfPageRange(value: string): ParsedPdfPageRange | undefined
   return { firstPage, lastPage };
 }
 
-export function countPdfPages(buffer: Buffer): number | undefined {
-  const latin1 = buffer.toString("latin1");
-  const matches = latin1.match(/\/Type\s*\/Page\b/g);
-  return matches && matches.length > 0 ? matches.length : undefined;
+export async function countPdfPages(absolutePath: string): Promise<number | undefined> {
+  try {
+    const { stdout } = await execFileAsync("pdfinfo", [absolutePath], { timeout: 10_000 });
+    const match = /^Pages:\s+(\d+)/m.exec(stdout);
+    if (!match) return undefined;
+    const count = parseInt(match[1]!, 10);
+    return isNaN(count) ? undefined : count;
+  } catch {
+    return undefined;
+  }
 }
