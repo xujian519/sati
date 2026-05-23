@@ -35,8 +35,8 @@ test("loop helpers collect tool calls and project paired tool results", () => {
 
   assert.deepEqual(decideLoopContinuation(message), { type: "continue", reason: "tool_results" });
   assert.equal(calls[0]?.id, "call-1");
-  assert.equal(projected.role, "user");
-  assert.equal(projected.content[0]?.type, "tool_result");
+  assert.equal(projected[0]!.role, "user");
+  assert.equal(projected[0]!.content[0]?.type, "tool_result");
 });
 
 test("AgentLoop completes a no-tool turn", async () => {

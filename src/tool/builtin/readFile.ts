@@ -31,6 +31,7 @@ export type ReadFileInput = {
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_TEXT_TOKENS = 25_000;
 const MAX_PDF_PAGES_PER_REQUEST = 20;
+const PDF_AT_MENTION_INLINE_THRESHOLD = 10;
 const FILE_UNCHANGED_STUB =
   "File unchanged since the last read. Refer to the earlier read_file result instead of re-reading it.";
 const execFileAsync = promisify(execFile);
@@ -218,6 +219,14 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
             `PDF page range ${input.pages} exceeds the detected page count (${pageCount}).`,
           );
         }
+        if (!input.pages && pageCount !== undefined && pageCount > PDF_AT_MENTION_INLINE_THRESHOLD) {
+          throw new PilotDeckToolRuntimeError(
+            "invalid_tool_input",
+            `This PDF has ${pageCount} pages, which is too many to read at once. ` +
+            `Use the pages parameter to read specific page ranges (e.g., pages: "1-5"). ` +
+            `Maximum ${MAX_PDF_PAGES_PER_REQUEST} pages per request.`,
+          );
+        }
         if (!supportsPdf) {
           const supportsImage = context.modelMultimodal?.input?.includes("image");
           if (supportsImage) {
@@ -243,7 +252,12 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
                 pages: input.pages,
               });
               return {
-                content: [...textBlocks, ...rendered.images],
+                content: textBlocks,
+                supplementalMessages: [{
+                  role: "user",
+                  content: rendered.images,
+                  isMeta: true,
+                }],
                 data: {
                   filePath: resolved.relativePath,
                   kind,
@@ -283,20 +297,24 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         });
         return {
           content: [
-            ...(parsedPages
-              ? [{
-                  type: "text" as const,
-                  text: `Requested PDF pages: ${parsedPages.firstPage}-${parsedPages.lastPage}.`,
-                }]
-              : []),
             {
-              type: "pdf" as const,
-              mimeType: "application/pdf",
-              data: pdfBuffer.toString("base64"),
-              bytes: pdfBuffer.byteLength,
-              pages: pageCount,
+              type: "text" as const,
+              text: `PDF file read: ${resolved.relativePath} (${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""}${parsedPages ? `, requested pages ${parsedPages.firstPage}-${parsedPages.lastPage}` : ""})`,
             },
           ],
+          supplementalMessages: [{
+            role: "user",
+            content: [
+              {
+                type: "pdf" as const,
+                mimeType: "application/pdf" as const,
+                data: pdfBuffer.toString("base64"),
+                bytes: pdfBuffer.byteLength,
+                pages: pageCount,
+              },
+            ],
+            isMeta: true,
+          }],
           data: {
             filePath: resolved.relativePath,
             kind,

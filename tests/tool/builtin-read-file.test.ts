@@ -158,7 +158,9 @@ test("read_file returns pdf blocks and validates page ranges", async (t) => {
   );
 
   assert.equal(success.type, "success");
-  assert.equal(success.content[1]?.type, "pdf");
+  assert.equal(success.content[0]?.type, "text");
+  assert.ok(success.supplementalMessages);
+  assert.equal(success.supplementalMessages![0]!.content[0]?.type, "pdf");
   assert.equal(invalid.type, "error");
   if (invalid.type === "error") {
     assert.equal(invalid.error.code, "invalid_tool_input");

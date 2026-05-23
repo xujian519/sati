@@ -113,8 +113,15 @@ export type PilotDeckFileUpdateNotifier = {
   didSave?(update: PilotDeckFileUpdateNotification): Promise<void> | void;
 };
 
+export type PilotDeckToolSupplementalMessage = {
+  role: "user";
+  content: PilotDeckToolResultContent[];
+  isMeta?: boolean;
+};
+
 export type PilotDeckToolExecutionOutput<Output = unknown> = {
   content: PilotDeckToolResultContent[];
+  supplementalMessages?: PilotDeckToolSupplementalMessage[];
   data?: Output;
   metadata?: Record<string, unknown>;
 };

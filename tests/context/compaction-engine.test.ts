@@ -105,3 +105,32 @@ test("CompactionEngine reports error in PostCompact payload when summary stream 
   assert.equal(result.error, "boom");
   assert.equal(events[1]?.payload.status, "error");
 });
+
+test("CompactionEngine strips multimedia before sending to summarizer", async () => {
+  const model = new ScriptedModel([
+    { type: "text_delta", text: "Summary" },
+  ]);
+  const engine = new CompactionEngine({ model, provider: "test", model_: "test-model" });
+  const messagesWithMedia: CanonicalMessage[] = [
+    { role: "user", content: [{ type: "text", text: "read this pdf" }] },
+    { role: "assistant", content: [{ type: "tool_call", id: "tc1", name: "read_file", input: { file_path: "test.pdf" } }] },
+    { role: "user", content: [{ type: "tool_result", toolCallId: "tc1", content: [{ type: "text", text: "PDF file read: test.pdf" }] }] },
+    { role: "user", content: [{ type: "pdf", source: "base64", data: "x".repeat(100000), mimeType: "application/pdf", bytes: 75000 }] },
+    { role: "assistant", content: [{ type: "text", text: "I read the pdf" }] },
+    { role: "user", content: [{ type: "text", text: "thanks" }] },
+  ];
+  await engine.run({ trigger: "auto", messages: messagesWithMedia, keepTailRatio: 0.2 });
+  const sentMessages = model.requests[0]!.messages;
+  // Verify no pdf base64 was sent to the summarizer
+  for (const msg of sentMessages) {
+    for (const block of msg.content) {
+      assert.notEqual(block.type, "pdf", "PDF block should have been stripped");
+      assert.notEqual(block.type, "image", "Image block should have been stripped");
+    }
+  }
+  // Verify the [document] marker is present
+  const pdfReplacementMsg = sentMessages.find((m) =>
+    m.content.some((b) => b.type === "text" && "text" in b && (b as { text: string }).text === "[document]"),
+  );
+  assert.ok(pdfReplacementMsg, "Should have [document] marker replacing PDF");
+});

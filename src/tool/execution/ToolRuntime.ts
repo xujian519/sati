@@ -213,6 +213,7 @@ export class ToolRuntime {
         toolCallId: call.id,
         toolName: tool.name,
         content: limited.content,
+        supplementalMessages: output.supplementalMessages,
         data: output.data,
         metadata: mergeMetadata(
           output.metadata,

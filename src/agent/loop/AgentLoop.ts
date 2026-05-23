@@ -289,9 +289,11 @@ export class AgentLoop {
           const projected = projectToolResults(
             toolCalls.map((call) => createMissingToolResult(call, this.now, "Model error interrupted tool execution.")),
           );
-          messages.push(projected);
-          yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: projected };
-          await input.onDurableMessage?.(projected);
+          messages.push(...projected);
+          yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: projected[0]! };
+          for (const msg of projected) {
+            await input.onDurableMessage?.(msg);
+          }
         }
 
         if (
@@ -513,24 +515,33 @@ export class AgentLoop {
       // runtime so large payloads land on disk via `ToolResultBudget`. When
       // the runtime doesn't implement `applyToolResults` (e.g. NullContext),
       // we simply append the raw projection (legacy behaviour).
+      // Only the first message (containing tool_result blocks) goes through
+      // budget processing; supplemental messages (PDF/image data) are appended directly.
+      const [toolResultMsg, ...supplementalMsgs] = projected;
       const ctxApply = this.dependencies.context?.applyToolResults;
       if (ctxApply) {
         try {
           const applied = await ctxApply.call(this.dependencies.context, {
             sessionId: input.sessionId,
             turnId: input.turnId,
-            toolResultMessage: projected,
+            toolResultMessage: toolResultMsg,
             messages,
           });
           messages = applied.messages;
         } catch {
-          messages.push(projected);
+          messages.push(toolResultMsg);
         }
       } else {
-        messages.push(projected);
+        messages.push(toolResultMsg);
       }
-      yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: projected };
-      await input.onDurableMessage?.(projected);
+      for (const supplemental of supplementalMsgs) {
+        messages.push(supplemental);
+      }
+      yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: toolResultMsg };
+      await input.onDurableMessage?.(toolResultMsg);
+      for (const supplemental of supplementalMsgs) {
+        await input.onDurableMessage?.(supplemental);
+      }
 
       const lifecycleBlock = findToolLifecycleBlock(pairedResults);
       if (lifecycleBlock) {

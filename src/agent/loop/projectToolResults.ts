@@ -1,20 +1,46 @@
-import type { CanonicalContentBlock, CanonicalMessage } from "../../model/index.js";
-import { toCanonicalToolResultBlock, type PilotDeckToolResult } from "../../tool/index.js";
+import type { CanonicalContentBlock, CanonicalMessage, CanonicalToolResultContentBlock } from "../../model/index.js";
+import { toCanonicalToolResultBlock, type PilotDeckToolResult, type PilotDeckToolResultContent } from "../../tool/index.js";
 
-export function projectToolResults(results: PilotDeckToolResult[]): CanonicalMessage {
-  const content: CanonicalContentBlock[] = [];
+function toCanonicalSupplementalBlock(content: PilotDeckToolResultContent): CanonicalToolResultContentBlock {
+  if (content.type === "image") {
+    return {
+      type: "image",
+      source: "base64",
+      data: content.data,
+      mimeType: content.mimeType,
+      bytes: content.bytes,
+      detail: content.detail,
+    };
+  }
+  if (content.type === "pdf") {
+    return {
+      type: "pdf",
+      source: "base64",
+      data: content.data,
+      mimeType: content.mimeType,
+      bytes: content.bytes,
+      pages: content.pages,
+    };
+  }
+  return { type: "text", text: content.type === "text" ? content.text : JSON.stringify(content) };
+}
+
+export function projectToolResults(results: PilotDeckToolResult[]): CanonicalMessage[] {
+  const messages: CanonicalMessage[] = [];
+  const toolResultContent: CanonicalContentBlock[] = [];
   for (const result of results) {
-    content.push(toCanonicalToolResultBlock(result));
-    for (const item of result.content) {
-      if (item.type === "image") {
-        content.push({
-          type: "image",
-          source: "base64",
-          data: item.data,
-          mimeType: item.mimeType,
-        });
+    toolResultContent.push(toCanonicalToolResultBlock(result));
+  }
+  messages.push({ role: "user", content: toolResultContent });
+
+  for (const result of results) {
+    if (result.supplementalMessages) {
+      for (const msg of result.supplementalMessages) {
+        const blocks: CanonicalContentBlock[] = msg.content.map(toCanonicalSupplementalBlock);
+        messages.push({ role: "user", content: blocks });
       }
     }
   }
-  return { role: "user", content };
+
+  return messages;
 }
