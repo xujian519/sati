@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { BackgroundTaskRuntime } from "../../src/task/index.js";
 
+const hold = (s: number) => `node -e "setTimeout(()=>{},${s * 1000})"`;
+
 test("C5.RT.1 start() spawns a real shell command and reports completed", async () => {
   const runtime = new BackgroundTaskRuntime();
-  const task = await runtime.start({ command: "echo hello-bg && sleep 0.05", cwd: process.cwd() });
+  const task = await runtime.start({ command: `echo hello-bg && ${hold(0.05)}`, cwd: process.cwd() });
   assert.equal(task.status, "running");
   assert.ok(task.taskId);
   assert.ok(task.pid);
@@ -18,7 +20,7 @@ test("C5.RT.1 start() spawns a real shell command and reports completed", async 
 
 test("C5.RT.2 stop() issues SIGTERM and flips status to cancelled", async () => {
   const runtime = new BackgroundTaskRuntime();
-  const task = await runtime.start({ command: "sleep 5", cwd: process.cwd() });
+  const task = await runtime.start({ command: hold(5), cwd: process.cwd() });
   await runtime.stop(task.taskId, { graceMs: 200 });
   const final = runtime.get(task.taskId)!;
   assert.equal(final.status, "cancelled");
@@ -50,8 +52,8 @@ test("C5.RT.4 list() filters by agentId / status / kind", async () => {
 
 test("C5.RT.5 killForAgent() stops only that agent's running tasks", async () => {
   const runtime = new BackgroundTaskRuntime();
-  const a = await runtime.start({ command: "sleep 5", cwd: process.cwd(), agentId: "alpha" });
-  const b = await runtime.start({ command: "sleep 5", cwd: process.cwd(), agentId: "beta" });
+  const a = await runtime.start({ command: hold(5), cwd: process.cwd(), agentId: "alpha" });
+  const b = await runtime.start({ command: hold(5), cwd: process.cwd(), agentId: "beta" });
   await runtime.killForAgent("alpha");
   assert.equal(runtime.get(a.taskId)!.status, "cancelled");
   assert.equal(runtime.get(b.taskId)!.status, "running");
@@ -60,8 +62,8 @@ test("C5.RT.5 killForAgent() stops only that agent's running tasks", async () =>
 
 test("C5.RT.6 killAll() stops every running task (SessionRouter onSessionEnd)", async () => {
   const runtime = new BackgroundTaskRuntime();
-  const a = await runtime.start({ command: "sleep 5", cwd: process.cwd() });
-  const b = await runtime.start({ command: "sleep 5", cwd: process.cwd() });
+  const a = await runtime.start({ command: hold(5), cwd: process.cwd() });
+  const b = await runtime.start({ command: hold(5), cwd: process.cwd() });
   await runtime.killAll();
   assert.equal(runtime.get(a.taskId)!.status, "cancelled");
   assert.equal(runtime.get(b.taskId)!.status, "cancelled");
@@ -79,7 +81,7 @@ test("C5.RT.7 maxTasks throws when exceeded", async () => {
 test("C5.RT.8 getOutput supports incremental polling", async () => {
   const runtime = new BackgroundTaskRuntime();
   const task = await runtime.start({
-    command: "for i in 1 2 3; do echo line$i; done",
+    command: "echo line1 && echo line2 && echo line3",
     cwd: process.cwd(),
   });
   await runtime.waitFor(task.taskId);

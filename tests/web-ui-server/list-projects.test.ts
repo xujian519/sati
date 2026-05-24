@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { listWebProjects, describeWebProject } from "../../src/web/server/listProjects.js";
 import { createCollisionResistantProjectId, createProjectId } from "../../src/pilot/index.js";
+import { sanitizeSessionIdForPath } from "../../src/session/storage/ProjectSessionStorage.js";
 
 test("listWebProjects always includes the default project root", async () => {
   const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-listp-"));
@@ -35,7 +36,8 @@ test("listWebProjects surfaces session counts when chats exist", async () => {
     createdAt: "2026-01-01T00:00:00.000Z",
     messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
   };
-  writeFileSync(join(chatDir, "web:demo.jsonl"), JSON.stringify(session) + "\n");
+  const safeSessionFile = sanitizeSessionIdForPath("web:demo");
+  writeFileSync(join(chatDir, `${safeSessionFile}.jsonl`), JSON.stringify(session) + "\n");
   try {
     const result = await listWebProjects({ pilotHome, defaultProjectRoot: projectRoot });
     const found = result.projects.find((p) => p.fullPath === projectRoot);
@@ -84,7 +86,8 @@ test("listWebProjects prefers .cwd marker when resolving a project id", async ()
     createdAt: "2026-01-01T00:00:00.000Z",
     messages: [{ role: "user", content: [{ type: "text", text: "marker" }] }],
   };
-  writeFileSync(join(chatDir, "web:opaque-marker.jsonl"), JSON.stringify(session) + "\n");
+  const safeMarkerFile = sanitizeSessionIdForPath("web:opaque-marker");
+  writeFileSync(join(chatDir, `${safeMarkerFile}.jsonl`), JSON.stringify(session) + "\n");
   try {
     const result = await listWebProjects({ pilotHome, defaultProjectRoot: workspace });
     const found = result.projects.find((p) => p.fullPath === workspace);

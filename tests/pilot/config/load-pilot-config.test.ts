@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   createPilotConfigStore,
   loadPilotConfig,
@@ -239,13 +239,13 @@ test("loads optional agent subagent timeout config", () => {
 });
 
 test("derives project chat directory under PilotHome", () => {
-  const pilotHome = "/tmp/pilot-home";
+  const pilotHome = resolve("/tmp/pilot-home");
   const first = getPilotProjectChatDir("/repo/project", pilotHome);
   const second = getPilotProjectChatDir("/repo/project", pilotHome);
   const other = getPilotProjectChatDir("/repo/other", pilotHome);
 
   assert.equal(first, second);
-  assert.equal(first, "/tmp/pilot-home/projects/repo-project/chats");
+  assert.equal(first, resolve(pilotHome, "projects", "repo-project", "chats"));
   assert.notEqual(first, other);
 });
 
