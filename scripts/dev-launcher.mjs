@@ -9,26 +9,43 @@
  * occupying 18789) no longer breaks `npm run dev` — the launcher just slides
  * over to 3002 / 18790 / etc. and prints the resolved map up top.
  *
- * Defaults can be overridden via env:
- *   SERVER_PORT_BASE        (default 3001)
- *   PILOTDECK_GATEWAY_PORT_BASE (default 18789)
- *   VITE_PORT_BASE          (default 5173)
+ * Port resolution priority (highest wins):
+ *   SERVER_PORT / VITE_PORT (env hard-pin, skips probing)
+ *   > SERVER_PORT_BASE / VITE_PORT_BASE (env base override)
+ *   > webui.runtime.serverPort / vitePort (from ~/.pilotdeck/pilotdeck.yaml)
+ *   > 3001 / 5173 (hardcoded defaults)
  *
  * Hard-pinned ports still win — if SERVER_PORT / PILOTDECK_GATEWAY_PORT /
  * VITE_PORT are already exported the launcher trusts them and skips probing
  * (so prod-style setups don't accidentally slide).
  */
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { dirname, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parse as parseYaml } from 'yaml';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
 
-const SERVER_PORT_BASE = parsePort(process.env.SERVER_PORT_BASE, 3001);
+function readYamlPortConfig() {
+  const home = process.env.PILOT_HOME || join(homedir(), '.pilotdeck');
+  const configPath = process.env.PILOTDECK_CONFIG_PATH || join(home, 'pilotdeck.yaml');
+  try {
+    const raw = readFileSync(configPath, 'utf8');
+    const config = parseYaml(raw);
+    return config?.webui?.runtime ?? {};
+  } catch {
+    return {};
+  }
+}
+
+const yamlRuntime = readYamlPortConfig();
+const SERVER_PORT_BASE = parsePort(process.env.SERVER_PORT_BASE, yamlRuntime.serverPort ?? 3001);
 const GATEWAY_PORT_BASE = parsePort(process.env.PILOTDECK_GATEWAY_PORT_BASE, 18789);
-const VITE_PORT_BASE = parsePort(process.env.VITE_PORT_BASE, 5173);
+const VITE_PORT_BASE = parsePort(process.env.VITE_PORT_BASE, yamlRuntime.vitePort ?? 5173);
 
 const MAX_PORT_TRIES = 20;
 
