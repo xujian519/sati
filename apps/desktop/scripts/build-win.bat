@@ -11,6 +11,7 @@ set "DESKTOP_DIR=%~dp0..\"
 set "UI_DIR=%REPO_ROOT%ui"
 set "MEMORY_DIR=%REPO_ROOT%edgeclaw-memory-core"
 set "RESOURCES=%DESKTOP_DIR%resources"
+
 set SKIP_INSTALL=0
 set SKIP_BUILD=0
 set X64_ONLY=0
@@ -42,7 +43,7 @@ if %SKIP_INSTALL%==0 (
     echo.
     echo [2] Installing npm dependencies...
     cd /d "%REPO_ROOT%"
-    call npm install
+    call npm install --ignore-scripts
     if errorlevel 1 (
         echo ERROR: npm install failed
         exit /b 1
@@ -55,20 +56,8 @@ if %SKIP_INSTALL%==0 (
     )
     echo OK
 ) else (
-    echo [2] Skipping npm install - skip-install flag
+    echo [2] Skipping npm install (--skip-install)
 )
-
-REM --- Rebuild native modules for bundled Node v22 (must match node-bin) ---
-echo.
-echo [2b] Rebuilding better-sqlite3 for bundled Node...
-set "PATH=%RESOURCES%\node-bin;%PATH%"
-cd /d "%REPO_ROOT%"
-call npm rebuild better-sqlite3
-if errorlevel 1 (
-    echo ERROR: better-sqlite3 rebuild failed
-    exit /b 1
-)
-echo OK
 
 REM --- Step 3: Download Node.js for Windows ---
 if not exist "%RESOURCES%\node-bin\node.exe" (
@@ -105,7 +94,7 @@ if not exist "%RESOURCES%\bun-bin\bun.exe" (
 REM --- Step 5: Build pilotdeckui ---
 if %SKIP_BUILD%==0 (
     echo.
-    echo [5] Building pilotdeckui - vite...
+    echo [5] Building pilotdeckui (vite)...
     cd /d "%UI_DIR%"
     call npx vite build
     if errorlevel 1 (
@@ -114,7 +103,7 @@ if %SKIP_BUILD%==0 (
     )
     echo OK
 ) else (
-    echo [5] Skipping builds - skip-build flag
+    echo [5] Skipping builds (--skip-build)
     goto :skip_builds
 )
 
@@ -179,7 +168,7 @@ set "BUILD_DATE=%date:~0,4%-%date:~5,2%-%date:~8,2%"
 
 mkdir "%DESKTOP_DIR%dist" 2>nul
 echo {"version":"%VERSION%","gitSha":"%GIT_SHA%","gitFullSha":"%GIT_FULL_SHA%","gitBranch":"%GIT_BRANCH%","buildDate":"%BUILD_DATE%","mode":"win-build"} > "%DESKTOP_DIR%dist\build-info.json"
-echo OK: v%VERSION% sha %GIT_SHA%
+echo OK: v%VERSION% (%GIT_SHA%)
 
 REM --- Step 9: Compile desktop TypeScript ---
 echo.

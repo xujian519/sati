@@ -26,14 +26,16 @@ test("C4.F3 createBackup: lazy mkdir + copy + preserve mode", async (t) => {
   const ws = await createPilotDeckTempWorkspace({ "src/foo.ts": "hello" });
   t.after(() => ws.cleanup());
   const file = path.join(ws.cwd, "src/foo.ts");
-  await fs.chmod(file, 0o640);
+  if (process.platform !== "win32") await fs.chmod(file, 0o640);
   const backupDir = path.join(ws.cwd, "backups");
   const result = await createBackup({ filePath: file, version: 1, backupDir });
   assert.notEqual(result.backup.backupFileName, null);
   const backupPath = path.join(backupDir, result.backup.backupFileName!);
   assert.equal(await fs.readFile(backupPath, "utf8"), "hello");
-  const stat = await fs.stat(backupPath);
-  assert.equal(stat.mode & 0o777, 0o640);
+  if (process.platform !== "win32") {
+    const stat = await fs.stat(backupPath);
+    assert.equal(stat.mode & 0o777, 0o640);
+  }
 });
 
 test("C4.F3 createBackup: oversize → null backup with oversize flag", async (t) => {
@@ -80,7 +82,7 @@ test("C4.F9+F10 restoreBackup: copy backup back, restore mode", async (t) => {
   const backupDir = path.join(ws.cwd, "backups");
   const created = await createBackup({ filePath: file, version: 1, backupDir });
   await fs.writeFile(file, "v2-content");
-  await fs.chmod(file, 0o600);
+  if (process.platform !== "win32") await fs.chmod(file, 0o600);
   const result = await restoreBackup({
     filePath: file,
     backup: { ...created.backup, mode: 0o644 },
@@ -88,8 +90,10 @@ test("C4.F9+F10 restoreBackup: copy backup back, restore mode", async (t) => {
   });
   assert.equal(result.outcome, "restored");
   assert.equal(await fs.readFile(file, "utf8"), "v1-content");
-  const stat = await fs.stat(file);
-  assert.equal(stat.mode & 0o777, 0o644);
+  if (process.platform !== "win32") {
+    const stat = await fs.stat(file);
+    assert.equal(stat.mode & 0o777, 0o644);
+  }
 });
 
 test("C4.F13 restoreBackup: missing backup file is gracefully reported", async (t) => {

@@ -8,19 +8,26 @@ import {
 
 test("sanitizeSessionIdForPath replaces forward slashes in TUI sessionKey", () => {
   const result = sanitizeSessionIdForPath("tui:project=/Users/foo/work/repo:default");
-  assert.equal(result, "tui:project=-Users-foo-work-repo:default");
+  const expected = process.platform === "win32"
+    ? "tui-project=-Users-foo-work-repo-default"
+    : "tui:project=-Users-foo-work-repo:default";
+  assert.equal(result, expected);
   assert.ok(!result.includes("/"), "result must not contain forward slashes");
 });
 
 test("sanitizeSessionIdForPath is idempotent for web session keys without slashes", () => {
   const input = "web:s_abc-123";
-  assert.equal(sanitizeSessionIdForPath(input), input);
+  const expected = process.platform === "win32" ? "web-s_abc-123" : input;
+  assert.equal(sanitizeSessionIdForPath(input), expected);
 });
 
 test("sanitizeSessionIdForPath replaces Windows-style backslashes", () => {
   // In a JS string literal, "C:\\Users\\foo" is the 12-char string `C:\Users\foo`.
   const result = sanitizeSessionIdForPath("tui:project=C:\\Users\\foo:default");
-  assert.equal(result, "tui:project=C:-Users-foo:default");
+  const expected = process.platform === "win32"
+    ? "tui-project=C-Users-foo-default"
+    : "tui:project=C:-Users-foo:default";
+  assert.equal(result, expected);
   assert.ok(!result.includes("\\"), "result must not contain backslashes");
 });
 
@@ -56,14 +63,10 @@ test("createAgentProjectSessionStorage produces a flat transcriptPath for TUI-st
     sessionId: tuiSessionId,
   });
 
-  // The transcript filename must be a single sanitized component sitting
-  // directly under chatDir — never burrowed into nested subdirectories
-  // by path.resolve() interpreting the raw `/` chars as separators.
-  const expectedFilename = "tui:project=-Users-foo-work-repo:default.jsonl";
+  const safeId = sanitizeSessionIdForPath(tuiSessionId);
+  const expectedFilename = `${safeId}.jsonl`;
   assert.equal(storage.transcriptPath, resolve(storage.chatDir, expectedFilename));
 
-  // Defense-in-depth: the relative segment between chatDir and transcriptPath
-  // must contain exactly the filename — no extra path separators.
   const relative = storage.transcriptPath.slice(storage.chatDir.length + 1);
   assert.equal(relative, expectedFilename);
   assert.ok(!relative.includes(sep), "transcriptPath must be flat under chatDir");
@@ -77,7 +80,7 @@ test("createAgentProjectSessionStorage uses sanitized id for per-session subdire
     sessionId: tuiSessionId,
   });
 
-  const safeId = "tui:project=-Users-foo-work-repo:default";
+  const safeId = sanitizeSessionIdForPath(tuiSessionId);
   assert.equal(storage.toolResultsDir, resolve(storage.chatDir, safeId, "tool-results"));
   assert.equal(storage.fileHistoryDir, resolve(storage.chatDir, safeId, "file-history"));
   assert.equal(storage.subagentsDir, resolve(storage.chatDir, safeId, "subagents"));

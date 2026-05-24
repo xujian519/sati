@@ -64,7 +64,6 @@ function bundledBinary(binDir: string, name: string): string {
   return path.join(binDir, name);
 }
 
-/** Directory symlink; Windows uses junction (no admin / Developer Mode). */
 function linkDirectory(link: string, target: string): void {
   if (fsSync.existsSync(link) || !fsSync.existsSync(target)) return;
   if (process.platform === "win32") {
@@ -184,8 +183,25 @@ function processExists(pid: number): boolean {
     return true;
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ESRCH") return false;
+    // On Windows, process.kill(pid, 0) can throw EPERM if the process
+    // exists but belongs to another user — treat as "exists".
+    if (process.platform === "win32" && (err as NodeJS.ErrnoException).code === "EPERM") return true;
     throw err;
   }
+}
+
+function forceKillPid(pid: number): void {
+  try {
+    if (process.platform === "win32") {
+      execSync(`taskkill /F /PID ${pid} /T 2>NUL`, {
+        stdio: "ignore",
+        timeout: 5000,
+        shell: "cmd.exe",
+      });
+    } else {
+      process.kill(pid, "SIGKILL");
+    }
+  } catch { /* ignore */ }
 }
 
 async function waitForProcessExit(pid: number, maxMs: number): Promise<void> {
@@ -214,11 +230,7 @@ async function cleanupStaleOrOrphanPid(): Promise<void> {
   }
   await waitForProcessExit(pid, SHUTDOWN_SIGTERM_WAIT_MS);
   if (processExists(pid)) {
-    try {
-      process.kill(pid, "SIGKILL");
-    } catch {
-      /* ignore */
-    }
+    forceKillPid(pid);
   }
   try {
     await fs.unlink(getPidFilePath());
@@ -393,9 +405,6 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     const tarBin = process.platform === "win32" ? "tar" : "/usr/bin/tar";
     await execFile(tarBin, ["xf", tarball, "-C", destDir], {
       timeout: 180_000,
-      // Don't capture stdout/stderr to memory; tar is intentionally quiet
-      // unless something fails, in which case it writes to stderr and
-      // exits non-zero — execFile rejects with the stderr captured for us.
       maxBuffer: 1024 * 1024,
     });
     await fs.writeFile(marker, expectedMarker);
@@ -515,9 +524,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     // bridges the gap so all ESM resolve calls succeed at runtime.
     const distLink = path.join(runtimeBaseDir, "dist");
     const distTarget = path.join(pilotDeckMainDir, "dist");
-    if (fsSync.existsSync(distTarget) && !fsSync.existsSync(distLink)) {
-      linkDirectory(distLink, distTarget);
-    }
+    linkDirectory(distLink, distTarget);
 
     // edgeclaw-memory-core is a file: dependency in the repo's package.json.
     // The release tar excludes the top-level edgeclaw-memory-core/ (it has
@@ -530,12 +537,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       "edgeclaw-memory-core",
     );
     const memCoreDir = path.join(runtimeBaseDir, "edgeclaw-memory-core");
-    if (
-      fsSync.existsSync(memCoreDir) &&
-      !fsSync.existsSync(memNodeModLink)
-    ) {
-      linkDirectory(memNodeModLink, memCoreDir);
-    }
+    linkDirectory(memNodeModLink, memCoreDir);
 
     // npm hoists shared deps (ws, express, etc.) into the root node_modules/
     // which ends up inside pilotdeck-main-bundle.tar, not pilotdeckui-bundle.tar.
@@ -544,21 +546,14 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     // lets the resolver find hoisted packages after exhausting pilotdeckui's own.
     const hoistedLink = path.join(runtimeBaseDir, "node_modules");
     const hoistedTarget = path.join(pilotDeckMainDir, "node_modules");
-    if (
-      fsSync.existsSync(hoistedTarget) &&
-      !fsSync.existsSync(hoistedLink)
-    ) {
-      linkDirectory(hoistedLink, hoistedTarget);
-    }
+    linkDirectory(hoistedLink, hoistedTarget);
 
     // ui/server/ also imports `../../src/web/server/*.js` etc. In dev
     // mode tsx resolves .js → .ts; in packaged mode we need actual .js
     // files. Point src/ → pilotdeck-main/dist/src/ (compiled output).
     const srcLink = path.join(runtimeBaseDir, "src");
     const srcTarget = path.join(pilotDeckMainDir, "dist", "src");
-    if (fsSync.existsSync(srcTarget) && !fsSync.existsSync(srcLink)) {
-      linkDirectory(srcLink, srcTarget);
-    }
+    linkDirectory(srcLink, srcTarget);
 
     return {
       nodeBin: bundledBinary(path.join(resources, "node-bin"), "node"),
@@ -595,11 +590,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     }
     await waitForProcessExit(pid, ORPHAN_TERM_WAIT_MS);
     if (processExists(pid)) {
-      try {
-        process.kill(pid, "SIGKILL");
-      } catch {
-        /* ignore */
-      }
+      forceKillPid(pid);
     }
   }
 
@@ -652,16 +643,24 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
   private async killOrphanCronDaemonByPgrep(): Promise<void> {
     let out = "";
     try {
-      out = execSync(
-        `/usr/bin/pgrep -f "daemonMain\\(\\['serve'\\]\\)" || true`,
-        { stdio: ["ignore", "pipe", "ignore"], timeout: 3000 },
-      ).toString("utf8");
+      if (process.platform === "win32") {
+        // wmic is universally available on Windows; filter by command line.
+        out = execSync(
+          'wmic process where "CommandLine like \'%daemonMain%serve%\'" get ProcessId /format:list 2>NUL',
+          { stdio: ["ignore", "pipe", "ignore"], timeout: 5000, shell: "cmd.exe" },
+        ).toString("utf8");
+      } else {
+        out = execSync(
+          `/usr/bin/pgrep -f "daemonMain\\(\\['serve'\\]\\)" || true`,
+          { stdio: ["ignore", "pipe", "ignore"], timeout: 3000 },
+        ).toString("utf8");
+      }
     } catch {
       return;
     }
     const pids = out
       .split("\n")
-      .map((s) => Number.parseInt(s.trim(), 10))
+      .map((s) => Number.parseInt(s.replace(/\D/g, ""), 10))
       .filter((n) => Number.isFinite(n) && n > 0 && n !== process.pid);
     for (const pid of pids) {
       await this.killPidGracefully(pid);
@@ -677,25 +676,23 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
 
   private listenerPidForPort(port: number): number | null {
     try {
+      let out: string;
       if (process.platform === "win32") {
-        const out = execSync(`netstat -ano -p tcp | findstr :${port}`, {
+        // netstat -ano gives lines like:  TCP  0.0.0.0:18790  0.0.0.0:0  LISTENING  1234
+        const raw = execSync(`netstat -ano -p TCP`, {
           stdio: ["ignore", "pipe", "ignore"],
-          timeout: 3000,
-          shell: process.env.COMSPEC ?? "cmd.exe",
-        })
-          .toString("utf8")
-          .trim();
-        if (!out) return null;
-        for (const line of out.split("\n")) {
-          if (!line.includes("LISTENING")) continue;
-          const parts = line.trim().split(/\s+/);
-          const pid = Number.parseInt(parts[parts.length - 1] ?? "", 10);
-          if (Number.isFinite(pid) && pid > 0) return pid;
-        }
-        return null;
+          timeout: 5000,
+          shell: "cmd.exe",
+        }).toString("utf8");
+        const line = raw.split("\n").find(
+          (l) => l.includes("LISTENING") && l.includes(`:${port} `),
+        );
+        if (!line) return null;
+        const parts = line.trim().split(/\s+/);
+        const pid = Number.parseInt(parts[parts.length - 1] ?? "", 10);
+        return Number.isFinite(pid) && pid > 0 ? pid : null;
       }
-      // -t = terse (PID only); -i :port -sTCP:LISTEN = TCP LISTEN sockets only.
-      const out = execSync(`/usr/sbin/lsof -nP -t -i :${port} -sTCP:LISTEN`, {
+      out = execSync(`/usr/sbin/lsof -nP -t -i :${port} -sTCP:LISTEN`, {
         stdio: ["ignore", "pipe", "ignore"],
         timeout: 3000,
       })
@@ -993,11 +990,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     }
 
     if (processExists(pid)) {
-      try {
-        process.kill(pid, "SIGKILL");
-      } catch {
-        /* ignore */
-      }
+      forceKillPid(pid);
     }
   }
 
@@ -1070,11 +1063,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     }
 
     if (processExists(pid)) {
-      try {
-        process.kill(pid, "SIGKILL");
-      } catch {
-        /* ignore */
-      }
+      forceKillPid(pid);
     }
   }
 

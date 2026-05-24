@@ -63,7 +63,9 @@ export async function createBackup(
   const backupPath = path.join(options.backupDir, backupFileName);
   await fs.mkdir(options.backupDir, { recursive: true });
   await fs.copyFile(options.filePath, backupPath);
-  await fs.chmod(backupPath, stat.mode & 0o777);
+  if (process.platform !== "win32") {
+    await fs.chmod(backupPath, stat.mode & 0o777);
+  }
 
   return {
     backup: {

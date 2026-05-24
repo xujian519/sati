@@ -47,7 +47,7 @@ export async function restoreBackup(
   }
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.copyFile(backupPath, filePath);
-  if (typeof backup.mode === "number") {
+  if (typeof backup.mode === "number" && process.platform !== "win32") {
     await fs.chmod(filePath, backup.mode & 0o777);
   }
   return { outcome: "restored" };

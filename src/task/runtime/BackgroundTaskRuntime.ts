@@ -16,9 +16,9 @@
  *     hooks the cron-PR coordination notes call for (priority window
  *     200-299, see §6.5.5 step 7 of the deferred-feature guide).
  *
- * Platform support: macOS / Linux only. Windows callers receive
- * `{ status: "failed" }` with a `unsupported_platform` message — we don't
- * silently downgrade.
+ * Platform support: macOS, Linux, and Windows. On Windows, `child.kill()`
+ * maps SIGTERM/SIGKILL to TerminateProcess; `detached` creates a new
+ * console group rather than a Unix process group.
  */
 
 import { type ChildProcess, spawn } from "node:child_process";
@@ -109,37 +109,6 @@ export class BackgroundTaskRuntime {
       throw new Error(
         `BackgroundTaskRuntime: max tasks (${this.options.maxTasks}) exceeded.`,
       );
-    }
-
-    if (process.platform === "win32") {
-      const taskId = randomUUID();
-      const failed: PilotDeckBackgroundBashTask = {
-        taskId,
-        type: "local_bash",
-        agentId: spec.agentId,
-        kind: spec.kind ?? "bash",
-        command: spec.command,
-        cwd: spec.cwd,
-        status: "failed",
-        exitCode: -1,
-        completionStatusSentInAttachment: false,
-        lastReportedTotalLines: 0,
-        isBackgrounded: true,
-        interrupted: false,
-        startedAt: this.options.now(),
-        endedAt: this.options.now(),
-        outputBytes: 0,
-      };
-      const output = new TaskOutputStore({ taskId });
-      output.append(
-        Buffer.from("background tasks are not supported on Windows in this build."),
-      );
-      this.entries.set(taskId, {
-        task: failed,
-        output,
-        done: Promise.resolve(),
-      });
-      return failed;
     }
 
     const taskId = randomUUID();

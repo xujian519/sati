@@ -61,6 +61,13 @@ export async function listWebProjects(
     projects.push(summary);
   }
 
+  // Always include the default project root, even if it has no chats yet.
+  const normalizedDefault = resolve(options.defaultProjectRoot);
+  if (!seen.has(normalizedDefault)) {
+    const summary = await summarizeProject(normalizedDefault, options);
+    projects.push(summary);
+  }
+
   projects.sort((left, right) => (right.lastActivity ?? 0) - (left.lastActivity ?? 0));
   return { projects };
 }
@@ -125,17 +132,30 @@ async function tryDecodeProjectId(id: string): Promise<string | null> {
   // to the original id (this catches names that happen to share an
   // encoded form but live on different paths).
   const segments = id.split("-");
+  const isWindows = process.platform === "win32";
   for (let firstSlash = 0; firstSlash < segments.length; firstSlash += 1) {
-    const candidate = "/" + segments.slice(firstSlash).join("/");
-    const reEncoded = createProjectId(candidate);
-    if (reEncoded !== id) continue;
-    try {
-      const stats = await stat(candidate);
-      if (stats.isDirectory()) {
-        return candidate;
+    const candidates: string[] = [];
+    if (isWindows) {
+      // On Windows, try common drive letter prefixes (e.g. C:\Users\...)
+      const rest = segments.slice(firstSlash).join("\\");
+      for (const drive of ["C", "D", "E"]) {
+        candidates.push(`${drive}:\\${rest}`);
       }
-    } catch {
-      // ignore — try next candidate
+    }
+    // Always try Unix-style as well (works on macOS/Linux, harmless on Windows)
+    candidates.push("/" + segments.slice(firstSlash).join("/"));
+
+    for (const candidate of candidates) {
+      const reEncoded = createProjectId(candidate);
+      if (reEncoded !== id) continue;
+      try {
+        const stats = await stat(candidate);
+        if (stats.isDirectory()) {
+          return candidate;
+        }
+      } catch {
+        // ignore — try next candidate
+      }
     }
   }
   return null;

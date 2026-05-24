@@ -7,7 +7,8 @@ import { createApplyHandler } from "../../src/always-on/runtime/createApplyHandl
 import { SessionConfigOverrides } from "../../src/always-on/runtime/SessionConfigOverrides.js";
 
 function createProjectId(projectRoot: string): string {
-  return resolve(projectRoot).replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "project";
+  const normalized = resolve(projectRoot).replace(/\\/g, "/").replace(/^[A-Za-z]:/, "");
+  return normalized.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "project";
 }
 
 function makeTestEnv() {
