@@ -51,7 +51,10 @@ function applyDockIcon(): void {
 
 const isDev = !app.isPackaged;
 const devRepoRoot = path.resolve(__dirname, "..", "..", "..");
-const configPath = path.join(os.homedir(), ".pilotdeck", "pilotdeck.yaml");
+const configPath = path.join(
+  process.env.PILOT_HOME || path.join(os.homedir(), ".pilotdeck"),
+  "pilotdeck.yaml",
+);
 
 const serverManager = new ServerManager({
   dev: isDev,
@@ -566,7 +569,7 @@ app.on("activate", () => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (process.platform !== "darwin" && mainWindow !== null) app.quit();
 });
 
 app.on("web-contents-created", (_event, contents) => {

@@ -56,7 +56,7 @@ function writeConfig(
       }
     }
 
-    const configDir = path.join(os.homedir(), ".pilotdeck");
+    const configDir = process.env.PILOT_HOME || path.join(os.homedir(), ".pilotdeck");
     const configPath = path.join(configDir, "pilotdeck.yaml");
     fs.mkdirSync(configDir, { recursive: true });
     fs.writeFileSync(configPath, buildConfigYaml(payload), { mode: 0o600 });
