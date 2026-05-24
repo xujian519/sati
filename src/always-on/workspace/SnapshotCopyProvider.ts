@@ -130,14 +130,28 @@ async function pruneIgnored(target: string, ignores: Set<string>): Promise<void>
 }
 
 async function estimateSize(root: string, ignores: Set<string>): Promise<number> {
-  // Quick best-effort estimate; if `du` fails fall back to 0 (caller still
-  // copies but skips the cap). Real file traversal is acceptable but slower.
+  // Quick best-effort estimate; if the OS command fails fall back to 0
+  // (caller still copies but skips the cap).
+  if (platform() === "win32") {
+    return estimateSizeWindows(root, ignores);
+  }
   return runCommand("du", ["-sk", root])
     .then((result) => {
       if (result.exitCode !== 0) return 0;
       const tokens = result.stdout.trim().split(/\s+/);
       const kb = Number.parseInt(tokens[0], 10);
       return Number.isFinite(kb) ? kb * 1024 : 0;
+    })
+    .catch(() => 0);
+}
+
+async function estimateSizeWindows(root: string, _ignores: Set<string>): Promise<number> {
+  const script = `(Get-ChildItem -Path '${root.replace(/'/g, "''")}' -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum`;
+  return runCommand("powershell", ["-NoProfile", "-Command", script])
+    .then((result) => {
+      if (result.exitCode !== 0) return 0;
+      const bytes = Number.parseInt(result.stdout.trim(), 10);
+      return Number.isFinite(bytes) ? bytes : 0;
     })
     .catch(() => 0);
 }

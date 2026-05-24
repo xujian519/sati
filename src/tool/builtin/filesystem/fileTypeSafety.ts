@@ -79,12 +79,37 @@ export function hasBinaryExtension(filePath: string): boolean {
   return BINARY_EXTENSIONS.has(extension) && !isImagePath(filePath) && !isPdfPath(filePath);
 }
 
+const WINDOWS_DEVICE_NAMES = new Set([
+  "CON", "PRN", "AUX", "NUL",
+  "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+  "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+]);
+
 export function isBlockedDevicePath(filePath: string): boolean {
   if (BLOCKED_DEVICE_PATHS.has(filePath)) {
     return true;
   }
-  return filePath.startsWith("/proc/")
-    && (filePath.endsWith("/fd/0") || filePath.endsWith("/fd/1") || filePath.endsWith("/fd/2"));
+  if (filePath.startsWith("/proc/")
+    && (filePath.endsWith("/fd/0") || filePath.endsWith("/fd/1") || filePath.endsWith("/fd/2"))) {
+    return true;
+  }
+
+  // Windows device paths: \\.\PhysicalDrive0, \\.\C:, etc.
+  if (filePath.startsWith("\\\\.\\") || filePath.startsWith("\\\\?\\")) {
+    const device = filePath.slice(4).split(/[\\/]/)[0]?.toUpperCase() ?? "";
+    if (/^PHYSICALDRIVE\d+$/.test(device) || /^[A-Z]:$/.test(device) || WINDOWS_DEVICE_NAMES.has(device)) {
+      return true;
+    }
+  }
+
+  // Bare device names (e.g. "CON", "NUL") — strip any extension
+  const basename = path.basename(filePath);
+  const nameWithoutExt = basename.replace(/\.[^.]*$/, "").toUpperCase();
+  if (WINDOWS_DEVICE_NAMES.has(nameWithoutExt)) {
+    return true;
+  }
+
+  return false;
 }
 
 export function parsePdfPageRange(value: string): ParsedPdfPageRange | undefined {
