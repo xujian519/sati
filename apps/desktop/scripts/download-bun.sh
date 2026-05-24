@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Download Bun runtime for arm64 macOS.
-# Bun is needed because claude-code-main is a Bun-native project (uses
-# bun-only APIs, .tsx imports without compilation, etc.). We can't compile it
-# with `bun build --compile` either due to node:sqlite limitations.
+# Bun is needed for Bun-native dependencies that use bun-only APIs,
+# .tsx imports without compilation, etc.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

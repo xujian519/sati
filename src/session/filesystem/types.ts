@@ -1,6 +1,6 @@
 /**
- * Session file-history (C4) protocol types. Mirrors the legacy
- * `third-party/claude-code-main/src/utils/fileHistory.ts` shapes (F1-F14).
+ * Session file-history (C4) protocol types. Mirrors the legacy upstream
+ * file-history shapes (F1-F14).
  *
  * `FileHistoryBackup`
  *   - `backupFileName: string | null` — null marker means "file did not

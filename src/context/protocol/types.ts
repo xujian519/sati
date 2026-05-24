@@ -52,9 +52,9 @@ export type ContextPrepareInput = {
   additionalWorkingDirectories: string[];
   messages: CanonicalMessage[];
   tools: CanonicalToolSchema[];
-  /** Optional override (Claude Code `customSystemPrompt`). */
+  /** Optional full system-prompt override. */
   customSystemPrompt?: string;
-  /** Optional addendum (Claude Code `appendSystemPrompt`). */
+  /** Optional system-prompt addendum appended after the base prompt. */
   appendSystemPrompt?: string;
   /** Maximum messages retained when no compact boundary is in play. */
   maxMessages?: number;

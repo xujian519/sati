@@ -1,7 +1,7 @@
 /**
  * `BackgroundTaskRuntime` — the central registry + spawn / kill orchestrator
- * for C5 background bash tasks (§6.5). Mirrors legacy
- * `third-party/claude-code-main/src/tasks/LocalShellTask` (T1-T11).
+ * for C5 background bash tasks (§6.5). Mirrors the legacy upstream
+ * LocalShellTask behaviour (T1-T11).
  *
  * Process model:
  *   - `start(spec)` spawns a *detached* child via `spawn(command, { shell:

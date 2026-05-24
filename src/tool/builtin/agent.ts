@@ -25,8 +25,8 @@ import type {
  *      call against the simple `BUILTIN_SUBAGENTS` presets so existing tests
  *      stay green.
  *
- * Mirrors legacy `third-party/claude-code-main/src/tools/AgentTool/AgentTool.ts`
- * input schema (description / prompt / subagent_type) and the 5-field
+ * Mirrors the legacy upstream agent tool input schema (description / prompt /
+ * subagent_type) and the 5-field
  * `Scope/Result/Key files/Files changed/Issues` output contract.
  */
 
@@ -107,7 +107,7 @@ export type CreateAgentToolOptions = {
 };
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
-const DEFAULT_PROVIDER_FALLBACK = "edgeclaw";
+const DEFAULT_PROVIDER_FALLBACK = "pilotdeck";
 const DEFAULT_MODEL_FALLBACK = "moonshotai/kimi-k2.6";
 const DEFAULT_SUBAGENT_TIMEOUT_MS = 60 * 60_000;
 const PUBLIC_SUBAGENT_TYPES = ["general-purpose", "explore", "plan"] as const;

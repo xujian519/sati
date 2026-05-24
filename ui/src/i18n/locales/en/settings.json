@@ -459,7 +459,7 @@
       "description": "Codex supports stdio-based MCP servers. You can add servers that extend Codex's capabilities with additional tools and resources."
     }
   },
-  "edgeClawConfig": {
+  "pilotDeckConfig": {
     "loading": "Loading PilotDeck config...",
     "header": {
       "configFile": "Config file",
@@ -780,7 +780,7 @@
   },
   "pluginSettings": {
     "title": "Plugins",
-    "description": "Extend the interface with custom plugins. Install from git or drop a folder in ~/.claude-code-ui/plugins/",
+    "description": "Extend the interface with custom plugins. Install from git or drop a folder in ~/.pilotdeck/plugins/",
     "installPlaceholder": "https://github.com/user/my-plugin",
     "installButton": "Install",
     "installing": "Installing…",

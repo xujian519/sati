@@ -7,7 +7,7 @@ export type FormatValidationErrorOptions = {
 
 /**
  * Format validation issues into a human-readable (and LLM-friendly) error
- * message. Modelled after edgeclaw-opc's `formatZodValidationError` so the
+ * message. Formats missing, mistyped, and unexpected parameters so the
  * model sees exactly which parameters are missing, have the wrong type, or
  * are unexpected — enabling effective self-correction on the next turn.
  */

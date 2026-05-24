@@ -192,8 +192,8 @@ async function waitForLocalPort(port, host = '127.0.0.1', timeoutMs = 4000) {
 }
 
 async function ensurePilotDeckProxyRunning() {
-    // The legacy in-process proxy bootstrap was tied to the bundled claude-code-main /
-    // CCR pipeline that we removed during the PilotDeck-only migration.
+    // The legacy in-process proxy bootstrap was tied to a bundled CCR pipeline
+    // that we removed during the PilotDeck-only migration.
     // Model traffic now flows through `src/gateway` directly. Returning
     // immediately keeps any callers happy without touching dead code.
     return;
@@ -1923,11 +1923,8 @@ function handleChatConnection(ws, request) {
     const userId = request?.user?.id ?? request?.user?.userId ?? null;
     ws.__pilotdeckUserId = userId;
     connectedClients.add(ws);
-    // NOTE: the legacy claude-code-main cron-daemon client lease was retired
-    // here. PilotDeck's cron runtime now lives inside `pilotdeck server`
-    // (src/cron via createCronRuntime), so multi-client lease tracking
-    // through `~/.claude/cron-daemon.sock` is no longer needed and was
-    // only producing ENOENT log spam against a daemon that never existed.
+    // PilotDeck's cron runtime lives inside `pilotdeck server`
+    // (src/cron via createCronRuntime); no legacy daemon lease needed.
     let cleanedUp = false;
 
     // Wrap WebSocket with writer for consistent interface with SSEStreamWriter
@@ -2957,7 +2954,7 @@ async function ensureLocalUserWhenAuthDisabled() {
     }
     const passwordHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
     userDb.createUser('local', passwordHash);
-    console.log(`${c.info('[INFO]')} Web UI login is disabled (default). Using built-in user. Set CLOUDCLI_DISABLE_LOCAL_AUTH=0 to require username/password.`);
+    console.log(`${c.info('[INFO]')} Web UI login is disabled (default). Using built-in user. Set PILOTDECK_DISABLE_LOCAL_AUTH=0 to require username/password.`);
 }
 
 // Initialize database and start server
@@ -3057,7 +3054,6 @@ async function startServer() {
                         stopChromeHealthCheck();
                         shutdownGlobalChrome();
                     } catch { /* Chrome may not have been started */ }
-                    // Legacy claude-code-main cron-daemon shutdown removed —
                     // PilotDeck cron is owned by `pilotdeck server` and shuts
                     // down with it; ui/server never spawns its own daemon.
                 } finally {

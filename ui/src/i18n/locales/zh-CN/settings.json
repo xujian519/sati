@@ -459,7 +459,7 @@
       "description": "Codex 支持基于 stdio 的 MCP 服务器。您可以添加服务器，通过额外的工具和资源来扩展 Codex 的功能。"
     }
   },
-  "edgeClawConfig": {
+  "pilotDeckConfig": {
     "loading": "正在加载 PilotDeck 配置...",
     "header": {
       "configFile": "配置文件",
@@ -780,7 +780,7 @@
   },
   "pluginSettings": {
     "title": "插件",
-    "description": "通过自定义插件扩展界面。从 git 安装或直接将文件夹放入 ~/.claude-code-ui/plugins/",
+    "description": "通过自定义插件扩展界面。从 git 安装或直接将文件夹放入 ~/.pilotdeck/plugins/",
     "installPlaceholder": "https://github.com/user/my-plugin",
     "installButton": "安装",
     "installing": "安装中…",

@@ -5,12 +5,10 @@ import os from 'os';
 import { spawn } from 'child_process';
 import { sendCronDaemonRequest } from './cron-daemon-owner.js';
 
-// Cron daemon entry point. The PilotDeck-only migration removed the
-// bundled claude-code-main path resolver, so the cron daemon now expects
-// its launcher script to be discoverable on PATH or supplied via
-// PILOTDECK_CRON_DAEMON_BIN. Returning `null` falls back to the in-tree
-// fallback path that already handles missing binaries gracefully.
-function resolveClaudeCodeMainRoot() {
+// Cron daemon entry point. The launcher script is discoverable on PATH
+// or supplied via PILOTDECK_CRON_DAEMON_BIN. Returning `null` falls back
+// to the in-tree fallback path that handles missing binaries gracefully.
+function resolvePilotDeckMainRoot() {
     return null;
 }
 
@@ -20,12 +18,12 @@ const START_LOCK_STALE_MS = 30000;
 const CCR_SENTINEL = 'http://ccr.local';
 const CCR_DAEMON_FETCH_INTERCEPTOR = 'CCR_DAEMON_FETCH_INTERCEPTOR';
 
-function getClaudeConfigHomeDir() {
-  return process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+function getPilotDeckConfigHomeDir() {
+  return process.env.PILOTDECK_CONFIG_DIR || process.env.PILOT_HOME || path.join(os.homedir(), '.pilotdeck');
 }
 
 function getCronDaemonStartLockPath() {
-  return path.join(getClaudeConfigHomeDir(), 'cron-daemon', 'start.lock');
+  return path.join(getPilotDeckConfigHomeDir(), 'cron-daemon', 'start.lock');
 }
 
 /**
@@ -83,13 +81,13 @@ export function buildCronDaemonEnv(baseEnv = process.env) {
 }
 
 export function buildCronDaemonSpawnCommand({
-  resolveClaudeCodeMainRootFn = resolveClaudeCodeMainRoot,
-  cliPath = process.env.CLAUDE_CLI_PATH
+  resolvePilotDeckMainRootFn = resolvePilotDeckMainRoot,
+  cliPath = process.env.PILOTDECK_CLI_PATH
 } = {}) {
-  const localClaudeCodeMainRoot = resolveClaudeCodeMainRootFn();
-  if (localClaudeCodeMainRoot) {
-    const preloadPath = path.join(localClaudeCodeMainRoot, 'preload.ts');
-    const daemonMainPath = path.join(localClaudeCodeMainRoot, 'src', 'daemon', 'main.ts');
+  const localMainRoot = resolvePilotDeckMainRootFn();
+  if (localMainRoot) {
+    const preloadPath = path.join(localMainRoot, 'preload.ts');
+    const daemonMainPath = path.join(localMainRoot, 'src', 'daemon', 'main.ts');
     return {
       command: 'bun',
       args: [
@@ -102,7 +100,7 @@ export function buildCronDaemonSpawnCommand({
   }
 
   return {
-    command: typeof cliPath === 'string' && cliPath.trim().length > 0 ? cliPath.trim() : 'claude',
+    command: typeof cliPath === 'string' && cliPath.trim().length > 0 ? cliPath.trim() : 'pilotdeck',
     args: ['daemon', 'serve']
   };
 }
@@ -151,7 +149,7 @@ export function startCronDaemonDetached({
   const { command, args } = buildCronDaemonSpawnCommandFn();
   const { fd, logPath } = openLogFdFn();
   // Detach so multiple ui servers (e.g. dev + PilotDeck Desktop side-by-side)
-  // can share state through ~/.claude/cron-daemon.sock, but pipe stdout/stderr
+  // can share state through ~/.pilotdeck/cron-daemon.sock, but pipe stdout/stderr
   // into a real log file instead of /dev/null so the daemon is debuggable
   // post-mortem. Stdin stays 'ignore' (the daemon never reads input).
   const stdio = fd === null ? 'ignore' : ['ignore', fd, fd];

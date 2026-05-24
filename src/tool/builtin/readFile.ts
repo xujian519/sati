@@ -635,7 +635,7 @@ async function validateAndRepairImage(
  * separate "image token" cap because multimodal LLMs price images by
  * dimensions or fixed tile cost, not by base64 length. A `bytes / 6`
  * heuristic on top of that just rejects perfectly cheap images (e.g. a
- * 250 KB JPEG that Claude charges ~700 tokens for).
+ * 250 KB JPEG that the model charges ~700 tokens for).
  *
  * Cascade: pass 1 = format-appropriate 1600px / quality 80, pass 2 =
  * 1200px JPEG quality 55, pass 3 = 800px JPEG quality 40. Only after all

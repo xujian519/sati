@@ -52,7 +52,7 @@ function classifySemanticError(
   status: number | undefined,
   protocol: ModelProtocol,
 ): CanonicalModelErrorCode | undefined {
-  // Legacy claude-code matches "prompt is too long" case-insensitively for Anthropic and Vertex.
+  // Legacy upstream matches "prompt is too long" case-insensitively for Anthropic and Vertex.
   if (PROMPT_TOO_LONG_ANTHROPIC_PATTERN.test(message)) {
     return "prompt_too_long";
   }

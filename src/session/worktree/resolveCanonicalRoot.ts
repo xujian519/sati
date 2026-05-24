@@ -13,8 +13,8 @@ const cache = new LRUMap<string, string>(50);
  * follows the chain to the main repo:
  *   `.git` file → gitdir → commondir → realpath validation → main repo root
  *
- * Behaviour mirrors `third-party/claude-code-main/src/utils/git.ts:123-183`,
- * including the SECURITY validations (line 142-170 of legacy):
+ * Behaviour mirrors the legacy upstream git worktree resolver,
+ * including the SECURITY validations:
  *   1. layout check: `dirname(worktreeGitDir)` must equal
  *      `<commonDir>/worktrees`. Without this, a malicious repo could write a
  *      `.git` file pointing commondir at the victim's trusted dir.
@@ -100,7 +100,7 @@ async function resolveImpl(gitRoot: string): Promise<string> {
 
   // Bare-repo worktree: the common dir is not inside a working directory.
   // Use the common dir itself as the stable identity.
-  // Legacy: `anthropics/claude-code#27994`.
+  // Bare-repo worktree identity: use the common dir when it is not a `.git` directory.
   if (basename(commonDir) !== ".git") {
     return canonicalize(commonDir);
   }

@@ -16,7 +16,7 @@
  *      consumed-and-rejected and an `elicitation_cancelled` event is
  *      emitted to clean up the host UI.
  *
- * Behaviour parity with `third-party/claude-code-main/src/services/sdk/elicitationHandler.ts`:
+ * Behaviour parity with the legacy upstream elicitation handler:
  *   - Single round-trip per `askUser` invocation (E1).
  *   - User can decline → returns `{ type: "cancelled", reason }` (E2).
  *   - Free-form per-question annotations carried verbatim (E3).

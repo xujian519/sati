@@ -13,8 +13,8 @@
  *                      <dir>/.pilotdeck/rules/*.md
  *   5. Local       — <dir>/PILOTDECK.local.md  (private, not committed)
  *
- * Design mirrors Claude Code's `claudemd.ts` discovery, adapted to PilotDeck
- * path conventions (~/.pilotdeck/, .pilotdeck/).
+ * Design mirrors the legacy upstream instruction-file discovery, adapted to
+ * PilotDeck path conventions (~/.pilotdeck/, .pilotdeck/).
  */
 
 import { readFile, readdir } from "node:fs/promises";

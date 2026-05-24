@@ -6,7 +6,7 @@ const PADDING = 10;
 
 /**
  * ANSI-aware truncation to at most MAX_LINES visual lines.
- * Ported from Claude Code's renderTruncatedContent logic.
+ * ANSI-aware multi-line truncation for TUI display.
  *
  * 4-line special case: if the content has exactly MAX_LINES+1 visual lines,
  * show all 4 rather than truncating to 3 (avoids the absurd "3 lines shown,

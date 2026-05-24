@@ -1,6 +1,5 @@
 /**
- * Lightweight HTML fragment validator. Direct port of
- * `third-party/claude-code-main/src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx:validateHtmlPreview`.
+ * Lightweight HTML fragment validator for ask-user HTML previews.
  *
  * Not a parser — HTML5 parsers are error-recovering by spec and accept
  * almost anything. This function checks model intent (did it emit HTML?)

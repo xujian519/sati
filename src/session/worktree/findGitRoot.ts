@@ -8,7 +8,7 @@ const NOT_FOUND = Symbol("findGitRoot.NOT_FOUND");
  * LRU-cached filesystem walk that finds the directory containing `.git`
  * (regular repo: `.git` is a directory; worktree/submodule: `.git` is a file).
  *
- * Behaviour mirrors `third-party/claude-code-main/src/utils/git.ts:27-86`:
+ * Behaviour mirrors the legacy upstream git-root walk:
  *   - walk parent → stat `<dir>/.git`; both file and directory count as a hit
  *   - return path NFC-normalized (`.normalize('NFC')`) so macOS UTF-8 forms fold
  *   - LRU cap 50 entries (cwd → resolved root) to keep hot paths in memory
