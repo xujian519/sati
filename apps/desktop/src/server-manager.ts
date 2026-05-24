@@ -56,6 +56,24 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function bundledBinary(binDir: string, name: string): string {
+  if (process.platform === "win32") {
+    const exePath = path.join(binDir, `${name}.exe`);
+    if (fsSync.existsSync(exePath)) return exePath;
+  }
+  return path.join(binDir, name);
+}
+
+/** Directory symlink; Windows uses junction (no admin / Developer Mode). */
+function linkDirectory(link: string, target: string): void {
+  if (fsSync.existsSync(link) || !fsSync.existsSync(target)) return;
+  if (process.platform === "win32") {
+    fsSync.symlinkSync(target, link, "junction");
+  } else {
+    fsSync.symlinkSync(target, link);
+  }
+}
+
 function getPilotDeckDir(): string {
   return path.join(os.homedir(), ".pilotdeck");
 }
@@ -372,7 +390,8 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     }
     await fs.mkdir(destDir, { recursive: true });
 
-    await execFile("/usr/bin/tar", ["xf", tarball, "-C", destDir], {
+    const tarBin = process.platform === "win32" ? "tar" : "/usr/bin/tar";
+    await execFile(tarBin, ["xf", tarball, "-C", destDir], {
       timeout: 180_000,
       // Don't capture stdout/stderr to memory; tar is intentionally quiet
       // unless something fails, in which case it writes to stderr and
@@ -420,20 +439,12 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       if (!root)
         throw new Error("ServerManager: devRepoRoot is required when dev=true");
       return {
-        nodeBin: path.join(
-          root,
-          "apps",
-          "desktop",
-          "resources",
-          "node-bin",
+        nodeBin: bundledBinary(
+          path.join(root, "apps", "desktop", "resources", "node-bin"),
           "node",
         ),
-        bunBin: path.join(
-          root,
-          "apps",
-          "desktop",
-          "resources",
-          "bun-bin",
+        bunBin: bundledBinary(
+          path.join(root, "apps", "desktop", "resources", "bun-bin"),
           "bun",
         ),
         // Repo UI lives at ui/ (bundle tar extracts as pilotdeckui/ at runtime).
@@ -505,7 +516,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     const distLink = path.join(runtimeBaseDir, "dist");
     const distTarget = path.join(pilotDeckMainDir, "dist");
     if (fsSync.existsSync(distTarget) && !fsSync.existsSync(distLink)) {
-      fsSync.symlinkSync(distTarget, distLink);
+      linkDirectory(distLink, distTarget);
     }
 
     // edgeclaw-memory-core is a file: dependency in the repo's package.json.
@@ -523,7 +534,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       fsSync.existsSync(memCoreDir) &&
       !fsSync.existsSync(memNodeModLink)
     ) {
-      fsSync.symlinkSync(memCoreDir, memNodeModLink);
+      linkDirectory(memNodeModLink, memCoreDir);
     }
 
     // npm hoists shared deps (ws, express, etc.) into the root node_modules/
@@ -537,7 +548,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       fsSync.existsSync(hoistedTarget) &&
       !fsSync.existsSync(hoistedLink)
     ) {
-      fsSync.symlinkSync(hoistedTarget, hoistedLink);
+      linkDirectory(hoistedLink, hoistedTarget);
     }
 
     // ui/server/ also imports `../../src/web/server/*.js` etc. In dev
@@ -546,14 +557,12 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     const srcLink = path.join(runtimeBaseDir, "src");
     const srcTarget = path.join(pilotDeckMainDir, "dist", "src");
     if (fsSync.existsSync(srcTarget) && !fsSync.existsSync(srcLink)) {
-      fsSync.symlinkSync(srcTarget, srcLink);
+      linkDirectory(srcLink, srcTarget);
     }
 
     return {
-      // Native binaries stay under the read-only Resources/ — no need to copy
-      // them out (they're already executable + signed in place).
-      nodeBin: path.join(resources, "node-bin", "node"),
-      bunBin: path.join(resources, "bun-bin", "bun"),
+      nodeBin: bundledBinary(path.join(resources, "node-bin"), "node"),
+      bunBin: bundledBinary(path.join(resources, "bun-bin"), "bun"),
       serverEntry: path.join(pilotDeckUiDir, "server", "index.js"),
       serverCwd: pilotDeckUiDir,
       pilotDeckMainDir,
@@ -668,6 +677,23 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
 
   private listenerPidForPort(port: number): number | null {
     try {
+      if (process.platform === "win32") {
+        const out = execSync(`netstat -ano -p tcp | findstr :${port}`, {
+          stdio: ["ignore", "pipe", "ignore"],
+          timeout: 3000,
+          shell: process.env.COMSPEC ?? "cmd.exe",
+        })
+          .toString("utf8")
+          .trim();
+        if (!out) return null;
+        for (const line of out.split("\n")) {
+          if (!line.includes("LISTENING")) continue;
+          const parts = line.trim().split(/\s+/);
+          const pid = Number.parseInt(parts[parts.length - 1] ?? "", 10);
+          if (Number.isFinite(pid) && pid > 0) return pid;
+        }
+        return null;
+      }
       // -t = terse (PID only); -i :port -sTCP:LISTEN = TCP LISTEN sockets only.
       const out = execSync(`/usr/sbin/lsof -nP -t -i :${port} -sTCP:LISTEN`, {
         stdio: ["ignore", "pipe", "ignore"],
@@ -829,7 +855,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       // Tell pilotdeckui where pilotdeck-main lives
       PILOTDECK_MAIN_DIR: pilotDeckMainDir,
       // Prepend bundled Node + Bun to PATH so any indirect lookups resolve our binaries
-      PATH: `${path.dirname(nodeBin)}:${path.dirname(bunBin)}:${
+      PATH: `${path.dirname(nodeBin)}${path.delimiter}${path.dirname(bunBin)}${path.delimiter}${
         process.env.PATH ?? ""
       }`,
       // Reasoning-friendly default. Anything already present (env passthrough
