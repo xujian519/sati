@@ -399,9 +399,10 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
           limit: input.limit,
           pages: input.pages,
         });
-        if (offset === 1 && input.limit === undefined) {
-          recordWriteSnapshot(context, resolved.absolutePath, await readFile(resolved.absolutePath, "utf8"), fileStat.mtimeMs);
-        }
+        recordWriteSnapshot(
+          context, resolved.absolutePath, await readFile(resolved.absolutePath, "utf8"), fileStat.mtimeMs,
+          { offset: input.offset, limit: input.limit },
+        );
         return {
           content: [{ type: "text", text: numbered }],
           data: {
@@ -427,9 +428,10 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         limit: input.limit,
         pages: input.pages,
       });
-      if (offset === 1 && input.limit === undefined) {
-        recordWriteSnapshot(context, resolved.absolutePath, ranged.content, ranged.mtimeMs);
-      }
+      recordWriteSnapshot(
+        context, resolved.absolutePath, ranged.fullContent, ranged.mtimeMs,
+        { offset: input.offset, limit: input.limit },
+      );
       return {
         content: [{ type: "text", text }],
         data: {

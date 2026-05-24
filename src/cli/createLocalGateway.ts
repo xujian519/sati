@@ -663,6 +663,7 @@ class ProjectRuntimeRegistry {
       storage,
       transcript: storage.transcript,
       initialState: previous.state,
+      seedState: previous.fileState,
     });
     return session;
   }

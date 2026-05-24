@@ -86,6 +86,13 @@ export class AgentLoop {
     this.writeSnapshots = cloneWriteSnapshotMap(seedState?.writeSnapshots);
   }
 
+  snapshotFileState(): AgentLoopSeedState {
+    return {
+      readFileState: cloneReadFileStateMap(this.readFileState),
+      writeSnapshots: cloneWriteSnapshotMap(this.writeSnapshots),
+    };
+  }
+
   async *run(input: AgentLoopInput): AsyncGenerator<AgentEvent, AgentLoopRunResult, unknown> {
     this.applyPermissionOverrides(input.permissionMode, input.permissionRules);
     const startedAt = this.now().toISOString();

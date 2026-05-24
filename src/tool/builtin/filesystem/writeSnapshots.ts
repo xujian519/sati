@@ -19,12 +19,15 @@ export function recordWriteSnapshot(
   absolutePath: string,
   content: string,
   mtimeMs: number,
+  range?: { offset?: number; limit?: number },
 ): void {
   context.writeSnapshots ??= new Map();
   context.writeSnapshots.set(absolutePath, {
     absolutePath,
     mtimeMs: Math.floor(mtimeMs),
     contentHash: hashText(content),
+    offset: range?.offset,
+    limit: range?.limit,
   });
 }
 
@@ -73,21 +76,24 @@ export async function validateWriteSnapshotFresh(
     return { exists: true };
   }
 
-  const previousContent = await readTextFile(absolutePath);
-  const currentHash = hashText(previousContent);
-  if (currentHash !== snapshot.contentHash) {
-    throw new PilotDeckToolRuntimeError(
-      "invalid_tool_input",
-      "File has changed since the last full read. Read it again before writing to it.",
-      {
-        absolutePath,
-        expectedMtimeMs: snapshot.mtimeMs,
-        actualMtimeMs: normalizedMtime,
-      },
-    );
+  const isFullRead = snapshot.offset === undefined && snapshot.limit === undefined;
+  if (isFullRead) {
+    const previousContent = await readTextFile(absolutePath);
+    const currentHash = hashText(previousContent);
+    if (currentHash === snapshot.contentHash) {
+      return { exists: true };
+    }
   }
 
-  return { exists: true };
+  throw new PilotDeckToolRuntimeError(
+    "invalid_tool_input",
+    "File has changed since the last read. Read it again before writing to it.",
+    {
+      absolutePath,
+      expectedMtimeMs: snapshot.mtimeMs,
+      actualMtimeMs: normalizedMtime,
+    },
+  );
 }
 
 export async function ensureWriteSnapshotFresh(
@@ -119,11 +125,31 @@ export async function ensureWriteSnapshotFresh(
 
   const normalizedMtime = Math.floor(fileStat.mtimeMs);
   const previousContent = await readTextFile(absolutePath);
-  const currentHash = hashText(previousContent);
-  if (normalizedMtime !== snapshot.mtimeMs || currentHash !== snapshot.contentHash) {
+
+  if (normalizedMtime !== snapshot.mtimeMs) {
+    const isFullRead = snapshot.offset === undefined && snapshot.limit === undefined;
+    if (isFullRead) {
+      const currentHash = hashText(previousContent);
+      if (currentHash === snapshot.contentHash) {
+        return { exists: true, previousContent, mtimeMs: normalizedMtime };
+      }
+    }
     throw new PilotDeckToolRuntimeError(
       "invalid_tool_input",
-      "File has changed since the last full read. Read it again before writing to it.",
+      "File has changed since the last read. Read it again before writing to it.",
+      {
+        absolutePath,
+        expectedMtimeMs: snapshot.mtimeMs,
+        actualMtimeMs: normalizedMtime,
+      },
+    );
+  }
+
+  const currentHash = hashText(previousContent);
+  if (currentHash !== snapshot.contentHash) {
+    throw new PilotDeckToolRuntimeError(
+      "invalid_tool_input",
+      "File has changed since the last read. Read it again before writing to it.",
       {
         absolutePath,
         expectedMtimeMs: snapshot.mtimeMs,

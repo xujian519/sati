@@ -165,7 +165,7 @@ export function createEditNotebookTool(): PilotDeckToolDefinition<EditNotebookIn
         const normalized = error instanceof PilotDeckToolRuntimeError ? error.message : String(error);
         if (
           normalized === "File has not been read yet. Read it first before writing to it."
-          || normalized === "File has changed since the last full read. Read it again before writing to it."
+          || normalized === "File has changed since the last read. Read it again before writing to it."
         ) {
           return {
             ok: false,

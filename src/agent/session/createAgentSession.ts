@@ -1,6 +1,6 @@
 import { PermissionRuntime } from "../../permission/index.js";
 import { ConcurrentToolScheduler, SequentialToolScheduler, ToolRuntime } from "../../tool/index.js";
-import { AgentLoop } from "../loop/AgentLoop.js";
+import { AgentLoop, type AgentLoopSeedState } from "../loop/AgentLoop.js";
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
 import { InMemoryTranscriptWriter } from "../../session/transcript/InMemoryTranscriptWriter.js";
@@ -25,6 +25,7 @@ export type CreateAgentSessionOptions = {
   storage?: AgentProjectSessionStorage;
   projectStorage?: Omit<AgentProjectSessionStorageOptions, "sessionId" | "now">;
   initialState?: AgentSessionStateShape;
+  seedState?: AgentLoopSeedState;
   replayEvents?: AgentEvent[];
 };
 
@@ -50,7 +51,7 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
     eventEmitter: emitter,
     drainEvents: options.dependencies.drainEvents ?? eventBuf?.drain,
   };
-  const loop = new AgentLoop(options.config, dependencies);
+  const loop = new AgentLoop(options.config, dependencies, options.seedState);
   const storage = options.storage ?? (
     options.projectStorage
       ? createAgentProjectSessionStorage({

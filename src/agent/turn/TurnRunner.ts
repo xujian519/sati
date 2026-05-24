@@ -2,7 +2,7 @@ import { agentError, normalizeAgentError } from "../protocol/errors.js";
 import type { AgentEvent } from "../protocol/events.js";
 import type { AgentInput } from "../protocol/input.js";
 import type { AgentTurnResult } from "../protocol/result.js";
-import type { AgentLoop } from "../loop/AgentLoop.js";
+import type { AgentLoop, AgentLoopSeedState } from "../loop/AgentLoop.js";
 import type { AgentTranscriptWriter } from "../../session/transcript/TranscriptWriter.js";
 import { TurnInputProcessor } from "./TurnInputProcessor.js";
 import type { CanonicalMessage, CanonicalUsage } from "../../model/index.js";
@@ -127,6 +127,10 @@ export class TurnRunner {
       runtimeContext: { ...this.runtimeContext },
       transcriptWriterState: this.transcript.snapshotState?.(),
     };
+  }
+
+  snapshotFileState(): AgentLoopSeedState {
+    return this.loop.snapshotFileState();
   }
 
   private createErrorResult(options: TurnRunnerOptions, error: ReturnType<typeof agentError>): AgentTurnResult {

@@ -43,6 +43,10 @@ test("C4 edit_file calls fileHistory.trackEdit before mutating, allowing rewind"
     messageId: "msg-1",
   };
 
+  await runtime.execute(
+    { id: "read-1", name: "read_file", input: { file_path: "src/notes.md" } },
+    ctx,
+  );
   const result = await runtime.execute(
     {
       id: "call-1",
