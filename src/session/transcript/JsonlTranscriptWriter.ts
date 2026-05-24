@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, appendFile } from "node:fs/promises";
-import { dirname, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import type { CanonicalMessage } from "../../model/index.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
 import {
@@ -224,8 +224,6 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
 function defaultSubagentPath(parentPath: string, subagentId: string): string {
   // Default layout: <parentPath dirname>/<parentBaseStem>/subagents/<subagentId>.jsonl
   const dir = dirname(parentPath);
-  const stem = parentPath
-    .slice(dir.length + 1)
-    .replace(/\.jsonl$/i, "");
-  return `${dir}/${stem}/subagents/${subagentId}.jsonl`;
+  const stem = basename(parentPath).replace(/\.jsonl$/i, "");
+  return join(dir, stem, "subagents", `${subagentId}.jsonl`);
 }

@@ -43,10 +43,17 @@ export class NodeShellCommandRunner implements PilotDeckCommandRunner {
       function killProcessGroup() {
         const pid = child.pid;
         if (!pid) return;
-        try { process.kill(-pid, "SIGTERM"); } catch { /* already dead */ }
-        setTimeout(() => {
-          try { process.kill(-pid, "SIGKILL"); } catch { /* already dead */ }
-        }, 3000).unref();
+        if (process.platform === "win32") {
+          try { child.kill("SIGTERM"); } catch { /* already dead */ }
+          setTimeout(() => {
+            try { child.kill("SIGKILL"); } catch { /* already dead */ }
+          }, 3000).unref();
+        } else {
+          try { process.kill(-pid, "SIGTERM"); } catch { /* already dead */ }
+          setTimeout(() => {
+            try { process.kill(-pid, "SIGKILL"); } catch { /* already dead */ }
+          }, 3000).unref();
+        }
       }
 
       const timeout = setTimeout(() => {

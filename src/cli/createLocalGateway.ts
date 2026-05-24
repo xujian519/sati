@@ -58,6 +58,7 @@ import { createPilotConfigStoreSync, type PilotConfigStore } from "../pilot/conf
 import type { PilotAgentModelSelection, PilotConfigSnapshot } from "../pilot/config/types.js";
 import { DEFAULT_JUDGE_TIMEOUT_MS, DEFAULT_SUBAGENT_MAX_TOKENS, DEFAULT_ALLOWED_TOOLS, DEFAULT_TRIGGER_TIERS, type RouterConfig } from "../router/config/schema.js";
 import { createAgentProjectSessionStorage, listProjectSessions, resumeAgentSession } from "../session/index.js";
+import { sanitizeSessionIdForPath } from "../session/storage/ProjectSessionStorage.js";
 import { readWebSessionMessages } from "../web/server/readSessionMessages.js";
 import { describeWebProject, listWebProjects } from "../web/server/listProjects.js";
 import { BackgroundTaskRuntime } from "../task/runtime/BackgroundTaskRuntime.js";
@@ -684,7 +685,7 @@ class ProjectRuntimeRegistry {
             runtime.projectRoot,
             ".pilotdeck",
             "browser_screenshots",
-            context.sessionKey,
+            sanitizeSessionIdForPath(context.sessionKey),
           );
           mkdirSyncFs(outDir, { recursive: true });
           return { ...spec, args: [...(spec.args ?? []), `--output-dir=${outDir}`] };
