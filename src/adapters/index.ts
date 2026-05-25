@@ -8,6 +8,10 @@ export { renderFeishuEvent } from "./channel/feishu/feishu-render.js";
 export { WeixinChannel, type WeixinChannelOptions } from "./channel/weixin/WeixinChannel.js";
 export { WeixinSessionMapper, type WeixinSessionMapperState } from "./channel/weixin/WeixinSessionMapper.js";
 export { renderWeixinEvent } from "./channel/weixin/weixin-render.js";
+export { QQChannel, type QQChannelOptions } from "./channel/qq/QQChannel.js";
+export { QQSessionMapper, type QQSessionMapperState } from "./channel/qq/QQSessionMapper.js";
+export { renderQQEvent } from "./channel/qq/qq-render.js";
+export { QQBotGateway, type QQBotCredentials, type QQGroupMessageEvent, type QQC2CMessageEvent } from "./channel/qq/qqbot-gateway.js";
 export { createWebStaticMount, type WebStaticMountOptions } from "./web/static-mount.js";
 export type {
   ChannelAdapter,
