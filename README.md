@@ -36,7 +36,7 @@
 
 **News** 🔥
 
-- **[2026.05.28]** PilotDeck v0.1 public beta released! Try it now at [http://58.57.119.12:52006/](http://58.57.119.12:52006/). The full WorkSpace cockpit plus the three pillars — White-box Memory, Smart Routing, and Always-on — shipped with the initial release.
+- **[2026.05.28]** <official website>
 
 ---
 
@@ -298,7 +298,7 @@ We provide a one-line installer for macOS / Linux, plus a source-based workflow 
 ### Option A: One-line install (recommended, macOS / Linux)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Gucc111/PilotDeck/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | bash
 ```
 
 The script auto-installs Node.js 22, clones the repo, installs dependencies, and builds the frontend. Once it finishes:
@@ -313,7 +313,7 @@ pilotdeck status     # check runtime status
 **1. Clone and install dependencies**
 
 ```bash
-git clone https://github.com/Gucc111/PilotDeck.git
+git clone https://github.com/OpenBMB/PilotDeck.git
 cd PilotDeck
 
 npm install              # root deps (Gateway runtime)
