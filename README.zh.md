@@ -398,6 +398,11 @@ cd ui && npx vitest run
 <td width="33%" align="center"><b>飞书交流群</b></td>
 <td width="33%" align="center"><b>Discord 社区</b></td>
 </tr>
+<tr>
+<td align="center"><img src="assets/community/qr-wechat.png" width="200" alt="微信二维码"/></td>
+<td align="center"><img src="assets/community/qr-feishu.png" width="200" alt="飞书二维码"/></td>
+<td align="center"><img src="assets/community/qr-discord.png" width="200" alt="Discord 二维码"/></td>
+</tr>
 </table>
 
 ---

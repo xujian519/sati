@@ -398,6 +398,11 @@ cd ui && npx vitest run
 <td width="33%" align="center"><b>Feishu Community</b></td>
 <td width="33%" align="center"><b>Discord Community</b></td>
 </tr>
+<tr>
+<td align="center"><img src="assets/community/qr-wechat.png" width="200" alt="WeChat QR"/></td>
+<td align="center"><img src="assets/community/qr-feishu.png" width="200" alt="Feishu QR"/></td>
+<td align="center"><img src="assets/community/qr-discord.png" width="200" alt="Discord QR"/></td>
+</tr>
 </table>
 
 ---
