@@ -225,6 +225,8 @@ PilotDeck ships an out-of-the-box Web UI with full WorkSpace management, white-b
 
 ### Use Cases
 
+> All demos below are generated entirely by edge-side models (e.g. MiniMax-M1) via PilotDeck's Smart Routing — no cloud-side frontier model required.
+
 #### Work Document Generation
 
 > *"Survey the Chinese LLM application market and turn it into a formal HTML white paper."*
