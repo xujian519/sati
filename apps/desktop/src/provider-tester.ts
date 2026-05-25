@@ -163,7 +163,7 @@ async function checkKeyAuth(p: ProviderInput): Promise<{ compat: Check; auth: Ch
     compat = { id: "apiCompat", label: "API 兼容", level: "ok", detail: mode === "anthropic" ? "支持 Messages API" : `支持 ${mode}`, durationMs: dur };
   } else if (status === 404 || status === 405) {
     const hint = mode === "anthropic" && /\/v1$/.test(stripTrailingSlash(p.baseUrl))
-      ? "Anthropic 类型的 baseUrl 不需要带 /v1，会被自动追加。"
+      ? "Messages API 类型的 baseUrl 不需要带 /v1，会被自动追加。"
       : `检查协议类型是否匹配；当前按 ${mode} 调用 ${url}。`;
     compat = { id: "apiCompat", label: "API 兼容", level: "error", detail: `${status}：endpoint 不存在 — ${truncate(body)}`, hint, durationMs: dur };
   } else if (status >= 500) {
@@ -197,7 +197,7 @@ function checkKeyFormat(apiKey: string): Check {
   if (!k) return { id: "keyFormat", label: "Key 格式", level: "error", detail: "API key 缺失" };
   if (/^Bearer\s+/i.test(k))
     return { id: "keyFormat", label: "Key 格式", level: "warning", detail: "已包含 \"Bearer \" 前缀（建议去掉）", hint: "apiKey 只填裸 token，\"Bearer \" 前缀由系统自动添加。" };
-  if (/^sk-ant-/i.test(k)) return { id: "keyFormat", label: "Key 格式", level: "ok", detail: "Anthropic 官方格式 (sk-ant-…)" };
+  if (/^sk-ant-/i.test(k)) return { id: "keyFormat", label: "Key 格式", level: "ok", detail: "官方格式 (sk-ant-…)" };
   if (/^sk-proj-/i.test(k)) return { id: "keyFormat", label: "Key 格式", level: "ok", detail: "OpenAI 项目密钥 (sk-proj-…)" };
   if (/^sk-[A-Za-z0-9]{20,}$/.test(k)) return { id: "keyFormat", label: "Key 格式", level: "ok", detail: "OpenAI 或兼容格式 (sk-…)" };
   return { id: "keyFormat", label: "Key 格式", level: "ok", detail: "第三方格式" };

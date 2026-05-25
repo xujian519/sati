@@ -180,9 +180,12 @@ wcb-output/
 # Temporary download artifacts
 arxiv_response.xml
 
-# Bun artifacts (project uses npm)
+# Bun artifacts (project uses pnpm)
 bun-bin/
 bun.lock
+
+# npm lock file (project uses pnpm)
+package-lock.json
 
 # Test output
 test-results/
