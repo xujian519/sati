@@ -149,6 +149,14 @@ export type PilotToolsConfig = {
   webSearch?: PilotWebSearchConfig;
 };
 
+export type PilotPlatformAdapterConfig = {
+  enabled: boolean;
+  token?: string;
+  apiKey?: string;
+  webhookUrl?: string;
+  extra?: Record<string, unknown>;
+};
+
 export type PilotAdaptersConfig = {
   cli?: {
     autoConnectServer: boolean;
@@ -163,7 +171,26 @@ export type PilotAdaptersConfig = {
     encryptKey?: string;
     verifyToken?: string;
     defaultSessionLabel: string;
+    connectionMode?: "stream" | "webhook";
+    domainName?: "feishu" | "lark";
   };
+  weixin?: { enabled: boolean };
+  telegram?: PilotPlatformAdapterConfig;
+  discord?: PilotPlatformAdapterConfig;
+  slack?: PilotPlatformAdapterConfig;
+  matrix?: PilotPlatformAdapterConfig;
+  mattermost?: PilotPlatformAdapterConfig;
+  signal?: PilotPlatformAdapterConfig;
+  whatsapp?: PilotPlatformAdapterConfig;
+  bluebubbles?: PilotPlatformAdapterConfig;
+  dingtalk?: PilotPlatformAdapterConfig;
+  wecom?: PilotPlatformAdapterConfig;
+  wecomCallback?: PilotPlatformAdapterConfig;
+  email?: PilotPlatformAdapterConfig;
+  sms?: PilotPlatformAdapterConfig;
+  homeassistant?: PilotPlatformAdapterConfig;
+  apiServer?: PilotPlatformAdapterConfig;
+  webhook?: PilotPlatformAdapterConfig;
 };
 
 export type PilotConfig = {

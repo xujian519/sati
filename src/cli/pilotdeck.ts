@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { createAlwaysOnManager, createApplyHandler, SessionConfigOverrides, type AlwaysOnManager, type AlwaysOnConfig } from "../always-on/index.js";
 import { createCronRuntime, type CronRuntime, type CronConfig } from "../cron/index.js";
 import { connectRemoteGatewayIfAvailable, type Gateway, type GatewayEvent, type GatewaySubmitTurnInput } from "../gateway/index.js";
-import { CliChannel, TuiChannel, FeishuChannel, WeixinChannel, QQChannel } from "../adapters/index.js";
+import { CliChannel, TuiChannel, FeishuChannel, WeixinChannel, QQChannel, loadEnabledChannels } from "../adapters/index.js";
 import {
   migrateSkillsToPilotDeck,
   type SkillMigrationConflictMode,
@@ -182,13 +182,29 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     // --- Server startup ---
 
     const envPort = Number.parseInt(env.PILOTDECK_GATEWAY_PORT ?? "", 10);
+    const extraChannels = await loadEnabledChannels(snapshot.config.adapters);
+    const feishuCfg = snapshot.config.adapters?.feishu;
+    const feishuChannel = feishuCfg?.enabled === true
+      ? new FeishuChannel({
+          appId: feishuCfg.appId,
+          appSecret: feishuCfg.appSecret,
+          encryptKey: feishuCfg.encryptKey,
+          verifyToken: feishuCfg.verifyToken,
+          connectionMode: feishuCfg.connectionMode,
+          domainName: feishuCfg.domainName,
+        })
+      : undefined;
+    const weixinCfg = snapshot.config.adapters?.weixin;
+    const weixinChannel = weixinCfg?.enabled === true ? new WeixinChannel() : undefined;
     const server = await startPilotDeckServer({
       gateway,
       port: readPort(argv) ?? (Number.isFinite(envPort) ? envPort : 18789),
       staticAssetsPath: resolve(projectRoot, "ui/dist"),
-      feishu: new FeishuChannel(),
-      weixin: new WeixinChannel(),
+      feishu: feishuChannel,
+      weixin: weixinChannel,
       qq: new QQChannel(),
+      channels: extraChannels,
+      config: snapshot.config,
     });
     bindServer(server);
     deferredBroadcast = (name, payload) => server.broadcastNotification(name, payload);

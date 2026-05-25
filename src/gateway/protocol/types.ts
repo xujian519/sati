@@ -42,7 +42,14 @@ import type {
   SkillsListResult,
 } from "../../extension/skills/types.js";
 
-export type GatewayChannelKey = "cli" | "tui" | "feishu" | "weixin" | "qq" | "web" | "test" | (string & {});
+export type GatewayChannelKey =
+  | "cli" | "tui" | "feishu" | "weixin" | "qq" | "web" | "test"
+  | "telegram" | "discord" | "slack" | "matrix" | "mattermost"
+  | "signal" | "whatsapp" | "bluebubbles"
+  | "dingtalk" | "wecom" | "wecom_callback"
+  | "email" | "sms" | "homeassistant"
+  | "api_server" | "webhook"
+  | (string & {});
 
 export type GatewayMode = "default" | "plan" | "acceptEdits" | "bypassPermissions";
 

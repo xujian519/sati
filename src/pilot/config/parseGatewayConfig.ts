@@ -1,5 +1,10 @@
 import { isRecord } from "../../model/config/schema.js";
-import type { PilotAdaptersConfig, PilotConfigDiagnostic, PilotGatewayConfig } from "./types.js";
+import type {
+  PilotAdaptersConfig,
+  PilotConfigDiagnostic,
+  PilotGatewayConfig,
+  PilotPlatformAdapterConfig,
+} from "./types.js";
 
 export function parseGatewayConfig(rawGateway: unknown, diagnostics: PilotConfigDiagnostic[]): PilotGatewayConfig | undefined {
   if (rawGateway === undefined) {
@@ -61,10 +66,45 @@ export function parseAdaptersConfig(rawAdapters: unknown, diagnostics: PilotConf
     return undefined;
   }
 
-  return {
+  const PLATFORM_KEYS = [
+    "telegram", "discord", "slack", "matrix", "mattermost",
+    "signal", "whatsapp", "bluebubbles",
+    "dingtalk", "wecom", "wecomCallback",
+    "email", "sms", "homeassistant",
+    "apiServer", "webhook",
+  ] as const;
+
+  const result: PilotAdaptersConfig = {
     cli: parseAutoConnect(rawAdapters.cli),
     tui: parseAutoConnect(rawAdapters.tui),
     feishu: parseFeishu(rawAdapters.feishu),
+    weixin: parseEnabledOnly(rawAdapters.weixin),
+  };
+
+  for (const key of PLATFORM_KEYS) {
+    const parsed = parsePlatformAdapter(rawAdapters[key]);
+    if (parsed) {
+      (result as Record<string, unknown>)[key] = parsed;
+    }
+  }
+
+  return result;
+}
+
+function parseEnabledOnly(raw: unknown): { enabled: boolean } | undefined {
+  if (!isRecord(raw)) return undefined;
+  return { enabled: booleanField(raw, "enabled", false) };
+}
+
+function parsePlatformAdapter(raw: unknown): PilotPlatformAdapterConfig | undefined {
+  if (!isRecord(raw)) return undefined;
+  const extra = isRecord(raw.extra) ? (raw.extra as Record<string, unknown>) : undefined;
+  return {
+    enabled: booleanField(raw, "enabled", false),
+    token: stringField(raw, "token"),
+    apiKey: stringField(raw, "apiKey"),
+    webhookUrl: stringField(raw, "webhookUrl"),
+    extra,
   };
 }
 
@@ -79,6 +119,8 @@ function parseFeishu(raw: unknown): PilotAdaptersConfig["feishu"] {
   if (!isRecord(raw)) {
     return undefined;
   }
+  const mode = stringField(raw, "connectionMode");
+  const domain = stringField(raw, "domainName");
   return {
     enabled: booleanField(raw, "enabled", false),
     appId: stringField(raw, "appId"),
@@ -86,6 +128,8 @@ function parseFeishu(raw: unknown): PilotAdaptersConfig["feishu"] {
     encryptKey: stringField(raw, "encryptKey"),
     verifyToken: stringField(raw, "verifyToken"),
     defaultSessionLabel: stringField(raw, "defaultSessionLabel", "general") ?? "general",
+    connectionMode: mode === "stream" || mode === "webhook" ? mode : undefined,
+    domainName: domain === "feishu" || domain === "lark" ? domain : undefined,
   };
 }
 
