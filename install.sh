@@ -3,9 +3,9 @@ set -euo pipefail
 
 # PilotDeck one-line installer for macOS and Linux.
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/Gucc111/PilotDeck/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | bash
 
-REPO_URL="${PILOTDECK_REPO_URL:-https://github.com/Gucc111/PilotDeck.git}"
+REPO_URL="${PILOTDECK_REPO_URL:-https://github.com/OpenBMB/PilotDeck.git}"
 BRANCH="${PILOTDECK_BRANCH:-main}"
 INSTALL_DIR="${PILOTDECK_INSTALL_DIR:-$HOME/.pilotdeck/app}"
 CONFIG_FILE="${PILOTDECK_CONFIG_PATH:-$HOME/.pilotdeck/pilotdeck.yaml}"
@@ -125,7 +125,13 @@ ensure_native_build_tools() {
 
 is_port_free() {
   local port="$1"
-  ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+  if command -v lsof >/dev/null 2>&1; then
+    ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+  elif command -v ss >/dev/null 2>&1; then
+    ! ss -tlnH "sport = :$port" 2>/dev/null | grep -q .
+  else
+    ! (echo >/dev/tcp/127.0.0.1/"$port") 2>/dev/null
+  fi
 }
 
 find_free_port() {
@@ -342,7 +348,13 @@ warn() { printf "pilotdeck: %s\n" "$1" >&2; }
 
 is_port_free() {
   local port="$1"
-  ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+  if command -v lsof >/dev/null 2>&1; then
+    ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+  elif command -v ss >/dev/null 2>&1; then
+    ! ss -tlnH "sport = :$port" 2>/dev/null | grep -q .
+  else
+    ! (echo >/dev/tcp/127.0.0.1/"$port") 2>/dev/null
+  fi
 }
 
 find_free_port() {

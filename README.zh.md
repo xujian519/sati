@@ -7,11 +7,11 @@
 </p>
 
 <p align="center">
-  <a href="http://58.57.119.12:52006/"><img src="https://img.shields.io/badge/Demo-Live-brightgreen?style=flat-square" alt="Live Demo"/></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-TBD-blue.svg?style=flat-square" alt="License"/></a>
+  <a href="<demo_link>"><img src="https://img.shields.io/badge/Demo-Live-brightgreen?style=flat-square" alt="Live Demo"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL_3.0-blue.svg?style=flat-square" alt="License"/></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-Native-6366F1?style=flat-square" alt="MCP Native"/></a>
   <a href="#-桌面端-app-apple-silicon"><img src="https://img.shields.io/badge/macOS-Desktop_App-000000?style=flat-square&logo=apple&logoColor=white" alt="Desktop App"/></a>
-  <a href="https://github.com/Gucc111/PilotDeck/stargazers"><img src="https://img.shields.io/github/stars/Gucc111/PilotDeck?style=flat-square" alt="Stars"/></a>
+  <a href="https://github.com/OpenBMB/PilotDeck/stargazers"><img src="https://img.shields.io/github/stars/OpenBMB/PilotDeck?style=flat-square" alt="Stars"/></a>
   <br/>
   <a href="#-联系我们"><img src="https://img.shields.io/badge/Discord-Join_Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/></a>
   &nbsp;
@@ -29,7 +29,7 @@
 <p align="center">
   <a href="./README.md">English</a> | <b>简体中文</b>
   <br/>
-  <a href="http://58.57.119.12:52006/">在线体验</a> · <a href="#-安装与快速开始">快速开始</a> · <a href="#-核心亮点">核心亮点</a> · <a href="#使用场景">使用场景</a> · <a href="#-联系我们">社区</a>
+  <a href="<demo_link>">在线体验</a> · <a href="#-安装与快速开始">快速开始</a> · <a href="#-核心亮点">核心亮点</a> · <a href="#使用场景">使用场景</a> · <a href="#-联系我们">社区</a>
 </p>
 
 ---
@@ -387,7 +387,7 @@ cd ui && npx vitest run
 
 ## 💬 联系我们
 
-- 关于技术问题及功能请求，请提交 [GitHub Issues](https://github.com/Gucc111/PilotDeck/issues)。
+- 关于技术问题及功能请求，请提交 [GitHub Issues](https://github.com/OpenBMB/PilotDeck/issues)。
 - 商务合作、企业级支持或开源 License 讨论，请邮件联系：`team@pilotdeck.ai` 。
 - 欢迎加入我们的社区与我们交流：
 
@@ -420,13 +420,12 @@ cd ui && npx vitest run
 ```bibtex
 @misc{pilotdeck2026,
   title  = {PilotDeck: A WorkSpace-Centric Open-Source Agent Operating System},
-  author = {THUNLP and ModelBest and OpenBMB and AI9stars},
+  author = {THUNLP and ModelBest and OpenBMB and AI9Stars},
   year   = {2026},
-  note   = {Live demo: http://58.57.119.12:52006/},
-  url    = {https://github.com/Gucc111/PilotDeck}
+  url    = {https://github.com/OpenBMB/PilotDeck}
 }
 ```
 
 ## 📄 许可证
 
-本项目开源许可证 **待定 (TBD)**。在正式 License 落地前，核心代码视作 "source-available, all rights reserved"。`products/` 目录存放客户专属定制代码，不包含在开源发布范围内。
+本项目基于 [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE) 开源。`products/` 目录存放客户专属定制代码，不包含在开源发布范围内。
