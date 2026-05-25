@@ -27,12 +27,10 @@ export type SnipResult = {
 
 /**
  * Boundary marker injected between the kept head and tail. Looks like a
- * user-visible note so providers don't choke on an unknown role. Callers
- * recognize it via `isSnipBoundaryMessage`.
- *
- * Mirrors `third-party/claude-code-main/src/utils/messages.ts:createSnipBoundary`
- * structure, but the inner text is PilotDeck-specific (legacy uses the same
- * convention but with an XML envelope; we keep the envelope).
+ * user-visible note (role=user, text content) so providers don't choke on
+ * an unknown role. Callers recognize it via `isSnipBoundaryMessage`. The
+ * payload is wrapped in an XML-style envelope so it's easy to detect and
+ * never mistaken for normal user input.
  */
 const SNIP_BOUNDARY_TEXT_PREFIX = "<snip-boundary";
 
@@ -60,8 +58,7 @@ export function isSnipBoundaryMessage(message: CanonicalMessage): boolean {
  * conversation by turn (not token) so the provider sees only the head and
  * tail anchors plus a boundary marker.
  *
- * Behaviour alignment with `third-party/claude-code-main/src/services/compact/compact.ts`
- * (`partialCompactConversation` / `snipMessages` / `projectSnippedView`):
+ * Behaviour rules:
  *   S1 turn boundaries: a "turn" starts at a user message that is NOT a
  *      tool_result-only message. Assistant + subsequent tool_result user
  *      messages are part of that turn.

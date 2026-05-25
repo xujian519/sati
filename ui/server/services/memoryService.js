@@ -48,7 +48,7 @@ function buildServiceForDataDir(dataDir, workspaceDir = dataDir) {
     rootDir: MEMORY_ROOT_DIR,
     dbPath: path.join(dataDir, 'control.sqlite'),
     memoryDir: path.join(dataDir, 'memory'),
-    source: 'claudecodeui',
+    source: 'pilotdeck',
     ...memoryDefaults,
   });
   if (memoryDefaults.defaultIndexingSettings) {

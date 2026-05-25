@@ -19,9 +19,9 @@ const IS_WINDOWS = typeof navigator !== 'undefined'
   && /win/i.test(navigator.userAgent)
   && !/darwin/i.test(navigator.userAgent);
 
-// Mirrors the curated set the legacy claudecodeui Permissions tab used. These
-// are just convenience shortcuts — the user can still type any free-form
-// pattern Anthropic's permission DSL accepts.
+// Curated convenience shortcuts shown in the Permissions tab. Users can
+// still type any free-form pattern the PilotDeck permission DSL accepts —
+// these are just one-click presets for the most common allow-list entries.
 const QUICK_ADD_TOOLS = [
   'bash:git log:*',
   'bash:git diff:*',

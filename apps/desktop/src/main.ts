@@ -6,7 +6,7 @@
  *   2. Check ~/.pilotdeck/pilotdeck.yaml exists; if not, show onboarding window
  *      (small BrowserWindow with onboarding/onboarding.html). User submits
  *      API credentials → main writes pilotdeck.yaml → onboarding window closes.
- *   3. Start ServerManager (spawns claudecodeui server on bundled Node)
+ *   3. Start ServerManager (spawns the PilotDeck ui/server on bundled Node)
  *   4. Wait for /health, then load http://127.0.0.1:<port>/ in BrowserWindow
  */
 

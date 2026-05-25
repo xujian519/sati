@@ -2,9 +2,9 @@
  * S1-S3 — fork the parent's assistant message into a child-side message
  * sequence so the subagent inherits the parent's reasoning trace cache-safely.
  *
- * Mirror of `third-party/claude-code-main/src/tools/AgentTool/forkSubagent.ts`
- * (lines 107-198). The exact byte-for-byte placeholder string and message
- * shape are critical — both for prompt-cache hits and for legacy parity.
+ * The exact byte-for-byte placeholder string and message shape are critical
+ * for prompt-cache hits — do not casually tweak the wording or block order
+ * here, even when it looks harmless.
  */
 
 import type {

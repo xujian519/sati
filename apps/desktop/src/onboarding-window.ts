@@ -4,8 +4,8 @@
  * Renders a dedicated BrowserWindow loading onboarding/onboarding.html.
  * The renderer collects (providerType, baseUrl, apiKey, model) from the user
  * and POSTs it back to main via IPC. We then write a minimal *structured*
- * YAML to ~/.pilotdeck/pilotdeck.yaml — claudecodeui's deep-merge will fill the
- * rest from buildDefaultPilotDeckConfig().
+ * YAML to ~/.pilotdeck/pilotdeck.yaml — the ui/server's deep-merge will fill
+ * the rest from buildDefaultPilotDeckConfig().
  *
  * The function returns:
  *   - "saved"     — user successfully completed onboarding; main should

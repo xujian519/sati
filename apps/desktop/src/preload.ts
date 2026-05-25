@@ -1,7 +1,7 @@
 /**
  * Preload script — exposes minimal APIs to two different renderers:
  *
- *   1. `window.pilotdeck` — for the claudecodeui renderer (loaded from
+ *   1. `window.pilotdeck` — for the PilotDeck web UI renderer (loaded from
  *      http://127.0.0.1:<port>/). Tells it that it's running inside the
  *      desktop shell.
  *   2. `window.pilotdeckOnboarding` — for the first-run onboarding HTML.

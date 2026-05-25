@@ -2,16 +2,14 @@ import type { CanonicalMessage, CanonicalUsage } from "../../model/index.js";
 
 /**
  * Subset of tool names whose results are eligible for cached
- * microcompaction. Mirrors `third-party/claude-code-main/src/services/compact/microCompact.ts`
- * COMPACTABLE_TOOLS — tools whose output is large, stale-by-default, and
+ * microcompaction — tools whose output is large, stale-by-default, and
  * cheap to re-derive. Read-only / search / fetch tools dominate; permission
  * sensitive tools and ask_user_question are intentionally absent so user
  * decisions are never silently dropped.
  *
- * Behaviour M1 in §4.4: must match legacy set verbatim (in PilotDeck tool
- * naming). Adding a tool here is a runtime contract change; remove from
- * here only if the parent tool's output is small enough that caching does
- * not help.
+ * Behaviour M1 in §4.4. Adding a tool here is a runtime contract change;
+ * remove from here only if the parent tool's output is small enough that
+ * caching does not help.
  */
 export const COMPACTABLE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "read_file",

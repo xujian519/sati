@@ -3,7 +3,7 @@
  *
  * Mirrors the three most critical checks from
  * ui/server/services/providerTester.js but runs inside the Electron main
- * process (before the claudecodeui server starts). Keeps the same result
+ * process (before the PilotDeck ui/server starts). Keeps the same result
  * shape so the renderer can display identical UI.
  *
  * Checks performed:
