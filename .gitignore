@@ -151,6 +151,10 @@ artifacts/
 # README assets are tracked; the .mov originals stay local).
 assets/*.mov
 
+# Locally regenerated demo video — kept out of the repo so each
+# re-export doesn't churn a 50MB blob.
+assets/result/ios_game_result.mp4
+
 # third-party
 third-party/
 
