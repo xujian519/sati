@@ -40,4 +40,10 @@ export type AgentRuntimeConfig = {
   subagentTimeoutMs?: number;
   /** Enable automatic JSON self-correction retry on invalid_tool_arguments. Default false. */
   jsonSelfCorrect?: boolean;
+  /**
+   * The agent's default-model context window (tokens). Passed through so the
+   * loop can compare it with the routed model's window and trigger a
+   * post-routing compaction pass when the routed window is smaller.
+   */
+  maxContextTokens?: number;
 };

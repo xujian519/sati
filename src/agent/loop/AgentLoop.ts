@@ -190,7 +190,7 @@ export class AgentLoop {
         yield* this.drainEventBuffer();
       }
 
-      const request = await this.createModelRequest(messages, input);
+      let request = await this.createModelRequest(messages, input);
       if (input.abortSignal?.aborted) {
         const result = this.createTurnResult(input, {
           type: "aborted",
@@ -217,15 +217,56 @@ export class AgentLoop {
         provider: request.provider,
       };
 
+      // Split decide + execute so we can insert a post-routing compact pass
+      // when the routed model's context window is smaller than the agent's
+      // default model (the window used by the first tryAutoCompact above).
+      const decision = await this.dependencies.router.decide({
+        request,
+        sessionId: input.sessionId,
+        isMainAgent: !this.config.isSubagent,
+        metadata: previousTier ? { previousTier } : undefined,
+      });
+
+      const getMaxCtx = this.dependencies.getModelMaxContextTokens;
+      const agentMaxCtx = this.config.maxContextTokens;
+      if (ctx?.tryAutoCompact && getMaxCtx && agentMaxCtx) {
+        const routedMaxCtx = getMaxCtx(decision.provider, decision.model);
+        if (routedMaxCtx !== undefined && routedMaxCtx < agentMaxCtx) {
+          try {
+            const recompact = await ctx.tryAutoCompact({
+              messages,
+              abortSignal: input.abortSignal,
+              maxContextTokens: routedMaxCtx,
+            });
+            if (recompact.type === "compacted") {
+              messages = recompact.messages;
+              request = await this.createModelRequest(messages, input);
+              yield {
+                type: "turn_continued",
+                sessionId: input.sessionId,
+                turnId: input.turnId,
+                reason: "auto_compact",
+              };
+            }
+            yield {
+              type: "context_budget",
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              snapshot: recompact.snapshot,
+            };
+          } catch {
+            // Post-routing compaction must never block the model call.
+          }
+        }
+      }
+
       const assembler = createModelMessageAssemblerState();
       try {
-        for await (const event of this.dependencies.router.stream(request, {
+        for await (const event of this.dependencies.router.execute(decision, request, {
           sessionId: input.sessionId,
           turnId: input.turnId,
           projectPath: this.config.cwd,
           abortSignal: input.abortSignal,
-          isMainAgent: !this.config.isSubagent,
-          previousTier,
         })) {
           yield { type: "model_event", sessionId: input.sessionId, turnId: input.turnId, event };
           applyModelEventToAssembler(assembler, event);

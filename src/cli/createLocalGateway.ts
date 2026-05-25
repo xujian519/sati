@@ -805,6 +805,13 @@ class ProjectRuntimeRegistry {
       now: this.options.now,
       eventEmitter: eventBuf.emitter,
       drainEvents: eventBuf.drain,
+      getModelMaxContextTokens: (provider, model) => {
+        try {
+          return runtime.model.getCapabilities(provider, model).maxContextTokens;
+        } catch {
+          return undefined;
+        }
+      },
     };
     const extendDependencies = (storage: ReturnType<typeof createAgentProjectSessionStorage>) => {
       const toolResultBudget = new ToolResultBudget({ toolResultsDir: storage.toolResultsDir });
@@ -988,6 +995,13 @@ class ProjectRuntimeRegistry {
     } catch {
       // Model or provider not found — fall back to text-only.
     }
+    let maxContextTokens: number | undefined;
+    try {
+      const caps = runtime.model.getCapabilities(agent.model.provider, agent.model.model);
+      maxContextTokens = agent.maxContextTokens ?? caps.maxContextTokens;
+    } catch {
+      maxContextTokens = agent.maxContextTokens;
+    }
     return {
       provider: agent.model.provider,
       model: agent.model.model,
@@ -996,6 +1010,7 @@ class ProjectRuntimeRegistry {
       permissionMode,
       jsonSelfCorrect: true,
       subagentTimeoutMs: agent.subagents?.timeoutMs,
+      maxContextTokens,
       permissionContext: createDefaultPermissionContext({
         cwd,
         mode: permissionMode,

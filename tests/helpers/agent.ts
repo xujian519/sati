@@ -19,6 +19,7 @@ import type {
   AgentRuntimeDependencies,
 } from "../../src/agent/index.js";
 import type { LifecycleRuntime } from "../../src/lifecycle/index.js";
+import type { RouterDecision, RouterDecisionInput, RouterExecuteContext } from "../../src/router/index.js";
 
 export class ScriptedAgentModel {
   readonly requests: CanonicalModelRequest[] = [];
@@ -51,8 +52,12 @@ export class ScriptedAgentRouter implements AgentRouterRuntime {
   readonly model: ScriptedAgentModel;
   readonly fallbackProvider?: string;
   readonly fallbackModel?: string;
+  /** Override provider/model returned by `decide()`. Useful for testing post-routing compaction. */
+  decidedProvider?: string;
+  decidedModel?: string;
   private fallbackArmed = false;
   readonly observedUsage: Array<{ sessionId: string; usage: CanonicalUsage | undefined }> = [];
+  readonly decisions: RouterDecision[] = [];
 
   constructor(
     scripts: CanonicalModelEvent[][],
@@ -63,9 +68,24 @@ export class ScriptedAgentRouter implements AgentRouterRuntime {
     this.fallbackModel = options.fallbackModel;
   }
 
-  async *stream(
+  async decide(input: RouterDecisionInput): Promise<RouterDecision> {
+    const decision: RouterDecision = {
+      provider: this.decidedProvider ?? input.request.provider,
+      model: this.decidedModel ?? input.request.model,
+      scenarioType: "default",
+      isSubagent: !input.isMainAgent,
+      orchestrating: false,
+      resolvedFrom: "explicit",
+      mutations: {},
+    };
+    this.decisions.push(decision);
+    return decision;
+  }
+
+  async *execute(
+    _decision: RouterDecision,
     request: CanonicalModelRequest,
-    ctx: { sessionId: string; turnId: string; abortSignal?: AbortSignal; isMainAgent: boolean },
+    ctx: RouterExecuteContext,
   ): AsyncIterable<CanonicalModelEvent> {
     const attempts: CanonicalModelRequest[] = [request];
     if (this.fallbackModel) {
@@ -109,6 +129,19 @@ export class ScriptedAgentRouter implements AgentRouterRuntime {
       yield event;
     }
     void lastError;
+  }
+
+  async *stream(
+    request: CanonicalModelRequest,
+    ctx: RouterExecuteContext & { sessionId: string; isMainAgent: boolean; previousTier?: string },
+  ): AsyncIterable<CanonicalModelEvent> {
+    const decision = await this.decide({
+      request,
+      sessionId: ctx.sessionId,
+      isMainAgent: ctx.isMainAgent,
+      metadata: ctx.previousTier ? { previousTier: ctx.previousTier } : undefined,
+    });
+    yield* this.execute(decision, request, ctx);
   }
 
   observeUsage(sessionId: string, usage: CanonicalUsage | undefined): void {

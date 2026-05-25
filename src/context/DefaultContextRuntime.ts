@@ -286,13 +286,15 @@ export class DefaultContextRuntime implements ContextRuntime {
   async tryAutoCompact(input: {
     messages: CanonicalMessage[];
     abortSignal?: AbortSignal;
+    maxContextTokens?: number;
   }): Promise<AutoCompactResult> {
+    const effectiveMaxContextTokens = input.maxContextTokens ?? this.maxContextTokens;
     if (!this.autoCompactionPolicy || !this.tokenBudget) {
       return {
         type: "skipped",
         snapshot: {
           tokens: 0,
-          maxContextTokens: this.maxContextTokens,
+          maxContextTokens: effectiveMaxContextTokens,
           warningRatio: 0,
           blockingRatio: 0,
           state: "ok",
@@ -301,7 +303,7 @@ export class DefaultContextRuntime implements ContextRuntime {
       };
     }
     let messages = input.messages;
-    const decision = this.autoCompactionPolicy.evaluate(messages, this.maxContextTokens);
+    const decision = this.autoCompactionPolicy.evaluate(messages, effectiveMaxContextTokens);
     if (decision.type !== "trigger") {
       return { type: "skipped", snapshot: decision.snapshot };
     }
@@ -311,7 +313,7 @@ export class DefaultContextRuntime implements ContextRuntime {
       const r = this.microCompaction.apply({ messages });
       if (r.rewritten > 0) {
         messages = r.messages;
-        const snap = this.tokenBudget.evaluate(messages, this.maxContextTokens);
+        const snap = this.tokenBudget.evaluate(messages, effectiveMaxContextTokens);
         if (snap.state === "ok") {
           return {
             type: "compacted",
@@ -328,7 +330,7 @@ export class DefaultContextRuntime implements ContextRuntime {
       const r = this.snipEngine.snip(messages);
       if (r.applied) {
         messages = r.messages;
-        const snap = this.tokenBudget.evaluate(messages, this.maxContextTokens);
+        const snap = this.tokenBudget.evaluate(messages, effectiveMaxContextTokens);
         if (snap.state === "ok") {
           return {
             type: "compacted",
@@ -348,7 +350,7 @@ export class DefaultContextRuntime implements ContextRuntime {
         signal: input.abortSignal,
       });
       const postCompactMessages = ensureTrailingUserMessage(buildPostCompactMessages(result));
-      const snapshot = this.tokenBudget.evaluate(postCompactMessages, this.maxContextTokens);
+      const snapshot = this.tokenBudget.evaluate(postCompactMessages, effectiveMaxContextTokens);
       return {
         type: "compacted",
         messages: postCompactMessages,

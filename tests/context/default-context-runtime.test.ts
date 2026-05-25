@@ -224,3 +224,44 @@ test("DefaultContextRuntime.tryAutoCompact returns a post-compaction snapshot af
   assert.equal(result.snapshot.maxContextTokens, 500);
   assert.equal(result.snapshot.state, "ok");
 });
+
+test("tryAutoCompact respects per-call maxContextTokens override", async () => {
+  const tokenBudget = new TokenBudgetManager();
+  const autoCompactionPolicy = new AutoCompactionPolicy({ tokenBudget });
+
+  const runtime = new DefaultContextRuntime({
+    tokenBudget,
+    autoCompactionPolicy,
+    compactionEngine: {
+      async run() {
+        return {
+          trigger: "auto",
+          preTokens: 4000,
+          postTokens: 100,
+          summaryMessage: { role: "assistant", content: [{ type: "text", text: "Summary" }] },
+          boundaryMarker: { role: "user", content: [{ type: "text", text: "[compaction boundary]" }] },
+          messagesToKeep: [],
+          attachments: [],
+          hookResults: [],
+          diagnostics: [],
+        };
+      },
+    } as never,
+    maxContextTokens: 200_000,
+  });
+
+  const messages: CanonicalMessage[] = [
+    {
+      role: "user",
+      content: [{ type: "text", text: "A".repeat(4_000) }],
+    },
+  ];
+
+  const defaultResult = await runtime.tryAutoCompact({ messages });
+  assert.equal(defaultResult.type, "skipped", "should skip compaction with the large default window");
+  assert.equal(defaultResult.snapshot.maxContextTokens, 200_000);
+
+  const overrideResult = await runtime.tryAutoCompact({ messages, maxContextTokens: 500 });
+  assert.equal(overrideResult.type, "compacted", "should trigger compaction with smaller override window");
+  assert.equal(overrideResult.snapshot.maxContextTokens, 500);
+});
