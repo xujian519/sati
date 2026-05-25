@@ -388,7 +388,6 @@ cd ui && npx vitest run
 ## 💬 联系我们
 
 - 关于技术问题及功能请求，请提交 [GitHub Issues](https://github.com/OpenBMB/PilotDeck/issues)。
-- 商务合作、企业级支持或开源 License 讨论，请邮件联系：`team@pilotdeck.ai` 。
 - 欢迎加入我们的社区与我们交流：
 
 <table width="100%">
@@ -398,6 +397,21 @@ cd ui && npx vitest run
 <td width="33%" align="center"><b>Discord 社区</b></td>
 </tr>
 </table>
+
+---
+
+## 🙏 致谢
+
+PilotDeck 的建设离不开以下优秀开源项目的支持：
+
+- [UltraRAG](https://github.com/OpenBMB/UltraRAG) — RAG 框架
+- [ClawXRouter](https://github.com/OpenBMB/ClawXRouter) — 智能模型路由
+- [ClawXMemory](https://github.com/OpenBMB/ClawXMemory) — Agent 记忆系统
+- [Claude Code UI](https://github.com/siteboon/claudecodeui) — Web UI 参考
+- [Claude Code Router](https://github.com/musistudio/claude-code-router) — 模型路由参考
+- [Vite](https://github.com/vitejs/vite) — 前端构建工具
+- [React](https://github.com/facebook/react) — UI 框架
+- [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) — 原子化 CSS 框架
 
 ---
 

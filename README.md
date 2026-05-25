@@ -388,7 +388,6 @@ cd ui && npx vitest run
 ## 💬 Community
 
 - For bugs and feature requests, please open a [GitHub Issue](https://github.com/OpenBMB/PilotDeck/issues).
-- For commercial collaboration, enterprise support, or open-source license discussions, please reach out via email: `team@pilotdeck.ai` <!-- TODO: replace with real contact email -->.
 - Join our community channels:
 
 <table width="100%">
@@ -398,6 +397,21 @@ cd ui && npx vitest run
 <td width="33%" align="center"><b>Discord Community</b></td>
 </tr>
 </table>
+
+---
+
+## 🙏 Acknowledgements
+
+PilotDeck builds upon the following outstanding open-source projects:
+
+- [UltraRAG](https://github.com/OpenBMB/UltraRAG) — RAG framework
+- [ClawXRouter](https://github.com/OpenBMB/ClawXRouter) — Intelligent model routing
+- [ClawXMemory](https://github.com/OpenBMB/ClawXMemory) — Agent memory system
+- [Claude Code UI](https://github.com/siteboon/claudecodeui) — Web UI reference
+- [Claude Code Router](https://github.com/musistudio/claude-code-router) — Model routing reference
+- [Vite](https://github.com/vitejs/vite) — Frontend build tool
+- [React](https://github.com/facebook/react) — UI framework
+- [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) — Utility-first CSS framework
 
 ---
 
