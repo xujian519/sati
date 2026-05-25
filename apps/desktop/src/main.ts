@@ -77,7 +77,7 @@ let currentServerPort: number | null = null;
 
 const PILOTDECK_DIR = path.dirname(configPath);
 const SERVER_LOG_PATH = path.join(PILOTDECK_DIR, "desktop.server.log");
-const REPO_URL = "https://github.com/Mingwwww/pilotdeck-opc";
+const REPO_URL = "https://github.com/OpenBMB/PilotDeck";
 const ISSUES_URL = `${REPO_URL}/issues`;
 
 /**
