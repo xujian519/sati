@@ -847,3 +847,203 @@ test("approved exit_plan_mode result is projected into the next model request", 
     /User has approved your plan\. You can now start coding\./i,
   );
 });
+
+test("post-routing compact triggers when routed model has smaller window", async () => {
+  const { model, router, config, dependencies } = createAgentLoopFixture({
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "text_delta", text: "Done." },
+        { type: "message_end", finishReason: "stop" },
+      ],
+    ],
+  });
+  router.decidedProvider = "small-provider";
+  router.decidedModel = "small-model";
+  let compactCalls = 0;
+  let lastOverrideMaxCtx: number | undefined;
+  const loop = new AgentLoop(
+    { ...config, maxContextTokens: 200_000 },
+    {
+      ...dependencies,
+      getModelMaxContextTokens: (provider, model) => {
+        if (provider === "small-provider" && model === "small-model") return 32_000;
+        return 200_000;
+      },
+      context: {
+        async prepareForModel() {
+          return {
+            messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+            systemPrompt: "",
+            systemPromptParts: [],
+            tools: [],
+            diagnostics: [],
+            boundaries: [],
+          };
+        },
+        async tryAutoCompact(input) {
+          compactCalls += 1;
+          lastOverrideMaxCtx = input.maxContextTokens;
+          if (input.maxContextTokens !== undefined) {
+            return {
+              type: "compacted" as const,
+              messages: input.messages,
+              tier: "micro" as const,
+              snapshot: {
+                tokens: 5000,
+                maxContextTokens: input.maxContextTokens,
+                warningRatio: 0.8,
+                blockingRatio: 0.95,
+                state: "ok" as const,
+                ratio: 5000 / input.maxContextTokens,
+              },
+            };
+          }
+          return {
+            type: "skipped" as const,
+            snapshot: {
+              tokens: 5000,
+              maxContextTokens: 200_000,
+              warningRatio: 0.8,
+              blockingRatio: 0.95,
+              state: "ok" as const,
+              ratio: 5000 / 200_000,
+            },
+          };
+        },
+      },
+    },
+  );
+
+  const { values } = await collectAsyncGenerator(
+    loop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+    }),
+  );
+
+  assert.equal(compactCalls, 2, "should call tryAutoCompact twice (pre-routing + post-routing)");
+  assert.equal(lastOverrideMaxCtx, 32_000, "post-routing compact should use the routed model's maxContextTokens");
+  const turnContinuedEvents = values.filter((e) => e.type === "turn_continued");
+  assert.ok(turnContinuedEvents.length >= 1, "should emit turn_continued for post-routing compact");
+  const budgetEvents = values.filter((e) => e.type === "context_budget");
+  assert.ok(budgetEvents.length >= 2, "should emit context_budget for both pre- and post-routing compact");
+});
+
+test("post-routing compact skips when routed model has same/larger window", async () => {
+  const { model, router, config, dependencies } = createAgentLoopFixture({
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "text_delta", text: "Done." },
+        { type: "message_end", finishReason: "stop" },
+      ],
+    ],
+  });
+  router.decidedProvider = "same-provider";
+  router.decidedModel = "same-model";
+  let compactCalls = 0;
+  const loop = new AgentLoop(
+    { ...config, maxContextTokens: 200_000 },
+    {
+      ...dependencies,
+      getModelMaxContextTokens: () => 200_000,
+      context: {
+        async prepareForModel() {
+          return {
+            messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+            systemPrompt: "",
+            systemPromptParts: [],
+            tools: [],
+            diagnostics: [],
+            boundaries: [],
+          };
+        },
+        async tryAutoCompact(input) {
+          compactCalls += 1;
+          return {
+            type: "skipped" as const,
+            snapshot: {
+              tokens: 5000,
+              maxContextTokens: input.maxContextTokens ?? 200_000,
+              warningRatio: 0.8,
+              blockingRatio: 0.95,
+              state: "ok" as const,
+              ratio: 5000 / 200_000,
+            },
+          };
+        },
+      },
+    },
+  );
+
+  await collectAsyncGenerator(
+    loop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+    }),
+  );
+
+  assert.equal(compactCalls, 1, "should only call tryAutoCompact once (pre-routing); post-routing skipped because window is not smaller");
+});
+
+test("post-routing compact tolerates unknown model gracefully", async () => {
+  const { model, router, config, dependencies } = createAgentLoopFixture({
+    scripts: [
+      [
+        { type: "message_start", role: "assistant" },
+        { type: "text_delta", text: "Done." },
+        { type: "message_end", finishReason: "stop" },
+      ],
+    ],
+  });
+  router.decidedProvider = "unknown-provider";
+  router.decidedModel = "unknown-model";
+  let compactCalls = 0;
+  const loop = new AgentLoop(
+    { ...config, maxContextTokens: 200_000 },
+    {
+      ...dependencies,
+      getModelMaxContextTokens: () => undefined,
+      context: {
+        async prepareForModel() {
+          return {
+            messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+            systemPrompt: "",
+            systemPromptParts: [],
+            tools: [],
+            diagnostics: [],
+            boundaries: [],
+          };
+        },
+        async tryAutoCompact(input) {
+          compactCalls += 1;
+          return {
+            type: "skipped" as const,
+            snapshot: {
+              tokens: 5000,
+              maxContextTokens: input.maxContextTokens ?? 200_000,
+              warningRatio: 0.8,
+              blockingRatio: 0.95,
+              state: "ok" as const,
+              ratio: 5000 / 200_000,
+            },
+          };
+        },
+      },
+    },
+  );
+
+  const { result } = await collectAsyncGenerator(
+    loop.run({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+    }),
+  );
+
+  assert.equal(result.result.type, "success", "should complete successfully");
+  assert.equal(compactCalls, 1, "should only call tryAutoCompact once (pre-routing); post-routing skipped because model is unknown");
+});

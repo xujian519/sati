@@ -205,11 +205,10 @@ test("edit_notebook requires a full read and rejects stale notebook edits", asyn
 
   assert.equal(unread.type, "error");
   assert.equal(partialRead.type, "success");
-  assert.equal(afterPartialRead.type, "error");
+  assert.equal(afterPartialRead.type, "success", "partial read should register a snapshot that permits notebook edits");
   assert.equal(fullRead.type, "success");
   assert.equal(stale.type, "error");
   if (unread.type === "error") assert.equal(unread.error.code, "invalid_tool_input");
-  if (afterPartialRead.type === "error") assert.equal(afterPartialRead.error.code, "invalid_tool_input");
   if (stale.type === "error") assert.equal(stale.error.code, "invalid_tool_input");
 });
 

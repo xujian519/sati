@@ -18,8 +18,11 @@ import type { AgentEvent, AgentEventEmitter } from "../protocol/events.js";
  * Narrow view of the router that the agent loop actually consumes. Tests can
  * inject anything that satisfies this contract; production wiring uses
  * `createRouterRuntime`.
+ *
+ * `decide` + `execute` are exposed so the agent loop can insert a post-routing
+ * compaction pass between the routing decision and the model call.
  */
-export type AgentRouterRuntime = Pick<RouterRuntime, "stream"> & {
+export type AgentRouterRuntime = Pick<RouterRuntime, "stream" | "decide" | "execute"> & {
   observeUsage?: RouterRuntime["observeUsage"];
   invalidateSticky?: RouterRuntime["invalidateSticky"];
 };
@@ -79,6 +82,13 @@ export type AgentRuntimeDependencies = {
     registry: ToolRegistry;
   };
   context?: AgentContextRuntime;
+  /**
+   * Look up a model's context-window size by provider/model id. Used after
+   * routing to re-evaluate compaction against the target model's window when
+   * it is smaller than the agent's default model. Returns `undefined` for
+   * unknown models so the caller can skip re-compaction gracefully.
+   */
+  getModelMaxContextTokens?: (provider: string, model: string) => number | undefined;
   now?: () => Date;
   uuid?: () => string;
   auditRecorder?: PilotDeckToolAuditRecorder;

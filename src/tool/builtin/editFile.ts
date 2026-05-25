@@ -11,6 +11,7 @@ import {
   recordWriteSnapshot,
   validateWriteSnapshotFresh,
 } from "./filesystem/writeSnapshots.js";
+import { findActualString, normalizeEditInput } from "./filesystem/editNormalization.js";
 
 export type EditFileInput = {
   file_path: string;
@@ -24,7 +25,7 @@ export function createEditFileTool(): PilotDeckToolDefinition<EditFileInput> {
     name: "edit_file",
     aliases: ["Edit"],
     description:
-      "Edit a workspace text file by replacing an exact string match.\n\nUsage:\n- Use this tool for targeted changes to an existing file.\n- old_string must appear in the target file.\n- If old_string is not unique, either provide a more specific old_string or set replace_all to update every occurrence.\n- Use replace_all when renaming or replacing repeated text across the same file.\n- If the file is outside the workspace or does not exist, the tool returns a controlled error.",
+      "Edit a workspace text file by replacing an exact string match.\n\nUsage:\n- You must read the target file with read_file before editing it. This tool will reject the input if the file has not been read in this session.\n- old_string must exactly match the file content character-by-character, including indentation. Copy old_string directly from read_file output without adding or removing spaces.\n- Use this tool for targeted changes to an existing file.\n- old_string must appear in the target file.\n- If old_string is not unique, either provide a more specific old_string or set replace_all to update every occurrence.\n- Use replace_all when renaming or replacing repeated text across the same file.\n- If the file is outside the workspace or does not exist, the tool returns a controlled error.",
     kind: "filesystem",
     inputSchema: {
       type: "object",
@@ -95,7 +96,7 @@ export function createEditFileTool(): PilotDeckToolDefinition<EditFileInput> {
         const normalized = error instanceof PilotDeckToolRuntimeError ? error.message : String(error);
         if (
           normalized === "File has not been read yet. Read it first before writing to it."
-          || normalized === "File has changed since the last full read. Read it again before writing to it."
+          || normalized === "File has changed since the last read. Read it again before writing to it."
         ) {
           return {
             ok: false,
@@ -168,19 +169,25 @@ export function createEditFileTool(): PilotDeckToolDefinition<EditFileInput> {
         }
         nextContent = input.new_string;
       } else {
-        occurrences = countOccurrences(content, input.old_string);
-        if (occurrences === 0) {
-          throw new PilotDeckToolRuntimeError("invalid_tool_input", "old_string was not found.");
+        const { oldString: normalizedOld, newString: normalizedNew } =
+          normalizeEditInput(resolved.absolutePath, input.old_string, input.new_string);
+        const actualOldString = findActualString(content, normalizedOld);
+        if (!actualOldString) {
+          throw new PilotDeckToolRuntimeError(
+            "invalid_tool_input",
+            `String to replace not found in file.\nString: ${input.old_string}`,
+          );
         }
+        occurrences = countOccurrences(content, actualOldString);
         if (occurrences > 1 && !input.replace_all) {
           throw new PilotDeckToolRuntimeError(
             "invalid_tool_input",
-            "old_string occurs more than once. Set replace_all to true to replace all occurrences.",
+            `Found ${occurrences} matches of old_string. Set replace_all to true to replace all occurrences, or provide a more specific old_string.`,
           );
         }
         nextContent = input.replace_all
-          ? content.split(input.old_string).join(input.new_string)
-          : content.replace(input.old_string, input.new_string);
+          ? content.split(actualOldString).join(normalizedNew)
+          : content.replace(actualOldString, normalizedNew);
       }
 
       const action = await writeTextFile(resolved.absolutePath, nextContent, { allowOverwrite: true });

@@ -3,6 +3,8 @@ import { PilotDeckToolRuntimeError } from "../../protocol/errors.js";
 
 export type ReadFileRangeResult = {
   content: string;
+  /** Full file content (BOM-stripped). Available for snapshot hashing. */
+  fullContent: string;
   lineCount: number;
   totalLines: number;
   totalBytes: number;
@@ -49,6 +51,7 @@ export async function readFileInRange(
 
   return {
     content,
+    fullContent: text,
     lineCount: selected.length,
     totalLines: lines.length,
     totalBytes: buffer.byteLength,

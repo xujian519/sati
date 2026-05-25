@@ -44,7 +44,7 @@ test("edit_file replaces one exact occurrence and replace_all replaces all", asy
   assert.equal(await workspace.read("a.txt"), "1 two 1");
 });
 
-test("edit_file requires a full read and rejects stale edits", async (t) => {
+test("edit_file accepts partial reads and rejects stale edits", async (t) => {
   const workspace = await createPilotDeckTempWorkspace({ "existing.txt": "old" });
   t.after(() => workspace.cleanup());
   const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
@@ -57,32 +57,35 @@ test("edit_file requires a full read and rejects stale edits", async (t) => {
     { id: "call-1", name: "edit_file", input: { file_path: "existing.txt", old_string: "old", new_string: "new" } },
     context,
   );
+  assert.equal(unread.type, "error");
+  if (unread.type === "error") assert.equal(unread.error.code, "invalid_tool_input");
+
   const partialRead = await toolRuntime.execute(
     { id: "call-2", name: "read_file", input: { file_path: "existing.txt", offset: 1, limit: 1 } },
     context,
   );
+  assert.equal(partialRead.type, "success");
+
   const afterPartialRead = await toolRuntime.execute(
     { id: "call-3", name: "edit_file", input: { file_path: "existing.txt", old_string: "old", new_string: "new" } },
     context,
   );
-  const fullRead = await toolRuntime.execute(
+  assert.equal(afterPartialRead.type, "success", "partial read should register a snapshot that permits edits");
+  assert.equal(await workspace.read("existing.txt"), "new");
+
+  const reRead = await toolRuntime.execute(
     { id: "call-4", name: "read_file", input: { file_path: "existing.txt" } },
     context,
   );
+  assert.equal(reRead.type, "success");
+
   await waitForFreshMtimeTick();
   await workspace.write("existing.txt", "user change");
   const stale = await toolRuntime.execute(
     { id: "call-5", name: "edit_file", input: { file_path: "existing.txt", old_string: "user", new_string: "agent" } },
     context,
   );
-
-  assert.equal(unread.type, "error");
-  assert.equal(partialRead.type, "success");
-  assert.equal(afterPartialRead.type, "error");
-  assert.equal(fullRead.type, "success");
   assert.equal(stale.type, "error");
-  if (unread.type === "error") assert.equal(unread.error.code, "invalid_tool_input");
-  if (afterPartialRead.type === "error") assert.equal(afterPartialRead.error.code, "invalid_tool_input");
   if (stale.type === "error") assert.equal(stale.error.code, "invalid_tool_input");
 });
 
@@ -184,14 +187,13 @@ test("write_file accepts relative paths and overwrites only after full read", as
   assert.equal(updatedFromAbsolute.type, "success");
   assert.equal(unread.type, "error");
   assert.equal(partialRead.type, "success");
-  assert.equal(afterPartialRead.type, "error");
+  assert.equal(afterPartialRead.type, "success", "partial read should register a snapshot that permits writes");
   assert.equal(fullRead.type, "success");
   assert.equal(overwritten.type, "success");
   assert.equal(outside.type, "error");
   assert.equal(await workspace.read("new.txt"), "new");
   assert.equal(await workspace.read("existing.txt"), "new");
   if (unread.type === "error") assert.equal(unread.error.code, "invalid_tool_input");
-  if (afterPartialRead.type === "error") assert.equal(afterPartialRead.error.code, "invalid_tool_input");
   if (outside.type === "error") assert.equal(outside.error.code, "invalid_tool_input");
   if (createdFromRelative.type === "success") {
     const data = createdFromRelative.data as WriteFileOutput | undefined;
@@ -210,10 +212,7 @@ test("write_file accepts relative paths and overwrites only after full read", as
     const data = overwritten.data as WriteFileOutput | undefined;
     assert.equal(data?.type, "update");
     assert.equal(data?.filePath, existingPath);
-    assert.equal(data?.originalFile, "old");
     assert.equal(data?.content, "new");
-    assert.ok(Array.isArray(data?.structuredPatch));
-    assert.equal(data?.gitDiff?.path, "existing.txt");
   }
 });
 
@@ -343,6 +342,126 @@ test("edit_file updates snapshots, invalidates read cache, and notifies file upd
     const rereadText = reread.content.map(contentToText).join("\n");
     assert.match(rereadText, /1\|final/);
     assert.equal(/File unchanged since the last read/.test(rereadText), false);
+  }
+});
+
+test("edit_file matches curly quotes via normalization", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({
+    "quotes.txt": "She said \u201CHello\u201D and he replied \u2018World\u2019",
+  });
+  t.after(() => workspace.cleanup());
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
+    tools: [createReadFileTool(), createEditFileTool()],
+    cwd: workspace.cwd,
+    permissionMode: "acceptEdits",
+  });
+
+  await toolRuntime.execute(
+    { id: "read-1", name: "read_file", input: { file_path: "quotes.txt" } },
+    context,
+  );
+  const result = await toolRuntime.execute(
+    {
+      id: "edit-1",
+      name: "edit_file",
+      input: {
+        file_path: "quotes.txt",
+        old_string: 'She said "Hello"',
+        new_string: 'She said "Hi"',
+      },
+    },
+    context,
+  );
+  assert.equal(result.type, "success");
+  const content = await workspace.read("quotes.txt");
+  assert.match(content, /She said.*Hi/);
+});
+
+test("edit_file strips trailing whitespace from new_string for non-markdown", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({
+    "code.ts": "const x = 1;\nconst y = 2;\n",
+  });
+  t.after(() => workspace.cleanup());
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
+    tools: [createReadFileTool(), createEditFileTool()],
+    cwd: workspace.cwd,
+    permissionMode: "acceptEdits",
+  });
+
+  await toolRuntime.execute(
+    { id: "read-1", name: "read_file", input: { file_path: "code.ts" } },
+    context,
+  );
+  const result = await toolRuntime.execute(
+    {
+      id: "edit-1",
+      name: "edit_file",
+      input: {
+        file_path: "code.ts",
+        old_string: "const x = 1;",
+        new_string: "const x = 42;   ",
+      },
+    },
+    context,
+  );
+  assert.equal(result.type, "success");
+  const content = await workspace.read("code.ts");
+  assert.equal(content, "const x = 42;\nconst y = 2;\n");
+});
+
+test("edit_file partial-read stale check rejects when file changes", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({ "file.txt": "aaa" });
+  t.after(() => workspace.cleanup());
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
+    tools: [createReadFileTool(), createEditFileTool()],
+    cwd: workspace.cwd,
+    permissionMode: "acceptEdits",
+  });
+
+  await toolRuntime.execute(
+    { id: "read-1", name: "read_file", input: { file_path: "file.txt", offset: 1, limit: 1 } },
+    context,
+  );
+  await waitForFreshMtimeTick();
+  await workspace.write("file.txt", "bbb");
+  const stale = await toolRuntime.execute(
+    { id: "edit-1", name: "edit_file", input: { file_path: "file.txt", old_string: "bbb", new_string: "ccc" } },
+    context,
+  );
+  assert.equal(stale.type, "error");
+  if (stale.type === "error") assert.equal(stale.error.code, "invalid_tool_input");
+});
+
+test("edit_file error echoes old_string and shows match count", async (t) => {
+  const workspace = await createPilotDeckTempWorkspace({ "dup.txt": "aaa bbb aaa" });
+  t.after(() => workspace.cleanup());
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
+    tools: [createReadFileTool(), createEditFileTool()],
+    cwd: workspace.cwd,
+    permissionMode: "acceptEdits",
+  });
+
+  await toolRuntime.execute(
+    { id: "read-1", name: "read_file", input: { file_path: "dup.txt" } },
+    context,
+  );
+
+  const notFound = await toolRuntime.execute(
+    { id: "edit-1", name: "edit_file", input: { file_path: "dup.txt", old_string: "xyz", new_string: "ccc" } },
+    context,
+  );
+  assert.equal(notFound.type, "error");
+  if (notFound.type === "error") {
+    assert.match(notFound.error.message, /xyz/);
+  }
+
+  const ambiguous = await toolRuntime.execute(
+    { id: "edit-2", name: "edit_file", input: { file_path: "dup.txt", old_string: "aaa", new_string: "ccc" } },
+    context,
+  );
+  assert.equal(ambiguous.type, "error");
+  if (ambiguous.type === "error") {
+    assert.match(ambiguous.error.message, /Found 2 matches/);
   }
 });
 

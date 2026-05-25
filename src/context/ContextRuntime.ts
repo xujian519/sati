@@ -51,9 +51,15 @@ export type AgentContextRuntime = {
    * Optional. Proactive auto-compaction: evaluates the token budget and
    * triggers summarization when the context approaches `maxContextTokens`.
    * Minimal runtimes (`NullContextRuntime`) leave this undefined.
+   *
+   * When `maxContextTokens` is provided it overrides the construction-time
+   * default for this single evaluation. The agent loop uses this to
+   * re-evaluate compaction against the routed model's (potentially smaller)
+   * context window after a routing decision.
    */
   tryAutoCompact?(input: {
     messages: CanonicalMessage[];
     abortSignal?: AbortSignal;
+    maxContextTokens?: number;
   }): Promise<AutoCompactResult>;
 };

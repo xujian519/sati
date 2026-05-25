@@ -37,7 +37,7 @@ export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput, W
     name: "write_file",
     aliases: ["Write"],
     description:
-      "Writes a UTF-8 text file inside the workspace.\n\nUsage:\n- The file_path parameter may be relative to the current workspace or an absolute path, but it must resolve inside the workspace.\n- This tool will overwrite the existing file if there is one at the provided path.\n- If this is an existing file, you should use the read_file tool first to read the file's contents. This tool will fail if you did not read the file first.\n- If the target file changed after the last full read, this tool will fail and you must read it again before writing.\n- Prefer the edit_file tool for modifying existing files. Only use this tool to create new files or for complete rewrites.\n- The returned filePath is always the resolved absolute path.\n- Do not create documentation files (*.md) or README files unless explicitly requested by the User.\n- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.",
+      "Writes a UTF-8 text file inside the workspace.\n\nUsage:\n- The file_path parameter may be relative to the current workspace or an absolute path, but it must resolve inside the workspace.\n- This tool will overwrite the existing file if there is one at the provided path.\n- You must read an existing file with read_file before writing to it. This tool will fail if you did not read the file first.\n- If the target file changed after the last read, this tool will fail and you must read it again before writing.\n- Prefer the edit_file tool for modifying existing files. Only use this tool to create new files or for complete rewrites.\n- The returned filePath is always the resolved absolute path.\n- Do not create documentation files (*.md) or README files unless explicitly requested by the User.\n- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.",
     kind: "filesystem",
     inputSchema: {
       type: "object",
@@ -122,7 +122,7 @@ export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput, W
       } catch (error) {
         const normalized = error instanceof PilotDeckToolRuntimeError ? error.message : String(error);
         if (normalized === "File has not been read yet. Read it first before writing to it."
-          || normalized === "File has changed since the last full read. Read it again before writing to it.") {
+          || normalized === "File has changed since the last read. Read it again before writing to it.") {
           return {
             ok: false,
             issues: [{

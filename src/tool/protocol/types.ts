@@ -96,6 +96,10 @@ export type PilotDeckWriteSnapshotEntry = {
   absolutePath: string;
   mtimeMs: number;
   contentHash: string;
+  /** Set when the snapshot was seeded by a ranged read (offset/limit). */
+  offset?: number;
+  /** Set when the snapshot was seeded by a ranged read (offset/limit). */
+  limit?: number;
 };
 
 export type PilotDeckWriteSnapshotMap = Map<string, PilotDeckWriteSnapshotEntry>;

@@ -13,6 +13,7 @@ import {
   snapshotAgentSessionState,
 } from "./AgentSessionState.js";
 import type { AgentTranscriptWriterState } from "../../session/transcript/TranscriptWriter.js";
+import type { AgentLoopSeedState } from "../loop/AgentLoop.js";
 
 export type AgentSessionOptions = {
   sessionId: string;
@@ -30,6 +31,7 @@ export type AgentSessionRuntimeReloadSnapshot = {
   cwd: string;
   transcriptPath: string;
   transcriptWriterState?: AgentTranscriptWriterState;
+  fileState?: AgentLoopSeedState;
 };
 
 export class AgentSession {
@@ -119,6 +121,7 @@ export class AgentSession {
       cwd: runtime.runtimeContext.cwd,
       transcriptPath: runtime.runtimeContext.transcriptPath,
       transcriptWriterState: runtime.transcriptWriterState,
+      fileState: this.options.turnRunner.snapshotFileState(),
     };
   }
 
