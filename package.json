@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.0.0",
+    "@types/ws": "^8.18.1",
     "ink-testing-library": "^4.0.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
@@ -46,6 +47,7 @@
     "turndown": "^7.2.4",
     "undici": "^8.2.0",
     "weixin-ilink": "^0.1.0",
+    "ws": "^8.21.0",
     "yaml": "^2.8.4"
   }
 }

@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { createAlwaysOnManager, createApplyHandler, SessionConfigOverrides, type AlwaysOnManager, type AlwaysOnConfig } from "../always-on/index.js";
 import { createCronRuntime, type CronRuntime, type CronConfig } from "../cron/index.js";
 import { connectRemoteGatewayIfAvailable, type Gateway, type GatewayEvent, type GatewaySubmitTurnInput } from "../gateway/index.js";
-import { CliChannel, TuiChannel, FeishuChannel, WeixinChannel } from "../adapters/index.js";
+import { CliChannel, TuiChannel, FeishuChannel, WeixinChannel, QQChannel } from "../adapters/index.js";
 import {
   migrateSkillsToPilotDeck,
   type SkillMigrationConflictMode,
@@ -188,6 +188,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       staticAssetsPath: resolve(projectRoot, "ui/dist"),
       feishu: new FeishuChannel(),
       weixin: new WeixinChannel(),
+      qq: new QQChannel(),
     });
     bindServer(server);
     deferredBroadcast = (name, payload) => server.broadcastNotification(name, payload);
