@@ -12,6 +12,10 @@
 #   bash scripts/release.sh --skip-notarize # signed but no notarization
 #   bash scripts/release.sh --skip-build    # reuse existing pilotdeckui/dist
 #   bash scripts/release.sh --skip-verify   # skip post-build verification
+#   bash scripts/release.sh --skip-tests    # skip pre-build npm test (emergency only)
+#   bash scripts/release.sh --with-l2       # after DMG: run Playwright L2 smoke
+#   bash scripts/release.sh --with-l3       # after DMG: run real-model L3 (needs API key)
+#   bash scripts/release.sh --full-verify   # verify-dmg + L2 + L3 (L3 skips if no key)
 #   bash scripts/release.sh --skip-publish  # skip GitHub Release upload
 #
 # Environment overrides (escape hatches — see RELEASING.md for context):
@@ -50,6 +54,10 @@ MODE="auto"
 SKIP_BUILD=0
 SKIP_NOTARIZE=0
 SKIP_VERIFY=0
+SKIP_TESTS=0
+WITH_L2=0
+WITH_L3=0
+FULL_VERIFY=0
 SKIP_PUBLISH="${SKIP_PUBLISH:-0}"
 KEYCHAIN_PROFILE="${NOTARIZE_KEYCHAIN_PROFILE:-EdgeClaw}"
 KEYCHAIN_PATH="${NOTARIZE_KEYCHAIN_PATH:-$HOME/Library/Keychains/login.keychain-db}"
@@ -62,6 +70,10 @@ for arg in "$@"; do
     --skip-build)     SKIP_BUILD=1 ;;
     --skip-notarize)  SKIP_NOTARIZE=1 ;;
     --skip-verify)    SKIP_VERIFY=1 ;;
+    --skip-tests)     SKIP_TESTS=1 ;;
+    --with-l2)        WITH_L2=1 ;;
+    --with-l3)        WITH_L3=1 ;;
+    --full-verify)    FULL_VERIFY=1; WITH_L2=1; WITH_L3=1 ;;
     --skip-publish)   SKIP_PUBLISH=1 ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "Unknown arg: $arg (use --help)" >&2; exit 2 ;;
@@ -206,6 +218,16 @@ if [[ ! -x "$BUN_BIN" ]]; then
   bash "${SCRIPT_DIR}/download-bun.sh" || fail "download-bun.sh failed"
 fi
 ok "Bundled Bun: $("$BUN_BIN" --version)"
+
+# ============================================================================
+if [[ "$SKIP_TESTS" == "0" ]]; then
+step "Repository tests (release gate)"
+# ============================================================================
+  info "npm test @ ${REPO_ROOT} (gateway, config, desktop onboarding compat, …)"
+  (cd "$REPO_ROOT" && npm test) \
+    || fail "npm test failed — fix tests or use --skip-tests for emergency local builds only"
+  ok "npm test passed"
+fi
 
 # ============================================================================
 step "Emit build-info.json"
@@ -532,9 +554,25 @@ ATT_PLIST="$(hdiutil attach -plist -nobrowse -noverify -noautoopen "$RW_DMG")" \
 MP="$(echo "$ATT_PLIST" | python3 -c "import sys, plistlib; d=plistlib.loads(sys.stdin.buffer.read()); print(next((e['mount-point'] for e in d['system-entities'] if 'mount-point' in e), ''))")"
 [[ -n "$MP" && -d "$MP" ]] || fail "Could not parse mount point from hdiutil plist"
 
-info "Step c: ditto .app + Applications symlink…"
-ditto "$APP_OUT" "$MP/PilotDeck.app" \
-  || { hdiutil detach "$MP" -force >/dev/null 2>&1; fail "ditto into mounted DMG failed (TCC? try a different volname)"; }
+info "Step c: copy .app + Applications symlink…"
+# macOS 16+ TCC App Management blocks ditto/cp/rsync/tar/mkdir from
+# creating *.app directories on mounted volumes — even with safe volume
+# names. Finder has inherent App Management privileges, so we use it as
+# the last-resort copy method.
+if ditto "$APP_OUT" "$MP/PilotDeck.app" 2>/dev/null; then
+  : # ditto succeeded (older macOS or TCC disabled)
+elif cp -R "$APP_OUT" "$MP/PilotDeck.app" 2>/dev/null; then
+  : # cp -R succeeded
+else
+  info "ditto/cp blocked by TCC, using Finder copy…"
+  osascript -e "
+    tell application \"Finder\"
+      set sourceApp to POSIX file \"$APP_OUT\" as alias
+      set targetVol to POSIX file \"$MP\" as alias
+      duplicate sourceApp to targetVol
+    end tell" \
+    || { hdiutil detach "$MP" -force >/dev/null 2>&1; fail "All copy methods failed (TCC?)"; }
+fi
 ln -sf /Applications "$MP/Applications"
 
 info "Step d: detach…"
@@ -627,10 +665,24 @@ fi
 
 # ============================================================================
 if [[ "$SKIP_VERIFY" == "0" && -x "${SCRIPT_DIR}/verify-dmg.sh" ]]; then
-step "End-to-end verification"
+step "End-to-end verification (L1 verify-dmg)"
 # ============================================================================
   bash "${SCRIPT_DIR}/verify-dmg.sh" "$DMG_OUT" "$MODE" \
     || fail "Verification failed (DMG produced but cannot pass smoke check)"
+fi
+
+if [[ "$WITH_L2" == "1" && -x "${SCRIPT_DIR}/release-l2.sh" ]]; then
+step "L2 Playwright smoke (UI + onboarding + Electron)"
+# ============================================================================
+  bash "${SCRIPT_DIR}/release-l2.sh" "$DMG_OUT" \
+    || fail "L2 smoke failed"
+fi
+
+if [[ "$WITH_L3" == "1" && -x "${SCRIPT_DIR}/release-l3.sh" ]]; then
+step "L3 real-model E2E (opt-in)"
+# ============================================================================
+  bash "${SCRIPT_DIR}/release-l3.sh" \
+    || fail "L3 E2E failed"
 fi
 
 # ============================================================================

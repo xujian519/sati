@@ -6,6 +6,7 @@ import type {
 } from "../../model/index.js";
 import { TokenBudgetManager } from "../budget/TokenBudgetManager.js";
 import type { ContextDiagnostic } from "../protocol/types.js";
+import { stripMultimediaFromMessages } from "./stripMultimedia.js";
 import {
   collectToolCallIds,
   collectToolResultIds,
@@ -219,7 +220,7 @@ export class CompactionEngine {
     const request: CanonicalModelRequest = {
       provider: this.options.provider,
       model: this.options.model_,
-      messages: [...messages, trailingPrompt],
+      messages: [...stripMultimediaFromMessages(messages), trailingPrompt],
       systemPrompt: this.options.systemPrompt ?? COMPACT_SYSTEM_PROMPT_DEFAULT,
       maxOutputTokens: this.options.maxOutputTokens ?? COMPACT_MAX_OUTPUT_TOKENS,
       stream: true,

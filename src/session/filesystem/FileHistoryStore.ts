@@ -1,7 +1,7 @@
 /**
  * `FileHistoryStore` — implements C4 (§6.4 of the deferred-feature guide).
  *
- * Behaviour parity with `third-party/claude-code-main/src/utils/fileHistory.ts`:
+ * Behaviour parity with the legacy upstream file-history store:
  *
  *   F1  trackEdit performs a 3-phase commit (check → backup → commit)
  *   F2  Repeated trackEdit on the same file in the same snapshot does NOT

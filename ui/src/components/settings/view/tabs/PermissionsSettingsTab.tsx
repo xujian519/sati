@@ -15,6 +15,10 @@ import SettingsRow from '../SettingsRow';
 import SettingsSection from '../SettingsSection';
 import SettingsToggle from '../SettingsToggle';
 
+const IS_WINDOWS = typeof navigator !== 'undefined'
+  && /win/i.test(navigator.userAgent)
+  && !/darwin/i.test(navigator.userAgent);
+
 // Mirrors the curated set the legacy claudecodeui Permissions tab used. These
 // are just convenience shortcuts — the user can still type any free-form
 // pattern Anthropic's permission DSL accepts.
@@ -33,7 +37,16 @@ const QUICK_ADD_TOOLS = [
   'web_search',
 ];
 
-const QUICK_BLOCK_TOOLS = ['bash:rm:*', 'bash:sudo:*'];
+const QUICK_BLOCK_TOOLS_UNIX = ['bash:rm:*', 'bash:sudo:*'];
+const QUICK_BLOCK_TOOLS_WINDOWS = [
+  'bash:rm:*',
+  'bash:Remove-Item:*',
+  'bash:del /s:*',
+  'bash:rd /s:*',
+  'bash:Format-Volume:*',
+  'bash:Start-Process:*',
+];
+const QUICK_BLOCK_TOOLS = IS_WINDOWS ? QUICK_BLOCK_TOOLS_WINDOWS : QUICK_BLOCK_TOOLS_UNIX;
 
 const addUnique = (items: string[], value: string): string[] => {
   const trimmed = value.trim();
@@ -629,6 +642,18 @@ export default function PermissionsSettingsTab() {
               <code className="rounded bg-muted px-1 py-0.5 text-foreground">bash:rm:*</code>{' '}
               {t('permissions.toolExamples.bashRm', { defaultValue: '— block all rm commands (dangerous)' })}
             </li>
+            {IS_WINDOWS ? (
+              <>
+                <li>
+                  <code className="rounded bg-muted px-1 py-0.5 text-foreground">bash:Remove-Item:*</code>{' '}
+                  {t('permissions.toolExamples.bashRemoveItem', { defaultValue: '— block PowerShell Remove-Item' })}
+                </li>
+                <li>
+                  <code className="rounded bg-muted px-1 py-0.5 text-foreground">bash:del /s:*</code>{' '}
+                  {t('permissions.toolExamples.bashDel', { defaultValue: '— block CMD recursive delete' })}
+                </li>
+              </>
+            ) : null}
           </ul>
         </SettingsCard>
       </SettingsSection>

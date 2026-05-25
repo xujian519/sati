@@ -14,7 +14,7 @@ import {
   readPilotDeckConfigFile,
 } from './pilotdeckConfig.js';
 
-const MEMORY_ROOT_DIR = path.join(os.homedir(), '.pilotdeck', 'memory');
+const MEMORY_ROOT_DIR = path.join(process.env.PILOT_HOME || path.join(os.homedir(), '.pilotdeck'), 'memory');
 const MEMORY_WORKSPACES_ROOT = path.join(MEMORY_ROOT_DIR, 'workspaces');
 const MEMORY_GLOBAL_ROOT = path.join(MEMORY_ROOT_DIR, 'global');
 const MEMORY_SCHEDULER_INTERVAL_MS = 60_000;

@@ -1,8 +1,5 @@
-import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
-import { execFile } from "node:child_process";
-import { tmpdir } from "node:os";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import type { PilotDeckToolDefinition } from "../protocol/types.js";
 import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
 import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
@@ -31,9 +28,10 @@ export type ReadFileInput = {
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_TEXT_TOKENS = 25_000;
 const MAX_PDF_PAGES_PER_REQUEST = 20;
+const PDF_AT_MENTION_INLINE_THRESHOLD = 10;
+const PDF_EXTRACT_SIZE_THRESHOLD = 3 * 1024 * 1024;
 const FILE_UNCHANGED_STUB =
   "File unchanged since the last read. Refer to the earlier read_file result instead of re-reading it.";
-const execFileAsync = promisify(execFile);
 
 export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
   return {
@@ -172,8 +170,9 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
           };
         }
         const imageBuffer = await readFile(resolved.absolutePath);
+        const validated = await validateAndRepairImage(imageBuffer, mimeType);
         const maxImageBytes = Math.min(MAX_IMAGE_BYTES, context.modelMultimodal?.maxImageBytes ?? MAX_IMAGE_BYTES);
-        const compressed = await compressImageForBudget(imageBuffer, mimeType, maxImageBytes);
+        const compressed = await compressImageForBudget(validated.buffer, validated.mimeType, maxImageBytes);
         readState.set(dedupKey, {
           mtimeMs: Math.floor(fileStat.mtimeMs),
           kind,
@@ -201,12 +200,15 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
 
       if (kind === "pdf") {
         const supportsPdf = context.modelMultimodal?.input?.includes("pdf");
-        const pdfBuffer = await readFile(resolved.absolutePath);
-        const pageCount = countPdfPages(pdfBuffer);
+        const supportsImage = context.modelMultimodal?.input?.includes("image");
         const parsedPages = input.pages ? parsePdfPageRange(input.pages) : undefined;
         if (input.pages && !parsedPages) {
           throw new PilotDeckToolRuntimeError("invalid_tool_input", `Invalid PDF page range: ${input.pages}.`);
         }
+
+        const pdfBuffer = await readFile(resolved.absolutePath);
+        const pageCount = await countPdfPages(pdfBuffer);
+
         if (
           parsedPages
           && pageCount !== undefined
@@ -217,62 +219,137 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
             `PDF page range ${input.pages} exceeds the detected page count (${pageCount}).`,
           );
         }
-        if (!supportsPdf) {
-          const supportsImage = context.modelMultimodal?.input?.includes("image");
-          if (supportsImage) {
-            const rendered = await renderPdfPagesAsImages(
-              resolved.absolutePath,
-              resolved.relativePath,
-              parsedPages,
-              pageCount,
-              context.modelMultimodal?.maxImageBytes ?? MAX_IMAGE_BYTES,
-              context.modelMultimodal?.imageDetail,
-            );
-            if (rendered.ok) {
-              const textBlocks = [{
-                type: "text" as const,
-                text: `[PDF pages rendered from ${resolved.relativePath}: ${rendered.firstPage}-${rendered.lastPage}${pageCount ? ` of ${pageCount}` : ""}.]`
-                  + (rendered.truncated ? `\n[PDF truncated to ${MAX_PDF_PAGES_PER_REQUEST} pages; use the pages parameter to read another range.]` : ""),
-              }];
-              readState.set(dedupKey, {
-                mtimeMs: Math.floor(fileStat.mtimeMs),
-                kind,
-                offset: input.offset,
-                limit: input.limit,
-                pages: input.pages,
-              });
-              return {
-                content: [...textBlocks, ...rendered.images],
-                data: {
-                  filePath: resolved.relativePath,
-                  kind,
-                  modelSupportsPdf: false,
-                  pdfPagesRendered: true,
-                  pageCount,
-                  requestedPages: input.pages,
-                  renderedPages: { firstPage: rendered.firstPage, lastPage: rendered.lastPage },
-                  truncated: rendered.truncated,
-                },
-                metadata: { truncated: rendered.truncated },
-              };
-            }
+
+        // With pages parameter: always render as images via mupdf
+        if (parsedPages) {
+          if (!supportsImage) {
             return {
               content: [{
                 type: "text",
-                text: `[PDF file: ${resolved.relativePath}, ${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""}. Current model does not support PDF input, and PDF page rendering failed: ${rendered.error}]`,
+                text: `[PDF file: ${resolved.relativePath}, ${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""}. Current model does not support image input; cannot render requested pages.]`,
               }],
-              data: { filePath: resolved.relativePath, kind, modelSupportsPdf: false, modelSupportsImage: true, pageCount },
+              data: { filePath: resolved.relativePath, kind, modelSupportsImage: false, pageCount },
             };
           }
+          const rendered = await renderPdfPagesAsImages(
+            pdfBuffer,
+            resolved.relativePath,
+            parsedPages,
+            pageCount,
+            context.modelMultimodal?.maxImageBytes ?? MAX_IMAGE_BYTES,
+            context.modelMultimodal?.imageDetail,
+          );
+          if (!rendered.ok) {
+            return {
+              content: [{
+                type: "text",
+                text: `[PDF file: ${resolved.relativePath}. PDF page rendering failed: ${rendered.error}]`,
+              }],
+              data: { filePath: resolved.relativePath, kind, pageCount, renderError: rendered.error },
+            };
+          }
+          readState.set(dedupKey, {
+            mtimeMs: Math.floor(fileStat.mtimeMs),
+            kind,
+            offset: input.offset,
+            limit: input.limit,
+            pages: input.pages,
+          });
+          return {
+            content: [{
+              type: "text" as const,
+              text: `PDF pages extracted: ${rendered.lastPage - rendered.firstPage + 1} page(s) from ${resolved.relativePath} (pages ${rendered.firstPage}-${rendered.lastPage}${pageCount ? ` of ${pageCount}` : ""}).`,
+            }],
+            supplementalMessages: [{
+              role: "user",
+              content: rendered.images,
+              isMeta: true,
+            }],
+            data: {
+              filePath: resolved.relativePath,
+              kind,
+              pdfPagesRendered: true,
+              pageCount,
+              requestedPages: input.pages,
+              renderedPages: { firstPage: rendered.firstPage, lastPage: rendered.lastPage },
+              truncated: rendered.truncated,
+            },
+            metadata: { truncated: rendered.truncated },
+          };
+        }
 
+        // Without pages: enforce page count threshold
+        if (pageCount !== undefined && pageCount > PDF_AT_MENTION_INLINE_THRESHOLD) {
+          throw new PilotDeckToolRuntimeError(
+            "invalid_tool_input",
+            `This PDF has ${pageCount} pages, which is too many to read at once. ` +
+            `Use the pages parameter to read specific page ranges (e.g., pages: "1-5"). ` +
+            `Maximum ${MAX_PDF_PAGES_PER_REQUEST} pages per request.`,
+          );
+        }
+
+        // Degrade to image rendering when model lacks PDF support or file is large
+        if (!supportsPdf || fileStat.size > PDF_EXTRACT_SIZE_THRESHOLD) {
+          if (!supportsImage) {
+            return {
+              content: [{
+                type: "text",
+                text: `[PDF file: ${resolved.relativePath}, ${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""}. Current model does not support PDF input or image input.]`,
+              }],
+              data: { filePath: resolved.relativePath, kind, modelSupportsPdf: false, modelSupportsImage: false, pageCount },
+            };
+          }
+          const rendered = await renderPdfPagesAsImages(
+            pdfBuffer,
+            resolved.relativePath,
+            undefined,
+            pageCount,
+            context.modelMultimodal?.maxImageBytes ?? MAX_IMAGE_BYTES,
+            context.modelMultimodal?.imageDetail,
+          );
+          if (rendered.ok) {
+            readState.set(dedupKey, {
+              mtimeMs: Math.floor(fileStat.mtimeMs),
+              kind,
+              offset: input.offset,
+              limit: input.limit,
+              pages: input.pages,
+            });
+            const degradeReason = !supportsPdf ? "model does not support PDF input" : `file exceeds ${PDF_EXTRACT_SIZE_THRESHOLD / 1024 / 1024}MB threshold`;
+            return {
+              content: [{
+                type: "text" as const,
+                text: `[PDF pages rendered from ${resolved.relativePath}: ${rendered.firstPage}-${rendered.lastPage}${pageCount ? ` of ${pageCount}` : ""} (${degradeReason}).]`
+                  + (rendered.truncated ? `\n[PDF truncated to ${MAX_PDF_PAGES_PER_REQUEST} pages; use the pages parameter to read another range.]` : ""),
+              }],
+              supplementalMessages: [{
+                role: "user",
+                content: rendered.images,
+                isMeta: true,
+              }],
+              data: {
+                filePath: resolved.relativePath,
+                kind,
+                modelSupportsPdf: !!supportsPdf,
+                pdfPagesRendered: true,
+                degradeReason,
+                pageCount,
+                renderedPages: { firstPage: rendered.firstPage, lastPage: rendered.lastPage },
+                truncated: rendered.truncated,
+              },
+              metadata: { truncated: rendered.truncated },
+            };
+          }
           return {
             content: [{
               type: "text",
-              text: `[PDF file: ${resolved.relativePath}, ${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""}. Current model does not support PDF input or image input.]`,
+              text: `[PDF file: ${resolved.relativePath}, ${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""}. PDF page rendering failed: ${rendered.error}]`,
             }],
-            data: { filePath: resolved.relativePath, kind, modelSupportsPdf: false, modelSupportsImage: false, pageCount },
+            data: { filePath: resolved.relativePath, kind, modelSupportsPdf: !!supportsPdf, pageCount, renderError: rendered.error },
           };
         }
+
+        // Model supports PDF and file is small enough: send as document block
         readState.set(dedupKey, {
           mtimeMs: Math.floor(fileStat.mtimeMs),
           kind,
@@ -282,26 +359,29 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         });
         return {
           content: [
-            ...(parsedPages
-              ? [{
-                  type: "text" as const,
-                  text: `Requested PDF pages: ${parsedPages.firstPage}-${parsedPages.lastPage}.`,
-                }]
-              : []),
             {
-              type: "pdf" as const,
-              mimeType: "application/pdf",
-              data: pdfBuffer.toString("base64"),
-              bytes: pdfBuffer.byteLength,
-              pages: pageCount,
+              type: "text" as const,
+              text: `PDF file read: ${resolved.relativePath} (${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""})`,
             },
           ],
+          supplementalMessages: [{
+            role: "user",
+            content: [
+              {
+                type: "pdf" as const,
+                mimeType: "application/pdf" as const,
+                data: pdfBuffer.toString("base64"),
+                bytes: pdfBuffer.byteLength,
+                pages: pageCount,
+              },
+            ],
+            isMeta: true,
+          }],
           data: {
             filePath: resolved.relativePath,
             kind,
             bytes: pdfBuffer.byteLength,
             pageCount,
-            requestedPages: input.pages,
           },
         };
       }
@@ -403,7 +483,7 @@ function renderNumberedLines(lines: string[], startLine: number): string {
 }
 
 async function renderPdfPagesAsImages(
-  absolutePath: string,
+  pdfBuffer: Buffer,
   relativePath: string,
   pages: { firstPage: number; lastPage: number } | undefined,
   pageCount: number | undefined,
@@ -428,28 +508,26 @@ async function renderPdfPagesAsImages(
   const firstPage = pages?.firstPage ?? 1;
   const lastPage = pages?.lastPage ?? Math.min(pageCount ?? MAX_PDF_PAGES_PER_REQUEST, MAX_PDF_PAGES_PER_REQUEST);
   const truncated = pages === undefined && pageCount !== undefined && pageCount > lastPage;
-  const outputDir = await mkdtemp(path.join(tmpdir(), "pilotdeck-pdf-pages-"));
 
   try {
-    const prefix = path.join(outputDir, "page");
-    await execFileAsync(
-      "pdftoppm",
-      ["-jpeg", "-r", "100", "-f", String(firstPage), "-l", String(lastPage), absolutePath, prefix],
-      { encoding: "utf8", timeout: 120_000 },
-    );
-
-    const imageFiles = (await readdir(outputDir))
-      .filter((file) => file.endsWith(".jpg") || file.endsWith(".jpeg"))
-      .sort();
-    if (imageFiles.length === 0) {
-      return { ok: false, error: `pdftoppm produced no page images for ${relativePath}` };
-    }
+    const mupdf = await import("mupdf");
+    const doc = mupdf.Document.openDocument(pdfBuffer, "application/pdf");
 
     const images = [];
-    for (const imageFile of imageFiles) {
-      const imageBuffer = await readFile(path.join(outputDir, imageFile));
+    for (let i = firstPage - 1; i < lastPage; i++) {
+      const page = doc.loadPage(i);
+      const scale = 100 / 72;
+      const pixmap = page.toPixmap(
+        mupdf.Matrix.scale(scale, scale),
+        mupdf.ColorSpace.DeviceRGB,
+        false,
+        true,
+      );
+      const jpegData = pixmap.asJPEG(80, false);
+      const jpegBuffer = Buffer.from(jpegData);
+
       const compressed = await compressImageForBudget(
-        imageBuffer,
+        jpegBuffer,
         "image/jpeg",
         Math.min(MAX_IMAGE_BYTES, maxImageBytes),
       );
@@ -462,6 +540,10 @@ async function renderPdfPagesAsImages(
       });
     }
 
+    if (images.length === 0) {
+      return { ok: false, error: `mupdf produced no page images for ${relativePath}` };
+    }
+
     return {
       ok: true,
       images,
@@ -471,9 +553,7 @@ async function renderPdfPagesAsImages(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, error: message || "pdftoppm is unavailable" };
-  } finally {
-    await rm(outputDir, { recursive: true, force: true }).catch(() => undefined);
+    return { ok: false, error: message || "mupdf rendering failed" };
   }
 }
 
@@ -506,12 +586,56 @@ function ensureTokenBudget(text: string, filePath: string): void {
 }
 
 /**
+ * Validate image integrity and attempt repair if truncated/corrupted.
+ * Fast path: complete JPEGs (with EOI marker and > 1KB) pass through unchanged.
+ * For suspicious images, attempt re-encode via sharp which can tolerate minor truncation.
+ * Throws PilotDeckToolRuntimeError if the image is unrecoverably corrupt.
+ */
+async function validateAndRepairImage(
+  buffer: Buffer,
+  mimeType: string,
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  const isJpeg = mimeType === "image/jpeg";
+  const hasEoi = isJpeg && buffer.length >= 2
+    && buffer[buffer.length - 2] === 0xff
+    && buffer[buffer.length - 1] === 0xd9;
+
+  if (isJpeg && hasEoi && buffer.length > 1000) {
+    return { buffer, mimeType };
+  }
+
+  if (!isJpeg && buffer.length > 1000) {
+    // For non-JPEG formats, do a quick decode check via sharp
+    try {
+      const sharpModule = await import("sharp");
+      const sharp = sharpModule.default;
+      await sharp(buffer).metadata();
+      return { buffer, mimeType };
+    } catch {
+      // Fall through to repair attempt
+    }
+  }
+
+  try {
+    const sharpModule = await import("sharp");
+    const sharp = sharpModule.default;
+    const repaired = await sharp(buffer).jpeg({ quality: 90 }).toBuffer();
+    return { buffer: repaired, mimeType: "image/jpeg" };
+  } catch {
+    throw new PilotDeckToolRuntimeError(
+      "invalid_tool_input",
+      `Image file appears truncated or corrupted (${buffer.length} bytes). Cannot decode.`,
+    );
+  }
+}
+
+/**
  * Multi-pass image compressor. We size against a single byte budget (which
  * the model's own `maxImageBytes` constraint also enforces) — there's no
  * separate "image token" cap because multimodal LLMs price images by
  * dimensions or fixed tile cost, not by base64 length. A `bytes / 6`
  * heuristic on top of that just rejects perfectly cheap images (e.g. a
- * 250 KB JPEG that Claude charges ~700 tokens for).
+ * 250 KB JPEG that the model charges ~700 tokens for).
  *
  * Cascade: pass 1 = format-appropriate 1600px / quality 80, pass 2 =
  * 1200px JPEG quality 55, pass 3 = 800px JPEG quality 40. Only after all

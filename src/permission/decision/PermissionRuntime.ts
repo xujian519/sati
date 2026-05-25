@@ -97,6 +97,13 @@ export class PermissionRuntime {
             message: `Plan mode allows read-only tool ${tool.name} despite .checkPermissions ask.`,
           });
         }
+        if (permissionContext.mode === "plan" && !isPlanDirectoryWrite(tool, input, permissionContext)) {
+          return deny({
+            type: "mode",
+            mode: "plan",
+            message: `Plan mode denies side-effecting tool ${tool.name}.`,
+          });
+        }
         return finalizeAsk(toolDecision, permissionContext);
       }
       return toolDecision;

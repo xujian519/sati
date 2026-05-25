@@ -1,6 +1,5 @@
 /**
- * Pre-approved hosts list — exact port of
- * `third-party/claude-code-main/src/tools/WebFetchTool/preapproved.ts`.
+ * Pre-approved hosts list for `web_fetch`.
  * Hosts on this list bypass the per-domain user-approval prompt because
  * they're hardcoded canonical sources (docs, package registries, etc.).
  *

@@ -25,8 +25,8 @@ import type {
  *      call against the simple `BUILTIN_SUBAGENTS` presets so existing tests
  *      stay green.
  *
- * Mirrors legacy `third-party/claude-code-main/src/tools/AgentTool/AgentTool.ts`
- * input schema (description / prompt / subagent_type) and the 5-field
+ * Mirrors the legacy upstream agent tool input schema (description / prompt /
+ * subagent_type) and the 5-field
  * `Scope/Result/Key files/Files changed/Issues` output contract.
  */
 
@@ -107,7 +107,7 @@ export type CreateAgentToolOptions = {
 };
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
-const DEFAULT_PROVIDER_FALLBACK = "edgeclaw";
+const DEFAULT_PROVIDER_FALLBACK = "pilotdeck";
 const DEFAULT_MODEL_FALLBACK = "moonshotai/kimi-k2.6";
 const DEFAULT_SUBAGENT_TIMEOUT_MS = 60 * 60_000;
 const PUBLIC_SUBAGENT_TYPES = ["general-purpose", "explore", "plan"] as const;
@@ -168,7 +168,10 @@ export function createAgentTool(
 
       // Full fork path (C2): preferred when AgentLoop wired the fork API.
       if (context.subagent) {
-        const requestedType = explicit ?? "general-purpose";
+        let requestedType = explicit ?? "general-purpose";
+        if (context.permissionContext?.mode === "plan" && requestedType === "general-purpose") {
+          requestedType = "explore";
+        }
         return runFullFork({
           input,
           context,
@@ -177,7 +180,10 @@ export function createAgentTool(
           fork: context.subagent,
         });
       }
-      const requestedType = explicit ?? "general-purpose";
+      let requestedType = explicit ?? "general-purpose";
+      if (context.permissionContext?.mode === "plan" && requestedType === "general-purpose") {
+        requestedType = "explore";
+      }
 
       return runFallback({
         input,
@@ -226,6 +232,70 @@ function buildAgentToolDescription(): string {
     "- Inside the AgentLoop, this runs a real forked subagent with its own scoped tool loop.",
     "- In stand-alone runtimes and some tests, it falls back to a single model call that preserves the same high-level subagent intent.",
   ].join("\n");
+}
+
+const PLAN_MODE_SUBAGENT_TYPES = ["explore", "plan"] as const;
+
+/**
+ * Returns replacement `description` and `inputSchema` for the `agent` tool
+ * when the parent agent is in plan mode. The override removes
+ * `general-purpose` from the advertised presets and changes the default to
+ * `explore`, so the model is guided toward read-only subagent types only.
+ */
+export function buildPlanModeAgentToolSchema(): {
+  description: string;
+  inputSchema: Record<string, unknown>;
+} {
+  const typeLines = PLAN_MODE_SUBAGENT_TYPES
+    .map((id) => {
+      const definition = SUBAGENT_DEFINITIONS[id];
+      return `- ${id}: ${definition.description} Tools: ${definition.allowedTools.join(", ")}.`;
+    })
+    .join("\n");
+
+  const description = [
+    "Launch a read-only subagent for investigation or planning.",
+    "",
+    "In plan mode, only read-only subagent types are available. The 'general-purpose' type is NOT available because it includes write tools that conflict with plan mode's read-only constraint.",
+    "",
+    "Provide:",
+    "- `description`: a short 3-5 word label for the task.",
+    "- `prompt`: the full directive for the subagent — include goal, context, and what good output looks like. The subagent can only read and search code, not modify files.",
+    "- `subagent_type` (optional): 'explore' (read-only with read_file/grep/glob/bash) or 'plan' (read-only with read_file/grep/glob). Defaults to 'explore'.",
+    "",
+    "Available subagent types:",
+    typeLines,
+    "",
+    "The subagent returns one structured report with these sections: `Scope`, `Result`, `Key files`, `Files changed`, and `Issues`.",
+  ].join("\n");
+
+  const inputSchema: Record<string, unknown> = {
+    type: "object",
+    required: ["description", "prompt"],
+    additionalProperties: false,
+    properties: {
+      description: {
+        type: "string",
+        description: "Short 3-5 word task summary used to label the subagent run.",
+      },
+      prompt: {
+        type: "string",
+        description:
+          "Detailed directive for the subagent. Include the goal, relevant context, and what good output looks like. The subagent can only read and search code, not modify files or run write commands.",
+      },
+      subagent_type: {
+        type: "string",
+        description:
+          "Subagent preset. In plan mode only 'explore' (read-only with read_file/grep/glob/bash) and 'plan' (read-only with read_file/grep/glob) are available. Defaults to 'explore'.",
+      },
+      subagentType: {
+        type: "string",
+        description: "Deprecated legacy alias for subagent_type. Prefer subagent_type.",
+      },
+    },
+  };
+
+  return { description, inputSchema };
 }
 
 function normalizeRequestedSubagentType(value: string | undefined): string | undefined {

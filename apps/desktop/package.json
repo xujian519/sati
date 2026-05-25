@@ -1,6 +1,6 @@
 {
   "name": "@pilotdeck/desktop",
-  "version": "0.0.4",
+  "version": "0.0.10",
   "description": "PilotDeck macOS Desktop App (Electron shell + pilotdeckui + pilotdeck-main)",
   "main": "dist/main.js",
   "private": true,
@@ -13,8 +13,12 @@
     "release:adhoc": "bash scripts/release.sh --ad-hoc",
     "release:signed": "bash scripts/release.sh --signed",
     "verify:dmg": "bash scripts/verify-dmg.sh",
+    "verify:l2": "bash scripts/release-l2.sh",
+    "verify:l3": "bash scripts/release-l3.sh",
+    "verify:full": "bash scripts/release-verify-all.sh",
     "download-node": "bash scripts/download-node.sh",
-    "download-bun": "bash scripts/download-bun.sh"
+    "download-bun": "bash scripts/download-bun.sh",
+    "generate-icon": "bash scripts/generate-icon.sh"
   },
   "dependencies": {
     "yaml": "^2.8.3"

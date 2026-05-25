@@ -8,7 +8,7 @@ import { loadPluginCommands } from "./PluginCommandLoader.js";
 
 /**
  * Loads a standalone skill directory (containing SKILL.md) as a pseudo-plugin.
- * No plugin.json required — mirrors Claude Code's ~/.claude/skills/{name}/ layout.
+ * No plugin.json required — mirrors the legacy standalone skill directory layout.
  */
 export async function loadSkillFromPath(
   skillDir: string,

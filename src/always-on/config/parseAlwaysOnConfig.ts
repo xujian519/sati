@@ -35,8 +35,11 @@ export type AlwaysOnProjectConfig = {
   enabled: boolean;
 };
 
+export type AlwaysOnPromptLanguage = "en" | "zh-CN";
+
 export type AlwaysOnConfig = {
   enabled: boolean;
+  language?: AlwaysOnPromptLanguage;
   trigger: AlwaysOnTriggerConfig;
   dormancy: AlwaysOnDormancyConfig;
   workspace: AlwaysOnWorkspaceConfig;
@@ -87,12 +90,15 @@ export function defaultAlwaysOnConfig(): AlwaysOnConfig {
 
 const ALLOWED_TOP_LEVEL_KEYS = new Set([
   "enabled",
+  "language",
   "trigger",
   "dormancy",
   "workspace",
   "execution",
   "projects",
 ]);
+
+const VALID_LANGUAGES = new Set<string>(["en", "zh-CN"]);
 
 const REMOVED_TOP_LEVEL_KEYS: Record<string, string> = {
   discovery:
@@ -144,6 +150,18 @@ export function parseAlwaysOnConfig(
 
   const result = defaultAlwaysOnConfig();
   result.enabled = booleanField(raw, "enabled", result.enabled);
+
+  if (typeof raw.language === "string" && VALID_LANGUAGES.has(raw.language)) {
+    result.language = raw.language as AlwaysOnPromptLanguage;
+  } else if (raw.language !== undefined) {
+    diagnostics.push({
+      code: "ALWAYS_ON_LANGUAGE_INVALID",
+      severity: "warning",
+      message: `alwaysOn.language must be "en" or "zh-CN"; ignoring "${String(raw.language)}".`,
+      path: "alwaysOn.language",
+      recoverable: true,
+    });
+  }
 
   for (const key of Object.keys(raw)) {
     const removalReason = REMOVED_TOP_LEVEL_KEYS[key];

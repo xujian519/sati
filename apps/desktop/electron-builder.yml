@@ -50,6 +50,20 @@ dmg:
       type: link
       path: /Applications
 
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+  icon: resources/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: "PilotDeck-${version}-win-${arch}.exe"
+  shortcutName: PilotDeck
+  uninstallDisplayName: PilotDeck ${version}
+
 afterSign: scripts/notarize.js
 
 extraResources:

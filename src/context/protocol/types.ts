@@ -52,9 +52,9 @@ export type ContextPrepareInput = {
   additionalWorkingDirectories: string[];
   messages: CanonicalMessage[];
   tools: CanonicalToolSchema[];
-  /** Optional override (Claude Code `customSystemPrompt`). */
+  /** Optional full system-prompt override. */
   customSystemPrompt?: string;
-  /** Optional addendum (Claude Code `appendSystemPrompt`). */
+  /** Optional system-prompt addendum appended after the base prompt. */
   appendSystemPrompt?: string;
   /** Maximum messages retained when no compact boundary is in play. */
   maxMessages?: number;
@@ -84,6 +84,7 @@ export type ContextRecoveryInput = {
 
 export type ContextRecoveryDecision =
   | { type: "truncate_head_and_retry"; keepRatio: number; reason: string }
+  | { type: "strip_images_and_retry"; reason: string }
   | { type: "give_up"; reason: string };
 
 /**

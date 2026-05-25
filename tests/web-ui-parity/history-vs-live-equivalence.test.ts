@@ -20,6 +20,7 @@ import {
 } from "../../src/web/client/index.js";
 import { readWebSessionMessages } from "../../src/web/server/readSessionMessages.js";
 import { createProjectId } from "../../src/pilot/index.js";
+import { sanitizeSessionIdForPath } from "../../src/session/storage/ProjectSessionStorage.js";
 
 function normalize(message: WebMessage): {
   role: string;
@@ -84,7 +85,7 @@ test("history reader and live reducer agree on a single text turn", async () => 
     },
   ];
   writeFileSync(
-    join(chatDir, `${sessionKey}.jsonl`),
+    join(chatDir, `${sanitizeSessionIdForPath(sessionKey)}.jsonl`),
     transcript.map((line) => JSON.stringify(line)).join("\n") + "\n",
   );
 

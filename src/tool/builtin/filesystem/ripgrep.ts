@@ -1,6 +1,10 @@
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { PilotDeckToolRuntimeError } from "../../protocol/errors.js";
+
+const require = createRequire(import.meta.url);
+const { rgPath } = require("@vscode/ripgrep") as { rgPath: string };
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 const DEFAULT_KILL_GRACE_MS = 1_000;
@@ -20,7 +24,7 @@ export async function runRipgrep(input: RipgrepRunInput): Promise<string> {
   const args = [...input.args];
 
   return await new Promise<string>((resolve, reject) => {
-    const child = spawn("rg", args, {
+    const child = spawn(rgPath, args, {
       cwd: input.cwd,
       env,
       stdio: ["ignore", "pipe", "pipe"],

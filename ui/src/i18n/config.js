@@ -16,6 +16,8 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 // eslint-disable-next-line import-x/order
 import LanguageDetector from 'i18next-browser-languagedetector';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { authenticatedFetch } from '../utils/api';
 
 import enCommon from './locales/en/common.json';
 import enSettings from './locales/en/settings.json';
@@ -113,6 +115,29 @@ i18n.on('languageChanged', (lng) => {
   } catch (error) {
     console.error('Failed to save language preference:', error);
   }
+  syncAlwaysOnLanguage(lng);
 });
+
+function syncAlwaysOnLanguage(lng) {
+  const alwaysOnLang = lng === 'zh-CN' ? 'zh-CN' : 'en';
+  authenticatedFetch('/api/config')
+    .then((r) => r.json())
+    .then((data) => {
+      const raw = typeof data?.raw === 'string' ? data.raw : '';
+      if (!raw) return;
+      let parsed;
+      try { parsed = parseYaml(raw); } catch { return; }
+      if (!parsed || typeof parsed !== 'object') return;
+      if (!parsed.alwaysOn || typeof parsed.alwaysOn !== 'object') return;
+      if (parsed.alwaysOn.language === alwaysOnLang) return;
+      parsed.alwaysOn.language = alwaysOnLang;
+      const updated = stringifyYaml(parsed, { lineWidth: 0 });
+      return authenticatedFetch('/api/config', {
+        method: 'PUT',
+        body: JSON.stringify({ raw: updated }),
+      });
+    })
+    .catch(() => {});
+}
 
 export default i18n;

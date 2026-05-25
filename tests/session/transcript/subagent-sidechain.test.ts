@@ -107,7 +107,7 @@ test("C3.S2 forSubagent derives an independent writer at the resolved path", asy
   });
   const handle = writer.forSubagent("uuid-1");
   assert.equal(handle.subagentId, "uuid-1");
-  assert.match(handle.transcriptPath, /subagents\/uuid-1\.jsonl$/);
+  assert.match(handle.transcriptPath, /subagents[/\\]uuid-1\.jsonl$/);
 
   await handle.writer.recordEntry({
     type: "session_metadata",

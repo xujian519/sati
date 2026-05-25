@@ -173,6 +173,9 @@ export function normalizeDiscoveryPlanRecord(record: Record<string, unknown> | n
   const mappedStatus =
     gatewayStatus === "executing" ? "running" :
     gatewayStatus === "superseded" ? "archived" :
+    gatewayStatus === "applying" ? "completed" :
+    gatewayStatus === "applied" ? "archived" :
+    gatewayStatus === "apply_failed" ? "completed" :
     gatewayStatus;
 
   return {
@@ -196,6 +199,7 @@ export function normalizeDiscoveryPlanRecord(record: Record<string, unknown> | n
     reportFilePath: normalizeString(record?.reportFilePath) || undefined,
     structureVersion:
       typeof record?.structureVersion === "number" ? record.structureVersion : STRUCTURE_VERSION,
+    workCycleId: normalizeString(record?.workCycleId) || undefined,
     workspace: normalizeWorkspaceRef(record?.workspace),
   };
 }
@@ -522,67 +526,31 @@ export class DiscoveryPlanService {
       });
     }
 
-    // When an apply session completes, finalize the plan status and
-    // dispose the workspace.
-    if (
-      plan.status === "applying" &&
-      (normalizedStatus === "completed" || normalizedStatus === "failed")
-    ) {
-      const finalStatus = normalizedStatus === "completed" ? "applied" : "failed";
-
-      if (finalStatus === "applied" && nextPlan.workspace?.cwd && this.deps.workspace) {
-        try {
-          await this.deps.workspace.disposeWorkspace(
-            nextPlan.workspace.strategy,
-            nextPlan.workspace.cwd,
-            projectRoot,
-          );
-        } catch {
-          // Best effort cleanup.
-        }
-      }
-
-      const finalPlan: WebPlanRecord = {
-        ...nextPlan,
-        status: finalStatus,
-        ...(finalStatus === "applied" ? { workspace: undefined } : {}),
-        updatedAt: new Date().toISOString(),
-      };
-      store.plans[index] = finalPlan;
-      await writePlanStore(projectDir, store);
-
-      const isActive = (id: string) => this.deps.activity.isSessionActive(id);
-      const content = await readPlanBody(projectDir, finalPlan.planFilePath);
-      return buildOverview(finalPlan, content, null, isActive);
-    }
-
     const isActive = (id: string) => this.deps.activity.isSessionActive(id);
     const content = await readPlanBody(projectDir, nextPlan.planFilePath);
     return buildOverview(nextPlan, content, null, isActive);
   }
 
   /**
-   * Archive a plan and dispose its isolated workspace (if any).
+   * Archive an entire work cycle: dispose its workspace and mark all
+   * associated plans as archived.
    */
-  async archive(projectName: string, planId: string) {
+  async archiveCycle(projectName: string, cycleId: string) {
     const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
     const projectDir = this.projectDir(projectRoot);
-    const store = await readPlanStore(projectDir);
-    const index = store.plans.findIndex((p) => p.id === planId);
-    if (index === -1) throw makeError("Discovery plan not found", "NOT_FOUND");
+    const cycleIndex = await readCycleIndex(projectDir);
+    const cycle = cycleIndex.cycles.find((c) => c.id === cycleId);
+    if (!cycle) throw makeError("Work cycle not found", "NOT_FOUND");
 
-    const plan = store.plans[index]!;
-    const isActive = (id: string) => this.deps.activity.isSessionActive(id);
-    const execStatus = computeExecutionStatus(plan, null, isActive);
-    if (execStatus === "running" || execStatus === "queued") {
-      throw makeError("Running discovery plans cannot be archived", "INVALID_STATE");
+    if (cycle.status === "applying") {
+      throw makeError("Cannot archive a cycle that is currently being applied", "INVALID_STATE");
     }
 
-    if (plan.workspace?.cwd && this.deps.workspace) {
+    if (cycle.workspace?.cwd && this.deps.workspace) {
       try {
         await this.deps.workspace.disposeWorkspace(
-          plan.workspace.strategy,
-          plan.workspace.cwd,
+          cycle.workspace.strategy,
+          cycle.workspace.cwd,
           projectRoot,
         );
       } catch {
@@ -590,80 +558,139 @@ export class DiscoveryPlanService {
       }
     }
 
-    store.plans[index] = {
-      ...plan,
-      status: "archived",
-      workspace: undefined,
-      updatedAt: new Date().toISOString(),
-    };
+    cycle.status = "archived";
+    cycle.archivedAt = new Date().toISOString();
+    await writeCycleIndex(projectDir, cycleIndex);
+
+    const store = await readPlanStore(projectDir);
+    const now = new Date().toISOString();
+    for (const plan of store.plans) {
+      if (cycle.planIds.includes(plan.id) && plan.status !== "archived") {
+        plan.status = "archived";
+        plan.updatedAt = now;
+      }
+    }
     await writePlanStore(projectDir, store);
+
     return { archived: true };
   }
 
   /**
-   * Mark a plan as "applying" and return its metadata. The actual apply
+   * Mark a cycle as "applying" and return its metadata. The actual apply
    * agent loop is triggered via `gateway.alwaysOnApply` — the caller
    * (discovery-plans.js) fires that RPC after this method returns.
    */
-  async queueApply(projectName: string, planId: string) {
+  async queueCycleApply(projectName: string, cycleId: string) {
     const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
     const projectDir = this.projectDir(projectRoot);
-    const store = await readPlanStore(projectDir);
-    const index = store.plans.findIndex((p) => p.id === planId);
-    if (index === -1) throw makeError("Discovery plan not found", "NOT_FOUND");
+    const cycleIndex = await readCycleIndex(projectDir);
+    const cycle = cycleIndex.cycles.find((c) => c.id === cycleId);
+    if (!cycle) throw makeError("Work cycle not found", "NOT_FOUND");
 
-    const plan = store.plans[index]!;
-    const isActive = (id: string) => this.deps.activity.isSessionActive(id);
-    const planStatus = computePlanStatus(plan, null, isActive);
-
-    if (planStatus !== "completed") {
+    if (cycle.status !== "active") {
       throw makeError(
-        `Plan must be in completed status to apply (current: ${planStatus})`,
+        `Cycle must be in active status to apply (current: ${cycle.status})`,
         "INVALID_STATE",
       );
     }
 
-    if (!plan.workspace?.cwd) {
+    if (!cycle.workspace?.cwd) {
       throw makeError(
-        "Plan has no associated workspace to apply",
+        "Cycle has no associated workspace to apply",
         "MISSING_WORKSPACE",
       );
     }
 
+    const store = await readPlanStore(projectDir);
+    const cyclePlans = store.plans.filter((p) => cycle.planIds.includes(p.id));
+    const hasCompleted = cyclePlans.some((p) => p.status === "completed");
+    if (!hasCompleted) {
+      throw makeError("Cycle has no completed plans to apply", "INVALID_STATE");
+    }
+
+    cycle.status = "applying";
+    await writeCycleIndex(projectDir, cycleIndex);
+
     const now = new Date().toISOString();
     const executionToken = randomUUID();
-    const content = await readPlanBody(projectDir, plan.planFilePath);
-
-    const updated: WebPlanRecord = {
-      ...plan,
-      status: "applying",
-      executionStatus: "queued",
-      executionSessionId: "",
-      executionStartedAt: "",
-      executionLastActivityAt: "",
-      latestSummary: "",
-      updatedAt: now,
-      lastExecutionSource: "apply",
-    };
-    store.plans[index] = updated;
-    await writePlanStore(projectDir, store);
 
     await this.deps.events.appendRunEvent(projectRoot, {
       runId: executionToken,
-      kind: "plan-apply",
-      sourceId: updated.id,
-      title: `Apply: ${updated.title}`,
+      kind: "cycle-apply",
+      sourceId: cycle.id,
+      title: `Apply cycle: ${cyclePlans.map((p) => p.title).join(", ")}`,
       status: "queued",
       timestamp: now,
       startedAt: now,
-      metadata: { planId: updated.id, source: "apply" },
+      metadata: { cycleId: cycle.id, source: "apply" },
     });
 
     return {
-      plan: buildOverview(updated, content, null, isActive),
+      cycle,
       projectRoot,
       executionToken,
     };
+  }
+
+  /**
+   * Finalize a cycle apply — called after the gateway apply RPC completes.
+   */
+  async updateCycleExecution(
+    projectName: string,
+    cycleId: string,
+    updates: { status: string; executionSessionId?: string; executionToken?: string },
+  ) {
+    const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
+    const projectDir = this.projectDir(projectRoot);
+    const cycleIndex = await readCycleIndex(projectDir);
+    const cycle = cycleIndex.cycles.find((c) => c.id === cycleId);
+    if (!cycle) throw makeError("Work cycle not found", "NOT_FOUND");
+
+    const normalizedStatus = updates.status;
+    const now = new Date().toISOString();
+
+    if (cycle.status === "applying") {
+      const finalStatus = normalizedStatus === "completed" ? "applied" : "active";
+
+      if (finalStatus === "applied" && cycle.workspace?.cwd && this.deps.workspace) {
+        try {
+          await this.deps.workspace.disposeWorkspace(
+            cycle.workspace.strategy,
+            cycle.workspace.cwd,
+            projectRoot,
+          );
+        } catch {
+          // Best effort cleanup.
+        }
+      }
+
+      cycle.status = finalStatus;
+      if (finalStatus === "applied") cycle.appliedAt = now;
+      await writeCycleIndex(projectDir, cycleIndex);
+
+      if (finalStatus === "applied") {
+        const store = await readPlanStore(projectDir);
+        for (const plan of store.plans) {
+          if (cycle.planIds.includes(plan.id) && plan.status !== "archived") {
+            plan.status = "archived";
+            plan.updatedAt = now;
+          }
+        }
+        await writePlanStore(projectDir, store);
+      }
+    }
+
+    return { cycle };
+  }
+
+  /**
+   * Read cycle records for a project.
+   */
+  async getCyclesOverview(projectName: string) {
+    const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
+    const projectDir = this.projectDir(projectRoot);
+    const cycleIndex = await readCycleIndex(projectDir);
+    return { cycles: cycleIndex.cycles };
   }
 
   /**
@@ -707,6 +734,58 @@ export class DiscoveryPlanService {
 
 // ---------------------------------------------------------------------------
 // Helpers
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Cycle store I/O
+// ---------------------------------------------------------------------------
+
+type CycleIndex = {
+  schemaVersion: number;
+  cycles: Array<{
+    id: string;
+    projectKey: string;
+    status: string;
+    workspace: { strategy: string; cwd: string; metadata?: Record<string, string> };
+    planIds: string[];
+    createdAt: string;
+    createdByRunId?: string;
+    appliedAt?: string;
+    archivedAt?: string;
+  }>;
+};
+
+const EMPTY_CYCLE_INDEX: CycleIndex = { schemaVersion: 1, cycles: [] };
+
+async function readCycleIndex(projectDir: string): Promise<CycleIndex> {
+  const filePath = join(projectDir, "cycles", "index.json");
+  try {
+    const raw = await fs.readFile(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && Array.isArray(parsed.cycles)) {
+      return parsed as CycleIndex;
+    }
+    return { ...EMPTY_CYCLE_INDEX };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+      return { ...EMPTY_CYCLE_INDEX };
+    }
+    throw error;
+  }
+}
+
+async function writeCycleIndex(projectDir: string, index: CycleIndex): Promise<void> {
+  const dir = join(projectDir, "cycles");
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(
+    join(dir, "index.json"),
+    `${JSON.stringify({ schemaVersion: 1, cycles: index.cycles }, null, 2)}\n`,
+    "utf8",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Error helper
 // ---------------------------------------------------------------------------
 
 function makeError(message: string, code: string): Error & { code: string } {

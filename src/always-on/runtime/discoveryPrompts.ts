@@ -1,8 +1,24 @@
-import type { AlwaysOnCurrentWorkspaceRef, DiscoveryPlanRecord } from "../protocol/types.js";
+import type { DiscoveryPlanRecord } from "../protocol/types.js";
 import type { WorkspaceDiff } from "../workspace/WorkspaceApply.js";
+import type { ChatDigest } from "../context/ChatDigestBuilder.js";
 import { ALWAYS_ON_PLAN_TOOL_NAME } from "../tool/AlwaysOnDiscoveryPlanTool.js";
 import { ALWAYS_ON_REPORT_TOOL_NAME } from "../tool/AlwaysOnReportTool.js";
 import { ALWAYS_ON_WORKSPACE_TOOL_NAME } from "../tool/AlwaysOnWorkspaceTool.js";
+import { ALWAYS_ON_CHAT_HISTORY_TOOL_NAME } from "../tool/AlwaysOnChatHistoryTool.js";
+import {
+  buildDiscoveryPromptZh,
+  buildWorkspacePromptZh,
+  buildExecutionPromptZh,
+  buildReportPromptZh,
+  buildApplyPromptZh,
+} from "./discoveryPrompts.zh.js";
+
+export type ExistingPlanSummary = {
+  id: string;
+  title: string;
+  dedupeKey: string;
+  status: string;
+};
 
 export type BuildDiscoveryPromptInput = {
   projectRoot: string;
@@ -13,9 +29,16 @@ export type BuildDiscoveryPromptInput = {
   chatDir: string;
   /** When an isolated workspace from a previous run still exists on disk, discovery runs inside it. */
   workspace?: { cwd: string; strategy: string };
+  /** Pre-built digest of recent user chat sessions. */
+  chatDigest?: ChatDigest;
+  /** Summaries of previously created Always-On plans. */
+  existingPlans?: ExistingPlanSummary[];
+  /** Prompt language override. Defaults to English when absent. */
+  language?: string;
 };
 
 export function buildDiscoveryPrompt(input: BuildDiscoveryPromptInput): string {
+  if (input.language === "zh-CN") return buildDiscoveryPromptZh(input);
   const codeAccessLines: string[] = input.workspace
     ? [
         `Isolated workspace cwd: ${input.workspace.cwd}`,
@@ -27,20 +50,31 @@ export function buildDiscoveryPrompt(input: BuildDiscoveryPromptInput): string {
         `Read the project root at ${input.projectRoot} using read_file / glob / bash freely.`,
       ];
 
-  return [
-    `You are running an autonomous Always-On discovery for project: ${input.projectRoot}`,
+  const headerLine = input.workspace
+    ? `You are running an autonomous Always-On discovery for project: ${input.projectRoot} (working inside isolated workspace: ${input.workspace.cwd})`
+    : `You are running an autonomous Always-On discovery for project: ${input.projectRoot}`;
+
+  const lines: string[] = [
+    headerLine,
     "",
-    "Goal: identify AT MOST ONE concrete, automatically-verifiable improvement to propose.",
+    "Goal: identify AT MOST ONE worthwhile task to propose.",
+    "Tasks may include enriching or adding content, completing unfinished work,",
+    "improving structure or layout, fixing errors, enhancing user experience,",
+    "or anything valuable discussed in user chat history.",
+    "Each plan must include at least one automatically-checkable verification step",
+    "(e.g. file exists, content matches expected pattern, page renders without error).",
     "If nothing actionable is found, do not call any tool — just respond with a short note explaining why.",
     "",
     "Permissions: this turn runs in `bypassPermissions` mode — every tool call is auto-allowed.",
     ...codeAccessLines,
+  ];
+
+  lines.push("", ...formatChatDigestSection(input.chatDigest));
+  lines.push("", ...formatExistingPlansSection(input.existingPlans));
+
+  lines.push(
     "",
-    `Project chat history (PilotDeck transcripts) lives at: ${input.chatDir}`,
-    "Use read_file / glob / bash on that directory to skim recent user-agent conversations",
-    "when looking for valuable, automatically-verifiable improvements.",
-    "",
-    `If you do find one, call \`${ALWAYS_ON_PLAN_TOOL_NAME}\` exactly once with a strictly-formatted markdown plan.`,
+    `If you identify a task, call \`${ALWAYS_ON_PLAN_TOOL_NAME}\` exactly once with a strictly-formatted markdown plan.`,
     "Required plan structure (top to bottom):",
     "  - Level-1 heading: # <plan title>",
     "  - Metadata blockquote, first line `Always-On Discovery Plan`, then keyed lines:",
@@ -59,49 +93,82 @@ export function buildDiscoveryPrompt(input: BuildDiscoveryPromptInput): string {
     `  - Calling \`${ALWAYS_ON_PLAN_TOOL_NAME}\` more than once returns plan_quota_exhausted.`,
     "  - Plans missing or reordering required sections, or containing fuzzy 'TODO' wording, will be rejected.",
     "  - Do not include Risks or Rollback sections.",
-  ].join("\n");
+  );
+
+  return lines.join("\n");
+}
+
+function formatChatDigestSection(digest?: ChatDigest): string[] {
+  if (!digest || digest.sessions.length === 0) {
+    return [
+      "No recent user conversations found. Explore the workspace contents to find a worthwhile task.",
+    ];
+  }
+
+  const lines: string[] = [
+    "## Recent user conversations",
+    "",
+    "Below is a structured digest of recent user-agent chat sessions.",
+    "These are primary signals for what the user cares about.",
+    `To see the full conversation of a session, call \`${ALWAYS_ON_CHAT_HISTORY_TOOL_NAME}\` with its sessionId.`,
+    "",
+  ];
+
+  for (const session of digest.sessions) {
+    const ts = session.lastModified.replace(/\.\d{3}Z$/, "Z");
+    lines.push(`- [${ts}] "${session.title}" (sessionId: ${session.alias})`);
+    for (const prompt of session.userPrompts) {
+      const oneLiner = prompt.replace(/\n/g, " ").trim();
+      lines.push(`  > ${oneLiner}`);
+    }
+    lines.push("");
+  }
+
+  return lines;
+}
+
+function formatExistingPlansSection(plans?: ExistingPlanSummary[]): string[] {
+  if (!plans || plans.length === 0) {
+    return [];
+  }
+
+  const lines: string[] = [
+    "## Existing Always-On plans (do NOT duplicate these topics)",
+    "",
+  ];
+
+  for (const plan of plans) {
+    lines.push(`- [${plan.status}] "${plan.title}" (dedupeKey: ${plan.dedupeKey})`);
+  }
+
+  return lines;
 }
 
 export type BuildWorkspacePromptInput = {
   projectRoot: string;
   runId: string;
-  currentWorkspace?: AlwaysOnCurrentWorkspaceRef;
+  language?: string;
 };
 
 export function buildWorkspacePrompt(input: BuildWorkspacePromptInput): string {
-  const lines: string[] = [
+  if (input.language === "zh-CN") return buildWorkspacePromptZh(input);
+  return [
     "You are preparing an isolated workspace for an Always-On plan execution.",
     "",
     `Project root: ${input.projectRoot}`,
     "",
     "Available workspace strategies:",
-    "  - `git-worktree`: Creates a detached git worktree. Fast and space-efficient (hard-links).",
+    "  - `git-worktree`: Creates a git worktree on a new branch. Fast and space-efficient (hard-links).",
     "    Requires a git repo with at least one commit and a clean working tree (no uncommitted changes).",
     "  - `snapshot-copy`: Copies the project directory (CoW on APFS/btrfs). Works for any directory",
     "    but uses more disk space. Ignores .git, node_modules, dist by default.",
     "",
     "Permissions: this turn runs in `bypassPermissions` mode — every tool call is auto-allowed.",
-  ];
-
-  if (input.currentWorkspace) {
-    lines.push(
-      "",
-      `A workspace from a previous run already exists at: ${input.currentWorkspace.cwd}`,
-      `Strategy: ${input.currentWorkspace.strategy}`,
-      "If the directory still exists on disk, you may skip workspace creation entirely",
-      "by responding without calling the workspace tool.",
-    );
-  }
-
-  lines.push(
     "",
     "## What to do",
     "1. Check the project root state (e.g. `git status --porcelain` if it looks like a git repo, or `ls` otherwise).",
     `2. Call \`${ALWAYS_ON_WORKSPACE_TOOL_NAME}\` with the chosen strategy, or \`auto\` to let the runtime decide.`,
-    "3. If reusing an existing workspace, just respond with a short note and do not call the tool.",
-  );
-
-  return lines.join("\n");
+  ].join("\n");
 }
 
 export type BuildExecutionPromptInput = {
@@ -109,9 +176,11 @@ export type BuildExecutionPromptInput = {
   planMarkdown: string;
   workspaceCwd: string;
   workspaceStrategy: string;
+  language?: string;
 };
 
 export function buildExecutionPrompt(input: BuildExecutionPromptInput): string {
+  if (input.language === "zh-CN") return buildExecutionPromptZh(input);
   return [
     `You are executing an Always-On discovery plan inside an isolated workspace.`,
     `Workspace strategy: ${input.workspaceStrategy}.`,
@@ -135,9 +204,11 @@ export type BuildReportPromptInput = {
   planMarkdown: string;
   workspaceCwd: string;
   workspaceStrategy: string;
+  language?: string;
 };
 
 export function buildReportPrompt(input: BuildReportPromptInput): string {
+  if (input.language === "zh-CN") return buildReportPromptZh(input);
   return [
     "You are writing a work report for a completed Always-On plan execution.",
     `Workspace strategy: ${input.workspaceStrategy}.`,
@@ -163,18 +234,18 @@ export type BuildApplyPromptInput = {
   projectName: string;
   projectRoot: string;
   diff: WorkspaceDiff;
+  branchName?: string;
+  language?: string;
 };
 
 export function buildApplyPrompt(input: BuildApplyPromptInput): string {
-  const { plan, projectName, projectRoot, diff } = input;
-  const header = [
+  if (input.language === "zh-CN") return buildApplyPromptZh(input);
+  const { plan, projectName, projectRoot, diff, branchName } = input;
+
+  const lines: string[] = [
     `Always-On apply for project "${projectName}".`,
     "",
     "Your job is to merge changes from the isolated workspace into the project root.",
-    "Apply each change carefully using Edit or Write tools.",
-    "If a file in the project root has been modified since the plan was executed,",
-    "merge both sets of changes intelligently — do not blindly overwrite.",
-    "If you cannot resolve a conflict, leave standard conflict markers (<<<< / ==== / >>>>).",
     "",
     "Do not enter Plan Mode.",
     "Do not create a new plan — apply the existing changes directly.",
@@ -184,18 +255,36 @@ export function buildApplyPrompt(input: BuildApplyPromptInput): string {
   ];
 
   if (plan.workspace?.cwd) {
-    header.push(`Isolated workspace: ${plan.workspace.cwd} (${plan.workspace.strategy})`);
+    lines.push(`Isolated workspace: ${plan.workspace.cwd} (${plan.workspace.strategy})`);
   }
 
-  header.push("");
+  if (branchName) {
+    lines.push(`Workspace branch: ${branchName}`);
+  }
+
+  lines.push(
+    "",
+    "## Merge approach",
+    "",
+    "Choose the best merge strategy based on the situation. You have full access to git and shell tools.",
+    "Common approaches (pick whichever fits):",
+    "  - `git merge` / `git merge --no-ff` if the workspace is on a named branch",
+    "  - `git cherry-pick` for individual commits",
+    "  - `git diff` + `git apply` for patch-based application",
+    "  - Direct file edits via Edit/Write tools for surgical changes",
+    "",
+    "If you encounter conflicts, resolve them intelligently — do not blindly overwrite.",
+    "If you cannot resolve a conflict, leave standard conflict markers (<<<< / ==== / >>>>).",
+    "",
+  );
 
   if (!diff.diff.trim()) {
-    header.push("No differences detected in the workspace. Nothing to apply.");
-    return header.join("\n");
+    lines.push("No differences detected in the workspace. Nothing to apply.");
+    return lines.join("\n");
   }
 
   if (diff.truncated) {
-    header.push(
+    lines.push(
       `The diff is large (${diff.fileCount} files) and has been truncated.`,
       "Read the relevant files from the workspace directory to compare and apply.",
       "",
@@ -204,12 +293,12 @@ export function buildApplyPrompt(input: BuildApplyPromptInput): string {
       diff.diff,
     );
   } else {
-    header.push(
+    lines.push(
       `Changes (${diff.fileCount} file${diff.fileCount === 1 ? "" : "s"}):`,
       "",
       diff.diff,
     );
   }
 
-  return header.join("\n");
+  return lines.join("\n");
 }

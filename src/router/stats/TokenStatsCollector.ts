@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as os from "node:os";
 import type { CanonicalUsage } from "../../model/index.js";
 import type { RouterStatsConfig } from "../config/schema.js";
+import { resolvePilotHome } from "../../pilot/paths.js";
 import type { RouterDecision } from "../protocol/decision.js";
 
 export type RouterStatsRecord = {
@@ -70,7 +70,7 @@ export class TokenStatsCollector {
     if (this.enabled) {
       const routerDir = config?.filePath
         ? path.dirname(config.filePath)
-        : path.join(os.homedir(), ".pilotdeck", "router");
+        : path.join(resolvePilotHome(), "router");
       try { fs.mkdirSync(routerDir, { recursive: true }); } catch { /* ok */ }
 
       this.jsonlPath = path.join(routerDir, "stats.jsonl");
@@ -99,7 +99,7 @@ export class TokenStatsCollector {
       record.cost = this.calculateCost(record.usage, record.provider, record.model);
     }
 
-    record.baselineCost = this.calculateBaselineCostForRecord(record.usage, record.provider, record.model);
+    record.baselineCost = this.calculateBaselineCostForRecord(record.usage, record.provider, record.model) ?? record.cost!.total;
 
     this.recentRecords.push(record);
     if (this.recentRecords.length > 500) {
@@ -285,11 +285,12 @@ export class TokenStatsCollector {
     const inputCost = ((usage.inputTokens ?? 0) / 1_000_000) * (pricing.input ?? 0);
     const outputCost = ((usage.outputTokens ?? 0) / 1_000_000) * (pricing.output ?? 0);
     const cacheReadCost = ((usage.cacheReadTokens ?? 0) / 1_000_000) * (pricing.cacheRead ?? 0);
+    const cacheWriteCost = ((usage.cacheWriteTokens ?? 0) / 1_000_000) * (pricing.input ?? 0);
     return {
       input: inputCost,
       output: outputCost,
       cacheRead: cacheReadCost,
-      total: inputCost + outputCost + cacheReadCost,
+      total: inputCost + outputCost + cacheReadCost + cacheWriteCost,
     };
   }
 
@@ -312,16 +313,17 @@ export class TokenStatsCollector {
     usage: CanonicalUsage,
     provider: string,
     model: string,
-  ): number {
+  ): number | undefined {
     if (!this.baselineModel?.model) {
       const cost = this.calculateCost(usage, provider, model);
       return cost.total;
     }
-    const cost = this.calculateCost(
-      usage,
-      this.baselineModel.provider || provider,
-      this.baselineModel.model,
-    );
+    const baseProvider = this.baselineModel.provider || provider;
+    const baseModel = this.baselineModel.model;
+    if (baseProvider === provider && baseModel === model) {
+      return undefined;
+    }
+    const cost = this.calculateCost(usage, baseProvider, baseModel);
     return cost.total;
   }
 }

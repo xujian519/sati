@@ -5,6 +5,7 @@ import type { PilotDeckToolDefinition } from "../../tool/index.js";
 import type { AlwaysOnConfig } from "../config/parseAlwaysOnConfig.js";
 import { resolveAlwaysOnPaths, type AlwaysOnPaths } from "../storage/AlwaysOnPaths.js";
 import { DiscoveryPlanStore } from "../storage/DiscoveryPlanStore.js";
+import { WorkCycleStore } from "../storage/WorkCycleStore.js";
 import { AlwaysOnEventStore } from "../storage/AlwaysOnEventStore.js";
 import { DiscoveryReportStore } from "../storage/DiscoveryReportStore.js";
 import { DiscoveryStateStore } from "../storage/DiscoveryStateStore.js";
@@ -18,6 +19,9 @@ import {
 import {
   createAlwaysOnWorkspaceTool,
 } from "../tool/AlwaysOnWorkspaceTool.js";
+import {
+  createAlwaysOnChatHistoryTool,
+} from "../tool/AlwaysOnChatHistoryTool.js";
 import { GitWorktreeProvider } from "../workspace/GitWorktreeProvider.js";
 import { SnapshotCopyProvider } from "../workspace/SnapshotCopyProvider.js";
 import { WorkspaceProviderRegistry } from "../workspace/WorkspaceProviderRegistry.js";
@@ -90,6 +94,7 @@ export class AlwaysOnRuntime {
 
   private readonly stateStore: DiscoveryStateStore;
   private readonly planStore: DiscoveryPlanStore;
+  private readonly cycleStore: WorkCycleStore;
   private readonly reportStore: DiscoveryReportStore;
   private readonly eventStore: AlwaysOnEventStore;
   private readonly runContexts: AlwaysOnRunContextRegistry;
@@ -125,6 +130,7 @@ export class AlwaysOnRuntime {
 
     this.stateStore = new DiscoveryStateStore(this.paths);
     this.planStore = new DiscoveryPlanStore(this.paths);
+    this.cycleStore = new WorkCycleStore(this.paths);
     this.reportStore = new DiscoveryReportStore(this.paths);
     this.eventStore = new AlwaysOnEventStore(this.paths);
     this.runContexts = options.runContexts ?? new AlwaysOnRunContextRegistry();
@@ -149,6 +155,9 @@ export class AlwaysOnRuntime {
             now: this.now,
           }),
           createAlwaysOnWorkspaceTool({
+            runContexts: this.runContexts,
+          }),
+          createAlwaysOnChatHistoryTool({
             runContexts: this.runContexts,
           }),
         ];
@@ -189,6 +198,7 @@ export class AlwaysOnRuntime {
       sessionOverrides: this.sessionOverrides,
       stateStore: this.stateStore,
       planStore: this.planStore,
+      cycleStore: this.cycleStore,
       reportStore: this.reportStore,
       eventStore: this.eventStore,
       uuid: this.uuid,
@@ -231,27 +241,29 @@ export class AlwaysOnRuntime {
     this.logger.info("always-on runtime stopped", { projectKey: this.projectKey });
   }
 
-  async applyPlan(input: {
-    planId: string;
+  async applyCycle(input: {
+    workCycleId: string;
     projectRoot: string;
     projectName: string;
   }): Promise<{ sessionKey: string; error?: { code: string; message: string } }> {
     if (!this.fire) {
       return { sessionKey: "", error: { code: "not_ready", message: "AlwaysOnRuntime.bindGateway not called" } };
     }
-    const plan = await this.planStore.getRecord(input.planId);
-    if (!plan) {
-      return { sessionKey: "", error: { code: "plan_not_found", message: `Plan ${input.planId} not found` } };
+    const cycle = await this.cycleStore.getRecord(input.workCycleId);
+    if (!cycle) {
+      return { sessionKey: "", error: { code: "cycle_not_found", message: `Work cycle ${input.workCycleId} not found` } };
     }
+
+    const planIndex = await this.planStore.readIndex();
+    const cyclePlans = planIndex.plans
+      .filter((p) => cycle.planIds.includes(p.id))
+      .map((p) => ({ id: p.id, title: p.title }));
 
     const runId = this.uuid();
     const result = await this.fire.runApplyPhase({
       runId,
-      plan: {
-        id: plan.id,
-        title: plan.title,
-        workspace: plan.workspace,
-      },
+      cycle,
+      plans: cyclePlans,
       projectName: input.projectName,
       projectRoot: input.projectRoot,
     });

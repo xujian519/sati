@@ -166,29 +166,3 @@ test("grep supports multiline patterns and dash-prefixed literals", async (t) =>
   });
 });
 
-test("grep reports unsupported_tool when ripgrep is unavailable", async (t) => {
-  const workspace = await createPilotDeckTempWorkspace({
-    "a.txt": "alpha",
-  });
-  t.after(() => workspace.cleanup());
-  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
-    tools: [createGrepTool()],
-    cwd: workspace.cwd,
-  });
-  context.env = {
-    ...process.env,
-    PATH: "",
-    Path: "",
-  };
-
-  const result = await toolRuntime.execute(
-    { id: "call-1", name: "grep", input: { pattern: "alpha" } },
-    context,
-  );
-
-  assert.equal(result.type, "error");
-  if (result.type === "error") {
-    assert.equal(result.error.code, "unsupported_tool");
-    assert.match(result.error.message, /ripgrep/i);
-  }
-});

@@ -1,6 +1,5 @@
 /**
- * Secondary-model prompt builder for `web_fetch` (W13). Verbatim port of
- * `third-party/claude-code-main/src/tools/WebFetchTool/prompt.ts`.
+ * Secondary-model prompt builder for `web_fetch` (W13).
  */
 
 export const WEB_FETCH_TOOL_NAME = "web_fetch";

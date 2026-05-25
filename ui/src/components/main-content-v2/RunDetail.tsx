@@ -36,6 +36,7 @@ const STATUS_COLORS: Record<string, string> = {
   running: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
   completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
   failed: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  apply_failed: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
   applying: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
   applied: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
   archived: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400',
@@ -88,7 +89,6 @@ export default function RunDetail(props: RunDetailProps) {
   const [reportMarkdown, setReportMarkdown] = useState('');
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [loadingReport, setLoadingReport] = useState(false);
-  const [actionLoading, setActionLoading] = useState<'apply' | 'archive' | null>(null);
   const [planOpen, setPlanOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
 
@@ -137,47 +137,6 @@ export default function RunDetail(props: RunDetailProps) {
       });
     return () => { cancelled = true; };
   }, [projectName, planId]);
-
-  const handleApply = useCallback(async () => {
-    if (!projectName || !planId) return;
-    setActionLoading('apply');
-    try {
-      const response = await api.applyProjectDiscoveryPlan(projectName, planId);
-      const body = await response.json().catch(() => ({})) as {
-        plan?: { status?: string };
-        error?: { code?: string; message?: string } | string;
-      };
-      if (!response.ok || body.error) {
-        setPlan((prev) => (prev ? { ...prev, status: 'failed' } : prev));
-        return;
-      }
-      const serverStatus = body.plan?.status;
-      setPlan((prev) =>
-        prev ? { ...prev, status: serverStatus || 'applying' } : prev,
-      );
-    } catch {
-      setPlan((prev) => (prev ? { ...prev, status: 'failed' } : prev));
-    } finally {
-      setActionLoading(null);
-    }
-  }, [projectName, planId]);
-
-  const handleArchive = useCallback(async () => {
-    if (!projectName || !planId) return;
-    setActionLoading('archive');
-    try {
-      await api.archiveProjectDiscoveryPlan(projectName, planId);
-      setPlan((prev) => (prev ? { ...prev, status: 'archived' } : prev));
-    } catch {
-      // swallow
-    } finally {
-      setActionLoading(null);
-    }
-  }, [projectName, planId]);
-
-  const canApply =
-    plan?.status === 'completed' || plan?.status === 'ready' || plan?.status === 'failed';
-  const canArchive = plan != null && plan.status !== 'archived' && plan.status !== 'applying';
 
   const statusColor =
     STATUS_COLORS[plan?.status ?? ''] ??
@@ -345,33 +304,7 @@ export default function RunDetail(props: RunDetailProps) {
           )}
         </div>
 
-        {/* Action buttons */}
-        {plan && (
-          <div className="flex items-center gap-3 px-5 py-4">
-            <button
-              type="button"
-              onClick={() => void handleApply()}
-              disabled={!canApply || actionLoading != null}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3.5 text-[13px] font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
-            >
-              {actionLoading === 'apply' && (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
-              )}
-              {t('dashboard.runDetail.apply', { defaultValue: 'Apply to Main' })}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleArchive()}
-              disabled={!canArchive || actionLoading != null}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 px-3.5 text-[13px] font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-            >
-              {actionLoading === 'archive' && (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
-              )}
-              {t('dashboard.runDetail.archive', { defaultValue: 'Archive' })}
-            </button>
-          </div>
-        )}
+        {/* Per-plan apply/archive removed — use cycle-level actions in the plans list */}
       </div>
     </div>
   );

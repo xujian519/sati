@@ -24,17 +24,28 @@ export function normalizeOpenAIUsage(raw: unknown): CanonicalUsage | undefined {
     return undefined;
   }
 
-  const inputTokens = readNumber(raw.prompt_tokens) ?? readNumber(raw.input_tokens);
+  const promptTokens = readNumber(raw.prompt_tokens) ?? readNumber(raw.input_tokens);
   const outputTokens = readNumber(raw.completion_tokens) ?? readNumber(raw.output_tokens);
-  const totalTokens = readNumber(raw.total_tokens) ?? sumDefined(inputTokens, outputTokens);
   const nativeCost =
     readNumber(raw.cost) ??
     readNumber(raw.total_cost) ??
     readNumber(raw.estimated_cost);
 
+  const details = isRecord(raw.prompt_tokens_details) ? raw.prompt_tokens_details : undefined;
+  const cacheReadTokens = readNumber(details?.cached_tokens) ?? readNumber(raw.cache_read_input_tokens);
+  const cacheWriteTokens = readNumber(details?.cache_write_tokens) ?? readNumber(raw.cache_creation_input_tokens);
+
+  const inputTokens = promptTokens != null
+    ? promptTokens - (cacheReadTokens ?? 0) - (cacheWriteTokens ?? 0)
+    : undefined;
+
+  const totalTokens = readNumber(raw.total_tokens) ?? sumDefined(promptTokens, outputTokens);
+
   return compactUsage({
     inputTokens,
     outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
     totalTokens,
     nativeCost,
   });

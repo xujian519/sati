@@ -113,8 +113,15 @@ export type PilotDeckFileUpdateNotifier = {
   didSave?(update: PilotDeckFileUpdateNotification): Promise<void> | void;
 };
 
+export type PilotDeckToolSupplementalMessage = {
+  role: "user";
+  content: PilotDeckToolResultContent[];
+  isMeta?: boolean;
+};
+
 export type PilotDeckToolExecutionOutput<Output = unknown> = {
   content: PilotDeckToolResultContent[];
+  supplementalMessages?: PilotDeckToolSupplementalMessage[];
   data?: Output;
   metadata?: Record<string, unknown>;
 };
@@ -259,6 +266,13 @@ export type PilotDeckToolRuntimeContext = {
    * when planning multi-step writes.
    */
   maxOutputTokens?: number;
+  /**
+   * True when the model's response was truncated due to output token limit
+   * (finishReason === "length"). Tools use this to produce accurate error
+   * messages — e.g. distinguishing "parameter missing because output was
+   * truncated" from "model failed to provide required parameter".
+   */
+  outputTruncated?: boolean;
   /**
    * Optional session-scoped cache for read_file de-duplication. The agent loop
    * keeps the map stable across turns so repeated reads of an unchanged file

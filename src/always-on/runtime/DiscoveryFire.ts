@@ -3,6 +3,7 @@ import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Gateway, GatewayChannelKey, GatewayEvent } from "../../gateway/index.js";
 import { getPilotProjectChatDir } from "../../pilot/paths.js";
+import { buildChatDigest } from "../context/ChatDigestBuilder.js";
 import type { AlwaysOnConfig } from "../config/parseAlwaysOnConfig.js";
 import { buildFallbackReport, type ReportMetadata } from "../contracts/ReportContract.js";
 import { AlwaysOnError } from "../protocol/errors.js";
@@ -13,6 +14,7 @@ import type {
   DiscoveryFireResult,
   DiscoveryPlanRecord,
   DiscoveryRunHistoryEvent,
+  WorkCycleRecord,
   WorkspaceHandle,
 } from "../protocol/types.js";
 import type { AlwaysOnPaths } from "../storage/AlwaysOnPaths.js";
@@ -20,11 +22,13 @@ import { AlwaysOnEventStore } from "../storage/AlwaysOnEventStore.js";
 import { DiscoveryPlanStore } from "../storage/DiscoveryPlanStore.js";
 import { DiscoveryReportStore } from "../storage/DiscoveryReportStore.js";
 import { DiscoveryStateStore } from "../storage/DiscoveryStateStore.js";
+import { WorkCycleStore } from "../storage/WorkCycleStore.js";
 import type { WorkspaceProviderRegistry } from "../workspace/WorkspaceProviderRegistry.js";
 import type { AlwaysOnRunContextRegistry, ExecutionRunContext, DiscoveryRunContext, WorkspaceRunContext, ReportRunContext } from "./AlwaysOnRunContextRegistry.js";
 import { generateWorkspaceDiff } from "../workspace/WorkspaceApply.js";
 import { buildDiscoveryPrompt, buildExecutionPrompt, buildWorkspacePrompt, buildReportPrompt, buildApplyPrompt } from "./discoveryPrompts.js";
 import type { SessionConfigOverrides } from "./SessionConfigOverrides.js";
+import type { PermissionRule } from "../../permission/index.js";
 
 export type DiscoveryFireDependencies = {
   config: AlwaysOnConfig;
@@ -36,6 +40,7 @@ export type DiscoveryFireDependencies = {
   sessionOverrides: SessionConfigOverrides;
   stateStore: DiscoveryStateStore;
   planStore: DiscoveryPlanStore;
+  cycleStore: WorkCycleStore;
   reportStore: DiscoveryReportStore;
   eventStore: AlwaysOnEventStore;
   uuid: () => string;
@@ -56,52 +61,101 @@ const EXECUTION_CHANNEL: GatewayChannelKey = "always-on/execute";
 const REPORT_CHANNEL: GatewayChannelKey = "always-on/report";
 const APPLY_CHANNEL: GatewayChannelKey = "always-on/apply";
 
-export type EnsureAlwaysOnWorkspaceInput = {
+/**
+ * Tools that require user interaction or could block an unattended session.
+ * Excluded from all Always-On agent loops via SessionConfigOverride.excludeTools.
+ */
+const ALWAYS_ON_EXCLUDED_TOOLS = [
+  "enter_plan_mode",
+  "exit_plan_mode",
+  "ask_user_question",
+];
+
+/**
+ * Deny rules injected into the execution phase session. These override
+ * `bypassPermissions` because deny rules always win in `PermissionRuntime.decide()`.
+ * Prevents the agent from pushing code or modifying remote configuration.
+ */
+export const ALWAYS_ON_EXECUTION_DENY_RULES: PermissionRule[] = [
+  { source: "policy", behavior: "deny", toolName: "bash", pattern: "git push*" },
+  { source: "policy", behavior: "deny", toolName: "bash", pattern: "git remote*" },
+  { source: "policy", behavior: "deny", toolName: "bash", pattern: "*git push*" },
+  { source: "policy", behavior: "deny", toolName: "bash", pattern: "*git remote*" },
+];
+
+export type EnsureActiveWorkCycleInput = {
   state: AlwaysOnDiscoveryState;
   projectKey: string;
   runId: string;
+  cycleId: string;
   workspaceRegistry: WorkspaceProviderRegistry;
   stateStore: DiscoveryStateStore;
+  cycleStore: WorkCycleStore;
   now: () => Date;
   fileExists?: (path: string) => boolean;
 };
 
-export type EnsureAlwaysOnWorkspaceResult = {
+export type EnsureActiveWorkCycleResult = {
   handle: WorkspaceHandle;
+  cycle: WorkCycleRecord;
   reused: boolean;
 };
 
 /**
- * Look up the project's persistent isolated workspace from
- * `state.currentWorkspace`. If it still exists on disk, return a reconstructed
- * `WorkspaceHandle`. Otherwise prepare a new one via the provider registry and
- * persist the handle into state. Always-On runs at most one workspace per
- * project; this function is the single source of truth for that invariant.
+ * Look up the project's active work cycle. If a cycle exists with its
+ * workspace still on disk, reuse it. Otherwise prepare a new workspace and
+ * create a new cycle. Always-On runs at most one active cycle (and one
+ * workspace) per project; this function is the single source of truth.
  */
-export async function ensureAlwaysOnWorkspace(
-  input: EnsureAlwaysOnWorkspaceInput,
-): Promise<EnsureAlwaysOnWorkspaceResult> {
+export async function ensureActiveWorkCycle(
+  input: EnsureActiveWorkCycleInput,
+): Promise<EnsureActiveWorkCycleResult> {
   const fileExists = input.fileExists ?? existsSync;
-  const ref = input.state.currentWorkspace;
-  if (ref && fileExists(ref.cwd)) {
-    return {
-      handle: {
-        runId: ref.runId,
-        projectKey: input.projectKey,
-        strategy: ref.strategy,
-        cwd: ref.cwd,
-        metadata: { ...ref.metadata },
-      },
-      reused: true,
+
+  if (input.state.activeWorkCycleId) {
+    const existing = await input.cycleStore.getRecord(input.state.activeWorkCycleId);
+    if (existing && existing.status === "active" && fileExists(existing.workspace.cwd)) {
+      return {
+        handle: {
+          runId: existing.createdByRunId,
+          projectKey: input.projectKey,
+          strategy: existing.workspace.strategy,
+          cwd: existing.workspace.cwd,
+          metadata: { ...existing.workspace.metadata },
+        },
+        cycle: existing,
+        reused: true,
+      };
+    }
+  }
+
+  // Legacy migration: state still has currentWorkspace but no activeWorkCycleId
+  if (input.state.currentWorkspace && fileExists(input.state.currentWorkspace.cwd)) {
+    const ref = input.state.currentWorkspace;
+    const handle: WorkspaceHandle = {
+      runId: ref.runId,
+      projectKey: input.projectKey,
+      strategy: ref.strategy,
+      cwd: ref.cwd,
+      metadata: { ...ref.metadata },
     };
+    const cycle = await input.cycleStore.create(handle, ref.runId, input.cycleId, input.now());
+    await input.stateStore.setActiveWorkCycleId(cycle.id, input.now());
+    return { handle, cycle, reused: true };
   }
 
   const prepared = await input.workspaceRegistry.prepare({
     projectRoot: input.projectKey,
     runId: input.runId,
   });
-  await input.stateStore.setCurrentWorkspace(prepared.handle, input.now());
-  return { handle: prepared.handle, reused: false };
+  const cycle = await input.cycleStore.create(
+    prepared.handle,
+    input.runId,
+    input.cycleId,
+    input.now(),
+  );
+  await input.stateStore.setActiveWorkCycleId(cycle.id, input.now());
+  return { handle: prepared.handle, cycle, reused: false };
 }
 
 export class DiscoveryFire {
@@ -147,22 +201,16 @@ export class DiscoveryFire {
 
   async runApplyPhase(input: {
     runId: string;
-    plan: { id: string; title: string; workspace?: { cwd: string; strategy: string } };
+    cycle: WorkCycleRecord;
+    plans: Array<{ id: string; title: string }>;
     projectName: string;
     projectRoot: string;
   }): Promise<{ events: GatewayEvent[]; error?: { code: string; message: string }; sessionKey: string }> {
-    const { plan, projectRoot } = input;
-    if (!plan.workspace?.cwd) {
-      return {
-        events: [],
-        error: { code: "missing_workspace", message: "Plan has no associated workspace to apply" },
-        sessionKey: "",
-      };
-    }
+    const { cycle, projectRoot } = input;
 
     const diff = await generateWorkspaceDiff(
-      plan.workspace.strategy,
-      plan.workspace.cwd,
+      cycle.workspace.strategy,
+      cycle.workspace.cwd,
       projectRoot,
     );
 
@@ -172,6 +220,7 @@ export class DiscoveryFire {
       permissionMode: "bypassPermissions",
       bypassAvailable: true,
       canPrompt: false,
+      excludeTools: ALWAYS_ON_EXCLUDED_TOOLS,
     });
 
     try {
@@ -180,10 +229,16 @@ export class DiscoveryFire {
         channelKey: APPLY_CHANNEL,
         runId: `${input.runId}.apply`,
         message: buildApplyPrompt({
-          plan,
+          plan: {
+            id: cycle.id,
+            title: input.plans.map((p) => p.title).join("; "),
+            workspace: { cwd: cycle.workspace.cwd, strategy: cycle.workspace.strategy },
+          },
           projectName: input.projectName,
           projectRoot,
           diff,
+          branchName: cycle.workspace.metadata?.branchName as string | undefined,
+          language: this.deps.config.language,
         }),
         mode: "bypassPermissions",
         persistEvents: true,
@@ -218,9 +273,14 @@ export class DiscoveryFire {
     this.emitEvent(runId, "discovery_started");
     const discoverySessionKey = DiscoveryFire.deriveDiscoverySessionKey(this.deps.projectKey, runId);
 
-    const existingWorkspace = state.currentWorkspace && existsSync(state.currentWorkspace.cwd)
-      ? state.currentWorkspace
+    const activeCycle = state.activeWorkCycleId
+      ? await this.deps.cycleStore.getRecord(state.activeWorkCycleId)
       : undefined;
+    const existingWorkspace = activeCycle && activeCycle.status === "active" && existsSync(activeCycle.workspace.cwd)
+      ? { cwd: activeCycle.workspace.cwd, strategy: activeCycle.workspace.strategy, metadata: activeCycle.workspace.metadata }
+      : state.currentWorkspace && existsSync(state.currentWorkspace.cwd)
+        ? state.currentWorkspace
+        : undefined;
 
     const discoveryCtx: DiscoveryRunContext = {
       kind: "discovery",
@@ -238,7 +298,25 @@ export class DiscoveryFire {
       permissionMode: "bypassPermissions",
       bypassAvailable: true,
       canPrompt: false,
+      excludeTools: ALWAYS_ON_EXCLUDED_TOOLS,
     });
+
+    const chatDigest = await buildChatDigest({
+      projectRoot: this.deps.projectKey,
+      pilotHome: this.deps.paths.pilotHome,
+      maxSessions: 10,
+      maxPromptsPerSession: 8,
+      maxPromptLength: 500,
+    });
+    discoveryCtx.chatSessionAliases = chatDigest.aliasMap;
+
+    const planIndex = await this.deps.planStore.readIndex();
+    const existingPlans = planIndex.plans.map((p) => ({
+      id: p.id,
+      title: p.title,
+      dedupeKey: p.dedupeKey,
+      status: p.status,
+    }));
 
     let discoveryEvents: GatewayEvent[];
     try {
@@ -254,6 +332,9 @@ export class DiscoveryFire {
           workspace: existingWorkspace
             ? { cwd: existingWorkspace.cwd, strategy: existingWorkspace.strategy }
             : undefined,
+          chatDigest,
+          existingPlans,
+          language: this.deps.config.language,
         }),
         mode: "bypassPermissions",
       });
@@ -312,8 +393,11 @@ export class DiscoveryFire {
 
     // ── Phase 2: Workspace (bypassPermissions, agent-driven) ──
     let workspace: WorkspaceHandle;
+    let workCycle: WorkCycleRecord;
     try {
-      workspace = await this.runWorkspacePhase({ runId, state });
+      const wsResult = await this.runWorkspacePhase({ runId, state });
+      workspace = wsResult.handle;
+      workCycle = wsResult.cycle;
     } catch (error) {
       const finishedAt = this.deps.now();
       const code = error instanceof AlwaysOnError ? error.code : "workspace_prepare_failed";
@@ -357,6 +441,10 @@ export class DiscoveryFire {
       permissionMode: "bypassPermissions",
       bypassAvailable: true,
       canPrompt: false,
+      excludeTools: ALWAYS_ON_EXCLUDED_TOOLS,
+      permissionRules: {
+        deny: ALWAYS_ON_EXECUTION_DENY_RULES,
+      },
     });
 
     const executionCtx: ExecutionRunContext = {
@@ -371,8 +459,9 @@ export class DiscoveryFire {
     this.deps.runContexts.register(executionCtx);
     await this.deps.planStore.updateStatus(planRecord.id, {
       status: "executing",
-      workspace: { strategy: workspace.strategy, handle: workspace.cwd, cwd: workspace.cwd },
+      workCycleId: workCycle.id,
     });
+    await this.deps.cycleStore.addPlan(workCycle.id, planRecord.id);
     this.emitEvent(runId, "execution_started", { planId: planRecord.id, title: planRecord.title });
 
     let executionError: { code?: string; message: string } | undefined;
@@ -386,6 +475,7 @@ export class DiscoveryFire {
           planMarkdown: discoveryCtx.plan.markdown,
           workspaceCwd: workspace.cwd,
           workspaceStrategy: workspace.strategy,
+          language: this.deps.config.language,
         }),
         mode: "bypassPermissions",
         persistEvents: true,
@@ -418,7 +508,7 @@ export class DiscoveryFire {
       await this.deps.planStore.updateStatus(planRecord.id, {
         status: "failed",
         reportFilePath,
-        workspace: { strategy: workspace.strategy, handle: workspace.cwd, cwd: workspace.cwd },
+        workCycleId: workCycle.id,
       });
       await this.deps.stateStore.markFireCompleted({ outcome: "failed", runId, planId: planRecord.id, now: finishedAt });
       await this.deps.reportStore.appendHistory({
@@ -426,6 +516,7 @@ export class DiscoveryFire {
         planId: planRecord.id,
         outcome: "failed",
         finishedAt: finishedAt.toISOString(),
+        workCycleId: workCycle.id,
         workspace: { strategy: workspace.strategy, handle: workspace.cwd },
         error: { code: executionError.code ?? "execution_failed", message: executionError.message },
       });
@@ -450,6 +541,7 @@ export class DiscoveryFire {
       permissionMode: "bypassPermissions",
       bypassAvailable: true,
       canPrompt: false,
+      excludeTools: ALWAYS_ON_EXCLUDED_TOOLS,
     });
 
     const reportCtx: ReportRunContext = {
@@ -476,6 +568,7 @@ export class DiscoveryFire {
           planMarkdown: discoveryCtx.plan.markdown,
           workspaceCwd: workspace.cwd,
           workspaceStrategy: workspace.strategy,
+          language: this.deps.config.language,
         }),
         mode: "bypassPermissions",
         persistEvents: true,
@@ -523,7 +616,7 @@ export class DiscoveryFire {
     await this.deps.planStore.updateStatus(planRecord.id, {
       status: outcome === "executed" ? "completed" : "failed",
       reportFilePath,
-      workspace: { strategy: workspace.strategy, handle: workspace.cwd, cwd: workspace.cwd },
+      workCycleId: workCycle.id,
     });
     await this.deps.stateStore.markFireCompleted({
       outcome,
@@ -536,6 +629,7 @@ export class DiscoveryFire {
       planId: planRecord.id,
       outcome,
       finishedAt: finishedAt.toISOString(),
+      workCycleId: workCycle.id,
       workspace: { strategy: workspace.strategy, handle: workspace.cwd },
       error: reportError ? { code: reportError.code ?? "report_failed", message: reportError.message } : undefined,
     });
@@ -553,16 +647,36 @@ export class DiscoveryFire {
   }
 
   /**
-   * Phase 2: Run the workspace agent loop. If the agent calls the workspace
-   * tool, the handle is set on the context. If the agent does not call the
-   * tool (e.g. it detected an existing workspace and skipped), we fall back
-   * to the legacy `ensureAlwaysOnWorkspace` function.
+   * Phase 2: Ensure an isolated workspace exists for plan execution.
+   *
+   * The runtime decides deterministically whether to reuse an existing
+   * workspace or create a new one — the agent loop is only started when
+   * a fresh workspace is needed.
    */
   private async runWorkspacePhase(input: {
     runId: string;
     state: AlwaysOnDiscoveryState;
-  }): Promise<WorkspaceHandle> {
+  }): Promise<{ handle: WorkspaceHandle; cycle: WorkCycleRecord }> {
     const { runId, state } = input;
+
+    // ── Deterministic reuse check ──
+    if (state.activeWorkCycleId) {
+      const activeCycle = await this.deps.cycleStore.getRecord(state.activeWorkCycleId);
+      if (activeCycle && activeCycle.status === "active" && existsSync(activeCycle.workspace.cwd)) {
+        return {
+          handle: {
+            runId: activeCycle.createdByRunId,
+            projectKey: this.deps.projectKey,
+            strategy: activeCycle.workspace.strategy,
+            cwd: activeCycle.workspace.cwd,
+            metadata: { ...activeCycle.workspace.metadata },
+          },
+          cycle: activeCycle,
+        };
+      }
+    }
+
+    // ── No reusable workspace — start agent loop to create one ──
     const workspaceSessionKey = DiscoveryFire.deriveWorkspaceSessionKey(this.deps.projectKey, runId);
 
     const workspaceCtx: WorkspaceRunContext = {
@@ -573,6 +687,7 @@ export class DiscoveryFire {
       paths: this.deps.paths,
       workspaceRegistry: this.deps.workspaceRegistry,
       stateStore: this.deps.stateStore,
+      cycleStore: this.deps.cycleStore,
       now: this.deps.now,
     };
     this.deps.runContexts.register(workspaceCtx);
@@ -581,6 +696,7 @@ export class DiscoveryFire {
       permissionMode: "bypassPermissions",
       bypassAvailable: true,
       canPrompt: false,
+      excludeTools: ALWAYS_ON_EXCLUDED_TOOLS,
     });
 
     try {
@@ -591,7 +707,7 @@ export class DiscoveryFire {
         message: buildWorkspacePrompt({
           projectRoot: this.deps.projectKey,
           runId,
-          currentWorkspace: state.currentWorkspace,
+          language: this.deps.config.language,
         }),
         mode: "bypassPermissions",
       });
@@ -603,19 +719,29 @@ export class DiscoveryFire {
         .catch(() => undefined);
     }
 
+    const cycleId = this.deps.uuid();
     if (workspaceCtx.handle) {
-      return workspaceCtx.handle;
+      const cycle = await this.deps.cycleStore.create(
+        workspaceCtx.handle,
+        runId,
+        cycleId,
+        this.deps.now(),
+      );
+      await this.deps.stateStore.setActiveWorkCycleId(cycle.id, this.deps.now());
+      return { handle: workspaceCtx.handle, cycle };
     }
 
-    const ensured = await ensureAlwaysOnWorkspace({
+    const ensured = await ensureActiveWorkCycle({
       state,
       projectKey: this.deps.projectKey,
       runId,
+      cycleId,
       workspaceRegistry: this.deps.workspaceRegistry,
       stateStore: this.deps.stateStore,
+      cycleStore: this.deps.cycleStore,
       now: this.deps.now,
     });
-    return ensured.handle;
+    return { handle: ensured.handle, cycle: ensured.cycle };
   }
 
   private assertWorkspaceCwdSafe(workspace: WorkspaceHandle): void {

@@ -366,6 +366,12 @@ export class DefaultContextRuntime implements ContextRuntime {
       return this.overflowRecovery.decide(input);
     }
     // Fallback: inline logic when no ContextOverflowRecovery is injected.
+    if (input.error.recoverableViaImageStrip) {
+      return {
+        type: "strip_images_and_retry",
+        reason: "multimodal-processor-error",
+      };
+    }
     if (input.error.code !== "prompt_too_long") {
       return {
         type: "give_up",

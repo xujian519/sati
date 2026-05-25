@@ -40,7 +40,7 @@ const THINK_CLOSE = "</think>";
  * `delta.content` into separate `thinking_delta` / `text_delta` events.
  * Handles tags split across multiple chunks via `state.tagBuffer`.
  *
- * Modelled after edgeclaw-opc's ForceReasoningTransformer.
+ * FSM that splits reasoning tags from streamed content deltas.
  */
 export function splitThinkContent(
   content: string,

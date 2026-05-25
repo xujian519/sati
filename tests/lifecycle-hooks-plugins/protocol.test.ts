@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { resolve } from "node:path";
 import { getPilotExtensionPaths } from "../../src/pilot/index.js";
 import {
   PILOTDECK_HOOK_EVENTS,
@@ -77,9 +78,9 @@ test("hook output parser maps sync hook-specific output", () => {
 
 test("extension paths are fixed under PilotHome and project .pilotdeck", () => {
   assert.deepEqual(getPilotExtensionPaths("/repo/app", "/home/user/.pilotdeck"), {
-    globalPluginsDir: "/home/user/.pilotdeck/plugins",
-    globalSkillsDir: "/home/user/.pilotdeck/skills",
-    projectPluginsDir: "/repo/app/.pilotdeck/plugins",
-    projectSkillsDir: "/repo/app/.pilotdeck/skills",
+    globalPluginsDir: resolve("/home/user/.pilotdeck", "plugins"),
+    globalSkillsDir: resolve("/home/user/.pilotdeck", "skills"),
+    projectPluginsDir: resolve("/repo/app", ".pilotdeck", "plugins"),
+    projectSkillsDir: resolve("/repo/app", ".pilotdeck", "skills"),
   });
 });

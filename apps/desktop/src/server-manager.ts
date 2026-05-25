@@ -28,9 +28,11 @@ import * as path from "node:path";
 const DEFAULT_PORT_START = 18790;
 const DEFAULT_PORT_END = 18799;
 const PROXY_PORT = 18080;
+const GATEWAY_PORT = 18789;
 const HEALTH_POLL_MS = 1500;
 const HEALTH_REQUEST_TIMEOUT_MS = 2000;
 const STARTUP_HEALTH_TIMEOUT_MS = 60_000;
+const GATEWAY_STARTUP_TIMEOUT_MS = 45_000;
 const SHUTDOWN_SIGTERM_WAIT_MS = 5000;
 const ORPHAN_TERM_WAIT_MS = 3000;
 const STABLE_RUN_RESET_MS = 60_000;
@@ -52,6 +54,23 @@ const REASONING_FRIENDLY_MAX_OUTPUT_TOKENS = "16000";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function bundledBinary(binDir: string, name: string): string {
+  if (process.platform === "win32") {
+    const exePath = path.join(binDir, `${name}.exe`);
+    if (fsSync.existsSync(exePath)) return exePath;
+  }
+  return path.join(binDir, name);
+}
+
+function linkDirectory(link: string, target: string): void {
+  if (fsSync.existsSync(link) || !fsSync.existsSync(target)) return;
+  if (process.platform === "win32") {
+    fsSync.symlinkSync(target, link, "junction");
+  } else {
+    fsSync.symlinkSync(target, link);
+  }
 }
 
 function getPilotDeckDir(): string {
@@ -164,8 +183,25 @@ function processExists(pid: number): boolean {
     return true;
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ESRCH") return false;
+    // On Windows, process.kill(pid, 0) can throw EPERM if the process
+    // exists but belongs to another user — treat as "exists".
+    if (process.platform === "win32" && (err as NodeJS.ErrnoException).code === "EPERM") return true;
     throw err;
   }
+}
+
+function forceKillPid(pid: number): void {
+  try {
+    if (process.platform === "win32") {
+      execSync(`taskkill /F /PID ${pid} /T 2>NUL`, {
+        stdio: "ignore",
+        timeout: 5000,
+        shell: "cmd.exe",
+      });
+    } else {
+      process.kill(pid, "SIGKILL");
+    }
+  } catch { /* ignore */ }
 }
 
 async function waitForProcessExit(pid: number, maxMs: number): Promise<void> {
@@ -194,11 +230,7 @@ async function cleanupStaleOrOrphanPid(): Promise<void> {
   }
   await waitForProcessExit(pid, SHUTDOWN_SIGTERM_WAIT_MS);
   if (processExists(pid)) {
-    try {
-      process.kill(pid, "SIGKILL");
-    } catch {
-      /* ignore */
-    }
+    forceKillPid(pid);
   }
   try {
     await fs.unlink(getPidFilePath());
@@ -292,6 +324,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
   private readonly appVersion: string | undefined;
 
   private child: ChildProcess | null = null;
+  private gatewayChild: ChildProcess | null = null;
   private port: number | null = null;
   private stopRequested = false;
   private startPromise: Promise<{ port: number }> | null = null;
@@ -369,11 +402,9 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     }
     await fs.mkdir(destDir, { recursive: true });
 
-    await execFile("/usr/bin/tar", ["xf", tarball, "-C", destDir], {
+    const tarBin = process.platform === "win32" ? "tar" : "/usr/bin/tar";
+    await execFile(tarBin, ["xf", tarball, "-C", destDir], {
       timeout: 180_000,
-      // Don't capture stdout/stderr to memory; tar is intentionally quiet
-      // unless something fails, in which case it writes to stderr and
-      // exits non-zero — execFile rejects with the stderr captured for us.
       maxBuffer: 1024 * 1024,
     });
     await fs.writeFile(marker, expectedMarker);
@@ -417,25 +448,18 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       if (!root)
         throw new Error("ServerManager: devRepoRoot is required when dev=true");
       return {
-        nodeBin: path.join(
-          root,
-          "apps",
-          "desktop",
-          "resources",
-          "node-bin",
+        nodeBin: bundledBinary(
+          path.join(root, "apps", "desktop", "resources", "node-bin"),
           "node",
         ),
-        bunBin: path.join(
-          root,
-          "apps",
-          "desktop",
-          "resources",
-          "bun-bin",
+        bunBin: bundledBinary(
+          path.join(root, "apps", "desktop", "resources", "bun-bin"),
           "bun",
         ),
-        serverEntry: path.join(root, "pilotdeckui", "server", "index.js"),
-        serverCwd: path.join(root, "pilotdeckui"),
-        pilotDeckMainDir: path.join(root, "pilotdeck-main"),
+        // Repo UI lives at ui/ (bundle tar extracts as pilotdeckui/ at runtime).
+        serverEntry: path.join(root, "ui", "server", "index.js"),
+        serverCwd: path.join(root, "ui"),
+        pilotDeckMainDir: root,
       };
     }
     const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string })
@@ -500,9 +524,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     // bridges the gap so all ESM resolve calls succeed at runtime.
     const distLink = path.join(runtimeBaseDir, "dist");
     const distTarget = path.join(pilotDeckMainDir, "dist");
-    if (fsSync.existsSync(distTarget) && !fsSync.existsSync(distLink)) {
-      fsSync.symlinkSync(distTarget, distLink);
-    }
+    linkDirectory(distLink, distTarget);
 
     // edgeclaw-memory-core is a file: dependency in the repo's package.json.
     // The release tar excludes the top-level edgeclaw-memory-core/ (it has
@@ -515,18 +537,27 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       "edgeclaw-memory-core",
     );
     const memCoreDir = path.join(runtimeBaseDir, "edgeclaw-memory-core");
-    if (
-      fsSync.existsSync(memCoreDir) &&
-      !fsSync.existsSync(memNodeModLink)
-    ) {
-      fsSync.symlinkSync(memCoreDir, memNodeModLink);
-    }
+    linkDirectory(memNodeModLink, memCoreDir);
+
+    // npm hoists shared deps (ws, express, etc.) into the root node_modules/
+    // which ends up inside pilotdeck-main-bundle.tar, not pilotdeckui-bundle.tar.
+    // ESM resolution walks up the directory tree looking for node_modules/ dirs.
+    // A symlink at <runtimeBaseDir>/node_modules → pilotdeck-main/node_modules
+    // lets the resolver find hoisted packages after exhausting pilotdeckui's own.
+    const hoistedLink = path.join(runtimeBaseDir, "node_modules");
+    const hoistedTarget = path.join(pilotDeckMainDir, "node_modules");
+    linkDirectory(hoistedLink, hoistedTarget);
+
+    // ui/server/ also imports `../../src/web/server/*.js` etc. In dev
+    // mode tsx resolves .js → .ts; in packaged mode we need actual .js
+    // files. Point src/ → pilotdeck-main/dist/src/ (compiled output).
+    const srcLink = path.join(runtimeBaseDir, "src");
+    const srcTarget = path.join(pilotDeckMainDir, "dist", "src");
+    linkDirectory(srcLink, srcTarget);
 
     return {
-      // Native binaries stay under the read-only Resources/ — no need to copy
-      // them out (they're already executable + signed in place).
-      nodeBin: path.join(resources, "node-bin", "node"),
-      bunBin: path.join(resources, "bun-bin", "bun"),
+      nodeBin: bundledBinary(path.join(resources, "node-bin"), "node"),
+      bunBin: bundledBinary(path.join(resources, "bun-bin"), "bun"),
       serverEntry: path.join(pilotDeckUiDir, "server", "index.js"),
       serverCwd: pilotDeckUiDir,
       pilotDeckMainDir,
@@ -559,11 +590,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     }
     await waitForProcessExit(pid, ORPHAN_TERM_WAIT_MS);
     if (processExists(pid)) {
-      try {
-        process.kill(pid, "SIGKILL");
-      } catch {
-        /* ignore */
-      }
+      forceKillPid(pid);
     }
   }
 
@@ -616,16 +643,24 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
   private async killOrphanCronDaemonByPgrep(): Promise<void> {
     let out = "";
     try {
-      out = execSync(
-        `/usr/bin/pgrep -f "daemonMain\\(\\['serve'\\]\\)" || true`,
-        { stdio: ["ignore", "pipe", "ignore"], timeout: 3000 },
-      ).toString("utf8");
+      if (process.platform === "win32") {
+        // wmic is universally available on Windows; filter by command line.
+        out = execSync(
+          'wmic process where "CommandLine like \'%daemonMain%serve%\'" get ProcessId /format:list 2>NUL',
+          { stdio: ["ignore", "pipe", "ignore"], timeout: 5000, shell: "cmd.exe" },
+        ).toString("utf8");
+      } else {
+        out = execSync(
+          `/usr/bin/pgrep -f "daemonMain\\(\\['serve'\\]\\)" || true`,
+          { stdio: ["ignore", "pipe", "ignore"], timeout: 3000 },
+        ).toString("utf8");
+      }
     } catch {
       return;
     }
     const pids = out
       .split("\n")
-      .map((s) => Number.parseInt(s.trim(), 10))
+      .map((s) => Number.parseInt(s.replace(/\D/g, ""), 10))
       .filter((n) => Number.isFinite(n) && n > 0 && n !== process.pid);
     for (const pid of pids) {
       await this.killPidGracefully(pid);
@@ -641,8 +676,23 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
 
   private listenerPidForPort(port: number): number | null {
     try {
-      // -t = terse (PID only); -i :port -sTCP:LISTEN = TCP LISTEN sockets only.
-      const out = execSync(`/usr/sbin/lsof -nP -t -i :${port} -sTCP:LISTEN`, {
+      let out: string;
+      if (process.platform === "win32") {
+        // netstat -ano gives lines like:  TCP  0.0.0.0:18790  0.0.0.0:0  LISTENING  1234
+        const raw = execSync(`netstat -ano -p TCP`, {
+          stdio: ["ignore", "pipe", "ignore"],
+          timeout: 5000,
+          shell: "cmd.exe",
+        }).toString("utf8");
+        const line = raw.split("\n").find(
+          (l) => l.includes("LISTENING") && l.includes(`:${port} `),
+        );
+        if (!line) return null;
+        const parts = line.trim().split(/\s+/);
+        const pid = Number.parseInt(parts[parts.length - 1] ?? "", 10);
+        return Number.isFinite(pid) && pid > 0 ? pid : null;
+      }
+      out = execSync(`/usr/sbin/lsof -nP -t -i :${port} -sTCP:LISTEN`, {
         stdio: ["ignore", "pipe", "ignore"],
         timeout: 3000,
       })
@@ -667,9 +717,17 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
 
   private async cleanupOrphanRuntimeProcesses(): Promise<void> {
     // Order: proxy first (its parent is the cron daemon's child of the
-    // previous UI server), then cron daemon.
+    // previous UI server), then cron daemon, then orphan gateway.
     await this.killOrphanProxy();
     await this.killOrphanCronDaemon();
+    await this.killOrphanGateway();
+  }
+
+  private async killOrphanGateway(): Promise<void> {
+    const pid = this.listenerPidForPort(GATEWAY_PORT);
+    if (pid === null) return;
+    if (pid === process.pid) return;
+    await this.killPidGracefully(pid);
   }
 
   private clearStableTimer(): void {
@@ -794,7 +852,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       // Tell pilotdeckui where pilotdeck-main lives
       PILOTDECK_MAIN_DIR: pilotDeckMainDir,
       // Prepend bundled Node + Bun to PATH so any indirect lookups resolve our binaries
-      PATH: `${path.dirname(nodeBin)}:${path.dirname(bunBin)}:${
+      PATH: `${path.dirname(nodeBin)}${path.delimiter}${path.dirname(bunBin)}${path.delimiter}${
         process.env.PATH ?? ""
       }`,
       // Reasoning-friendly default. Anything already present (env passthrough
@@ -812,6 +870,62 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     await ensurePilotDeckDir();
     const logPath = getServerLogPath();
     const logStream = fsSync.createWriteStream(logPath, { flags: "a" });
+
+    // --- Start the Gateway process (port 18789) BEFORE the UI server ---
+    // The UI server's pilotdeck-bridge connects to ws://127.0.0.1:18789/ws
+    // within 30s. We must have the gateway listening before the UI server
+    // attempts its first WebSocket handshake.
+    const gatewayEntry = path.join(
+      pilotDeckMainDir,
+      "dist",
+      "src",
+      "cli",
+      "pilotdeck.js",
+    );
+    if (fsSync.existsSync(gatewayEntry)) {
+      this.emit("progress", "启动 PilotDeck Gateway…");
+      const gwLogStream = fsSync.createWriteStream(logPath, { flags: "a" });
+      gwLogStream.write(
+        `\n=== ${new Date().toISOString()} spawn gateway ${gatewayEntry} (port=${GATEWAY_PORT}) ===\n`,
+      );
+      const gwChild = spawn(nodeBin, [gatewayEntry, "server"], {
+        stdio: ["ignore", "pipe", "pipe"],
+        cwd: pilotDeckMainDir,
+        env: {
+          ...env,
+          PILOTDECK_GATEWAY_PORT: String(GATEWAY_PORT),
+        },
+        windowsHide: true,
+      });
+      gwChild.stdout?.pipe(gwLogStream, { end: false });
+      gwChild.stderr?.pipe(gwLogStream, { end: false });
+      gwChild.once("exit", () => {
+        gwLogStream.end();
+      });
+      this.gatewayChild = gwChild;
+
+      // Wait for gateway to start listening
+      const gwDeadline = Date.now() + GATEWAY_STARTUP_TIMEOUT_MS;
+      let gwReady = false;
+      while (Date.now() < gwDeadline) {
+        if (gwChild.exitCode !== null) break;
+        const pid = this.listenerPidForPort(GATEWAY_PORT);
+        if (pid !== null) {
+          gwReady = true;
+          break;
+        }
+        await sleep(HEALTH_POLL_MS);
+      }
+      if (!gwReady) {
+        gwChild.kill("SIGTERM");
+        this.gatewayChild = null;
+        const tail = readTailSafe(logPath, 4000);
+        throw new Error(
+          `Gateway failed to start on port ${GATEWAY_PORT} within ${GATEWAY_STARTUP_TIMEOUT_MS}ms\n--- log tail ---\n${tail}`,
+        );
+      }
+    }
+
     logStream.write(
       `\n=== ${new Date().toISOString()} spawn ${serverEntry} (port=${chosenPort}) ===\n`,
     );
@@ -876,11 +990,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     }
 
     if (processExists(pid)) {
-      try {
-        process.kill(pid, "SIGKILL");
-      } catch {
-        /* ignore */
-      }
+      forceKillPid(pid);
     }
   }
 
@@ -921,6 +1031,10 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     this.child = null;
     this.port = null;
 
+    // Stop the gateway process
+    await this.killGatewayGracefully();
+    this.gatewayChild = null;
+
     await this.removePidFile();
     // The ui-server's SIGTERM handler stops the proxy and (after our
     // pilotdeckConfig.js patch) the cron daemon. As a belt-and-suspenders
@@ -929,6 +1043,28 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     // remaining orphans now so quitting PilotDeck really leaves zero processes.
     await this.cleanupOrphanRuntimeProcesses();
     this.stopRequested = false;
+  }
+
+  private async killGatewayGracefully(): Promise<void> {
+    const proc = this.gatewayChild;
+    if (!proc || !proc.pid) return;
+    const pid = proc.pid;
+
+    try {
+      proc.kill("SIGTERM");
+    } catch {
+      /* ignore */
+    }
+
+    const deadline = Date.now() + SHUTDOWN_SIGTERM_WAIT_MS;
+    while (Date.now() < deadline) {
+      if (!processExists(pid)) return;
+      await sleep(50);
+    }
+
+    if (processExists(pid)) {
+      forceKillPid(pid);
+    }
   }
 
   getPort(): number | null {

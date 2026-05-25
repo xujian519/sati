@@ -1,8 +1,10 @@
-import {
-  flattenToolResultBlockText,
-  type CanonicalMessage,
-  type CanonicalToolResultBlock,
+import type {
+  CanonicalMessage,
+  CanonicalToolResultBlock,
 } from "../../model/index.js";
+import { COMPACTABLE_TOOL_NAMES } from "./CachedMicroCompactionEngine.js";
+
+export const MICROCOMPACT_CLEARED = "[Old tool result content cleared]";
 
 export type MicroCompactionInput = {
   messages: CanonicalMessage[];
@@ -25,12 +27,9 @@ export type MicroCompactionResult = {
 /**
  * Phase 5 microcompact (time-based path only — decision §3.1 #5):
  * directly rewrites tool_result content in older messages so subsequent turns
- * carry less context. Cached / Anthropic `cache_edits` path is intentionally
- * deferred (intentional_difference `context-microcompact-cached`).
- *
- * The "older" cutoff is determined by message index; the legacy time-based
- * heuristic uses elapsed ms but the simple deterministic version drops to
- * "rewrite all but the last `keepLatest` tool_results".
+ * carry less context. Only targets tool_results whose originating tool_call
+ * is in COMPACTABLE_TOOL_NAMES. Properly accounts for multimodal content
+ * size (base64 data length) rather than relying on the text-only fallback.
  */
 export class MicroCompactionEngine {
   constructor(private readonly options: { keepLatest?: number; trimToBytes?: number } = {}) {}
@@ -38,7 +37,10 @@ export class MicroCompactionEngine {
   apply(input: MicroCompactionInput): MicroCompactionResult {
     const trimToBytes = input.trimToBytes ?? this.options.trimToBytes ?? 1536;
     const keepLatest = this.options.keepLatest ?? 1;
-    const toolResultIndices = this.collectToolResultMessageIndices(input.messages);
+
+    const compactableCallIds = this.collectCompactableToolCallIds(input.messages);
+    const toolResultIndices = this.collectCompactableToolResultIndices(input.messages, compactableCallIds);
+
     if (toolResultIndices.length <= keepLatest) {
       return {
         messages: input.messages,
@@ -49,7 +51,7 @@ export class MicroCompactionEngine {
       };
     }
 
-    const rewriteUntil = toolResultIndices[toolResultIndices.length - 1 - keepLatest];
+    const rewriteUntil = toolResultIndices[toolResultIndices.length - keepLatest]! - 1;
     const rewrittenIds: string[] = [];
     let rewrittenBytes = 0;
 
@@ -63,21 +65,34 @@ export class MicroCompactionEngine {
       let touched = false;
       const newContent = message.content.map((block) => {
         if (block.type !== "tool_result") {
+          // Clear standalone multimedia blocks (from supplementalMessages)
+          // in older user messages that are within the rewrite window.
+          if (block.type === "image" || block.type === "pdf") {
+            touched = true;
+            rewrittenBytes += "data" in block ? (block as { data: string }).data.length : 0;
+            return {
+              type: "text" as const,
+              text: block.type === "image" ? "[image cleared]" : "[document cleared]",
+            };
+          }
           return block;
         }
-        const flat = flattenToolResultBlockText(block as CanonicalToolResultBlock);
-        if (flat.length <= trimToBytes) {
+        if (!compactableCallIds.has(block.toolCallId)) {
+          return block;
+        }
+        const size = this.estimateToolResultSize(block as CanonicalToolResultBlock);
+        if (size <= trimToBytes) {
           return block;
         }
         touched = true;
         rewrittenIds.push(block.toolCallId);
-        rewrittenBytes += flat.length - trimToBytes;
+        rewrittenBytes += size;
         return {
           ...block,
           content: [
             {
               type: "text" as const,
-              text: `${flat.slice(0, trimToBytes)}\n... (microcompacted, original ${flat.length} bytes)`,
+              text: MICROCOMPACT_CLEARED,
             },
           ],
         };
@@ -94,13 +109,43 @@ export class MicroCompactionEngine {
     };
   }
 
-  private collectToolResultMessageIndices(messages: CanonicalMessage[]): number[] {
+  private collectCompactableToolCallIds(messages: CanonicalMessage[]): Set<string> {
+    const ids = new Set<string>();
+    for (const message of messages) {
+      if (message.role !== "assistant") continue;
+      for (const block of message.content) {
+        if (block.type === "tool_call" && COMPACTABLE_TOOL_NAMES.has(block.name)) {
+          ids.add(block.id);
+        }
+      }
+    }
+    return ids;
+  }
+
+  private collectCompactableToolResultIndices(
+    messages: CanonicalMessage[],
+    compactableCallIds: Set<string>,
+  ): number[] {
     const indices: number[] = [];
     messages.forEach((message, index) => {
-      if (message.role === "user" && message.content.some((block) => block.type === "tool_result")) {
-        indices.push(index);
-      }
+      if (message.role !== "user") return;
+      const hasCompactable = message.content.some(
+        (block) => block.type === "tool_result" && compactableCallIds.has(block.toolCallId),
+      );
+      if (hasCompactable) indices.push(index);
     });
     return indices;
+  }
+
+  private estimateToolResultSize(block: CanonicalToolResultBlock): number {
+    let size = 0;
+    for (const item of block.content) {
+      if (item.type === "text") {
+        size += item.text.length;
+      } else if (item.type === "image" || item.type === "pdf") {
+        size += item.data.length;
+      }
+    }
+    return size;
   }
 }

@@ -78,6 +78,10 @@ export function sanitizeSessionIdForPath(sessionId) {
 }
 
 function createLegacyProjectId(projectRoot) {
-    return projectRoot.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
+    // Normalize to forward slashes so the same physical path produces the same
+    // project ID on Windows (\) and Unix (/). Also strip a Windows drive-letter
+    // prefix (e.g. "C:") so "C:\Users\foo" slugifies identically to "/Users/foo".
+    const normalized = projectRoot.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '');
+    return normalized.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
 }
 

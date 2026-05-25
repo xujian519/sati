@@ -113,6 +113,70 @@ test("records permission and tool audit records", async () => {
   assert.equal(toolRecords[0]?.status, "success");
 });
 
+test("invalid_tool_input with outputTruncated includes truncation cause", async () => {
+  const tool = createPilotDeckTestTool({
+    name: "write_file",
+    readOnly: false,
+    kind: "filesystem",
+    inputSchema: {
+      type: "object",
+      required: ["path", "content"],
+      additionalProperties: false,
+      properties: { path: { type: "string" }, content: { type: "string" } },
+    },
+    execute: async () => ({ content: [{ type: "text", text: "ok" }] }),
+  });
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
+    tools: [tool],
+    outputTruncated: true,
+    maxOutputTokens: 4096,
+  });
+
+  const result = await toolRuntime.execute(
+    { id: "call-1", name: "write_file", input: { path: "/tmp/test.txt" } },
+    context,
+  );
+
+  assert.equal(result.type, "error");
+  if (result.type === "error") {
+    assert.equal(result.error.code, "invalid_tool_input");
+    assert.ok(result.error.message.includes("truncated"), "should mention truncation");
+    assert.ok(result.error.message.includes("output token limit"), "should mention output token limit");
+    assert.ok(result.error.message.includes("4096"), "should include maxOutputTokens value");
+    assert.ok(result.error.message.includes("incremental"), "should include multi-step hint");
+  }
+});
+
+test("invalid_tool_input without outputTruncated omits truncation hint", async () => {
+  const tool = createPilotDeckTestTool({
+    name: "write_file",
+    readOnly: false,
+    kind: "filesystem",
+    inputSchema: {
+      type: "object",
+      required: ["path", "content"],
+      additionalProperties: false,
+      properties: { path: { type: "string" }, content: { type: "string" } },
+    },
+    execute: async () => ({ content: [{ type: "text", text: "ok" }] }),
+  });
+  const { toolRuntime, context } = createPilotDeckToolRuntimeFixture({
+    tools: [tool],
+  });
+
+  const result = await toolRuntime.execute(
+    { id: "call-1", name: "write_file", input: { path: "/tmp/test.txt" } },
+    context,
+  );
+
+  assert.equal(result.type, "error");
+  if (result.type === "error") {
+    assert.equal(result.error.code, "invalid_tool_input");
+    assert.ok(!result.error.message.includes("truncated"), "should NOT mention truncation");
+    assert.ok(result.error.message.includes("ensure all required parameters"), "should prompt for missing params");
+  }
+});
+
 test("truncates oversized result content", async () => {
   const tool = createPilotDeckTestTool({
     name: "read_file",

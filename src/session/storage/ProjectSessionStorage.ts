@@ -45,7 +45,11 @@ export type AgentProjectSessionStorage = {
  * on-disk filenames unchanged and stay backward compatible.
  */
 export function sanitizeSessionIdForPath(sessionId: string): string {
-  return sessionId.replace(/[\\/]+/g, "-").replace(/^-+|-+$/g, "") || "session";
+  // On Windows, `:` is reserved (drive letters / ADS) and cannot appear in
+  // filenames.  Strip it alongside path separators so that TUI-style session
+  // keys like `tui:project=/Users/foo:default` produce a single flat file.
+  const illegal = process.platform === "win32" ? /[\\/:<>"|?*]+/g : /[\\/]+/g;
+  return sessionId.replace(illegal, "-").replace(/^-+|-+$/g, "") || "session";
 }
 
 export function createAgentProjectSessionStorage(

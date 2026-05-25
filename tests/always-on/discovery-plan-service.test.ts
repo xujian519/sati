@@ -142,33 +142,66 @@ test("queueExecution queues a ready plan and emits events", async () => {
   }
 });
 
-test("archive throws INVALID_STATE for running plan", async () => {
+// ---- cycle-level archive/apply (per-plan archive/apply removed) ----
+
+test("archiveCycle marks all cycle plans as archived", async () => {
   const env = makeTestEnv();
   try {
+    const cyclesDir = join(env.projectDir, "cycles");
+    mkdirSync(cyclesDir, { recursive: true });
+    writeFileSync(join(cyclesDir, "index.json"), JSON.stringify({
+      schemaVersion: 1,
+      cycles: [{
+        id: "c1",
+        projectKey: env.projectRoot,
+        status: "active",
+        workspace: { strategy: "snapshot-copy", cwd: "/tmp/ws", metadata: {} },
+        planIds: ["p1"],
+        createdAt: "2026-05-08T10:00:00Z",
+        createdByRunId: "run-1",
+      }],
+    }));
     writePlanIndex(env.plansDir, [
-      { id: "p1", title: "Running", status: "running", planFilePath: "plans/p1.md" },
+      { id: "p1", title: "Done plan", status: "completed", planFilePath: "plans/p1.md" },
     ]);
-    await assert.rejects(
-      () => env.service.archive("test-project", "p1"),
-      (error: Error & { code?: string }) => error.code === "INVALID_STATE",
-    );
+
+    const result = await env.service.archiveCycle("test-project", "c1");
+    assert.deepEqual(result, { archived: true });
+
+    const planRaw = readFileSync(join(env.plansDir, "index.json"), "utf8");
+    const stored = JSON.parse(planRaw);
+    assert.equal(stored.plans[0].status, "archived");
   } finally {
     env.cleanup();
   }
 });
 
-test("archive marks a plan as archived", async () => {
+test("queueCycleApply rejects non-active cycle", async () => {
   const env = makeTestEnv();
   try {
+    const cyclesDir = join(env.projectDir, "cycles");
+    mkdirSync(cyclesDir, { recursive: true });
+    writeFileSync(join(cyclesDir, "index.json"), JSON.stringify({
+      schemaVersion: 1,
+      cycles: [{
+        id: "c1",
+        projectKey: env.projectRoot,
+        status: "archived",
+        workspace: { strategy: "snapshot-copy", cwd: "/tmp/ws", metadata: {} },
+        planIds: ["p1"],
+        createdAt: "2026-05-08T10:00:00Z",
+        createdByRunId: "run-1",
+      }],
+    }));
     writePlanIndex(env.plansDir, [
-      { id: "p1", title: "Done", status: "completed", planFilePath: "plans/p1.md" },
+      { id: "p1", title: "Done plan", status: "completed", planFilePath: "plans/p1.md" },
     ]);
-    const result = await env.service.archive("test-project", "p1");
-    assert.deepEqual(result, { archived: true });
+    writePlanBody(env.plansDir, "p1", "Plan content");
 
-    const raw = readFileSync(join(env.plansDir, "index.json"), "utf8");
-    const stored = JSON.parse(raw);
-    assert.equal(stored.plans[0].status, "archived");
+    await assert.rejects(
+      () => env.service.queueCycleApply("test-project", "c1"),
+      (error: Error & { code?: string }) => error.code === "INVALID_STATE",
+    );
   } finally {
     env.cleanup();
   }

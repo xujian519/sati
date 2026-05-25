@@ -5,12 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readWebSessionMessages } from "../../src/web/server/readSessionMessages.js";
 import { createProjectId } from "../../src/pilot/index.js";
+import { sanitizeSessionIdForPath } from "../../src/session/storage/ProjectSessionStorage.js";
 
 function makeFixture(projectRoot: string, pilotHome: string, sessionKey: string): void {
   const projectId = createProjectId(projectRoot);
   const chatDir = join(pilotHome, "projects", projectId, "chats");
   mkdirSync(chatDir, { recursive: true });
-  const path = join(chatDir, `${sessionKey}.jsonl`);
+  const safeId = sanitizeSessionIdForPath(sessionKey);
+  const path = join(chatDir, `${safeId}.jsonl`);
   // Minimal transcript: an accepted_input + assistant message + turn_result
   // so replayTranscriptEntries keeps both messages.
   const lines = [
@@ -112,7 +114,7 @@ test("readWebSessionMessages filters out synthetic messages", async () => {
     const projectId = createProjectId(projectRoot);
     const chatDir = join(pilotHome, "projects", projectId, "chats");
     mkdirSync(chatDir, { recursive: true });
-    const path = join(chatDir, `${sessionKey}.jsonl`);
+    const path = join(chatDir, `${sanitizeSessionIdForPath(sessionKey)}.jsonl`);
     const lines = [
       {
         type: "accepted_input",
@@ -204,7 +206,7 @@ test("readWebSessionMessages preserves tool error codes for permission UI gating
     const projectId = createProjectId(projectRoot);
     const chatDir = join(pilotHome, "projects", projectId, "chats");
     mkdirSync(chatDir, { recursive: true });
-    const path = join(chatDir, `${sessionKey}.jsonl`);
+    const path = join(chatDir, `${sanitizeSessionIdForPath(sessionKey)}.jsonl`);
     const lines = [
       {
         type: "accepted_input",
@@ -302,7 +304,7 @@ test("readWebSessionMessages restores incomplete turns with continuous tool call
     const projectId = createProjectId(projectRoot);
     const chatDir = join(pilotHome, "projects", projectId, "chats");
     mkdirSync(chatDir, { recursive: true });
-    const path = join(chatDir, `${sessionKey}.jsonl`);
+    const path = join(chatDir, `${sanitizeSessionIdForPath(sessionKey)}.jsonl`);
     const lines = [
       {
         type: "accepted_input",

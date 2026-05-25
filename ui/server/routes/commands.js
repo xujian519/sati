@@ -31,9 +31,8 @@ const PINNED_COMMAND_NAMES = [
 ];
 
 /**
- * Bundled skills that live inside the claude-code CLI binary (registered via
- * `registerBundledSkill` in claude-code-main/src/skills/bundled/*.ts). They are
- * not on disk, so the directory scanners can't see them — we surface stub
+ * Bundled skills registered via the skill registry in the CLI binary.
+ * They are not on disk, so the directory scanners can't see them — we surface stub
  * entries so the UI menu can suggest them. The actual execution still happens
  * agent-side: typing `/projects` sends the slash text through, the proxy hands
  * it to the bundled-skill registry, and the result streams back.
@@ -120,7 +119,7 @@ async function scanCommandsDirectory(dir, baseDir, namespace) {
 /**
  * Scan `.claude/skills/` for skill-format slash commands. Each immediate
  * subdirectory `<dir>/<name>/SKILL.md` becomes the slash command `/<name>`.
- * Mirrors claude-code-main's `loadSkillsFromSkillsDir` (loadSkillsDir.ts:407)
+ * Mirrors the upstream `loadSkillsFromSkillsDir` convention
  * so disk semantics stay aligned: directory format only, name = parent dir,
  * frontmatter parsed for description/metadata.
  *
@@ -789,16 +788,16 @@ Custom commands can be created in:
  * POST /api/commands/list
  * List all available commands from project and user directories
  *
- * Discovery layout (mirrors claude-code-main where possible):
+ * Discovery layout:
  *   - Built-in commands: hardcoded in this file (handled by builtInHandlers).
  *   - Bundled skills: hardcoded stubs (BUNDLED_SKILL_STUBS) — actual handlers
- *     live in claude-code-main; we only surface them so the UI menu shows them.
- *   - On-disk commands: `.claude/commands/**\/*.md` (project + user).
+ *     live in the CLI binary; we only surface them so the UI menu shows them.
+ *   - On-disk commands: `.pilotdeck/commands/**\/*.md` (project + user).
  *   - On-disk skills:   `.claude/skills/<name>/SKILL.md` (project + user).
  *
  * Dedup: when the same `/<name>` exists in multiple places, project wins over
- * user, and `commands/` wins over `skills/` (mirrors claude-code's first-seen
- * preference). Bundled stubs only surface when no on-disk override exists.
+ * user, and `commands/` wins over `skills/` (first-seen preference).
+ * Bundled stubs only surface when no on-disk override exists.
  *
  * Pinning: PINNED_COMMAND_NAMES are reassigned `namespace: 'pinned'` so the
  * frontend menu pulls them into a curated top group, in fixed order.
@@ -968,7 +967,7 @@ router.post('/execute', async (req, res) => {
     }
 
     // Bundled-skill stubs (e.g. /projects, /add-project) have no on-disk
-    // file — claude-code-main's `registerBundledSkill` registry handles the
+    // file — the CLI's `registerBundledSkill` registry handles the
     // actual execution. Send the raw `/<name> <args>` text back as a
     // passthrough so the frontend submits it as normal user input; the proxy's
     // slash parser then routes to the bundled skill.

@@ -12,6 +12,8 @@ export type AlwaysOnPaths = {
   stateFile: string;
   plansDir: string;
   planIndexFile: string;
+  cyclesDir: string;
+  cycleIndexFile: string;
   reportsDir: string;
   runsDir: string;
   runHistoryFile: string;
@@ -45,6 +47,8 @@ export function resolveAlwaysOnPaths(input: {
     stateFile: resolve(projectDir, "state.json"),
     plansDir: resolve(projectDir, "plans"),
     planIndexFile: resolve(projectDir, "plans", "index.json"),
+    cyclesDir: resolve(projectDir, "cycles"),
+    cycleIndexFile: resolve(projectDir, "cycles", "index.json"),
     reportsDir: resolve(projectDir, "reports"),
     runsDir: resolve(projectDir, "runs"),
     runHistoryFile: resolve(projectDir, "run-history.jsonl"),

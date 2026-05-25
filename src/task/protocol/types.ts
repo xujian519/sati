@@ -1,6 +1,6 @@
 /**
  * Background task runtime protocol (C5 §6.5 of the deferred-feature guide).
- * Mirrors `third-party/claude-code-main/src/tasks/LocalShellTask` (T1-T11).
+ * Mirrors the legacy upstream LocalShellTask behaviour (T1-T11).
  */
 
 export type PilotDeckBackgroundTaskStatus =

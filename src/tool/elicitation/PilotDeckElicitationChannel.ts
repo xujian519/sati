@@ -4,7 +4,7 @@
  * (Gateway / Adapter), wired into the ToolRuntime via
  * `PilotDeckToolRuntimeContext.elicitation`.
  *
- * Behaviour parity with `third-party/claude-code-main/src/services/sdk/elicitationHandler.ts`:
+ * Behaviour parity with the legacy upstream elicitation handler:
  *   E1 a single round-trip per invocation; channel returns one Result.
  *   E2 user can decline; channel returns `cancelled: true`.
  *   E3 free-form notes per question are optional.

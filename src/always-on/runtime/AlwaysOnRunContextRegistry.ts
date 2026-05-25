@@ -2,6 +2,7 @@ import type { DiscoveryPlanRecord, WorkspaceHandle } from "../protocol/types.js"
 import type { DiscoveryPlanStore } from "../storage/DiscoveryPlanStore.js";
 import type { DiscoveryReportStore } from "../storage/DiscoveryReportStore.js";
 import type { DiscoveryStateStore } from "../storage/DiscoveryStateStore.js";
+import type { WorkCycleStore } from "../storage/WorkCycleStore.js";
 import type { AlwaysOnPaths } from "../storage/AlwaysOnPaths.js";
 import type { WorkspaceProviderRegistry } from "../workspace/WorkspaceProviderRegistry.js";
 
@@ -17,6 +18,8 @@ export type DiscoveryRunContext = {
   plan?: { record: DiscoveryPlanRecord; markdown: string };
   /** Number of plan-tool calls in this fire (success and failure). */
   planCallCount: number;
+  /** Short alias -> real sessionId mapping for the chat history tool. */
+  chatSessionAliases?: Map<string, string>;
 };
 
 export type WorkspaceRunContext = {
@@ -27,6 +30,7 @@ export type WorkspaceRunContext = {
   paths: AlwaysOnPaths;
   workspaceRegistry: WorkspaceProviderRegistry;
   stateStore: DiscoveryStateStore;
+  cycleStore: WorkCycleStore;
   now: () => Date;
   /** Set after the workspace tool succeeds. */
   handle?: WorkspaceHandle;

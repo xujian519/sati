@@ -18,6 +18,7 @@ export type AlwaysOnDormantState = {
   lastChangeAt?: string;
 };
 
+/** @deprecated Retained for lazy migration from pre-WorkCycle state files. */
 export type AlwaysOnCurrentWorkspaceRef = {
   runId: string;
   strategy: WorkspaceStrategyId;
@@ -36,6 +37,8 @@ export type AlwaysOnDiscoveryState = {
   todayRunCount: number;
   consecutiveFailures: number;
   dormant?: AlwaysOnDormantState;
+  activeWorkCycleId?: string;
+  /** @deprecated Retained for lazy migration; replaced by activeWorkCycleId. */
   currentWorkspace?: AlwaysOnCurrentWorkspaceRef;
 };
 
@@ -55,9 +58,9 @@ export type DiscoveryPlanStatus =
   | "executing"
   | "completed"
   | "failed"
-  | "applying"
-  | "applied"
   | "archived";
+
+export type WorkCycleStatus = "active" | "applying" | "applied" | "archived";
 
 export type WorkspaceStrategyId = "git-worktree" | "snapshot-copy";
 
@@ -69,6 +72,7 @@ export type WorkspaceHandle = {
   metadata: Record<string, string>;
 };
 
+/** @deprecated Retained for lazy migration from pre-WorkCycle plan records. */
 export type DiscoveryPlanWorkspaceRef = {
   strategy: WorkspaceStrategyId;
   handle: string;
@@ -86,7 +90,30 @@ export type DiscoveryPlanRecord = {
   sourceRunId: string;
   planFilePath: string;
   reportFilePath?: string;
+  workCycleId?: string;
+  /** @deprecated Retained for lazy migration; replaced by workCycleId. */
   workspace?: DiscoveryPlanWorkspaceRef;
+};
+
+export type WorkCycleRecord = {
+  id: string;
+  projectKey: string;
+  status: WorkCycleStatus;
+  workspace: {
+    strategy: WorkspaceStrategyId;
+    cwd: string;
+    metadata: Record<string, string>;
+  };
+  planIds: string[];
+  createdAt: string;
+  createdByRunId: string;
+  appliedAt?: string;
+  archivedAt?: string;
+};
+
+export type WorkCycleIndex = {
+  schemaVersion: 1;
+  cycles: WorkCycleRecord[];
 };
 
 export type DiscoveryPlanIndex = {
@@ -101,6 +128,7 @@ export type DiscoveryRunHistoryEvent = {
   finishedAt?: string;
   outcome: AlwaysOnDiscoveryOutcome;
   planId?: string;
+  workCycleId?: string;
   workspace?: { strategy: WorkspaceStrategyId; handle: string };
   error?: { code: string; message: string };
 };

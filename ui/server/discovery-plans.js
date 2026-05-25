@@ -79,16 +79,20 @@ export async function updateProjectDiscoveryPlanExecution(projectName, planId, u
   return getService().updateExecution(projectName, planId, updates);
 }
 
-export async function archiveProjectDiscoveryPlan(projectName, planId) {
-  return getService().archive(projectName, planId);
-}
-
 export async function getProjectDiscoveryPlanReport(projectName, planId) {
   return getService().readReport(projectName, planId);
 }
 
-export async function applyProjectDiscoveryPlan(projectName, planId) {
-  const result = await getService().queueApply(projectName, planId);
+export async function getProjectWorkCycles(projectName) {
+  return getService().getCyclesOverview(projectName);
+}
+
+export async function archiveWorkCycle(projectName, cycleId) {
+  return getService().archiveCycle(projectName, cycleId);
+}
+
+export async function applyWorkCycle(projectName, cycleId) {
+  const result = await getService().queueCycleApply(projectName, cycleId);
 
   const gw = await getPilotDeckGateway();
 
@@ -96,38 +100,32 @@ export async function applyProjectDiscoveryPlan(projectName, planId) {
   try {
     applyResult = await gw.alwaysOnApply({
       projectKey: result.projectRoot,
-      planId,
+      workCycleId: cycleId,
       projectName,
     });
   } catch (err) {
-    const finalPlan = await getService().updateExecution(projectName, planId, {
+    await getService().updateCycleExecution(projectName, cycleId, {
       status: 'failed',
-      latestSummary: (err && err.message) || 'Apply failed due to unexpected error',
-      executionToken: result.executionToken,
     });
     return {
-      plan: finalPlan,
+      cycle: result.cycle,
       error: { code: 'apply_error', message: (err && err.message) || 'Apply failed' },
     };
   }
 
   if (applyResult.error) {
-    const finalPlan = await getService().updateExecution(projectName, planId, {
+    await getService().updateCycleExecution(projectName, cycleId, {
       status: 'failed',
-      latestSummary: applyResult.error.message || 'Apply failed',
-      executionToken: result.executionToken,
     });
-    return { plan: finalPlan, error: applyResult.error };
+    return { cycle: result.cycle, error: applyResult.error };
   }
 
-  const finalPlan = await getService().updateExecution(projectName, planId, {
+  const finalResult = await getService().updateCycleExecution(projectName, cycleId, {
     status: 'completed',
     executionSessionId: applyResult.sessionKey,
-    executionToken: result.executionToken,
   });
   return {
-    plan: finalPlan,
+    cycle: finalResult.cycle,
     sessionKey: applyResult.sessionKey,
-    executionToken: result.executionToken,
   };
 }

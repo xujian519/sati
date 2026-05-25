@@ -134,6 +134,40 @@ test("parseAlwaysOnConfig warns on unknown project field but only keeps enabled"
   assert.equal(warnings[0].code, "ALWAYS_ON_PROJECT_UNKNOWN_FIELD");
 });
 
+test("parseAlwaysOnConfig parses valid language field", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+  const result = parseAlwaysOnConfig({ language: "zh-CN" }, diagnostics);
+  assert.ok(result);
+  assert.equal(result.language, "zh-CN");
+  assert.equal(diagnostics.length, 0);
+});
+
+test("parseAlwaysOnConfig parses language: en", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+  const result = parseAlwaysOnConfig({ language: "en" }, diagnostics);
+  assert.ok(result);
+  assert.equal(result.language, "en");
+  assert.equal(diagnostics.length, 0);
+});
+
+test("parseAlwaysOnConfig ignores invalid language with warning", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+  const result = parseAlwaysOnConfig({ language: "fr" }, diagnostics);
+  assert.ok(result);
+  assert.equal(result.language, undefined);
+  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0].code, "ALWAYS_ON_LANGUAGE_INVALID");
+  assert.equal(diagnostics[0].severity, "warning");
+});
+
+test("parseAlwaysOnConfig leaves language undefined when absent", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+  const result = parseAlwaysOnConfig({}, diagnostics);
+  assert.ok(result);
+  assert.equal(result.language, undefined);
+  assert.equal(diagnostics.length, 0);
+});
+
 test("parseAlwaysOnConfig falls back on invalid numbers with warning diagnostics", () => {
   const diagnostics: PilotConfigDiagnostic[] = [];
   const result = parseAlwaysOnConfig(

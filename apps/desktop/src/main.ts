@@ -17,6 +17,7 @@ import {
   clipboard,
   dialog,
   ipcMain,
+  nativeImage,
   shell,
 } from "electron";
 import * as fs from "node:fs";
@@ -29,9 +30,31 @@ import { resolveSplashHtmlPath, showSplashWindow } from "./splash-window";
 
 app.setName("PilotDeck");
 
+function resolveAppIconPath(): string | undefined {
+  const candidates = [
+    path.join(__dirname, "..", "resources", "icon.icns"),
+    path.join(process.resourcesPath, "icon.icns"),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return undefined;
+}
+
+function applyDockIcon(): void {
+  if (process.platform !== "darwin" || !app.dock) return;
+  const iconPath = resolveAppIconPath();
+  if (!iconPath) return;
+  const img = nativeImage.createFromPath(iconPath);
+  if (!img.isEmpty()) app.dock.setIcon(img);
+}
+
 const isDev = !app.isPackaged;
 const devRepoRoot = path.resolve(__dirname, "..", "..", "..");
-const configPath = path.join(os.homedir(), ".pilotdeck", "pilotdeck.yaml");
+const configPath = path.join(
+  process.env.PILOT_HOME || path.join(os.homedir(), ".pilotdeck"),
+  "pilotdeck.yaml",
+);
 
 const serverManager = new ServerManager({
   dev: isDev,
@@ -356,6 +379,7 @@ function createMainWindow(
   port: number,
   options: { onReadyToShow?: () => void } = {},
 ): BrowserWindow {
+  const iconPath = resolveAppIconPath();
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -364,6 +388,7 @@ function createMainWindow(
     title: "PilotDeck",
     show: false,
     titleBarStyle: "default",
+    ...(iconPath ? { icon: iconPath } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -422,6 +447,7 @@ if (!gotLock) {
   });
 
   void app.whenReady().then(async () => {
+    applyDockIcon();
     setupAboutPanel();
     setupAppMenu();
     registerIpcHandlers();
@@ -543,7 +569,7 @@ app.on("activate", () => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (process.platform !== "darwin" && mainWindow !== null) app.quit();
 });
 
 app.on("web-contents-created", (_event, contents) => {

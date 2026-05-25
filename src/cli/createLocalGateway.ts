@@ -56,8 +56,9 @@ import { createDefaultPermissionContext, type PermissionRule } from "../permissi
 import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
 import { createPilotConfigStoreSync, type PilotConfigStore } from "../pilot/config/PilotConfigStore.js";
 import type { PilotAgentModelSelection, PilotConfigSnapshot } from "../pilot/config/types.js";
-import type { RouterConfig } from "../router/config/schema.js";
+import { DEFAULT_JUDGE_TIMEOUT_MS, DEFAULT_SUBAGENT_MAX_TOKENS, DEFAULT_ALLOWED_TOOLS, DEFAULT_TRIGGER_TIERS, type RouterConfig } from "../router/config/schema.js";
 import { createAgentProjectSessionStorage, listProjectSessions, resumeAgentSession } from "../session/index.js";
+import { sanitizeSessionIdForPath } from "../session/storage/ProjectSessionStorage.js";
 import { readWebSessionMessages } from "../web/server/readSessionMessages.js";
 import { describeWebProject, listWebProjects } from "../web/server/listProjects.js";
 import { BackgroundTaskRuntime } from "../task/runtime/BackgroundTaskRuntime.js";
@@ -510,7 +511,6 @@ class ProjectRuntimeRegistry {
       customRouterRegistry: pluginRuntime,
       loadSkillPrompt: (extensionId) => pluginRuntime.loadSkillPrompt(extensionId),
       events: this.buildRouterEventBus(),
-      sessionStore: this.sharedSessionStore,
     });
     const backgroundTasks = new BackgroundTaskRuntime({ now: this.options.now });
     const webSearchConfig = snapshot.config.tools?.webSearch;
@@ -685,7 +685,7 @@ class ProjectRuntimeRegistry {
             runtime.projectRoot,
             ".pilotdeck",
             "browser_screenshots",
-            context.sessionKey,
+            sanitizeSessionIdForPath(context.sessionKey),
           );
           mkdirSyncFs(outDir, { recursive: true });
           return { ...spec, args: [...(spec.args ?? []), `--output-dir=${outDir}`] };
@@ -720,6 +720,36 @@ class ProjectRuntimeRegistry {
         `[pilotdeck] Per-session MCP limit reached (${maxInstances}). ` +
         `Session ${context.sessionKey} will share the project-level browser instance.`,
       );
+    }
+
+    // -- excludeTools filtering (Always-On headless sessions) -----------
+    const override = this._sessionOverrides?.get(context.sessionKey);
+    if (override?.excludeTools && override.excludeTools.length > 0) {
+      if (sessionTools === runtime.tools) {
+        sessionTools = runtime.tools.clone();
+      }
+      for (const name of override.excludeTools) {
+        sessionTools.unregister(name);
+      }
+    }
+
+    // -- Strip always_on_* tools from non-Always-On sessions -------------
+    // These tools require an AlwaysOnRunContext to execute; surfacing them
+    // in regular user sessions just pollutes the model's tool list.
+    const isAlwaysOnSession = override?.permissionMode === "bypassPermissions"
+      && override?.canPrompt === false;
+    if (!isAlwaysOnSession) {
+      const alwaysOnNames = this._extraTools
+        .filter((t) => t.name.startsWith("always_on_"))
+        .map((t) => t.name);
+      if (alwaysOnNames.length > 0) {
+        if (sessionTools === runtime.tools) {
+          sessionTools = runtime.tools.clone();
+        }
+        for (const name of alwaysOnNames) {
+          sessionTools.unregister(name);
+        }
+      }
     }
 
     // Inject the gateway's interactive permission hook so the agent's
@@ -1062,6 +1092,8 @@ function ensureRouterConfig(
       ...router,
       scenarios: router.scenarios ?? { default: defaultRef },
       fallback: router.fallback ?? { default: [defaultRef] },
+      tokenSaver: router.tokenSaver ?? buildDefaultTokenSaver(defaultRef),
+      autoOrchestrate: router.autoOrchestrate ?? buildDefaultAutoOrchestrate(),
       stats: { enabled: true, baselineModel: defaultRef, ...(router.stats ?? {}) },
     };
   }
@@ -1069,6 +1101,33 @@ function ensureRouterConfig(
     scenarios: { default: defaultRef },
     fallback: { default: [defaultRef] },
     zeroUsageRetry: { enabled: true, maxAttempts: 2 },
+    tokenSaver: buildDefaultTokenSaver(defaultRef),
+    autoOrchestrate: buildDefaultAutoOrchestrate(),
     stats: { enabled: true, baselineModel: defaultRef },
+  };
+}
+
+function buildDefaultTokenSaver(defaultRef: { id: string; provider: string; model: string }) {
+  return {
+    enabled: false,
+    judge: defaultRef,
+    defaultTier: "medium",
+    judgeTimeoutMs: DEFAULT_JUDGE_TIMEOUT_MS,
+    tiers: {
+      simple: { model: defaultRef },
+      medium: { model: defaultRef },
+      complex: { model: defaultRef },
+      reasoning: { model: defaultRef },
+    },
+  };
+}
+
+function buildDefaultAutoOrchestrate() {
+  return {
+    enabled: false,
+    triggerTiers: [...DEFAULT_TRIGGER_TIERS],
+    slimSystemPrompt: true,
+    allowedTools: [...DEFAULT_ALLOWED_TOOLS],
+    subagentMaxTokens: DEFAULT_SUBAGENT_MAX_TOKENS,
   };
 }

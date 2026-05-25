@@ -5,6 +5,7 @@ import type { CreateAlwaysOnDiscoveryPlanToolOptions } from "../tool/AlwaysOnDis
 import { createAlwaysOnDiscoveryPlanTool } from "../tool/AlwaysOnDiscoveryPlanTool.js";
 import { createAlwaysOnReportTool } from "../tool/AlwaysOnReportTool.js";
 import { createAlwaysOnWorkspaceTool } from "../tool/AlwaysOnWorkspaceTool.js";
+import { createAlwaysOnChatHistoryTool } from "../tool/AlwaysOnChatHistoryTool.js";
 import { AlwaysOnRunContextRegistry } from "./AlwaysOnRunContextRegistry.js";
 import type { DiscoveryFireDependencies } from "./DiscoveryFire.js";
 import {
@@ -57,6 +58,9 @@ export class AlwaysOnManager {
         now,
       }),
       createAlwaysOnWorkspaceTool({
+        runContexts: this.runContexts,
+      }),
+      createAlwaysOnChatHistoryTool({
         runContexts: this.runContexts,
       }),
     ];
@@ -124,17 +128,17 @@ export class AlwaysOnManager {
     }
   }
 
-  async applyPlan(input: {
+  async applyCycle(input: {
     projectKey: string;
-    planId: string;
+    workCycleId: string;
     projectName: string;
   }): Promise<{ sessionKey: string; error?: { code: string; message: string } }> {
     const runtime = this.runtimes.find((r) => r.projectKey === input.projectKey);
     if (!runtime) {
       return { sessionKey: "", error: { code: "project_not_found", message: `No Always-On runtime for project ${input.projectKey}` } };
     }
-    return runtime.applyPlan({
-      planId: input.planId,
+    return runtime.applyCycle({
+      workCycleId: input.workCycleId,
       projectRoot: input.projectKey,
       projectName: input.projectName,
     });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AlertCircle,
+  Archive,
   ChevronDown,
   ChevronRight,
   FileText,
@@ -18,6 +19,7 @@ import type {
   DiscoveryPlanStatus,
   Project,
   ProjectDiscoveryPlansResponse,
+  WorkCycleOverview,
 } from '../../types/app';
 import { api } from '../../utils/api';
 import { cn } from '../../lib/utils.js';
@@ -34,8 +36,6 @@ type PlanDisplayStatus =
   | 'executing'
   | 'completedWaiting'
   | 'failed'
-  | 'applying'
-  | 'applied'
   | 'archived';
 
 function mapPlanStatus(status: DiscoveryPlanStatus): PlanDisplayStatus {
@@ -50,10 +50,6 @@ function mapPlanStatus(status: DiscoveryPlanStatus): PlanDisplayStatus {
       return 'completedWaiting';
     case 'failed':
       return 'failed';
-    case 'applying':
-      return 'applying';
-    case 'applied':
-      return 'applied';
     case 'archived':
       return 'archived';
     default:
@@ -68,8 +64,6 @@ const PLAN_STATUS_STYLE: Record<PlanDisplayStatus, string> = {
   completedWaiting: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
   failed: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
   archived: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400',
-  applying: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
-  applied: 'bg-teal-100 text-teal-600 dark:bg-teal-900/40 dark:text-teal-400',
 };
 
 const PLAN_STATUS_LABEL: Record<PlanDisplayStatus, { key: string; defaultValue: string }> = {
@@ -79,8 +73,6 @@ const PLAN_STATUS_LABEL: Record<PlanDisplayStatus, { key: string; defaultValue: 
   completedWaiting: { key: 'plansCron.status.completedWaiting', defaultValue: 'Completed' },
   failed: { key: 'plansCron.status.failed', defaultValue: 'Failed' },
   archived: { key: 'plansCron.status.archived', defaultValue: 'Archived' },
-  applying: { key: 'plansCron.status.applying', defaultValue: 'Applying' },
-  applied: { key: 'plansCron.status.applied', defaultValue: 'Applied' },
 };
 
 const CRON_STATUS_STYLE: Record<'scheduled' | 'running', string> = {
@@ -123,8 +115,7 @@ function formatAbsoluteTime(iso: string | number): string {
 // ---------------------------------------------------------------------------
 
 const COL = {
-  title: 'min-w-0 flex-1 max-w-[280px]',
-  type: 'w-[90px] shrink-0',
+  title: 'min-w-0 flex-1 max-w-[380px]',
   createdAt: 'w-[150px] shrink-0',
   status: 'w-[160px] shrink-0',
   actions: 'w-[140px] shrink-0',
@@ -136,18 +127,31 @@ const COL = {
 
 type PlansAndCronJobsProps = {
   onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
-  onApplyPlan?: (projectName: string, planId: string) => Promise<void>;
+  onApplyWorkCycle?: (projectName: string, cycleId: string) => Promise<void>;
   onOpenPlanDetail?: (planId: string, projectName: string, projectDisplayName: string) => void;
 };
 
-export default function PlansAndCronJobs({ onExecutePlan, onApplyPlan, onOpenPlanDetail }: PlansAndCronJobsProps) {
+export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOpenPlanDetail }: PlansAndCronJobsProps) {
   const { t } = useTranslation('alwaysOn');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [plansByProject, setPlansByProject] = useState<Map<string, DiscoveryPlanOverview[]>>(new Map());
+  const [cyclesByProject, setCyclesByProject] = useState<Map<string, WorkCycleOverview[]>>(new Map());
   const [cronJobs, setCronJobs] = useState<CronJobOverview[]>([]);
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
+  const [cycleBusy, setCycleBusy] = useState<string | null>(null);
+  const [confirmingArchiveCycle, setConfirmingArchiveCycle] = useState<string | null>(null);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+
+  const toggleSection = (key: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -158,9 +162,12 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyPlan, onOpenPla
       const projectsList: Project[] = await projectsRes.json();
       setProjects(projectsList);
 
-      const [cronRes, ...planResults] = await Promise.all([
+      const [cronRes, ...mixedResults] = await Promise.all([
         api.allCronJobs(),
-        ...projectsList.map((p) => api.projectDiscoveryPlans(p.name)),
+        ...projectsList.flatMap((p) => [
+          api.projectDiscoveryPlans(p.name),
+          api.projectWorkCycles(p.name),
+        ]),
       ]);
 
       if (cronRes.ok) {
@@ -171,16 +178,25 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyPlan, onOpenPla
       }
 
       const newPlansByProject = new Map<string, DiscoveryPlanOverview[]>();
+      const newCyclesByProject = new Map<string, WorkCycleOverview[]>();
       for (let i = 0; i < projectsList.length; i++) {
-        const res = planResults[i];
-        if (res && res.ok) {
-          const payload = (await res.json()) as ProjectDiscoveryPlansResponse;
+        const planRes = mixedResults[i * 2];
+        const cycleRes = mixedResults[i * 2 + 1];
+        if (planRes && planRes.ok) {
+          const payload = (await planRes.json()) as ProjectDiscoveryPlansResponse;
           if (Array.isArray(payload.plans) && payload.plans.length > 0) {
             newPlansByProject.set(projectsList[i]!.name, payload.plans);
           }
         }
+        if (cycleRes && cycleRes.ok) {
+          const payload = (await cycleRes.json()) as { cycles?: WorkCycleOverview[] };
+          if (Array.isArray(payload.cycles) && payload.cycles.length > 0) {
+            newCyclesByProject.set(projectsList[i]!.name, payload.cycles);
+          }
+        }
       }
       setPlansByProject(newPlansByProject);
+      setCyclesByProject(newCyclesByProject);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -223,6 +239,7 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyPlan, onOpenPla
     const projectKeyToName = new Map<string, string>();
     for (const p of projects) {
       projectKeyToName.set(p.name, p.name);
+      if (p.fullPath) projectKeyToName.set(p.fullPath, p.name);
     }
 
     for (const job of activeCronJobs) {
@@ -342,53 +359,168 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyPlan, onOpenPla
                   </span>
                 </button>
 
-                {!isCollapsed && (
-                  <>
-                    {/* Column headers */}
-                    <div className="flex items-center gap-4 border-t border-b border-neutral-200 bg-neutral-50 px-5 py-2 dark:border-neutral-800 dark:bg-neutral-900/50">
-                      <div className={COL.title}>
-                        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                          {t('plansCron.columns.title', { defaultValue: 'Title' })}
-                        </span>
-                      </div>
-                      <div className={COL.type}>
-                        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                          {t('plansCron.columns.type', { defaultValue: 'Type' })}
-                        </span>
-                      </div>
-                      <div className={COL.createdAt}>
-                        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                          {t('plansCron.columns.createdAt', { defaultValue: 'Created' })}
-                        </span>
-                      </div>
-                      <div className={COL.status}>
-                        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                          {t('plansCron.columns.status', { defaultValue: 'Status' })}
-                        </span>
-                      </div>
-                      <div className={COL.actions}>
-                        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                          {t('plansCron.columns.actions', { defaultValue: 'Actions' })}
-                        </span>
-                      </div>
-                    </div>
+                {!isCollapsed && (() => {
+                  const planItems = items.filter((i) => i.kind === 'plan');
+                  const cronItems = items.filter((i) => i.kind === 'cron');
+                  const cycles = cyclesByProject.get(projectKey) ?? [];
+                  const activeCycle = cycles.find((c) => c.status === 'active' || c.status === 'applying');
+                  const hasCompletedPlan = planItems.some((p) => (p.data as DiscoveryPlanOverview).status === 'completed');
+                  const canApply = !!activeCycle && activeCycle.status === 'active' && hasCompletedPlan;
+                  const canArchive = !!activeCycle && activeCycle.status === 'active';
+                  const isApplying = activeCycle?.status === 'applying';
+                  const busy = !!activeCycle && cycleBusy === activeCycle.id;
 
-                    {/* Rows */}
-                    <div className="divide-y divide-neutral-100 dark:divide-neutral-900">
-                      {items.map((item) => (
-                        <ItemRow
-                          key={`${item.kind}-${item.data.id}`}
-                          item={item}
-                          t={t}
-                          onRefresh={refresh}
-                          onExecutePlan={onExecutePlan}
-                          onApplyPlan={onApplyPlan}
-                          onOpenPlanDetail={onOpenPlanDetail}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
+                  const handleApply = async () => {
+                    if (!activeCycle || busy) return;
+                    setCycleBusy(activeCycle.id);
+                    try {
+                      if (onApplyWorkCycle) {
+                        await onApplyWorkCycle(projectKey, activeCycle.id);
+                      } else {
+                        const res = await api.applyWorkCycle(projectKey, activeCycle.id);
+                        if (!res.ok) {
+                          const body = await res.json().catch(() => ({})) as { error?: string };
+                          throw new Error(body?.error || `HTTP ${res.status}`);
+                        }
+                      }
+                      await refresh();
+                    } catch {
+                      // Visible via refresh.
+                    } finally {
+                      setCycleBusy(null);
+                    }
+                  };
+
+                  const handleArchive = async () => {
+                    if (!activeCycle || busy) return;
+                    setCycleBusy(activeCycle.id);
+                    try {
+                      const res = await api.archiveWorkCycle(projectKey, activeCycle.id);
+                      if (!res.ok) {
+                        const body = await res.json().catch(() => ({})) as { error?: string };
+                        throw new Error(body?.error || `HTTP ${res.status}`);
+                      }
+                      await refresh();
+                    } catch {
+                      // Visible via refresh.
+                    } finally {
+                      setCycleBusy(null);
+                      setConfirmingArchiveCycle(null);
+                    }
+                  };
+
+                  const confirmingArchive = !!activeCycle && confirmingArchiveCycle === activeCycle.id;
+
+                  return (
+                    <>
+                      {/* Plans sub-section */}
+                      {planItems.length > 0 && (
+                        <SubSection
+                          sectionKey={`${projectKey}::plans`}
+                          label={`${t('plansCron.type.plan', { defaultValue: 'Plan' })} (${planItems.length})`}
+                          collapsedSections={collapsedSections}
+                          toggleSection={toggleSection}
+                          actions={
+                            <div className="flex items-center gap-1.5">
+                              {isApplying && (
+                                <span className="inline-flex items-center gap-1 text-xxs text-sky-600 dark:text-sky-400">
+                                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
+                                  {t('plansCron.cycleStatus.applying', { defaultValue: 'Applying…' })}
+                                </span>
+                              )}
+                              {canApply && !isApplying && (
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => void handleApply()}
+                                  className="inline-flex h-7 items-center rounded-md bg-emerald-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50 dark:bg-emerald-700 dark:hover:bg-emerald-600"
+                                >
+                                  {busy ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
+                                  ) : (
+                                    t('plansCron.actions.applyCycle', { defaultValue: 'Apply All' })
+                                  )}
+                                </button>
+                              )}
+                              {canArchive && !confirmingArchive && (
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => setConfirmingArchiveCycle(activeCycle!.id)}
+                                  className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-neutral-500 transition hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-red-700 dark:hover:text-red-400"
+                                  title={t('plansCron.actions.archiveCycle', { defaultValue: 'Archive' })}
+                                >
+                                  <Archive className="h-3.5 w-3.5" strokeWidth={1.75} />
+                                </button>
+                              )}
+                              {confirmingArchive && (
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() => void handleArchive()}
+                                    className="inline-flex h-7 items-center rounded-md bg-red-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-red-700 disabled:opacity-50"
+                                  >
+                                    {busy ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
+                                    ) : (
+                                      t('plansCron.actions.archiveCycle', { defaultValue: 'Archive' })
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmingArchiveCycle(null)}
+                                    className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-[11px] text-neutral-500 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          }
+                        >
+                          <ColumnHeaders t={t} />
+                          <div className="divide-y divide-neutral-100 dark:divide-neutral-900">
+                            {planItems.map((item) => (
+                              <ItemRow
+                                key={`plan-${item.data.id}`}
+                                item={item}
+                                t={t}
+                                onRefresh={refresh}
+                                onExecutePlan={onExecutePlan}
+                                onOpenPlanDetail={onOpenPlanDetail}
+                              />
+                            ))}
+                          </div>
+                        </SubSection>
+                      )}
+
+                      {/* Cron Jobs sub-section */}
+                      {cronItems.length > 0 && (
+                        <SubSection
+                          sectionKey={`${projectKey}::crons`}
+                          label={`${t('plansCron.type.cronJob', { defaultValue: 'Cron Jobs' })} (${cronItems.length})`}
+                          collapsedSections={collapsedSections}
+                          toggleSection={toggleSection}
+                        >
+                          <ColumnHeaders t={t} />
+                          <div className="divide-y divide-neutral-100 dark:divide-neutral-900">
+                            {cronItems.map((item) => (
+                              <ItemRow
+                                key={`cron-${item.data.id}`}
+                                item={item}
+                                t={t}
+                                onRefresh={refresh}
+                                onExecutePlan={onExecutePlan}
+                                onOpenPlanDetail={onOpenPlanDetail}
+                              />
+                            ))}
+                          </div>
+                        </SubSection>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             );
           })}
@@ -399,7 +531,80 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyPlan, onOpenPla
 }
 
 // ---------------------------------------------------------------------------
-// Table row
+// Collapsible sub-section (Plans / Cron Jobs within a project card)
+// ---------------------------------------------------------------------------
+
+function SubSection({
+  sectionKey,
+  label,
+  collapsedSections,
+  toggleSection,
+  actions,
+  children,
+}: {
+  sectionKey: string;
+  label: string;
+  collapsedSections: Set<string>;
+  toggleSection: (key: string) => void;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const isCollapsed = collapsedSections.has(sectionKey);
+  return (
+    <>
+      <div className="flex items-center gap-2 border-t border-neutral-200 bg-neutral-50/80 px-5 py-2 dark:border-neutral-800 dark:bg-neutral-900/30">
+        <button
+          type="button"
+          onClick={() => toggleSection(sectionKey)}
+          className="flex items-center gap-1.5 text-xxs font-semibold uppercase tracking-wider text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+        >
+          {isCollapsed ? (
+            <ChevronRight className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+          )}
+          {label}
+        </button>
+        {!isCollapsed && actions && <div className="ml-auto">{actions}</div>}
+      </div>
+      {!isCollapsed && children}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Column headers (shared between Plans and Cron Jobs sub-sections)
+// ---------------------------------------------------------------------------
+
+function ColumnHeaders({ t }: { t: (key: string, opts?: Record<string, string>) => string }) {
+  return (
+    <div className="flex items-center gap-4 border-b border-neutral-200 bg-neutral-50 px-5 py-2 dark:border-neutral-800 dark:bg-neutral-900/50">
+      <div className={COL.title}>
+        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+          {t('plansCron.columns.title', { defaultValue: 'Title' })}
+        </span>
+      </div>
+      <div className={COL.createdAt}>
+        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+          {t('plansCron.columns.createdAt', { defaultValue: 'Created' })}
+        </span>
+      </div>
+      <div className={COL.status}>
+        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+          {t('plansCron.columns.status', { defaultValue: 'Status' })}
+        </span>
+      </div>
+      <div className={COL.actions}>
+        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+          {t('plansCron.columns.actions', { defaultValue: 'Actions' })}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Table row (plan or cron)
 // ---------------------------------------------------------------------------
 
 function ItemRow({
@@ -407,14 +612,12 @@ function ItemRow({
   t,
   onRefresh,
   onExecutePlan,
-  onApplyPlan,
   onOpenPlanDetail,
 }: {
   item: UnifiedItem;
   t: (key: string, opts?: Record<string, string>) => string;
   onRefresh: () => Promise<void>;
   onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
-  onApplyPlan?: (projectName: string, planId: string) => Promise<void>;
   onOpenPlanDetail?: (planId: string, projectName: string, projectDisplayName: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -426,14 +629,6 @@ function ItemRow({
 
   const title = isPlan ? (plan!.title || '—') : (job!.prompt || '—');
   const fullTitle = isPlan ? (plan!.title || '') : (job!.prompt || '');
-
-  const typeLabel = isPlan
-    ? t('plansCron.type.plan', { defaultValue: 'Plan' })
-    : t('plansCron.type.cronJob', { defaultValue: 'Cron Job' });
-  const typeBg = isPlan
-    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
-    : 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300';
-
   const createdAt = isPlan ? plan!.createdAt : job!.createdAt;
 
   let statusLabel: string;
@@ -451,30 +646,7 @@ function ItemRow({
     statusStyle = CRON_STATUS_STYLE[cs];
   }
 
-  const showApply = isPlan && displayStatus === 'completedWaiting';
   const showRetry = isPlan && displayStatus === 'failed';
-  const canDelete = isPlan && displayStatus !== 'executing' && displayStatus !== 'preparingWorkspace' && displayStatus !== 'applying';
-
-  const handleApply = async () => {
-    if (!plan || busy) return;
-    setBusy(true);
-    try {
-      if (onApplyPlan) {
-        await onApplyPlan(item.projectName, plan.id);
-      } else {
-        const res = await api.applyProjectDiscoveryPlan(item.projectName, plan.id);
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({})) as { error?: string };
-          throw new Error(body?.error || `HTTP ${res.status}`);
-        }
-      }
-      await onRefresh();
-    } catch {
-      // Errors are visible via the global refresh.
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const handleRetry = async () => {
     if (!plan || busy) return;
@@ -491,32 +663,24 @@ function ItemRow({
       }
       await onRefresh();
     } catch {
-      // Errors are visible via the global refresh.
+      // Visible via refresh.
     } finally {
       setBusy(false);
     }
   };
 
-  const handleDelete = async () => {
-    if (busy) return;
+  const handleCronDelete = async () => {
+    if (!job || busy) return;
     setBusy(true);
     try {
-      if (isPlan && plan) {
-        const res = await api.archiveProjectDiscoveryPlan(item.projectName, plan.id);
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({})) as { error?: string };
-          throw new Error(body?.error || `HTTP ${res.status}`);
-        }
-      } else if (job) {
-        const res = await api.cronDelete(job.id);
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({})) as { error?: string };
-          throw new Error(body?.error || `HTTP ${res.status}`);
-        }
+      const res = await api.cronDelete(job.id);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body?.error || `HTTP ${res.status}`);
       }
       await onRefresh();
     } catch {
-      // Errors are visible via the global refresh.
+      // Visible via refresh.
     } finally {
       setBusy(false);
       setConfirmingDelete(false);
@@ -534,7 +698,7 @@ function ItemRow({
       }
       await onRefresh();
     } catch {
-      // Errors are visible via the global refresh.
+      // Visible via refresh.
     } finally {
       setBusy(false);
     }
@@ -551,7 +715,7 @@ function ItemRow({
       }
       await onRefresh();
     } catch {
-      // Errors are visible via the global refresh.
+      // Visible via refresh.
     } finally {
       setBusy(false);
     }
@@ -576,13 +740,6 @@ function ItemRow({
         )}
       </div>
 
-      {/* Type */}
-      <div className={COL.type}>
-        <span className={cn('inline-block rounded-full px-2 py-0.5 text-center text-[11px] font-medium', typeBg)}>
-          {typeLabel}
-        </span>
-      </div>
-
       {/* Created */}
       <div className={cn(COL.createdAt, 'font-mono text-xxs tabular-nums text-neutral-500 dark:text-neutral-400')}>
         {formatAbsoluteTime(createdAt)}
@@ -599,20 +756,6 @@ function ItemRow({
       <div className={cn(COL.actions, 'flex items-center gap-1.5')}>
         {isPlan ? (
           <>
-            {showApply && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void handleApply()}
-                className="inline-flex h-7 items-center rounded-md bg-emerald-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50 dark:bg-emerald-700 dark:hover:bg-emerald-600"
-              >
-                {busy ? (
-                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
-                ) : (
-                  t('plansCron.actions.apply', { defaultValue: 'Apply' })
-                )}
-              </button>
-            )}
             {showRetry && (
               <button
                 type="button"
@@ -626,40 +769,6 @@ function ItemRow({
                   t('plansCron.actions.retry', { defaultValue: 'Retry' })
                 )}
               </button>
-            )}
-            {canDelete && !confirmingDelete && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setConfirmingDelete(true)}
-                className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-neutral-500 transition hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-red-700 dark:hover:text-red-400"
-                title={t('plansCron.actions.delete', { defaultValue: 'Delete' })}
-              >
-                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-              </button>
-            )}
-            {confirmingDelete && (
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void handleDelete()}
-                  className="inline-flex h-7 items-center rounded-md bg-red-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-red-700 disabled:opacity-50"
-                >
-                  {busy ? (
-                    <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
-                  ) : (
-                    t('plansCron.actions.delete', { defaultValue: 'Delete' })
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDelete(false)}
-                  className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-[11px] text-neutral-500 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800"
-                >
-                  ✕
-                </button>
-              </div>
             )}
           </>
         ) : (
@@ -713,7 +822,7 @@ function ItemRow({
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => void handleDelete()}
+                  onClick={() => void handleCronDelete()}
                   className="inline-flex h-7 items-center rounded-md bg-red-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-red-700 disabled:opacity-50"
                 >
                   {busy ? (

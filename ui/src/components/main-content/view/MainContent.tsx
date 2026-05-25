@@ -343,12 +343,12 @@ function MainContent({
     refreshProjectsSilently();
   }, [projects, refreshProjectsSilently, trackedSendMessage]);
 
-  const applyAndLaunchPlan = useCallback(async (
+  const applyAndLaunchCycle = useCallback(async (
     projectName: string,
-    planId: string,
+    cycleId: string,
   ) => {
-    const response = await api.applyProjectDiscoveryPlan(projectName, planId);
-    const payload = await readJsonPayload<{ plan?: { id: string }; sessionKey?: string; executionToken?: string; error?: { code: string; message: string } | string }>(response);
+    const response = await api.applyWorkCycle(projectName, cycleId);
+    const payload = await readJsonPayload<{ cycle?: { id: string }; sessionKey?: string; executionToken?: string; error?: { code: string; message: string } | string }>(response);
     if (!response.ok || !payload) {
       const errMsg = typeof payload?.error === 'string' ? payload.error : payload?.error?.message;
       throw new Error(errMsg || 'Failed to queue discovery plan apply');
@@ -769,7 +769,7 @@ function MainContent({
           handleStartDiscoverySession={handleStartDiscoverySession}
           handleExecuteDiscoveryPlan={handleExecuteDiscoveryPlan}
           executeAndLaunchPlan={executeAndLaunchPlan}
-          applyAndLaunchPlan={applyAndLaunchPlan}
+          applyAndLaunchCycle={applyAndLaunchCycle}
           handleOpenExecutionSession={handleOpenExecutionSession}
           editorExpanded={editorExpanded}
           hasEditor={editingFile !== null}
@@ -846,7 +846,7 @@ type SplitBodyProps = {
   handleStartDiscoverySession: any;
   handleExecuteDiscoveryPlan: any;
   executeAndLaunchPlan: (projectName: string, planId: string) => Promise<void>;
-  applyAndLaunchPlan: (projectName: string, planId: string) => Promise<void>;
+  applyAndLaunchCycle: (projectName: string, cycleId: string) => Promise<void>;
   handleOpenExecutionSession: (projectKey: string, runId: string, projectName?: string) => void;
   editorExpanded: boolean;
   hasEditor: boolean;
@@ -886,7 +886,7 @@ function SplitBody(props: SplitBodyProps) {
     handleStartDiscoverySession,
     handleExecuteDiscoveryPlan,
     executeAndLaunchPlan,
-    applyAndLaunchPlan,
+    applyAndLaunchCycle,
     handleOpenExecutionSession,
     editorExpanded,
     hasEditor,
@@ -1000,7 +1000,7 @@ function SplitBody(props: SplitBodyProps) {
         <AlwaysOnV2
           selectedProject={selectedProject}
           onExecutePlan={executeAndLaunchPlan}
-          onApplyPlan={applyAndLaunchPlan}
+          onApplyWorkCycle={applyAndLaunchCycle}
           onOpenExecutionSession={handleOpenExecutionSession}
         />
       );

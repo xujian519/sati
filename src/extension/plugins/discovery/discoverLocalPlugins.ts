@@ -35,7 +35,7 @@ export async function discoverPluginPaths(
 
 /**
  * Discovers standalone skill directories (containing SKILL.md without plugin.json).
- * Mirrors Claude Code's ~/.claude/skills/{name}/ convention.
+ * Mirrors the legacy standalone skill directory convention.
  */
 export async function discoverSkillPaths(
   directories: Array<{ path: string; source: PilotDeckPluginSourceKind }>,

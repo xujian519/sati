@@ -12,8 +12,7 @@ import {
  * Compose `findGitRoot` + `resolveCanonicalRoot` so two worktrees of the same
  * repository map to the same canonical project root.
  *
- * Mirrors `third-party/claude-code-main/src/utils/git.ts:195-210`
- * (`findCanonicalGitRoot`).
+ * Mirrors the legacy upstream `findCanonicalGitRoot` composition.
  *
  * Behaviour difference from legacy: when the cwd has no git root at all,
  * legacy returns `null` and the caller decides what to do. PilotDeck always

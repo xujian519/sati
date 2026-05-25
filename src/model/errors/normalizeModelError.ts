@@ -1,6 +1,7 @@
 import type { ModelProtocol } from "../protocol/canonical.js";
 import {
   MAX_OUTPUT_REACHED_PATTERN,
+  MULTIMODAL_PROCESSOR_PATTERN,
   PROMPT_TOO_LONG_ANTHROPIC_PATTERN,
   PROMPT_TOO_LONG_OPENAI_PATTERN,
   REQUEST_TOO_LARGE_PATTERN,
@@ -40,6 +41,9 @@ export function normalizeModelError(
   if (code === "prompt_too_long") {
     result.recoverableViaCompact = true;
   }
+  if (MULTIMODAL_PROCESSOR_PATTERN.test(message)) {
+    result.recoverableViaImageStrip = true;
+  }
   return result;
 }
 
@@ -48,7 +52,7 @@ function classifySemanticError(
   status: number | undefined,
   protocol: ModelProtocol,
 ): CanonicalModelErrorCode | undefined {
-  // Legacy claude-code matches "prompt is too long" case-insensitively for Anthropic and Vertex.
+  // Legacy upstream matches "prompt is too long" case-insensitively for Anthropic and Vertex.
   if (PROMPT_TOO_LONG_ANTHROPIC_PATTERN.test(message)) {
     return "prompt_too_long";
   }

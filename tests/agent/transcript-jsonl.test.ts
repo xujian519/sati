@@ -41,7 +41,9 @@ test("JsonlTranscriptWriter writes ordered transcript entries", async () => {
     assert.deepEqual(read.entries.map((entry) => entry.sequence), [1, 2, 3]);
     assert.ok(read.entries.every((entry) => entry.entryId));
     assert.equal(read.entries[1]?.parentEntryId, read.entries[0]?.entryId);
-    assert.equal(fileStat.mode & 0o777, 0o600);
+    if (process.platform !== "win32") {
+      assert.equal(fileStat.mode & 0o777, 0o600);
+    }
     assert.deepEqual(read.diagnostics, []);
   } finally {
     await rm(root, { recursive: true, force: true });

@@ -69,11 +69,12 @@
       "actions": "Actions"
     },
     "actions": {
-      "apply": "Apply",
       "retry": "Retry",
       "delete": "Delete",
       "runNow": "Run Now",
-      "stop": "Stop"
+      "stop": "Stop",
+      "applyCycle": "Apply All",
+      "archiveCycle": "Archive"
     },
     "type": {
       "plan": "Plan",
@@ -86,10 +87,16 @@
       "completedWaiting": "Completed",
       "failed": "Failed",
       "archived": "Archived",
-      "applying": "Applying",
-      "applied": "Applied",
       "scheduled": "Scheduled",
       "running": "Running"
+    },
+    "workCycle": "Work Cycle",
+    "plans": "plans",
+    "cycleStatus": {
+      "active": "Active",
+      "applying": "Applying…",
+      "applied": "Applied",
+      "archived": "Archived"
     }
   }
 }

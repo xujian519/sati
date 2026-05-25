@@ -29,8 +29,8 @@ export default defineConfig(({ mode }) => {
     path.resolve(process.cwd(), 'node_modules', ...segments)
 
   const disableLocalAuth =
-    env.CLOUDCLI_DISABLE_LOCAL_AUTH !== '0' &&
-    env.CLOUDCLI_DISABLE_LOCAL_AUTH !== 'false'
+    env.PILOTDECK_DISABLE_LOCAL_AUTH !== '0' &&
+    env.PILOTDECK_DISABLE_LOCAL_AUTH !== 'false'
 
   return {
     define: {

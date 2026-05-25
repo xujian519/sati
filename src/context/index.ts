@@ -77,6 +77,7 @@ export {
 } from "./compaction/AutoCompactionPolicy.js";
 export {
   MicroCompactionEngine,
+  MICROCOMPACT_CLEARED,
   type MicroCompactionInput,
   type MicroCompactionResult,
 } from "./compaction/MicroCompactionEngine.js";
@@ -87,6 +88,7 @@ export {
   type CachedMicroCompactionOptions,
   type CachedMicroCompactionResult,
 } from "./compaction/CachedMicroCompactionEngine.js";
+export { stripMultimediaFromMessages } from "./compaction/stripMultimedia.js";
 export {
   SnipEngine,
   createSnipBoundary,

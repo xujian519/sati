@@ -4,6 +4,7 @@ import {
   assembleAssistantMessage,
   createModelMessageAssemblerState,
   type CanonicalToolCall,
+  type CanonicalToolSchema,
   PROMPT_TOO_LONG_ANTHROPIC_PATTERN,
   PROMPT_TOO_LONG_OPENAI_PATTERN,
   REQUEST_TOO_LARGE_PATTERN,
@@ -23,6 +24,7 @@ import {
   SUBAGENT_DEFINITIONS,
   getSubagentDefinition,
 } from "../sub/builtinSubagentTypes.js";
+import { buildPlanModeAgentToolSchema } from "../../tool/builtin/agent.js";
 import { agentError } from "../protocol/errors.js";
 import type { AgentEvent } from "../protocol/events.js";
 import type { AgentPermissionDenial, AgentTurnResult } from "../protocol/result.js";
@@ -287,9 +289,11 @@ export class AgentLoop {
           const projected = projectToolResults(
             toolCalls.map((call) => createMissingToolResult(call, this.now, "Model error interrupted tool execution.")),
           );
-          messages.push(projected);
-          yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: projected };
-          await input.onDurableMessage?.(projected);
+          messages.push(...projected);
+          yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: projected[0]! };
+          for (const msg of projected) {
+            await input.onDurableMessage?.(msg);
+          }
         }
 
         if (
@@ -328,6 +332,18 @@ export class AgentLoop {
           messages = stripTrailingErrorPair(messages);
           messages = truncateHeadKeepRatio(messages, reactive.keepRatio);
           hasAttemptedCompact = true;
+          yield {
+            type: "turn_continued",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            reason: "model_error",
+          };
+          continue;
+        }
+
+        if (reactive && reactive.type === "strip_images_and_retry") {
+          messages = stripTrailingErrorPair(messages);
+          messages = stripImagesFromMessages(messages);
           yield {
             type: "turn_continued",
             sessionId: input.sessionId,
@@ -438,9 +454,13 @@ export class AgentLoop {
       }
       let results: PilotDeckToolResult[];
       try {
+        const toolContext = this.createToolContext(input, messages);
+        if (assembled.finishReason === "length") {
+          toolContext.outputTruncated = true;
+        }
         results = yield* this.executeToolsWithEventPump(
           toolCalls,
-          this.createToolContext(input, messages),
+          toolContext,
           input,
         );
       } catch (error) {
@@ -495,24 +515,33 @@ export class AgentLoop {
       // runtime so large payloads land on disk via `ToolResultBudget`. When
       // the runtime doesn't implement `applyToolResults` (e.g. NullContext),
       // we simply append the raw projection (legacy behaviour).
+      // Only the first message (containing tool_result blocks) goes through
+      // budget processing; supplemental messages (PDF/image data) are appended directly.
+      const [toolResultMsg, ...supplementalMsgs] = projected;
       const ctxApply = this.dependencies.context?.applyToolResults;
       if (ctxApply) {
         try {
           const applied = await ctxApply.call(this.dependencies.context, {
             sessionId: input.sessionId,
             turnId: input.turnId,
-            toolResultMessage: projected,
+            toolResultMessage: toolResultMsg,
             messages,
           });
           messages = applied.messages;
         } catch {
-          messages.push(projected);
+          messages.push(toolResultMsg);
         }
       } else {
-        messages.push(projected);
+        messages.push(toolResultMsg);
       }
-      yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: projected };
-      await input.onDurableMessage?.(projected);
+      for (const supplemental of supplementalMsgs) {
+        messages.push(supplemental);
+      }
+      yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: toolResultMsg };
+      await input.onDurableMessage?.(toolResultMsg);
+      for (const supplemental of supplementalMsgs) {
+        await input.onDurableMessage?.(supplemental);
+      }
 
       const lifecycleBlock = findToolLifecycleBlock(pairedResults);
       if (lifecycleBlock) {
@@ -634,6 +663,11 @@ export class AgentLoop {
   ): Promise<CanonicalModelRequest> {
     const contextRuntime = this.dependencies.context ?? new NullContextRuntime();
     const planTodo = this.dependencies.planTodoManager?.forSession(input.sessionId);
+    let tools = this.dependencies.tools.registry.toCanonicalSchemas();
+    if (this.config.permissionMode === "plan") {
+      tools = applyPlanModeToolOverrides(tools);
+    }
+
     const prepared = await contextRuntime.prepareForModel({
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -643,7 +677,7 @@ export class AgentLoop {
       permissionMode: this.config.permissionMode,
       additionalWorkingDirectories: this.config.permissionContext.additionalWorkingDirectories,
       messages: cloneMessages(messages),
-      tools: this.dependencies.tools.registry.toCanonicalSchemas(),
+      tools,
       maxMessages: this.config.maxContextMessages,
       customSystemPrompt: this.config.systemPrompt,
       appendSystemPrompt: planTodo?.buildPromptAddendum(),
@@ -1086,6 +1120,14 @@ export class AgentLoop {
   private readonly now = (): Date => this.dependencies.now?.() ?? new Date();
 }
 
+function applyPlanModeToolOverrides(tools: CanonicalToolSchema[]): CanonicalToolSchema[] {
+  const override = buildPlanModeAgentToolSchema();
+  return tools.map((tool) => {
+    if (tool.name !== "agent") return tool;
+    return { ...tool, description: override.description, inputSchema: override.inputSchema };
+  });
+}
+
 function mergeUserRules(target: PermissionRule[], userRules: PermissionRule[] | undefined): void {
   const nonUserRules = target.filter((rule) => rule.source !== "user");
   target.splice(0, target.length, ...nonUserRules, ...(userRules ?? []));
@@ -1189,6 +1231,32 @@ function stripTrailingErrorPair(messages: CanonicalMessage[]): CanonicalMessage[
     out.pop();
   }
   return out;
+}
+
+/**
+ * Strip all image blocks from messages, replacing them with a text placeholder.
+ * Used as a recovery strategy when a multimodal processor fails on corrupted images.
+ */
+function stripImagesFromMessages(messages: CanonicalMessage[]): CanonicalMessage[] {
+  return messages.map((msg) => {
+    const newContent = msg.content.map((block) => {
+      if (block.type === "image") {
+        return { type: "text" as const, text: "[Image removed: multimodal processor error recovery]" };
+      }
+      if (block.type === "tool_result" && block.content.some((c) => c.type === "image")) {
+        return {
+          ...block,
+          content: block.content.map((c) =>
+            c.type === "image"
+              ? { type: "text" as const, text: "[Image removed: multimodal processor error recovery]" }
+              : c,
+          ),
+        };
+      }
+      return block;
+    });
+    return { ...msg, content: newContent };
+  });
 }
 
 function collectPermissionDenials(results: PilotDeckToolResult[]): AgentPermissionDenial[] {

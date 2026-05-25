@@ -3,13 +3,14 @@ import type {
   CanonicalToolResultContentBlock,
 } from "../../model/index.js";
 import type { PilotDeckToolError } from "./errors.js";
-import type { PilotDeckToolResultContent } from "./types.js";
+import type { PilotDeckToolResultContent, PilotDeckToolSupplementalMessage } from "./types.js";
 
 export type PilotDeckToolSuccessResult = {
   type: "success";
   toolCallId: string;
   toolName: string;
   content: PilotDeckToolResultContent[];
+  supplementalMessages?: PilotDeckToolSupplementalMessage[];
   data?: unknown;
   metadata?: Record<string, unknown>;
   startedAt: string;
@@ -22,6 +23,7 @@ export type PilotDeckToolErrorResult = {
   toolName: string;
   error: PilotDeckToolError;
   content: PilotDeckToolResultContent[];
+  supplementalMessages?: PilotDeckToolSupplementalMessage[];
   metadata?: Record<string, unknown>;
   startedAt: string;
   completedAt: string;

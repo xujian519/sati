@@ -161,3 +161,14 @@ test("normalizeStringList filters non-strings", () => {
   assert.deepEqual(normalizeStringList(["a", "", "  b  ", 42, null]), ["a", "b"]);
   assert.deepEqual(normalizeStringList("not-array"), []);
 });
+
+// ---- cycle-level statuses removed from plans --------------------------------
+
+test("PLAN_STATUS_ORDER does not include apply_failed (cycle-level now)", () => {
+  assert.equal(PLAN_STATUS_ORDER["apply_failed"], undefined);
+});
+
+test("computeExecutionStatus returns empty for archived status", () => {
+  const plan = makePlan({ status: "archived" });
+  assert.equal(computeExecutionStatus(plan, null, NEVER_ACTIVE), "");
+});

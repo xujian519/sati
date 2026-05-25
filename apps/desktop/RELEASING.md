@@ -31,6 +31,109 @@ bash scripts/release.sh --signed
 
 ---
 
+## 发布前测试（分层，按最佳实践）
+
+原则：**快且确定性的进自动化门禁；慢、要密钥、易抖动的不要塞进每次 DMG 构建。**
+
+```
+                    ┌─────────────────────────────────────┐
+  每次 PR / 合并前   │ L0  npm test（仓库根目录）            │  ← release.sh 默认也会跑
+                    │     Gateway / config / bridge 单测   │
+                    └─────────────────────────────────────┘
+                                      ↓
+                    ┌─────────────────────────────────────┐
+  每次打出 DMG 后    │ L1  verify-dmg.sh（制品冒烟）         │  ← release.sh 默认调用
+                    │     签名 / bundle / 沙箱起双进程       │
+                    │     V2 pilotdeck.yaml + bridge 连通   │
+                    │     onboarding → loadPilotConfig      │
+                    └─────────────────────────────────────┘
+                                      ↓
+                    ┌─────────────────────────────────────┐
+  发 rc / 正式版前   │ L2  人工或半自动（可选清单）          │  ← 不进脚本，见下表
+                    │     真机安装 DMG、Gatekeeper、About   │
+                    │     Electron 首次启动 + 桌面 onboarding│
+                    └─────────────────────────────────────┘
+                                      ↓
+                    ┌─────────────────────────────────────┐
+  nightly / 发版前   │ L3  真模型 E2E（opt-in）              │  ← 绝不默认进 release.sh
+                    │     PILOTDECK_RUN_FRAMEWORK_E2E=1     │
+                    │     PILOTDECK_RUN_REAL_AGENT_…=1      │
+                    └─────────────────────────────────────┘
+```
+
+### L0 — 源码门禁（`npm test`）
+
+- **何时跑**：`release.sh` 在打包前默认执行；日常开发、PR 也应跑同一命令。
+- **覆盖**：`dist/tests/**`（含 `tests/desktop/onboarding-config-compat`）、Gateway、配置加载等。
+- **跳过**：`bash scripts/release.sh --skip-tests`（仅本地救急，**正式 signed 发版不要用**）。
+
+### L1 — DMG 制品冒烟（`verify-dmg.sh`）
+
+- **何时跑**：`release.sh` 打出 DMG 后自动调用（`--skip-verify` 可跳过）。
+- **覆盖**：挂载 DMG、codesign、tar 内 `server` / `pilotdeck` CLI、沙箱里用 **打包进去的 node** 起 Gateway(18789) + UI(18790)、`pilotdeck-bridge` 连通、V2 stub 配置、onboarding YAML 与 `loadPilotConfig` 兼容。
+- **故意不做**：不启动真实 Electron 窗口、不调 LLM API、不跑 Playwright 点 UI。
+
+### L2 — UI / onboarding / Electron（Playwright，可自动化）
+
+2026 年实践：**确定性脚本**（Playwright）负责可重复门禁；人工只补 L2 里脚本覆盖不到的项（另一台 Mac 冷启动、真用户拖拽安装）。
+
+```bash
+# DMG 或 .app 路径
+bash apps/desktop/scripts/release-l2.sh dist-electron/PilotDeck-0.0.5-arm64.dmg
+
+# 无 GUI / CI：跳过 Electron 窗口测试
+PD_SKIP_ELECTRON=1 bash apps/desktop/scripts/release-l2.sh <DMG>
+
+# 子项（release-l2.sh 内部顺序）：
+#   L2a  Playwright → 打包 UI 的 Agent/Files/Skills/Routing/Memory Tab
+#   L2b  onboarding.html + mock IPC → buildConfigYaml V2
+#   L2c  Playwright Electron → 已有 V2 配置时主窗口加载（隔离 HOME，不测 onboarding）
+#   L2d  冷启动 Electron → 无 pilotdeck.yaml，走真实 onboarding 并校验 V2 写入（隔离 HOME）
+#   默认不修改本机 ~/.pilotdeck；无需备份/复原。若必须用真机目录，见 scripts/lib/pilotdeck-user-config.sh
+```
+
+与 `release.sh` 集成：
+
+```bash
+bash scripts/release.sh --signed --with-l2          # L1 + L2
+bash scripts/release.sh --signed --full-verify      # L1 + L2 + L3（无 key 时 L3 自动 skip）
+bash apps/desktop/scripts/release-verify-all.sh <DMG>   # 同上，独立跑
+```
+
+**L2 仍建议人工抽查（脚本不替代）**
+
+| 项 | 说明 |
+|---|---|
+| 安装 | 从 DMG 拖到 `/Applications`，首次打开无「已损坏」 |
+| About | 菜单 **PilotDeck → 关于**，version / git-sha / date 与 tag 一致 |
+| 签名版 | `spctl -a -vv` / 另一台 Mac 冷启动（已公证时） |
+
+### L3 — 真模型 E2E（脚本化，opt-in）
+
+```bash
+export ANTHROPIC_API_KEY=sk-...   # 或 OPENAI_API_KEY / PILOTDECK_API_KEY
+bash apps/desktop/scripts/release-l3.sh
+
+# 额外跑 lifecycle hooks：
+PILOTDECK_RUN_REAL_AGENT_LIFECYCLE_E2E=1 bash apps/desktop/scripts/release-l3.sh
+```
+
+无 API key 时 `release-l3.sh` **退出 0 并 skip**（不挡发版）；`--force` 则在缺 key 时失败。
+
+**为什么 L3 不进默认 DMG 构建？** 需要密钥、外网、配额；失败常是环境而非制品——默认只在 `--full-verify` / nightly / 发 rc 前显式开启。
+
+### 「AI 帮忙跑」指什么？
+
+- **已落地**：Playwright 自动点 Tab、走 onboarding 表单、可选启动 Electron——这是 L2/L3 的**可重复自动化**，适合每次发版。
+- **不放进 release 脚本**：在 Cursor 里让 Agent 用 browse 技能「探索式 QA」——适合发现偶发 UI 问题，但慢、非确定性，适合发版前人工触发一次，而不是 `release.sh` 默认步骤。
+
+### 和「新用户配置」Bug 的关系
+
+- **预防**：L0 的 `onboarding-config-compat` + L1 的 V2 stub / Step 9，保证桌面 onboarding 写的 YAML 能被 Gateway 加载。
+- **回归**：改 `onboarding-window.ts` / `onboarding-config.ts` 后必须 `npm test`；改打包路径后必须过完整 `verify-dmg`。
+
+---
+
 ## 何时 bump 哪段？SemVer 速记
 
 | 改动类型 | bump 哪段 | 例子 |

@@ -80,7 +80,6 @@ export function createAlwaysOnWorkspaceTool(
         prepared = { handle, provider };
       }
 
-      await ctx.stateStore.setCurrentWorkspace(prepared.handle, ctx.now());
       ctx.handle = prepared.handle;
 
       const data: AlwaysOnWorkspaceOutput = {

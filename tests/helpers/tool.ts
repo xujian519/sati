@@ -58,6 +58,7 @@ export function createPilotDeckToolRuntimeFixture(options?: {
   messageId?: string;
   modelMultimodal?: MultimodalConstraints;
   maxOutputTokens?: number;
+  outputTruncated?: boolean;
   writeSnapshots?: PilotDeckWriteSnapshotMap;
 }): {
   registry: ToolRegistry;
@@ -92,6 +93,7 @@ export function createPilotDeckToolRuntimeFixture(options?: {
     messageId: options?.messageId,
     modelMultimodal: options?.modelMultimodal,
     maxOutputTokens: options?.maxOutputTokens,
+    outputTruncated: options?.outputTruncated,
     writeSnapshots: options?.writeSnapshots,
   };
 

@@ -3,7 +3,7 @@
  * by `PluginRuntime.mcpServers()` (each plugin's manifest) into the strict
  * `PilotDeckMcpServerSpec[]` consumed by `McpRuntime`.
  *
- * Behaviour parity with `third-party/claude-code-main` plugin manifest schema:
+ * Behaviour parity with the legacy upstream plugin manifest schema:
  *   - `command` ⇒ stdio transport (`args`/`env`/`cwd` optional).
  *   - `url` (or `httpUrl`) ⇒ streamable_http transport.
  *   - Anything else is silently dropped — we do **not** throw at startup so

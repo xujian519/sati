@@ -1,7 +1,7 @@
 /**
  * In-process pending-request store for elicitation round-trips. Per-session.
  *
- * Behaviour parity with `third-party/claude-code-main/src/services/sdk/elicitationHandler.ts`:
+ * Behaviour parity with the legacy upstream elicitation handler:
  *   - One bus per session — concurrent tool calls within a session share the
  *     same map.
  *   - Each entry tracks `(resolve, reject, signal-listener)` so an aborted

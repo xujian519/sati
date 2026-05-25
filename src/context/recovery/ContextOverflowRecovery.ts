@@ -24,6 +24,9 @@ export class ContextOverflowRecovery {
   }
 
   decide(input: { error: CanonicalModelError; hasAttemptedCompact: boolean }): ContextRecoveryDecision {
+    if (input.error.recoverableViaImageStrip) {
+      return { type: "strip_images_and_retry", reason: "multimodal-processor-error" };
+    }
     if (input.error.code !== "prompt_too_long") {
       return { type: "give_up", reason: `non_recoverable_model_error:${input.error.code}` };
     }

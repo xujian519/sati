@@ -32,6 +32,7 @@ export type {
   PilotDeckToolCall,
   PilotDeckToolDefinition,
   PilotDeckToolExecutionOutput,
+  PilotDeckToolSupplementalMessage,
   PilotDeckFileUpdateNotification,
   PilotDeckFileUpdateNotifier,
   PilotDeckPlanTodoStateHandle,
