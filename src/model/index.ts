@@ -55,6 +55,7 @@ export {
   flattenToolResultContentText,
   toolResultContentBlockToText,
 } from "./protocol/toolResultContent.js";
+export { cloneContentBlock, cloneMessage, cloneMessages } from "./protocol/clone.js";
 export {
   ANTHROPIC_STRUCTURED_OUTPUT_TOOL_NAME,
 } from "./providers/anthropic/request.js";

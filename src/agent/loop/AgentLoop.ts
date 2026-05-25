@@ -2,6 +2,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import {
   applyModelEventToAssembler,
   assembleAssistantMessage,
+  cloneMessages,
   createModelMessageAssemblerState,
   type CanonicalToolCall,
   type CanonicalToolSchema,
@@ -1209,13 +1210,6 @@ function textFromMessage(message: CanonicalMessage): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function cloneMessages(messages: CanonicalMessage[]): CanonicalMessage[] {
-  return messages.map((message) => ({
-    ...message,
-    content: message.content.map((block) => ({ ...block })),
-  }));
 }
 
 function cloneReadFileStateMap(

@@ -1,4 +1,4 @@
-import type { CanonicalMessage, CanonicalUsage } from "../../model/index.js";
+import { cloneMessage, cloneMessages, type CanonicalMessage, type CanonicalUsage } from "../../model/index.js";
 import type { AgentEvent } from "../../agent/protocol/events.js";
 import type { AgentPermissionDenial, AgentTurnResult } from "../../agent/protocol/result.js";
 import type { AgentTranscriptDiagnostic, AgentTranscriptEntry, SessionMetadataValue } from "./TranscriptEntry.js";
@@ -137,17 +137,6 @@ function projectMessageEvent(sessionId: string, turnId: string, message: Canonic
     return { type: "assistant_message", sessionId, turnId, message: cloneMessage(message) };
   }
   return { type: "tool_results_projected", sessionId, turnId, message: cloneMessage(message) };
-}
-
-function cloneMessages(messages: CanonicalMessage[]): CanonicalMessage[] {
-  return messages.map(cloneMessage);
-}
-
-function cloneMessage(message: CanonicalMessage): CanonicalMessage {
-  return {
-    ...message,
-    content: message.content.map((block) => ({ ...block })),
-  };
 }
 
 function cloneTurnResult(result: AgentTurnResult): AgentTurnResult {
