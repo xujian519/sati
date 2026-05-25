@@ -1,0 +1,17 @@
+services:
+  pilotdeck:
+    build: .
+    ports:
+      - "3001:3001"
+      - "18789:18789"
+    volumes:
+      - pilotdeck-data:/data
+      - ./products:/app/products
+    environment:
+      - PILOTDECK_CONFIG_PATH=/data/pilotdeck.yaml
+      - SERVER_PORT=3001
+      - PILOTDECK_GATEWAY_PORT=18789
+    restart: unless-stopped
+
+volumes:
+  pilotdeck-data:

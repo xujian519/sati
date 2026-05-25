@@ -3,9 +3,9 @@ set -euo pipefail
 
 # PilotDeck one-line installer for macOS.
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/Gucc111/PilotDeck/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | bash
 
-REPO_URL="${PILOTDECK_REPO_URL:-https://github.com/Gucc111/PilotDeck.git}"
+REPO_URL="${PILOTDECK_REPO_URL:-https://github.com/OpenBMB/PilotDeck.git}"
 BRANCH="${PILOTDECK_BRANCH:-main}"
 INSTALL_DIR="${PILOTDECK_INSTALL_DIR:-$HOME/.pilotdeck/app}"
 CONFIG_FILE="${PILOTDECK_CONFIG_PATH:-$HOME/.pilotdeck/pilotdeck.yaml}"
@@ -25,7 +25,13 @@ fail() { printf "  ${RED}✗${RESET} %s\n" "$1"; exit 1; }
 
 is_port_free() {
   local port="$1"
-  ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+  if command -v lsof >/dev/null 2>&1; then
+    ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+  elif command -v ss >/dev/null 2>&1; then
+    ! ss -tlnH "sport = :$port" 2>/dev/null | grep -q .
+  else
+    ! (echo >/dev/tcp/127.0.0.1/"$port") 2>/dev/null
+  fi
 }
 
 find_free_port() {
@@ -92,10 +98,12 @@ echo "====================="
 echo ""
 
 echo "Checking system requirements..."
-if [[ "$(uname -s)" != "Darwin" ]]; then
-  fail "This installer currently supports macOS only."
-fi
-ok "macOS detected"
+OS="$(uname -s)"
+case "$OS" in
+  Darwin) ok "macOS detected" ;;
+  Linux)  ok "Linux detected" ;;
+  *)      fail "Unsupported OS: $OS. This installer supports macOS and Linux." ;;
+esac
 echo ""
 
 echo "Checking Node.js..."
@@ -135,7 +143,11 @@ echo ""
 
 echo "Checking git..."
 if ! command -v git >/dev/null 2>&1; then
-  fail "git is not installed. Please install Xcode Command Line Tools: xcode-select --install"
+  if [[ "$OS" == "Darwin" ]]; then
+    fail "git is not installed. Please install Xcode Command Line Tools: xcode-select --install"
+  else
+    fail "git is not installed. Please install it: sudo apt-get install git (Debian/Ubuntu) or sudo dnf install git (Fedora/RHEL)"
+  fi
 fi
 ok "git found"
 echo ""
@@ -147,8 +159,14 @@ else
   warn "ripgrep not found. Installing..."
   if command -v brew >/dev/null 2>&1; then
     brew install ripgrep </dev/null
+  elif command -v apt-get >/dev/null 2>&1; then
+    sudo apt-get install -y ripgrep </dev/null
+  elif command -v dnf >/dev/null 2>&1; then
+    sudo dnf install -y ripgrep </dev/null
+  elif command -v pacman >/dev/null 2>&1; then
+    sudo pacman -S --noconfirm ripgrep </dev/null
   else
-    fail "ripgrep (rg) is required but not installed. Please install it: brew install ripgrep"
+    fail "ripgrep (rg) is required but not installed. Please install it manually: https://github.com/BurntSushi/ripgrep#installation"
   fi
   ok "ripgrep installed"
 fi
@@ -224,7 +242,13 @@ warn() { printf "pilotdeck: %s\n" "$1" >&2; }
 
 is_port_free() {
   local port="$1"
-  ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+  if command -v lsof >/dev/null 2>&1; then
+    ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+  elif command -v ss >/dev/null 2>&1; then
+    ! ss -tlnH "sport = :$port" 2>/dev/null | grep -q .
+  else
+    ! (echo >/dev/tcp/127.0.0.1/"$port") 2>/dev/null
+  fi
 }
 
 find_free_port() {

@@ -7,11 +7,11 @@
 </p>
 
 <p align="center">
-  <a href="http://58.57.119.12:52006/"><img src="https://img.shields.io/badge/Demo-Live-brightgreen?style=flat-square" alt="Live Demo"/></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-TBD-blue.svg?style=flat-square" alt="License"/></a>
+  <a href="<demo_link>"><img src="https://img.shields.io/badge/Demo-Live-brightgreen?style=flat-square" alt="Live Demo"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL_3.0-blue.svg?style=flat-square" alt="License"/></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-Native-6366F1?style=flat-square" alt="MCP Native"/></a>
   <a href="#-desktop-app-apple-silicon"><img src="https://img.shields.io/badge/macOS-Desktop_App-000000?style=flat-square&logo=apple&logoColor=white" alt="Desktop App"/></a>
-  <a href="https://github.com/Gucc111/PilotDeck/stargazers"><img src="https://img.shields.io/github/stars/Gucc111/PilotDeck?style=flat-square" alt="Stars"/></a>
+  <a href="https://github.com/OpenBMB/PilotDeck/stargazers"><img src="https://img.shields.io/github/stars/OpenBMB/PilotDeck?style=flat-square" alt="Stars"/></a>
   <br/>
   <a href="#-community"><img src="https://img.shields.io/badge/Discord-Join_Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/></a>
   &nbsp;
@@ -29,7 +29,7 @@
 <p align="center">
   <b>English</b> | <a href="./README.zh.md">简体中文</a>
   <br/>
-  <a href="http://58.57.119.12:52006/">Live Demo</a> · <a href="#-installation--quick-start">Quick Start</a> · <a href="#-key-highlights">Highlights</a> · <a href="#use-cases">Use Cases</a> · <a href="#-community">Community</a>
+  <a href="<demo_link>">Live Demo</a> · <a href="#-installation--quick-start">Quick Start</a> · <a href="#-key-highlights">Highlights</a> · <a href="#use-cases">Use Cases</a> · <a href="#-community">Community</a>
 </p>
 
 ---
@@ -387,7 +387,7 @@ cd ui && npx vitest run
 
 ## 💬 Community
 
-- For bugs and feature requests, please open a [GitHub Issue](https://github.com/Gucc111/PilotDeck/issues).
+- For bugs and feature requests, please open a [GitHub Issue](https://github.com/OpenBMB/PilotDeck/issues).
 - For commercial collaboration, enterprise support, or open-source license discussions, please reach out via email: `team@pilotdeck.ai` <!-- TODO: replace with real contact email -->.
 - Join our community channels:
 
@@ -418,13 +418,12 @@ If PilotDeck has been helpful in your work or research, please consider giving u
 ```bibtex
 @misc{pilotdeck2026,
   title  = {PilotDeck: A WorkSpace-Centric Open-Source Agent Operating System},
-  author = {THUNLP and ModelBest and OpenBMB and AI9stars},
+  author = {THUNLP and ModelBest and OpenBMB and AI9Stars},
   year   = {2026},
-  note   = {Live demo: http://58.57.119.12:52006/},
-  url    = {https://github.com/Gucc111/PilotDeck}
+  url    = {https://github.com/OpenBMB/PilotDeck}
 }
 ```
 
 ## 📄 License
 
-The open-source license for this project is **TBD**. Until a formal license is finalized, the core code should be treated as "source-available, all rights reserved". The `products/**` directory contains customer-specific customizations and is **not** part of the open-source release scope.
+This project is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE). The `products/**` directory contains customer-specific customizations and is **not** part of the open-source release scope.
