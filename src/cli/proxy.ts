@@ -1,5 +1,3 @@
-import { ProxyAgent, setGlobalDispatcher } from "undici";
-
 type EnvLike = Record<string, string | undefined>;
 
 /**
@@ -36,6 +34,7 @@ export function installGlobalProxy(explicitUrl?: string): string | undefined {
   if (!proxyUrl) return undefined;
 
   try {
+    const { ProxyAgent, setGlobalDispatcher } = require("undici") as typeof import("undici");
     const agent = new ProxyAgent(proxyUrl);
     setGlobalDispatcher(agent);
     installed = true;

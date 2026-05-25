@@ -13,8 +13,13 @@ export type StartPilotDeckServerOptions = {
 };
 
 export async function startPilotDeckServer(options: StartPilotDeckServerOptions): Promise<GatewayServer> {
+  const consoleLogger = {
+    info: (msg: string) => console.log(msg),
+    warn: (msg: string) => console.warn(msg),
+    error: (msg: string) => console.error(msg),
+  };
   await options.feishu?.start({ gateway: options.gateway });
-  await options.weixin?.start({ gateway: options.gateway });
+  await options.weixin?.start({ gateway: options.gateway, logger: consoleLogger });
   return startGatewayServer({
     gateway: options.gateway,
     port: options.port,
