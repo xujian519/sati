@@ -126,6 +126,38 @@ test("A4 cacheBreakpoints absent → no cache_control emitted (regression)", () 
   assert.equal(body.messages[0].content[0].cache_control, undefined);
 });
 
+test("omits internal metadata keys from Anthropic requests", () => {
+  const config = parseModelConfig(validModelConfig(), {
+    env: { ANTHROPIC_API_KEY: "anthropic-key" },
+  });
+  const body = buildModelRequest(
+    {
+      provider: "anthropic-main",
+      model: "claude-sonnet-4-5",
+      messages: [{ role: "user", content: [{ type: "text", text: "x" }] }],
+      metadata: { configSnapshotVersion: 1, script: "smoke" },
+    },
+    config,
+  ) as Record<string, any>;
+  assert.equal(body.metadata, undefined);
+});
+
+test("passes supported Anthropic user_id metadata only", () => {
+  const config = parseModelConfig(validModelConfig(), {
+    env: { ANTHROPIC_API_KEY: "anthropic-key" },
+  });
+  const body = buildModelRequest(
+    {
+      provider: "anthropic-main",
+      model: "claude-sonnet-4-5",
+      messages: [{ role: "user", content: [{ type: "text", text: "x" }] }],
+      metadata: { user_id: "user-123", script: "smoke" },
+    },
+    config,
+  ) as Record<string, any>;
+  assert.deepEqual(body.metadata, { user_id: "user-123" });
+});
+
 test("tool_result preserves multimodal image and pdf blocks for Anthropic", () => {
   const config = parseModelConfig(validModelConfig(), {
     env: { ANTHROPIC_API_KEY: "anthropic-key" },
