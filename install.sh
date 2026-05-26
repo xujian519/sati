@@ -275,6 +275,11 @@ install_or_update_repo() {
 }
 
 ensure_lfs_assets() {
+  if [[ "${PILOTDECK_INSTALL_LFS:-0}" != "1" ]]; then
+    warn "Skipping Git LFS media download. Set PILOTDECK_INSTALL_LFS=1 to fetch demo images/videos."
+    return
+  fi
+
   if [[ "${GIT_LFS_SKIP_SMUDGE:-}" == "1" ]]; then
     warn "GIT_LFS_SKIP_SMUDGE=1 is set; large media assets were intentionally skipped."
     return
@@ -361,17 +366,19 @@ fi
 ok "git found"
 echo ""
 
-echo "Checking Git LFS..."
-if [[ "${GIT_LFS_SKIP_SMUDGE:-}" == "1" ]]; then
-  warn "GIT_LFS_SKIP_SMUDGE=1 is set; large media assets will be skipped."
-elif command -v git-lfs >/dev/null 2>&1 || git lfs version >/dev/null 2>&1; then
-  ok "Git LFS $(git lfs version | awk '{print $1}') found"
-else
-  warn "Git LFS not found. Installing..."
-  install_git_lfs
-  ok "Git LFS installed"
+if [[ "${PILOTDECK_INSTALL_LFS:-0}" == "1" ]]; then
+  echo "Checking Git LFS..."
+  if [[ "${GIT_LFS_SKIP_SMUDGE:-}" == "1" ]]; then
+    warn "GIT_LFS_SKIP_SMUDGE=1 is set; large media assets will be skipped."
+  elif command -v git-lfs >/dev/null 2>&1 || git lfs version >/dev/null 2>&1; then
+    ok "Git LFS $(git lfs version | awk '{print $1}') found"
+  else
+    warn "Git LFS not found. Installing..."
+    install_git_lfs
+    ok "Git LFS installed"
+  fi
+  echo ""
 fi
-echo ""
 
 echo "Checking ripgrep..."
 if command -v rg >/dev/null 2>&1; then
