@@ -667,7 +667,31 @@ else
   ln -sf "$CLI_TARGET" "$LOCAL_BIN/pilotdeck"
   ok "pilotdeck command linked to ${DIM}${LOCAL_BIN}/pilotdeck${RESET}"
   if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
-    warn "Add to your shell profile: export PATH=\"\$HOME/.local/bin:\$PATH\""
+    PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
+    SHELL_RC=""
+    case "$(basename "${SHELL:-/bin/sh}")" in
+      zsh)  SHELL_RC="$HOME/.zshrc" ;;
+      bash)
+        if [[ -f "$HOME/.bash_profile" ]]; then
+          SHELL_RC="$HOME/.bash_profile"
+        else
+          SHELL_RC="$HOME/.bashrc"
+        fi
+        ;;
+      fish) SHELL_RC="$HOME/.config/fish/config.fish"; PATH_LINE='set -gx PATH $HOME/.local/bin $PATH' ;;
+      *)    SHELL_RC="$HOME/.profile" ;;
+    esac
+
+    if [[ -n "$SHELL_RC" ]]; then
+      if [[ ! -f "$SHELL_RC" ]] || ! grep -qF '.local/bin' "$SHELL_RC" 2>/dev/null; then
+        printf '\n# Added by PilotDeck installer\n%s\n' "$PATH_LINE" >> "$SHELL_RC"
+        ok "PATH updated in ${DIM}${SHELL_RC}${RESET}"
+        warn "Run ${BOLD}source ${SHELL_RC}${RESET} or open a new terminal to use the ${BOLD}pilotdeck${RESET} command"
+      else
+        ok "${DIM}${SHELL_RC}${RESET} already contains .local/bin PATH entry"
+      fi
+      export PATH="$LOCAL_BIN:$PATH"
+    fi
   fi
 fi
 echo ""
