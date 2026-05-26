@@ -31,11 +31,11 @@ export interface ToolDisplayConfig {
   result?: {
     hidden?: boolean;
     hideOnSuccess?: boolean;
-    type?: 'one-line' | 'collapsible' | 'special';
+    type?: 'one-line' | 'collapsible' | 'special' | 'card';
     title?: string | ((result: any) => string);
     defaultOpen?: boolean;
     // Special result handlers
-    contentType?: 'markdown' | 'file-list' | 'todo-list' | 'text' | 'success-message' | 'task' | 'question-answer';
+    contentType?: 'markdown' | 'file-list' | 'todo-list' | 'text' | 'success-message' | 'task' | 'question-answer' | 'plan-card';
     getMessage?: (result: any) => string;
     getContentProps?: (result: any) => any;
   };
@@ -661,41 +661,47 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
 
   exit_plan_mode: {
     input: {
-      type: 'hide',
+      type: 'hidden',
     },
     result: {
-      type: 'collapsible',
-      title: 'Implementation plan',
-      defaultOpen: true,
-      contentType: 'markdown',
-      getContentProps: (result) => {
+      type: 'card',
+      contentType: 'plan-card',
+      getContentProps: (result: any) => {
         const text = typeof result.content === 'string'
           ? result.content
           : Array.isArray(result.content)
             ? result.content.map((c: { text?: string }) => c.text || '').join('')
             : '';
-        return { content: text };
-      }
+        const titleMatch = text.match(/^#\s+(.+)$/m);
+        const planTitle = titleMatch?.[1] || 'Implementation Plan';
+        const lines = text.split('\n').filter((l: string) => l.trim() && !l.startsWith('#'));
+        const planSummary = lines.slice(0, 2).join('\n').slice(0, 200);
+        const planFilePath = result.planFilePath || '';
+        return { planTitle, planSummary, planFilePath };
+      },
     }
   },
 
   ExitPlanMode: {
     input: {
-      type: 'hide',
+      type: 'hidden',
     },
     result: {
-      type: 'collapsible',
-      title: 'Implementation plan',
-      defaultOpen: true,
-      contentType: 'markdown',
-      getContentProps: (result) => {
+      type: 'card',
+      contentType: 'plan-card',
+      getContentProps: (result: any) => {
         const text = typeof result.content === 'string'
           ? result.content
           : Array.isArray(result.content)
             ? result.content.map((c: { text?: string }) => c.text || '').join('')
             : '';
-        return { content: text };
-      }
+        const titleMatch = text.match(/^#\s+(.+)$/m);
+        const planTitle = titleMatch?.[1] || 'Implementation Plan';
+        const lines = text.split('\n').filter((l: string) => l.trim() && !l.startsWith('#'));
+        const planSummary = lines.slice(0, 2).join('\n').slice(0, 200);
+        const planFilePath = result.planFilePath || '';
+        return { planTitle, planSummary, planFilePath };
+      },
     }
   },
 

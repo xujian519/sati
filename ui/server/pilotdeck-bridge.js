@@ -362,6 +362,9 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                               })),
                           }
                         : {}),
+                    ...(event.toolName === 'exit_plan_mode' && event.data?.planFilePath
+                        ? { planFilePath: event.data.planFilePath }
+                        : {}),
                 }),
             ];
         case 'permission_request':

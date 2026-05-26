@@ -11,6 +11,7 @@ export type ExitPlanModeOutput = {
   requestedMode?: "default";
   action?: "continue_planning" | "execute_plan" | "cancelled";
   feedback?: string;
+  planFilePath?: string;
 };
 
 const EXIT_PLAN_MODE_QUESTION = "What should happen next?";
@@ -259,7 +260,7 @@ export function createExitPlanModeTool(): PilotDeckToolDefinition<ExitPlanModeIn
             type: "text",
             text: buildApprovedPlanResult(plan, resolvedPlanFilePath),
           }],
-          data: { plan, action, requestedMode: "default" },
+          data: { plan, action, requestedMode: "default", planFilePath: resolvedPlanFilePath },
         };
       }
 

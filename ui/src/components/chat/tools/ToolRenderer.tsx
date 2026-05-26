@@ -2,7 +2,7 @@ import React, { memo, useMemo, useCallback } from 'react';
 import type { Project } from '../../../types/app';
 import type { SubagentChildTool } from '../types/types';
 import { getToolConfig } from './configs/toolConfigs';
-import { OneLineDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from './components';
+import { OneLineDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer, PlanApprovedCard } from './components';
 
 type DiffLine = {
   type: string;
@@ -290,6 +290,17 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
         );
         break;
 
+      case 'plan-card':
+        contentComponent = (
+          <PlanApprovedCard
+            planTitle={contentProps.planTitle || ''}
+            planSummary={contentProps.planSummary || ''}
+            planFilePath={contentProps.planFilePath || ''}
+            onViewPlan={() => onFileOpen?.(contentProps.planFilePath)}
+          />
+        );
+        break;
+
       case 'success-message': {
         const msg = toDisplayString(
           safeCall('success message getter', toolName, () => displayConfig.getMessage?.(parsedData), 'Success'),
@@ -329,6 +340,31 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
         {contentComponent}
       </CollapsibleDisplay>
     );
+  }
+
+  if (displayConfig.type === 'card') {
+    const contentProps = toObject(safeCall(
+      'content props getter',
+      toolName,
+      () => displayConfig.getContentProps?.(parsedData, { selectedProject, createDiff, onFileOpen }),
+      {},
+    ));
+
+    let cardComponent: React.ReactNode = null;
+    switch (displayConfig.contentType) {
+      case 'plan-card':
+        cardComponent = (
+          <PlanApprovedCard
+            planTitle={contentProps.planTitle || ''}
+            planSummary={contentProps.planSummary || ''}
+            planFilePath={contentProps.planFilePath || ''}
+            onViewPlan={() => onFileOpen?.(contentProps.planFilePath)}
+          />
+        );
+        break;
+    }
+
+    return cardComponent;
   }
 
   return null;

@@ -165,6 +165,9 @@
       "feedbackPlaceholder": "例如：再补充测试方案，或者先不要改数据库。",
       "continueButton": "发送继续交流消息",
       "executeButton": "按计划执行"
+    },
+    "approvedCard": {
+      "viewPlan": "查看计划"
     }
   },
   "usageLimit": {

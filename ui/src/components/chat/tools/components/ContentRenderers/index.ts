@@ -4,3 +4,4 @@ export { TodoListContent } from './TodoListContent';
 export { TaskListContent } from './TaskListContent';
 export { TextContent } from './TextContent';
 export { QuestionAnswerContent } from './QuestionAnswerContent';
+export { PlanApprovedCard } from './PlanApprovedCard';

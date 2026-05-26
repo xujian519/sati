@@ -114,6 +114,8 @@ export type GatewayEvent =
        * failures like a non-zero shell exit code.
        */
       errorCode?: string;
+      /** Structured data from the tool result (e.g. planFilePath for exit_plan_mode). */
+      data?: Record<string, unknown>;
     }
   | { type: "tool_result_detail_available"; toolCallId: string; resultPath?: string; fullText?: string }
   | { type: "permission_request"; requestId: string; toolName: string; payload: unknown }

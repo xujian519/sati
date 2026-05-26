@@ -165,6 +165,9 @@
       "feedbackPlaceholder": "e.g. Add a test plan, or do not modify the database yet.",
       "continueButton": "Continue Discussion",
       "executeButton": "Execute Plan"
+    },
+    "approvedCard": {
+      "viewPlan": "View Plan"
     }
   },
   "usageLimit": {
