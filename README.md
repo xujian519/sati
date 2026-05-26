@@ -314,6 +314,9 @@ pilotdeck status     # check runtime status
 
 **1. Clone and install dependencies**
 
+> This repo uses [Git LFS](https://git-lfs.com/) for large media assets. Make sure `git lfs` is installed before cloning.
+> If you don't need the demo videos/GIFs, add `GIT_LFS_SKIP_SMUDGE=1` before `git clone` to skip downloading them.
+
 ```bash
 git clone https://github.com/OpenBMB/PilotDeck.git
 cd PilotDeck

@@ -314,6 +314,9 @@ pilotdeck status     # 查看运行状态
 
 **1. 克隆代码与安装依赖**
 
+> 本仓库使用 [Git LFS](https://git-lfs.com/) 管理大型媒体文件。克隆前请确保已安装 `git lfs`。
+> 如果不需要演示视频/GIF，可在 clone 前加上 `GIT_LFS_SKIP_SMUDGE=1` 跳过下载。
+
 ```bash
 git clone https://github.com/OpenBMB/PilotDeck.git
 cd PilotDeck
