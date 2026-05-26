@@ -318,6 +318,7 @@ function flushBlock(
       flushText();
       const resultText = flattenToolResultBlockText(block);
       const errorCode = readToolResultErrorCode(block.raw);
+      const planData = readPlanData(block.raw);
       out.push({
         id: `${context.sessionKey}-tool-${block.toolCallId}-result`,
         sessionKey: context.sessionKey,
@@ -330,6 +331,7 @@ function flushBlock(
         ok: !block.isError,
         text: resultText,
         ...(errorCode ? { errorCode } : {}),
+        ...(planData ? { payload: planData } : {}),
         source: "history",
       });
       return;
@@ -528,4 +530,17 @@ function readToolResultErrorCode(raw: unknown): string | undefined {
   if (!error || typeof error !== "object") return undefined;
   const code = (error as { code?: unknown }).code;
   return typeof code === "string" && code.length > 0 ? code : undefined;
+}
+
+function readPlanData(raw: unknown): Record<string, unknown> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const data = (raw as { data?: unknown }).data;
+  if (!data || typeof data !== "object") return undefined;
+  const d = data as Record<string, unknown>;
+  if (typeof d.planFilePath !== "string") return undefined;
+  return {
+    planFilePath: d.planFilePath,
+    planTitle: d.planTitle,
+    planSummary: d.planSummary,
+  };
 }

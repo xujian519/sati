@@ -415,11 +415,14 @@ cd ui && npx vitest run
 
 PilotDeck 的建设离不开以下优秀开源项目的支持：
 
-- [UltraRAG](https://github.com/OpenBMB/UltraRAG) — RAG 框架
 - [ClawXRouter](https://github.com/OpenBMB/ClawXRouter) — 智能模型路由
 - [ClawXMemory](https://github.com/OpenBMB/ClawXMemory) — Agent 记忆系统
 - [Claude Code UI](https://github.com/siteboon/claudecodeui) — Web UI 参考
 - [Claude Code Router](https://github.com/musistudio/claude-code-router) — 模型路由参考
+- [UltraRAG](https://github.com/OpenBMB/UltraRAG) — RAG 框架
+- [Anthropic Skills](https://github.com/anthropics/skills) — Agent 技能框架和内置技能（skill-creator、frontend-slides）
+- [MiniMax-AI Skills](https://github.com/MiniMax-AI/skills) — minimax-pdf 技能
+- [Karpathy Guidelines](https://x.com/karpathy/status/2015883857489522876) — LLM 编码行为准则
 - [Vite](https://github.com/vitejs/vite) — 前端构建工具
 - [React](https://github.com/facebook/react) — UI 框架
 - [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) — 原子化 CSS 框架

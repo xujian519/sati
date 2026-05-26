@@ -96,6 +96,16 @@ install_ripgrep() {
   fi
 }
 
+install_git_lfs() {
+  if [[ "$PLATFORM" == "macos" ]] && command -v brew >/dev/null 2>&1; then
+    brew install git-lfs </dev/null
+  elif [[ "$PLATFORM" == "linux" ]]; then
+    install_linux_packages git-lfs
+  else
+    fail "git-lfs is required for PilotDeck assets. On macOS, install Homebrew and run: brew install git-lfs"
+  fi
+}
+
 install_lsof() {
   if [[ "$PLATFORM" == "linux" ]]; then
     install_linux_packages lsof
@@ -186,10 +196,105 @@ github_repo_slug() {
 clone_repo() {
   local slug
   if slug="$(github_repo_slug)" && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    gh repo clone "$slug" "$INSTALL_DIR" -- --branch "$BRANCH" --depth 1 --quiet
+    gh repo clone "$slug" "$INSTALL_DIR" -- --branch "$BRANCH" --depth 1 --quiet || \
+      fail "Could not clone ${REPO_URL}. Check repository access and network connectivity."
   else
-    git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$INSTALL_DIR" --quiet
+    git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$INSTALL_DIR" --quiet || \
+      fail "Could not clone ${REPO_URL}. If this repository is private, authenticate with GitHub first."
   fi
+}
+
+repo_remote_url() {
+  git -C "$1" remote get-url origin 2>/dev/null || true
+}
+
+repo_has_changes() {
+  [[ -n "$(git -C "$1" status --porcelain 2>/dev/null)" ]]
+}
+
+backup_existing_installation() {
+  local source_dir="$1"
+  local backup_dir timestamp
+  timestamp="$(date +%Y%m%d-%H%M%S)"
+  backup_dir="${source_dir}.backup.${timestamp}"
+  while [[ -e "$backup_dir" ]]; do
+    timestamp="$(date +%Y%m%d-%H%M%S)-$RANDOM"
+    backup_dir="${source_dir}.backup.${timestamp}"
+  done
+  mv "$source_dir" "$backup_dir"
+  warn "Existing installation moved to ${backup_dir}"
+}
+
+checkout_existing_installation() {
+  cd "$INSTALL_DIR"
+  git fetch origin "$BRANCH" --quiet
+  git checkout -B "$BRANCH" "origin/$BRANCH" --quiet
+}
+
+install_or_update_repo() {
+  mkdir -p "$(dirname "$INSTALL_DIR")"
+
+  if [[ -d "$INSTALL_DIR/.git" ]]; then
+    local current_remote
+    current_remote="$(repo_remote_url "$INSTALL_DIR")"
+    if [[ "$current_remote" != "$REPO_URL" ]]; then
+      warn "Existing installation uses ${current_remote:-unknown remote}; expected ${REPO_URL}."
+      backup_existing_installation "$INSTALL_DIR"
+      clone_repo
+      ok "Repository cloned"
+      return
+    fi
+
+    if repo_has_changes "$INSTALL_DIR"; then
+      warn "Existing installation has local changes; preserving it before reinstalling."
+      backup_existing_installation "$INSTALL_DIR"
+      clone_repo
+      ok "Repository cloned"
+      return
+    fi
+
+    warn "Existing installation found. Updating..."
+    if checkout_existing_installation; then
+      ok "Updated to latest ${BRANCH}"
+    else
+      warn "Fast update failed; preserving existing checkout before reinstalling."
+      cd "$(dirname "$INSTALL_DIR")"
+      backup_existing_installation "$INSTALL_DIR"
+      clone_repo
+      ok "Repository cloned"
+    fi
+    return
+  fi
+
+  if [[ -d "$INSTALL_DIR" ]]; then
+    warn "Cleaning incomplete installation at $INSTALL_DIR"
+    rm -rf "$INSTALL_DIR"
+  fi
+  clone_repo
+  ok "Repository cloned"
+}
+
+ensure_lfs_assets() {
+  if [[ "${GIT_LFS_SKIP_SMUDGE:-}" == "1" ]]; then
+    warn "GIT_LFS_SKIP_SMUDGE=1 is set; large media assets were intentionally skipped."
+    return
+  fi
+
+  if ! command -v git-lfs >/dev/null 2>&1 && ! git lfs version >/dev/null 2>&1; then
+    fail "git-lfs command not found after installation."
+  fi
+
+  cd "$INSTALL_DIR"
+  git lfs install --local >/dev/null
+  git lfs pull
+
+  local pointer_file=""
+  for pointer_file in assets/banner.png ui/public/favicon.png ui/src/assets/pilotdeck-logo.png; do
+    if [[ -f "$pointer_file" ]] && grep -q "version https://git-lfs.github.com/spec/v1" "$pointer_file"; then
+      fail "Git LFS asset was not downloaded correctly: ${pointer_file}"
+    fi
+  done
+  ok "Git LFS assets downloaded"
 }
 
 echo ""
@@ -256,6 +361,18 @@ fi
 ok "git found"
 echo ""
 
+echo "Checking Git LFS..."
+if [[ "${GIT_LFS_SKIP_SMUDGE:-}" == "1" ]]; then
+  warn "GIT_LFS_SKIP_SMUDGE=1 is set; large media assets will be skipped."
+elif command -v git-lfs >/dev/null 2>&1 || git lfs version >/dev/null 2>&1; then
+  ok "Git LFS $(git lfs version | awk '{print $1}') found"
+else
+  warn "Git LFS not found. Installing..."
+  install_git_lfs
+  ok "Git LFS installed"
+fi
+echo ""
+
 echo "Checking ripgrep..."
 if command -v rg >/dev/null 2>&1; then
   ok "ripgrep $(rg --version | head -1) found"
@@ -279,23 +396,8 @@ ensure_native_build_tools
 echo ""
 
 echo "Installing PilotDeck to ${DIM}${INSTALL_DIR}${RESET} ..."
-mkdir -p "$(dirname "$INSTALL_DIR")"
-
-if [[ -d "$INSTALL_DIR/.git" ]]; then
-  warn "Existing installation found. Updating..."
-  cd "$INSTALL_DIR"
-  git fetch origin "$BRANCH" --quiet
-  git checkout "$BRANCH" --quiet 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH" --quiet
-  git pull --ff-only origin "$BRANCH" --quiet
-  ok "Updated to latest ${BRANCH}"
-else
-  if [[ -d "$INSTALL_DIR" ]]; then
-    warn "Cleaning incomplete installation at $INSTALL_DIR"
-    rm -rf "$INSTALL_DIR"
-  fi
-  clone_repo
-  ok "Repository cloned"
-fi
+install_or_update_repo
+ensure_lfs_assets
 echo ""
 
 echo "Installing root dependencies..."
@@ -339,7 +441,17 @@ cat > "$CLI_TARGET" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  SOURCE_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+  LINK_TARGET="$(readlink "$SOURCE")"
+  if [[ "$LINK_TARGET" == /* ]]; then
+    SOURCE="$LINK_TARGET"
+  else
+    SOURCE="$SOURCE_DIR/$LINK_TARGET"
+  fi
+done
+INSTALL_DIR="$(cd "$(dirname "$SOURCE")/.." && pwd)"
 CONFIG_FILE="${PILOTDECK_CONFIG_PATH:-$HOME/.pilotdeck/pilotdeck.yaml}"
 MAX_PORT_TRIES="${PILOTDECK_MAX_PORT_TRIES:-20}"
 
@@ -368,6 +480,14 @@ find_free_port() {
     fi
   done
   return 1
+}
+
+git_remote_url() {
+  git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null || printf "unknown"
+}
+
+git_branch_name() {
+  git -C "$INSTALL_DIR" branch --show-current 2>/dev/null || printf "unknown"
 }
 
 COMMAND="start"
@@ -423,9 +543,14 @@ HELP
 fi
 
 if [[ "$COMMAND" == "status" ]]; then
+  SERVER_BASE="${SERVER_PORT:-3001}"
+  NEXT_SERVER_PORT="$(find_free_port "$SERVER_BASE" || printf "%s" "$SERVER_BASE")"
   printf "Installation: %s\n" "$INSTALL_DIR"
+  printf "Remote:       %s\n" "$(git_remote_url)"
+  printf "Branch:       %s\n" "$(git_branch_name)"
   printf "Config:       %s\n" "$CONFIG_FILE"
-  printf "URL:          http://localhost:%s\n" "${SERVER_PORT:-3001}"
+  printf "Default URL:  http://localhost:%s\n" "$SERVER_BASE"
+  printf "Next start:   http://localhost:%s\n" "$NEXT_SERVER_PORT"
   exit 0
 fi
 
@@ -465,10 +590,18 @@ if [[ -e "$BIN_LINK" || -L "$BIN_LINK" ]]; then
   fi
 fi
 
-if [[ "$TARGET_BIN" == "$BIN_LINK" && -w "$(dirname "$BIN_LINK")" ]]; then
+TARGET_BIN_DIR="$(dirname "$TARGET_BIN")"
+if [[ "$TARGET_BIN" != "$BIN_LINK" ]]; then
+  :
+elif [[ ! -d "$TARGET_BIN_DIR" ]] && mkdir -p "$TARGET_BIN_DIR" 2>/dev/null; then
+  :
+fi
+
+if [[ "$TARGET_BIN" == "$BIN_LINK" && -d "$TARGET_BIN_DIR" && -w "$TARGET_BIN_DIR" ]]; then
   ln -sf "$CLI_TARGET" "$TARGET_BIN"
   ok "pilotdeck command linked to ${DIM}${TARGET_BIN}${RESET}"
 elif sudo -n true 2>/dev/null; then
+  sudo mkdir -p "$TARGET_BIN_DIR"
   sudo ln -sf "$CLI_TARGET" "$TARGET_BIN"
   ok "pilotdeck command linked to ${DIM}${TARGET_BIN}${RESET}"
 else
@@ -486,7 +619,7 @@ echo -e "${BOLD}Installation complete!${RESET}"
 echo ""
 echo -e "  App location:   ${DIM}${INSTALL_DIR}${RESET}"
 echo -e "  Config file:    ${DIM}${CONFIG_FILE}${RESET}"
-echo -e "  CLI command:    ${DIM}pilotdeck${RESET}"
+echo -e "  CLI command:    ${DIM}${TARGET_BIN}${RESET}"
 echo ""
 
 echo "Starting PilotDeck..."

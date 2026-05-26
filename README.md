@@ -415,11 +415,14 @@ cd ui && npx vitest run
 
 PilotDeck builds upon the following outstanding open-source projects:
 
-- [UltraRAG](https://github.com/OpenBMB/UltraRAG) — RAG framework
 - [ClawXRouter](https://github.com/OpenBMB/ClawXRouter) — Intelligent model routing
 - [ClawXMemory](https://github.com/OpenBMB/ClawXMemory) — Agent memory system
 - [Claude Code UI](https://github.com/siteboon/claudecodeui) — Web UI reference
 - [Claude Code Router](https://github.com/musistudio/claude-code-router) — Model routing reference
+- [UltraRAG](https://github.com/OpenBMB/UltraRAG) — RAG framework
+- [Anthropic Skills](https://github.com/anthropics/skills) — Agent skill framework and built-in skills (skill-creator, frontend-slides)
+- [MiniMax-AI Skills](https://github.com/MiniMax-AI/skills) — minimax-pdf skill
+- [Karpathy Guidelines](https://x.com/karpathy/status/2015883857489522876) — LLM coding behavioral guidelines
 - [Vite](https://github.com/vitejs/vite) — Frontend build tool
 - [React](https://github.com/facebook/react) — UI framework
 - [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) — Utility-first CSS framework

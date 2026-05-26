@@ -659,6 +659,9 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
           resultPath,
           ...(images.length > 0 ? { images } : {}),
           ...(event.result.type === "error" && { errorCode: event.result.error.code }),
+          ...(event.result.type === "success" && event.result.data
+            ? { data: event.result.data as Record<string, unknown> }
+            : {}),
         },
       ];
     }

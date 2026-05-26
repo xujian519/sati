@@ -11,6 +11,9 @@ export type ExitPlanModeOutput = {
   requestedMode?: "default";
   action?: "continue_planning" | "execute_plan" | "cancelled";
   feedback?: string;
+  planFilePath?: string;
+  planTitle?: string;
+  planSummary?: string;
 };
 
 const EXIT_PLAN_MODE_QUESTION = "What should happen next?";
@@ -83,6 +86,7 @@ function buildApprovedPlanResult(plan: string, planFilePath: string | undefined)
     : [];
   return [
     "User has approved your plan. You can now start coding.",
+    'Do NOT output any confirmation text like "Plan approved, starting implementation" — the user already knows. Proceed directly with todo_write and implementation.',
     "Before using any non-read-only tool, you MUST call todo_write with a markdown checklist derived from the approved plan.",
     "After each completed implementation step, call todo_write again to refresh the checklist and mark completed items with `- [x]`.",
     "",
@@ -253,12 +257,16 @@ export function createExitPlanModeTool(): PilotDeckToolDefinition<ExitPlanModeIn
 
       if (action === EXIT_PLAN_MODE_EXECUTE) {
         context.planTodo?.markPlanApproved(plan);
+        const titleMatch = plan.match(/^#\s+(.+)$/m);
+        const planTitle = titleMatch?.[1];
+        const summaryLines = plan.split("\n").filter((l) => l.trim() && !l.startsWith("#"));
+        const planSummary = summaryLines.slice(0, 2).join("\n").slice(0, 200) || undefined;
         return {
           content: [{
             type: "text",
             text: buildApprovedPlanResult(plan, resolvedPlanFilePath),
           }],
-          data: { plan, action, requestedMode: "default" },
+          data: { plan, action, requestedMode: "default", planFilePath: resolvedPlanFilePath, planTitle, planSummary },
         };
       }
 

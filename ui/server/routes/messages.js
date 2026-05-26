@@ -84,7 +84,10 @@ function mapWebMessageToNormalized(message, sessionId) {
         toolInput: message.payload,
         toolId: message.toolCallId,
       });
-    case 'tool_result':
+    case 'tool_result': {
+      const planPayload = message.payload && typeof message.payload === 'object'
+          ? message.payload
+          : {};
       return createNormalizedMessage({
         ...base,
         kind: 'tool_result',
@@ -102,7 +105,13 @@ function mapWebMessageToNormalized(message, sessionId) {
                 .map((image) => ({ data: image.data, mimeType: image.mimeType })),
             }
           : {}),
+        ...(planPayload.planFilePath ? {
+            planFilePath: planPayload.planFilePath,
+            planTitle: planPayload.planTitle,
+            planSummary: planPayload.planSummary,
+        } : {}),
       });
+    }
     case 'permission_request':
       return createNormalizedMessage({
         ...base,
