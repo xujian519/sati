@@ -193,13 +193,45 @@ github_repo_slug() {
   esac
 }
 
+normalize_github_remote() {
+  local url="$1"
+  case "$url" in
+    https://github.com/*)
+      local slug="${url#https://github.com/}"
+      slug="${slug%.git}"
+      printf "%s" "$slug"
+      ;;
+    git@github.com:*)
+      local slug="${url#git@github.com:}"
+      slug="${slug%.git}"
+      printf "%s" "$slug"
+      ;;
+    ssh://git@github.com/*)
+      local slug="${url#ssh://git@github.com/}"
+      slug="${slug%.git}"
+      printf "%s" "$slug"
+      ;;
+    *)
+      printf "%s" "$url"
+      ;;
+  esac
+}
+
+clone_without_lfs_smudge() {
+  if [[ "${PILOTDECK_INSTALL_LFS:-0}" == "1" ]]; then
+    "$@"
+  else
+    GIT_LFS_SKIP_SMUDGE=1 "$@"
+  fi
+}
+
 clone_repo() {
   local slug
   if slug="$(github_repo_slug)" && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    gh repo clone "$slug" "$INSTALL_DIR" -- --branch "$BRANCH" --depth 1 --quiet || \
+    clone_without_lfs_smudge gh repo clone "$slug" "$INSTALL_DIR" -- --branch "$BRANCH" --depth 1 || \
       fail "Could not clone ${REPO_URL}. Check repository access and network connectivity."
   else
-    git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$INSTALL_DIR" --quiet || \
+    clone_without_lfs_smudge git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$INSTALL_DIR" || \
       fail "Could not clone ${REPO_URL}. If this repository is private, authenticate with GitHub first."
   fi
 }
@@ -227,17 +259,19 @@ backup_existing_installation() {
 
 checkout_existing_installation() {
   cd "$INSTALL_DIR"
-  git fetch origin "$BRANCH" --quiet
-  git checkout -B "$BRANCH" "origin/$BRANCH" --quiet
+  GIT_LFS_SKIP_SMUDGE=1 git fetch origin "$BRANCH"
+  GIT_LFS_SKIP_SMUDGE=1 git checkout -B "$BRANCH" "origin/$BRANCH"
 }
 
 install_or_update_repo() {
   mkdir -p "$(dirname "$INSTALL_DIR")"
 
   if [[ -d "$INSTALL_DIR/.git" ]]; then
-    local current_remote
+    local current_remote current_remote_normalized expected_remote_normalized
     current_remote="$(repo_remote_url "$INSTALL_DIR")"
-    if [[ "$current_remote" != "$REPO_URL" ]]; then
+    current_remote_normalized="$(normalize_github_remote "$current_remote")"
+    expected_remote_normalized="$(normalize_github_remote "$REPO_URL")"
+    if [[ "$current_remote_normalized" != "$expected_remote_normalized" ]]; then
       warn "Existing installation uses ${current_remote:-unknown remote}; expected ${REPO_URL}."
       backup_existing_installation "$INSTALL_DIR"
       clone_repo
