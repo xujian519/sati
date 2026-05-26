@@ -49,7 +49,7 @@
     "title": "Getting Started with TaskMaster",
     "subtitle": "Your guide to productive task management",
     "examples": {
-      "parsePRD": "💬 Example:\n\"I've just initialized a new project with Claude Task Master. I have a PRD at .taskmaster/docs/prd.txt. Can you help me parse it and set up the initial tasks?\"",
+      "parsePRD": "💬 Example:\n\"I've just initialized a new project with TaskMaster. I have a PRD at .taskmaster/docs/prd.txt. Can you help me parse it and set up the initial tasks?\"",
       "expandTask": "💬 Example:\n\"Task 5 seems complex. Can you break it down into subtasks?\"",
       "addTask": "💬 Example:\n\"Please add a new task to implement user profile image uploads using Cloudinary, research the best approach.\""
     },

@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="<demo_link>"><img src="https://img.shields.io/badge/Demo-Live-brightgreen?style=flat-square" alt="Live Demo"/></a>
+  <a href="https://pilotdeck.openbmb.cn/"><img src="https://img.shields.io/badge/Demo-Live-brightgreen?style=flat-square" alt="Live Demo"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL_3.0-blue.svg?style=flat-square" alt="License"/></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-Native-6366F1?style=flat-square" alt="MCP Native"/></a>
   <a href="#-desktop-app-apple-silicon"><img src="https://img.shields.io/badge/macOS-Desktop_App-000000?style=flat-square&logo=apple&logoColor=white" alt="Desktop App"/></a>
@@ -29,14 +29,14 @@
 <p align="center">
   <b>English</b> | <a href="./README.zh.md">简体中文</a>
   <br/>
-  <a href="<demo_link>">Live Demo</a> · <a href="#-installation--quick-start">Quick Start</a> · <a href="#-key-highlights">Highlights</a> · <a href="#use-cases">Use Cases</a> · <a href="#-community">Community</a>
+  <a href="https://pilotdeck.openbmb.cn/">Live Demo</a> · <a href="#-installation--quick-start">Quick Start</a> · <a href="#-key-highlights">Highlights</a> · <a href="#use-cases">Use Cases</a> · <a href="#-community">Community</a>
 </p>
 
 ---
 
 **News** 🔥
 
-- **[2026.05.28]** <official website>
+- **[2026.05.28]** https://pilotdeck.openbmb.cn/
 
 ---
 
@@ -419,6 +419,9 @@ PilotDeck builds upon the following outstanding open-source projects:
 - [Claude Code UI](https://github.com/siteboon/claudecodeui) — Web UI reference
 - [Claude Code Router](https://github.com/musistudio/claude-code-router) — Model routing reference
 - [UltraRAG](https://github.com/OpenBMB/UltraRAG) — RAG framework
+- [Anthropic Skills](https://github.com/anthropics/skills) — Agent skill framework and built-in skills (skill-creator, frontend-slides)
+- [MiniMax-AI Skills](https://github.com/MiniMax-AI/skills) — minimax-pdf skill
+- [Karpathy Guidelines](https://x.com/karpathy/status/2015883857489522876) — LLM coding behavioral guidelines
 - [Vite](https://github.com/vitejs/vite) — Frontend build tool
 - [React](https://github.com/facebook/react) — UI framework
 - [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) — Utility-first CSS framework

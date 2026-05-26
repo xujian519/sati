@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="<demo_link>"><img src="https://img.shields.io/badge/Demo-Live-brightgreen?style=flat-square" alt="Live Demo"/></a>
+  <a href="https://pilotdeck.openbmb.cn/"><img src="https://img.shields.io/badge/Demo-Live-brightgreen?style=flat-square" alt="Live Demo"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL_3.0-blue.svg?style=flat-square" alt="License"/></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-Native-6366F1?style=flat-square" alt="MCP Native"/></a>
   <a href="#-桌面端-app-apple-silicon"><img src="https://img.shields.io/badge/macOS-Desktop_App-000000?style=flat-square&logo=apple&logoColor=white" alt="Desktop App"/></a>
@@ -29,14 +29,14 @@
 <p align="center">
   <a href="./README.md">English</a> | <b>简体中文</b>
   <br/>
-  <a href="<demo_link>">在线体验</a> · <a href="#-安装与快速开始">快速开始</a> · <a href="#-核心亮点">核心亮点</a> · <a href="#使用场景">使用场景</a> · <a href="#-联系我们">社区</a>
+  <a href="https://pilotdeck.openbmb.cn/">在线体验</a> · <a href="#-安装与快速开始">快速开始</a> · <a href="#-核心亮点">核心亮点</a> · <a href="#使用场景">使用场景</a> · <a href="#-联系我们">社区</a>
 </p>
 
 ---
 
 **更新日志** 🔥
 
-- **[2026.05.28]** <官网地址>
+- **[2026.05.28]** https://pilotdeck.openbmb.cn/
 
 ---
 
@@ -419,6 +419,9 @@ PilotDeck 的建设离不开以下优秀开源项目的支持：
 - [Claude Code UI](https://github.com/siteboon/claudecodeui) — Web UI 参考
 - [Claude Code Router](https://github.com/musistudio/claude-code-router) — 模型路由参考
 - [UltraRAG](https://github.com/OpenBMB/UltraRAG) — RAG 框架
+- [Anthropic Skills](https://github.com/anthropics/skills) — Agent 技能框架和内置技能（skill-creator、frontend-slides）
+- [MiniMax-AI Skills](https://github.com/MiniMax-AI/skills) — minimax-pdf 技能
+- [Karpathy Guidelines](https://x.com/karpathy/status/2015883857489522876) — LLM 编码行为准则
 - [Vite](https://github.com/vitejs/vite) — 前端构建工具
 - [React](https://github.com/facebook/react) — UI 框架
 - [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) — 原子化 CSS 框架
