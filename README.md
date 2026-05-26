@@ -441,10 +441,11 @@ If PilotDeck has been helpful in your work or research, please consider giving u
 
 ```bibtex
 @misc{pilotdeck2026,
-  title  = {PilotDeck: A WorkSpace-Centric Open-Source Agent Operating System},
-  author = {THUNLP and ModelBest and OpenBMB and AI9Stars},
-  year   = {2026},
-  url    = {https://github.com/OpenBMB/PilotDeck}
+  author       = {PilotDeck Team},
+  title        = {PilotDeck: A WorkSpace-Centric Open-Source Agent Operating System},
+  howpublished = {\url{https://github.com/OpenBMB/PilotDeck}},
+  year         = {2026},
+  note         = {Accessed: 2026-05-29}
 }
 ```
 
