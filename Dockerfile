@@ -9,21 +9,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy package manifests first for layer caching.
-# ui/ is a npm workspace — root npm install handles both.
-COPY package.json package-lock.json tsconfig.json ./
+# ui/ is a npm workspace — root pnpm install handles both.
+COPY package.json pnpm-lock.yaml tsconfig.json ./
 COPY src/context/memory/edgeclaw-memory-core/package.json src/context/memory/edgeclaw-memory-core/tsconfig.json src/context/memory/edgeclaw-memory-core/tsconfig.base.json src/context/memory/edgeclaw-memory-core/
 COPY ui/package.json ui/
 COPY ui/scripts/ ui/scripts/
 
-# Single npm install resolves root + workspace (ui) + file dep (edgeclaw-memory-core)
-RUN HUSKY=0 npm install --no-audit --no-fund --loglevel=error 2>&1 | tail -5
+# Single pnpm install resolves root + workspace (ui) + file dep (edgeclaw-memory-core)
+RUN npm install -g pnpm && HUSKY=0 pnpm install --frozen-lockfile 2>&1 | tail -5
 
 # Copy all source files
 COPY src/ src/
 COPY scripts/ scripts/
 COPY ui/ ui/
-COPY config/ config/
-COPY third-party/ third-party/
 COPY skills/ skills/
 
 # Build edgeclaw-memory-core (src/ → lib/)
@@ -48,15 +46,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && npm install -g tsx concurrently
 
 # Copy built application from builder
-COPY --from=builder /build/package.json /build/package-lock.json ./
+COPY --from=builder /build/package.json /build/pnpm-lock.yaml ./
 COPY --from=builder /build/tsconfig.json ./
 COPY --from=builder /build/node_modules/ node_modules/
 COPY --from=builder /build/dist/ dist/
 COPY --from=builder /build/src/ src/
 COPY --from=builder /build/scripts/ scripts/
-COPY --from=builder /build/config/ config/
 COPY --from=builder /build/skills/ skills/
-COPY --from=builder /build/third-party/ third-party/
 COPY --from=builder /build/ui/package.json ui/package.json
 COPY --from=builder /build/ui/node_modules/ ui/node_modules/
 COPY --from=builder /build/ui/server/ ui/server/
