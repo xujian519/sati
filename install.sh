@@ -302,6 +302,18 @@ ensure_lfs_assets() {
   ok "Git LFS assets downloaded"
 }
 
+has_playwright_chrome_for_testing() {
+  local candidate
+  for candidate in \
+    "$HOME/Library/Caches/ms-playwright"/mcp-chrome-for-testing-* \
+    "$HOME/.cache/ms-playwright"/mcp-chrome-for-testing-*; do
+    if [[ -d "$candidate" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 echo ""
 echo -e "${BOLD}PilotDeck Installer${RESET}"
 echo "====================="
@@ -423,11 +435,15 @@ ok "Frontend built"
 warn "Keeping UI dev dependencies because production start uses concurrently/vite build tooling."
 echo ""
 
-echo "Installing Playwright browser for browser-use plugin..."
+echo "Checking Playwright browser for browser-use plugin..."
 cd "$INSTALL_DIR"
-npx @playwright/mcp install-browser chrome-for-testing </dev/null 2>/dev/null && \
-  ok "Chrome for Testing installed" || \
-  warn "Chrome for Testing install failed (browser-use plugin may not work)"
+if has_playwright_chrome_for_testing; then
+  ok "Chrome for Testing already installed"
+else
+  npx @playwright/mcp install-browser chrome-for-testing </dev/null 2>/dev/null && \
+    ok "Chrome for Testing installed" || \
+    warn "Chrome for Testing install failed (browser-use plugin may not work)"
+fi
 echo ""
 
 echo "Installing ClawHub CLI..."
@@ -581,7 +597,7 @@ node "$INSTALL_DIR/scripts/bootstrap-pilotdeck-config.mjs"
 
 printf "pilotdeck: starting at http://localhost:%s\n" "$SERVER_PORT"
 cd "$INSTALL_DIR/ui"
-exec npm run start
+exec npm run start:built
 EOF
 chmod +x "$CLI_TARGET"
 TARGET_BIN="$BIN_LINK"
@@ -638,4 +654,4 @@ echo -e "  UI:             ${DIM}http://localhost:${SERVER_PORT}${RESET}"
 echo -e "  Gateway:        ${DIM}${PILOTDECK_GATEWAY_URL}${RESET}"
 echo ""
 cd "$INSTALL_DIR/ui"
-exec npm run start
+exec npm run start:built

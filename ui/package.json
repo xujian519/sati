@@ -20,7 +20,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
-    "start": "npm run build && concurrently --kill-others --names gateway,server \"npm:gateway\" \"npm:server\"",
+    "start": "npm run build && npm run start:built",
+    "start:built": "concurrently --kill-others --names gateway,server \"npm:gateway\" \"npm:server\"",
     "postinstall": "node scripts/fix-node-pty.js"
   },
   "dependencies": {
