@@ -243,7 +243,13 @@ if [[ -d "$CCM_DIR/dist/src" ]]; then
 fi
 if [[ -d "$MEM_DIR" ]]; then
   mkdir -p "$SANDBOX/src/context/memory"
-  ln -sfn "$MEM_DIR" "$SANDBOX/src/context/memory/edgeclaw-memory-core"
+  # The pilotdeck-main bundle may contain a stub edgeclaw-memory-core/ dir
+  # from tsc output; remove it so the symlink to the real bundle takes effect.
+  ECMC_LINK="$SANDBOX/src/context/memory/edgeclaw-memory-core"
+  if [[ -d "$ECMC_LINK" && ! -L "$ECMC_LINK" ]]; then
+    rm -rf "$ECMC_LINK"
+  fi
+  ln -sfn "$MEM_DIR" "$ECMC_LINK"
   # Also expose as a node_modules package so bare `import 'edgeclaw-memory-core'` resolves
   mkdir -p "$CCM_DIR/node_modules"
   ln -sfn "$MEM_DIR" "$CCM_DIR/node_modules/edgeclaw-memory-core"

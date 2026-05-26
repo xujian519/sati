@@ -2637,8 +2637,9 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
         const { provider = 'claude' } = req.query;
         const homeDir = os.homedir();
 
-        // PilotDeck sessions use `web:s_<uuid>` keys — return in-memory budget
-        if (provider === 'pilotdeck' || /^web:s_/.test(sessionId)) {
+        // PilotDeck sessions use `web:s_<uuid>` keys; Windows-safe sessions
+        // may use `web-s_<uuid>` because ':' is illegal in Windows filenames.
+        if (provider === 'pilotdeck' || /^web[:_-]s_/.test(sessionId)) {
             return res.json(getSessionTokenBudget(sessionId));
         }
 

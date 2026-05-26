@@ -180,11 +180,17 @@ export function getPilotDeckRepoRoot() {
 const sessionState = new Map();
 
 function isPilotDeckSessionKey(value) {
-    return typeof value === 'string' && /^web:s_/.test(value);
+    return typeof value === 'string' && /^web[:_-]s_/.test(value);
 }
 
 function newSessionKey() {
-    return `web:s_${randomUUID()}`;
+    // On Windows, colons are illegal in filenames. The on-disk session file
+    // is named after the key via sanitizeSessionIdForPath which replaces ':'
+    // with '-'. Using '-' from the start avoids a mismatch between the key
+    // the frontend holds (from session_created) and the key the session
+    // listing returns (from the filename).
+    const sep = process.platform === 'win32' ? '-' : ':';
+    return `web${sep}s_${randomUUID()}`;
 }
 
 function ensureSessionState(sessionKey, projectKey, channelKey) {

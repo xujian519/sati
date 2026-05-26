@@ -555,6 +555,23 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     const srcTarget = path.join(pilotDeckMainDir, "dist", "src");
     linkDirectory(srcLink, srcTarget);
 
+    // pilotdeckui/server/routes/memory.js imports edgeclaw-memory-core
+    // via `../../../src/context/memory/edgeclaw-memory-core/lib/index.js`.
+    // The src/ symlink points to pilotdeck-main/dist/src/ (compiled TS),
+    // which contains an empty edgeclaw-memory-core/src/ stub (no lib/).
+    // Replace that stub with a symlink to the real extracted bundle.
+    const memSrcLink = path.join(
+      runtimeBaseDir,
+      "src",
+      "context",
+      "memory",
+      "edgeclaw-memory-core",
+    );
+    if (fsSync.existsSync(memSrcLink) && !fsSync.lstatSync(memSrcLink).isSymbolicLink()) {
+      fsSync.rmSync(memSrcLink, { recursive: true });
+    }
+    linkDirectory(memSrcLink, memCoreDir);
+
     return {
       nodeBin: bundledBinary(path.join(resources, "node-bin"), "node"),
       bunBin: bundledBinary(path.join(resources, "bun-bin"), "bun"),
