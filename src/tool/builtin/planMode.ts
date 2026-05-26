@@ -83,6 +83,7 @@ function buildApprovedPlanResult(plan: string, planFilePath: string | undefined)
     : [];
   return [
     "User has approved your plan. You can now start coding.",
+    'Do NOT output any confirmation text like "Plan approved, starting implementation" — the user already knows. Proceed directly with todo_write and implementation.',
     "Before using any non-read-only tool, you MUST call todo_write with a markdown checklist derived from the approved plan.",
     "After each completed implementation step, call todo_write again to refresh the checklist and mark completed items with `- [x]`.",
     "",
