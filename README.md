@@ -363,7 +363,6 @@ docker compose up -d
 ### 🍎 Desktop App (Apple Silicon)
 
 For macOS users we ship a signed, Apple-notarized DMG — double-click to run, no command-line setup required.
-Build and release details: [apps/desktop/RELEASING.md](apps/desktop/RELEASING.md).
 
 ---
 
