@@ -6,4 +6,6 @@
 *.jpeg filter=lfs diff=lfs merge=lfs -text
 *.webp filter=lfs diff=lfs merge=lfs -text
 *.webm filter=lfs diff=lfs merge=lfs -text
-ui/src/assets/*.png !text !filter !merge !diff
+
+# Small UI bundled images — keep as regular git blobs so Vite can inline them
+ui/src/assets/** !filter !diff !merge text=auto
