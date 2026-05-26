@@ -8,7 +8,7 @@
   "scripts": {
     "predev": "node ../scripts/bootstrap-pilotdeck-config.mjs",
     "dev": "node ../scripts/dev-launcher.mjs",
-    "dev:concurrent": "concurrently --kill-others --names gateway,server,client \"npm:dev:gateway\" \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:concurrent": "concurrently --kill-others-on-fail --names gateway,server,client \"npm:dev:gateway\" \"npm:dev:server\" \"npm:dev:client\"",
     "dev:gateway": "npm --prefix .. run server",
     "dev:server": "node --import tsx server/index.js",
     "dev:client": "vite",
@@ -21,7 +21,7 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "start": "npm run build && npm run start:built",
-    "start:built": "concurrently --kill-others --names gateway,server \"npm:gateway\" \"npm:server\"",
+    "start:built": "concurrently --kill-others-on-fail --names gateway,server \"npm:gateway\" \"npm:server\"",
     "postinstall": "node scripts/fix-node-pty.js"
   },
   "dependencies": {
