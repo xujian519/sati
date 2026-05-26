@@ -362,7 +362,7 @@ docker compose up -d
 ### 🍎 桌面端 App (Apple Silicon)
 
 对于 macOS 用户，我们提供了签名并经过 Apple 公证的 DMG 安装包，无需配置命令行环境即可双击运行。
-详细构建与发布指南请参考 [apps/desktop/RELEASING.md](apps/desktop/RELEASING.md)。
+
 
 ---
 
