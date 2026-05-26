@@ -621,7 +621,6 @@ function ItemRow({
   onOpenPlanDetail?: (planId: string, projectName: string, projectDisplayName: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const isPlan = item.kind === 'plan';
   const plan = isPlan ? item.data : null;
@@ -683,7 +682,6 @@ function ItemRow({
       // Visible via refresh.
     } finally {
       setBusy(false);
-      setConfirmingDelete(false);
     }
   };
 
@@ -806,40 +804,15 @@ function ItemRow({
                 )}
               </button>
             )}
-            {!confirmingDelete && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setConfirmingDelete(true)}
-                className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-neutral-500 transition hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-red-700 dark:hover:text-red-400"
-                title={t('plansCron.actions.delete', { defaultValue: 'Delete' })}
-              >
-                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-              </button>
-            )}
-            {confirmingDelete && (
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void handleCronDelete()}
-                  className="inline-flex h-7 items-center rounded-md bg-red-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-red-700 disabled:opacity-50"
-                >
-                  {busy ? (
-                    <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
-                  ) : (
-                    t('plansCron.actions.delete', { defaultValue: 'Delete' })
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDelete(false)}
-                  className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-[11px] text-neutral-500 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void handleCronDelete()}
+              className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-neutral-500 transition hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-red-700 dark:hover:text-red-400"
+              title={t('plansCron.actions.delete', { defaultValue: 'Delete' })}
+            >
+              <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+            </button>
           </>
         )}
       </div>
