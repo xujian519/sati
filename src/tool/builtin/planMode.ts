@@ -12,6 +12,8 @@ export type ExitPlanModeOutput = {
   action?: "continue_planning" | "execute_plan" | "cancelled";
   feedback?: string;
   planFilePath?: string;
+  planTitle?: string;
+  planSummary?: string;
 };
 
 const EXIT_PLAN_MODE_QUESTION = "What should happen next?";
@@ -255,12 +257,16 @@ export function createExitPlanModeTool(): PilotDeckToolDefinition<ExitPlanModeIn
 
       if (action === EXIT_PLAN_MODE_EXECUTE) {
         context.planTodo?.markPlanApproved(plan);
+        const titleMatch = plan.match(/^#\s+(.+)$/m);
+        const planTitle = titleMatch?.[1];
+        const summaryLines = plan.split("\n").filter((l) => l.trim() && !l.startsWith("#"));
+        const planSummary = summaryLines.slice(0, 2).join("\n").slice(0, 200) || undefined;
         return {
           content: [{
             type: "text",
             text: buildApprovedPlanResult(plan, resolvedPlanFilePath),
           }],
-          data: { plan, action, requestedMode: "default", planFilePath: resolvedPlanFilePath },
+          data: { plan, action, requestedMode: "default", planFilePath: resolvedPlanFilePath, planTitle, planSummary },
         };
       }
 

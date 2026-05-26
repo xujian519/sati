@@ -103,7 +103,11 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
               toolUseResult: (tr as any).toolUseResult,
               errorCode: (tr as any).errorCode,
               ...(toolResultImages && toolResultImages.length > 0 ? { images: toolResultImages } : {}),
-              ...((tr as any).planFilePath ? { planFilePath: (tr as any).planFilePath } : {}),
+              ...((tr as any).planFilePath ? {
+                  planFilePath: (tr as any).planFilePath,
+                  planTitle: (tr as any).planTitle,
+                  planSummary: (tr as any).planSummary,
+              } : {}),
             }
           : null;
 

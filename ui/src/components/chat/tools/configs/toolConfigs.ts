@@ -666,19 +666,11 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     result: {
       type: 'card',
       contentType: 'plan-card',
-      getContentProps: (result: any) => {
-        const text = typeof result.content === 'string'
-          ? result.content
-          : Array.isArray(result.content)
-            ? result.content.map((c: { text?: string }) => c.text || '').join('')
-            : '';
-        const titleMatch = text.match(/^#\s+(.+)$/m);
-        const planTitle = titleMatch?.[1] || 'Implementation Plan';
-        const lines = text.split('\n').filter((l: string) => l.trim() && !l.startsWith('#'));
-        const planSummary = lines.slice(0, 2).join('\n').slice(0, 200);
-        const planFilePath = result.planFilePath || '';
-        return { planTitle, planSummary, planFilePath };
-      },
+      getContentProps: (result: any) => ({
+        planTitle: result.planTitle || 'Implementation Plan',
+        planSummary: result.planSummary || '',
+        planFilePath: result.planFilePath || '',
+      }),
     }
   },
 
@@ -689,19 +681,11 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     result: {
       type: 'card',
       contentType: 'plan-card',
-      getContentProps: (result: any) => {
-        const text = typeof result.content === 'string'
-          ? result.content
-          : Array.isArray(result.content)
-            ? result.content.map((c: { text?: string }) => c.text || '').join('')
-            : '';
-        const titleMatch = text.match(/^#\s+(.+)$/m);
-        const planTitle = titleMatch?.[1] || 'Implementation Plan';
-        const lines = text.split('\n').filter((l: string) => l.trim() && !l.startsWith('#'));
-        const planSummary = lines.slice(0, 2).join('\n').slice(0, 200);
-        const planFilePath = result.planFilePath || '';
-        return { planTitle, planSummary, planFilePath };
-      },
+      getContentProps: (result: any) => ({
+        planTitle: result.planTitle || 'Implementation Plan',
+        planSummary: result.planSummary || '',
+        planFilePath: result.planFilePath || '',
+      }),
     }
   },
 
