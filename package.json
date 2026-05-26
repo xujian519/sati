@@ -11,7 +11,7 @@
   },
   "scripts": {
     "postinstall": "npx @playwright/mcp install-browser chrome-for-testing || exit 0",
-    "prebuild": "node scripts/bootstrap-pilotdeck-config.mjs",
+    "prebuild": "node scripts/bootstrap-pilotdeck-config.mjs && cd src/context/memory/edgeclaw-memory-core && npm run build",
     "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json && node -e \"require('fs').cpSync('src/extension/plugins/builtin','dist/src/extension/plugins/builtin',{recursive:true})\"",
     "server": "tsx src/cli/pilotdeck.ts server",
     "server:built": "node dist/src/cli/pilotdeck.js server",
