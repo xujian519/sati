@@ -7,7 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="<demo_link>"><img src="https://img.shields.io/badge/Demo-Live-brightgreen?style=flat-square" alt="Live Demo"/></a>
+  <a href="https://pilotdeck.openbmb.cn"><img src="https://img.shields.io/badge/官网-pilotdeck.openbmb.cn-FF6B35?style=flat-square&logo=googlechrome&logoColor=white" alt="官方网站"/></a>
+  <a href="https://pilotdeck.openbmb.cn/pilotdeck.github.io/demo/p/pilotdeck-demo"><img src="https://img.shields.io/badge/Demo-在线体验-brightgreen?style=flat-square" alt="在线体验"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL_3.0-blue.svg?style=flat-square" alt="License"/></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-Native-6366F1?style=flat-square" alt="MCP Native"/></a>
   <a href="#-桌面端-app-apple-silicon"><img src="https://img.shields.io/badge/macOS-Desktop_App-000000?style=flat-square&logo=apple&logoColor=white" alt="Desktop App"/></a>
@@ -29,14 +30,14 @@
 <p align="center">
   <a href="./README.md">English</a> | <b>简体中文</b>
   <br/>
-  <a href="<demo_link>">在线体验</a> · <a href="#-安装与快速开始">快速开始</a> · <a href="#-核心亮点">核心亮点</a> · <a href="#使用场景">使用场景</a> · <a href="#-联系我们">社区</a>
+  <a href="https://pilotdeck.openbmb.cn">官网</a> · <a href="https://pilotdeck.openbmb.cn/pilotdeck.github.io/demo/p/pilotdeck-demo">在线体验</a> · <a href="https://pilotdeck.openbmb.cn/pilotdeck.github.io/docs/en/introduction">教程</a> · <a href="#-安装与快速开始">快速开始</a> · <a href="#-核心亮点">核心亮点</a> · <a href="#使用场景">使用场景</a> · <a href="#-联系我们">社区</a>
 </p>
 
 ---
 
 **更新日志** 🔥
 
-- **[2026.05.28]** <官网地址>
+- **[2026.05.28]** PilotDeck 正式开源！欢迎访问官网 [pilotdeck.openbmb.cn](https://pilotdeck.openbmb.cn)，期待社区的贡献、反馈与 Star 支持。
 
 ---
 
