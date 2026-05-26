@@ -122,7 +122,8 @@ export type WebGatewayMethod =
   | "skill_import"
   | "skill_validate"
   | "skill_scan"
-  | "always_on_apply";
+  | "always_on_apply"
+  | "always_on_rerun_plan";
 
 export type WebSubmitTurnInput = {
   sessionKey: string;

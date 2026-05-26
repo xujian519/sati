@@ -183,7 +183,6 @@ export function normalizeDiscoveryPlanRecord(record: Record<string, unknown> | n
     title: normalizeString(record?.title, "Untitled discovery plan"),
     createdAt: toIsoTimestamp(record?.createdAt as string) || now,
     updatedAt: toIsoTimestamp((record?.updatedAt as string) || (record?.createdAt as string)) || now,
-    approvalMode: record?.approvalMode === "manual" ? "manual" : "auto",
     status: mappedStatus,
     summary: normalizeString(record?.summary),
     rationale: normalizeString(record?.rationale),
@@ -302,25 +301,6 @@ function buildOverview(
   };
 }
 
-function buildExecutionPrompt(plan: WebPlanRecord, planContent: string, projectName: string): string {
-  return [
-    `Always-On execution for project "${projectName}".`,
-    "",
-    "This plan is already approved.",
-    "Execute the work directly.",
-    "Do not enter Plan Mode.",
-    "Do not create a second mini-plan before acting.",
-    "",
-    `Plan ID: ${plan.id}`,
-    `Plan file: ${plan.planFilePath}`,
-    "",
-    "Approved plan:",
-    "",
-    planContent.trim(),
-  ].join("\n");
-}
-
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -353,182 +333,25 @@ export class DiscoveryPlanService {
     }
 
     const isActive = (id: string) => this.deps.activity.isSessionActive(id);
+
+    const cycleIndex = await readCycleIndex(projectDir);
+    const cycleWorkspaceMap = new Map(cycleIndex.cycles.map((c) => [c.id, c.workspace]));
+
     const plans = await Promise.all(
       store.plans.map(async (plan) => {
         const body = await readPlanBody(projectDir, plan.planFilePath);
         const session = plan.executionSessionId
           ? (sessionsById.get(plan.executionSessionId) as WebPlanSession) || null
           : null;
-        return buildOverview(plan, body, session, isActive);
+        const overview = buildOverview(plan, body, session, isActive);
+        if (!overview.workspace && plan.workCycleId) {
+          overview.workspace = cycleWorkspaceMap.get(plan.workCycleId);
+        }
+        return overview;
       }),
     );
 
     return { plans: sortDiscoveryPlans(plans) };
-  }
-
-  async queueExecution(projectName: string, planId: string, options: { source?: string } = {}) {
-    const source = options.source ?? "manual";
-    const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
-    const projectDir = this.projectDir(projectRoot);
-    const store = await readPlanStore(projectDir);
-    const index = store.plans.findIndex((p) => p.id === planId);
-    if (index === -1) throw makeError("Discovery plan not found", "NOT_FOUND");
-
-    const plan = store.plans[index]!;
-    if (plan.status === "archived" || plan.status === "applied") {
-      throw makeError("Archived or applied discovery plans cannot be executed", "INVALID_STATE");
-    }
-    const isActive = (id: string) => this.deps.activity.isSessionActive(id);
-    const execStatus = computeExecutionStatus(plan, null, isActive);
-    if (execStatus === "running" || execStatus === "queued") {
-      throw makeError("Discovery plan is already queued or running", "ALREADY_RUNNING");
-    }
-    const content = await readPlanBody(projectDir, plan.planFilePath);
-    if (!normalizeString(content)) {
-      throw makeError("Discovery plan content is missing", "MISSING_PLAN_BODY");
-    }
-
-    const now = new Date().toISOString();
-    const executionToken = randomUUID();
-    const updated: WebPlanRecord = {
-      ...plan,
-      status: "queued",
-      executionStatus: "queued",
-      executionSessionId: "",
-      executionStartedAt: "",
-      executionLastActivityAt: "",
-      latestSummary: "",
-      updatedAt: now,
-      lastExecutionSource: source,
-    };
-    store.plans[index] = updated;
-    await writePlanStore(projectDir, store);
-
-    await this.deps.events.appendRunEvent(projectRoot, {
-      runId: executionToken,
-      kind: "plan",
-      sourceId: updated.id,
-      title: updated.title,
-      status: "queued",
-      timestamp: now,
-      startedAt: now,
-      metadata: { planId: updated.id, planFilePath: updated.planFilePath, source },
-    });
-    await this.deps.events.appendRunLog(projectRoot, executionToken, [
-      this.deps.events.formatLogLine({
-        timestamp: now,
-        runId: executionToken,
-        planId: updated.id,
-        phase: "queued",
-        message: `Queued plan "${updated.title}" from ${source}`,
-      }),
-      this.deps.events.formatLogLine({
-        timestamp: now,
-        runId: executionToken,
-        planId: updated.id,
-        phase: "plan_file",
-        message: `Plan file: ${updated.planFilePath}`,
-      }),
-    ]);
-    await this.deps.events.appendRunLogEvent(projectRoot, executionToken, {
-      kind: "plan",
-      planId: updated.id,
-      phase: "queued",
-      status: "queued",
-      source,
-      planFilePath: updated.planFilePath,
-    });
-
-    return {
-      plan: buildOverview(updated, content, null, isActive),
-      sessionSummary: `Always-On: ${updated.title}`,
-      command: buildExecutionPrompt(updated, content, projectName),
-      executionToken,
-      workspaceCwd: plan.workspace?.cwd,
-    };
-  }
-
-  async updateExecution(projectName: string, planId: string, updates: Record<string, unknown> = {}) {
-    const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
-    const projectDir = this.projectDir(projectRoot);
-    const store = await readPlanStore(projectDir);
-    const index = store.plans.findIndex((p) => p.id === planId);
-    if (index === -1) throw makeError("Discovery plan not found", "NOT_FOUND");
-
-    const plan = store.plans[index]!;
-    const now = new Date().toISOString();
-    const nextPlan: WebPlanRecord = {
-      ...plan,
-      executionSessionId: normalizeString(updates.executionSessionId, plan.executionSessionId),
-      executionStartedAt: updates.executionStartedAt
-        ? toIsoTimestamp(updates.executionStartedAt as string)
-        : normalizeString(updates.status) === "running" && !plan.executionStartedAt
-          ? now
-          : plan.executionStartedAt,
-      executionLastActivityAt: updates.executionLastActivityAt
-        ? toIsoTimestamp(updates.executionLastActivityAt as string)
-        : now,
-      executionStatus: normalizeString(updates.status, plan.executionStatus),
-      latestSummary: normalizeString(updates.latestSummary, plan.latestSummary),
-      status: normalizeString(updates.status) ? normalizeString(updates.status) : plan.status,
-      updatedAt: now,
-    };
-
-    store.plans[index] = nextPlan;
-    await writePlanStore(projectDir, store);
-
-    const executionRunId = normalizeString(
-      updates.executionToken as string,
-      nextPlan.executionSessionId || plan.executionSessionId || nextPlan.id,
-    );
-    const normalizedStatus = normalizeString(updates.status, nextPlan.executionStatus || nextPlan.status);
-    if (executionRunId && normalizedStatus) {
-      await this.deps.events.appendRunEvent(projectRoot, {
-        runId: executionRunId,
-        kind: "plan",
-        sourceId: nextPlan.id,
-        title: nextPlan.title,
-        status: normalizedStatus,
-        timestamp: now,
-        startedAt: nextPlan.executionStartedAt || now,
-        finishedAt:
-          normalizedStatus === "completed" || normalizedStatus === "failed" ? now : undefined,
-        sessionId: nextPlan.executionSessionId,
-        output: nextPlan.latestSummary,
-        metadata: { planId: nextPlan.id, planFilePath: nextPlan.planFilePath },
-      });
-      const logLines = [
-        this.deps.events.formatLogLine({
-          timestamp: now,
-          level: normalizedStatus === "failed" ? "error" : "info",
-          runId: executionRunId,
-          planId: nextPlan.id,
-          phase: normalizedStatus,
-          message: `Plan execution ${normalizedStatus}`,
-        }),
-        nextPlan.latestSummary
-          ? this.deps.events.formatLogLine({
-              timestamp: now,
-              runId: executionRunId,
-              planId: nextPlan.id,
-              phase: "summary",
-              message: nextPlan.latestSummary,
-            })
-          : "",
-      ].filter(Boolean);
-      await this.deps.events.appendRunLog(projectRoot, executionRunId, logLines);
-      await this.deps.events.appendRunLogEvent(projectRoot, executionRunId, {
-        kind: "plan",
-        planId: nextPlan.id,
-        phase: normalizedStatus,
-        status: normalizedStatus,
-        sessionId: nextPlan.executionSessionId,
-      });
-    }
-
-    const isActive = (id: string) => this.deps.activity.isSessionActive(id);
-    const content = await readPlanBody(projectDir, nextPlan.planFilePath);
-    return buildOverview(nextPlan, content, null, isActive);
   }
 
   /**

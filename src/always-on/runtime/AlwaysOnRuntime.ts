@@ -241,6 +241,18 @@ export class AlwaysOnRuntime {
     this.logger.info("always-on runtime stopped", { projectKey: this.projectKey });
   }
 
+  async rerunPlan(input: {
+    planId: string;
+  }): Promise<{ runId: string; error?: { code: string; message: string } }> {
+    if (!this.fire) {
+      return { runId: "", error: { code: "not_ready", message: "AlwaysOnRuntime.bindGateway not called" } };
+    }
+    const runId = this.uuid();
+    const startedAt = this.now();
+    const result = await this.fire.rerunPlan({ planId: input.planId, runId, startedAt });
+    return { runId: result.runId, error: "error" in result ? result.error : undefined };
+  }
+
   async applyCycle(input: {
     workCycleId: string;
     projectRoot: string;

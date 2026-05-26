@@ -23,7 +23,6 @@ function makePlan(overrides: Partial<WebPlanRecord> = {}): WebPlanRecord {
     title: "Test plan",
     createdAt: "2026-05-08T10:00:00.000Z",
     updatedAt: "2026-05-08T10:00:00.000Z",
-    approvalMode: "auto",
     status: "ready",
     summary: "",
     rationale: "",

@@ -11,6 +11,8 @@ type PlanDetailTarget = {
   planId: string;
   projectName: string;
   projectDisplayName: string;
+  sourceRunId: string;
+  projectKey: string;
 };
 
 const SUB_TABS: { id: AlwaysOnSubTab; labelKey: string; defaultLabel: string; icon: typeof BarChart3 }[] = [
@@ -20,19 +22,18 @@ const SUB_TABS: { id: AlwaysOnSubTab; labelKey: string; defaultLabel: string; ic
 
 type AlwaysOnV2Props = {
   selectedProject: Project | null;
-  onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
   onApplyWorkCycle?: (projectName: string, cycleId: string) => Promise<void>;
   onOpenExecutionSession?: (projectKey: string, runId: string, projectName?: string) => void;
 };
 
-export default function AlwaysOnV2({ selectedProject, onExecutePlan, onApplyWorkCycle, onOpenExecutionSession }: AlwaysOnV2Props) {
+export default function AlwaysOnV2({ selectedProject, onApplyWorkCycle, onOpenExecutionSession }: AlwaysOnV2Props) {
   const { t } = useTranslation('alwaysOn');
   const [subTab, setSubTab] = useState<AlwaysOnSubTab>('dashboard');
   const [planDetail, setPlanDetail] = useState<PlanDetailTarget | null>(null);
 
   const handleOpenPlanDetail = useCallback(
-    (planId: string, projectName: string, projectDisplayName: string) => {
-      setPlanDetail({ planId, projectName, projectDisplayName });
+    (planId: string, projectName: string, projectDisplayName: string, sourceRunId: string, projectKey: string) => {
+      setPlanDetail({ planId, projectName, projectDisplayName, sourceRunId, projectKey });
     },
     [],
   );
@@ -78,6 +79,8 @@ export default function AlwaysOnV2({ selectedProject, onExecutePlan, onApplyWork
             planId={planDetail.planId}
             projectName={planDetail.projectName}
             projectDisplayName={planDetail.projectDisplayName}
+            runId={planDetail.sourceRunId}
+            projectKey={planDetail.projectKey}
             backLabel={t('dashboard.runDetail.backToPlans', { defaultValue: 'Back to Plans & Cron Jobs' })}
             onBack={() => setPlanDetail(null)}
             onOpenExecutionSession={onOpenExecutionSession}
@@ -85,7 +88,7 @@ export default function AlwaysOnV2({ selectedProject, onExecutePlan, onApplyWork
         ) : subTab === 'dashboard' ? (
           <AlwaysOnDashboard onOpenExecutionSession={onOpenExecutionSession} />
         ) : (
-          <PlansAndCronJobs onExecutePlan={onExecutePlan} onApplyWorkCycle={onApplyWorkCycle} onOpenPlanDetail={handleOpenPlanDetail} />
+          <PlansAndCronJobs onApplyWorkCycle={onApplyWorkCycle} onOpenPlanDetail={handleOpenPlanDetail} />
         )}
       </div>
     </div>

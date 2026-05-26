@@ -71,12 +71,20 @@ export async function getProjectDiscoveryPlansOverview(projectName) {
   return getService().getPlansOverview(projectName);
 }
 
-export async function queueDiscoveryPlanExecution(projectName, planId, options = {}) {
-  return getService().queueExecution(projectName, planId, options);
-}
-
-export async function updateProjectDiscoveryPlanExecution(projectName, planId, updates = {}) {
-  return getService().updateExecution(projectName, planId, updates);
+export async function rerunDiscoveryPlan(projectName, planId) {
+  const projectRoot = await extractProjectDirectory(projectName);
+  const gw = await getPilotDeckGateway();
+  const result = await gw.alwaysOnRerunPlan({
+    projectKey: projectRoot,
+    planId,
+    projectName,
+  });
+  if (result.error) {
+    const err = new Error(result.error.message);
+    err.code = result.error.code;
+    throw err;
+  }
+  return { runId: result.runId };
 }
 
 export async function getProjectDiscoveryPlanReport(projectName, planId) {

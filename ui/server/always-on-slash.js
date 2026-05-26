@@ -4,7 +4,7 @@ import {
 } from './projects.js';
 import {
   getProjectDiscoveryPlansOverview,
-  queueDiscoveryPlanExecution,
+  rerunDiscoveryPlan,
 } from './discovery-plans.js';
 import { getPilotDeckGateway } from './pilotdeck-bridge.js';
 
@@ -81,18 +81,6 @@ function buildResponse(content, extraData = {}) {
       mode: 'message',
       content,
       ...extraData,
-    },
-  };
-}
-
-function buildRunPlanResponse(content, execution) {
-  return {
-    type: 'builtin',
-    action: 'ao',
-    data: {
-      mode: 'run-plan',
-      content,
-      execution,
     },
   };
 }
@@ -211,7 +199,6 @@ function buildPlanListMarkdown(projectPath, plans) {
   for (const plan of plans) {
     lines.push(`- \`${plan.id}\` - ${formatText(plan.title)}`);
     lines.push(`  - Status: \`${plan.status}\``);
-    lines.push(`  - Approval: \`${plan.approvalMode}\``);
     lines.push(`  - Updated: ${formatDateTime(plan.updatedAt)}`);
     lines.push(`  - Summary: ${summarizeText(plan.summary, 180)}`);
   }
@@ -269,7 +256,6 @@ function buildPlanStatusMarkdown(projectPath, plan) {
     projectPath ? '' : '',
     `- Title: ${formatText(plan.title)}`,
     `- Status: \`${plan.status}\``,
-    `- Approval: \`${plan.approvalMode}\``,
     `- Updated: ${formatDateTime(plan.updatedAt)}`,
     `- Execution session: ${formatText(plan.executionSessionId)}`,
     `- Execution started: ${formatDateTime(plan.executionStartedAt)}`,
@@ -307,20 +293,6 @@ function buildCronRunMarkdown(jobId, result) {
     `Started cron job \`${jobId}\` immediately.`,
     '',
     `Use \`/ao status cron ${jobId}\` to inspect the latest state.`,
-  ].join('\n');
-}
-
-function buildPlanRunMarkdown(plan) {
-  return [
-    '# Always-On',
-    '',
-    `Queued discovery plan \`${plan.id}\` for execution.`,
-    '',
-    `- Title: ${formatText(plan.title)}`,
-    `- Status: \`${plan.status}\``,
-    `- Approval: \`${plan.approvalMode}\``,
-    '',
-    `Use \`/ao status plan ${plan.id}\` to inspect the latest state.`,
   ].join('\n');
 }
 
@@ -421,13 +393,10 @@ export async function executeAlwaysOnSlashCommand(args = [], context = {}) {
     }
 
     if (parsed.action === 'run' && parsed.target === 'plan') {
-      const execution = await queueDiscoveryPlanExecution(project.projectName, parsed.id, {
-        source: 'manual',
-      });
+      const result = await rerunDiscoveryPlan(project.projectName, parsed.id);
 
-      return buildRunPlanResponse(
-        buildPlanRunMarkdown(execution.plan),
-        execution,
+      return buildResponse(
+        `Plan \`${parsed.id}\` has been queued for re-execution (runId: \`${result.runId}\`).`,
       );
     }
 

@@ -106,6 +106,9 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       alwaysOnApply: alwaysOn
         ? (input) => alwaysOn!.applyCycle(input)
         : standaloneApply,
+      alwaysOnRerunPlan: alwaysOn
+        ? (input) => alwaysOn!.rerunPlan(input)
+        : undefined,
     });
     if (cron) {
       cron.bindGateway(gateway);
@@ -167,6 +170,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         sessionOverrides: alwaysOn?.getSessionOverrides(),
         cron,
         alwaysOnApply: alwaysOn ? (input) => alwaysOn!.applyCycle(input) : fallbackApply,
+        alwaysOnRerunPlan: alwaysOn ? (input) => alwaysOn!.rerunPlan(input) : undefined,
       });
       if (cronChanged && cron) {
         cron.bindGateway(gateway);

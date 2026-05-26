@@ -238,6 +238,11 @@ export class GatewayWsConnection {
           return this.options.gateway.alwaysOnApply(frame.params as never);
         }
         return Promise.resolve({ sessionKey: "", error: { code: "not_configured", message: "Always-On apply not available" } });
+      case "always_on_rerun_plan":
+        if (this.options.gateway.alwaysOnRerunPlan) {
+          return this.options.gateway.alwaysOnRerunPlan(frame.params as never);
+        }
+        return Promise.resolve({ runId: "", error: { code: "not_configured", message: "Always-On rerun not available" } });
       default:
         throw new Error(`Unknown gateway method ${(frame as { method?: string }).method}.`);
     }

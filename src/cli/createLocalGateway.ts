@@ -108,6 +108,7 @@ export type SubsystemUpdate = {
   sessionOverrides?: SessionConfigOverrides;
   cron?: GatewayCronController;
   alwaysOnApply?: InProcessGatewayOptions["alwaysOnApply"];
+  alwaysOnRerunPlan?: InProcessGatewayOptions["alwaysOnRerunPlan"];
 };
 
 export type CreateLocalGatewayResult = {
@@ -270,6 +271,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       });
       gateway.setCronController(update.cron);
       gateway.setAlwaysOnApply(update.alwaysOnApply);
+      gateway.setAlwaysOnRerunPlan(update.alwaysOnRerunPlan);
     },
   };
 }

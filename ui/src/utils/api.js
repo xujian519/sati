@@ -102,11 +102,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  updateProjectDiscoveryPlanExecution: (projectName, planId, body = {}) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-plans/${encodeURIComponent(planId)}/execution`, {
-      method: 'PATCH',
-      body: JSON.stringify(body),
-    }),
   discoveryPlanReport: (projectName, planId) =>
     authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-plans/${encodeURIComponent(planId)}/report`),
   projectWorkCycles: (projectName) =>

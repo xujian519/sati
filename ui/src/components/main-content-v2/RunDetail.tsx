@@ -18,6 +18,7 @@ type RunDetailProps = {
   planId?: string;
   projectName?: string;
   projectDisplayName?: string;
+  projectKey?: string;
   backLabel?: string;
   onBack: () => void;
   onOpenExecutionSession?: (projectKey: string, runId: string, projectName?: string) => void;
@@ -42,32 +43,47 @@ const STATUS_COLORS: Record<string, string> = {
   archived: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400',
 };
 
+function planStatusToOutcome(status?: string): string {
+  if (!status) return '';
+  if (status === 'completed' || status === 'applied') return 'executed';
+  if (status === 'failed' || status === 'apply_failed') return 'failed';
+  if (status === 'archived') return 'archived';
+  return '';
+}
+
 export default function RunDetail(props: RunDetailProps) {
   const {
-    runId,
+    runId: runIdProp,
     events = [],
     planId: directPlanId,
     projectName: directProjectName,
     projectDisplayName: directProjectDisplayName,
+    projectKey: directProjectKey,
     backLabel,
     onBack,
     onOpenExecutionSession,
   } = props;
   const { t } = useTranslation('alwaysOn');
 
+  const effectiveRunId = runIdProp || (directPlanId ? directPlanId.replace(/^plan_/, '') : '');
+
   const runEvents = useMemo(
-    () => (runId ? events.filter((e) => e.runId === runId) : []),
-    [events, runId],
+    () => (effectiveRunId ? events.filter((e) => e.runId === effectiveRunId) : []),
+    [events, effectiveRunId],
   );
 
   const { planId, projectKey, projectName, projectDisplayName, outcome } = useMemo(() => {
     if (directPlanId && directProjectName) {
+      let evtOutcome = '';
+      for (const e of runEvents) {
+        if (e.outcome) { evtOutcome = e.outcome; break; }
+      }
       return {
         planId: directPlanId,
-        projectKey: '',
+        projectKey: directProjectKey || '',
         projectName: directProjectName,
         projectDisplayName: directProjectDisplayName || '',
-        outcome: '',
+        outcome: evtOutcome,
       };
     }
     let planId = '';
@@ -83,7 +99,7 @@ export default function RunDetail(props: RunDetailProps) {
       if (e.outcome && !outcome) outcome = e.outcome;
     }
     return { planId, projectKey, projectName, projectDisplayName, outcome };
-  }, [runEvents, directPlanId, directProjectName, directProjectDisplayName]);
+  }, [runEvents, directPlanId, directProjectName, directProjectDisplayName, directProjectKey]);
 
   const [plan, setPlan] = useState<PlanData | null>(null);
   const [reportMarkdown, setReportMarkdown] = useState('');
@@ -206,10 +222,10 @@ export default function RunDetail(props: RunDetailProps) {
               {t('dashboard.runDetail.executionSession', { defaultValue: 'Execution Session' })}
             </div>
             <div className="mt-1">
-              {projectKey && runId ? (
+              {projectKey && effectiveRunId ? (
                 <button
                   type="button"
-                  onClick={() => onOpenExecutionSession?.(projectKey, runId, projectName)}
+                  onClick={() => onOpenExecutionSession?.(projectKey, effectiveRunId, projectName)}
                   className="inline-flex items-center gap-1 text-[13px] font-medium text-blue-600 transition hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                 >
                   {t('dashboard.runDetail.openSession', { defaultValue: 'Open Session' })}
@@ -227,7 +243,7 @@ export default function RunDetail(props: RunDetailProps) {
               {t('dashboard.runDetail.outcome', { defaultValue: 'Outcome' })}
             </div>
             <div className="mt-1 text-[13px] font-medium text-neutral-700 dark:text-neutral-300">
-              {outcome || '—'}
+              {outcome || planStatusToOutcome(plan?.status) || '—'}
             </div>
           </div>
         </div>

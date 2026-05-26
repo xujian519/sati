@@ -26,12 +26,10 @@ import type {
   PermissionMode,
 } from '../types/types';
 import type {
-  ExecuteDiscoveryPlanResponse,
   Project,
   ProjectSession,
 } from '../../../types/app';
 import { escapeRegExp } from '../utils/chatFormatting';
-import { handleAlwaysOnSlashAction } from '../utils/alwaysOnSlashActions';
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
 
@@ -62,7 +60,6 @@ interface UseChatComposerStateArgs {
   onInputFocusChange?: (focused: boolean) => void;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
-  onLaunchAlwaysOnPlanExecution?: ((execution: ExecuteDiscoveryPlanResponse) => void | Promise<void>) | null;
   pendingViewSessionRef: { current: PendingViewSession | null };
   scrollToBottom: () => void;
   addMessage: (msg: ChatMessage, targetSessionId?: string | null) => void;
@@ -141,7 +138,6 @@ export function useChatComposerState({
   onInputFocusChange,
   onFileOpen,
   onShowSettings,
-  onLaunchAlwaysOnPlanExecution,
   pendingViewSessionRef,
   scrollToBottom,
   addMessage,
@@ -266,14 +262,6 @@ export function useChatComposerState({
           }
           break;
 
-        case 'ao':
-          await handleAlwaysOnSlashAction({
-            data,
-            addMessage,
-            onLaunchAlwaysOnPlanExecution,
-          });
-          break;
-
         case 'skillInstall': {
           if (data.error) {
             addMessage({
@@ -380,7 +368,6 @@ export function useChatComposerState({
       addMessage,
       clearMessages,
       rewindMessages,
-      onLaunchAlwaysOnPlanExecution,
     ],
   );
 

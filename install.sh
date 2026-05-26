@@ -193,13 +193,45 @@ github_repo_slug() {
   esac
 }
 
+normalize_github_remote() {
+  local url="$1"
+  case "$url" in
+    https://github.com/*)
+      local slug="${url#https://github.com/}"
+      slug="${slug%.git}"
+      printf "%s" "$slug"
+      ;;
+    git@github.com:*)
+      local slug="${url#git@github.com:}"
+      slug="${slug%.git}"
+      printf "%s" "$slug"
+      ;;
+    ssh://git@github.com/*)
+      local slug="${url#ssh://git@github.com/}"
+      slug="${slug%.git}"
+      printf "%s" "$slug"
+      ;;
+    *)
+      printf "%s" "$url"
+      ;;
+  esac
+}
+
+clone_without_lfs_smudge() {
+  if [[ "${PILOTDECK_INSTALL_LFS:-0}" == "1" ]]; then
+    "$@"
+  else
+    GIT_LFS_SKIP_SMUDGE=1 "$@"
+  fi
+}
+
 clone_repo() {
   local slug
   if slug="$(github_repo_slug)" && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    gh repo clone "$slug" "$INSTALL_DIR" -- --branch "$BRANCH" --depth 1 --quiet || \
+    clone_without_lfs_smudge gh repo clone "$slug" "$INSTALL_DIR" -- --branch "$BRANCH" --depth 1 || \
       fail "Could not clone ${REPO_URL}. Check repository access and network connectivity."
   else
-    git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$INSTALL_DIR" --quiet || \
+    clone_without_lfs_smudge git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$INSTALL_DIR" || \
       fail "Could not clone ${REPO_URL}. If this repository is private, authenticate with GitHub first."
   fi
 }
@@ -227,17 +259,19 @@ backup_existing_installation() {
 
 checkout_existing_installation() {
   cd "$INSTALL_DIR"
-  git fetch origin "$BRANCH" --quiet
-  git checkout -B "$BRANCH" "origin/$BRANCH" --quiet
+  GIT_LFS_SKIP_SMUDGE=1 git fetch origin "$BRANCH"
+  GIT_LFS_SKIP_SMUDGE=1 git checkout -B "$BRANCH" "origin/$BRANCH"
 }
 
 install_or_update_repo() {
   mkdir -p "$(dirname "$INSTALL_DIR")"
 
   if [[ -d "$INSTALL_DIR/.git" ]]; then
-    local current_remote
+    local current_remote current_remote_normalized expected_remote_normalized
     current_remote="$(repo_remote_url "$INSTALL_DIR")"
-    if [[ "$current_remote" != "$REPO_URL" ]]; then
+    current_remote_normalized="$(normalize_github_remote "$current_remote")"
+    expected_remote_normalized="$(normalize_github_remote "$REPO_URL")"
+    if [[ "$current_remote_normalized" != "$expected_remote_normalized" ]]; then
       warn "Existing installation uses ${current_remote:-unknown remote}; expected ${REPO_URL}."
       backup_existing_installation "$INSTALL_DIR"
       clone_repo
@@ -275,6 +309,11 @@ install_or_update_repo() {
 }
 
 ensure_lfs_assets() {
+  if [[ "${PILOTDECK_INSTALL_LFS:-0}" != "1" ]]; then
+    warn "Skipping Git LFS media download. Set PILOTDECK_INSTALL_LFS=1 to fetch demo images/videos."
+    return
+  fi
+
   if [[ "${GIT_LFS_SKIP_SMUDGE:-}" == "1" ]]; then
     warn "GIT_LFS_SKIP_SMUDGE=1 is set; large media assets were intentionally skipped."
     return
@@ -295,6 +334,18 @@ ensure_lfs_assets() {
     fi
   done
   ok "Git LFS assets downloaded"
+}
+
+has_playwright_chrome_for_testing() {
+  local candidate
+  for candidate in \
+    "$HOME/Library/Caches/ms-playwright"/mcp-chrome-for-testing-* \
+    "$HOME/.cache/ms-playwright"/mcp-chrome-for-testing-*; do
+    if [[ -d "$candidate" ]]; then
+      return 0
+    fi
+  done
+  return 1
 }
 
 echo ""
@@ -361,17 +412,19 @@ fi
 ok "git found"
 echo ""
 
-echo "Checking Git LFS..."
-if [[ "${GIT_LFS_SKIP_SMUDGE:-}" == "1" ]]; then
-  warn "GIT_LFS_SKIP_SMUDGE=1 is set; large media assets will be skipped."
-elif command -v git-lfs >/dev/null 2>&1 || git lfs version >/dev/null 2>&1; then
-  ok "Git LFS $(git lfs version | awk '{print $1}') found"
-else
-  warn "Git LFS not found. Installing..."
-  install_git_lfs
-  ok "Git LFS installed"
+if [[ "${PILOTDECK_INSTALL_LFS:-0}" == "1" ]]; then
+  echo "Checking Git LFS..."
+  if [[ "${GIT_LFS_SKIP_SMUDGE:-}" == "1" ]]; then
+    warn "GIT_LFS_SKIP_SMUDGE=1 is set; large media assets will be skipped."
+  elif command -v git-lfs >/dev/null 2>&1 || git lfs version >/dev/null 2>&1; then
+    ok "Git LFS $(git lfs version | awk '{print $1}') found"
+  else
+    warn "Git LFS not found. Installing..."
+    install_git_lfs
+    ok "Git LFS installed"
+  fi
+  echo ""
 fi
-echo ""
 
 echo "Checking ripgrep..."
 if command -v rg >/dev/null 2>&1; then
@@ -416,11 +469,15 @@ ok "Frontend built"
 warn "Keeping UI dev dependencies because production start uses concurrently/vite build tooling."
 echo ""
 
-echo "Installing Playwright browser for browser-use plugin..."
+echo "Checking Playwright browser for browser-use plugin..."
 cd "$INSTALL_DIR"
-npx @playwright/mcp install-browser chrome-for-testing </dev/null 2>/dev/null && \
-  ok "Chrome for Testing installed" || \
-  warn "Chrome for Testing install failed (browser-use plugin may not work)"
+if has_playwright_chrome_for_testing; then
+  ok "Chrome for Testing already installed"
+else
+  npx @playwright/mcp install-browser chrome-for-testing </dev/null 2>/dev/null && \
+    ok "Chrome for Testing installed" || \
+    warn "Chrome for Testing install failed (browser-use plugin may not work)"
+fi
 echo ""
 
 echo "Installing ClawHub CLI..."
@@ -574,7 +631,7 @@ node "$INSTALL_DIR/scripts/bootstrap-pilotdeck-config.mjs"
 
 printf "pilotdeck: starting at http://localhost:%s\n" "$SERVER_PORT"
 cd "$INSTALL_DIR/ui"
-exec npm run start
+exec npm run start:built
 EOF
 chmod +x "$CLI_TARGET"
 TARGET_BIN="$BIN_LINK"
@@ -610,7 +667,31 @@ else
   ln -sf "$CLI_TARGET" "$LOCAL_BIN/pilotdeck"
   ok "pilotdeck command linked to ${DIM}${LOCAL_BIN}/pilotdeck${RESET}"
   if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
-    warn "Add to your shell profile: export PATH=\"\$HOME/.local/bin:\$PATH\""
+    PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
+    SHELL_RC=""
+    case "$(basename "${SHELL:-/bin/sh}")" in
+      zsh)  SHELL_RC="$HOME/.zshrc" ;;
+      bash)
+        if [[ -f "$HOME/.bash_profile" ]]; then
+          SHELL_RC="$HOME/.bash_profile"
+        else
+          SHELL_RC="$HOME/.bashrc"
+        fi
+        ;;
+      fish) SHELL_RC="$HOME/.config/fish/config.fish"; PATH_LINE='set -gx PATH $HOME/.local/bin $PATH' ;;
+      *)    SHELL_RC="$HOME/.profile" ;;
+    esac
+
+    if [[ -n "$SHELL_RC" ]]; then
+      if [[ ! -f "$SHELL_RC" ]] || ! grep -qF '.local/bin' "$SHELL_RC" 2>/dev/null; then
+        printf '\n# Added by PilotDeck installer\n%s\n' "$PATH_LINE" >> "$SHELL_RC"
+        ok "PATH updated in ${DIM}${SHELL_RC}${RESET}"
+        warn "Run ${BOLD}source ${SHELL_RC}${RESET} or open a new terminal to use the ${BOLD}pilotdeck${RESET} command"
+      else
+        ok "${DIM}${SHELL_RC}${RESET} already contains .local/bin PATH entry"
+      fi
+      export PATH="$LOCAL_BIN:$PATH"
+    fi
   fi
 fi
 echo ""
@@ -631,4 +712,4 @@ echo -e "  UI:             ${DIM}http://localhost:${SERVER_PORT}${RESET}"
 echo -e "  Gateway:        ${DIM}${PILOTDECK_GATEWAY_URL}${RESET}"
 echo ""
 cd "$INSTALL_DIR/ui"
-exec npm run start
+exec npm run start:built

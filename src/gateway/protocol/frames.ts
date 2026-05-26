@@ -46,7 +46,8 @@ export type WsGatewayMethod =
   | "skill_import"
   | "skill_validate"
   | "skill_scan"
-  | "always_on_apply";
+  | "always_on_apply"
+  | "always_on_rerun_plan";
 
 export type WsRequestFrame = {
   type: "request";
