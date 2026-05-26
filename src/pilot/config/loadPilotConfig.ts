@@ -95,15 +95,27 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
   const router = parseRouterSection(rawConfig.router, model, diagnostics);
 
   if (router?.scenarios?.default && agent.model.id !== router.scenarios.default.id) {
+    // Soft-recover instead of crashing: many users update agent.model through
+    // onboarding/UI without touching the router block, leaving the two out of
+    // sync. Treating that as fatal locks them out of the gateway entirely
+    // (see issue: customer reinstall doesn't help because pilotdeck.yaml
+    // survives the wipe). Auto-align router.scenarios.default to agent.model
+    // and warn — agent.model is the canonical source of truth.
+    const previousId = router.scenarios.default.id;
+    router.scenarios.default = {
+      id: agent.model.id,
+      provider: agent.model.provider,
+      model: agent.model.model,
+    };
     diagnostics.push({
       code: "CONFIG_MODEL_CONFLICT",
-      severity: "fatal",
+      severity: "warning",
       message:
-        `agent.model (${agent.model.id}) conflicts with router.scenarios.default ` +
-        `(${router.scenarios.default.id}). Use only one: set agent.model and omit ` +
-        `the router section, or set router.scenarios.default and remove agent.model.`,
+        `agent.model (${agent.model.id}) and router.scenarios.default (${previousId}) ` +
+        `disagree. Using agent.model and overriding router.scenarios.default ` +
+        `at runtime. Update the yaml to silence this warning.`,
       path: "agent.model",
-      recoverable: false,
+      recoverable: true,
     });
   }
 

@@ -446,13 +446,50 @@ export function readPilotDeckConfigFile() {
   return { exists: true, configPath, raw, config, rawYaml: parsed };
 }
 
+// Keep `router.scenarios.default` aligned with `agent.model` whenever we
+// write the config. The gateway treats agent.model as the source of truth
+// (loadPilotConfig.ts auto-overrides router.scenarios.default with
+// agent.model on conflict, with a warning). Doing the rewrite here too
+// means the on-disk yaml stays consistent — no stale router refs left
+// over from before the user picked a new model in onboarding/settings.
+//
+// Scope is deliberately narrow:
+//   • only touches `router.scenarios.default` (not tokenSaver tiers,
+//     fallback chains, or other scenario keys — those are user-curated)
+//   • no-ops when agent.model is empty or unparseable
+//   • no-ops when router block doesn't exist (won't create one)
+export function syncAgentModelWithRouter(config) {
+  if (!isRecord(config)) return config;
+  const agentRef = normalizeString(config.agent?.model);
+  if (!agentRef) return config;
+  const slash = agentRef.indexOf('/');
+  if (slash <= 0 || slash >= agentRef.length - 1) return config;
+  const providerId = agentRef.slice(0, slash);
+  const modelId = agentRef.slice(slash + 1);
+
+  if (!isRecord(config.router)) return config;
+  if (!isRecord(config.router.scenarios)) return config;
+  const currentDefault = config.router.scenarios.default;
+  // Accept both string ("provider/model") and object ref shapes.
+  const currentId = typeof currentDefault === 'string'
+    ? currentDefault.trim()
+    : (isRecord(currentDefault) ? normalizeString(currentDefault.id) : '');
+  if (currentId === agentRef) return config;
+  config.router.scenarios.default = typeof currentDefault === 'string'
+    ? agentRef
+    : { id: agentRef, provider: providerId, model: modelId };
+  return config;
+}
+
 // Lossless writer — config object is the V2 disk shape, written verbatim
 // after running through validation. UI-internal === disk schema, so
 // there's no read-modify-write needed anymore (the previous translation
 // layer existed only to bridge an older internal schema).
 export async function writePilotDeckConfig(config) {
-  const sanitized = sanitizeProviderCredentials(
-    isRecord(config) ? deepMerge({}, config) : config,
+  const sanitized = syncAgentModelWithRouter(
+    sanitizeProviderCredentials(
+      isRecord(config) ? deepMerge({}, config) : config,
+    ),
   );
   const validation = validatePilotDeckConfig(sanitized);
   if (!validation.valid) {

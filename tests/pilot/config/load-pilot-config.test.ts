@@ -315,6 +315,45 @@ test("accepts a webui top-level section without emitting an unknown-field warnin
   }
 });
 
+test("soft-recovers when agent.model and router.scenarios.default disagree", () => {
+  const pilotHome = makeTempDir();
+  try {
+    writeJson(getPilotConfigFilePath(pilotHome), {
+      schemaVersion: 1,
+      agent: validAgentConfig(),
+      model: validModelConfig(),
+      router: {
+        scenarios: {
+          default: "openai-main/gpt-5.1",
+        },
+      },
+    });
+
+    const snapshot = loadPilotConfig({
+      env: {
+        PILOT_HOME: pilotHome,
+        ANTHROPIC_API_KEY: "anthropic-key",
+      },
+    });
+
+    assert.equal(snapshot.config.agent.model.id, "anthropic-main/claude-sonnet-4-5");
+    assert.equal(
+      snapshot.config.router?.scenarios?.default.id,
+      "anthropic-main/claude-sonnet-4-5",
+      "router.scenarios.default should be auto-overridden to match agent.model",
+    );
+
+    const conflictDiagnostics = snapshot.diagnostics.filter(
+      (diagnostic) => diagnostic.code === "CONFIG_MODEL_CONFLICT",
+    );
+    assert.equal(conflictDiagnostics.length, 1);
+    assert.equal(conflictDiagnostics[0].severity, "warning");
+    assert.equal(conflictDiagnostics[0].recoverable, true);
+  } finally {
+    rmSync(pilotHome, { recursive: true, force: true });
+  }
+});
+
 test("warns on unknown top-level keys other than webui", () => {
   const pilotHome = makeTempDir();
   try {
