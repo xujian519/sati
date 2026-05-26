@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy package manifests first for layer caching.
 # ui/ is a npm workspace — root pnpm install handles both.
-COPY package.json pnpm-lock.yaml tsconfig.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
 COPY src/context/memory/edgeclaw-memory-core/package.json src/context/memory/edgeclaw-memory-core/tsconfig.json src/context/memory/edgeclaw-memory-core/tsconfig.base.json src/context/memory/edgeclaw-memory-core/
 COPY ui/package.json ui/
 COPY ui/scripts/ ui/scripts/
