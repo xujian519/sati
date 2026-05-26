@@ -55,7 +55,6 @@ export interface AlwaysOnDashboardEventsResponse {
   events: AlwaysOnDashboardEvent[];
 }
 
-export type DiscoveryPlanApprovalMode = 'auto' | 'manual';
 export type DiscoveryPlanStatus =
   | 'ready'
   | 'queued'
@@ -69,10 +68,11 @@ export interface DiscoveryPlanOverview {
   title: string;
   createdAt: string;
   updatedAt: string;
-  approvalMode: DiscoveryPlanApprovalMode;
   status: DiscoveryPlanStatus;
   executionSessionId?: string;
   workCycleId?: string;
+  sourceRunId?: string;
+  sourceDiscoverySessionId?: string;
 }
 
 export interface ProjectDiscoveryPlansResponse {
@@ -105,7 +105,6 @@ export interface DiscoveryContextPlanItem {
   id: string;
   title: string;
   status: DiscoveryPlanStatus;
-  approvalMode: DiscoveryPlanApprovalMode;
   updatedAt: string;
   summary: string;
 }
@@ -160,18 +159,6 @@ export interface ProjectDiscoveryContextResponse {
   existingPlans: DiscoveryContextPlanItem[];
   cronJobs: DiscoveryContextCronItem[];
   recentChats: DiscoveryContextChatItem[];
-}
-
-export interface ExecuteDiscoveryPlanResponse {
-  plan: DiscoveryPlanOverview;
-  sessionSummary: string;
-  command: string;
-  executionToken: string;
-  workspaceCwd?: string;
-}
-
-export interface UpdateDiscoveryPlanExecutionResponse {
-  plan: DiscoveryPlanOverview;
 }
 
 export interface ProjectSession {

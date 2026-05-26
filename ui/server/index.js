@@ -96,7 +96,7 @@ import { initializeDatabase, sessionNamesDb, applyCustomSessionNames, userDb } f
 import { configureWebPush } from './services/vapid-keys.js';
 import { sendCronDaemonRequest } from './services/cron-daemon-owner.js';
 import { createAlwaysOnHeartbeatManager } from './always-on-heartbeat.js';
-import { startDiscoveryTriggerClient } from './services/discovery-trigger-client.js';
+
 import { runServerStartupBeforeListen, startServerAfterStartup } from './services/server-startup.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { DISABLE_LOCAL_AUTH, IS_PLATFORM } from './constants/config.js';
@@ -136,10 +136,6 @@ const alwaysOnHeartbeat = createAlwaysOnHeartbeatManager({
     // Legacy four-provider session details have been removed; PilotDeck
     // gateway sessions are tracked by `pilotdeck-bridge.js` instead.
     getActiveClaudeSessions: () => []
-});
-const alwaysOnDiscoveryTriggerClient = startDiscoveryTriggerClient({
-    clients: connectedClients,
-    getWriterId: (ws) => alwaysOnHeartbeat.getWriterId(ws)
 });
 registerAlwaysOnNotificationForwarding(connectedClients);
 let isGetProjectsRunning = false; // Flag to prevent reentrant calls
@@ -1938,12 +1934,6 @@ function handleChatConnection(ws, request) {
                 await alwaysOnHeartbeat.handlePresence(ws, data);
             } else if (data.type === 'always-on-presence-clear') {
                 await alwaysOnHeartbeat.clearPresence(ws);
-            } else if (data.type === 'always-on-auto-discovery-complete') {
-                await sendCronDaemonRequest({
-                    type: 'discovery_fire_complete',
-                    projectRoot: data.projectRoot,
-                    status: data.status === 'failed' ? 'failed' : 'started'
-                }).catch(() => {});
             } else if (
                 data.type === 'pilotdeck-command' ||
                 // Deprecated: legacy per-provider frame types kept for back-compat.
@@ -3044,7 +3034,6 @@ async function startServer() {
                     stopMemoryScheduler();
                     closeMemoryServices();
                     stopPilotDeckConfigWatcher();
-                    alwaysOnDiscoveryTriggerClient.stop();
                     await stopPilotDeckProxy();
                     await stopAllPlugins();
                     // The CCR (Claude Code Router) and embedded-chrome

@@ -263,12 +263,7 @@
       "description": "由 Always-On discovery 生成、在执行前可审阅的结构化计划。",
       "emptyTitle": "还没有 discovery 计划",
       "emptyDescription": "运行 discovery 后，这里会出现可执行的结构化计划。",
-      "modes": {
-        "auto": "自动执行",
-        "manual": "等待批准"
-      },
       "summary": {
-        "manualPending": "待批准计划",
         "running": "运行中计划"
       },
       "actions": {
@@ -280,7 +275,6 @@
         "title": "标题",
         "summary": "摘要",
         "rationale": "价值说明",
-        "approvalMode": "批准方式",
         "updatedAt": "更新时间",
         "planFile": "计划文件",
         "sourceSession": "discovery 会话",

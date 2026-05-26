@@ -267,6 +267,17 @@ export type AlwaysOnApplyResult = {
   error?: { code: string; message: string };
 };
 
+export type AlwaysOnRerunPlanInput = {
+  projectKey: string;
+  planId: string;
+  projectName: string;
+};
+
+export type AlwaysOnRerunPlanResult = {
+  runId: string;
+  error?: { code: string; message: string };
+};
+
 export interface Gateway {
   submitTurn(input: GatewaySubmitTurnInput): AsyncIterable<GatewayEvent>;
   abortTurn(input: { sessionKey: string; runId?: string }): Promise<void>;
@@ -342,6 +353,11 @@ export interface Gateway {
    * `always-on:turn-event` notifications.
    */
   alwaysOnApply?(input: AlwaysOnApplyInput): Promise<AlwaysOnApplyResult>;
+  /**
+   * Re-execute an existing Always-On plan through DiscoveryFire phases 2-4
+   * (workspace, execution, report). Used by the UI retry button.
+   */
+  alwaysOnRerunPlan?(input: AlwaysOnRerunPlanInput): Promise<AlwaysOnRerunPlanResult>;
 
   skillsList?(input: SkillsListInput): Promise<SkillsListResult>;
   skillRead?(input: SkillAddressInput): Promise<SkillReadResult>;

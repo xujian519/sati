@@ -257,6 +257,185 @@ export class DiscoveryFire {
     }
   }
 
+  async rerunPlan(input: {
+    planId: string;
+    runId: string;
+    startedAt: Date;
+  }): Promise<DiscoveryFireResult> {
+    const { planId, runId, startedAt } = input;
+
+    const planRecord = await this.deps.planStore.getRecord(planId);
+    if (!planRecord) {
+      return {
+        outcome: "failed",
+        runId,
+        startedAt: startedAt.toISOString(),
+        finishedAt: startedAt.toISOString(),
+        planId,
+        error: { code: "plan_not_found", message: `Plan ${planId} not found` },
+      };
+    }
+
+    const planMarkdown = await this.deps.planStore.readPlanMarkdown(planId);
+    if (!planMarkdown) {
+      return {
+        outcome: "failed",
+        runId,
+        startedAt: startedAt.toISOString(),
+        finishedAt: startedAt.toISOString(),
+        planId,
+        error: { code: "plan_body_missing", message: `Plan markdown for ${planId} not found on disk` },
+      };
+    }
+
+    await this.deps.planStore.updateStatus(planId, { status: "ready" });
+
+    const baseHistory: DiscoveryRunHistoryEvent = {
+      schemaVersion: 1,
+      runId,
+      planId,
+      startedAt: startedAt.toISOString(),
+      outcome: "no_plan",
+    };
+
+    const state = await this.deps.stateStore.read(startedAt);
+
+    // Phase 2: Workspace
+    let workspace: WorkspaceHandle;
+    let workCycle: WorkCycleRecord;
+    try {
+      const wsResult = await this.runWorkspacePhase({ runId, state });
+      workspace = wsResult.handle;
+      workCycle = wsResult.cycle;
+    } catch (error) {
+      const finishedAt = this.deps.now();
+      const code = error instanceof AlwaysOnError ? error.code : "workspace_prepare_failed";
+      const message = error instanceof Error ? error.message : String(error);
+      this.emitEvent(runId, "run_failed", { planId, error: { code, message }, outcome: "failed" });
+      await this.deps.stateStore.markFireCompleted({ outcome: "failed", runId, planId, now: finishedAt });
+      await this.deps.reportStore.appendHistory({ ...baseHistory, outcome: "failed", finishedAt: finishedAt.toISOString(), error: { code, message } });
+      return { outcome: "failed", runId, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), planId, error: { code, message } };
+    }
+
+    this.assertWorkspaceCwdSafe(workspace);
+    workspace.metadata.startedAt = startedAt.toISOString();
+
+    // Phase 3: Execution
+    const executionSessionKey = DiscoveryFire.deriveExecutionSessionKey(this.deps.projectKey, runId);
+    this.deps.sessionOverrides.set(executionSessionKey, {
+      cwd: workspace.cwd,
+      permissionMode: "bypassPermissions",
+      bypassAvailable: true,
+      canPrompt: false,
+      excludeTools: ALWAYS_ON_EXCLUDED_TOOLS,
+      permissionRules: { deny: ALWAYS_ON_EXECUTION_DENY_RULES },
+    });
+
+    const executionCtx: ExecutionRunContext = {
+      kind: "execution",
+      sessionKey: executionSessionKey,
+      runId,
+      projectKey: this.deps.projectKey,
+      paths: this.deps.paths,
+      workspace,
+      plan: planRecord,
+    };
+    this.deps.runContexts.register(executionCtx);
+    await this.deps.planStore.updateStatus(planId, { status: "executing", workCycleId: workCycle.id });
+    await this.deps.cycleStore.addPlan(workCycle.id, planId);
+    this.emitEvent(runId, "execution_started", { planId, title: planRecord.title });
+
+    let executionError: { code?: string; message: string } | undefined;
+    try {
+      const events = await this.drainTurn({
+        sessionKey: executionSessionKey,
+        channelKey: EXECUTION_CHANNEL,
+        runId: `${runId}.execute`,
+        message: buildExecutionPrompt({
+          plan: planRecord,
+          planMarkdown,
+          workspaceCwd: workspace.cwd,
+          workspaceStrategy: workspace.strategy,
+          language: this.deps.config.language,
+        }),
+        mode: "bypassPermissions",
+        persistEvents: true,
+      });
+      executionError = pickFirstError(events);
+    } finally {
+      this.deps.runContexts.unregister(executionSessionKey);
+      this.deps.sessionOverrides.delete(executionSessionKey);
+      await this.deps.gateway.closeSession({ sessionKey: executionSessionKey, reason: "always-on/done" }).catch(() => undefined);
+    }
+
+    if (executionError) {
+      this.emitEvent(runId, "run_failed", { planId, error: { code: executionError.code ?? "execution_failed", message: executionError.message }, outcome: "failed" });
+      const finishedAt = this.deps.now();
+      const reportFilePath = await this.writeFallbackReport({ runId, plan: planRecord, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), reason: `execution_failed: ${executionError.message}`, workspaceStrategy: workspace.strategy, workspaceHandle: workspace.cwd });
+      await this.deps.planStore.updateStatus(planId, { status: "failed", reportFilePath, workCycleId: workCycle.id });
+      await this.deps.stateStore.markFireCompleted({ outcome: "failed", runId, planId, now: finishedAt });
+      await this.deps.reportStore.appendHistory({ ...baseHistory, outcome: "failed", finishedAt: finishedAt.toISOString(), workCycleId: workCycle.id, workspace: { strategy: workspace.strategy, handle: workspace.cwd }, error: { code: executionError.code ?? "execution_failed", message: executionError.message } });
+      return { outcome: "failed", runId, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), planId, workspace, reportFilePath, error: { code: executionError.code ?? "execution_failed", message: executionError.message } };
+    }
+
+    this.emitEvent(runId, "execution_completed", { planId, title: planRecord.title });
+
+    // Phase 4: Report
+    const reportSessionKey = DiscoveryFire.deriveReportSessionKey(this.deps.projectKey, runId);
+    this.deps.sessionOverrides.set(reportSessionKey, { cwd: workspace.cwd, permissionMode: "bypassPermissions", bypassAvailable: true, canPrompt: false, excludeTools: ALWAYS_ON_EXCLUDED_TOOLS });
+
+    const reportCtx: ReportRunContext = {
+      kind: "report",
+      sessionKey: reportSessionKey,
+      runId,
+      projectKey: this.deps.projectKey,
+      paths: this.deps.paths,
+      workspace,
+      plan: planRecord,
+      reportStore: this.deps.reportStore,
+      reportCallCount: 0,
+    };
+    this.deps.runContexts.register(reportCtx);
+
+    let reportError: { code?: string; message: string } | undefined;
+    try {
+      const events = await this.drainTurn({
+        sessionKey: reportSessionKey,
+        channelKey: REPORT_CHANNEL,
+        runId: `${runId}.report`,
+        message: buildReportPrompt({ plan: planRecord, planMarkdown, workspaceCwd: workspace.cwd, workspaceStrategy: workspace.strategy, language: this.deps.config.language }),
+        mode: "bypassPermissions",
+        persistEvents: true,
+      });
+      reportError = pickFirstError(events);
+    } finally {
+      this.deps.runContexts.unregister(reportSessionKey);
+      this.deps.sessionOverrides.delete(reportSessionKey);
+      await this.deps.gateway.closeSession({ sessionKey: reportSessionKey, reason: "always-on/done" }).catch(() => undefined);
+    }
+
+    const finishedAt = this.deps.now();
+    const outcome: AlwaysOnDiscoveryOutcome = reportCtx.report && !reportError ? "executed" : "failed";
+
+    if (reportCtx.report && !reportError) {
+      this.emitEvent(runId, "report_produced", { planId, title: planRecord.title, outcome });
+      this.emitEvent(runId, "run_completed", { planId, title: planRecord.title, outcome });
+    } else {
+      this.emitEvent(runId, "run_failed", { planId, error: reportError ? { code: reportError.code ?? "report_failed", message: reportError.message } : { code: "report_tool_not_invoked", message: "Report tool was not invoked" }, outcome });
+    }
+
+    let reportFilePath = reportCtx.report?.filePath;
+    if (!reportCtx.report) {
+      reportFilePath = await this.writeFallbackReport({ runId, plan: planRecord, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), reason: reportError ? `report_failed: ${reportError.message}` : "report_tool_not_invoked", workspaceStrategy: workspace.strategy, workspaceHandle: workspace.cwd });
+    }
+
+    await this.deps.planStore.updateStatus(planId, { status: outcome === "executed" ? "completed" : "failed", reportFilePath, workCycleId: workCycle.id });
+    await this.deps.stateStore.markFireCompleted({ outcome, runId, planId, now: finishedAt });
+    await this.deps.reportStore.appendHistory({ ...baseHistory, outcome, finishedAt: finishedAt.toISOString(), workCycleId: workCycle.id, workspace: { strategy: workspace.strategy, handle: workspace.cwd }, error: reportError ? { code: reportError.code ?? "report_failed", message: reportError.message } : undefined });
+
+    return { outcome, runId, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), planId, workspace, reportFilePath, error: reportError ? { code: reportError.code ?? "report_failed", message: reportError.message } : undefined };
+  }
+
   async run(input: DiscoveryFireRunInput): Promise<DiscoveryFireResult> {
     const { runId, startedAt } = input;
 

@@ -48,6 +48,8 @@ test("Every Gateway WS method is a WebGatewayMethod superset", () => {
     "skill_import",
     "skill_validate",
     "skill_scan",
+    "always_on_apply",
+    "always_on_rerun_plan",
   ];
   const webMethods: WebGatewayMethod[] = serverMethods.map((m): WebGatewayMethod => m);
   assert.equal(webMethods.length, serverMethods.length);

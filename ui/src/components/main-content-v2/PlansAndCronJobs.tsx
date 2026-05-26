@@ -90,8 +90,8 @@ const CRON_STATUS_LABEL: Record<'scheduled' | 'running', { key: string; defaultV
 // ---------------------------------------------------------------------------
 
 type UnifiedItem =
-  | { kind: 'plan'; data: DiscoveryPlanOverview; projectName: string; projectDisplayName: string }
-  | { kind: 'cron'; data: CronJobOverview; projectName: string; projectDisplayName: string };
+  | { kind: 'plan'; data: DiscoveryPlanOverview; projectName: string; projectDisplayName: string; projectKey: string }
+  | { kind: 'cron'; data: CronJobOverview; projectName: string; projectDisplayName: string; projectKey: string };
 
 // ---------------------------------------------------------------------------
 // Time formatting
@@ -126,12 +126,11 @@ const COL = {
 // ---------------------------------------------------------------------------
 
 type PlansAndCronJobsProps = {
-  onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
   onApplyWorkCycle?: (projectName: string, cycleId: string) => Promise<void>;
-  onOpenPlanDetail?: (planId: string, projectName: string, projectDisplayName: string) => void;
+  onOpenPlanDetail?: (planId: string, projectName: string, projectDisplayName: string, sourceRunId: string, projectKey: string) => void;
 };
 
-export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOpenPlanDetail }: PlansAndCronJobsProps) {
+export default function PlansAndCronJobs({ onApplyWorkCycle, onOpenPlanDetail }: PlansAndCronJobsProps) {
   const { t } = useTranslation('alwaysOn');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -228,6 +227,7 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOp
           data: plan,
           projectName,
           projectDisplayName: displayName,
+          projectKey: project?.fullPath || '',
         });
       }
     }
@@ -257,6 +257,7 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOp
         data: job,
         projectName,
         projectDisplayName: displayName,
+        projectKey: project?.fullPath || '',
       });
     }
 
@@ -487,7 +488,6 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOp
                                 item={item}
                                 t={t}
                                 onRefresh={refresh}
-                                onExecutePlan={onExecutePlan}
                                 onOpenPlanDetail={onOpenPlanDetail}
                               />
                             ))}
@@ -511,7 +511,6 @@ export default function PlansAndCronJobs({ onExecutePlan, onApplyWorkCycle, onOp
                                 item={item}
                                 t={t}
                                 onRefresh={refresh}
-                                onExecutePlan={onExecutePlan}
                                 onOpenPlanDetail={onOpenPlanDetail}
                               />
                             ))}
@@ -611,14 +610,12 @@ function ItemRow({
   item,
   t,
   onRefresh,
-  onExecutePlan,
   onOpenPlanDetail,
 }: {
   item: UnifiedItem;
   t: (key: string, opts?: Record<string, string>) => string;
   onRefresh: () => Promise<void>;
-  onExecutePlan?: (projectName: string, planId: string) => Promise<void>;
-  onOpenPlanDetail?: (planId: string, projectName: string, projectDisplayName: string) => void;
+  onOpenPlanDetail?: (planId: string, projectName: string, projectDisplayName: string, sourceRunId: string, projectKey: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
 
@@ -651,14 +648,10 @@ function ItemRow({
     if (!plan || busy) return;
     setBusy(true);
     try {
-      if (onExecutePlan) {
-        await onExecutePlan(item.projectName, plan.id);
-      } else {
-        const res = await api.executeProjectDiscoveryPlan(item.projectName, plan.id, { source: 'manual' });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({})) as { error?: string };
-          throw new Error(body?.error || `HTTP ${res.status}`);
-        }
+      const res = await api.executeProjectDiscoveryPlan(item.projectName, plan.id, { source: 'manual' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body?.error || `HTTP ${res.status}`);
       }
       await onRefresh();
     } catch {
@@ -728,7 +721,7 @@ function ItemRow({
         {isPlan && onOpenPlanDetail ? (
           <button
             type="button"
-            onClick={() => onOpenPlanDetail(plan!.id, item.projectName, item.projectDisplayName)}
+            onClick={() => onOpenPlanDetail(plan!.id, item.projectName, item.projectDisplayName, (plan as DiscoveryPlanOverview).sourceRunId || (plan as DiscoveryPlanOverview).sourceDiscoverySessionId || '', item.projectKey)}
             className="truncate text-left hover:underline"
           >
             {title}

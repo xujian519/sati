@@ -9,7 +9,6 @@ import { CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
 import { parseFrontmatter } from '../utils/frontmatter.js';
 import { getClaudeRuntimeModelConfig, getClaudeRuntimeModelValues } from '../utils/claude-runtime-config.js';
 import { readPilotDeckConfigFile, resolveModel } from '../services/pilotdeckConfig.js';
-import { executeAlwaysOnSlashCommand } from '../always-on-slash.js';
 import { executeTurnkeySlashCommand } from '../turnkey-slash.js';
 
 const execFileAsync = promisify(execFile);
@@ -536,10 +535,6 @@ Custom commands can be created in:
         message: `Rewinding conversation by ${steps} step${steps > 1 ? 's' : ''}...`
       }
     };
-  },
-
-  '/ao': async (args, context) => {
-    return await executeAlwaysOnSlashCommand(args, context);
   },
 
   '/turnkey': async (args) => executeTurnkeySlashCommand(args),

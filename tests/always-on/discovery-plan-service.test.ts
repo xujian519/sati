@@ -79,68 +79,6 @@ test("getPlansOverview returns sorted plans with body", async () => {
   }
 });
 
-test("queueExecution throws NOT_FOUND for missing plan", async () => {
-  const env = makeTestEnv();
-  try {
-    await assert.rejects(
-      () => env.service.queueExecution("test-project", "nonexistent"),
-      (error: Error & { code?: string }) => error.code === "NOT_FOUND",
-    );
-  } finally {
-    env.cleanup();
-  }
-});
-
-test("queueExecution throws INVALID_STATE for archived plan", async () => {
-  const env = makeTestEnv();
-  try {
-    writePlanIndex(env.plansDir, [
-      { id: "p1", title: "Old plan", status: "archived", planFilePath: "plans/p1.md" },
-    ]);
-    writePlanBody(env.plansDir, "p1", "body");
-    await assert.rejects(
-      () => env.service.queueExecution("test-project", "p1"),
-      (error: Error & { code?: string }) => error.code === "INVALID_STATE",
-    );
-  } finally {
-    env.cleanup();
-  }
-});
-
-test("queueExecution throws MISSING_PLAN_BODY for empty plan", async () => {
-  const env = makeTestEnv();
-  try {
-    writePlanIndex(env.plansDir, [
-      { id: "p1", title: "Empty plan", status: "ready", planFilePath: "plans/p1.md" },
-    ]);
-    writePlanBody(env.plansDir, "p1", "");
-    await assert.rejects(
-      () => env.service.queueExecution("test-project", "p1"),
-      (error: Error & { code?: string }) => error.code === "MISSING_PLAN_BODY",
-    );
-  } finally {
-    env.cleanup();
-  }
-});
-
-test("queueExecution queues a ready plan and emits events", async () => {
-  const env = makeTestEnv();
-  try {
-    writePlanIndex(env.plansDir, [
-      { id: "p1", title: "Good plan", status: "ready", planFilePath: "plans/p1.md" },
-    ]);
-    writePlanBody(env.plansDir, "p1", "Do the thing");
-
-    const result = await env.service.queueExecution("test-project", "p1");
-    assert.equal(result.plan.status, "queued");
-    assert.ok(result.executionToken);
-    assert.ok(result.command.includes("Do the thing"));
-    assert.ok(env.events.length > 0);
-    assert.equal(env.events[0]!.status, "queued");
-  } finally {
-    env.cleanup();
-  }
-});
 
 // ---- cycle-level archive/apply (per-plan archive/apply removed) ----
 

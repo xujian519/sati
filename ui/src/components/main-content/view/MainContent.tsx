@@ -9,11 +9,6 @@ import PluginTabContent from '../../plugins/view/PluginTabContent';
 import DashboardV2 from '../../main-content-v2/DashboardV2';
 import TasksV2 from '../../main-content-v2/TasksV2';
 import { cn } from '../../../lib/utils.js';
-import {
-  getStoredPermissionMode,
-  startSessionCommand,
-} from '../../chat/utils/sessionLauncher';
-import { getPilotDeckSettings } from '../../chat/utils/chatStorage';
 import type { MainContentProps } from '../types/types';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
@@ -23,26 +18,14 @@ import EditorSidebar from '../../code-editor/view/EditorSidebar';
 import type { CodeEditorDiffInfo } from '../../code-editor/types/types';
 import type {
   AlwaysOnSessionTarget,
-  ExecuteDiscoveryPlanResponse,
   Project,
-  ProjectDiscoveryContextResponse,
-  ProjectDiscoveryPlansResponse,
   ProjectSession,
 } from '../../../types/app';
 import { api } from '../../../utils/api';
 import {
-  buildAlwaysOnDiscoveryPrompt,
-  normalizeDiscoveryPromptLanguage,
-} from '../../../utils/alwaysOnDiscoveryPrompt';
-import {
   clearAlwaysOnPresence,
   sendAlwaysOnPresence,
 } from '../../../utils/alwaysOnPresence';
-import {
-  createDiscoveryRequestDedupeStore,
-  shouldProcessDiscoveryRequest,
-} from '../../../utils/alwaysOnDiscoveryRequestDedupe';
-import { findAlwaysOnProjectByRoot } from '../../../utils/alwaysOnProjectMatching';
 import MainContentStateView from './subcomponents/MainContentStateView';
 import ErrorBoundary from './ErrorBoundary';
 import MemoryPanel from './memory/MemoryPanel';
@@ -59,15 +42,8 @@ type TasksSettingsContextValue = {
   isTaskMasterReady: boolean | null;
 };
 
-type PendingDiscoveryExecution = {
-  projectName: string;
-  planId: string;
-  executionToken: string;
-};
-
 type MainContentToast = { kind: 'error' | 'info'; text: string } | null;
 
-const AUTO_EXECUTION_POLL_INTERVAL_MS = 15000;
 const FILES_CHAT_DEFAULT_WIDTH = 460;
 const FILES_CHAT_MIN_WIDTH = 320;
 const FILES_TREE_MIN_WIDTH = 280;
@@ -79,38 +55,6 @@ async function readJsonPayload<T>(response: Response): Promise<T | null> {
   } catch {
     return null;
   }
-}
-
-function buildAlwaysOnExecutionToolsSettings() {
-  const settings = getPilotDeckSettings();
-  const disallowedTools = Array.isArray(settings.disallowedTools)
-    ? [...settings.disallowedTools]
-    : [];
-
-  if (!disallowedTools.includes('EnterPlanMode')) {
-    disallowedTools.push('EnterPlanMode');
-  }
-
-  return {
-    ...settings,
-    disallowedTools,
-  };
-}
-
-function buildAlwaysOnDiscoveryToolsSettings() {
-  const settings = getPilotDeckSettings();
-  const disallowedTools = Array.isArray(settings.disallowedTools)
-    ? [...settings.disallowedTools]
-    : [];
-
-  if (!disallowedTools.includes('CronCreate')) {
-    disallowedTools.push('CronCreate');
-  }
-
-  return {
-    ...settings,
-    disallowedTools,
-  };
 }
 
 function MainContent({
@@ -143,14 +87,9 @@ function MainContent({
   const { i18n } = useTranslation();
   const { preferences } = useUiPreferences();
   const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter } = preferences;
-  const discoveryPromptLanguage = normalizeDiscoveryPromptLanguage(i18n.language);
 
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
-  const pendingDiscoveryExecutionsRef = useRef<Map<string, PendingDiscoveryExecution>>(new Map());
-  const discoveryExecutionsBySessionRef = useRef<Map<string, PendingDiscoveryExecution>>(new Map());
-  const autoLaunchInFlightRef = useRef<Set<string>>(new Set());
-  const processedDiscoveryRequestsRef = useRef(createDiscoveryRequestDedupeStore());
   const lastUserMsgAtRef = useRef<string | null>(null);
   const [toast, setToast] = useState<MainContentToast>(null);
 
@@ -236,112 +175,6 @@ function MainContent({
       clearAlwaysOnPresence(sendMessage);
     };
   }, [projects, publishPresence, selectedProject, sendMessage, ws]);
-
-  const updateDiscoveryExecution = useCallback(async (
-    projectName: string,
-    planId: string,
-    body: Record<string, unknown>,
-  ) => {
-    const response = await api.updateProjectDiscoveryPlanExecution(projectName, planId, body);
-    if (!response.ok) {
-      const payload = await readJsonPayload<{ error?: string }>(response);
-      throw new Error(payload?.error || 'Failed to update discovery plan execution');
-    }
-  }, []);
-
-  const launchQueuedDiscoveryPlanExecution = useCallback(async (
-    payload: ExecuteDiscoveryPlanResponse,
-  ) => {
-    if (!selectedProject) {
-      return;
-    }
-
-    const planId = payload?.plan?.id;
-    if (!planId) {
-      throw new Error('Missing discovery plan id in execution payload');
-    }
-
-    pendingDiscoveryExecutionsRef.current.set(payload.executionToken, {
-      projectName: selectedProject.name,
-      planId,
-      executionToken: payload.executionToken,
-    });
-
-    startSessionCommand({
-      sendMessage: trackedSendMessage,
-      selectedProject,
-      command: payload.command,
-      permissionMode: 'default',
-      sessionSummary: payload.sessionSummary,
-      toolsSettings: buildAlwaysOnExecutionToolsSettings(),
-      alwaysOnPlanId: planId,
-      alwaysOnExecutionToken: payload.executionToken,
-      workspaceCwd: payload.workspaceCwd,
-    });
-
-    refreshProjectsSilently();
-  }, [refreshProjectsSilently, selectedProject, trackedSendMessage]);
-
-  const handleExecuteDiscoveryPlan = useCallback(async (
-    planId: string,
-    source: 'manual' | 'auto' = 'manual',
-  ) => {
-    if (!selectedProject) {
-      return;
-    }
-
-    autoLaunchInFlightRef.current.add(planId);
-
-    const response = await api.executeProjectDiscoveryPlan(selectedProject.name, planId, { source });
-    const payload = await readJsonPayload<ExecuteDiscoveryPlanResponse & { error?: string }>(response);
-    if (!response.ok || !payload) {
-      autoLaunchInFlightRef.current.delete(planId);
-      throw new Error(payload?.error || 'Failed to queue discovery plan execution');
-    }
-
-    await launchQueuedDiscoveryPlanExecution(payload);
-  }, [launchQueuedDiscoveryPlanExecution, selectedProject]);
-
-  const executeAndLaunchPlan = useCallback(async (
-    projectName: string,
-    planId: string,
-  ) => {
-    const project = projects.find((p) => p.name === projectName);
-    if (!project) {
-      throw new Error(`Project "${projectName}" not found`);
-    }
-
-    const response = await api.executeProjectDiscoveryPlan(projectName, planId, { source: 'manual' });
-    const payload = await readJsonPayload<ExecuteDiscoveryPlanResponse & { error?: string }>(response);
-    if (!response.ok || !payload) {
-      throw new Error(payload?.error || 'Failed to queue discovery plan execution');
-    }
-
-    const resolvedPlanId = payload.plan?.id;
-    if (!resolvedPlanId) {
-      throw new Error('Missing discovery plan id in execution payload');
-    }
-
-    pendingDiscoveryExecutionsRef.current.set(payload.executionToken, {
-      projectName,
-      planId: resolvedPlanId,
-      executionToken: payload.executionToken,
-    });
-
-    startSessionCommand({
-      sendMessage: trackedSendMessage,
-      selectedProject: project,
-      command: payload.command,
-      permissionMode: 'default',
-      sessionSummary: payload.sessionSummary,
-      toolsSettings: buildAlwaysOnExecutionToolsSettings(),
-      alwaysOnPlanId: resolvedPlanId,
-      alwaysOnExecutionToken: payload.executionToken,
-      workspaceCwd: payload.workspaceCwd,
-    });
-
-    refreshProjectsSilently();
-  }, [projects, refreshProjectsSilently, trackedSendMessage]);
 
   const applyAndLaunchCycle = useCallback(async (
     projectName: string,
@@ -477,243 +310,6 @@ function MainContent({
     [handleOpenAlwaysOnSession],
   );
 
-  useEffect(() => {
-    const message = latestMessage as {
-      kind?: string;
-      sessionId?: string;
-      newSessionId?: string;
-      content?: string;
-      exitCode?: number;
-      aborted?: boolean;
-      alwaysOnPlanId?: string | null;
-      alwaysOnExecutionToken?: string | null;
-    } | null;
-
-    if (!message || typeof message !== 'object') {
-      return;
-    }
-
-    const executionToken = typeof message.alwaysOnExecutionToken === 'string'
-      ? message.alwaysOnExecutionToken
-      : '';
-    const explicitPlanId = typeof message.alwaysOnPlanId === 'string'
-      ? message.alwaysOnPlanId
-      : '';
-
-    if (message.kind === 'session_created' && executionToken) {
-      const pending = pendingDiscoveryExecutionsRef.current.get(executionToken);
-      const newSessionId = typeof message.newSessionId === 'string'
-        ? message.newSessionId
-        : '';
-      if (!pending || !newSessionId) {
-        return;
-      }
-
-      pendingDiscoveryExecutionsRef.current.delete(executionToken);
-      discoveryExecutionsBySessionRef.current.set(newSessionId, pending);
-      autoLaunchInFlightRef.current.delete(pending.planId);
-
-      void updateDiscoveryExecution(pending.projectName, pending.planId, {
-        executionSessionId: newSessionId,
-        status: 'running',
-        executionStartedAt: new Date().toISOString(),
-        executionToken: pending.executionToken,
-      }).finally(() => {
-        refreshProjectsSilently();
-      });
-      return;
-    }
-
-    if (message.kind !== 'complete' && message.kind !== 'error') {
-      return;
-    }
-
-    const sessionId = typeof message.sessionId === 'string' ? message.sessionId : '';
-    const trackedExecution = sessionId
-      ? discoveryExecutionsBySessionRef.current.get(sessionId)
-      : null;
-    const fallbackTrackedExecution = explicitPlanId && selectedProject
-      ? {
-          projectName: selectedProject.name,
-          planId: explicitPlanId,
-          executionToken,
-        }
-      : null;
-    const execution = trackedExecution || fallbackTrackedExecution;
-
-    if (!execution) {
-      return;
-    }
-
-    if (sessionId) {
-      discoveryExecutionsBySessionRef.current.delete(sessionId);
-    }
-    autoLaunchInFlightRef.current.delete(execution.planId);
-
-    const status = message.kind === 'error'
-      ? 'failed'
-      : (message.aborted || (typeof message.exitCode === 'number' && message.exitCode !== 0))
-        ? 'failed'
-        : 'completed';
-
-    void updateDiscoveryExecution(execution.projectName, execution.planId, {
-      executionSessionId: sessionId || undefined,
-      status,
-      executionLastActivityAt: new Date().toISOString(),
-      latestSummary: typeof message.content === 'string' ? message.content : undefined,
-      executionToken: execution.executionToken,
-    }).finally(() => {
-      refreshProjectsSilently();
-    });
-  }, [latestMessage, refreshProjectsSilently, selectedProject, updateDiscoveryExecution]);
-
-  const pollAutoExecutablePlans = useCallback(async () => {
-    if (!selectedProject) {
-      return;
-    }
-
-    const response = await api.projectDiscoveryPlans(selectedProject.name);
-    const payload = await readJsonPayload<ProjectDiscoveryPlansResponse & { error?: string }>(response);
-    if (!response.ok || !payload) {
-      return;
-    }
-
-    const autoReadyPlans = Array.isArray(payload.plans)
-      ? payload.plans.filter((plan) =>
-          plan.approvalMode === 'auto' &&
-          plan.status === 'ready' &&
-          !plan.executionSessionId &&
-          !autoLaunchInFlightRef.current.has(plan.id),
-        )
-      : [];
-
-    for (const plan of autoReadyPlans) {
-      try {
-        await handleExecuteDiscoveryPlan(plan.id, 'auto');
-      } catch {
-        autoLaunchInFlightRef.current.delete(plan.id);
-      }
-    }
-  }, [handleExecuteDiscoveryPlan, selectedProject]);
-
-  useEffect(() => {
-    if (!selectedProject) {
-      return undefined;
-    }
-
-    void pollAutoExecutablePlans();
-    const timer = window.setInterval(() => {
-      void pollAutoExecutablePlans();
-    }, AUTO_EXECUTION_POLL_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [pollAutoExecutablePlans, selectedProject]);
-
-  const handleStartDiscoverySession = useCallback(async (targetProject = selectedProject) => {
-    if (!targetProject) {
-      return;
-    }
-
-    onStartNewSession(targetProject);
-    let discoveryContext: ProjectDiscoveryContextResponse = {
-      generatedAt: new Date().toISOString(),
-      lookbackDays: 7,
-      workspace: {
-        projectName: targetProject.name,
-        projectRoot: targetProject.fullPath || targetProject.path || targetProject.name,
-        signals: [],
-      },
-      memory: [],
-      existingPlans: [],
-      cronJobs: [],
-      recentChats: [],
-    };
-
-    try {
-      const response = await api.projectDiscoveryContext(targetProject.name);
-      const payload = await readJsonPayload<ProjectDiscoveryContextResponse & { error?: string }>(response);
-      if (response.ok && payload) {
-        discoveryContext = payload;
-      }
-    } catch {
-      // Fall back to a minimal context payload if the API call fails.
-    }
-
-    const discoveryPrompt = buildAlwaysOnDiscoveryPrompt(
-      targetProject,
-      discoveryContext,
-      discoveryPromptLanguage,
-    );
-    const pendingSessionId = startSessionCommand({
-      sendMessage: trackedSendMessage,
-      selectedProject: targetProject,
-      command: discoveryPrompt,
-      permissionMode: getStoredPermissionMode(selectedSession),
-      sessionSummary: `Always-On discovery: ${targetProject.displayName || targetProject.name}`,
-      toolsSettings: buildAlwaysOnDiscoveryToolsSettings(),
-    });
-
-    onSessionActive?.(pendingSessionId);
-  }, [
-    onSessionActive,
-    onStartNewSession,
-    discoveryPromptLanguage,
-    selectedProject,
-    selectedSession,
-    trackedSendMessage,
-  ]);
-
-  useEffect(() => {
-    const message = latestMessage as {
-      type?: string;
-      requestId?: string;
-      projectRoot?: string;
-    } | null;
-    if (message?.type !== 'always-on-auto-discovery-start') {
-      return;
-    }
-
-    if (!message.requestId) {
-      sendMessage({
-        type: 'always-on-auto-discovery-complete',
-        projectRoot: message.projectRoot,
-        status: 'failed',
-      });
-      return;
-    }
-    if (!shouldProcessDiscoveryRequest(processedDiscoveryRequestsRef.current, message.requestId)) {
-      return;
-    }
-
-    const targetProject = findAlwaysOnProjectByRoot(projects, message.projectRoot);
-    if (!targetProject) {
-      sendMessage({
-        type: 'always-on-auto-discovery-complete',
-        projectRoot: message.projectRoot,
-        status: 'failed',
-      });
-      return;
-    }
-
-    void handleStartDiscoverySession(targetProject)
-      .then(() => {
-        sendMessage({
-          type: 'always-on-auto-discovery-complete',
-          projectRoot: message.projectRoot,
-          status: 'started',
-        });
-      })
-      .catch(() => {
-        sendMessage({
-          type: 'always-on-auto-discovery-complete',
-          projectRoot: message.projectRoot,
-          status: 'failed',
-        });
-      });
-  }, [handleStartDiscoverySession, latestMessage, projects, sendMessage]);
-
   if (isLoading) {
     return (
       <MainContentStateView
@@ -765,10 +361,6 @@ function MainContent({
           showThinking={showThinking}
           autoScrollToBottom={autoScrollToBottom}
           sendByCtrlEnter={sendByCtrlEnter}
-          launchQueuedDiscoveryPlanExecution={launchQueuedDiscoveryPlanExecution}
-          handleStartDiscoverySession={handleStartDiscoverySession}
-          handleExecuteDiscoveryPlan={handleExecuteDiscoveryPlan}
-          executeAndLaunchPlan={executeAndLaunchPlan}
           applyAndLaunchCycle={applyAndLaunchCycle}
           handleOpenExecutionSession={handleOpenExecutionSession}
           editorExpanded={editorExpanded}
@@ -842,10 +434,6 @@ type SplitBodyProps = {
   showThinking: any;
   autoScrollToBottom: any;
   sendByCtrlEnter: any;
-  launchQueuedDiscoveryPlanExecution: any;
-  handleStartDiscoverySession: any;
-  handleExecuteDiscoveryPlan: any;
-  executeAndLaunchPlan: (projectName: string, planId: string) => Promise<void>;
   applyAndLaunchCycle: (projectName: string, cycleId: string) => Promise<void>;
   handleOpenExecutionSession: (projectKey: string, runId: string, projectName?: string) => void;
   editorExpanded: boolean;
@@ -882,10 +470,6 @@ function SplitBody(props: SplitBodyProps) {
     showThinking,
     autoScrollToBottom,
     sendByCtrlEnter,
-    launchQueuedDiscoveryPlanExecution,
-    handleStartDiscoverySession,
-    handleExecuteDiscoveryPlan,
-    executeAndLaunchPlan,
     applyAndLaunchCycle,
     handleOpenExecutionSession,
     editorExpanded,
@@ -999,7 +583,6 @@ function SplitBody(props: SplitBodyProps) {
       return (
         <AlwaysOnV2
           selectedProject={selectedProject}
-          onExecutePlan={executeAndLaunchPlan}
           onApplyWorkCycle={applyAndLaunchCycle}
           onOpenExecutionSession={handleOpenExecutionSession}
         />
@@ -1072,7 +655,6 @@ function SplitBody(props: SplitBodyProps) {
             onReplaceTemporarySession={onReplaceTemporarySession}
             onNavigateToSession={onNavigateToSession}
             onShowSettings={onShowSettings}
-            onLaunchAlwaysOnPlanExecution={launchQueuedDiscoveryPlanExecution}
             autoExpandTools={autoExpandTools}
             showRawParameters={showRawParameters}
             showThinking={showThinking}

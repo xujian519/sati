@@ -30,6 +30,8 @@ import type {
   NewSessionInput,
   AlwaysOnApplyInput,
   AlwaysOnApplyResult,
+  AlwaysOnRerunPlanInput,
+  AlwaysOnRerunPlanResult,
   ReloadConfigResult,
   WebDescribeProjectInput,
   WebListProjectsResult,
@@ -124,6 +126,7 @@ export type InProcessGatewayOptions = {
   setSessionCwd?: (sessionKey: string, cwd: string) => void;
   /** Delegate for Always-On apply — wired to AlwaysOnManager.applyPlan. */
   alwaysOnApply?: (input: AlwaysOnApplyInput) => Promise<AlwaysOnApplyResult>;
+  alwaysOnRerunPlan?: (input: AlwaysOnRerunPlanInput) => Promise<AlwaysOnRerunPlanResult>;
   /**
    * Optional non-blocking post-turn callback. Used by createLocalGateway to
    * coalesce project-level memory maintenance after a turn has fully ended.
@@ -498,6 +501,10 @@ export class InProcessGateway implements Gateway {
     (this.options as { alwaysOnApply?: InProcessGatewayOptions["alwaysOnApply"] }).alwaysOnApply = handler;
   }
 
+  setAlwaysOnRerunPlan(handler: InProcessGatewayOptions["alwaysOnRerunPlan"]): void {
+    (this.options as { alwaysOnRerunPlan?: InProcessGatewayOptions["alwaysOnRerunPlan"] }).alwaysOnRerunPlan = handler;
+  }
+
   // -------------------------------------------------------------------
   // Skill management — see `SkillManager` for the actual disk ops. The
   // gateway methods just guard "skill manager configured" and translate
@@ -553,6 +560,13 @@ export class InProcessGateway implements Gateway {
       return { sessionKey: "", error: { code: "not_configured", message: "Always-On apply is not configured on this gateway." } };
     }
     return this.options.alwaysOnApply(input);
+  }
+
+  async alwaysOnRerunPlan(input: AlwaysOnRerunPlanInput): Promise<AlwaysOnRerunPlanResult> {
+    if (!this.options.alwaysOnRerunPlan) {
+      return { runId: "", error: { code: "not_configured", message: "Always-On rerun is not configured on this gateway." } };
+    }
+    return this.options.alwaysOnRerunPlan(input);
   }
 
   private requireCron(): GatewayCronController {

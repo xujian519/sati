@@ -1,6 +1,8 @@
 import type {
   AlwaysOnApplyInput,
   AlwaysOnApplyResult,
+  AlwaysOnRerunPlanInput,
+  AlwaysOnRerunPlanResult,
   Gateway,
   GatewayElicitationResponseInput,
   GatewayEvent,
@@ -170,6 +172,10 @@ export class RemoteGateway implements Gateway {
 
   async alwaysOnApply(input: AlwaysOnApplyInput): Promise<AlwaysOnApplyResult> {
     return (await this.client.request("always_on_apply", input)) as AlwaysOnApplyResult;
+  }
+
+  async alwaysOnRerunPlan(input: AlwaysOnRerunPlanInput): Promise<AlwaysOnRerunPlanResult> {
+    return (await this.client.request("always_on_rerun_plan", input)) as AlwaysOnRerunPlanResult;
   }
 }
 

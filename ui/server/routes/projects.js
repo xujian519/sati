@@ -11,8 +11,7 @@ import {
   getProjectDiscoveryContext,
   getProjectDiscoveryPlansOverview,
   getProjectDiscoveryPlanReport,
-  queueDiscoveryPlanExecution,
-  updateProjectDiscoveryPlanExecution,
+  rerunDiscoveryPlan,
   getProjectWorkCycles,
   applyWorkCycle,
   archiveWorkCycle,
@@ -240,39 +239,11 @@ export async function handleExecuteProjectDiscoveryPlan(req, res) {
       return res.status(400).json({ error: 'planId is required' });
     }
 
-    const source = getTrimmedParam(req.body?.source) || 'manual';
-    const payload = await queueDiscoveryPlanExecution(projectName, planId, { source });
-    return res.json(payload);
+    const result = await rerunDiscoveryPlan(projectName, planId);
+    return res.json(result);
   } catch (error) {
     return res.status(getDiscoveryPlanErrorStatus(error)).json({
-      error: getDiscoveryPlanErrorMessage(error, 'Failed to execute discovery plan')
-    });
-  }
-}
-
-export async function handleUpdateProjectDiscoveryPlanExecution(req, res) {
-  try {
-    const projectName = getTrimmedParam(req.params?.projectName);
-    const planId = getTrimmedParam(req.params?.planId);
-    if (!projectName) {
-      return res.status(400).json({ error: 'projectName is required' });
-    }
-    if (!planId) {
-      return res.status(400).json({ error: 'planId is required' });
-    }
-
-    const updatedPlan = await updateProjectDiscoveryPlanExecution(projectName, planId, {
-      executionSessionId: getTrimmedParam(req.body?.executionSessionId),
-      executionStartedAt: getTrimmedParam(req.body?.executionStartedAt),
-      executionLastActivityAt: getTrimmedParam(req.body?.executionLastActivityAt),
-      status: getTrimmedParam(req.body?.status),
-      latestSummary: getTrimmedParam(req.body?.latestSummary),
-      executionToken: getTrimmedParam(req.body?.executionToken)
-    });
-    return res.json({ plan: updatedPlan });
-  } catch (error) {
-    return res.status(getDiscoveryPlanErrorStatus(error)).json({
-      error: getDiscoveryPlanErrorMessage(error, 'Failed to update discovery plan execution')
+      error: getDiscoveryPlanErrorMessage(error, 'Failed to rerun discovery plan')
     });
   }
 }
@@ -280,7 +251,6 @@ export async function handleUpdateProjectDiscoveryPlanExecution(req, res) {
 router.get('/:projectName/discovery-context', handleGetProjectDiscoveryContext);
 router.get('/:projectName/discovery-plans', handleGetProjectDiscoveryPlans);
 router.post('/:projectName/discovery-plans/:planId/execute', handleExecuteProjectDiscoveryPlan);
-router.patch('/:projectName/discovery-plans/:planId/execution', handleUpdateProjectDiscoveryPlanExecution);
 
 router.get('/:projectName/discovery-plans/:planId/report', async (req, res) => {
   try {

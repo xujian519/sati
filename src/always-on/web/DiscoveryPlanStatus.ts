@@ -23,7 +23,6 @@ export type WebPlanRecord = {
   title: string;
   createdAt: string;
   updatedAt: string;
-  approvalMode: "auto" | "manual";
   status: string;
   summary: string;
   rationale: string;
