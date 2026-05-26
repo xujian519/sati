@@ -61,8 +61,9 @@ fi
 if [[ "$SKIP_L3" == "0" ]]; then
   echo
   echo "${BLD}══ L3: real-model E2E (opt-in) ══${RST}"
-  bash "${SCRIPT_DIR}/release-l3.sh" || true
-  # release-l3 exits 0 when keys missing — intentional
+  # release-l3 exits 0 when keys are absent, so non-zero here means a real
+  # L3 failure that must fail full verification.
+  bash "${SCRIPT_DIR}/release-l3.sh"
 fi
 
 echo

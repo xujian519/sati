@@ -52,7 +52,19 @@ function buildDeps(
   // Adapt the ScriptedModel into the router-shaped surface the agent loop now
   // consumes — tests don't exercise scenario routing / fallback, so the shim
   // just forwards `stream(request)` and ignores the routing context.
-  const router = {
+  const router: AgentRuntimeDependencies["router"] = {
+    async decide(input) {
+      return {
+        provider: input.request.provider,
+        model: input.request.model,
+        scenarioType: "default",
+        isSubagent: !input.isMainAgent,
+        orchestrating: false,
+        resolvedFrom: "explicit",
+        mutations: {},
+      };
+    },
+    execute: (_decision, request) => model.stream(request),
     stream: (request: CanonicalModelRequest) => model.stream(request),
   };
   return { router, tools: { scheduler, registry }, eventEmitter, ...overrides };
