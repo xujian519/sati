@@ -413,6 +413,8 @@ cd ui && npx vitest run
 
 ## 🙏 致谢
 
+感谢 OpenClaw、Claude Code、Codex、Cursor、Hermes 等 Agent OS 先行者的探索，为这一领域的发展提供了重要启发。
+
 PilotDeck 的建设离不开以下优秀开源项目的支持：
 
 - [ClawXRouter](https://github.com/OpenBMB/ClawXRouter) — 智能模型路由

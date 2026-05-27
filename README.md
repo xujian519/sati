@@ -412,6 +412,8 @@ cd ui && npx vitest run
 
 ## 🙏 Acknowledgements
 
+We thank Agent OS pioneers such as OpenClaw, Claude Code, Codex, Cursor, and Hermes for their explorations that helped shape this field.
+
 PilotDeck builds upon the following outstanding open-source projects:
 
 - [ClawXRouter](https://github.com/OpenBMB/ClawXRouter) — Intelligent model routing
