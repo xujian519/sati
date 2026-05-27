@@ -1,9 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { join } from "node:path";
 
 const require = createRequire(import.meta.url);
-const { sanitizeSessionIdForPath } = require("../../ui/server/utils/pilotPaths.js") as {
+const { sanitizeSessionIdForPath } = require(
+  join(process.cwd(), "ui/server/utils/pilotPaths.js"),
+) as {
   sanitizeSessionIdForPath: (sessionId: string) => string;
 };
 
