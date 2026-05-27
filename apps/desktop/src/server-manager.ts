@@ -114,7 +114,10 @@ function getRuntimeBaseDir(version: string): string {
 }
 
 function getCronDaemonSocketPath(): string {
-  return path.join(os.homedir(), ".claude", "cron-daemon.sock");
+  return path.join(
+    process.env.PILOTDECK_CONFIG_DIR || process.env.PILOT_HOME || path.join(os.homedir(), ".pilotdeck"),
+    "cron-daemon.sock",
+  );
 }
 
 async function isPortFree(port: number): Promise<boolean> {
@@ -617,7 +620,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
    *
    * NOTE: owner.json.processId records the *ui-server* PID (the process that
    * spawned the daemon), NOT the daemon's own PID, so we can't just kill it.
-   * The daemon listens on `~/.claude/cron-daemon.sock` and accepts a JSON
+   * The daemon listens on `~/.pilotdeck/cron-daemon.sock` and accepts a JSON
    * `{ type: "shutdown" }` request which triggers its own clean exit.
    */
   private async shutdownCronDaemonViaSocket(): Promise<boolean> {

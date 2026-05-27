@@ -74,7 +74,8 @@ export function createCollisionResistantProjectId(projectRoot) {
  * @returns {string} Filename-safe session identifier.
  */
 export function sanitizeSessionIdForPath(sessionId) {
-    return sessionId.replace(/[\\/]+/g, '-').replace(/^-+|-+$/g, '') || 'session';
+    const illegal = process.platform === 'win32' ? /[\\/:<>"|?*]+/g : /[\\/]+/g;
+    return sessionId.replace(illegal, '-').replace(/^-+|-+$/g, '') || 'session';
 }
 
 function createLegacyProjectId(projectRoot) {

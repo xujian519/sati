@@ -82,6 +82,7 @@ const isTemporarySessionId = (id: unknown): boolean =>
 // for disk storage. Normalize to the disk form so that in-memory state
 // (from session_created) matches server listings (from filenames).
 const normalizeSessionId = (id: string): string => id.replace(/^web:s_/, 'web-s_');
+const sessionTranscriptFilename = (id: string): string => `${normalizeSessionId(id)}.jsonl`;
 
 const preserveLoadedSessions = (prevProjects: Project[], nextProjects: Project[]): Project[] =>
   nextProjects.map((updated) => {
@@ -352,7 +353,7 @@ export function useProjectsState({
         projectRelativeChanged === selectedSession.relativeTranscriptPath;
       const isMainSessionChange =
         !isBackgroundTaskSession(selectedSession) &&
-        projectRelativeChanged === `${selectedSession.id}.jsonl`;
+        projectRelativeChanged === sessionTranscriptFilename(selectedSession.id);
 
       if (isMainSessionChange || isSelectedBackgroundTranscriptChange) {
         const isSessionActive = activeSessions.has(selectedSession.id);
