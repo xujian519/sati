@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, KeyboardEvent, RefObject, SetStateAction } from 'react';
 import Fuse from 'fuse.js';
 import { authenticatedFetch } from '../../../utils/api';
+import { isImeEnterEvent } from '../../../utils/ime';
 import { safeLocalStorage } from '../utils/chatStorage';
 import type { Project } from '../../../types/app';
 
@@ -348,6 +349,9 @@ export function useSlashCommands({
       }
 
       if (event.key === 'Tab' || event.key === 'Enter') {
+        if (isImeEnterEvent(event)) {
+          return false;
+        }
         event.preventDefault();
         if (selectedCommandIndex >= 0) {
           selectCommandFromKeyboard(filteredCommands[selectedCommandIndex]);

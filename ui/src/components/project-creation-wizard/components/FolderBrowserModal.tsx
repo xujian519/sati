@@ -3,6 +3,7 @@ import { Eye, EyeOff, FolderOpen, FolderPlus, Loader2, Plus, X } from 'lucide-re
 import { Button, Input } from '../../../shared/view/ui';
 import { browseFilesystemFolders, createFolderInFilesystem } from '../data/workspaceApi';
 import { getParentPath, joinFolderPath } from '../utils/pathUtils';
+import { isImeEnterEvent } from '../../../utils/ime';
 import type { FolderSuggestion } from '../types';
 
 type FolderBrowserModalProps = {
@@ -151,6 +152,9 @@ export default function FolderBrowserModal({
                 className="flex-1"
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
+                    if (isImeEnterEvent(event)) {
+                      return;
+                    }
                     handleCreateFolder();
                   }
                   if (event.key === 'Escape') {

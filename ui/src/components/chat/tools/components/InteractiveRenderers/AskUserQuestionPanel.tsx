@@ -5,6 +5,7 @@ import type { Question } from '../../../types/types';
 import { Button } from '../../../../ui/button';
 import { Input } from '../../../../ui/input';
 import { cn } from '../../../../../lib/utils.js';
+import { isImeEnterEvent } from '../../../../../utils/ime';
 
 function normalizeOption(option: unknown) {
   if (!option || typeof option !== 'object') return null;
@@ -151,6 +152,9 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
 
     // Enter to advance / submit
     if (e.key === 'Enter') {
+      if (isImeEnterEvent(e)) {
+        return;
+      }
       e.preventDefault();
       const isLast = currentStep === questions.length - 1;
       if (isLast) handleSubmit();
@@ -344,6 +348,10 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
                     value={otherTexts.get(currentStep) || ''}
                     onChange={(e) => setOtherText(currentStep, e.target.value)}
                     onKeyDown={(e) => {
+                      if (isImeEnterEvent(e)) {
+                        e.stopPropagation();
+                        return;
+                      }
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         if (isLast) handleSubmit();

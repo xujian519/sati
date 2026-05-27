@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, KeyboardEvent, RefObject, SetStateAction } from 'react';
 import { api } from '../../../utils/api';
+import { isImeEnterEvent } from '../../../utils/ime';
 import { escapeRegExp } from '../utils/chatFormatting';
 import type { Project } from '../../../types/app';
 
@@ -264,6 +265,9 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
       }
 
       if (event.key === 'Tab' || event.key === 'Enter') {
+        if (isImeEnterEvent(event)) {
+          return false;
+        }
         event.preventDefault();
         if (selectedFileIndex >= 0) {
           selectFile(filteredFiles[selectedFileIndex]);

@@ -30,6 +30,7 @@ import type {
   ProjectSession,
 } from '../../../types/app';
 import { escapeRegExp } from '../utils/chatFormatting';
+import { isImeEnterEvent } from '../../../utils/ime';
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
 
@@ -928,6 +929,10 @@ export function useChatComposerState({
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (isImeEnterEvent(event)) {
+        return;
+      }
+
       if (handleCommandMenuKeyDown(event)) {
         return;
       }
@@ -943,10 +948,6 @@ export function useChatComposerState({
       }
 
       if (event.key === 'Enter') {
-        if (event.nativeEvent.isComposing) {
-          return;
-        }
-
         if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
           event.preventDefault();
           handleSubmit(event);

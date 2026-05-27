@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Download, Plus, Shield, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button, Input } from '../../../../shared/view/ui';
+import { isImeEnterEvent } from '../../../../utils/ime';
 import {
   PILOTDECK_SETTINGS_KEY,
   fetchPilotDeckPermissionSettings,
@@ -463,6 +464,9 @@ export default function PermissionsSettingsTab() {
               })}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
+                  if (isImeEnterEvent(event)) {
+                    return;
+                  }
                   event.preventDefault();
                   handleAddAllowed(newAllowed);
                 }
@@ -553,6 +557,9 @@ export default function PermissionsSettingsTab() {
               })}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
+                  if (isImeEnterEvent(event)) {
+                    return;
+                  }
                   event.preventDefault();
                   handleAddBlocked(newBlocked);
                 }

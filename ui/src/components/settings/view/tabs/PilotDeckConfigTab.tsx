@@ -23,6 +23,7 @@ import {
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { Button } from '../../../../shared/view/ui';
 import { authenticatedFetch } from '../../../../utils/api';
+import { isImeEnterEvent } from '../../../../utils/ime';
 import { usePilotDeckConfig, type ConfigReload } from '../../../../hooks/usePilotDeckConfig';
 import {
   getAlwaysOnProjectRoot,
@@ -822,7 +823,7 @@ function ProviderCard({
             onChange={(e) => setNewModelId(e.target.value)}
             placeholder="Custom model ID"
             className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-[11px] text-foreground outline-none focus:ring-1 focus:ring-ring"
-            onKeyDown={(e) => { if (e.key === 'Enter') addModel(newModelId); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !isImeEnterEvent(e)) addModel(newModelId); }}
           />
           <Button variant="outline" size="sm" className="shrink-0" onClick={() => addModel(newModelId)} disabled={!newModelId.trim()}>
             <Plus className="mr-1 h-3 w-3" />
@@ -1530,7 +1531,7 @@ function CustomEnvSection({ config, onChange }: { config: PilotDeckConfig; onCha
               placeholder="value"
               type="password"
               className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
-              onKeyDown={(e) => { if (e.key === 'Enter') addEntry(); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !isImeEnterEvent(e)) addEntry(); }}
             />
             <Button variant="outline" size="sm" className="shrink-0" onClick={addEntry} disabled={!newKey.trim()}>
               <Plus className="mr-1 h-3.5 w-3.5" />
@@ -2210,7 +2211,7 @@ function ModelPricingEditor({ config, onChange }: { config: PilotDeckConfig; onC
             onChange={(e) => setNewKey(e.target.value)}
             placeholder="provider/model-name"
             className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
-            onKeyDown={(e) => { if (e.key === 'Enter') addPricing(); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !isImeEnterEvent(e)) addPricing(); }}
           />
           <Button variant="outline" size="sm" className="shrink-0" onClick={addPricing} disabled={!newKey.trim()}>
             <Plus className="mr-1 h-3.5 w-3.5" />
@@ -2279,7 +2280,7 @@ function RouterScenarioEditor({ config, onChange }: { config: PilotDeckConfig; o
             onChange={(e) => setNewKey(e.target.value)}
             placeholder="scenario name"
             className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
-            onKeyDown={(e) => { if (e.key === 'Enter') addScenario(); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !isImeEnterEvent(e)) addScenario(); }}
           />
           <Button variant="outline" size="sm" className="shrink-0" onClick={addScenario} disabled={!newKey.trim()}>
             <Plus className="mr-1 h-3.5 w-3.5" />
@@ -2381,7 +2382,7 @@ function RouterFallbackEditor({ config, onChange }: { config: PilotDeckConfig; o
             onChange={(e) => setNewKey(e.target.value)}
             placeholder="scenario name (e.g. default)"
             className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
-            onKeyDown={(e) => { if (e.key === 'Enter') addChain(); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !isImeEnterEvent(e)) addChain(); }}
           />
           <Button variant="outline" size="sm" className="shrink-0" onClick={addChain} disabled={!newKey.trim()}>
             <Plus className="mr-1 h-3.5 w-3.5" />
@@ -2472,7 +2473,7 @@ function TokenSaverTierEditor({ config, onChange }: { config: PilotDeckConfig; o
             onChange={(e) => setNewKey(e.target.value)}
             placeholder="tier name (e.g. simple, medium, complex)"
             className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
-            onKeyDown={(e) => { if (e.key === 'Enter') addTier(); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !isImeEnterEvent(e)) addTier(); }}
           />
           <Button variant="outline" size="sm" className="shrink-0" onClick={addTier} disabled={!newKey.trim()}>
             <Plus className="mr-1 h-3.5 w-3.5" />
@@ -2535,7 +2536,7 @@ function TokenSaverRulesEditor({ config, onChange }: { config: PilotDeckConfig; 
           onChange={(e) => setNewRule(e.target.value)}
           placeholder={t('pilotDeckConfig.panels.router.rules.placeholder')}
           className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
-          onKeyDown={(e) => { if (e.key === 'Enter') addRule(); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !isImeEnterEvent(e)) addRule(); }}
         />
         <Button variant="outline" size="sm" className="shrink-0" onClick={addRule} disabled={!newRule.trim()}>
           <Plus className="mr-1 h-3.5 w-3.5" />

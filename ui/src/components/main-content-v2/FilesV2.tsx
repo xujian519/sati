@@ -26,6 +26,7 @@ import { getFileIconData } from '../file-tree/constants/fileIcons';
 import { cn } from '../../lib/utils.js';
 import { api } from '../../utils/api';
 import { copyTextToClipboard } from '../../utils/clipboard';
+import { isImeEnterEvent } from '../../utils/ime';
 
 type FilesV2Props = {
   selectedProject: Project | null;
@@ -248,6 +249,9 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
   const handleInlineKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
       if (event.key === 'Enter') {
+        if (isImeEnterEvent(event)) {
+          return;
+        }
         event.preventDefault();
         commitInlineEdit(event.currentTarget.value);
       } else if (event.key === 'Escape') {

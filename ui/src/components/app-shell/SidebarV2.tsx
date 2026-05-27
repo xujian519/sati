@@ -24,6 +24,7 @@ import {
 import type { TFunction } from 'i18next';
 import type { AppTab, Project, ProjectSession } from '../../types/app';
 import { cn } from '../../lib/utils.js';
+import { isImeEnterEvent } from '../../utils/ime';
 import {
   projectDisplayName,
   sessionDisplayTitle,
@@ -623,6 +624,9 @@ export default function SidebarV2({
   const handleRenameKey = useCallback(
     (event: KeyboardEvent<HTMLInputElement>, kind: 'project' | 'session') => {
       if (event.key === 'Enter') {
+        if (isImeEnterEvent(event)) {
+          return;
+        }
         event.preventDefault();
         if (kind === 'project') commitProjectRename();
         else commitSessionRename();
