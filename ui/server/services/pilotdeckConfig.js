@@ -479,14 +479,70 @@ export function syncAgentModelWithRouter(config) {
   return config;
 }
 
+// Remove the bootstrap `_placeholder` provider and any router model refs
+// that still point at it. Called automatically on every config write so the
+// placeholder disappears as soon as the user saves real provider details.
+function purgeBootstrapPlaceholder(config) {
+  if (!isRecord(config)) return config;
+  const providers = config?.model?.providers;
+  if (isRecord(providers) && '_placeholder' in providers) {
+    delete providers._placeholder;
+  }
+
+  const agentModel = normalizeString(config?.agent?.model);
+  if (agentModel === '_placeholder/_placeholder') {
+    const realProviders = isRecord(providers) ? Object.keys(providers) : [];
+    if (realProviders.length > 0) {
+      const firstProvider = realProviders[0];
+      const models = Object.keys(providers[firstProvider]?.models ?? {});
+      if (models.length > 0) {
+        config.agent.model = `${firstProvider}/${models[0]}`;
+      }
+    }
+  }
+
+  const router = config?.router;
+  if (!isRecord(router)) return config;
+
+  const PLACEHOLDER_REF = '_placeholder/_placeholder';
+  const agentRef = normalizeString(config.agent?.model);
+
+  if (isRecord(router.scenarios)) {
+    for (const [key, val] of Object.entries(router.scenarios)) {
+      if (val === PLACEHOLDER_REF) router.scenarios[key] = agentRef || val;
+    }
+  }
+  if (Array.isArray(router.fallback?.default)) {
+    router.fallback.default = router.fallback.default.map(
+      v => v === PLACEHOLDER_REF ? (agentRef || v) : v
+    );
+  }
+  if (isRecord(router.tokenSaver)) {
+    if (router.tokenSaver.judge === PLACEHOLDER_REF) {
+      router.tokenSaver.judge = agentRef || router.tokenSaver.judge;
+    }
+    if (isRecord(router.tokenSaver.tiers)) {
+      for (const tier of Object.values(router.tokenSaver.tiers)) {
+        if (isRecord(tier) && tier.model === PLACEHOLDER_REF) {
+          tier.model = agentRef || tier.model;
+        }
+      }
+    }
+  }
+
+  return config;
+}
+
 // Lossless writer — config object is the V2 disk shape, written verbatim
 // after running through validation. UI-internal === disk schema, so
 // there's no read-modify-write needed anymore (the previous translation
 // layer existed only to bridge an older internal schema).
 export async function writePilotDeckConfig(config) {
-  const sanitized = syncAgentModelWithRouter(
-    sanitizeProviderCredentials(
-      isRecord(config) ? deepMerge({}, config) : config,
+  const sanitized = purgeBootstrapPlaceholder(
+    syncAgentModelWithRouter(
+      sanitizeProviderCredentials(
+        isRecord(config) ? deepMerge({}, config) : config,
+      ),
     ),
   );
   const validation = validatePilotDeckConfig(sanitized);
