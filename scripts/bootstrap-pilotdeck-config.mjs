@@ -58,7 +58,7 @@ router:
     enabled: true
     maxAttempts: 2
   tokenSaver:
-    enabled: true
+    enabled: false
     judge: openrouter/qwen/qwen3-8b
     defaultTier: medium
     judgeTimeoutMs: 15000

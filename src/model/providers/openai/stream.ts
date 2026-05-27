@@ -14,7 +14,7 @@ export type OpenAIStreamState = {
   /**
    * Cumulative reasoning content seen so far in this stream. Used to
    * tell incremental-delta providers (DeepSeek, OpenRouter, …) apart
-   * from cumulative-snapshot providers (Yeysai's Gemini wrapper, some
+   * from cumulative-snapshot providers (some
    * Chinese-region Gemini proxies) — when the next chunk's reasoning
    * field strictly extends this prefix we emit only the suffix, else
    * we treat it as a fresh delta and append.
@@ -146,7 +146,7 @@ export function normalizeOpenAIStreamEvent(
     }
 
     // Reasoning-model chain-of-thought comes in two non-standard fields:
-    //   - `delta.reasoning`         — OpenRouter / DeepInfra / Parasail / Yeysai-Gemini
+    //   - `delta.reasoning`         — OpenRouter / DeepInfra / Parasail
     //   - `delta.reasoning_content` — DeepSeek native API (V4 series)
     //
     // Two separate footguns:
@@ -157,11 +157,7 @@ export function normalizeOpenAIStreamEvent(
     //      either non-empty source, but never duplicating.
     //
     //   2) Providers disagree on stream semantics. Most send incremental
-    //      deltas (`"So"` then `" the"` then `" only"` …), but Yeysai's
-    //      Gemini wrapper sends cumulative snapshots (`"So"` then
-    //      `"So the"` then `"So the only"` …). Naively concatenating a
-    //      snapshot stream as if it were deltas blows the thinking
-    //      buffer up triangularly (N tokens render N×(N+1)/2 chars).
+    //      deltas (`"So"` then `" the"` then `" only"` …).
     //
     //      Auto-detect by checking whether the new payload extends the
     //      prefix we've already seen: if yes, emit only the suffix
