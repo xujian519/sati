@@ -420,7 +420,8 @@ PilotDeck 的建设离不开以下优秀开源项目的支持：
 - [Claude Code UI](https://github.com/siteboon/claudecodeui) — Web UI 参考
 - [Claude Code Router](https://github.com/musistudio/claude-code-router) — 模型路由参考
 - [UltraRAG](https://github.com/OpenBMB/UltraRAG) — RAG 框架
-- [Anthropic Skills](https://github.com/anthropics/skills) — Agent 技能框架和内置技能（skill-creator、frontend-slides）
+- [Anthropic Skills](https://github.com/anthropics/skills) — Agent 技能框架和内置技能（skill-creator）
+- [Vercel Labs Skills](https://github.com/vercel-labs/skills) — find-skills 技能
 - [MiniMax-AI Skills](https://github.com/MiniMax-AI/skills) — minimax-pdf 技能
 - [frontend-slides](https://github.com/zarazhangrui/frontend-slides) — 用编程 Agent 的前端能力创建精美网页幻灯片
 - [Karpathy Guidelines](https://x.com/karpathy/status/2015883857489522876) — LLM 编码行为准则
