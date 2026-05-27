@@ -13,6 +13,7 @@ interface CollapsibleDisplayProps {
   rawContent?: string;
   className?: string;
   toolCategory?: string;
+  autoExpandable?: boolean;
 }
 
 const borderColorMap: Record<string, string> = {
@@ -37,7 +38,8 @@ export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
   showRawParameters = false,
   rawContent,
   className = '',
-  toolCategory
+  toolCategory,
+  autoExpandable = true
 }) => {
   // Fall back to default styling for unknown/new categories so className never includes "undefined".
   const borderColor = borderColorMap[toolCategory || 'default'] || borderColorMap.default;
@@ -50,6 +52,7 @@ export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
         open={defaultOpen}
         action={action}
         onTitleClick={onTitleClick}
+        autoExpandable={autoExpandable}
       >
         {children}
 

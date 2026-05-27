@@ -287,4 +287,26 @@ describe('processGrouping', () => {
     ]);
     expect(processAttachments(items.find((item) => item.message.id === 'a1'))).toHaveLength(0);
   });
+
+  it('folds plan-mode side-effect denials into the process row', () => {
+    const planModeDeny = {
+      content: 'Plan mode denies side-effecting tool bash.',
+      isError: true,
+      errorCode: 'permission_denied',
+    };
+    const messages = [
+      user('u1'),
+      tool('plan-deny-1', 'bash', { command: 'cd .' }, 100, planModeDeny),
+      assistant('a1', 'I will continue with a plan.', 200),
+    ];
+
+    const items = buildRenderableMessageItems(messages);
+    const assistantItem = items.find((item) => item.message.id === 'a1');
+    const attachments = processAttachments(assistantItem);
+
+    expect(items.map((item) => item.message.id)).toEqual(['u1', 'a1']);
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0].processDetailMessages.map((message) => message.id)).toEqual(['plan-deny-1']);
+    expect(attachments[0].processSummary.toolErrorCount).toBe(1);
+  });
 });

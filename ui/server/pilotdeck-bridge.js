@@ -76,9 +76,29 @@ const GATEWAY_CONNECT_RETRY_INTERVAL_MS = 250;
 const subagentActivityStarts = new Map();
 
 function normalizeToolDisplayName(name) {
+    const aliases = {
+        agent: 'Task',
+        ask_user_question: 'AskUserQuestion',
+        bash: 'Bash',
+        edit_file: 'Edit',
+        glob: 'Glob',
+        grep: 'Grep',
+        read_file: 'Read',
+        write_file: 'Write',
+    };
+    if (aliases[name]) return aliases[name];
     if (name === 'todo_write') return 'TodoWrite';
     if (name === 'todo_read') return 'TodoRead';
     return name;
+}
+
+function isPlanModeToolDenyText(text) {
+    return typeof text === 'string' && /plan mode denies side-effecting tool\b/i.test(text);
+}
+
+function normalizeToolErrorCode(errorCode, resultPreview) {
+    if (isPlanModeToolDenyText(resultPreview)) return 'plan_mode_denied';
+    return errorCode;
 }
 
 /**
@@ -340,7 +360,8 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                     toolInput: tryParseJson(event.argsPreview),
                 }),
             ];
-        case 'tool_call_finished':
+        case 'tool_call_finished': {
+            const normalizedErrorCode = normalizeToolErrorCode(event.errorCode, event.resultPreview);
             return [
                 createNormalizedMessage({
                     ...base,
@@ -353,7 +374,7 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                     // ordinary execution failures (`tool_execution_failed`,
                     // `file_not_found`, …) so the "Add to Allowed Tools"
                     // affordance only fires for the former.
-                    ...(event.errorCode && { errorCode: event.errorCode }),
+                    ...(normalizedErrorCode && { errorCode: normalizedErrorCode }),
                     // Inline tool-result images (e.g. read_file on a PNG).
                     // The wire shape uses raw base64; we wrap as data URLs
                     // here so the UI can drop them straight into <img src>.
@@ -374,6 +395,7 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                         : {}),
                 }),
             ];
+        }
         case 'permission_request':
             return [
                 createNormalizedMessage({
