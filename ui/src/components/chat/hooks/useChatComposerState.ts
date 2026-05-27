@@ -45,7 +45,7 @@ interface UseChatComposerStateArgs {
   currentSessionId: string | null;
   model: string;
   permissionMode: PermissionMode | string;
-  cyclePermissionMode: () => void;
+  cycleRunMode: () => void;
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
@@ -113,6 +113,19 @@ type UploadedAttachmentFile = {
   mimeType?: string;
 };
 
+export function shouldCycleRunModeOnKeyDown(
+  event: Pick<KeyboardEvent<HTMLTextAreaElement>, 'key' | 'shiftKey'>,
+  {
+    showFileDropdown,
+    showCommandMenu,
+  }: {
+    showFileDropdown: boolean;
+    showCommandMenu: boolean;
+  },
+): boolean {
+  return event.key === 'Tab' && event.shiftKey && !showFileDropdown && !showCommandMenu;
+}
+
 function buildAttachmentPathNote(files: UploadedAttachmentFile[]): string {
   if (!files.length) {
     return '';
@@ -128,7 +141,7 @@ export function useChatComposerState({
   currentSessionId,
   model,
   permissionMode,
-  cyclePermissionMode,
+  cycleRunMode,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -941,9 +954,9 @@ export function useChatComposerState({
         return;
       }
 
-      if (event.key === 'Tab' && !showFileDropdown && !showCommandMenu) {
+      if (shouldCycleRunModeOnKeyDown(event, { showFileDropdown, showCommandMenu })) {
         event.preventDefault();
-        cyclePermissionMode();
+        cycleRunMode();
         return;
       }
 
@@ -958,7 +971,7 @@ export function useChatComposerState({
       }
     },
     [
-      cyclePermissionMode,
+      cycleRunMode,
       handleCommandMenuKeyDown,
       handleFileMentionsKeyDown,
       handleSubmit,

@@ -236,6 +236,62 @@ describe('MessagesPaneV2 render behavior', () => {
     expect(screen.getByText('HiddenTool.tsx')).toBeTruthy();
   });
 
+  it('renders expanded plan-mode bash denials as neutral collapsed tool details', () => {
+    const now = new Date().toISOString();
+    const messages: ChatMessage[] = [
+      {
+        id: 'u-1',
+        type: 'user',
+        content: '列一下文件',
+        timestamp: now,
+      },
+      {
+        id: 'a-1',
+        type: 'assistant',
+        content: 'I will inspect the current directory.',
+        timestamp: now,
+      },
+      {
+        id: 'tool-bash-1',
+        type: 'assistant',
+        content: '',
+        timestamp: now,
+        isToolUse: true,
+        toolName: 'bash',
+        toolId: 'tool-bash-1',
+        toolInput: '{"command":"find . -maxdepth 1 -type f","description":"List files"}',
+        toolResult: {
+          content: 'Plan mode denies side-effecting tool bash.',
+          isError: true,
+          errorCode: 'permission_denied',
+        },
+      },
+      {
+        id: 'a-2',
+        type: 'assistant',
+        content: 'I will use a read-only approach instead.',
+        timestamp: now,
+      },
+    ];
+
+    const { container } = renderPane({ messages, isAssistantWorking: true, runMode: 'plan' });
+
+    const summary = screen.getByText(/Ran 1 command.*1 error/);
+    const button = summary.closest('button');
+    expect(button).not.toBeNull();
+    fireEvent.click(button as HTMLButtonElement);
+
+    expect(screen.getByText(/find \. -maxdepth 1 -type f/)).toBeTruthy();
+    expect(screen.queryByText('Parameters')).toBeNull();
+    expect(container.querySelector('.border-l-red-500')).toBeNull();
+    expect(screen.queryByRole('button', { name: /permissions\.grant|Grant Bash for this chat/ })).toBeNull();
+
+    const errorSummary = screen.getByText('Tool error').closest('summary');
+    expect(errorSummary).not.toBeNull();
+    const details = errorSummary?.closest('details') as HTMLDetailsElement | null;
+    expect(details?.open).toBe(false);
+  });
+
   it('preserves an expanded live process row while streamed tool groups grow', () => {
     const now = new Date().toISOString();
     const baseMessages: ChatMessage[] = [
@@ -565,9 +621,9 @@ describe('MessagesPaneV2 render behavior', () => {
         content: '',
         timestamp: now,
         isToolUse: true,
-        toolName: 'Edit',
+        toolName: 'write_file',
         toolId: 'tool-edit-1',
-        toolInput: '{"file_path":"src/FailedTool.tsx"}',
+        toolInput: '{"file_path":"src/FailedTool.tsx","content":"export const failed = true;"}',
         toolResult: failedResult,
       },
       {
@@ -589,7 +645,7 @@ describe('MessagesPaneV2 render behavior', () => {
       },
     ];
 
-    renderPane({ messages });
+    const { container } = renderPane({ messages });
 
     expect(screen.queryByText('Tool error')).toBeNull();
     expect(screen.queryByText('FailedTool.tsx')).toBeNull();
@@ -607,6 +663,7 @@ describe('MessagesPaneV2 render behavior', () => {
 
     expect(screen.getByText('FailedTool.tsx')).toBeTruthy();
     expect(screen.getAllByText('Tool error').length).toBeGreaterThan(0);
+    expect(container.querySelector('.border-l-red-500')).toBeNull();
   });
 
   it('does not render a completed compact boundary as a plan-mode process row', () => {

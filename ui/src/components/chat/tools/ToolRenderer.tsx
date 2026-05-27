@@ -1,7 +1,7 @@
 import React, { memo, useMemo, useCallback } from 'react';
 import type { Project } from '../../../types/app';
 import type { SubagentChildTool } from '../types/types';
-import { getToolConfig } from './configs/toolConfigs';
+import { getCanonicalToolName, getToolConfig } from './configs/toolConfigs';
 import { OneLineDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer, PlanApprovedCard } from './components';
 
 type DiffLine = {
@@ -132,6 +132,7 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
   isSubagentContainer,
   subagentState
 }) => {
+  const canonicalToolName = getCanonicalToolName(toolName);
   const config = getToolConfig(toolName);
   const displayConfig: any = mode === 'input' ? config.input : config.result;
 
@@ -319,7 +320,7 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
     }
 
     // For edit tools, make the title (filename) clickable to open the file
-    const handleTitleClick = (toolName === 'Edit' || toolName === 'Write' || toolName === 'ApplyPatch') && contentProps.filePath && onFileOpen
+    const handleTitleClick = (canonicalToolName === 'Edit' || canonicalToolName === 'Write' || canonicalToolName === 'ApplyPatch') && contentProps.filePath && onFileOpen
       ? () => onFileOpen(contentProps.filePath, {
           old_string: contentProps.oldContent,
           new_string: contentProps.newContent
@@ -335,7 +336,7 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
         onTitleClick={handleTitleClick}
         showRawParameters={mode === 'input' && showRawParameters}
         rawContent={rawToolInput}
-        toolCategory={getToolCategory(toolName)}
+        toolCategory={getToolCategory(canonicalToolName)}
       >
         {contentComponent}
       </CollapsibleDisplay>

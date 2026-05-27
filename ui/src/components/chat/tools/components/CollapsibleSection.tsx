@@ -8,6 +8,7 @@ interface CollapsibleSectionProps {
   onTitleClick?: () => void;
   children: React.ReactNode;
   className?: string;
+  autoExpandable?: boolean;
 }
 
 /**
@@ -20,10 +21,15 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   action,
   onTitleClick,
   children,
-  className = ''
+  className = '',
+  autoExpandable = true,
 }) => {
   return (
-    <details className={`group/details relative ${className}`} open={open}>
+    <details
+      className={`group/details relative ${className}`}
+      open={open}
+      data-auto-expand={autoExpandable ? undefined : 'false'}
+    >
       <summary className="flex cursor-pointer select-none items-center gap-1.5 py-0.5 text-xs group-open/details:sticky group-open/details:top-0 group-open/details:z-10 group-open/details:-mx-1 group-open/details:bg-background group-open/details:px-1">
         <svg
           className="h-3 w-3 flex-shrink-0 text-gray-400 transition-transform duration-150 group-open/details:rotate-90 dark:text-gray-500"

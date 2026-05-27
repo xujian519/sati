@@ -9,9 +9,29 @@
 import type { WebGatewayEvent } from "./protocol.js";
 
 function normalizeToolDisplayName(name: string): string {
+  const aliases: Record<string, string> = {
+    agent: "Task",
+    ask_user_question: "AskUserQuestion",
+    bash: "Bash",
+    edit_file: "Edit",
+    glob: "Glob",
+    grep: "Grep",
+    read_file: "Read",
+    write_file: "Write",
+  };
+  if (aliases[name]) return aliases[name];
   if (name === "todo_write") return "TodoWrite";
   if (name === "todo_read") return "TodoRead";
   return name;
+}
+
+function isPlanModeToolDenyText(text: unknown): boolean {
+  return typeof text === "string" && /plan mode denies side-effecting tool\b/i.test(text);
+}
+
+function normalizeToolErrorCode(errorCode: string | undefined, resultPreview: unknown): string | undefined {
+  if (isPlanModeToolDenyText(resultPreview)) return "plan_mode_denied";
+  return errorCode;
 }
 
 export type WebMessageRole =
@@ -203,6 +223,7 @@ export function applyWebGatewayEvent(
     }
 
     case "tool_call_finished": {
+      const normalizedErrorCode = normalizeToolErrorCode(event.errorCode, event.resultPreview);
       const eventImages =
         Array.isArray(event.images) && event.images.length > 0
           ? event.images.map((image) => ({
@@ -222,7 +243,7 @@ export function applyWebGatewayEvent(
                   ok: event.ok,
                   text: event.resultPreview ?? m.text,
                   ...(eventImages ? { images: eventImages } : {}),
-                  ...(event.errorCode && { errorCode: event.errorCode }),
+                  ...(normalizedErrorCode && { errorCode: normalizedErrorCode }),
                 }
               : m,
           ),
@@ -241,7 +262,7 @@ export function applyWebGatewayEvent(
         ok: event.ok,
         text: event.resultPreview,
         ...(eventImages ? { images: eventImages } : {}),
-        ...(event.errorCode && { errorCode: event.errorCode }),
+        ...(normalizedErrorCode && { errorCode: normalizedErrorCode }),
         source: "live",
       };
       return {

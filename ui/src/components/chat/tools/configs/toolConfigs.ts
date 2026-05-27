@@ -715,11 +715,27 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   }
 };
 
+const TOOL_NAME_ALIASES: Record<string, string> = {
+  agent: 'Task',
+  ask_user_question: 'AskUserQuestion',
+  bash: 'Bash',
+  edit_file: 'Edit',
+  glob: 'Glob',
+  grep: 'Grep',
+  read_file: 'Read',
+  write_file: 'Write',
+};
+
+export function getCanonicalToolName(toolName: string): string {
+  return TOOL_NAME_ALIASES[toolName] || toolName;
+}
+
 /**
  * Get configuration for a tool, with fallback to default
  */
 export function getToolConfig(toolName: string): ToolDisplayConfig {
-  return TOOL_CONFIGS[toolName] || TOOL_CONFIGS.Default;
+  const canonicalToolName = getCanonicalToolName(toolName);
+  return TOOL_CONFIGS[canonicalToolName] || TOOL_CONFIGS.Default;
 }
 
 /**

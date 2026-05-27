@@ -630,6 +630,7 @@ fi
 node "$INSTALL_DIR/scripts/bootstrap-pilotdeck-config.mjs"
 
 printf "pilotdeck: starting at http://localhost:%s\n" "$SERVER_PORT"
+export PILOTDECK_SKIP_DEFAULT_PROJECT=1
 cd "$INSTALL_DIR/ui"
 exec npm run start:built
 EOF
@@ -711,5 +712,6 @@ node "$INSTALL_DIR/scripts/bootstrap-pilotdeck-config.mjs"
 echo -e "  UI:             ${DIM}http://localhost:${SERVER_PORT}${RESET}"
 echo -e "  Gateway:        ${DIM}${PILOTDECK_GATEWAY_URL}${RESET}"
 echo ""
+export PILOTDECK_SKIP_DEFAULT_PROJECT=1
 cd "$INSTALL_DIR/ui"
 exec npm run start:built

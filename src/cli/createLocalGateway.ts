@@ -96,6 +96,12 @@ export type CreateLocalGatewayOptions = {
    */
   __testModelFactory?: (snapshot: PilotConfigSnapshot) => ModelRuntime;
   /**
+   * When true, the project list will not auto-include `projectRoot`.
+   * Set by non-interactive launchers (dev mode, install.sh wrapper) where
+   * `process.cwd()` is the PilotDeck source tree, not a user project.
+   */
+  skipDefaultProject?: boolean;
+  /**
    * When true, `ask_user_question` tool calls are answered automatically
    * (first option selected) instead of waiting for a human. Intended for
    * benchmark / headless runs where no interactive user is present.
@@ -221,9 +227,9 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
         now,
       }),
     listProjects: () =>
-      listWebProjects({ pilotHome, defaultProjectRoot: projectRoot }),
+      listWebProjects({ pilotHome, defaultProjectRoot: options.skipDefaultProject ? undefined : projectRoot }),
     describeProject: (input) =>
-      describeWebProject(input.projectKey, { pilotHome, defaultProjectRoot: projectRoot }),
+      describeWebProject(input.projectKey, { pilotHome, defaultProjectRoot: options.skipDefaultProject ? undefined : projectRoot }),
     async reloadConfig() {
       let changedPaths: string[] = [];
       const unsubscribe = configStore.subscribe((event) => {

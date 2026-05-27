@@ -1,5 +1,6 @@
 import type { TFunction } from 'i18next';
 import type { ChatMessage, ChatRunMode } from '../chat/types/types';
+import { isPlanModeToolDeny } from '../chat/utils/chatPermissions';
 import type { ProcessTraceMetric, ProcessTraceStep } from './ProcessTrace';
 import { formatProcessDuration } from './processTraceUtils';
 
@@ -289,6 +290,9 @@ function hasToolError(message: ChatMessage): boolean {
 
 function isPermissionToolError(message: ChatMessage): boolean {
   if (!message.toolResult?.isError) {
+    return false;
+  }
+  if (isPlanModeToolDeny(message)) {
     return false;
   }
 
