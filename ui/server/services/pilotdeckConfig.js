@@ -129,8 +129,6 @@ export function sanitizeProviderCredentials(config) {
 function splitModelRef(ref) {
   const text = normalizeString(ref);
   if (!text) return null;
-  // Allow nested slashes: "openrouter/anthropic/claude-sonnet-4.6" →
-  // provider="openrouter", model="anthropic/claude-sonnet-4.6"
   const slash = text.indexOf('/');
   if (slash <= 0 || slash === text.length - 1) return null;
   return { providerId: text.slice(0, slash), modelId: text.slice(slash + 1) };

@@ -291,8 +291,6 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
  * Convert NormalizedMessage[] from the session store into ChatMessage[]
  * that the existing UI components expect.
  *
- * Internal/system content (e.g. <system-reminder>, <command-name>) is already
- * filtered server-side by the Claude adapter (server/providers/utils.js).
  */
 export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMessage[] {
   return convertNormalizedMessages(messages);

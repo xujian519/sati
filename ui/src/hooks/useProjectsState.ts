@@ -543,7 +543,6 @@ export function useProjectsState({
   // The /api/projects payload caps each project's sessions array at 5 for a
   // snappy first paint. Sidebar exposes a "Load more" affordance backed by
   // this action: it pages through /api/projects/:name/sessions?limit=&offset=
-  // and appends the new claude sessions in place. We track in-flight project
   // names so the button can render a loading state and reject re-entrancy.
   const loadingMoreSessionsRef = useRef<Set<string>>(new Set());
   const [loadingMoreProjectIds, setLoadingMoreProjectIds] = useState<Set<string>>(new Set());

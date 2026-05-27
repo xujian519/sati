@@ -294,7 +294,6 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
           </div>
         </div>
       ) : (
-        /* Claude/Error/Tool messages on the left */
         <div className="w-full">
           {!hideHeader && !isGrouped && (
             <div className="mb-2 flex items-center space-x-3">
@@ -312,7 +311,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 </div>
               )}
               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : (provider === 'cursor' ? t('messageTypes.cursor') : provider === 'codex' ? t('messageTypes.codex') : provider === 'gemini' ? t('messageTypes.gemini') : t('messageTypes.claude'))}
+                {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : (provider === 'cursor' ? t('messageTypes.cursor') : provider === 'codex' ? t('messageTypes.codex') : provider === 'gemini' ? t('messageTypes.gemini') : t('messageTypes.pilotdeck'))}
               </div>
             </div>
           )}

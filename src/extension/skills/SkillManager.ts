@@ -55,11 +55,10 @@ export type SkillManagerOptions = {
   /** Resolved `~/.pilotdeck` root. Required. */
   pilotHome: string;
   /**
-   * "General chat" cwds we treat as not-a-real-project. Defaults to the
-   * paths the legacy UI server filtered out (general-chat cwd aliases).
-   * When the caller passes a
-   * `projectKey` matching one of these, the manager behaves as if no
-   * project was set — only user-scope skills are visible.
+   * "General chat" cwds we treat as not-a-real-project. Defaults to
+   * `pilotHome` (~/.pilotdeck). When the caller passes a `projectKey`
+   * matching one of these, the manager behaves as if no project was set —
+   * only user-scope skills are visible.
    */
   generalCwdPaths?: string[];
 };
@@ -78,10 +77,7 @@ export class SkillManager {
 
   constructor(options: SkillManagerOptions) {
     this.pilotHome = resolve(options.pilotHome);
-    const defaults = [
-      join(homedir(), "Claude", "general"),
-      join(homedir(), ".claude-gateway", "general"),
-    ];
+    const defaults = [this.pilotHome];
     this.generalCwdPaths = (options.generalCwdPaths ?? defaults).map((p) => resolve(p));
   }
 

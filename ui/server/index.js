@@ -103,12 +103,11 @@ import { DISABLE_LOCAL_AUTH, IS_PLATFORM } from './constants/config.js';
 import { getConnectableHost } from '../shared/networkHosts.js';
 
 // PilotDeck-only mode: chat execution always goes through src/gateway via
-// pilotdeck-bridge.js. The bundled four-provider runtime (claude-sdk,
 // cursor-cli, openai-codex, gemini-cli) has been removed.
 const VALID_PROVIDERS = ['pilotdeck'];
 
 // File-system watchers for the chat transcript root maintained by
-// PilotDeck. Provider-specific watchers (.claude / .cursor / .codex /
+// PilotDeck. Provider-specific watchers (.pilotdeck) were dropped along with the four provider adapters.
 // .gemini) were dropped along with the four provider adapters.
 const PROVIDER_WATCH_PATHS = [
     {
@@ -135,7 +134,7 @@ const connectedClients = new Set();
 const alwaysOnHeartbeat = createAlwaysOnHeartbeatManager({
     // Legacy four-provider session details have been removed; PilotDeck
     // gateway sessions are tracked by `pilotdeck-bridge.js` instead.
-    getActiveClaudeSessions: () => []
+    getActivePilotDeckSessions: () => []
 });
 registerAlwaysOnNotificationForwarding(connectedClients);
 let isGetProjectsRunning = false; // Flag to prevent reentrant calls
@@ -270,7 +269,7 @@ function broadcastConfigReloaded(payload) {
 }
 process.on('pilotdeck:config-broadcast', broadcastConfigReloaded);
 
-// Setup file system watchers for Claude, Cursor, and Codex project/session folders
+
 async function setupProjectsWatcher() {
     const chokidar = (await import('chokidar')).default;
 
@@ -591,7 +590,7 @@ for (const removedPrefix of PROVIDER_REMOVED_PATHS) {
 // PilotDeck routing dashboard. The `/api/ccr/*` URL family was kept for
 // frontend back-compat (Dashboard tab + useRouterSettings) but the data
 // now comes from `src/router/stats/TokenStatsCollector` via the
-// PilotDeck bridge — there is no Claude Code Router process underneath.
+
 app.get('/api/ccr/dashboard', authenticateToken, (_req, res) => {
     try {
         res.json(getRouterDashboardData());
@@ -2055,7 +2054,6 @@ function handleShellConnection(ws) {
                 urlDetectionBuffer = '';
                 announcedAuthUrls.clear();
 
-                // Login commands (Claude/Cursor auth) should never reuse cached sessions
                 const isLoginCommand = initialCommand && (
                     initialCommand.includes('setup-token') ||
                     initialCommand.includes('cursor-agent login') ||
@@ -2199,7 +2197,7 @@ function handleShellConnection(ws) {
                             shellCommand = command;
                         }
                     } else {
-                        // Claude (default provider)
+
                         const command = initialCommand || 'claude';
                         if (hasSession && sessionId) {
                             if (os.platform() === 'win32') {
@@ -2742,7 +2740,6 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
             });
         }
 
-        // Handle Claude sessions (default)
         // Extract actual project path
         let projectPath;
         try {
@@ -2752,9 +2749,7 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
             return res.status(500).json({ error: 'Failed to determine project path' });
         }
 
-        // Construct the JSONL file path
-        // Claude stores session files in ~/.claude/projects/[encoded-project-path]/[session-id].jsonl
-        // The encoding replaces any non-alphanumeric character (except -) with -
+
         const encodedPath = projectPath.replace(/[^a-zA-Z0-9-]/g, '-');
         const projectDir = path.join(homeDir, '.claude', 'projects', encodedPath);
 
@@ -3037,7 +3032,6 @@ async function startServer() {
                     stopPilotDeckConfigWatcher();
                     await stopPilotDeckProxy();
                     await stopAllPlugins();
-                    // The CCR (Claude Code Router) and embedded-chrome
                     // helpers were retired with the four-provider runtime.
                     try {
                         const { shutdownGlobalChrome, stopChromeHealthCheck } = await import('./utils/globalChrome.js');

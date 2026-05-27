@@ -197,7 +197,7 @@ export default function PermissionsSettingsTab() {
       .catch((error) => {
         console.error('Failed to load permission settings from backend:', error);
       });
-    // Stay in sync with grants from the chat surface (`grantClaudeToolPermission`)
+
     // so users can flip back and forth between the chat and this dialog
     // without seeing stale state.
     const onStorage = (event: StorageEvent) => {
@@ -428,7 +428,7 @@ export default function PermissionsSettingsTab() {
                 })}
               </span>
             }
-            description={t('permissions.skipPermissions.claudeDescription', {
+            description={t('permissions.skipPermissions.pilotdeckDescription', {
               defaultValue: 'Equivalent to passing --dangerously-skip-permissions.',
             })}
           >

@@ -9,6 +9,7 @@ import { CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
 import { parseFrontmatter } from '../utils/frontmatter.js';
 import { getClaudeRuntimeModelConfig, getClaudeRuntimeModelValues } from '../utils/claude-runtime-config.js';
 import { readPilotDeckConfigFile, resolveModel } from '../services/pilotdeckConfig.js';
+import { resolvePilotHome } from '../utils/pilotPaths.js';
 import { executeTurnkeySlashCommand } from '../turnkey-slash.js';
 
 const execFileAsync = promisify(execFile);
@@ -116,13 +117,11 @@ async function scanCommandsDirectory(dir, baseDir, namespace) {
 }
 
 /**
- * Scan `.claude/skills/` for skill-format slash commands. Each immediate
  * subdirectory `<dir>/<name>/SKILL.md` becomes the slash command `/<name>`.
  * Mirrors the upstream `loadSkillsFromSkillsDir` convention
  * so disk semantics stay aligned: directory format only, name = parent dir,
  * frontmatter parsed for description/metadata.
  *
- * @param {string} dir - Path to the `.claude/skills/` directory
  * @param {string} namespace - 'project' or 'user'
  * @returns {Promise<Array>} Skill command objects
  */
@@ -569,9 +568,7 @@ Custom commands can be created in:
   //
   // Scope policy (auto-detected, override-able):
   //   - In general chat (no projectPath in context) → user scope:
-  //         workdir = ~/.claude     dir = skills      → ~/.claude/skills/<slug>/
   //   - In a project's chat (projectPath set)        → project scope:
-  //         workdir = <projectPath> dir = .claude/skills → <project>/.claude/skills/<slug>/
   //   - Explicit override: --global forces user scope, --project forces project
   //     scope (errors out if no projectPath available).
   //
@@ -640,15 +637,10 @@ Custom commands can be created in:
 
     const projectPath = context?.projectPath || null;
 
-    // Some "projects" are actually the general-chat synthetic cwd (configured
-    // in edgeclaw runtimePaths.generalCwd). They look like a real projectPath
-    // but the user's mental model is "I'm in general chat" → user/global scope.
-    // Detect the two known general-cwd patterns. If a user re-points generalCwd
-    // elsewhere, they can still force user scope with --global.
-    const GENERAL_CWD_PATHS = [
-      path.join(os.homedir(), 'Claude', 'general'),
-      path.join(os.homedir(), '.claude-gateway', 'general'),
-    ].map((p) => path.resolve(p));
+    // PilotDeck's virtual "general" workspace roots at ~/.pilotdeck. It looks
+    // like a real projectPath but the user's mental model is general chat →
+    // user/global scope. Force user scope with --global when needed.
+    const GENERAL_CWD_PATHS = [path.resolve(resolvePilotHome(process.env))];
     const isGeneralCwd =
       projectPath && GENERAL_CWD_PATHS.includes(path.resolve(projectPath));
     const effectiveProjectPath = isGeneralCwd ? null : projectPath;
@@ -788,7 +780,6 @@ Custom commands can be created in:
  *   - Bundled skills: hardcoded stubs (BUNDLED_SKILL_STUBS) — actual handlers
  *     live in the CLI binary; we only surface them so the UI menu shows them.
  *   - On-disk commands: `.pilotdeck/commands/**\/*.md` (project + user).
- *   - On-disk skills:   `.claude/skills/<name>/SKILL.md` (project + user).
  *
  * Dedup: when the same `/<name>` exists in multiple places, project wins over
  * user, and `commands/` wins over `skills/` (first-seen preference).
@@ -890,7 +881,6 @@ router.post('/load', async (req, res) => {
     }
 
     // Security: Prevent path traversal. Allow paths under any
-    // `.claude/commands` or `.claude/skills` directory (project or user).
     const resolvedPath = path.resolve(commandPath);
     const inHome = resolvedPath.startsWith(path.resolve(os.homedir()));
     const inClaudeSubdir = /\.claude\/(commands|skills)\//.test(resolvedPath);
@@ -984,7 +974,6 @@ router.post('/execute', async (req, res) => {
       });
     }
 
-    // On-disk skills (`.claude/skills/<name>/SKILL.md`) must NOT be expanded
     // server-side and submitted as raw user input — that would dump the whole
     // SKILL.md body into chat. Instead, passthrough the slash text so the
     // proxy's slash parser invokes SkillTool with the procedural body.
@@ -1003,7 +992,6 @@ router.post('/execute', async (req, res) => {
       });
     }
 
-    // Handle custom commands (legacy `.claude/commands/<name>.md` only)
     if (!commandPath) {
       return res.status(400).json({
         error: 'Command path is required for custom commands'
@@ -1012,7 +1000,6 @@ router.post('/execute', async (req, res) => {
 
     // Load command content
     // Security: validate commandPath is within allowed directories.
-    // Allow `.claude/{commands,skills}/` for both user (~) and project scopes.
     {
       const resolvedPath = path.resolve(commandPath);
       const allowedBases = [

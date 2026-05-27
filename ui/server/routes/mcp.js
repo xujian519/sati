@@ -10,9 +10,6 @@ const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Claude CLI command routes
-
-// GET /api/mcp/cli/list - List MCP servers using Claude CLI
 router.get('/cli/list', async (req, res) => {
   try {
     console.log('📋 Listing MCP servers using Claude CLI');
@@ -57,7 +54,6 @@ router.get('/cli/list', async (req, res) => {
   }
 });
 
-// POST /api/mcp/cli/add - Add MCP server using Claude CLI
 router.post('/cli/add', async (req, res) => {
   try {
     const { name, type = 'stdio', command, args = [], url, headers = {}, env = {}, scope = 'user', projectPath } = req.body;
@@ -84,7 +80,6 @@ router.post('/cli/add', async (req, res) => {
         cliArgs.push('--header', `${key}: ${value}`);
       });
     } else {
-      // stdio (default): claude mcp add --scope user <name> <command> [args...]
       cliArgs.push(name);
       // Add environment variables
       Object.entries(env).forEach(([key, value]) => {
@@ -184,7 +179,6 @@ router.post('/cli/add-json', async (req, res) => {
     
     const { spawn } = await import('child_process');
     
-    // Build the command: claude mcp add-json --scope <scope> <name> '<json>'
     const cliArgs = ['mcp', 'add-json', '--scope', scope, name];
     
     // Add the JSON config as a properly formatted string
@@ -237,7 +231,6 @@ router.post('/cli/add-json', async (req, res) => {
   }
 });
 
-// DELETE /api/mcp/cli/remove/:name - Remove MCP server using Claude CLI
 router.delete('/cli/remove/:name', async (req, res) => {
   try {
     const { name } = req.params;
@@ -309,7 +302,6 @@ router.delete('/cli/remove/:name', async (req, res) => {
   }
 });
 
-// GET /api/mcp/cli/get/:name - Get MCP server details using Claude CLI
 router.get('/cli/get/:name', async (req, res) => {
   try {
     const { name } = req.params;
@@ -354,7 +346,6 @@ router.get('/cli/get/:name', async (req, res) => {
   }
 });
 
-// GET /api/mcp/config/read - Read MCP servers directly from Claude config files
 router.get('/config/read', async (req, res) => {
   try {
     console.log('📖 Reading MCP servers from Claude config files');
@@ -474,7 +465,6 @@ router.get('/config/read', async (req, res) => {
   }
 });
 
-// Helper functions to parse Claude CLI output
 function parseClaudeListOutput(output) {
   const servers = [];
   const lines = output.split('\n').filter(line => line.trim());
@@ -528,7 +518,6 @@ function parseClaudeListOutput(output) {
 }
 
 function parseClaudeGetOutput(output) {
-  // Parse the output from 'claude mcp get <name>' command
   // This is a simple parser - might need adjustment based on actual output format
   try {
     // Try to extract JSON if present

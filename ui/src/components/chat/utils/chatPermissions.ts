@@ -50,7 +50,6 @@ export function getPilotDeckPermissionSuggestion(
   message: ChatMessage | null | undefined,
   _provider: string,
 ): PilotDeckPermissionSuggestion | null {
-  // No longer gated on provider === 'claude': after the PolitDeck-only
   // migration every provider routes tool calls through the same gateway
   // PermissionContext, so the "Permission added" affordance is useful
   // regardless of which model is selected.
