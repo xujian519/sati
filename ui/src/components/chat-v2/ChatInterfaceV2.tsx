@@ -86,8 +86,11 @@ function ChatInterfaceV2({
     setPermissionMode: setPermissionModeRaw,
     pendingPermissionRequests,
     setPendingPermissionRequests,
-    cyclePermissionMode,
   } = useChatProviderState({ selectedSession });
+
+  const cycleRunMode = useCallback(() => {
+    setRunMode((currentMode) => (currentMode === 'plan' ? 'agent' : 'plan'));
+  }, []);
 
   const selectPermissionMode = useCallback((mode: typeof permissionMode) => {
     setPermissionModeRaw(mode);
@@ -199,7 +202,7 @@ function ChatInterfaceV2({
     currentSessionId,
     model,
     permissionMode: effectivePermissionMode,
-    cyclePermissionMode,
+    cycleRunMode,
     isLoading,
     canAbortSession,
     tokenBudget,
