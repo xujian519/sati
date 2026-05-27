@@ -663,9 +663,9 @@ Custom commands can be created in:
         };
       }
       workdir = effectiveProjectPath;
-      dir = path.join('.claude', 'skills');
+      dir = path.join('.pilotdeck', 'skills');
     } else {
-      workdir = path.join(os.homedir(), '.claude');
+      workdir = path.join(os.homedir(), '.pilotdeck');
       dir = 'skills';
     }
     const installPath = path.join(workdir, dir, slug);
@@ -796,8 +796,8 @@ router.post('/list', async (req, res) => {
     const customCommandSources = [];
 
     if (projectPath) {
-      const projectCommandsDir = path.join(projectPath, '.claude', 'commands');
-      const projectSkillsDir = path.join(projectPath, '.claude', 'skills');
+      const projectCommandsDir = path.join(projectPath, '.pilotdeck', 'commands');
+      const projectSkillsDir = path.join(projectPath, '.pilotdeck', 'skills');
       const [projectCommands, projectSkills] = await Promise.all([
         scanCommandsDirectory(projectCommandsDir, projectCommandsDir, 'project'),
         scanSkillsDirectory(projectSkillsDir, 'project'),
@@ -805,8 +805,8 @@ router.post('/list', async (req, res) => {
       customCommandSources.push(...projectCommands, ...projectSkills);
     }
 
-    const userCommandsDir = path.join(homeDir, '.claude', 'commands');
-    const userSkillsDir = path.join(homeDir, '.claude', 'skills');
+    const userCommandsDir = path.join(homeDir, '.pilotdeck', 'commands');
+    const userSkillsDir = path.join(homeDir, '.pilotdeck', 'skills');
     const [userCommands, userSkills] = await Promise.all([
       scanCommandsDirectory(userCommandsDir, userCommandsDir, 'user'),
       scanSkillsDirectory(userSkillsDir, 'user'),
@@ -883,11 +883,11 @@ router.post('/load', async (req, res) => {
     // Security: Prevent path traversal. Allow paths under any
     const resolvedPath = path.resolve(commandPath);
     const inHome = resolvedPath.startsWith(path.resolve(os.homedir()));
-    const inClaudeSubdir = /\.claude\/(commands|skills)\//.test(resolvedPath);
-    if (!inHome && !inClaudeSubdir) {
+    const inPilotdeckSubdir = /\.pilotdeck\/(commands|skills)\//.test(resolvedPath);
+    if (!inHome && !inPilotdeckSubdir) {
       return res.status(403).json({
         error: 'Access denied',
-        message: 'Command must be in a .claude/commands or .claude/skills directory'
+        message: 'Command must be in a .pilotdeck/commands or .pilotdeck/skills directory'
       });
     }
 
@@ -977,7 +977,7 @@ router.post('/execute', async (req, res) => {
     // server-side and submitted as raw user input — that would dump the whole
     // SKILL.md body into chat. Instead, passthrough the slash text so the
     // proxy's slash parser invokes SkillTool with the procedural body.
-    if (commandPath && /\/\.claude\/skills\/[^/]+\/SKILL\.md$/i.test(commandPath)) {
+    if (commandPath && /\/\.pilotdeck\/skills\/[^/]+\/SKILL\.md$/i.test(commandPath)) {
       const argsString = args.join(' ').trim();
       const passthroughContent = argsString
         ? `${commandName} ${argsString}`
@@ -1003,13 +1003,13 @@ router.post('/execute', async (req, res) => {
     {
       const resolvedPath = path.resolve(commandPath);
       const allowedBases = [
-        path.resolve(path.join(os.homedir(), '.claude', 'commands')),
-        path.resolve(path.join(os.homedir(), '.claude', 'skills')),
+        path.resolve(path.join(os.homedir(), '.pilotdeck', 'commands')),
+        path.resolve(path.join(os.homedir(), '.pilotdeck', 'skills')),
       ];
       if (context?.projectPath) {
         allowedBases.push(
-          path.resolve(path.join(context.projectPath, '.claude', 'commands')),
-          path.resolve(path.join(context.projectPath, '.claude', 'skills')),
+          path.resolve(path.join(context.projectPath, '.pilotdeck', 'commands')),
+          path.resolve(path.join(context.projectPath, '.pilotdeck', 'skills')),
         );
       }
       const isUnder = (base) => {
@@ -1019,7 +1019,7 @@ router.post('/execute', async (req, res) => {
       if (!allowedBases.some(isUnder)) {
         return res.status(403).json({
           error: 'Access denied',
-          message: 'Command must be in a .claude/commands or .claude/skills directory'
+          message: 'Command must be in a .pilotdeck/commands or .pilotdeck/skills directory'
         });
       }
     }

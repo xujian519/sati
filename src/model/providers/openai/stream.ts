@@ -11,7 +11,6 @@ export type OpenAIStreamState = {
   toolCalls: Map<number, Partial<CanonicalToolCall> & { argumentsBuffer?: string }>;
   thinkFsm: ThinkFsmMode;
   tagBuffer: string;
-
   reasoningSnapshot: string;
 };
 
@@ -137,7 +136,6 @@ export function normalizeOpenAIStreamEvent(
     if (typeof delta.content === "string" && delta.content.length > 0) {
       events.push(...splitThinkContent(delta.content, state, raw));
     }
-
 
     const reasoning = delta.reasoning ?? delta.reasoning_content;
     if (typeof reasoning === "string" && reasoning.length > 0) {

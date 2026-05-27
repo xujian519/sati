@@ -78,9 +78,8 @@ export async function buildDiscoveryContext(deps: DiscoveryContextDeps) {
   const { projectName, projectRoot } = deps;
   const cutoff = Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
 
-  const [workspaceSignals, memory, cronOverview, sessionResult] = await Promise.all([
+  const [workspaceSignals, cronOverview, sessionResult] = await Promise.all([
     collectWorkspaceSignals(projectRoot),
-    collectMemorySignals(projectName),
     deps.getProjectCronJobsOverview(projectName).catch(() => ({ jobs: [] as CronJobOverview[] })),
     deps.getSessions(projectName, Number.MAX_SAFE_INTEGER, 0).catch(() => ({ sessions: [] as SessionRecord[] })),
   ]);
@@ -105,7 +104,7 @@ export async function buildDiscoveryContext(deps: DiscoveryContextDeps) {
     generatedAt: new Date().toISOString(),
     lookbackDays: LOOKBACK_DAYS,
     workspace: { projectName, projectRoot, signals: workspaceSignals },
-    memory,
+    memory: [],
     existingPlans: [] as unknown[],
     cronJobs: Array.isArray(cronOverview?.jobs)
       ? cronOverview.jobs.slice(0, MAX_ITEMS).map(buildCronContextItem)
@@ -182,7 +181,7 @@ async function walkDirectory(rootDir: string, visit: (path: string) => Promise<v
 }
 
 async function collectMemorySignals(projectName: string) {
-  const projectStoreDir = join(homedir(), ".claude", "projects", projectName);
+  const projectStoreDir = join(homedir(), ".pilotdeck", "projects", projectName);
   const candidates: { entryPath: string; modifiedAt: string }[] = [];
 
   await walkDirectory(projectStoreDir, async (entryPath) => {

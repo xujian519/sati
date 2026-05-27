@@ -1,6 +1,5 @@
 import type { ProviderCatalog } from "./types.js";
 
-
 export const PROVIDER_CATALOG: ProviderCatalog = {
 
   // ── Anthropic ──────────────────────────────────────────────────────────
