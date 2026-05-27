@@ -479,14 +479,21 @@ export function syncAgentModelWithRouter(config) {
   return config;
 }
 
-// Remove the bootstrap `_placeholder` provider and any router model refs
-// that still point at it. Called automatically on every config write so the
-// placeholder disappears as soon as the user saves real provider details.
+const BOOTSTRAP_PLACEHOLDER_KEY = 'PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE';
+
+// Remove bootstrap placeholder providers — both the new `_placeholder` name
+// and any legacy provider whose apiKey is still the onboarding sentinel.
+// Called automatically on every config write so stale placeholders disappear
+// as soon as the user saves real provider details.
 function purgeBootstrapPlaceholder(config) {
   if (!isRecord(config)) return config;
   const providers = config?.model?.providers;
-  if (isRecord(providers) && '_placeholder' in providers) {
-    delete providers._placeholder;
+  if (isRecord(providers)) {
+    for (const [pid, prov] of Object.entries(providers)) {
+      if (pid === '_placeholder' || normalizeString(prov?.apiKey) === BOOTSTRAP_PLACEHOLDER_KEY) {
+        delete providers[pid];
+      }
+    }
   }
 
   const agentModel = normalizeString(config?.agent?.model);
@@ -504,26 +511,34 @@ function purgeBootstrapPlaceholder(config) {
   const router = config?.router;
   if (!isRecord(router)) return config;
 
-  const PLACEHOLDER_REF = '_placeholder/_placeholder';
   const agentRef = normalizeString(config.agent?.model);
+  const survivingProviders = isRecord(providers) ? new Set(Object.keys(providers)) : new Set();
+
+  function isOrphanRef(ref) {
+    const s = normalizeString(ref);
+    if (!s) return false;
+    const slash = s.indexOf('/');
+    if (slash <= 0) return false;
+    return !survivingProviders.has(s.slice(0, slash));
+  }
 
   if (isRecord(router.scenarios)) {
     for (const [key, val] of Object.entries(router.scenarios)) {
-      if (val === PLACEHOLDER_REF) router.scenarios[key] = agentRef || val;
+      if (isOrphanRef(val)) router.scenarios[key] = agentRef || val;
     }
   }
   if (Array.isArray(router.fallback?.default)) {
     router.fallback.default = router.fallback.default.map(
-      v => v === PLACEHOLDER_REF ? (agentRef || v) : v
+      v => isOrphanRef(v) ? (agentRef || v) : v
     );
   }
   if (isRecord(router.tokenSaver)) {
-    if (router.tokenSaver.judge === PLACEHOLDER_REF) {
+    if (isOrphanRef(router.tokenSaver.judge)) {
       router.tokenSaver.judge = agentRef || router.tokenSaver.judge;
     }
     if (isRecord(router.tokenSaver.tiers)) {
       for (const tier of Object.values(router.tokenSaver.tiers)) {
-        if (isRecord(tier) && tier.model === PLACEHOLDER_REF) {
+        if (isRecord(tier) && isOrphanRef(tier.model)) {
           tier.model = agentRef || tier.model;
         }
       }
