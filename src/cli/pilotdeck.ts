@@ -80,6 +80,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       projectRoot,
       pilotHome,
       env,
+      skipDefaultProject: !!env.PILOTDECK_SKIP_DEFAULT_PROJECT,
       extraTools: [...(alwaysOn?.getTools() ?? []), ...(cron?.getTools() ?? [])],
       sessionOverrides: alwaysOn?.getSessionOverrides(),
       cron,
