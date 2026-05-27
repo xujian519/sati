@@ -17,15 +17,19 @@ test("AgentLoop.snapshotFileState round-trips seedState", () => {
   const { config, dependencies } = createAgentLoopFixture({ scripts: [] });
   const loop = new AgentLoop(config, dependencies, seedState);
   const snapshot = loop.snapshotFileState();
+  const readFileState = snapshot.readFileState;
+  const writeSnapshots = snapshot.writeSnapshots;
+  assert.ok(readFileState);
+  assert.ok(writeSnapshots);
 
-  assert.equal(snapshot.readFileState.size, 1);
-  assert.equal(snapshot.writeSnapshots.size, 1);
+  assert.equal(readFileState.size, 1);
+  assert.equal(writeSnapshots.size, 1);
   assert.deepEqual(
-    snapshot.writeSnapshots.get("/abs/file.txt"),
+    writeSnapshots.get("/abs/file.txt"),
     seedState.writeSnapshots!.get("/abs/file.txt"),
   );
   assert.deepEqual(
-    snapshot.readFileState.get("/abs/file.txt::text"),
+    readFileState.get("/abs/file.txt::text"),
     seedState.readFileState!.get("/abs/file.txt::text"),
   );
 });
@@ -41,14 +45,18 @@ test("AgentLoop.snapshotFileState returns independent clones", () => {
   const loop = new AgentLoop(config, dependencies, seedState);
   const snap1 = loop.snapshotFileState();
   const snap2 = loop.snapshotFileState();
+  const snap1WriteSnapshots = snap1.writeSnapshots;
+  const snap2WriteSnapshots = snap2.writeSnapshots;
+  assert.ok(snap1WriteSnapshots);
+  assert.ok(snap2WriteSnapshots);
 
-  snap1.writeSnapshots.set("/abs/b.txt", {
+  snap1WriteSnapshots.set("/abs/b.txt", {
     absolutePath: "/abs/b.txt",
     mtimeMs: 200,
     contentHash: "bbb",
   });
   assert.equal(
-    snap2.writeSnapshots.has("/abs/b.txt"),
+    snap2WriteSnapshots.has("/abs/b.txt"),
     false,
     "mutations to snap1 should not affect snap2",
   );

@@ -44,7 +44,19 @@ function buildDeps(model: ScriptedModel, registry: ToolRegistry): AgentRuntimeDe
   const permissions = new PermissionRuntime();
   const toolRuntime = new ToolRuntime(registry, permissions);
   const scheduler = new SequentialToolScheduler(toolRuntime);
-  const router = {
+  const router: AgentRuntimeDependencies["router"] = {
+    async decide(input) {
+      return {
+        provider: input.request.provider,
+        model: input.request.model,
+        scenarioType: "default",
+        isSubagent: !input.isMainAgent,
+        orchestrating: false,
+        resolvedFrom: "explicit",
+        mutations: {},
+      };
+    },
+    execute: (_decision, request) => model.stream(request),
     stream: (request: CanonicalModelRequest) => model.stream(request),
   };
   return { router, tools: { scheduler, registry } };

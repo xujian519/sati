@@ -94,7 +94,7 @@ export function buildAnthropicRequest(
         ? { type: "enabled", budget_tokens: request.thinking.budgetTokens }
         : undefined,
     stream: request.stream,
-    metadata: request.metadata,
+    metadata: toAnthropicMetadata(request.metadata),
   };
 }
 
@@ -210,6 +210,13 @@ function toAnthropicTool(tool: CanonicalToolSchema): AnthropicTool {
     description: tool.description,
     input_schema: tool.inputSchema,
   };
+}
+
+function toAnthropicMetadata(metadata: Record<string, unknown> | undefined): Record<string, string> | undefined {
+  if (!metadata || typeof metadata.user_id !== "string" || metadata.user_id.length === 0) {
+    return undefined;
+  }
+  return { user_id: metadata.user_id };
 }
 
 function toAnthropicToolChoice(toolChoice: CanonicalToolChoice | undefined): Record<string, unknown> | undefined {

@@ -155,6 +155,20 @@ if (fs.existsSync(distDir)) {
 // 3. memory-core also referenced from sandbox root
 mkJunction(path.join(sandbox, "edgeclaw-memory-core"), memDir);
 
+// 4. UI server imports ../../../src/context/memory/edgeclaw-memory-core/...
+//    sandbox/src -> dist/src which excludes the memory module; create the
+//    junction directly inside the dist/src tree so resolution succeeds.
+const memJunctionParent = path.join(distDir, "src", "context", "memory");
+if (!fs.existsSync(memJunctionParent)) {
+  fs.mkdirSync(memJunctionParent, { recursive: true });
+}
+const memJunction = path.join(memJunctionParent, "edgeclaw-memory-core");
+if (fs.existsSync(memJunction) && !fs.lstatSync(memJunction).isSymbolicLink()) {
+  fs.rmSync(memJunction, { recursive: true, force: true });
+}
+mkJunction(memJunction, memDir);
+console.log("  Linked: src/context/memory/edgeclaw-memory-core -> memory-core bundle");
+
 const nodeExe = path.join(resources, "node-bin", "node.exe");
 const bunExe = path.join(resources, "bun-bin", "bun.exe");
 

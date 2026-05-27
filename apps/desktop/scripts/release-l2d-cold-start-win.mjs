@@ -46,6 +46,7 @@ try {
       ...process.env,
       HOME: sandboxHome,
       USERPROFILE: sandboxHome,
+      PILOT_HOME: pilotHome,
       PILOTDECK_E2E_MOCK_PROVIDER: "1",
     },
     timeout: 180_000,

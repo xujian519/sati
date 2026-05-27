@@ -78,13 +78,18 @@ const getProjectSessions = (project: Project): ProjectSession[] =>
 const isTemporarySessionId = (id: unknown): boolean =>
   typeof id === 'string' && id.startsWith('new-session-');
 
+// On Windows, session keys like `web:s_<uuid>` are sanitized to `web-s_<uuid>`
+// for disk storage. Normalize to the disk form so that in-memory state
+// (from session_created) matches server listings (from filenames).
+const normalizeSessionId = (id: string): string => id.replace(/^web:s_/, 'web-s_');
+
 const preserveLoadedSessions = (prevProjects: Project[], nextProjects: Project[]): Project[] =>
   nextProjects.map((updated) => {
     const prev = prevProjects.find((p) => p.name === updated.name);
     if (!prev) return updated;
     const prevSessions = prev.sessions ?? [];
     const updatedSessions = updated.sessions ?? [];
-    const updatedIds = new Set(updatedSessions.map((s) => s.id));
+    const updatedIds = new Set(updatedSessions.map((s) => normalizeSessionId(s.id)));
     // Carry forward any in-flight optimistic placeholders (`new-session-*`)
     // that the server payload doesn't yet know about. They're explicitly
     // dropped by `replaceOptimisticInProjects` / `dropOptimisticInProjects`
@@ -93,7 +98,7 @@ const preserveLoadedSessions = (prevProjects: Project[], nextProjects: Project[]
     // before the new file shows up in the server's session list (~300ms
     // chokidar debounce vs unbounded agent start latency).
     const optimisticToKeep = prevSessions.filter(
-      (s) => isTemporarySessionId(s.id) && !updatedIds.has(s.id),
+      (s) => isTemporarySessionId(s.id) && !updatedIds.has(normalizeSessionId(s.id)),
     );
     const prevRealSessions = prevSessions.filter((s) => !isTemporarySessionId(s.id));
     if (prevRealSessions.length <= updatedSessions.length) {
@@ -106,7 +111,7 @@ const preserveLoadedSessions = (prevProjects: Project[], nextProjects: Project[]
     const merged = [
       ...optimisticToKeep,
       ...updatedSessions,
-      ...prevRealSessions.filter((s) => !updatedIds.has(s.id)),
+      ...prevRealSessions.filter((s) => !updatedIds.has(normalizeSessionId(s.id))),
     ];
     return {
       ...updated,
@@ -574,11 +579,11 @@ export function useProjectsState({
         const incoming = Array.isArray(data.sessions) ? data.sessions : [];
 
         const mergeSessions = (existing: ProjectSession[]): ProjectSession[] => {
-          const seen = new Set(existing.map((s) => s.id));
+          const seen = new Set(existing.map((s) => normalizeSessionId(s.id)));
           const merged = [...existing];
           for (const session of incoming) {
-            if (!session?.id || seen.has(session.id)) continue;
-            seen.add(session.id);
+            if (!session?.id || seen.has(normalizeSessionId(session.id))) continue;
+            seen.add(normalizeSessionId(session.id));
             merged.push(session);
           }
           return merged;

@@ -69,6 +69,14 @@ pd_runtime_extract_bundles() {
     ln -sfn "$MEM_DIR" "$SANDBOX/edgeclaw-memory-core"
     mkdir -p "$CCM_DIR/node_modules"
     ln -sfn "$MEM_DIR" "$CCM_DIR/node_modules/edgeclaw-memory-core"
+    # UI server routes/memory.js imports via relative path that resolves to
+    # $SANDBOX/src/context/memory/edgeclaw-memory-core/lib/index.js.
+    # Since $SANDBOX/src is a symlink to pilotdeck-main/dist/src, which may
+    # contain a stub dir from tsc output, remove it before symlinking.
+    mkdir -p "$SANDBOX/src/context/memory"
+    local _ecmc="$SANDBOX/src/context/memory/edgeclaw-memory-core"
+    if [[ -d "$_ecmc" && ! -L "$_ecmc" ]]; then rm -rf "$_ecmc"; fi
+    ln -sfn "$MEM_DIR" "$_ecmc"
   fi
   if [[ ! -e "$SANDBOX/node_modules" ]]; then
     ln -sfn "$CCM_DIR/node_modules" "$SANDBOX/node_modules"

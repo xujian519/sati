@@ -17,7 +17,12 @@ import { LifecycleRuntime } from "../../../src/lifecycle/index.js";
 import { createModelRuntime, type CanonicalModelEvent, type CanonicalModelRequest } from "../../../src/model/index.js";
 import { createDefaultPermissionContext } from "../../../src/permission/index.js";
 import { loadPilotConfig } from "../../../src/pilot/index.js";
-import { createRouterRuntime } from "../../../src/router/index.js";
+import {
+  createRouterRuntime,
+  type RouterDecision,
+  type RouterDecisionInput,
+  type RouterExecuteContext,
+} from "../../../src/router/index.js";
 import { ToolRegistry, type PilotDeckToolDefinition } from "../../../src/tool/index.js";
 
 const RUN_REAL_E2E = process.env.PILOTDECK_RUN_REAL_AGENT_LIFECYCLE_E2E === "1";
@@ -157,7 +162,6 @@ const config: AgentRuntimeConfig = {
   permissionMode: permissionContext.mode,
   permissionContext,
   systemPrompt: "You are executing a PilotDeck smoke test. Follow tool instructions exactly and copy requested markers verbatim.",
-  toolChoice: { type: "tool", name: TOOL_NAME },
   // Reasoning-heavy models like Kimi K2.6 spend most tokens on hidden reasoning;
   // 384 was the old limit and starved the final-answer phase. Use the model
   // capability cap (8192 for Kimi K2.6) so the second turn can write its text.
@@ -175,14 +179,35 @@ const realRouter = createRouterRuntime(
   { modelRuntime: baseModelRuntime },
 );
 
+function recordModelRequest(request: CanonicalModelRequest): CanonicalModelRequest {
+  const adjustedRequest = adjustToolChoice(request);
+  modelRequests.push({
+    index: modelRequests.length + 1,
+    toolChoice: adjustedRequest.toolChoice,
+    hasToolResult: hasToolResult(request),
+  });
+  return adjustedRequest;
+}
+
 const router: AgentRouterRuntime = {
-  async *stream(request, ctx) {
-    const adjustedRequest = adjustToolChoice(request);
-    modelRequests.push({
-      index: modelRequests.length + 1,
-      toolChoice: adjustedRequest.toolChoice,
-      hasToolResult: hasToolResult(request),
+  async decide(input: RouterDecisionInput): Promise<RouterDecision> {
+    return realRouter.decide({
+      ...input,
+      request: adjustToolChoice(input.request),
     });
+  },
+  async *execute(
+    decision: RouterDecision,
+    request: CanonicalModelRequest,
+    ctx: RouterExecuteContext,
+  ): AsyncIterable<CanonicalModelEvent> {
+    const adjustedRequest = recordModelRequest(request);
+    for await (const event of realRouter.execute(decision, adjustedRequest, ctx)) {
+      yield event;
+    }
+  },
+  async *stream(request, ctx) {
+    const adjustedRequest = recordModelRequest(request);
     for await (const event of realRouter.stream(adjustedRequest, ctx) as AsyncIterable<CanonicalModelEvent>) {
       yield event;
     }
@@ -308,16 +333,12 @@ function createSmokeTool(): PilotDeckToolDefinition {
 }
 
 function adjustToolChoice(request: CanonicalModelRequest): CanonicalModelRequest {
-  if (hasToolResult(request)) {
-    return {
-      ...request,
-      toolChoice: "none",
-    };
-  }
-  return {
-    ...request,
-    toolChoice: { type: "tool", name: TOOL_NAME },
-  };
+  // Some Anthropic-compatible endpoints accept tools but reject the optional
+  // `tool_choice` parameter. The prompt plus single registered tool is enough
+  // for this smoke, so omit provider-specific forcing.
+  const { toolChoice: _toolChoice, ...requestWithoutToolChoice } = request;
+  void _toolChoice;
+  return requestWithoutToolChoice;
 }
 
 function hasToolResult(request: CanonicalModelRequest): boolean {

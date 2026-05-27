@@ -8,7 +8,7 @@ import { loadPilotConfig } from "../../src/pilot/config/index.js";
 
 // apps/desktop compiles to CommonJS; load built output (release runs `npm run build` in apps/desktop first).
 const require = createRequire(import.meta.url);
-const { buildConfigYaml } = require("../../apps/desktop/dist/onboarding-config.js") as {
+const { buildConfigYaml } = require(join(process.cwd(), "apps/desktop/dist/onboarding-config.js")) as {
   buildConfigYaml: (p: {
     providerType: string;
     baseUrl: string;
