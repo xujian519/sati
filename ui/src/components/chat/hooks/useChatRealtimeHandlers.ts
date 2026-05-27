@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
-import type { ClaudeWorkStatus, CompactProgress, PendingPermissionRequest } from '../types/types';
+import type { ClaudeWorkStatus, CompactProgress, PendingPermissionRequest, PilotDeckWorkStatus } from '../types/types';
 import type { Project, ProjectSession, SessionProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
 import { useWebSocket } from '../../../contexts/WebSocketContext';
@@ -109,6 +109,7 @@ interface UseChatRealtimeHandlersArgs {
   setCanAbortSession: (canAbort: boolean) => void;
   setIsAborting: (aborting: boolean) => void;
   setClaudeStatus: (status: ClaudeWorkStatus | null) => void;
+  setPilotDeckStatus: (status: PilotDeckWorkStatus | null) => void;
   setTokenBudget: (budget: Record<string, unknown> | null) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
   pendingViewSessionRef: MutableRefObject<PendingViewSession | null>;
@@ -134,6 +135,7 @@ export function useChatRealtimeHandlers({
   setCanAbortSession,
   setIsAborting,
   setClaudeStatus,
+  setPilotDeckStatus,
   setTokenBudget,
   setPendingPermissionRequests,
   pendingViewSessionRef,
@@ -240,6 +242,7 @@ export function useChatRealtimeHandlers({
               compactProgress: status.compactProgress || status.compact_progress || null,
             };
             setClaudeStatus(statusInfo);
+            setPilotDeckStatus(statusInfo);
             setIsLoading(true);
             setCanAbortSession(statusInfo.can_interrupt);
             return;
@@ -261,6 +264,7 @@ export function useChatRealtimeHandlers({
             setIsLoading(false);
             setCanAbortSession(false);
             setClaudeStatus(null);
+            setPilotDeckStatus(null);
           }
           return;
         }
@@ -389,6 +393,7 @@ export function useChatRealtimeHandlers({
           setCanAbortSession(false);
           setIsAborting(false);
           setClaudeStatus(null);
+          setPilotDeckStatus(null);
         }
         if (sid) {
           setPendingPermissionRequests((prev) =>
@@ -430,6 +435,7 @@ export function useChatRealtimeHandlers({
           setCanAbortSession(false);
           setIsAborting(false);
           setClaudeStatus(null);
+          setPilotDeckStatus(null);
         }
         if (sid) {
           onSessionInactive?.(sid);
@@ -457,6 +463,7 @@ export function useChatRealtimeHandlers({
         setIsLoading(true);
         setCanAbortSession(true);
         setClaudeStatus({ text: 'Waiting for permission', tokens: 0, can_interrupt: true });
+        setPilotDeckStatus({ text: 'Waiting for permission', tokens: 0, can_interrupt: true });
         break;
       }
 
@@ -473,8 +480,15 @@ export function useChatRealtimeHandlers({
           setTokenBudget(msg.tokenBudget as Record<string, unknown>);
         } else if (msg.text === 'clear_status') {
           setClaudeStatus(null);
+          setPilotDeckStatus(null);
         } else if (msg.text) {
           setClaudeStatus({
+            text: msg.text,
+            tokens: msg.tokens || 0,
+            can_interrupt: msg.canInterrupt !== undefined ? msg.canInterrupt : true,
+            compactProgress: msg.compactProgress || msg.compact_progress || null,
+          });
+          setPilotDeckStatus({
             text: msg.text,
             tokens: msg.tokens || 0,
             can_interrupt: msg.canInterrupt !== undefined ? msg.canInterrupt : true,
@@ -489,6 +503,7 @@ export function useChatRealtimeHandlers({
       case 'compact_boundary': {
         if (isForActiveView) {
           setClaudeStatus(null);
+          setPilotDeckStatus(null);
           setIsLoading(true);
           setCanAbortSession(true);
         }
@@ -509,6 +524,7 @@ export function useChatRealtimeHandlers({
     setCanAbortSession,
     setIsAborting,
     setClaudeStatus,
+    setPilotDeckStatus,
     setTokenBudget,
     setPendingPermissionRequests,
     pendingViewSessionRef,

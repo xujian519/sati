@@ -7,7 +7,7 @@ import {
   savePilotDeckPermissionSettings,
 } from './chatStorage';
 
-export function buildClaudeToolPermissionEntry(toolName?: string, toolInput?: unknown) {
+export function buildPilotDeckToolPermissionEntry(toolName?: string, toolInput?: unknown) {
   if (!toolName) return null;
   if (toolName !== 'Bash' && toolName !== 'bash') return toolName;
 
@@ -63,7 +63,7 @@ export function getPilotDeckPermissionSuggestion(
   if (errorCode && !PERMISSION_ERROR_CODES.has(errorCode)) return null;
 
   const toolName = message?.toolName;
-  const entry = buildClaudeToolPermissionEntry(toolName, message.toolInput);
+  const entry = buildPilotDeckToolPermissionEntry(toolName, message.toolInput);
   if (!entry) return null;
 
   const settings = getPilotDeckSettings();
@@ -71,7 +71,7 @@ export function getPilotDeckPermissionSuggestion(
   return { toolName: toolName || 'UnknownTool', entry, isAllowed };
 }
 
-export function grantClaudeToolPermission(entry: string | null): PermissionGrantResult {
+export function grantPilotDeckToolPermission(entry: string | null): PermissionGrantResult {
   if (!entry) return { success: false };
 
   const settings = getPilotDeckSettings();

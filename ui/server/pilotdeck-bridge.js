@@ -1,8 +1,6 @@
 /**
  * PilotDeck bridge — the only chat-execution entry point in `ui/server/`.
  *
- * The Web UI keeps speaking the legacy WebSocket protocol (`*-command`,
- * frames). This module:
  *
  *   1. Connects to the standalone PilotDeck gateway server
  *      (`pilotdeck server`, default ws://127.0.0.1:18789/ws) as a
@@ -302,6 +300,7 @@ function resolvePermissionMode(options) {
  *
  * @param {object} event Gateway event payload.
  * @param {string} sessionId UI-facing session id.
+ * @param {string} provider Provider hint (pilotdeck).
  * @returns {object[]} NormalizedMessage frames.
  */
 export function gatewayEventToFrames(event, sessionId, provider) {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
-import type { ChatMessage, ClaudeWorkStatus } from '../types/types';
+import type { ChatMessage, ClaudeWorkStatus, PilotDeckWorkStatus } from '../types/types';
 import {
   getSessionRequestParams,
   isBackgroundTaskSession,
@@ -234,6 +234,7 @@ export function useChatSessionState({
   const [tokenBudget, setTokenBudget] = useState<Record<string, unknown> | null>(null);
   const [visibleMessageCount, setVisibleMessageCount] = useState(INITIAL_VISIBLE_MESSAGES);
   const [claudeStatus, setClaudeStatus] = useState<ClaudeWorkStatus | null>(null);
+  const [pilotDeckStatus, setPilotDeckStatus] = useState<PilotDeckWorkStatus | null>(null);
   const [sessionLoadError, setSessionLoadError] = useState<string | null>(null);
   const [allMessagesLoaded, setAllMessagesLoaded] = useState(false);
   const [isLoadingAllMessages, setIsLoadingAllMessages] = useState(false);
@@ -578,6 +579,7 @@ export function useChatSessionState({
       pendingViewSessionRef.current = null;
       setPendingUserMessage(null);
       setClaudeStatus(null);
+      setPilotDeckStatus(null);
       setCanAbortSession(false);
       setIsAborting(false);
       setIsLoading(false);
@@ -611,6 +613,7 @@ export function useChatSessionState({
       resetStreamingState();
       pendingViewSessionRef.current = null;
       setClaudeStatus(null);
+      setPilotDeckStatus(null);
       setSessionLoadError(null);
       setCanAbortSession(false);
       setIsAborting(false);
@@ -1029,6 +1032,8 @@ export function useChatSessionState({
     showLoadAllOverlay,
     claudeStatus,
     setClaudeStatus,
+    pilotDeckStatus,
+    setPilotDeckStatus,
     createDiff,
     scrollContainerRef,
     scrollToBottom,

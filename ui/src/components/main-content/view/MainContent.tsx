@@ -136,7 +136,7 @@ function MainContent({
       message &&
       typeof message === 'object' &&
       'type' in message &&
-      ['claude-command', 'cursor-command', 'codex-command', 'gemini-command'].includes(
+      ['claude-command', 'cursor-command', 'codex-command', 'gemini-command','pilotdeck-command'].includes(
         String((message as { type?: unknown }).type),
       )
     ) {
@@ -209,7 +209,7 @@ function MainContent({
     getProjectSessions(project).find((session) => session.id === sessionId)
   ), [getProjectSessions]);
 
-  const loadClaudeSession = useCallback(async (projectName: string, sessionId: string) => {
+  const loadPilotDeckSession = useCallback(async (projectName: string, sessionId: string) => {
     const response = await api.sessions(projectName, Number.MAX_SAFE_INTEGER, 0);
     if (!response.ok) {
       return null;
@@ -236,7 +236,7 @@ function MainContent({
 
       const existingSession =
         findSessionInProject(targetProject, target.sessionId) ??
-        await loadClaudeSession(lookupProjectName, target.sessionId);
+        await loadPilotDeckSession(lookupProjectName, target.sessionId);
 
       if (!existingSession) {
         flashToast({ kind: 'error', text: missingMessage });
@@ -259,7 +259,7 @@ function MainContent({
 
     const existingSession =
       findSessionInProject(selectedProject, target.sessionId) ??
-      await loadClaudeSession(selectedProject.name, target.sessionId);
+      await loadPilotDeckSession(selectedProject.name, target.sessionId);
 
     if (!existingSession) {
       flashToast({ kind: 'error', text: missingMessage });
@@ -293,7 +293,7 @@ function MainContent({
     findSessionInProject,
     flashToast,
     i18n,
-    loadClaudeSession,
+    loadPilotDeckSession,
     onNavigateToSession,
     onSelectSession,
     projects,

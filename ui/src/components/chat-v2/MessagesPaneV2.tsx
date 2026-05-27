@@ -6,6 +6,7 @@ import type {
   ChatMessage,
   ChatRunMode,
   ClaudeWorkStatus,
+  PilotDeckWorkStatus,
   PilotDeckPermissionSuggestion,
   PermissionGrantResult,
 } from '../chat/types/types';
@@ -58,7 +59,7 @@ type MessagesPaneV2Props = {
   showThinking?: boolean;
   setInput: Dispatch<SetStateAction<string>>;
   isAssistantWorking?: boolean;
-  workingStatus?: ClaudeWorkStatus | null;
+  workingStatus?: ClaudeWorkStatus | PilotDeckWorkStatus | null;
   runMode?: ChatRunMode;
 };
 
@@ -816,7 +817,7 @@ function activityToLiveStep(activity: ChatMessage): ProcessTraceStep {
 
 function getLiveStatusStep(
   activities: ChatMessage[],
-  workingStatus: ClaudeWorkStatus | null | undefined,
+  workingStatus: ClaudeWorkStatus | PilotDeckWorkStatus | null | undefined,
   hasAssistantContent: boolean,
   t: (key: string, options?: Record<string, unknown>) => string,
 ): ProcessTraceStep {

@@ -129,7 +129,9 @@ function ChatInterfaceV2({
     allMessagesLoaded,
     isLoadingAllMessages,
     claudeStatus,
+    pilotDeckStatus,
     setClaudeStatus,
+    setPilotDeckStatus,
     createDiff,
     scrollContainerRef,
     scrollToBottom,
@@ -218,6 +220,7 @@ function ChatInterfaceV2({
     setCanAbortSession,
     setIsAborting,
     setClaudeStatus,
+    setPilotDeckStatus,
     setIsUserScrolledUp,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -274,6 +277,7 @@ function ChatInterfaceV2({
     setCanAbortSession,
     setIsAborting,
     setClaudeStatus,
+    setPilotDeckStatus,
     setTokenBudget,
     setPendingPermissionRequests,
     pendingViewSessionRef,
@@ -467,7 +471,7 @@ function ChatInterfaceV2({
         showThinking={showThinking}
         setInput={setInput}
         isAssistantWorking={isLoading}
-        workingStatus={claudeStatus}
+        workingStatus={claudeStatus || pilotDeckStatus}
         runMode={runMode}
       />
       {composer}

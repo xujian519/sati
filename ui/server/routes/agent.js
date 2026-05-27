@@ -416,7 +416,7 @@ async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath) {
 async function cleanupProject(projectPath, sessionId = null) {
   try {
     // Only clean up projects in the external-projects directory
-    if (!projectPath.includes('.claude/external-projects')) {
+    if (!projectPath.includes('.pilotdeck/external-projects')) {
       console.warn('⚠️ Refusing to clean up non-external project:', projectPath);
       return;
     }
@@ -427,7 +427,7 @@ async function cleanupProject(projectPath, sessionId = null) {
 
     if (sessionId) {
       try {
-        const sessionPath = path.join(os.homedir(), '.claude', 'sessions', sessionId);
+        const sessionPath = path.join(os.homedir(), '.pilotdeck', 'sessions', sessionId);
         console.log('🧹 Cleaning up session directory:', sessionPath);
         await fs.rm(sessionPath, { recursive: true, force: true });
         console.log('✅ Session directory cleaned up');
@@ -538,7 +538,7 @@ class ResponseCollector {
       if (typeof msg === 'string') {
         try {
           const parsed = JSON.parse(msg);
-          if (parsed.type === 'claude-response' && parsed.data && parsed.data.type === 'assistant') {
+          if (parsed.type === 'claude-response' && parsed.data && parsed.data.type === 'assistant' || parsed.type === 'pilotdeck-response' && parsed.data && parsed.data.type === 'assistant') {
             assistantMessages.push(parsed.data);
           }
         } catch (e) {
@@ -571,7 +571,7 @@ class ResponseCollector {
         }
       }
 
-      if (data && data.type === 'claude-response' && data.data) {
+      if (data && (data.type === 'claude-response' || data.type === 'pilotdeck-response') && data.data) {
         const msgData = data.data;
         if (msgData.message && msgData.message.usage) {
           const usage = msgData.message.usage;
@@ -823,7 +823,7 @@ class ResponseCollector {
  *   }
  */
 router.post('/', validateExternalApiKey, async (req, res) => {
-  const { githubUrl, projectPath, message, provider = 'claude', model, githubToken, branchName, sessionId } = req.body;
+  const { githubUrl, projectPath, message, provider = 'pilotdeck', model, githubToken, branchName, sessionId } = req.body;
 
   // Parse stream and cleanup as booleans (handle string "true"/"false" from curl)
   const stream = req.body.stream === undefined ? true : (req.body.stream === true || req.body.stream === 'true');
@@ -870,7 +870,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       } else {
         // Generate a unique path for cloning
         const repoHash = crypto.createHash('md5').update(githubUrl + Date.now()).digest('hex');
-        targetPath = path.join(os.homedir(), '.claude', 'external-projects', repoHash);
+        targetPath = path.join(os.homedir(), '.pilotdeck', 'external-projects', repoHash);
       }
 
       finalProjectPath = await cloneGitHubRepo(githubUrl.trim(), tokenToUse, targetPath);

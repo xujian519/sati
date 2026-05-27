@@ -12,7 +12,7 @@ import type {
 import { useDropzone } from 'react-dropzone';
 import { authenticatedFetch } from '../../../utils/api';
 import { thinkingModes } from '../constants/thinkingModes';
-import { grantClaudeToolPermission } from '../utils/chatPermissions';
+import { grantPilotDeckToolPermission } from '../utils/chatPermissions';
 import { safeLocalStorage } from '../utils/chatStorage';
 import {
   createTemporarySessionId,
@@ -69,6 +69,7 @@ interface UseChatComposerStateArgs {
   setCanAbortSession: (canAbort: boolean) => void;
   setIsAborting: (aborting: boolean) => void;
   setClaudeStatus: (status: { text: string; tokens: number; can_interrupt: boolean } | null) => void;
+  setPilotDeckStatus: (status: { text: string; tokens: number; can_interrupt: boolean } | null) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
   pendingPermissionRequests: PendingPermissionRequest[];
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
@@ -147,6 +148,7 @@ export function useChatComposerState({
   setCanAbortSession,
   setIsAborting,
   setClaudeStatus,
+  setPilotDeckStatus,
   setIsUserScrolledUp,
   pendingPermissionRequests,
   setPendingPermissionRequests,
@@ -811,6 +813,7 @@ export function useChatComposerState({
       setCanAbortSession,
       addMessage,
       setClaudeStatus,
+      setPilotDeckStatus,
       setIsLoading,
       setIsUserScrolledUp,
       slashCommands,
@@ -1027,12 +1030,12 @@ export function useChatComposerState({
 
     setCanAbortSession(false);
     setIsAborting(true);
-    setClaudeStatus({
+    setPilotDeckStatus({
       text: 'Stopping',
       tokens: 0,
       can_interrupt: false,
     });
-  }, [canAbortSession, currentSessionId, pendingViewSessionRef, selectedSession?.id, sendMessage, setCanAbortSession, setClaudeStatus, setIsAborting]);
+  }, [canAbortSession, currentSessionId, pendingViewSessionRef, selectedSession?.id, sendMessage, setCanAbortSession, setClaudeStatus, setIsAborting, setPilotDeckStatus]);
 
   const handleGrantToolPermission = useCallback(
     (suggestion: { entry: string; toolName: string }) => {
@@ -1044,7 +1047,7 @@ export function useChatComposerState({
       // every provider persist its grants to localStorage and have the
       // pilotdeck server pick them up via the gateway PermissionRuntime
       // on the next turn.
-      return grantClaudeToolPermission(suggestion.entry);
+      return grantPilotDeckToolPermission(suggestion.entry);
     },
     [],
   );
@@ -1119,7 +1122,7 @@ export function useChatComposerState({
         }
 
         sendMessage({
-          type: 'claude-permission-response',
+          type: 'pilotdeck-permission-response',
           requestId,
           allow: Boolean(decision?.allow),
           updatedInput: decision?.updatedInput,
@@ -1132,11 +1135,12 @@ export function useChatComposerState({
         const next = previous.filter((request) => !validIds.includes(request.requestId));
         if (next.length === 0) {
           setClaudeStatus(null);
+          setPilotDeckStatus(null);
         }
         return next;
       });
     },
-    [pendingPermissionRequests, sendMessage, setClaudeStatus, setPendingPermissionRequests],
+    [pendingPermissionRequests, sendMessage, setClaudeStatus, setPilotDeckStatus, setPendingPermissionRequests],
   );
 
   const [isInputFocused, setIsInputFocused] = useState(false);

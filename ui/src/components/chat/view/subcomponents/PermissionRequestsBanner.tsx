@@ -1,6 +1,6 @@
 import React from 'react';
 import type { PendingPermissionRequest } from '../../types/types';
-import { buildClaudeToolPermissionEntry, formatToolInputForDisplay } from '../../utils/chatPermissions';
+import { buildPilotDeckToolPermissionEntry, formatToolInputForDisplay } from '../../utils/chatPermissions';
 import { getPilotDeckSettings } from '../../utils/chatStorage';
 import { getPermissionPanel, registerPermissionPanel } from '../../tools/configs/permissionPanelRegistry';
 import { AskUserQuestionPanel, ExitPlanModePanel } from '../../tools/components/InteractiveRenderers';
@@ -40,7 +40,7 @@ export default function PermissionRequestsBanner({
       continue;
     }
     const rawInput = formatToolInputForDisplay(request.input);
-    const entry = buildClaudeToolPermissionEntry(request.toolName, rawInput) ?? request.requestId;
+    const entry = buildPilotDeckToolPermissionEntry(request.toolName, rawInput) ?? request.requestId;
     const group = grouped.get(entry);
     if (group) {
       group.push(request);
@@ -67,7 +67,7 @@ export default function PermissionRequestsBanner({
         const first = requests[0];
         const allIds = requests.map((r) => r.requestId);
         const rawInput = formatToolInputForDisplay(first.input);
-        const permissionEntry = buildClaudeToolPermissionEntry(first.toolName, rawInput);
+        const permissionEntry = buildPilotDeckToolPermissionEntry(first.toolName, rawInput);
         const settings = getPilotDeckSettings();
         const alreadyAllowed = permissionEntry ? settings.allowedTools.includes(permissionEntry) : false;
         const rememberLabel = alreadyAllowed ? 'Allow (saved)' : 'Allow & remember';

@@ -130,6 +130,13 @@ export interface ClaudeWorkStatus {
   compactProgress?: CompactProgress | null;
 }
 
+export interface PilotDeckWorkStatus {
+  text: string;
+  tokens: number;
+  can_interrupt: boolean;
+  compactProgress?: CompactProgress | null;
+}
+
 export interface PilotDeckSettings {
   allowedTools: string[];
   disallowedTools: string[];
