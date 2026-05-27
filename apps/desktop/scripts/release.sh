@@ -782,8 +782,34 @@ Mode: ${MODE}"
       || warn "Failed to create release ${GH_TAG} (non-fatal)"
   fi
 
+  # Upload fixed-name "latest" copies so README permalink URLs always resolve
   if [[ "$GH_PUBLISH_OK" == "1" ]]; then
-    GH_URL="$(gh release view "$GH_TAG" --repo "$(git -C "$REPO_ROOT" remote get-url origin)" --json url -q .url 2>/dev/null || true)"
+    GH_REPO="$(git -C "$REPO_ROOT" remote get-url origin)"
+    LATEST_ASSETS=()
+
+    if [[ -f "$DMG_OUT" ]]; then
+      LATEST_DMG="$(dirname "$DMG_OUT")/PilotDeck-latest-arm64.dmg"
+      cp "$DMG_OUT" "$LATEST_DMG"
+      LATEST_ASSETS+=("$LATEST_DMG")
+    fi
+
+    DIST_DIR="$(dirname "$DMG_OUT")"
+    for exe in "$DIST_DIR"/PilotDeck-*-win-*.exe; do
+      [[ -f "$exe" ]] || continue
+      # PilotDeck-0.1.0-win-x64.exe → PilotDeck-latest-win-x64.exe
+      LATEST_EXE="$(echo "$exe" | sed "s/PilotDeck-${VERSION}-/PilotDeck-latest-/")"
+      cp "$exe" "$LATEST_EXE"
+      LATEST_ASSETS+=("$LATEST_EXE")
+    done
+
+    if [[ ${#LATEST_ASSETS[@]} -gt 0 ]]; then
+      gh release upload "$GH_TAG" "${LATEST_ASSETS[@]}" --clobber \
+        --repo "$GH_REPO" \
+        && ok "Permalink assets uploaded (PilotDeck-latest-*)" \
+        || warn "Failed to upload permalink assets (non-fatal)"
+    fi
+
+    GH_URL="$(gh release view "$GH_TAG" --repo "$GH_REPO" --json url -q .url 2>/dev/null || true)"
     [[ -n "$GH_URL" ]] && echo "  ${BLD}Release${RST}  ${GH_URL}"
   fi
 fi
