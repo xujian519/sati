@@ -226,7 +226,7 @@ function isConfirmedUserMessageDuplicate(
 
 /**
  * The backend pushes a synthetic `interrupted` notice the moment abort fires
- * (id: `local_interrupt_…`), but the Claude SDK also persists a matching
+
  * "[Request interrupted by user]" entry into the JSONL during the next user
  * turn. Once that JSONL entry is replayed via the server, drop the locally
  * pushed one to avoid stacking two dividers in the conversation.

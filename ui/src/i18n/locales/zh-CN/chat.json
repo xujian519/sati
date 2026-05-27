@@ -15,7 +15,8 @@
     "user": "U",
     "error": "错误",
     "tool": "工具",
-    "claude": "PilotDeck",
+    "claude": "Claude",
+    "pilotdeck": "PilotDeck",
     "cursor": "Cursor",
     "codex": "Codex",
     "gemini": "Gemini"

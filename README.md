@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://pilotdeck.openbmb.cn"><img src="https://img.shields.io/badge/Website-pilotdeck.openbmb.cn-FF6B35?style=flat-square&logo=googlechrome&logoColor=white" alt="Official Website"/></a>
   <a href="https://pilotdeck.openbmb.cn/pilotdeck.github.io/demo/p/pilotdeck-demo"><img src="https://img.shields.io/badge/Demo-Live-brightgreen?style=flat-square" alt="Live Demo"/></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL_3.0-blue.svg?style=flat-square" alt="License"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square" alt="License"/></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-Native-6366F1?style=flat-square" alt="MCP Native"/></a>
   <a href="#-desktop-app-apple-silicon"><img src="https://img.shields.io/badge/macOS-Desktop_App-000000?style=flat-square&logo=apple&logoColor=white" alt="Desktop App"/></a>
   <a href="https://github.com/OpenBMB/PilotDeck/stargazers"><img src="https://img.shields.io/github/stars/OpenBMB/PilotDeck?style=flat-square" alt="Stars"/></a>
@@ -459,4 +459,4 @@ If PilotDeck has been helpful in your work or research, please consider giving u
 
 ## 📄 License
 
-This project is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE). The `products/**` directory contains customer-specific customizations and is **not** part of the open-source release scope.
+This project is licensed under the [Apache License, Version 2.0](LICENSE).

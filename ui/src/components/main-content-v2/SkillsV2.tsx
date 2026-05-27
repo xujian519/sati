@@ -77,9 +77,9 @@ function projectCwd(p: Project | null): string | null {
   return p.fullPath || p.path || null;
 }
 
-function isGeneralCwd(p: string | null): boolean {
+function isGeneralProject(p: Project | null): boolean {
   if (!p) return false;
-  return p.endsWith('/Claude/general') || p.endsWith('/.claude-gateway/general');
+  return p.name === 'general' || p.displayName === 'general';
 }
 
 async function api<T>(url: string, body: unknown): Promise<T> {
@@ -103,7 +103,7 @@ export default function SkillsV2({ selectedProject, projects }: SkillsV2Props) {
   const { isDarkMode } = useTheme() as { isDarkMode: boolean };
 
   const cwd = projectCwd(selectedProject);
-  const generalCwd = isGeneralCwd(cwd);
+  const generalCwd = isGeneralProject(selectedProject);
   const effectiveProjectPath = generalCwd ? null : cwd;
 
   const [skills, setSkills] = useState<SkillsListResponse | null>(null);
@@ -475,7 +475,7 @@ function SkillsList({
     for (const project of projects) {
       const path = project.fullPath || project.path || null;
       if (!path) continue;
-      if (path.endsWith('/Claude/general') || path.endsWith('/.claude-gateway/general')) continue;
+      if (project.name === 'general' || project.displayName === 'general') continue;
       targets.push({
         label: project.displayName || project.name,
         target: { scope: 'project', projectPath: path },

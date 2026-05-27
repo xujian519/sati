@@ -15,7 +15,8 @@
     "user": "U",
     "error": "Error",
     "tool": "Tool",
-    "claude": "PilotDeck",
+    "claude": "Claude",
+    "pilotdeck": "PilotDeck",
     "cursor": "Cursor",
     "codex": "Codex",
     "gemini": "Gemini"

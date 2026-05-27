@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://pilotdeck.openbmb.cn"><img src="https://img.shields.io/badge/官网-pilotdeck.openbmb.cn-FF6B35?style=flat-square&logo=googlechrome&logoColor=white" alt="官方网站"/></a>
   <a href="https://pilotdeck.openbmb.cn/pilotdeck.github.io/demo/p/pilotdeck-demo"><img src="https://img.shields.io/badge/Demo-在线体验-brightgreen?style=flat-square" alt="在线体验"/></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL_3.0-blue.svg?style=flat-square" alt="License"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square" alt="License"/></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-Native-6366F1?style=flat-square" alt="MCP Native"/></a>
   <a href="#-桌面端-app-apple-silicon"><img src="https://img.shields.io/badge/macOS-Desktop_App-000000?style=flat-square&logo=apple&logoColor=white" alt="Desktop App"/></a>
   <a href="https://github.com/OpenBMB/PilotDeck/stargazers"><img src="https://img.shields.io/github/stars/OpenBMB/PilotDeck?style=flat-square" alt="Stars"/></a>
@@ -462,4 +462,4 @@ PilotDeck 的建设离不开以下优秀开源项目的支持：
 
 ## 📄 许可证
 
-本项目基于 [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE) 开源。`products/` 目录存放客户专属定制代码，不包含在开源发布范围内。
+本项目基于 [Apache License, Version 2.0](LICENSE) 开源。

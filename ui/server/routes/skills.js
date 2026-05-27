@@ -63,10 +63,7 @@ function safeSlug(slug) {
   return typeof slug === 'string' && SLUG_RE.test(slug) && !slug.includes('..');
 }
 
-const GENERAL_CWD_PATHS = [
-  path.join(os.homedir(), 'Claude', 'general'),
-  path.join(os.homedir(), '.claude-gateway', 'general'),
-].map((p) => path.resolve(p));
+const GENERAL_CWD_PATHS = [path.resolve(PILOT_HOME)];
 
 function isGeneralCwd(projectPath) {
   if (!projectPath) return false;

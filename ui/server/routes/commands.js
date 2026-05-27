@@ -9,6 +9,7 @@ import { CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
 import { parseFrontmatter } from '../utils/frontmatter.js';
 import { getClaudeRuntimeModelConfig, getClaudeRuntimeModelValues } from '../utils/claude-runtime-config.js';
 import { readPilotDeckConfigFile, resolveModel } from '../services/pilotdeckConfig.js';
+import { resolvePilotHome } from '../utils/pilotPaths.js';
 import { executeTurnkeySlashCommand } from '../turnkey-slash.js';
 
 const execFileAsync = promisify(execFile);
@@ -640,15 +641,10 @@ Custom commands can be created in:
 
     const projectPath = context?.projectPath || null;
 
-    // Some "projects" are actually the general-chat synthetic cwd (configured
-    // in edgeclaw runtimePaths.generalCwd). They look like a real projectPath
-    // but the user's mental model is "I'm in general chat" → user/global scope.
-    // Detect the two known general-cwd patterns. If a user re-points generalCwd
-    // elsewhere, they can still force user scope with --global.
-    const GENERAL_CWD_PATHS = [
-      path.join(os.homedir(), 'Claude', 'general'),
-      path.join(os.homedir(), '.claude-gateway', 'general'),
-    ].map((p) => path.resolve(p));
+    // PilotDeck's virtual "general" workspace roots at ~/.pilotdeck. It looks
+    // like a real projectPath but the user's mental model is general chat →
+    // user/global scope. Force user scope with --global when needed.
+    const GENERAL_CWD_PATHS = [path.resolve(resolvePilotHome(process.env))];
     const isGeneralCwd =
       projectPath && GENERAL_CWD_PATHS.includes(path.resolve(projectPath));
     const effectiveProjectPath = isGeneralCwd ? null : projectPath;
