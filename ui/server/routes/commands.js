@@ -479,12 +479,12 @@ Custom commands can be created in:
       };
     }
 
-    const claudeMdPath = path.join(projectPath, 'PILOTDECK.md');
+    const pilotDeckMdPath = path.join(projectPath, 'PILOTDECK.md');
 
     // Check if PILOTDECK.md exists
     let exists = false;
     try {
-      await fs.access(claudeMdPath);
+      await fs.access(pilotDeckMdPath);
       exists = true;
     } catch (err) {
       // File doesn't exist
@@ -494,11 +494,11 @@ Custom commands can be created in:
       type: 'builtin',
       action: 'memory',
       data: {
-        path: claudeMdPath,
+        path: pilotDeckMdPath,
         exists,
         message: exists
-          ? `Opening PILOTDECK.md at ${claudeMdPath}`
-          : `PILOTDECK.md not found at ${claudeMdPath}. Create it to store project-specific instructions.`
+          ? `Opening PILOTDECK.md at ${pilotDeckMdPath}`
+          : `PILOTDECK.md not found at ${pilotDeckMdPath}. Create it to store project-specific instructions.`
       }
     };
   },

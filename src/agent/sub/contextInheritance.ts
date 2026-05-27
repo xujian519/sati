@@ -5,7 +5,7 @@
  *   subagent's read_file freshness checks don't poison the parent.
  * - **S6**: re-use `getUserContext()` / `getSystemContext()` snapshots from
  *   the parent unless explicitly overridden.
- * - **S7**: drop the `<claudeMd>` block when `omitClaudeMd: true`.
+ * - **S7**: drop the `<project-instructions>` block when `omitProjectInstructions: true`.
  * - **S8**: drop the `<git-status>` block when `omitGitStatus: true`.
  *
  * In PilotDeck the only "context blocks" we have today are encoded as XML-like
@@ -44,15 +44,13 @@ export function cloneWriteSnapshots(parent: WriteSnapshotMap | undefined): Write
   return out;
 }
 
-/** S7+S8 — drop claudeMd / git-status blocks from the assembled system prompt. */
+/** S7+S8 — drop project-instructions / git-status blocks from the assembled system prompt. */
 export function applySystemPromptFilters(
   systemPrompt: string,
   definition: SubagentDefinition,
 ): string {
   let next = systemPrompt;
-  if (definition.omitClaudeMd) {
-    next = stripXmlBlock(next, "claude-md");
-    next = stripXmlBlock(next, "claudeMd");
+  if (definition.omitProjectInstructions) {
     next = stripXmlBlock(next, "agents-md");
     next = stripXmlBlock(next, "project-instructions");
   }

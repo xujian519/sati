@@ -3,11 +3,11 @@
  *
  * Four presets:
  *   - `general-purpose` — broad parent-tool access except nested `agent`
- *                         dispatch; claudeMd retained, full read/write.
+ *                         dispatch; project instructions retained, full read/write.
  *   - `explore`         — read-only file inspection (read / grep / glob / bash);
- *                         omits claudeMd & gitStatus from system context.
+ *                         omits project instructions & gitStatus from system context.
  *   - `plan`            — read-only planning (read / grep / glob, no bash);
- *                         omits claudeMd & gitStatus.
+ *                         omits project instructions & gitStatus.
  *   - `verify`          — read-only verification (read / grep / glob / bash);
  *                         inspects generated artifacts and reports issues.
  *
@@ -29,8 +29,8 @@ export type SubagentDefinition = {
    * full access. Empty array means *no* tools (degenerate).
    */
   allowedTools: readonly string[];
-  /** S7 — drop `<claudeMd>` from the assembled system prompt. */
-  omitClaudeMd: boolean;
+  /** S7 — drop `<project-instructions>` from the assembled system prompt. */
+  omitProjectInstructions: boolean;
   /** S8 — drop `<git-status>` from the assembled system prompt. */
   omitGitStatus: boolean;
   /** S9 — read-only subagents reject destructive tool calls outright. */
@@ -79,7 +79,7 @@ export const SUBAGENT_DEFINITIONS: Record<SubagentDefinitionId, SubagentDefiniti
     description:
       "General-purpose subagent for complex research/synthesis tasks. Has broad parent-tool access except nested subagent launch.",
     allowedTools: ["*"],
-    omitClaudeMd: false,
+    omitProjectInstructions: false,
     omitGitStatus: false,
     isReadOnly: false,
     systemPromptSuffix:
@@ -90,7 +90,7 @@ export const SUBAGENT_DEFINITIONS: Record<SubagentDefinitionId, SubagentDefiniti
     description:
       "Read-only exploration subagent. Inspects files, runs grep/glob, and may run safe shell commands. Cannot edit files.",
     allowedTools: ["read_file", "grep", "glob", "bash"],
-    omitClaudeMd: true,
+    omitProjectInstructions: true,
     omitGitStatus: true,
     isReadOnly: true,
     systemPromptSuffix:
@@ -101,7 +101,7 @@ export const SUBAGENT_DEFINITIONS: Record<SubagentDefinitionId, SubagentDefiniti
     description:
       "Read-only planning subagent. Inspects code via read/grep/glob and produces a step-by-step plan.",
     allowedTools: ["read_file", "grep", "glob"],
-    omitClaudeMd: true,
+    omitProjectInstructions: true,
     omitGitStatus: true,
     isReadOnly: true,
     systemPromptSuffix:
@@ -112,7 +112,7 @@ export const SUBAGENT_DEFINITIONS: Record<SubagentDefinitionId, SubagentDefiniti
     description:
       "Verification subagent. Inspects generated artifacts (images, HTML, PDFs) for correctness. Can read files, run shell commands, and search code, but cannot modify files.",
     allowedTools: ["read_file", "grep", "glob", "bash"],
-    omitClaudeMd: true,
+    omitProjectInstructions: true,
     omitGitStatus: true,
     isReadOnly: true,
     systemPromptSuffix: `Verification mode: your job is to **find problems**, not confirm success. Try to break the implementation.

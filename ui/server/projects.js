@@ -345,7 +345,7 @@ async function extractProjectDirectory(projectName) {
         return marked;
     }
     if (projectName.startsWith('-')) {
-        // Legacy dash-encoding heuristic: `-Users-miwi-foo` → `/Users/miwi/foo`.
+        // Legacy dash-encoding heuristic: `-Users-foo-foo` → `/Users/foo/foo`.
         const decoded = '/' + projectName.replace(/^-+/, '').replace(/-/g, '/');
         rememberProjectDirectory(projectName, decoded);
         return decoded;
