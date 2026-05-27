@@ -448,7 +448,7 @@ echo "Checking native build tools..."
 ensure_native_build_tools
 echo ""
 
-echo "Installing PilotDeck to ${DIM}${INSTALL_DIR}${RESET} ..."
+echo -e "Installing PilotDeck to ${DIM}${INSTALL_DIR}${RESET} ..."
 install_or_update_repo
 ensure_lfs_assets
 echo ""
