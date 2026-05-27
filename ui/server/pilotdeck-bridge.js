@@ -209,6 +209,12 @@ function ensureSessionState(sessionKey, projectKey, channelKey) {
     return state;
 }
 
+function clearActiveRunIfCurrent(state, runId) {
+    if (!state || state.runId !== runId) return;
+    state.active = false;
+    state.runId = undefined;
+}
+
 export function getSessionTokenBudget(sessionKey) {
     const state = sessionState.get(sessionKey);
     return state?.tokenBudget || {
@@ -744,6 +750,13 @@ export async function runChatViaGateway(
                     state: event.state,
                 };
             }
+            // Clear active flag as soon as we see turn_completed so that
+            // a subsequent submitTurn from the user (who already sees the
+            // input box) does NOT trigger the stale-abort path while we
+            // wait for the async generator to fully close.
+            if (event && event.type === 'turn_completed') {
+                clearActiveRunIfCurrent(state, runId);
+            }
             for (const frame of gatewayEventToFrames(event, sessionKey, provider)) {
                 writer.send(frame);
             }
@@ -773,8 +786,7 @@ export async function runChatViaGateway(
             }),
         );
     } finally {
-        state.active = false;
-        state.runId = undefined;
+        clearActiveRunIfCurrent(state, runId);
     }
 }
 
