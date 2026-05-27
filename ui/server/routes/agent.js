@@ -410,7 +410,6 @@ async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath) {
 }
 
 /**
- * Clean up a temporary project directory and its Claude session
  * @param {string} projectPath - Path to the project directory
  * @param {string} sessionId - Session ID to clean up
  */
@@ -426,7 +425,6 @@ async function cleanupProject(projectPath, sessionId = null) {
     await fs.rm(projectPath, { recursive: true, force: true });
     console.log('✅ Project cleaned up');
 
-    // Also clean up the Claude session directory if sessionId provided
     if (sessionId) {
       try {
         const sessionPath = path.join(os.homedir(), '.claude', 'sessions', sessionId);
@@ -540,7 +538,6 @@ class ResponseCollector {
       if (typeof msg === 'string') {
         try {
           const parsed = JSON.parse(msg);
-          // Only include claude-response messages with assistant type
           if (parsed.type === 'claude-response' && parsed.data && parsed.data.type === 'assistant') {
             assistantMessages.push(parsed.data);
           }
@@ -574,7 +571,6 @@ class ResponseCollector {
         }
       }
 
-      // Extract usage from claude-response messages
       if (data && data.type === 'claude-response' && data.data) {
         const msgData = data.data;
         if (msgData.message && msgData.message.usage) {
@@ -604,7 +600,6 @@ class ResponseCollector {
 /**
  * POST /api/agent
  *
- * Trigger an AI agent (Claude or Cursor) to work on a project.
  * Supports automatic GitHub branch and pull request creation after successful completion.
  *
  * ================================================================================================
@@ -622,15 +617,12 @@ class ResponseCollector {
  *                               Behavior depends on usage:
  *                               - If used alone: Must point to existing project directory
  *                               - If used with githubUrl: Target location for cloning
- *                               - If omitted with githubUrl: Auto-generates temporary path in ~/.claude/external-projects/
  *
  * @param {string} message - (Required) Task description for the AI agent. Used as:
  *                          - Instructions for the agent
  *                          - Source for auto-generated branch names (if createBranch=true and no branchName)
  *                          - Fallback for PR title if no commits are made
  *
- * @param {string} provider - (Optional) AI provider to use. Options: 'claude' | 'cursor' | 'codex' | 'gemini'
- *                           Default: 'claude'
  *
  * @param {boolean} stream - (Optional) Enable Server-Sent Events (SSE) streaming for real-time updates.
  *                          Default: true
@@ -639,7 +631,6 @@ class ResponseCollector {
  *
  * @param {string} model - (Optional) Model identifier for providers.
  *
- *                        Claude models: 'sonnet' (default), 'opus', 'haiku', 'opusplan', 'sonnet[1m]'
  *                        Cursor models: 'gpt-5' (default), 'gpt-5.2', 'gpt-5.2-high', 'sonnet-4.5', 'opus-4.5',
  *                                       'gemini-3-pro', 'composer-1', 'auto', 'gpt-5.1', 'gpt-5.1-high',
  *                                       'gpt-5.1-codex', 'gpt-5.1-codex-high', 'gpt-5.1-codex-max',
@@ -651,7 +642,6 @@ class ResponseCollector {
  *                           Behavior:
  *                           - Only applies when cloning via githubUrl (not for existing projectPath)
  *                           - Deletes cloned repository after 5 seconds
- *                           - Also deletes associated Claude session directory
  *                           - Remote branch and PR remain on GitHub if created
  *
  * @param {string} githubToken - (Optional) GitHub Personal Access Token for authentication.
@@ -700,7 +690,6 @@ class ResponseCollector {
  *
  * Scenario 1: Only githubUrl provided
  *   Input:  { githubUrl: "https://github.com/owner/repo" }
- *   Action: Clones to auto-generated temporary path: ~/.claude/external-projects/<hash>/
  *   Cleanup: Yes (if cleanup=true)
  *
  * Scenario 2: Only projectPath provided
@@ -747,7 +736,6 @@ class ResponseCollector {
  * Input Validations (400 Bad Request):
  *   - Either githubUrl OR projectPath must be provided (not neither)
  *   - message must be non-empty string
- *   - provider must be 'claude', 'cursor', 'codex', or 'gemini'
  *   - createBranch/createPR requires githubUrl OR projectPath (not neither)
  *   - branchName must pass Git naming rules (if provided)
  *
@@ -773,7 +761,6 @@ class ResponseCollector {
  *   Content-Type: text/event-stream
  *   Events:
  *     - { type: "status", message: "...", projectPath: "..." }
- *     - { type: "claude-response", data: {...} }
  *     - { type: "github-branch", branch: { name: "...", url: "..." } }
  *     - { type: "github-pr", pullRequest: { number: 42, url: "..." } }
  *     - { type: "github-error", error: "..." }

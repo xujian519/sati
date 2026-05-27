@@ -35,7 +35,7 @@ async function registerProject(projectRoot) {
 }
 
 export function createAlwaysOnHeartbeatManager({
-  getActiveClaudeSessions = () => [],
+  getActivePilotDeckSessions = () => [],
   registerProjectFn = registerProject
 } = {}) {
   const wsFiles = new WeakMap();
@@ -88,7 +88,7 @@ export function createAlwaysOnHeartbeatManager({
         lastUserMsgAt: selectedRoot === projectRoot ? payload.lastUserMsgAt : null,
       });
     }
-    const activeSessions = getActiveClaudeSessions();
+    const activeSessions = getActivePilotDeckSessions();
     for (const session of activeSessions) {
       const cwd = normalizeString(session?.cwd);
       if (!cwd) continue;

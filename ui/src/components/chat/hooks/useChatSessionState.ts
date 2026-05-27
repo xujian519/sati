@@ -59,7 +59,6 @@ export function isScrollNearBottom(
  * session's messages from bleeding into a freshly-cleared view, which means
  * by the time effects run it is already equal to `selectedSession.id`.
  * Using it for change-detection would always evaluate to false on a real
- * session-to-session switch and leak `claudeStatus` / `isLoading` /
  * `tokenBudget` from the previous session into the new view.
  */
 export function didLoadedSessionChange(
@@ -829,7 +828,6 @@ export function useChatSessionState({
     scrollToTarget();
   }, [chatMessages.length, isLoadingSessionMessages, searchTarget, selectedProject, selectedSession, sessionRequestParams, sessionStore]);
 
-  // Token usage fetch for Claude
   useEffect(() => {
     if (!selectedProject || !selectedSession?.id || selectedSession.id.startsWith('new-session-')) {
       setTokenBudget(null);

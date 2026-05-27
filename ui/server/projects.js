@@ -2,7 +2,6 @@
  * Project / session metadata layer (PilotDeck-only).
  *
  * Replaces the legacy four-provider scanner that used to read
- * ~/.claude/projects/, ~/.cursor/chats/, ~/.codex/sessions/,
  * ~/.gemini/projects/. After the PilotDeck-only migration:
  *
  *   - `getProjects()` lists projects via `gateway.listProjects()`.
@@ -365,8 +364,6 @@ async function addProjectManually(projectPath, _displayName = null) {
     // Materialize a PilotDeck project directory and drop a `.cwd` marker
     // recording the real absolute path. We need the marker because
     // createProjectId() encodes both '/' and literal '-' to '-', so the
-    // encoded id alone is ambiguous (e.g. /Users/me/claude-code and
-    // /Users/me/claude/code share the id "Users-me-claude-code").
     // PilotDeck's listWebProjects() heuristically tries each `-` as a
     // path separator and drops the project when no decode matches an
     // existing directory — which would silently lose workspaces whose

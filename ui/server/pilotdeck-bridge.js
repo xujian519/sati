@@ -2,7 +2,6 @@
  * PilotDeck bridge — the only chat-execution entry point in `ui/server/`.
  *
  * The Web UI keeps speaking the legacy WebSocket protocol (`*-command`,
- * `abort-session`, `claude-permission-response`, NormalizedMessage event
  * frames). This module:
  *
  *   1. Connects to the standalone PilotDeck gateway server
@@ -303,7 +302,6 @@ function resolvePermissionMode(options) {
  *
  * @param {object} event Gateway event payload.
  * @param {string} sessionId UI-facing session id.
- * @param {string} provider Provider hint (claude/cursor/codex/gemini/pilotdeck).
  * @returns {object[]} NormalizedMessage frames.
  */
 export function gatewayEventToFrames(event, sessionId, provider) {
@@ -397,7 +395,6 @@ export function gatewayEventToFrames(event, sessionId, provider) {
             // PascalCase alias that matches `registerPermissionPanel('AskUserQuestion', ...)`
             // and tag the frame with `isElicitation: true` so the composer can
             // route the user's answer back through `elicitation-response`
-            // (GatewayElicitationBus) instead of `claude-permission-response`
             // (GatewayPermissionBus).
             if (event.toolName === 'exit_plan_mode') {
                 return [

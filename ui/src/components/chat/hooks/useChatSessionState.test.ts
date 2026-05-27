@@ -67,7 +67,6 @@ describe('useChatSessionState scroll helpers', () => {
 
 describe('didLoadedSessionChange', () => {
   // Guards a real bug: when running session A and switching to session B the
-  // session-loading effect MUST clear `claudeStatus` / `isLoading` /
   // `tokenBudget` so A's running-status footer doesn't bleed into B's view.
   // The naive check `currentSessionId !== selectedSession.id` doesn't work
   // because a render-phase mirror eagerly syncs the two on switch, so we

@@ -294,7 +294,6 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
           </div>
         </div>
       ) : (
-        /* Claude/Error/Tool messages on the left */
         <div className="w-full">
           {!hideHeader && !isGrouped && (
             <div className="mb-2 flex items-center space-x-3">

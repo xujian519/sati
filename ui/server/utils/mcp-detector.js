@@ -12,12 +12,10 @@ import os from 'os';
 
 /**
  * Check if task-master-ai MCP server is configured
- * Reads directly from Claude configuration files like claude-cli.js does
  * @returns {Promise<Object>} MCP detection result
  */
 export async function detectTaskMasterMCPServer() {
     try {
-        // Read Claude configuration files directly (same logic as mcp.js)
         const homeDir = os.homedir();
         const configPaths = [
             path.join(homeDir, '.claude.json'),

@@ -1039,8 +1039,6 @@ export function useChatComposerState({
       if (!suggestion) {
         return { success: false };
       }
-      // Previously gated on `provider === 'claude'` because the legacy
-      // four-provider runtime only honored allowedTools for the Claude
       // adapter. After the PolitDeck-only migration every provider
       // routes through the same gateway PermissionContext, so we let
       // every provider persist its grants to localStorage and have the
