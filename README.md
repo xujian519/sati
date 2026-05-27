@@ -421,6 +421,7 @@ PilotDeck builds upon the following outstanding open-source projects:
 - [UltraRAG](https://github.com/OpenBMB/UltraRAG) — RAG framework
 - [Anthropic Skills](https://github.com/anthropics/skills) — Agent skill framework and built-in skills (skill-creator, frontend-slides)
 - [MiniMax-AI Skills](https://github.com/MiniMax-AI/skills) — minimax-pdf skill
+- [frontend-slides](https://github.com/zarazhangrui/frontend-slides) — Create beautiful slides on the web using a coding agent's frontend skills
 - [Karpathy Guidelines](https://x.com/karpathy/status/2015883857489522876) — LLM coding behavioral guidelines
 - [Vite](https://github.com/vitejs/vite) — Frontend build tool
 - [React](https://github.com/facebook/react) — UI framework
