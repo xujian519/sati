@@ -325,6 +325,9 @@
       },
       "gemini": {
         "description": "Google Gemini AI 助手"
+      },
+      "pilotdeck": {
+        "description": "OpenBMB PilotDeck AI 助手"
       }
     },
     "connectionStatus": "连接状态",
@@ -353,7 +356,8 @@
     "skipPermissions": {
       "label": "跳过权限提示（请谨慎使用）",
       "claudeDescription": "等同于 --dangerously-skip-permissions 标志",
-      "cursorDescription": "等同于 Cursor CLI 中的 -f 标志"
+      "cursorDescription": "等同于 Cursor CLI 中的 -f 标志",
+      "pilotdeckDescription": "等同于 --dangerously-skip-permissions 标志"
     },
     "allowedTools": {
       "title": "允许的工具",
@@ -428,7 +432,7 @@
   "mcpServers": {
     "title": "MCP 服务器",
     "description": {
-      "claude": "Model Context Protocol 服务器为 PilotDeck 提供额外的工具和数据源",
+      "pilotdeck": "Model Context Protocol 服务器为 PilotDeck 提供额外的工具和数据源",
       "cursor": "Model Context Protocol 服务器为 Cursor 提供额外的工具和数据源",
       "codex": "Model Context Protocol 服务器为 Codex 提供额外的工具和数据源"
     },

@@ -325,6 +325,9 @@
       },
       "gemini": {
         "description": "Google Gemini AI assistant"
+      },
+      "pilotdeck": {
+        "description": "OpenBMB PilotDeck AI assistant"
       }
     },
     "connectionStatus": "Connection Status",
@@ -353,7 +356,8 @@
     "skipPermissions": {
       "label": "Skip permission prompts (use with caution)",
       "claudeDescription": "Equivalent to --dangerously-skip-permissions flag",
-      "cursorDescription": "Equivalent to -f flag in Cursor CLI"
+      "cursorDescription": "Equivalent to -f flag in Cursor CLI",
+      "pilotdeckDescription": "Equivalent to --dangerously-skip-permissions flag"
     },
     "allowedTools": {
       "title": "Allowed Tools",
@@ -428,7 +432,7 @@
   "mcpServers": {
     "title": "MCP Servers",
     "description": {
-      "claude": "Model Context Protocol servers provide additional tools and data sources to PilotDeck",
+      "pilotdeck": "Model Context Protocol servers provide additional tools and data sources to PilotDeck",
       "cursor": "Model Context Protocol servers provide additional tools and data sources to Cursor",
       "codex": "Model Context Protocol servers provide additional tools and data sources to Codex"
     },

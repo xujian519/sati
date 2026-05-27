@@ -197,7 +197,6 @@ export default function PermissionsSettingsTab() {
       .catch((error) => {
         console.error('Failed to load permission settings from backend:', error);
       });
-
     // so users can flip back and forth between the chat and this dialog
     // without seeing stale state.
     const onStorage = (event: StorageEvent) => {

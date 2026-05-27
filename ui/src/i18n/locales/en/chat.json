@@ -299,7 +299,7 @@
       "google": "by Google"
     },
     "readyPrompt": {
-      "claude": "Ready to use PilotDeck with {{model}}. Start typing your message below.",
+      "pilotdeck": "Ready to use PilotDeck with {{model}}. Start typing your message below.",
       "cursor": "Ready to use Cursor with {{model}}. Start typing your message below.",
       "codex": "Ready to use Codex with {{model}}. Start typing your message below.",
       "gemini": "Ready to use Gemini with {{model}}. Start typing your message below.",
@@ -352,7 +352,7 @@
     "startCli": "Starting PilotDeck CLI in {{projectName}}",
     "defaultCommand": "command"
   },
-  "claudeStatus": {
+  "pilotdeckStatus": {
     "actions": {
       "thinking": "Thinking",
       "processing": "Processing",

@@ -34,6 +34,10 @@ const getProviderCommand = ({
     return customCommand;
   }
 
+  if (provider === 'pilotdeck') {
+    return 'pilotdeck --dangerously-skip-permissions /login';
+  }
+
   if (provider === 'claude') {
     return 'claude --dangerously-skip-permissions /login';
   }
@@ -50,6 +54,7 @@ const getProviderCommand = ({
 };
 
 const getProviderTitle = (provider: CliProvider) => {
+  if (provider === 'pilotdeck') return 'OpenBMB PilotDeck API Login';
   if (provider === 'claude') return 'Anthropic API Login';
   if (provider === 'cursor') return 'Cursor CLI Login';
   if (provider === 'codex') return 'Codex CLI Login';
@@ -71,7 +76,7 @@ const normalizeProject = (project?: LoginModalProject | null) => {
 export default function ProviderLoginModal({
   isOpen,
   onClose,
-  provider = 'claude',
+  provider = 'pilotdeck',
   project = null,
   onComplete,
   customCommand,
