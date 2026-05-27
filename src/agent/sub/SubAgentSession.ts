@@ -1,7 +1,7 @@
 /**
  * `SubAgentSession` — wraps `AgentLoop.run` for a forked subagent invocation
  * (C2 §6.2). Builds the forked message sequence, scopes the tool registry to
- * `allowedTools`, drops claudeMd / git-status from the system prompt, and
+ * `allowedTools`, drops project-instructions / git-status from the system prompt, and
  * collects the final assistant report into a {@link SubagentReport}.
  *
  * The subagent always returns a single text report — even if the model
