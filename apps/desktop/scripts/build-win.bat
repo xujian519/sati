@@ -9,7 +9,7 @@ REM ============================================================================
 set "REPO_ROOT=%~dp0..\..\..\"
 set "DESKTOP_DIR=%~dp0..\"
 set "UI_DIR=%REPO_ROOT%ui"
-set "MEMORY_DIR=%REPO_ROOT%edgeclaw-memory-core"
+set "MEMORY_DIR=%REPO_ROOT%src\context\memory\edgeclaw-memory-core"
 set "RESOURCES=%DESKTOP_DIR%resources"
 
 set SKIP_INSTALL=0
@@ -56,7 +56,7 @@ if %SKIP_INSTALL%==0 (
     )
     echo OK
 ) else (
-    echo [2] Skipping npm install (--skip-install)
+    echo [2] Skipping npm install ^(--skip-install^)
 )
 
 REM --- Step 3: Download Node.js for Windows ---
@@ -74,6 +74,33 @@ if not exist "%RESOURCES%\node-bin\node.exe" (
 ) else (
     echo [3] Node.js binary already present, skipping download
 )
+
+REM --- Step 3b: Rebuild native deps for bundled Node ABI ---
+echo.
+echo [3b] Rebuilding native deps for bundled Node...
+cd /d "%REPO_ROOT%"
+if exist node_modules\better-sqlite3\build rd /s /q node_modules\better-sqlite3\build
+set "PATH=%RESOURCES%\node-bin;%PATH%"
+set "NPM_CMD="
+for /f "delims=" %%i in ('where npm.cmd 2^>nul') do (
+    if not defined NPM_CMD set "NPM_CMD=%%i"
+)
+if not defined NPM_CMD (
+    echo ERROR: npm.cmd not found
+    exit /b 1
+)
+for %%i in ("%NPM_CMD%") do set "NPM_DIR=%%~dpi"
+set "NPM_CLI=%NPM_DIR%node_modules\npm\bin\npm-cli.js"
+if not exist "%NPM_CLI%" (
+    echo ERROR: npm-cli.js not found: %NPM_CLI%
+    exit /b 1
+)
+"%RESOURCES%\node-bin\node.exe" "%NPM_CLI%" rebuild better-sqlite3
+if errorlevel 1 (
+    echo ERROR: better-sqlite3 native rebuild failed
+    exit /b 1
+)
+echo OK
 
 REM --- Step 4: Download Bun for Windows ---
 if not exist "%RESOURCES%\bun-bin\bun.exe" (
@@ -94,7 +121,7 @@ if not exist "%RESOURCES%\bun-bin\bun.exe" (
 REM --- Step 5: Build pilotdeckui ---
 if %SKIP_BUILD%==0 (
     echo.
-    echo [5] Building pilotdeckui (vite)...
+    echo [5] Building pilotdeckui ^(vite^)...
     cd /d "%UI_DIR%"
     call npx vite build
     if errorlevel 1 (
@@ -103,19 +130,28 @@ if %SKIP_BUILD%==0 (
     )
     echo OK
 ) else (
-    echo [5] Skipping builds (--skip-build)
+    echo [5] Skipping builds ^(--skip-build^)
     goto :skip_builds
 )
 
-REM --- Step 6: Build pilotdeck-main ---
+REM --- Step 6: Build memory-core + pilotdeck-main ---
 echo.
-echo [6] Building pilotdeck-main (tsc)...
+echo [6] Building memory-core + pilotdeck-main ^(tsc^)...
+cd /d "%MEMORY_DIR%"
+if exist lib rd /s /q lib
+call npx tsc -p tsconfig.json
+if errorlevel 1 (
+    echo ERROR: memory-core tsc build failed
+    exit /b 1
+)
 cd /d "%REPO_ROOT%"
 call npx tsc -p tsconfig.json
 if errorlevel 1 (
     echo ERROR: tsc build failed
     exit /b 1
 )
+mkdir dist\src\extension\plugins 2>nul
+xcopy /E /I /Y src\extension\plugins\builtin dist\src\extension\plugins\builtin >nul
 echo OK
 
 REM --- Step 7: Create bundle tars ---

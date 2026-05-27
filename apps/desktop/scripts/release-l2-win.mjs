@@ -162,7 +162,11 @@ const memJunctionParent = path.join(distDir, "src", "context", "memory");
 if (!fs.existsSync(memJunctionParent)) {
   fs.mkdirSync(memJunctionParent, { recursive: true });
 }
-mkJunction(path.join(memJunctionParent, "edgeclaw-memory-core"), memDir);
+const memJunction = path.join(memJunctionParent, "edgeclaw-memory-core");
+if (fs.existsSync(memJunction) && !fs.lstatSync(memJunction).isSymbolicLink()) {
+  fs.rmSync(memJunction, { recursive: true, force: true });
+}
+mkJunction(memJunction, memDir);
 console.log("  Linked: src/context/memory/edgeclaw-memory-core -> memory-core bundle");
 
 const nodeExe = path.join(resources, "node-bin", "node.exe");
