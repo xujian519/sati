@@ -839,15 +839,15 @@ router.get('/commit-diff', async (req, res) => {
 
 // Generate commit message based on staged changes using AI
 router.post('/generate-commit-message', async (req, res) => {
-  const { project, files, provider = 'claude' } = req.body;
+  const { project, files, provider = 'pilotdeck' } = req.body;
 
   if (!project || !files || files.length === 0) {
     return res.status(400).json({ error: 'Project name and files are required' });
   }
 
   // Validate provider
-  if (!['claude', 'cursor'].includes(provider)) {
-    return res.status(400).json({ error: 'provider must be "claude" or "cursor"' });
+  if (!['claude', 'pilotdeck', 'cursor'].includes(provider)) {
+    return res.status(400).json({ error: 'provider must be "claude", "pilotdeck" or "cursor"' });
   }
 
   try {
@@ -939,9 +939,9 @@ Generate the commit message:`;
           const parsed = typeof data === 'string' ? JSON.parse(data) : data;
           console.log('🔍 Writer received message type:', parsed.type);
 
-          if (parsed.type === 'claude-response' && parsed.data) {
+          if ((parsed.type === 'claude-response' || parsed.type === 'pilotdeck-response') && parsed.data) {
             const message = parsed.data.message || parsed.data;
-            console.log('📦 Claude response message:', JSON.stringify(message, null, 2).substring(0, 500));
+            console.log('📦 PilotDeck response message:', JSON.stringify(message, null, 2).substring(0, 500));
             if (message.content && Array.isArray(message.content)) {
               // Extract text from content array
               for (const item of message.content) {

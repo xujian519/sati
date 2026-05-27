@@ -779,7 +779,7 @@ app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, re
     try {
         const { limit = 5, offset = 0 } = req.query;
         const result = await getSessions(req.params.projectName, parseInt(limit), parseInt(offset));
-        applyCustomSessionNames(result.sessions, 'claude');
+        applyCustomSessionNames(result.sessions, 'pilotdeck');
         res.json(result);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -807,7 +807,7 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, 
             parentSessionId: req.query.parentSessionId || null,
             relativeTranscriptPath: req.query.relativeTranscriptPath || null,
         });
-        sessionNamesDb.deleteName(sessionId, 'claude');
+        sessionNamesDb.deleteName(sessionId, 'pilotdeck');
         console.log(`[API] Session ${sessionId} deleted successfully`);
         res.json({ success: true });
     } catch (error) {
@@ -2048,7 +2048,7 @@ function handleShellConnection(ws) {
                 const projectPath = data.projectPath || process.cwd();
                 const sessionId = data.sessionId;
                 const hasSession = data.hasSession;
-                const provider = data.provider || 'claude';
+                const provider = data.provider || 'pilotdeck';
                 const initialCommand = data.initialCommand;
                 const isPlainShell = data.isPlainShell || (!!initialCommand && !hasSession) || provider === 'plain-shell';
                 urlDetectionBuffer = '';
@@ -2116,7 +2116,7 @@ function handleShellConnection(ws) {
                 if (isPlainShell) {
                     welcomeMsg = `\x1b[36mStarting terminal in: ${projectPath}\x1b[0m\r\n`;
                 } else {
-                    const providerName = provider === 'cursor' ? 'Cursor' : (provider === 'codex' ? 'Codex' : (provider === 'gemini' ? 'Gemini' : 'Claude'));
+                    const providerName = provider === 'pilotdeck' ? 'PilotDeck' : (provider === 'cursor' ? 'Cursor' : (provider === 'codex' ? 'Codex' : (provider === 'gemini' ? 'Gemini' : 'Claude')));
                     welcomeMsg = hasSession ?
                         `\x1b[36mResuming ${providerName} session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
                         `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
@@ -2196,8 +2196,18 @@ function handleShellConnection(ws) {
                         } else {
                             shellCommand = command;
                         }
+                    } else if (provider === 'pilotdeck') {
+                        const command = initialCommand || 'pilotdeck';
+                        if (hasSession && sessionId) {
+                            if (os.platform() === 'win32') {
+                                shellCommand = `pilotdeck --resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { pilotdeck }`;
+                            } else {
+                                shellCommand = `pilotdeck --resume "${sessionId}" || pilotdeck`;
+                            }
+                        } else {
+                            shellCommand = command;
+                        }
                     } else {
-
                         const command = initialCommand || 'claude';
                         if (hasSession && sessionId) {
                             if (os.platform() === 'win32') {
@@ -2632,7 +2642,7 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
 app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
     try {
         const { projectName, sessionId } = req.params;
-        const { provider = 'claude' } = req.query;
+        const { provider = 'pilotdeck' } = req.query;
         const homeDir = os.homedir();
 
         // PilotDeck sessions use `web:s_<uuid>` keys; Windows-safe sessions
@@ -2751,7 +2761,7 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
 
 
         const encodedPath = projectPath.replace(/[^a-zA-Z0-9-]/g, '-');
-        const projectDir = path.join(homeDir, '.claude', 'projects', encodedPath);
+        const projectDir = path.join(homeDir, '.pilotdeck', 'projects', encodedPath);
 
         const jsonlPath = path.join(projectDir, `${safeSessionId}.jsonl`);
 

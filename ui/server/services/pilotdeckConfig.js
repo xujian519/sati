@@ -350,9 +350,9 @@ export function buildRuntimeEnv(config) {
     10,
   );
   if (Number.isFinite(requestedMaxOutput) && requestedMaxOutput > 0) {
-    env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(requestedMaxOutput);
-  } else if (process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS) {
-    env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS;
+    env.PILOTDECK_MAX_OUTPUT_TOKENS = String(requestedMaxOutput);
+  } else if (process.env.PILOTDECK_MAX_OUTPUT_TOKENS) {
+    env.PILOTDECK_MAX_OUTPUT_TOKENS = process.env.PILOTDECK_MAX_OUTPUT_TOKENS;
   }
 
   const tavilyKey = mainParams.tavilyApiKey ?? mainParams.tavily_api_key ?? process.env.TAVILY_API_KEY;
