@@ -381,12 +381,7 @@ PilotDeck has an open plugin architecture with a strict boundary between the ope
 
 Thanks to everyone who has contributed code, feedback, and ideas. New contributors are warmly welcome — let's build the next-gen agent OS together.
 
-Workflow: **Fork → feature branch → PR**. Please make sure the unit tests and linters pass before opening a PR:
-
-```bash
-npm test
-cd ui && npx vitest run
-```
+Workflow: **Fork → feature branch → PR**.
 
 ---
 
