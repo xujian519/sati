@@ -427,6 +427,7 @@ PilotDeck builds upon the following outstanding open-source projects:
 - [Vite](https://github.com/vitejs/vite) — Frontend build tool
 - [React](https://github.com/facebook/react) — UI framework
 - [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) — Utility-first CSS framework
+- [shadcn/ui](https://github.com/shadcn-ui/ui) — Accessible component primitives for React
 
 ---
 

@@ -428,6 +428,7 @@ PilotDeck 的建设离不开以下优秀开源项目的支持：
 - [Vite](https://github.com/vitejs/vite) — 前端构建工具
 - [React](https://github.com/facebook/react) — UI 框架
 - [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) — 原子化 CSS 框架
+- [shadcn/ui](https://github.com/shadcn-ui/ui) — 可访问的 React 组件原语
 
 ---
 
