@@ -281,7 +281,7 @@ function getRecordSessionId(record: RunRecord): string | undefined {
 // ---------------------------------------------------------------------------
 
 function getProjectStoreDir(projectName: string): string {
-  return projectName ? join(homedir(), ".claude", "projects", projectName) : "";
+  return projectName ? join(homedir(), ".pilotdeck", "projects", projectName) : "";
 }
 
 function extractContentText(content: unknown): string {
