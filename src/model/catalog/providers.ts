@@ -1,15 +1,6 @@
 import type { ProviderCatalog } from "./types.js";
 
-/**
- * Built-in catalog of well-known LLM providers and models.
- *
- * When a user's pilotdeck.yaml references a model that exists in this catalog,
- * missing capability / multimodal fields are auto-filled from here so users
- * only need to provide API keys and model names.
- *
- * Capabilities represent the model's inherent abilities on its native API.
- * Proxy providers (OpenRouter, Yeysai, etc.) may support a subset.
- */
+
 export const PROVIDER_CATALOG: ProviderCatalog = {
 
   // ── Anthropic ──────────────────────────────────────────────────────────
