@@ -55,7 +55,9 @@ export function buildOpenAIRequest(
   request: CanonicalModelRequest,
   model: ModelDefinition,
 ): OpenAIRequestBody {
-  const messages = repairOpenAIToolPairing(request.messages.flatMap(toOpenAIMessages));
+  const messages = repairOpenAIToolPairing(
+    request.messages.flatMap((message, messageIndex) => toOpenAIMessages(message, messageIndex)),
+  );
   if (request.systemPrompt) {
     messages.unshift({ role: "system", content: request.systemPrompt });
   }
@@ -90,7 +92,7 @@ export function buildOpenAIRequest(
   return body;
 }
 
-function toOpenAIMessages(message: CanonicalMessage): OpenAIMessage[] {
+function toOpenAIMessages(message: CanonicalMessage, messageIndex: number): OpenAIMessage[] {
   if (message.role === "user") {
     return toOpenAIUserMessages(message);
   }
@@ -106,8 +108,8 @@ function toOpenAIMessages(message: CanonicalMessage): OpenAIMessage[] {
 
   const assistantToolCalls = message.content
     .filter((block) => block.type === "tool_call")
-    .map((block) => ({
-      id: block.id,
+    .map((block, toolCallIndex) => ({
+      id: normalizeToolCallId(block.id, messageIndex, toolCallIndex),
       type: "function",
       function: {
         name: block.name,
@@ -334,41 +336,86 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function normalizeToolCallId(id: unknown, messageIndex: number, toolCallIndex: number): string {
+  return typeof id === "string" && id.trim().length > 0
+    ? id
+    : `call_${messageIndex}_${toolCallIndex}`;
+}
+
 /**
- * Last-resort safety net: walk the flattened OpenAI message list and ensure
- * every assistant message with `tool_calls` is immediately followed by `tool`
- * messages covering every `tool_call_id`. Missing ones get a placeholder.
+ * Last-resort safety net for OpenAI's strict tool-pairing rules:
+ *  - normalize every assistant `tool_calls[]` item to the required shape;
+ *  - keep only immediately-following tool messages whose `tool_call_id`
+ *    matches that assistant message;
+ *  - inject placeholders for missing tool results;
+ *  - drop orphaned / duplicate / mismatched `role: "tool"` messages.
  */
 function repairOpenAIToolPairing(messages: OpenAIMessage[]): OpenAIMessage[] {
   const out: OpenAIMessage[] = [];
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
-    out.push(msg);
 
-    if (msg.role !== "assistant" || !msg.tool_calls?.length) continue;
+    if (msg.role !== "assistant" || !msg.tool_calls?.length) {
+      if (msg.role !== "tool") {
+        out.push(msg);
+      }
+      continue;
+    }
 
-    const expectedIds = new Set(
-      (msg.tool_calls as Array<{ id: string }>).map((tc) => tc.id),
+    const toolCalls = msg.tool_calls.map((toolCall, toolCallIndex) =>
+      normalizeOpenAIToolCall(toolCall, i, toolCallIndex)
     );
+    out.push({ ...msg, tool_calls: toolCalls });
 
-    // Scan ahead for matching tool messages.
+    const expectedIds = new Set(toolCalls.map((tc) => tc.id));
+    const matchedIds = new Set<string>();
     let j = i + 1;
     while (j < messages.length && messages[j].role === "tool") {
       const tid = messages[j].tool_call_id;
-      if (tid) expectedIds.delete(tid);
+      if (
+        typeof tid === "string" &&
+        tid.trim().length > 0 &&
+        expectedIds.has(tid) &&
+        !matchedIds.has(tid)
+      ) {
+        out.push(messages[j]);
+        matchedIds.add(tid);
+      }
       j++;
     }
 
     // Inject placeholders for any still-missing results.
     for (const missingId of expectedIds) {
+      if (matchedIds.has(missingId)) {
+        continue;
+      }
       out.push({
         role: "tool",
         tool_call_id: missingId,
         content: "[result truncated]",
       });
     }
+    i = j - 1;
   }
   return out;
+}
+
+function normalizeOpenAIToolCall(
+  toolCall: unknown,
+  messageIndex: number,
+  toolCallIndex: number,
+): { id: string; type: "function"; function: { name: string; arguments: string } } {
+  const record = isRecord(toolCall) ? toolCall : {};
+  const fn = isRecord(record.function) ? record.function : {};
+  const args = fn.arguments;
+  return {
+    id: normalizeToolCallId(record.id, messageIndex, toolCallIndex),
+    type: "function",
+    function: {
+      name: typeof fn.name === "string" ? fn.name : "",
+      arguments: typeof args === "string" ? args : JSON.stringify(args ?? {}),
+    },
+  };
 }
 
 function toOpenAIToolChoice(toolChoice: CanonicalToolChoice | undefined): unknown {
