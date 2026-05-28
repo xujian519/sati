@@ -31,6 +31,21 @@ bash scripts/release.sh --signed
 
 ---
 
+## 本地产物路径
+
+所有桌面安装包默认输出到 **`apps/desktop/dist-electron/`**（由 `electron-builder.yml` 的 `directories.output` 决定）。
+
+| 平台 | 构建命令 | 产物 |
+|---|---|---|
+| macOS (arm64) | `bash apps/desktop/scripts/release.sh` | `PilotDeck-<version>-arm64.dmg`、未打包的 `mac-arm64/PilotDeck.app` |
+| Windows (x64 / arm64) | `apps/desktop/scripts/build-win.bat` | `PilotDeck-<version>-win-x64.exe`、`PilotDeck-<version>-win-arm64.exe` |
+
+发版脚本还会在同一目录生成 README 永久链接用的副本：`PilotDeck-latest-arm64.dmg`、`PilotDeck-latest-win-*.exe`（与带版本号文件字节级一致，上传前会校验大小与 SHA256，上传后会用 GitHub API 核对远端大小）。
+
+同目录常见辅助文件：`install-pilotdeck.sh`、`INSTALL.md`（macOS 沙盒 IM 安装修复用）。
+
+---
+
 ## 发布前测试（分层，按最佳实践）
 
 原则：**快且确定性的进自动化门禁；慢、要密钥、易抖动的不要塞进每次 DMG 构建。**

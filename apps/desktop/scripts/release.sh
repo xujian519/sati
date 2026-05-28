@@ -90,6 +90,88 @@ warn() { echo "  ${YEL}⚠${RST} $*"; }
 fail() { echo "  ${RED}✗ $*${RST}"; exit 1; }
 info() { echo "  ${DIM}$*${RST}"; }
 
+# ─────────────── Release asset integrity (catch truncated uploads) ───────────────
+pd_release_file_size() {
+  stat -f%z "$1" 2>/dev/null || stat -c%s "$1"
+}
+
+pd_release_file_sha256() {
+  shasum -a 256 "$1" | awk '{print $1}'
+}
+
+pd_release_gh_repo_slug() {
+  local url="$1"
+  if [[ "$url" =~ github\.com[:/]([^/]+/[^/.]+) ]]; then
+    echo "${BASH_REMATCH[1]%.git}"
+  else
+    echo "$url"
+  fi
+}
+
+pd_release_assert_min_installer_size() {
+  local path="$1" kind="$2" min_bytes
+  case "$kind" in
+    dmg)     min_bytes=150000000 ;;
+    win-exe) min_bytes=100000000 ;;
+    *) fail "unknown installer kind: ${kind}" ;;
+  esac
+  local sz
+  sz="$(pd_release_file_size "$path")"
+  if [[ "$sz" -lt "$min_bytes" ]]; then
+    fail "Installer looks truncated (${sz} < ${min_bytes} bytes): $(basename "$path")"
+  fi
+}
+
+pd_release_assert_copy_matches() {
+  local src="$1" dst="$2"
+  [[ -f "$src" && -f "$dst" ]] || fail "Missing release file: ${src} or ${dst}"
+  local ss ds
+  ss="$(pd_release_file_size "$src")"
+  ds="$(pd_release_file_size "$dst")"
+  if [[ "$ss" != "$ds" ]]; then
+    fail "Permalink copy size mismatch: $(basename "$dst") (${ds} vs ${ss} bytes)"
+  fi
+  local hs hd
+  hs="$(pd_release_file_sha256 "$src")"
+  hd="$(pd_release_file_sha256 "$dst")"
+  if [[ "$hs" != "$hd" ]]; then
+    fail "Permalink copy SHA256 mismatch: $(basename "$dst")"
+  fi
+  ok "Permalink copy OK: $(basename "$dst") (${ds} bytes)"
+}
+
+pd_release_verify_gh_asset() {
+  local tag="$1" repo_slug="$2" name="$3" expected_bytes="$4"
+  local remote_bytes
+  remote_bytes="$(gh release view "$tag" --repo "$repo_slug" --json assets -q \
+    ".assets[] | select(.name==\"${name}\") | .size" 2>/dev/null || true)"
+  if [[ -z "$remote_bytes" ]]; then
+    fail "GitHub Release asset missing after upload: ${name}"
+  fi
+  if [[ "$remote_bytes" != "$expected_bytes" ]]; then
+    fail "GitHub Release size mismatch for ${name}: remote=${remote_bytes} local=${expected_bytes}"
+  fi
+  ok "GitHub asset OK: ${name} (${remote_bytes} bytes)"
+}
+
+pd_release_assert_not_lfs_pointer() {
+  local f
+  for f in "$@"; do
+    [[ -f "$f" ]] || fail "Missing release asset: ${f}"
+    if head -1 "$f" | grep -q "git-lfs.github.com/spec/v1"; then
+      fail "Git LFS pointer (not a real file): ${f}
+    Run: git lfs pull  OR restore apps/desktop/assets/*.png from a full checkout.
+    If OpenBMB LFS budget is exceeded, apps/desktop/assets must be regular git blobs
+    (see .gitattributes apps/desktop/assets/**)."
+    fi
+    local sz
+    sz="$(pd_release_file_size "$f")"
+    if [[ "$sz" -lt 200 ]]; then
+      fail "Release asset too small (${sz} bytes): ${f}"
+    fi
+  done
+}
+
 VERSION="$(node -e "console.log(require('${DESKTOP_DIR}/package.json').version)")"
 APP_OUT="${DESKTOP_DIR}/dist-electron/mac-arm64/PilotDeck.app"
 DMG_OUT="${DESKTOP_DIR}/dist-electron/PilotDeck-${VERSION}-arm64.dmg"
@@ -197,6 +279,11 @@ fi
 
 [[ -f "$ENTITLEMENTS" ]] || fail "Missing entitlements: ${ENTITLEMENTS}"
 ok "Entitlements: $(basename "$ENTITLEMENTS")"
+
+pd_release_assert_not_lfs_pointer \
+  "${DESKTOP_DIR}/assets/logo-dark-1024.png" \
+  "${DESKTOP_DIR}/resources/icon.icns"
+ok "Desktop icon assets present (not LFS pointers)"
 
 [[ -d "$PILOTDECKUI_DIR" ]] || fail "Missing pilotdeckui at ${PILOTDECKUI_DIR}"
 [[ -d "$PILOTDECK_MAIN_DIR/src" ]] || fail "Missing src/ at ${PILOTDECK_MAIN_DIR}"
@@ -761,6 +848,7 @@ Mode: ${MODE}"
   fi
 
   # Collect assets to upload
+  pd_release_assert_min_installer_size "$DMG_OUT" dmg
   GH_ASSETS=("$DMG_OUT")
   [[ -f "$HELPER_DST" ]]     && GH_ASSETS+=("$HELPER_DST")
   [[ -f "$INSTALL_MD_DST" ]] && GH_ASSETS+=("$INSTALL_MD_DST")
@@ -785,28 +873,41 @@ Mode: ${MODE}"
   # Upload fixed-name "latest" copies so README permalink URLs always resolve
   if [[ "$GH_PUBLISH_OK" == "1" ]]; then
     GH_REPO="$(git -C "$REPO_ROOT" remote get-url origin)"
+    GH_REPO_SLUG="$(pd_release_gh_repo_slug "$GH_REPO")"
     LATEST_ASSETS=()
 
     if [[ -f "$DMG_OUT" ]]; then
       LATEST_DMG="$(dirname "$DMG_OUT")/PilotDeck-latest-arm64.dmg"
       cp "$DMG_OUT" "$LATEST_DMG"
+      pd_release_assert_copy_matches "$DMG_OUT" "$LATEST_DMG"
       LATEST_ASSETS+=("$LATEST_DMG")
     fi
 
     DIST_DIR="$(dirname "$DMG_OUT")"
     for exe in "$DIST_DIR"/PilotDeck-*-win-*.exe; do
       [[ -f "$exe" ]] || continue
+      pd_release_assert_min_installer_size "$exe" win-exe
       # PilotDeck-0.1.0-win-x64.exe → PilotDeck-latest-win-x64.exe
       LATEST_EXE="$(echo "$exe" | sed "s/PilotDeck-${VERSION}-/PilotDeck-latest-/")"
       cp "$exe" "$LATEST_EXE"
+      pd_release_assert_copy_matches "$exe" "$LATEST_EXE"
       LATEST_ASSETS+=("$LATEST_EXE")
     done
 
     if [[ ${#LATEST_ASSETS[@]} -gt 0 ]]; then
+      step "Verify permalink assets before GitHub upload"
       gh release upload "$GH_TAG" "${LATEST_ASSETS[@]}" --clobber \
         --repo "$GH_REPO" \
         && ok "Permalink assets uploaded (PilotDeck-latest-*)" \
-        || warn "Failed to upload permalink assets (non-fatal)"
+        || fail "Failed to upload permalink assets to ${GH_TAG}"
+
+      step "Verify permalink assets on GitHub (size)"
+      pd_release_verify_gh_asset "$GH_TAG" "$GH_REPO_SLUG" "$(basename "$DMG_OUT")" \
+        "$(pd_release_file_size "$DMG_OUT")"
+      for asset in "${LATEST_ASSETS[@]}"; do
+        pd_release_verify_gh_asset "$GH_TAG" "$GH_REPO_SLUG" "$(basename "$asset")" \
+          "$(pd_release_file_size "$asset")"
+      done
     fi
 
     GH_URL="$(gh release view "$GH_TAG" --repo "$GH_REPO" --json url -q .url 2>/dev/null || true)"

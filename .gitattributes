@@ -9,3 +9,6 @@
 
 # Small UI bundled images — keep as regular git blobs so Vite can inline them
 ui/src/assets/** !filter !diff !merge text=auto
+
+# Desktop app icon sources are tiny; avoid LFS (OpenBMB budget) and release-time smudge failures
+apps/desktop/assets/** !filter !diff !merge text=auto

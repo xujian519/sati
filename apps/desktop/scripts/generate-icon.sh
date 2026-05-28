@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Regenerate resources/icon.icns from assets/logo-light-1024.png (macOS only).
+# Regenerate resources/icon.icns from assets/logo-dark-1024.png (macOS only).
+# logo-dark = white mark on dark background (app icon / Dock).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DESKTOP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-SRC="${DESKTOP_DIR}/assets/logo-light-1024.png"
+SRC="${DESKTOP_DIR}/assets/logo-dark-1024.png"
 ICONSET="${DESKTOP_DIR}/resources/icon.iconset"
 OUT="${DESKTOP_DIR}/resources/icon.icns"
 
@@ -35,3 +36,14 @@ mk 1024 icon_512x512@2x.png
 iconutil -c icns "$ICONSET" -o "$OUT"
 rm -rf "$ICONSET"
 echo "Wrote ${OUT}"
+
+ICO="${DESKTOP_DIR}/resources/icon.ico"
+if command -v magick >/dev/null 2>&1; then
+  magick "$SRC" -define icon:auto-resize=256,128,64,48,32,16 "$ICO"
+  echo "Wrote ${ICO}"
+elif command -v convert >/dev/null 2>&1; then
+  convert "$SRC" -define icon:auto-resize=256,128,64,48,32,16 "$ICO"
+  echo "Wrote ${ICO}"
+else
+  echo "Skip ${ICO} (install ImageMagick: brew install imagemagick)" >&2
+fi
