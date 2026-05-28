@@ -28,8 +28,11 @@ export const getSuggestionRootPath = (inputPath: string): string => {
 
 // Handles root edge cases for Unix-like and Windows paths.
 export const getParentPath = (currentPath: string): string | null => {
-  if (currentPath === '~' || currentPath === '/' || WINDOWS_DRIVE_PATTERN.test(currentPath)) {
+  if (currentPath === '/' || WINDOWS_DRIVE_PATTERN.test(currentPath)) {
     return null;
+  }
+  if (currentPath === '~') {
+    return '/';
   }
 
   const lastSeparatorIndex = Math.max(currentPath.lastIndexOf('/'), currentPath.lastIndexOf('\\'));
