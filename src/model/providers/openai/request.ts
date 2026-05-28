@@ -343,20 +343,22 @@ function normalizeToolCallId(id: unknown, messageIndex: number, toolCallIndex: n
 }
 
 /**
- * Last-resort safety net: walk the flattened OpenAI message list and ensure
- * every assistant message with `tool_calls` is immediately followed by `tool`
- * messages covering every `tool_call_id`. Missing ones get a placeholder.
+ * Last-resort safety net for OpenAI's strict tool-pairing rules:
+ *  - normalize every assistant `tool_calls[]` item to the required shape;
+ *  - keep only immediately-following tool messages whose `tool_call_id`
+ *    matches that assistant message;
+ *  - inject placeholders for missing tool results;
+ *  - drop orphaned / duplicate / mismatched `role: "tool"` messages.
  */
 function repairOpenAIToolPairing(messages: OpenAIMessage[]): OpenAIMessage[] {
   const out: OpenAIMessage[] = [];
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
-    if (msg.role === "tool" && (typeof msg.tool_call_id !== "string" || msg.tool_call_id.trim().length === 0)) {
-      continue;
-    }
 
     if (msg.role !== "assistant" || !msg.tool_calls?.length) {
-      out.push(msg);
+      if (msg.role !== "tool") {
+        out.push(msg);
+      }
       continue;
     }
 
@@ -365,26 +367,35 @@ function repairOpenAIToolPairing(messages: OpenAIMessage[]): OpenAIMessage[] {
     );
     out.push({ ...msg, tool_calls: toolCalls });
 
-    const expectedIds = new Set(
-      toolCalls.map((tc) => tc.id),
-    );
-
-    // Scan ahead for matching tool messages.
+    const expectedIds = new Set(toolCalls.map((tc) => tc.id));
+    const matchedIds = new Set<string>();
     let j = i + 1;
     while (j < messages.length && messages[j].role === "tool") {
       const tid = messages[j].tool_call_id;
-      if (tid) expectedIds.delete(tid);
+      if (
+        typeof tid === "string" &&
+        tid.trim().length > 0 &&
+        expectedIds.has(tid) &&
+        !matchedIds.has(tid)
+      ) {
+        out.push(messages[j]);
+        matchedIds.add(tid);
+      }
       j++;
     }
 
     // Inject placeholders for any still-missing results.
     for (const missingId of expectedIds) {
+      if (matchedIds.has(missingId)) {
+        continue;
+      }
       out.push({
         role: "tool",
         tool_call_id: missingId,
         content: "[result truncated]",
       });
     }
+    i = j - 1;
   }
   return out;
 }
