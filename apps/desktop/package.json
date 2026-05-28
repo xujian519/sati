@@ -1,6 +1,6 @@
 {
   "name": "@pilotdeck/desktop",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "description": "PilotDeck macOS Desktop App (Electron shell + pilotdeckui + pilotdeck-main)",
   "main": "dist/main.js",
   "private": true,
