@@ -59,11 +59,11 @@ export type AnalyticsEvent = {
   installationId: string;
   instanceId: string;
   deploymentMode: TelemetryDeploymentMode;
+  /** Hashed anonymous session key (24-char hex), not the raw sessionKey. */
   sessionId?: string;
   commitHash: string;
   appVersion: string;
   platform: NodeJS.Platform;
-  projectPath?: string;
   properties: AnalyticsEventProperties;
 };
 
@@ -73,8 +73,8 @@ export type AnalyticsEventEnvelope = {
 };
 
 export type TelemetryTrackContext = {
+  /** Raw session key; hashed before outbound events. */
   sessionId?: string;
-  projectPath?: string;
 };
 
 export type TelemetryFeatureUsedInput = TelemetryTrackContext & {

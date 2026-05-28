@@ -285,7 +285,6 @@ export class InProcessGateway implements Gateway {
           loopStage: "loop_start",
           outcome: "success",
           sessionId: input.sessionKey,
-          projectPath: input.projectKey,
           metadata: {
             runId,
             channelKey: input.channelKey,
@@ -313,7 +312,6 @@ export class InProcessGateway implements Gateway {
         )) {
           emitSessionTelemetry(this.options.telemetry, event, {
             sessionId: input.sessionKey,
-            projectPath: input.projectKey,
             runId,
             channelKey: input.channelKey,
             permissionMode: permissionMode ?? "default",
@@ -329,7 +327,6 @@ export class InProcessGateway implements Gateway {
           loopStage: "loop_end",
           errorCategory: "loop_error",
           sessionId: input.sessionKey,
-          projectPath: input.projectKey,
           metadata: {
             runId,
             channelKey: input.channelKey,
@@ -649,7 +646,6 @@ function emitSessionTelemetry(
   event: AgentEvent,
   context: {
     sessionId: string;
-    projectPath?: string;
     runId: string;
     channelKey: string;
     permissionMode: string;
@@ -663,7 +659,6 @@ function emitSessionTelemetry(
         loopStage: "model_request",
         outcome: "success",
         sessionId: context.sessionId,
-        projectPath: context.projectPath,
         metadata: {
           runId: context.runId,
           provider: event.provider,
@@ -680,7 +675,6 @@ function emitSessionTelemetry(
           loopStage: "model_response",
           outcome: "success",
           sessionId: context.sessionId,
-          projectPath: context.projectPath,
           metadata: { runId: context.runId },
         });
       }
@@ -690,7 +684,6 @@ function emitSessionTelemetry(
           loopStage: "model_request",
           errorCategory: "model_request_error",
           sessionId: context.sessionId,
-          projectPath: context.projectPath,
           code: event.event.error.code,
           metadata: { runId: context.runId },
         });
@@ -702,7 +695,6 @@ function emitSessionTelemetry(
         loopStage: "tool_prepare",
         outcome: "success",
         sessionId: context.sessionId,
-        projectPath: context.projectPath,
         metadata: {
           runId: context.runId,
           toolCount: event.calls.length,
@@ -716,7 +708,6 @@ function emitSessionTelemetry(
         loopStage: "tool_call",
         outcome: "success",
         sessionId: context.sessionId,
-        projectPath: context.projectPath,
         metadata: {
           runId: context.runId,
           toolName: event.toolName,
@@ -731,7 +722,6 @@ function emitSessionTelemetry(
         outcome: event.success ? "success" : "failed",
         errorCategory: event.success ? undefined : "tool_runtime_error",
         sessionId: context.sessionId,
-        projectPath: context.projectPath,
         metadata: {
           runId: context.runId,
           toolName: event.toolName,
@@ -748,7 +738,6 @@ function emitSessionTelemetry(
           loopStage: "tool_call",
           errorCategory: inferToolErrorCategory(code),
           sessionId: context.sessionId,
-          projectPath: context.projectPath,
           code,
           metadata: {
             runId: context.runId,
@@ -764,7 +753,6 @@ function emitSessionTelemetry(
         loopStage: "permission_check",
         outcome: "success",
         sessionId: context.sessionId,
-        projectPath: context.projectPath,
         metadata: {
           runId: context.runId,
           toolName: event.toolName,
@@ -778,7 +766,6 @@ function emitSessionTelemetry(
         loopStage: "permission_check",
         errorCategory: "permission_error",
         sessionId: context.sessionId,
-        projectPath: context.projectPath,
         code: "permission_denied",
         metadata: {
           runId: context.runId,
@@ -792,7 +779,6 @@ function emitSessionTelemetry(
         loopStage: "loop_end",
         outcome: "success",
         sessionId: context.sessionId,
-        projectPath: context.projectPath,
         metadata: {
           runId: context.runId,
           stopReason: event.result.stopReason,
@@ -806,7 +792,6 @@ function emitSessionTelemetry(
         loopStage: "loop_end",
         errorCategory: "loop_error",
         sessionId: context.sessionId,
-        projectPath: context.projectPath,
         code: event.error.code,
         metadata: {
           runId: context.runId,
@@ -819,7 +804,6 @@ function emitSessionTelemetry(
         loopStage: "loop_end",
         outcome: "aborted",
         sessionId: context.sessionId,
-        projectPath: context.projectPath,
         metadata: {
           runId: context.runId,
           reason: event.reason,

@@ -570,7 +570,6 @@ export function createRouterRuntime(
           loopStage: "model_response",
           outcome: "success",
           sessionId: ctx.sessionId,
-          projectPath: ctx.projectPath,
           metadata: {
             provider: attempt.provider,
             model: attempt.model,
@@ -589,7 +588,6 @@ export function createRouterRuntime(
         loopStage: "model_request",
         errorCategory: "model_request_error",
         sessionId: ctx.sessionId,
-        projectPath: ctx.projectPath,
         code: lastError.code,
         metadata: {
           provider: lastAttempt.provider,

@@ -149,7 +149,6 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   const ownsTelemetry = !options.telemetry;
   telemetry.trackAppStarted({
     channel: "gateway",
-    projectRoot,
   });
   let registry!: ProjectRuntimeRegistry;
   let router: SessionRouter | undefined;
@@ -602,7 +601,6 @@ class ProjectRuntimeRegistry {
             module: "memory",
             loopStage: "module_event",
             outcome: "success",
-            projectPath: runtime.projectRoot,
             metadata: {
               phase: "maintenance_completed",
             },
@@ -612,8 +610,7 @@ class ProjectRuntimeRegistry {
             module: "memory",
             loopStage: "loop_end",
             errorCategory: "loop_error",
-            projectPath: runtime.projectRoot,
-            metadata: { action: "maintenance" },
+            code: error instanceof Error ? error.name : "UnknownError",
           });
           // eslint-disable-next-line no-console
           console.warn(

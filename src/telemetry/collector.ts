@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 import { resolvePilotHome } from "../pilot/paths.js";
-import { resolveTelemetryRuntimeContext } from "./context.js";
+import { hashTelemetryId, resolveTelemetryRuntimeContext } from "./context.js";
 import { TelemetrySender } from "./sender.js";
 import {
   ANALYTICS_SCHEMA_VERSION,
@@ -28,6 +28,9 @@ type CreateTelemetryCollectorInput = {
 
 const DEFAULT_BASE_URL = "http://123.56.15.233:3000";
 
+const PATH_LIKE_KEY = /path|cwd|root|dir|file/i;
+const ABSOLUTE_PATH_VALUE = /^([A-Za-z]:)?[/\\]/;
+
 export function createTelemetryCollector(
   input: CreateTelemetryCollectorInput = {},
 ): TelemetryClient {
@@ -41,7 +44,7 @@ export function createTelemetryCollector(
       if (!config.enabled) return;
       sender.enqueue(buildEvent({
         eventName,
-        properties,
+        properties: sanitizeProperties(properties),
         context,
         runtimeContext,
       }));
@@ -63,23 +66,20 @@ export function createTelemetryCollector(
         loopStage,
         outcome,
         ...(errorCategory ? { errorCategory } : {}),
-        ...metadata,
+        ...sanitizeProperties(metadata),
       }, context);
     },
     trackError(error, inputError = {}) {
-      const err = normalizeError(error);
-      const metadata = inputError.metadata ?? {};
+      const err = normalizeErrorCode(error);
       const module = inputError.module ?? "runtime";
       const loopStage = inputError.loopStage ?? "loop_end";
       const errorCategory = inputError.errorCategory ?? "runtime_error";
+      const code = inputError.code ?? err;
       this.track("error_occurred", {
         module,
         loopStage,
         errorCategory,
-        code: inputError.code ?? err.code,
-        message: err.message,
-        stack: err.stack,
-        ...metadata,
+        code,
       }, inputError);
       this.trackFeatureLoopStage({
         module: normalizeModule(module),
@@ -87,15 +87,11 @@ export function createTelemetryCollector(
         outcome: "failed",
         errorCategory: normalizeErrorCategory(errorCategory),
         sessionId: inputError.sessionId,
-        projectPath: inputError.projectPath,
-        metadata: {
-          code: inputError.code ?? err.code,
-          ...metadata,
-        },
+        metadata: { code },
       });
     },
     trackAppStarted(metadata = {}) {
-      this.track("app_started", metadata, {});
+      this.track("app_started", sanitizeProperties(metadata), {});
     },
     flush() {
       return sender.flush();
@@ -140,6 +136,7 @@ function buildEvent(input: {
   context: TelemetryTrackContext;
   runtimeContext: TelemetryRuntimeContext;
 }): AnalyticsEvent {
+  const rawSessionId = input.context.sessionId;
   return {
     schemaVersion: ANALYTICS_SCHEMA_VERSION,
     eventId: randomUUID(),
@@ -148,39 +145,60 @@ function buildEvent(input: {
     installationId: input.runtimeContext.installationId,
     instanceId: input.runtimeContext.instanceId,
     deploymentMode: input.runtimeContext.deploymentMode,
-    sessionId: input.context.sessionId,
+    sessionId: rawSessionId ? hashTelemetryId(rawSessionId) : undefined,
     commitHash: input.runtimeContext.commitHash,
     appVersion: input.runtimeContext.appVersion,
     platform: input.runtimeContext.platform,
-    projectPath: input.context.projectPath,
     properties: input.properties,
   };
 }
 
-function normalizeError(error: unknown): { code: string; message: string; stack?: string } {
-  if (error instanceof Error) {
-    return {
-      code: error.name || "Error",
-      message: truncateText(error.message),
-      stack: error.stack ? sanitizeStack(error.stack) : undefined,
-    };
+export function sanitizeProperties(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (PATH_LIKE_KEY.test(key)) {
+      continue;
+    }
+    const sanitized = sanitizePropertyValue(entry);
+    if (sanitized !== undefined) {
+      out[key] = sanitized;
+    }
   }
-  const text = truncateText(String(error));
-  return { code: "UnknownError", message: text };
+  return out;
 }
 
-function sanitizeStack(stack: string): string {
-  return truncateText(
-    stack
-      .replace(/([A-Za-z]:)?\/[^)\n]+/g, "<path>")
-      .replace(/[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/g, "<jwt>"),
-    2000,
-  );
+function sanitizePropertyValue(value: unknown): unknown {
+  if (value == null) {
+    return value;
+  }
+  if (typeof value === "string") {
+    return looksLikeAbsolutePath(value) ? undefined : value;
+  }
+  if (Array.isArray(value)) {
+    const items = value
+      .map((item) => sanitizePropertyValue(item))
+      .filter((item) => item !== undefined);
+    return items.length > 0 ? items : undefined;
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const nested = sanitizeProperties(record);
+    return Object.keys(nested).length > 0 ? nested : undefined;
+  }
+  return value;
 }
 
-function truncateText(input: string, max = 500): string {
-  if (input.length <= max) return input;
-  return `${input.slice(0, max)}...`;
+function looksLikeAbsolutePath(value: string): boolean {
+  return ABSOLUTE_PATH_VALUE.test(value.trim());
+}
+
+function normalizeErrorCode(error: unknown): string {
+  if (error instanceof Error) {
+    return error.name || "Error";
+  }
+  return "UnknownError";
 }
 
 function parseEnabledFlag(value: string | undefined, fallback: boolean): boolean {

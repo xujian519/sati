@@ -172,7 +172,6 @@ export class DiscoveryFire {
       module: "always_on",
       loopStage: "module_event",
       outcome: phase === "run_failed" ? "failed" : "success",
-      projectPath: this.deps.projectKey,
       metadata: {
         phase,
         runId,
@@ -186,7 +185,6 @@ export class DiscoveryFire {
         loopStage: "loop_end",
         errorCategory: "loop_error",
         code: extra.error.code,
-        projectPath: this.deps.projectKey,
         metadata: {
           runId,
           phase,

@@ -154,6 +154,11 @@ function hashStableId(input: string): string {
   return createHash("sha256").update(input).digest("hex").slice(0, 24);
 }
 
+/** Stable anonymous id for outbound telemetry (e.g. session keys). */
+export function hashTelemetryId(input: string): string {
+  return hashStableId(input);
+}
+
 function buildRuntimeContextCacheKey(
   pilotHome: string | undefined,
   env: Record<string, string | undefined>,

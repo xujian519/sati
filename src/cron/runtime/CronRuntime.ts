@@ -105,7 +105,6 @@ export class CronRuntime {
           loopStage: "module_event",
           outcome: event.phase === "cron_failed" ? "failed" : "success",
           sessionId: event.runId,
-          projectPath: event.projectKey,
           metadata: {
             phase: event.phase,
             runId: event.runId,
@@ -120,7 +119,6 @@ export class CronRuntime {
             errorCategory: "loop_error",
             code: event.error.code,
             sessionId: event.runId,
-            projectPath: event.projectKey,
             metadata: {
               taskId: event.taskId,
               phase: event.phase,
@@ -195,7 +193,6 @@ export class CronRuntime {
       loopStage: "module_event",
       outcome: "success",
       sessionId: sessionKey,
-      projectPath: task.projectKey,
       metadata: {
         phase: "task_created",
         taskId,
