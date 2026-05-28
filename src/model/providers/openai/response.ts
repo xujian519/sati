@@ -1,4 +1,5 @@
 import { jsonrepair } from "jsonrepair";
+import { randomUUID } from "node:crypto";
 import type {
   CanonicalContentBlock,
   CanonicalModelResponse,
@@ -66,7 +67,7 @@ function toCanonicalToolCall(toolCall: unknown, provider: string): CanonicalTool
 
   return {
     type: "tool_call",
-    id: typeof record.id === "string" ? record.id : "",
+    id: readNonEmptyString(record.id) ?? generateToolCallId(),
     name: typeof fn.name === "string" ? fn.name : "",
     input,
     raw: toolCall,
@@ -77,4 +78,12 @@ function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function readNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function generateToolCallId(): string {
+  return `call_${randomUUID().slice(0, 8)}`;
 }

@@ -95,3 +95,52 @@ test("buildOpenAIRequest preserves existing items and does not mutate original s
   assert.equal((originalProps.ids as Record<string, unknown>).items, undefined);
   assert.deepEqual((originalProps.labels as Record<string, unknown>).items, { type: "string" });
 });
+
+test("buildOpenAIRequest repairs assistant tool calls missing OpenAI-required fields", () => {
+  const request: CanonicalModelRequest = {
+    model: "openai/test",
+    provider: "openai",
+    messages: [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_call",
+            id: "",
+            name: "find_skills",
+            input: { query: "popular skills" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            toolCallId: "",
+            content: [{ type: "text", text: "[]" }],
+          },
+        ],
+      },
+    ],
+    tools: [{ name: "find_skills", inputSchema: { type: "object", properties: {} } }],
+  };
+
+  const body = buildOpenAIRequest(request, TEST_MODEL);
+  const assistant = body.messages[0]!;
+  const toolCall = assistant.tool_calls?.[0] as {
+    id: string;
+    type: string;
+    function: { name: string; arguments: string };
+  };
+
+  assert.equal(assistant.role, "assistant");
+  assert.equal(toolCall.id, "call_0_0");
+  assert.equal(toolCall.type, "function");
+  assert.equal(toolCall.function.name, "find_skills");
+  assert.equal(toolCall.function.arguments, JSON.stringify({ query: "popular skills" }));
+  assert.deepEqual(
+    body.messages.filter((message) => message.role === "tool").map((message) => message.tool_call_id),
+    ["call_0_0"],
+  );
+});

@@ -55,7 +55,9 @@ export function buildOpenAIRequest(
   request: CanonicalModelRequest,
   model: ModelDefinition,
 ): OpenAIRequestBody {
-  const messages = repairOpenAIToolPairing(request.messages.flatMap(toOpenAIMessages));
+  const messages = repairOpenAIToolPairing(
+    request.messages.flatMap((message, messageIndex) => toOpenAIMessages(message, messageIndex)),
+  );
   if (request.systemPrompt) {
     messages.unshift({ role: "system", content: request.systemPrompt });
   }
@@ -90,7 +92,7 @@ export function buildOpenAIRequest(
   return body;
 }
 
-function toOpenAIMessages(message: CanonicalMessage): OpenAIMessage[] {
+function toOpenAIMessages(message: CanonicalMessage, messageIndex: number): OpenAIMessage[] {
   if (message.role === "user") {
     return toOpenAIUserMessages(message);
   }
@@ -106,8 +108,8 @@ function toOpenAIMessages(message: CanonicalMessage): OpenAIMessage[] {
 
   const assistantToolCalls = message.content
     .filter((block) => block.type === "tool_call")
-    .map((block) => ({
-      id: block.id,
+    .map((block, toolCallIndex) => ({
+      id: normalizeToolCallId(block.id, messageIndex, toolCallIndex),
       type: "function",
       function: {
         name: block.name,
@@ -334,6 +336,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function normalizeToolCallId(id: unknown, messageIndex: number, toolCallIndex: number): string {
+  return typeof id === "string" && id.trim().length > 0
+    ? id
+    : `call_${messageIndex}_${toolCallIndex}`;
+}
+
 /**
  * Last-resort safety net: walk the flattened OpenAI message list and ensure
  * every assistant message with `tool_calls` is immediately followed by `tool`
@@ -343,12 +351,22 @@ function repairOpenAIToolPairing(messages: OpenAIMessage[]): OpenAIMessage[] {
   const out: OpenAIMessage[] = [];
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
-    out.push(msg);
+    if (msg.role === "tool" && (typeof msg.tool_call_id !== "string" || msg.tool_call_id.trim().length === 0)) {
+      continue;
+    }
 
-    if (msg.role !== "assistant" || !msg.tool_calls?.length) continue;
+    if (msg.role !== "assistant" || !msg.tool_calls?.length) {
+      out.push(msg);
+      continue;
+    }
+
+    const toolCalls = msg.tool_calls.map((toolCall, toolCallIndex) =>
+      normalizeOpenAIToolCall(toolCall, i, toolCallIndex)
+    );
+    out.push({ ...msg, tool_calls: toolCalls });
 
     const expectedIds = new Set(
-      (msg.tool_calls as Array<{ id: string }>).map((tc) => tc.id),
+      toolCalls.map((tc) => tc.id),
     );
 
     // Scan ahead for matching tool messages.
@@ -369,6 +387,24 @@ function repairOpenAIToolPairing(messages: OpenAIMessage[]): OpenAIMessage[] {
     }
   }
   return out;
+}
+
+function normalizeOpenAIToolCall(
+  toolCall: unknown,
+  messageIndex: number,
+  toolCallIndex: number,
+): { id: string; type: "function"; function: { name: string; arguments: string } } {
+  const record = isRecord(toolCall) ? toolCall : {};
+  const fn = isRecord(record.function) ? record.function : {};
+  const args = fn.arguments;
+  return {
+    id: normalizeToolCallId(record.id, messageIndex, toolCallIndex),
+    type: "function",
+    function: {
+      name: typeof fn.name === "string" ? fn.name : "",
+      arguments: typeof args === "string" ? args : JSON.stringify(args ?? {}),
+    },
+  };
 }
 
 function toOpenAIToolChoice(toolChoice: CanonicalToolChoice | undefined): unknown {
