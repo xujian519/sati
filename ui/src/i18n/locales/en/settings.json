@@ -98,8 +98,37 @@
     "notifications": "Notifications",
     "plugins": "Plugins",
     "router": "Router",
-    "config": "Config",
+    "config": "Service Config",
     "about": "About"
+  },
+  "settingsHome": {
+    "back": "Back",
+    "close": "Close settings",
+    "basics": "Basics",
+    "configRequiredDescription": "Configure model services before running this service.",
+    "application": "Appearance",
+    "workflow": "Workflow",
+    "advanced": "Advanced",
+    "config": {
+      "detail": "Model pool, agents, routing, memory, search, and service settings"
+    },
+    "appearanceMode": {
+      "title": "Theme Mode",
+      "detail": "Follow the system appearance, or pin a light / dark theme.",
+      "system": "Follow System",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "chatInput": {
+      "title": "Chat & Input",
+      "detail": "Tool display, scroll behavior, and send shortcut"
+    },
+    "codeEditor": {
+      "detail": "Word wrap, line numbers, minimap, and font size"
+    },
+    "permissions": {
+      "detail": "Manage allowed and blocked tool rules"
+    }
   },
   "notifications": {
     "title": "Notifications",
@@ -350,15 +379,9 @@
     "exportSuccess": "Exported {{allowed}} allowed and {{blocked}} blocked tools.",
     "exportError": "Failed to export permissions.",
     "importReadError": "Could not read the selected file.",
-    "importInvalid": "Not a valid permissions export. Expected JSON with allowedTools / disallowedTools / skipPermissions.",
+    "importInvalid": "Not a valid permissions export. Expected JSON with allowedTools / disallowedTools.",
     "importConfirmBody": "Merge {{allowed}} allowed and {{blocked}} blocked tools into your existing permissions?",
     "importSuccess": "Imported. Added {{addedAllowed}} allowed and {{addedBlocked}} blocked tools.",
-    "skipPermissions": {
-      "label": "Skip permission prompts (use with caution)",
-      "claudeDescription": "Equivalent to --dangerously-skip-permissions flag",
-      "cursorDescription": "Equivalent to -f flag in Cursor CLI",
-      "pilotdeckDescription": "Equivalent to --dangerously-skip-permissions flag"
-    },
     "allowedTools": {
       "title": "Allowed Tools",
       "description": "Tools that are automatically allowed without prompting for permission",
@@ -474,37 +497,74 @@
       "form": "Form",
       "rawYaml": "Raw YAML"
     },
-    "actions": {
-      "opening": "Opening...",
-      "revealFile": "Reveal File",
-      "refresh": "Refresh",
-      "reloadCurrent": "Reload current",
-      "saving": "Saving...",
-      "saveAndReload": "Save & reload",
-      "remove": "Remove",
-      "removeModel": "Remove model",
-      "add": "Add",
-      "dismiss": "Dismiss"
-    },
-    "rawYaml": {
-      "configValid": "Config is valid",
-      "unsaved": "(unsaved)",
-      "configInvalid": "Config has validation errors",
-      "configInvalidSeeBelow": "Config has validation errors — see below",
-      "errors": "Errors",
-      "warnings": "Warnings",
-      "yamlParseError": "YAML on disk failed to parse — switch to Raw YAML to fix it.",
-      "cannotParse": "Could not parse the YAML on disk. Switch to {{rawYaml}} to inspect and fix it.",
-      "rawYaml": "Raw YAML"
+	    "actions": {
+	      "opening": "Opening...",
+	      "revealFile": "Reveal in Finder",
+	      "refresh": "Refresh",
+	      "reloadCurrent": "Reload current config",
+	      "saving": "Saving...",
+	      "saveAndReload": "Save and reload current config",
+	      "saveAndReloadShort": "Save & reload",
+	      "remove": "Remove",
+	      "removeModel": "Remove model",
+	      "add": "Add",
+	      "dismiss": "Dismiss",
+	      "showDetails": "Show config details",
+	      "hideDetails": "Hide config details"
+	    },
+	    "status": {
+	      "unsavedChanges": "Unsaved changes",
+	      "noUnsavedChanges": "No unsaved changes",
+	      "fixYamlInFilesystem": "Fix the config file in the filesystem, then refresh.",
+	      "subsystems": {
+	        "pending": "Waiting for config parsing.",
+	        "processEnv": {
+	          "label": "Process Env",
+	          "applied": "Native settings have been applied to this process."
+	        },
+	        "memory": {
+	          "label": "Memory",
+	          "enabled": "Memory service is enabled.",
+	          "disabled": "memory.enabled is false."
+	        },
+	        "router": {
+	          "label": "Router (CCR)",
+	          "enabled": "Router dashboard uses native records.",
+	          "disabled": "router.enabled is false."
+	        },
+	        "gateway": {
+	          "label": "Gateway",
+	          "enabled": "Gateway is enabled.",
+	          "disabled": "gateway.enabled is false."
+	        }
+	      }
+	    },
+	    "rawYaml": {
+	      "configValid": "Config is valid",
+	      "unsaved": "(unsaved)",
+	      "configInvalid": "Config has validation errors",
+	      "configInvalidSeeBelow": "Config has validation errors — see below",
+	      "errors": "Errors",
+	      "warnings": "Warnings",
+	      "yamlParseError": "The config file YAML failed to parse. Fix it in the filesystem, then refresh.",
+	      "cannotParse": "Could not parse the config file YAML. Fix it in the filesystem, then refresh.",
+	      "rawYaml": "Raw YAML"
+	    },
+    "sectionGroups": {
+      "basic": "Basic",
+      "basicDescription": "Configure model services before running this service.",
+      "features": "Features",
+      "advanced": "Advanced"
     },
     "sections": {
+      "backToMenu": "Back to service config",
       "runtime": {
-        "label": "Runtime",
-        "description": "Ports, host, timeouts, database location"
+        "label": "Service",
+        "description": "Ports, proxy, and paths"
       },
       "models": {
-        "label": "Models",
-        "description": "Providers and named model entries"
+        "label": "Model Pool",
+        "description": "Models available to agents, memory, and routing"
       },
       "agents": {
         "label": "Agents",
@@ -537,8 +597,9 @@
     },
     "panels": {
       "runtime": {
-        "title": "Advanced (Runtime)",
-        "description": "Ports, paths, and timeouts the UI server uses. Most users never need to touch these.",
+        "title": "Service",
+        "description": "Configure service ports, data paths, and network proxy. Changes to ports or paths usually require restarting the service.",
+        "advancedToggle": "Advanced settings",
         "fields": {
           "host": { "label": "Host", "description": "Bind interface for the HTTP/WebSocket server." },
           "serverPort": { "label": "Server port", "description": "Express + WebSocket port." },
@@ -551,41 +612,36 @@
         }
       },
       "models": {
-        "title": "Models",
-        "description": "Configure your LLM providers. The catalog auto-fills protocol, URL, and model capabilities — you only need to paste an API key and pick which models to enable."
+        "title": "Model Pool",
+        "description": "Configure model providers, API keys, base URLs, and enabled models. Agents, memory, and routing choose from the enabled models here.",
+        "providerIdDuplicate": "A Provider id with this name already exists."
       },
       "agents": {
         "title": "Agents",
-        "description": "Pick which provider/model the chat agent runs on.",
+        "description": "Set the main agent, subagents, and model parameters.",
         "mainModel": {
           "label": "Main agent model",
-          "description": "Used by the primary chat agent. Reference an enabled provider/model from the Models section."
+          "description": "Model used for the main conversation."
         },
         "capabilities": {
-          "title": "Active model capabilities",
+          "title": "Model Settings",
           "imageInput": "Image input",
           "enabled": "Enabled",
           "disabled": "Disabled",
-          "resetCatalog": "reset to catalog default",
-          "overrideActive": "Override active — your YAML explicitly defines this model's multimodal.input.",
-          "catalogSupportsImage": "Default from catalog: supports image input.",
-          "catalogTextOnly": "Default from catalog: text only.",
-          "noCatalog": "No catalog entry — defaulting to text only. Toggle to override.",
-          "imageWarning": "If the upstream model server doesn't actually accept images, enabling this will produce upstream errors at request time.",
+          "overrideActive": "Image input is set manually.",
+          "catalogSupportsImage": "Catalog default supports images.",
+          "catalogTextOnly": "Catalog default is text only.",
+          "noCatalog": "No catalog entry; defaulting to text only.",
+          "imageWarning": "Enable only when the upstream model supports images.",
           "maxOutputTokens": "Max output tokens",
-          "override": "Override",
-          "default": "Default",
-          "resetDefault": "reset to default",
-          "maxOutputDescription": "Cap on tokens the model may generate per turn (sent as max_tokens to upstream). Leave empty to fall back to the catalog or protocol default (typically 8192 for openai). Increase this for long-form creative tasks or thinking models that burn output budget while reasoning — too small a value cuts the response off mid-stream and the UI then appears stuck.",
+          "maxOutputDescription": "Maximum tokens generated in one response. Leave empty to use the default.",
           "maxContextTokens": "Max context tokens",
-          "maxContextDescription": "Override the model's context window size for auto-compaction. The agent automatically compresses conversation history when usage reaches 80% (warning) or 95% (blocking) of this budget. Leave empty to use the catalog default. Set a smaller value to trigger compaction earlier — useful for proxy providers or to reduce per-turn cost."
+          "maxContextDescription": "Context window used for auto-compaction. Leave empty to use the model default."
         },
         "subagents": {
-          "show": "Show",
-          "hide": "Hide",
-          "toggle": "subagent settings",
           "label": "Subagents default",
-          "description": "Used by tool-spawned subagents (e.g. tasks)."
+          "description": "Default model for subagents.",
+          "inherit": "Inherit main agent model"
         }
       },
       "customEnv": {
@@ -643,45 +699,45 @@
       },
       "memory": {
         "title": "Memory",
-        "description": "PilotDeck memory service — embeddings & summarisation pipelines.",
+        "description": "Configure the model used for memory indexing and Dream.",
         "enabled": {
           "label": "Enabled",
           "description": "Toggles the memory service."
         },
         "model": {
-          "label": "Memory model",
+          "label": "Memory Model",
           "description": "Provider/model the memory pipeline calls.",
           "inherit": "inherit (use main agent's model)"
         }
       },
       "tools": {
         "title": "Search",
-        "description": "Web search backing the agent's `web_search` tool. Select exactly one provider; inactive providers are ignored.",
+        "description": "Configure the search service used by the agent's web_search tool.",
         "provider": {
-          "label": "Provider",
-          "description": "Choose the single search provider used by the agent.",
+          "label": "Search provider",
+          "description": "The active search service.",
           "glm": "GLM / Z.AI Web Search",
           "tavily": "Tavily",
           "custom": "Custom"
         },
         "apiKey": {
           "label": "API key",
-          "description": "Stored in pilotdeck.yaml under tools.webSearch.apiKey for the selected provider.",
+          "description": "API key for the selected provider.",
           "placeholder": "provider API key"
         },
         "endpoint": {
           "label": "Endpoint",
-          "description": "Optional override for the selected provider endpoint. Leave empty to use the provider default.",
-          "placeholder": "Provider default endpoint"
+          "description": "Custom endpoint. Leave empty to use the default.",
+          "placeholder": "Default endpoint"
         },
         "custom": {
           "name": {
             "label": "Name",
-            "description": "Display name for this custom search provider."
+            "description": "Name of this custom search service."
           },
           "auth": {
             "label": "Auth",
-            "description": "How the custom provider receives the API key.",
+            "description": "How the API key is sent.",
             "bearer": "Bearer header",
             "bodyApiKey": "API key in JSON body",
             "queryApiKey": "API key in query string",
@@ -689,49 +745,69 @@
           },
           "method": {
             "label": "HTTP method",
-            "description": "Request method for the custom provider."
+            "description": "Request method."
           },
           "params": {
             "label": "Parameter names",
-            "description": "Left: query parameter/body field. Right: API key parameter/body field."
+            "description": "Parameter names for the query and API key."
           },
           "mapping": {
             "label": "Result mapping",
-            "description": "Dot-paths used to read the results array and each result's title, URL, snippet, source, and publish time."
+            "description": "Fields used to read search results from the response."
           }
         },
         "test": {
           "button": "Test connection",
           "testing": "Testing…",
           "needsKey": "Enter an API key first.",
-          "success": "Connected — {{count}} organic result(s) in {{latency}}ms.",
-          "failedPrefix": "Failed: {{error}}"
+          "success": "Connected: {{count}} result(s), {{latency}}ms.",
+          "failedPrefix": "Connection failed: {{error}}"
         }
       },
       "router": {
-        "title": "PilotDeck Router",
-        "description": "Embedded router for fan-out across providers (tier-based routing, token saver, auto-orchestrate).",
-        "enabled": { "label": "Enabled", "description": "When on, agents use the router instead of the configured provider directly." },
+        "title": "Routing",
+        "description": "Choose models by task complexity. Assign a model to each tier; advanced rules stay in Advanced settings.",
+        "advancedToggle": "Advanced settings",
+        "enabled": { "label": "Enable routing", "description": "When enabled, agent requests go through the router before a model is selected." },
         "zeroUsageRetry": {
-          "label": "Zero-usage retry",
-          "description": "Automatically retry when the upstream returns a response with zero tokens used.",
+          "label": "Empty response retry",
+          "description": "Retry automatically when the upstream returns an empty-usage response.",
           "maxAttempts": { "label": "Max attempts", "description": "Maximum retry attempts before giving up." }
         },
+        "tierRouting": {
+          "modelPlaceholder": "Select a model",
+          "simple": {
+            "label": "Simple tasks",
+            "description": "Quick Q&A, confirmations, light rewrites, and simple file operations."
+          },
+          "medium": {
+            "label": "Standard tasks",
+            "description": "Everyday chat, short generation, small file edits, and normal coding changes."
+          },
+          "complex": {
+            "label": "Complex tasks",
+            "description": "Tasks that need decomposition, parallel work, or multiple sub-agents."
+          },
+          "reasoning": {
+            "label": "Reasoning tasks",
+            "description": "Multi-file analysis, long context, research reports, and deep reasoning."
+          }
+        },
         "tokenSaver": {
-          "title": "Token Saver",
-          "description": "A lightweight judge classifies each turn into a tier and routes it to a cost-appropriate model.",
+          "title": "Smart routing",
+          "description": "Classify task complexity and route each tier to a model.",
           "judgeModel": "Judge model",
           "defaultTier": "Default tier",
           "judgeTimeout": { "label": "Judge timeout (ms)", "description": "Maximum time to wait for the judge decision." },
-          "subagentPolicy": { "label": "Sub-agent policy", "description": "How sub-agents are routed: 'judge' re-evaluates each sub-agent turn, 'inherit' reuses the parent tier." }
+          "subagentPolicy": { "label": "Sub-agent policy", "description": "judge re-evaluates each sub-agent turn; inherit reuses the parent tier." }
         },
         "autoOrchestrate": {
-          "title": "Auto Orchestrate",
-          "description": "Automatically fan out complex turns into parallel sub-agents when the judge assigns certain tiers.",
+          "title": "Split complex tasks",
+          "description": "Fan out selected tiers into parallel sub-agents.",
           "triggerTiers": "Trigger tiers",
           "slimPrompt": { "label": "Slim system prompt", "description": "Use a shorter system prompt for orchestrated sub-agents to save tokens." }
         },
-        "stats": { "label": "Stats collection", "description": "Track token usage and cost per session. Powers the Dashboard tab." },
+        "stats": { "label": "Usage stats", "description": "Track token usage and cost per session." },
         "pricing": {
           "title": "Model Pricing",
           "description": "Custom pricing per model ($/million tokens). Used when the API doesn't report cost.",
@@ -744,27 +820,27 @@
           "add": "Add"
         },
         "scenarios": {
-          "title": "Scenarios",
-          "description": "Map scenario names to models. default is the primary route.",
-          "empty": "No scenarios configured.",
+          "title": "Custom scenarios",
+          "description": "Only applies when the system or a plugin passes a matching scenario name. default is the primary route.",
+          "empty": "No custom scenarios configured.",
           "add": "Add"
         },
         "fallback": {
-          "title": "Fallback Chains",
-          "description": "Ordered fallback models per scenario. If the primary fails, the router tries the next.",
-          "empty": "No fallback chains configured.",
+          "title": "Fallback models",
+          "description": "If a scenario's primary model fails, the router tries these models in order.",
+          "empty": "No fallback models configured.",
           "addModel": "Add fallback model",
           "add": "Add"
         },
         "tiers": {
-          "title": "Tiers",
-          "description": "Complexity tiers the judge can route to. Pick a model for each — descriptions are pre-filled.",
+          "title": "Tier advanced settings",
+          "description": "Adjust the tier descriptions used by the judge, or add custom tiers.",
           "placeholder": "Describe when the judge should pick this tier…",
           "add": "Add"
         },
         "rules": {
           "title": "Judge Rules",
-          "empty": "No custom rules. The judge uses tier descriptions only.",
+          "empty": "No custom rules configured. The judge uses tier descriptions only.",
           "placeholder": "Add a rule for the judge…",
           "add": "Add"
         }

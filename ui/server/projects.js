@@ -214,6 +214,7 @@ async function getProjects(progressCallback = null) {
             displayName: projectDisplayName(fullPath),
             fullPath,
             path: fullPath,
+            lastActivity: project.lastActivity,
             sessions,
             sessionMeta: {
                 total: project.sessionCount ?? sessions.length,
@@ -238,6 +239,7 @@ async function getProjects(progressCallback = null) {
     const generalHome = resolvePilotHome(process.env);
     let generalSessions = [];
     let generalTotal = 0;
+    let generalLastActivity;
     try {
         const generalGateway = await getPilotDeckGateway();
         // Pair the first page query with describeProject so the General
@@ -260,9 +262,11 @@ async function getProjects(progressCallback = null) {
         generalTotal = typeof generalSummary?.sessionCount === 'number'
             ? generalSummary.sessionCount
             : generalSessions.length;
+        generalLastActivity = generalSummary?.lastActivity;
     } catch {
         generalSessions = [];
         generalTotal = 0;
+        generalLastActivity = undefined;
     }
     rememberProjectDirectory('general', generalHome);
     result.unshift({
@@ -270,6 +274,7 @@ async function getProjects(progressCallback = null) {
         displayName: 'general',
         fullPath: generalHome,
         path: generalHome,
+        lastActivity: generalLastActivity,
         sessions: generalSessions,
         sessionMeta: {
             total: generalTotal,

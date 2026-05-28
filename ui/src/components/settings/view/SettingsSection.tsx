@@ -12,13 +12,13 @@ type SettingsSectionProps = {
 
 export default function SettingsSection({ title, description, children, className }: SettingsSectionProps) {
   return (
-    <div className={cn('space-y-3', className)}>
+    <div className={cn('space-y-2.5', className)}>
       <div>
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
           {title}
         </h3>
         {description && (
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
         )}
       </div>
       {children}

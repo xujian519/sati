@@ -80,14 +80,19 @@ const useProjectSortOrder = (): ProjectSortOrder => {
   return order;
 };
 
-// "Most recent activity" for a project = newest timestamp across every
-// session it owns. Falls back to 0 so brand-new projects with no sessions
-// sort to the bottom under "date" mode (and stay alphabetical otherwise).
+// "Most recent activity" for a project = the project summary timestamp when
+// available, or the newest timestamp across previewed sessions. The summary
+// matters because the sidebar only keeps a capped session preview.
 const projectLastActivity = (project: Project): number => {
+  let latest = Math.max(
+    asTimestamp(project.lastActivity),
+    asTimestamp(project.updated_at),
+    asTimestamp(project.createdAt),
+    asTimestamp(project.created_at),
+  );
   const buckets: ProjectSession[][] = [
     Array.isArray(project.sessions) ? project.sessions : [],
   ];
-  let latest = 0;
   for (const list of buckets) {
     for (const session of list) {
       const ts = Math.max(
