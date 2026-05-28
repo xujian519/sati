@@ -6,7 +6,6 @@ node_modules/
 Auto-Research-Skills/
 apps/
 packages/
-*.png
 *.log
 .env*
 dist/

@@ -11,12 +11,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy package manifests first for layer caching.
 # ui/ is a npm workspace — root pnpm install handles both.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
-COPY src/context/memory/edgeclaw-memory-core/package.json src/context/memory/edgeclaw-memory-core/tsconfig.json src/context/memory/edgeclaw-memory-core/tsconfig.base.json src/context/memory/edgeclaw-memory-core/
+# NOTE: edgeclaw-memory-core is consumed via a local `file:` dependency.
+# Copy the full directory before install so pnpm snapshots complete sources/types.
+COPY src/context/memory/edgeclaw-memory-core/ src/context/memory/edgeclaw-memory-core/
 COPY ui/package.json ui/
 COPY ui/scripts/ ui/scripts/
 
 # Single pnpm install resolves root + workspace (ui) + file dep (edgeclaw-memory-core)
-RUN npm install -g pnpm && HUSKY=0 pnpm install --frozen-lockfile 2>&1 | tail -5
+RUN npm install -g pnpm && HUSKY=0 pnpm install --frozen-lockfile
 
 # Copy all source files
 COPY src/ src/
@@ -31,7 +33,7 @@ RUN cd src/context/memory/edgeclaw-memory-core && npm run build
 RUN npm run build
 
 # Build UI frontend (Vite → ui/dist/)
-RUN cd ui && npx vite build
+RUN cd ui && npm run build
 
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────
