@@ -11,7 +11,6 @@
   <a href="https://pilotdeck.openbmb.cn/pilotdeck.github.io/demo/p/pilotdeck-demo"><img src="https://img.shields.io/badge/Demo-Live-brightgreen?style=flat-square" alt="Live Demo"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL_3.0-blue.svg?style=flat-square" alt="License"/></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-Native-6366F1?style=flat-square" alt="MCP Native"/></a>
-  <a href="#-desktop-app"><img src="https://img.shields.io/badge/Desktop-Download-000000?style=flat-square&logo=apple&logoColor=white" alt="Desktop App"/></a>
   <a href="https://github.com/OpenBMB/PilotDeck/stargazers"><img src="https://img.shields.io/github/stars/OpenBMB/PilotDeck?style=flat-square" alt="Stars"/></a>
   <br/>
   <a href="#-community"><img src="https://img.shields.io/badge/Discord-Join_Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/></a>
@@ -354,20 +353,6 @@ If Docker is installed, you can start PilotDeck with:
 ```bash
 docker compose up -d
 ```
-
-### 🖥️ Desktop App
-
-Pre-built installers — double-click to run, no command-line setup required.
-
-| Platform | Download |
-|----------|----------|
-| macOS (Apple Silicon) | [PilotDeck-latest-arm64.dmg](https://github.com/OpenBMB/PilotDeck/releases/latest/download/PilotDeck-latest-arm64.dmg) |
-| Windows (x64) | [PilotDeck-latest-win-x64.exe](https://github.com/OpenBMB/PilotDeck/releases/latest/download/PilotDeck-latest-win-x64.exe) |
-| Windows (ARM64) | [PilotDeck-latest-win-arm64.exe](https://github.com/OpenBMB/PilotDeck/releases/latest/download/PilotDeck-latest-win-arm64.exe) |
-
-> macOS DMG is signed and Apple-notarized. If you received the DMG via Feishu/WeChat/QQ, see [INSTALL.md](apps/desktop/INSTALL.md) for a one-command fix.
->
-> Browse all versions: [GitHub Releases](https://github.com/OpenBMB/PilotDeck/releases/latest)
 
 ---
 

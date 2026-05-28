@@ -11,7 +11,6 @@
   <a href="https://pilotdeck.openbmb.cn/pilotdeck.github.io/demo/p/pilotdeck-demo"><img src="https://img.shields.io/badge/Demo-在线体验-brightgreen?style=flat-square" alt="在线体验"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL_3.0-blue.svg?style=flat-square" alt="License"/></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-Native-6366F1?style=flat-square" alt="MCP Native"/></a>
-  <a href="#-桌面端-app"><img src="https://img.shields.io/badge/Desktop-下载安装-000000?style=flat-square&logo=apple&logoColor=white" alt="Desktop App"/></a>
   <a href="https://github.com/OpenBMB/PilotDeck/stargazers"><img src="https://img.shields.io/github/stars/OpenBMB/PilotDeck?style=flat-square" alt="Stars"/></a>
   <br/>
   <a href="#-联系我们"><img src="https://img.shields.io/badge/Discord-Join_Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/></a>
@@ -353,21 +352,6 @@ cd ui && npm run start   # 生产模式，访问 http://localhost:3001
 ```bash
 docker compose up -d
 ```
-
-### 🖥️ 桌面端 App
-
-提供开箱即用的桌面安装包，双击即可运行，无需命令行操作。
-
-| 平台 | 下载 |
-|------|------|
-| macOS (Apple Silicon) | [PilotDeck-latest-arm64.dmg](https://github.com/OpenBMB/PilotDeck/releases/latest/download/PilotDeck-latest-arm64.dmg) |
-| Windows (x64) | [PilotDeck-latest-win-x64.exe](https://github.com/OpenBMB/PilotDeck/releases/latest/download/PilotDeck-latest-win-x64.exe) |
-| Windows (ARM64) | [PilotDeck-latest-win-arm64.exe](https://github.com/OpenBMB/PilotDeck/releases/latest/download/PilotDeck-latest-win-arm64.exe) |
-
-> macOS DMG 已签名并通过 Apple 公证。如果你通过飞书/微信/QQ 接收 DMG，请参阅 [INSTALL.md](apps/desktop/INSTALL.md) 了解一行命令修复方案。
->
-> 浏览所有版本：[GitHub Releases](https://github.com/OpenBMB/PilotDeck/releases/latest)
-
 
 ---
 
