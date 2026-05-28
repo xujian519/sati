@@ -310,6 +310,7 @@ export function useChatRealtimeHandlers({
         () => new SmoothTextStream({
           emit: (content) => sessionStore.updateStreaming(sid, content, provider),
           finalize: () => sessionStore.finalizeStreaming(sid),
+          frameMs: 50,
         }),
       );
       state.append(text);
@@ -326,6 +327,7 @@ export function useChatRealtimeHandlers({
         () => new SmoothTextStream({
           emit: (content) => sessionStore.updateStreamingThinking(sid, content, provider),
           finalize: () => sessionStore.finalizeStreamingThinking(sid),
+          frameMs: 50,
         }),
       );
       state.append(text);

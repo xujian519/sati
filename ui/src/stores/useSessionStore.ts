@@ -334,6 +334,80 @@ function recomputeMergedIfNeeded(slot: SessionSlot): boolean {
   return true;
 }
 
+function forceRecomputeMerged(slot: SessionSlot): void {
+  slot._lastServerRef = slot.serverMessages;
+  slot._lastRealtimeRef = slot.realtimeMessages;
+  slot.merged = computeMerged(slot.serverMessages, slot.realtimeMessages);
+}
+
+/**
+ * Patch a single streaming row in `slot.merged` without recomputing the full list.
+ * Returns true when the merged row was updated in place.
+ */
+export function patchMergedStreamingMessage(
+  slot: SessionSlot,
+  streamId: string,
+  content: string,
+  msgProvider?: SessionProvider,
+): boolean {
+  const mergedIdx = slot.merged.findIndex((message) => message.id === streamId);
+  if (mergedIdx < 0) {
+    return false;
+  }
+
+  const existing = slot.merged[mergedIdx];
+  if (existing.content === content && (msgProvider == null || existing.provider === msgProvider)) {
+    return true;
+  }
+
+  slot.merged[mergedIdx] = {
+    ...existing,
+    content,
+    ...(msgProvider != null ? { provider: msgProvider } : {}),
+  };
+  return true;
+}
+
+type RafScheduler = {
+  schedule: (sessionId: string) => void;
+  cancelAll: () => void;
+};
+
+/**
+ * Coalesce per-session store notifications to one React update per animation frame.
+ */
+export function createRafNotifyScheduler(
+  isActiveSession: (sessionId: string) => boolean,
+  onNotify: () => void,
+  scheduleFrame: (callback: () => void) => number = (callback) => requestAnimationFrame(callback),
+  cancelFrame: (handle: number) => void = (handle) => cancelAnimationFrame(handle),
+): RafScheduler {
+  const pendingBySession = new Map<string, number>();
+
+  return {
+    schedule(sessionId: string) {
+      if (!isActiveSession(sessionId)) {
+        return;
+      }
+      if (pendingBySession.has(sessionId)) {
+        return;
+      }
+      const handle = scheduleFrame(() => {
+        if (!pendingBySession.has(sessionId)) {
+          return;
+        }
+        pendingBySession.delete(sessionId);
+        onNotify();
+      });
+      pendingBySession.set(sessionId, handle);
+    },
+    cancelAll() {
+      pendingBySession.forEach((handle) => cancelFrame(handle));
+      pendingBySession.clear();
+    },
+  };
+}
+
 // ─── Stale threshold ─────────────────────────────────────────────────────────
 
 const STALE_THRESHOLD_MS = 30_000;
@@ -347,10 +421,18 @@ export function useSessionStore() {
   const activeSessionIdRef = useRef<string | null>(null);
   // Bump to force re-render — only when the active session's data changes
   const [, setTick] = useState(0);
-  const notify = useCallback((sessionId: string) => {
-    if (sessionId === activeSessionIdRef.current) {
-      setTick(n => n + 1);
+  const notifySchedulerRef = useRef<RafScheduler | null>(null);
+  const getNotifyScheduler = (): RafScheduler => {
+    if (notifySchedulerRef.current == null) {
+      notifySchedulerRef.current = createRafNotifyScheduler(
+        (sessionId) => sessionId === activeSessionIdRef.current,
+        () => setTick((n) => n + 1),
+      );
     }
+    return notifySchedulerRef.current;
+  };
+  const notify = useCallback((sessionId: string) => {
+    getNotifyScheduler().schedule(sessionId);
   }, []);
 
   const setActiveSession = useCallback((sessionId: string | null) => {
@@ -648,12 +730,16 @@ export function useSessionStore() {
       // Subsequent delta — preserve the original turn-start timestamp so
       // computeMerged can tell which server snapshots belong to this turn.
       const existing = slot.realtimeMessages[idx];
-      slot.realtimeMessages = [...slot.realtimeMessages];
-      slot.realtimeMessages[idx] = {
-        ...existing,
-        provider: msgProvider,
-        content: accumulatedText,
-      };
+      if (existing.content === accumulatedText && existing.provider === msgProvider) {
+        return;
+      }
+      existing.content = accumulatedText;
+      existing.provider = msgProvider;
+      if (!patchMergedStreamingMessage(slot, streamId, accumulatedText, msgProvider)) {
+        forceRecomputeMerged(slot);
+      }
+      notify(sessionId);
+      return;
     } else {
       // Record the id of server's tail message at the moment this turn
       // started streaming. computeMerged uses this for an id-based
@@ -713,12 +799,16 @@ export function useSessionStore() {
     const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
     if (idx >= 0) {
       const existing = slot.realtimeMessages[idx];
-      slot.realtimeMessages = [...slot.realtimeMessages];
-      slot.realtimeMessages[idx] = {
-        ...existing,
-        provider: msgProvider,
-        content: accumulatedText,
-      };
+      if (existing.content === accumulatedText && existing.provider === msgProvider) {
+        return;
+      }
+      existing.content = accumulatedText;
+      existing.provider = msgProvider;
+      if (!patchMergedStreamingMessage(slot, streamId, accumulatedText, msgProvider)) {
+        forceRecomputeMerged(slot);
+      }
+      notify(sessionId);
+      return;
     } else {
       const msg: NormalizedMessage = {
         id: streamId,
