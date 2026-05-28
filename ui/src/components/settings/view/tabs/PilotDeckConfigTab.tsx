@@ -1035,21 +1035,53 @@ function ModelsSection({ config, onChange }: { config: PilotDeckConfig; onChange
   );
 }
 
+function splitModelRef(ref: string | undefined): { providerId: string; modelId: string } | null {
+  const value = ref?.trim() ?? '';
+  const slash = value.indexOf('/');
+  if (slash <= 0 || slash === value.length - 1) return null;
+  return { providerId: value.slice(0, slash), modelId: value.slice(slash + 1) };
+}
+
+function ensureModelRefConfigured<T extends PilotDeckConfig>(config: T, ref: string | undefined): T {
+  const parsed = splitModelRef(ref);
+  if (!parsed) return config;
+
+  const provider = config.model?.providers?.[parsed.providerId];
+  if (!provider) return config;
+  if (provider.models && Object.prototype.hasOwnProperty.call(provider.models, parsed.modelId)) return config;
+
+  return patch(config, ['model', 'providers', parsed.providerId, 'models', parsed.modelId], {});
+}
+
+function ensureModelRefsConfigured<T extends PilotDeckConfig>(config: T, refs: Array<string | undefined>): T {
+  return refs.reduce((next, ref) => ensureModelRefConfigured(next, ref), config);
+}
+
 // Build the "provider/model" options for agent / memory / router model dropdowns
-// from the currently-enabled providers and their enabled model ids.
+// from configured providers. Catalog providers expose every catalog model, while
+// custom/off-catalog models come from the provider's saved models map.
 function buildModelRefOptions(config: PilotDeckConfig): Array<{ value: string; label: string }> {
   const out: Array<{ value: string; label: string }> = [];
   const providers = config.model?.providers ?? {};
   for (const [pid, prov] of Object.entries(providers)) {
-    if (!prov?.models) continue;
     const catalog = findCatalogProviderById(pid);
-    for (const mid of Object.keys(prov.models)) {
-      const catalogModel = catalog?.models.find((m) => m.id === mid);
+    const seen = new Set<string>();
+
+    if (catalog) {
+      for (const model of catalog.models) {
+        seen.add(model.id);
+        out.push({
+          value: `${pid}/${model.id}`,
+          label: `${catalog.displayName}: ${model.displayName}`,
+        });
+      }
+    }
+
+    for (const mid of Object.keys(prov.models ?? {})) {
+      if (seen.has(mid)) continue;
       out.push({
         value: `${pid}/${mid}`,
-        label: catalog && catalogModel
-          ? `${catalog.displayName}: ${catalogModel.displayName}`
-          : `${pid}/${mid}`,
+        label: catalog ? `${catalog.displayName}: ${mid}` : `${pid}/${mid}`,
       });
     }
   }
@@ -1178,7 +1210,7 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
           <Select
             value={mainRef}
             options={mainOptions}
-            onChange={(v) => onChange(patch(config, ['agent', 'model'], v))}
+            onChange={(v) => onChange(patch(ensureModelRefConfigured(config, v), ['agent', 'model'], v))}
           />
         </FormRow>
 
@@ -1283,7 +1315,7 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
           <Select
             value={subDefault}
             options={subOptions}
-            onChange={(v) => onChange(patch(config, ['agent', 'subagents', 'default'], v))}
+            onChange={(v) => onChange(patch(ensureModelRefConfigured(config, v), ['agent', 'subagents', 'default'], v))}
           />
         </FormRow>
       </SettingsCard>
@@ -1711,7 +1743,10 @@ function MemorySection({ config, onChange }: { config: PilotDeckConfig; onChange
             <Select
               value={selected}
               options={options}
-              onChange={(v) => onChange(patch(config, ['memory', 'model'], v === 'inherit' ? '' : v))}
+              onChange={(v) => {
+                const nextValue = v === 'inherit' ? '' : v;
+                onChange(patch(ensureModelRefConfigured(config, nextValue), ['memory', 'model'], nextValue));
+              }}
             />
           </FormRow>
         )}
@@ -2091,7 +2126,7 @@ function RouterScenarioEditor({ config, onChange }: { config: PilotDeckConfig; o
   const [newKey, setNewKey] = useState('');
 
   const setScenario = (key: string, value: string) =>
-    onChange(patch(config, ['router', 'scenarios', key], value));
+    onChange(patch(ensureModelRefConfigured(config, value), ['router', 'scenarios', key], value));
   const removeScenario = (key: string) => {
     const next = { ...scenarios };
     delete next[key];
@@ -2100,7 +2135,8 @@ function RouterScenarioEditor({ config, onChange }: { config: PilotDeckConfig; o
   const addScenario = () => {
     const key = newKey.trim();
     if (!key || scenarios[key]) return;
-    onChange(patch(config, ['router', 'scenarios', key], modelOpts[0]?.value ?? ''));
+    const value = modelOpts[0]?.value ?? '';
+    onChange(patch(ensureModelRefConfigured(config, value), ['router', 'scenarios', key], value));
     setNewKey('');
   };
 
@@ -2160,7 +2196,7 @@ function RouterFallbackEditor({ config, onChange }: { config: PilotDeckConfig; o
   const [newKey, setNewKey] = useState('');
 
   const setChain = (scenario: string, chain: string[]) =>
-    onChange(patch(config, ['router', 'fallback', scenario], chain));
+    onChange(patch(ensureModelRefsConfigured(config, chain), ['router', 'fallback', scenario], chain));
   const removeChain = (scenario: string) => {
     const next = { ...fallback };
     delete next[scenario];
@@ -2169,7 +2205,8 @@ function RouterFallbackEditor({ config, onChange }: { config: PilotDeckConfig; o
   const addChain = () => {
     const key = newKey.trim();
     if (!key || fallback[key]) return;
-    onChange(patch(config, ['router', 'fallback', key], [modelOpts[0]?.value ?? '']));
+    const value = modelOpts[0]?.value ?? '';
+    onChange(patch(ensureModelRefConfigured(config, value), ['router', 'fallback', key], [value]));
     setNewKey('');
   };
 
@@ -2279,7 +2316,11 @@ function TokenSaverTierEditor({ config, onChange }: { config: PilotDeckConfig; o
   const [newKey, setNewKey] = useState('');
 
   const setTier = (key: string, field: 'model' | 'description', value: string) =>
-    onChange(patch(config, ['router', 'tokenSaver', 'tiers', key, field], value));
+    onChange(patch(
+      field === 'model' ? ensureModelRefConfigured(config, value) : config,
+      ['router', 'tokenSaver', 'tiers', key, field],
+      value,
+    ));
   const removeTier = (key: string) => {
     const next = { ...tiers };
     delete next[key];
@@ -2289,8 +2330,9 @@ function TokenSaverTierEditor({ config, onChange }: { config: PilotDeckConfig; o
     const key = newKey.trim();
     if (!key || tiers[key]) return;
     const preset = DEFAULT_TIERS[key];
-    onChange(patch(config, ['router', 'tokenSaver', 'tiers', key], {
-      model: modelOpts[0]?.value ?? '',
+    const model = modelOpts[0]?.value ?? '';
+    onChange(patch(ensureModelRefConfigured(config, model), ['router', 'tokenSaver', 'tiers', key], {
+      model,
       description: preset?.description ?? '',
     }));
     setNewKey('');
@@ -2417,7 +2459,7 @@ function RouterLevelEditor({ config, onChange }: { config: PilotDeckConfig; onCh
   const tiers = config.router?.tokenSaver?.tiers ?? {};
 
   const setDefault = (value: string) => {
-    let next = patch(config, ['router', 'scenarios', 'default'], value);
+    let next = patch(ensureModelRefConfigured(config, value), ['router', 'scenarios', 'default'], value);
     const fallbackDefault = config.router?.fallback?.default ?? [];
     if (
       fallbackDefault.length === 0 ||
@@ -2430,7 +2472,7 @@ function RouterLevelEditor({ config, onChange }: { config: PilotDeckConfig; onCh
 
   const setTierModel = (key: RouterTierKey, model: string) => {
     const existing = tiers[key] ?? {};
-    onChange(patch(config, ['router', 'tokenSaver', 'tiers', key], {
+    onChange(patch(ensureModelRefConfigured(config, model), ['router', 'tokenSaver', 'tiers', key], {
       ...existing,
       model,
       description: existing.description ?? DEFAULT_TIERS[key].description,
@@ -2495,6 +2537,7 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
   const seedRouterDefaults = (base: PilotDeckConfig) => {
     let next = base;
     const defaultModel = getDefaultModel(next);
+    next = ensureModelRefConfigured(next, defaultModel);
 
     if (defaultModel && !next.router?.scenarios?.default) {
       next = patch(next, ['router', 'scenarios', 'default'], defaultModel);
@@ -2647,7 +2690,7 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
                           <ModelRefInput
                             value={ts.judge ?? ''}
                             options={modelOpts}
-                            onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'judge'], v))}
+                            onChange={(v) => onChange(patch(ensureModelRefConfigured(config, v), ['router', 'tokenSaver', 'judge'], v))}
                           />
                         </div>
                         <div>
