@@ -47,6 +47,7 @@ const projectsHaveChanges = (
       nextProject.name !== prevProject.name ||
       nextProject.displayName !== prevProject.displayName ||
       nextProject.fullPath !== prevProject.fullPath ||
+      nextProject.lastActivity !== prevProject.lastActivity ||
       serialize(nextProject.alwaysOn) !== serialize(prevProject.alwaysOn) ||
       serialize(nextProject.sessionMeta) !== serialize(prevProject.sessionMeta) ||
       serialize(nextProject.sessions) !== serialize(prevProject.sessions) ||
@@ -700,7 +701,7 @@ export function useProjectsState({
             lastActivity: now,
           };
           const reordered = [bumped, ...sessions.slice(0, idx), ...sessions.slice(idx + 1)];
-          return { ...project, sessions: reordered };
+          return { ...project, lastActivity: now, sessions: reordered };
         }
 
         const trimmedTitle = (optimisticTitle ?? '').replace(/\s+/g, ' ').trim();
@@ -715,6 +716,7 @@ export function useProjectsState({
         };
         return {
           ...project,
+          lastActivity: now,
           sessions: [placeholder, ...sessions],
           sessionMeta: {
             ...(project.sessionMeta ?? {}),
