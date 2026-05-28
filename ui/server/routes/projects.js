@@ -24,7 +24,7 @@ function sanitizeGitError(message, token) {
   return message.replace(new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '***');
 }
 
-// Configure allowed workspace root (defaults to user's home directory)
+// Default root used by the folder browser when no path is provided.
 export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
 
 // System-critical paths that should never be used as workspace directories
@@ -44,7 +44,6 @@ export const FORBIDDEN_PATHS = [
   '/lib',
   '/lib64',
   '/opt',
-  '/tmp',
   '/run',
   // Windows
   'C:\\Windows',
@@ -54,6 +53,28 @@ export const FORBIDDEN_PATHS = [
   'C:\\System Volume Information',
   'C:\\$Recycle.Bin'
 ];
+
+function isForbiddenWorkspacePath(inputPath) {
+  const normalizedPath = path.normalize(path.resolve(inputPath));
+  if (normalizedPath === '/' || FORBIDDEN_PATHS.includes(normalizedPath)) {
+    return true;
+  }
+
+  for (const forbidden of FORBIDDEN_PATHS) {
+    if (normalizedPath === forbidden || normalizedPath.startsWith(forbidden + path.sep)) {
+      // Exception: allow user-accessible temporary folders under /var.
+      if (
+        forbidden === '/var' &&
+        (normalizedPath.startsWith('/var/tmp') || normalizedPath.startsWith('/var/folders'))
+      ) {
+        continue;
+      }
+      return true;
+    }
+  }
+
+  return false;
+}
 
 /**
  * Validates that a path is safe for workspace operations
@@ -65,32 +86,12 @@ export async function validateWorkspacePath(requestedPath) {
     // Resolve to absolute path
     let absolutePath = path.resolve(requestedPath);
 
-    // Check if path is a forbidden system directory
-    const normalizedPath = path.normalize(absolutePath);
-    if (FORBIDDEN_PATHS.includes(normalizedPath) || normalizedPath === '/') {
+    // Reject system-critical directories and descendants.
+    if (isForbiddenWorkspacePath(absolutePath)) {
       return {
         valid: false,
-        error: 'Cannot use system-critical directories as workspace locations'
+        error: 'Cannot create workspace in system-critical directories'
       };
-    }
-
-    // Additional check for paths starting with forbidden directories
-    for (const forbidden of FORBIDDEN_PATHS) {
-      if (normalizedPath === forbidden ||
-          normalizedPath.startsWith(forbidden + path.sep)) {
-        // Exception: /var/tmp and similar user-accessible paths might be allowed
-        // but /var itself and most /var subdirectories should be blocked
-        if (forbidden === '/var' &&
-            (normalizedPath.startsWith('/var/tmp') ||
-             normalizedPath.startsWith('/var/folders'))) {
-          continue; // Allow these specific cases
-        }
-
-        return {
-          valid: false,
-          error: `Cannot create workspace in system directory: ${forbidden}`
-        };
-      }
     }
 
     // Try to resolve the real path (following symlinks)
@@ -122,15 +123,11 @@ export async function validateWorkspacePath(requestedPath) {
       }
     }
 
-    // Resolve the workspace root to its real path
-    const resolvedWorkspaceRoot = await fs.realpath(WORKSPACES_ROOT);
-
-    // Ensure the resolved path is contained within the allowed workspace root
-    if (!realPath.startsWith(resolvedWorkspaceRoot + path.sep) &&
-        realPath !== resolvedWorkspaceRoot) {
+    // Apply the same checks after symlink/canonical path resolution.
+    if (isForbiddenWorkspacePath(realPath)) {
       return {
         valid: false,
-        error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`
+        error: 'Resolved path points to a system-critical directory'
       };
     }
 
@@ -140,16 +137,15 @@ export async function validateWorkspacePath(requestedPath) {
       const stats = await fs.lstat(absolutePath);
 
       if (stats.isSymbolicLink()) {
-        // Verify symlink target is also within allowed root
+        // Verify symlink target is not a forbidden system path.
         const linkTarget = await fs.readlink(absolutePath);
         const resolvedTarget = path.resolve(path.dirname(absolutePath), linkTarget);
         const realTarget = await fs.realpath(resolvedTarget);
 
-        if (!realTarget.startsWith(resolvedWorkspaceRoot + path.sep) &&
-            realTarget !== resolvedWorkspaceRoot) {
+        if (isForbiddenWorkspacePath(realTarget)) {
           return {
             valid: false,
-            error: 'Symlink target is outside the allowed workspace root'
+            error: 'Symlink target points to a system-critical directory'
           };
         }
       }

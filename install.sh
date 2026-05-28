@@ -24,6 +24,30 @@ ok() { printf "  ${GREEN}✓${RESET} %s\n" "$1"; }
 warn() { printf "  ${YELLOW}→${RESET} %s\n" "$1"; }
 fail() { printf "  ${RED}✗${RESET} %s\n" "$1"; exit 1; }
 
+# Portable timeout: use GNU timeout if available, else fall back to a bg+kill approach.
+# Returns 124 on timeout (same convention as GNU timeout).
+run_with_timeout() {
+  local secs="$1"; shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$secs" "$@"
+  else
+    "$@" &
+    local pid=$!
+    ( sleep "$secs" && kill "$pid" 2>/dev/null ) &
+    local watchdog=$!
+    if wait "$pid" 2>/dev/null; then
+      kill "$watchdog" 2>/dev/null; wait "$watchdog" 2>/dev/null
+      return 0
+    else
+      local rc=$?
+      kill "$watchdog" 2>/dev/null; wait "$watchdog" 2>/dev/null
+      # 143 = SIGTERM (128+15), treat as timeout
+      if [[ $rc -eq 143 ]]; then return 124; fi
+      return $rc
+    fi
+  fi
+}
+
 run_as_root() {
   if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     "$@"
@@ -448,7 +472,7 @@ echo "Checking native build tools..."
 ensure_native_build_tools
 echo ""
 
-echo "Installing PilotDeck to ${DIM}${INSTALL_DIR}${RESET} ..."
+echo -e "Installing PilotDeck to ${DIM}${INSTALL_DIR}${RESET} ..."
 install_or_update_repo
 ensure_lfs_assets
 echo ""
@@ -471,12 +495,27 @@ echo ""
 
 echo "Checking Playwright browser for browser-use plugin..."
 cd "$INSTALL_DIR"
+BROWSER_INSTALL_TIMEOUT="${PILOTDECK_BROWSER_INSTALL_TIMEOUT:-300}"
 if has_playwright_chrome_for_testing; then
   ok "Chrome for Testing already installed"
+elif [[ "${PILOTDECK_SKIP_BROWSER_INSTALL:-0}" == "1" ]]; then
+  warn "Skipping Chrome for Testing install because PILOTDECK_SKIP_BROWSER_INSTALL=1"
 else
-  npx @playwright/mcp install-browser chrome-for-testing </dev/null 2>/dev/null && \
-    ok "Chrome for Testing installed" || \
-    warn "Chrome for Testing install failed (browser-use plugin may not work)"
+  echo "  Downloading and extracting Chrome for Testing (timeout: ${BROWSER_INSTALL_TIMEOUT}s)..."
+  echo "  This may take a few minutes — the extraction step can appear to stall."
+  if run_with_timeout "${BROWSER_INSTALL_TIMEOUT}" npx @playwright/mcp install-browser chrome-for-testing </dev/null; then
+    ok "Chrome for Testing installed"
+  else
+    exit_code=$?
+    if [[ $exit_code -eq 124 ]]; then
+      warn "Chrome for Testing install timed out after ${BROWSER_INSTALL_TIMEOUT}s."
+    else
+      warn "Chrome for Testing install failed (exit code $exit_code)."
+    fi
+    warn "PilotDeck core features are still available."
+    warn "To enable browser-use later, run: cd \"$INSTALL_DIR\" && npm run install:browser"
+    warn "To increase timeout, set PILOTDECK_BROWSER_INSTALL_TIMEOUT=600 and re-run."
+  fi
 fi
 echo ""
 
