@@ -14,6 +14,7 @@ import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
 import { createLocalGateway } from "./createLocalGateway.js";
 import { startPilotDeckServer } from "./pilotdeckServer.js";
 import { installGlobalProxy } from "./proxy.js";
+import { createTelemetryCollector } from "../telemetry/index.js";
 
 installGlobalProxy();
 
@@ -24,6 +25,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     const env = process.env;
     const pilotHome = resolvePilotHome(env);
     const snapshot = loadPilotConfig({ projectRoot, env });
+    const telemetry = createTelemetryCollector({ env, pilotHome });
 
     let alwaysOn: AlwaysOnManager | undefined;
     let cron: CronRuntime | undefined;
@@ -48,6 +50,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         config,
         pilotHome,
         logger: alwaysOnLogger,
+        telemetry,
         onWorktreeCreated: (runId, cwd) => {
           deferredBroadcast?.("worktree_created", { runId, cwd });
         },
@@ -67,6 +70,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         pilotHome,
         projectKey: projectRoot,
         logger: cronLogger,
+        telemetry,
       });
     }
 
@@ -84,6 +88,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       extraTools: [...(alwaysOn?.getTools() ?? []), ...(cron?.getTools() ?? [])],
       sessionOverrides: alwaysOn?.getSessionOverrides(),
       cron,
+      telemetry,
     });
 
     const standaloneApply = createApplyHandler({
@@ -91,6 +96,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       pilotHome,
       sessionOverrides: alwaysOn?.getSessionOverrides() ?? new SessionConfigOverrides(),
       alwaysOnConfig: snapshot.config.alwaysOn,
+      telemetry,
       onTurnEvent: (sessionKey, channelKey, event) => {
         deferredBroadcast?.("always-on:turn-event", { sessionKey, channelKey, event });
       },
@@ -161,6 +167,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         pilotHome,
         sessionOverrides: alwaysOn?.getSessionOverrides() ?? new SessionConfigOverrides(),
         alwaysOnConfig: config.alwaysOn,
+        telemetry,
         onTurnEvent: (sessionKey, channelKey, event) => {
           deferredBroadcast?.("always-on:turn-event", { sessionKey, channelKey, event });
         },
@@ -220,13 +227,21 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     }
     const stop = async () => {
       try {
+        console.log(`[telemetry] shutdown snapshot ${JSON.stringify(telemetry.snapshot())}`);
         disposeGateway();
         await alwaysOn?.stop();
         await cron?.stop();
+        await telemetry.shutdown();
       } catch (error) {
         console.warn(`[runtime] stop failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     };
+    process.on("uncaughtException", (error) => {
+      telemetry.trackError(error, { module: "runtime", metadata: { source: "uncaughtException" } });
+    });
+    process.on("unhandledRejection", (reason) => {
+      telemetry.trackError(reason, { module: "runtime", metadata: { source: "unhandledRejection" } });
+    });
     process.on("SIGINT", () => {
       void stop().finally(() => process.exit(0));
     });

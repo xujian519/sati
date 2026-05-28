@@ -36,6 +36,7 @@ import {
 import { TokenStatsCollector } from "./stats/TokenStatsCollector.js";
 import { classifyAndRoute } from "./tokenSaver/classifyAndRoute.js";
 import { countMessagesTokens, countResponseTokens, dispose as disposeTokenizer } from "./utils/countTokens.js";
+import type { TelemetryClient } from "../telemetry/index.js";
 
 export type RouterRuntimeDeps = {
   modelRuntime: ModelRuntime;
@@ -44,6 +45,7 @@ export type RouterRuntimeDeps = {
   /** Optional skill prompt loader for AutoOrchestrate; receives extension id, returns text. */
   loadSkillPrompt?: (extensionId: string) => Promise<string | undefined>;
   events?: RouterEventBus;
+  telemetry?: TelemetryClient;
   now?: () => Date;
   /**
    * Externally-owned session store that survives config-reload cycles.
@@ -99,6 +101,7 @@ export function createRouterRuntime(
   const customRouters = deps.customRouterRegistry ?? noopCustomRouterRegistry;
   const judgeRuntime = deps.judgeRuntime ?? deps.modelRuntime;
   const events = deps.events ?? { emit: () => undefined };
+  const telemetry = deps.telemetry;
 
   async function resolveCustom(
     input: RouterDecisionInput,
@@ -562,11 +565,38 @@ export function createRouterRuntime(
           startedAt,
           endedAt,
         });
+        telemetry?.trackFeatureLoopStage({
+          module: "router",
+          loopStage: "model_response",
+          outcome: "success",
+          sessionId: ctx.sessionId,
+          projectPath: ctx.projectPath,
+          metadata: {
+            provider: attempt.provider,
+            model: attempt.model,
+            scenarioType: attemptDecision.scenarioType,
+            resolvedFrom: attemptDecision.resolvedFrom,
+            role: decision.isSubagent ? "subagent" : "main",
+          },
+        });
         return;
       }
     }
 
     if (lastError && lastAttempt) {
+      telemetry?.trackError(lastError, {
+        module: "router",
+        loopStage: "model_request",
+        errorCategory: "model_request_error",
+        sessionId: ctx.sessionId,
+        projectPath: ctx.projectPath,
+        code: lastError.code,
+        metadata: {
+          provider: lastAttempt.provider,
+          model: lastAttempt.model,
+          scenarioType: lastDecision.scenarioType,
+        },
+      });
       events.emit({
         type: "pilotdeck_router_execute_failed",
         sessionId: ctx.sessionId,

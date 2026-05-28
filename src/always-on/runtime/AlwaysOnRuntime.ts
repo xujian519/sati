@@ -30,6 +30,7 @@ import { ChannelLeaseRegistry } from "./ChannelLeaseRegistry.js";
 import { DiscoveryFire, type DiscoveryFireDependencies } from "./DiscoveryFire.js";
 import { DiscoveryScheduler } from "./DiscoveryScheduler.js";
 import { SessionConfigOverrides } from "./SessionConfigOverrides.js";
+import type { TelemetryClient } from "../../telemetry/index.js";
 
 export type AlwaysOnRuntimeLogger = {
   info: (message: string, data?: Record<string, unknown>) => void;
@@ -63,6 +64,7 @@ export type CreateAlwaysOnRuntimeOptions = {
   isSessionInFlight?: () => boolean;
   /** When true, the runtime skips internal tool creation (manager owns tools). */
   skipToolCreation?: boolean;
+  telemetry?: TelemetryClient;
 };
 
 const NOOP_LOGGER: AlwaysOnRuntimeLogger = {
@@ -109,6 +111,7 @@ export class AlwaysOnRuntime {
   private readonly onWorktreeCreated?: (runId: string, cwd: string) => void;
   private readonly onWorktreeRemoved?: (cwd: string) => void;
   private readonly onTurnEvent?: DiscoveryFireDependencies["onTurnEvent"];
+  private readonly telemetry?: TelemetryClient;
 
   private gateway?: Gateway;
   private fire?: DiscoveryFire;
@@ -139,6 +142,7 @@ export class AlwaysOnRuntime {
     this.onWorktreeCreated = options.onWorktreeCreated;
     this.onWorktreeRemoved = options.onWorktreeRemoved;
     this.onTurnEvent = options.onTurnEvent;
+    this.telemetry = options.telemetry;
     this.workspaceRegistry = options.workspaceRegistry ?? this.buildDefaultWorkspaceRegistry();
 
     this.tools = options.skipToolCreation
@@ -205,6 +209,7 @@ export class AlwaysOnRuntime {
       now: this.now,
       logger: this.logger,
       onTurnEvent: this.onTurnEvent,
+      telemetry: this.telemetry,
     });
     this.scheduler = new DiscoveryScheduler({
       config: this.config,

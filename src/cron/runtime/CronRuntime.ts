@@ -25,6 +25,7 @@ import { createCronStopTool } from "../tool/CronStopTool.js";
 import { CronFire, type CronActiveRun } from "./CronFire.js";
 import { computeNextRunAt } from "./CronSchedule.js";
 import { CronScheduler } from "./CronScheduler.js";
+import type { TelemetryClient } from "../../telemetry/index.js";
 
 export type CronRuntimeLogger = {
   info: (message: string, data?: Record<string, unknown>) => void;
@@ -39,6 +40,7 @@ export type CreateCronRuntimeOptions = {
   uuid?: () => string;
   logger?: CronRuntimeLogger;
   store?: CronTaskStore;
+  telemetry?: TelemetryClient;
 };
 
 const NOOP_LOGGER: CronRuntimeLogger = {
@@ -55,6 +57,7 @@ export class CronRuntime {
   private readonly now: () => Date;
   private readonly uuid: () => string;
   private readonly logger: CronRuntimeLogger;
+  private readonly telemetry?: TelemetryClient;
   private readonly tools: PilotDeckToolDefinition[];
   private readonly activeRuns = new Map<string, CronActiveRun>();
   private gateway?: Gateway;
@@ -69,6 +72,7 @@ export class CronRuntime {
     this.now = options.now ?? (() => new Date());
     this.uuid = options.uuid ?? randomUUID;
     this.logger = options.logger ?? NOOP_LOGGER;
+    this.telemetry = options.telemetry;
     this.tools = [
       createCronCreateTool(this),
       createCronListTool(this),
@@ -95,6 +99,35 @@ export class CronRuntime {
       registerActiveRun: (run) => this.registerActiveRun(run),
       unregisterActiveRun: (runId) => this.unregisterActiveRun(runId),
       getActiveRun: (runId) => this.activeRuns.get(runId),
+      onPhaseEvent: (event) => {
+        this.telemetry?.trackFeatureLoopStage({
+          module: "cron_job",
+          loopStage: "module_event",
+          outcome: event.phase === "cron_failed" ? "failed" : "success",
+          sessionId: event.runId,
+          projectPath: event.projectKey,
+          metadata: {
+            phase: event.phase,
+            runId: event.runId,
+            taskId: event.taskId,
+            title: event.title,
+          },
+        });
+        if (event.error) {
+          this.telemetry?.trackError(event.error.message, {
+            module: "cron_job",
+            loopStage: "loop_end",
+            errorCategory: "loop_error",
+            code: event.error.code,
+            sessionId: event.runId,
+            projectPath: event.projectKey,
+            metadata: {
+              taskId: event.taskId,
+              phase: event.phase,
+            },
+          });
+        }
+      },
     });
     this.scheduler = new CronScheduler({
       config: this.config,
@@ -157,6 +190,18 @@ export class CronRuntime {
       nextRunAt: nextRunAt.toISOString(),
     };
     await this.store.putTask(task);
+    this.telemetry?.trackFeatureLoopStage({
+      module: "cron_job",
+      loopStage: "module_event",
+      outcome: "success",
+      sessionId: sessionKey,
+      projectPath: task.projectKey,
+      metadata: {
+        phase: "task_created",
+        taskId,
+        scheduleType: schedule.type,
+      },
+    });
     this.scheduler?.poke();
     return { task };
   }

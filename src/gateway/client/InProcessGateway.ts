@@ -73,6 +73,7 @@ import type {
   SkillsListInput,
   SkillsListResult,
 } from "../../extension/skills/types.js";
+import type { TelemetryClient } from "../../telemetry/index.js";
 
 export type InProcessGatewayOptions = {
   now?: () => Date;
@@ -136,6 +137,7 @@ export type InProcessGatewayOptions = {
     projectKey?: string;
     runId: string;
   }) => void;
+  telemetry?: TelemetryClient;
 };
 
 const ACTIVE_TURN_EVENT_LIMIT = 500;
@@ -278,6 +280,18 @@ export class InProcessGateway implements Gateway {
         const permissionMode = input.mode ?? (permissionSettings.skipPermissions ? "bypassPermissions" : undefined);
         const persistedRules = permissionSettingsToRuleSet(permissionSettings);
         const sessionAllowRules = this.sessionPermissionGrants.get(input.sessionKey) ?? [];
+        this.options.telemetry?.trackFeatureLoopStage({
+          module: "session",
+          loopStage: "loop_start",
+          outcome: "success",
+          sessionId: input.sessionKey,
+          projectPath: input.projectKey,
+          metadata: {
+            runId,
+            channelKey: input.channelKey,
+            permissionMode: permissionMode ?? "default",
+          },
+        });
         // Promote a text-only turn to blocks when the host channel attached
         // files/images. UI uploads come through this path; resolving them here
         // keeps attachment semantics in the gateway for every client.
@@ -297,12 +311,30 @@ export class InProcessGateway implements Gateway {
             },
           },
         )) {
+          emitSessionTelemetry(this.options.telemetry, event, {
+            sessionId: input.sessionKey,
+            projectPath: input.projectKey,
+            runId,
+            channelKey: input.channelKey,
+            permissionMode: permissionMode ?? "default",
+          });
           for (const gatewayEvent of mapAgentEvent(event, runId)) {
             this.recordActiveTurnEvent(input.sessionKey, gatewayEvent);
             queue.enqueue(gatewayEvent);
           }
         }
       } catch (error) {
+        this.options.telemetry?.trackError(error, {
+          module: "session",
+          loopStage: "loop_end",
+          errorCategory: "loop_error",
+          sessionId: input.sessionKey,
+          projectPath: input.projectKey,
+          metadata: {
+            runId,
+            channelKey: input.channelKey,
+          },
+        });
         const gatewayEvent: GatewayEvent = {
           type: "error",
           code: "gateway_submit_failed",
@@ -610,6 +642,203 @@ export class InProcessGateway implements Gateway {
 
 function cloneGatewayEvent(event: GatewayEvent): GatewayEvent {
   return JSON.parse(JSON.stringify(event)) as GatewayEvent;
+}
+
+function emitSessionTelemetry(
+  telemetry: TelemetryClient | undefined,
+  event: AgentEvent,
+  context: {
+    sessionId: string;
+    projectPath?: string;
+    runId: string;
+    channelKey: string;
+    permissionMode: string;
+  },
+): void {
+  if (!telemetry) return;
+  switch (event.type) {
+    case "model_request_started":
+      telemetry.trackFeatureLoopStage({
+        module: "session",
+        loopStage: "model_request",
+        outcome: "success",
+        sessionId: context.sessionId,
+        projectPath: context.projectPath,
+        metadata: {
+          runId: context.runId,
+          provider: event.provider,
+          model: event.model,
+          permissionMode: context.permissionMode,
+          channelKey: context.channelKey,
+        },
+      });
+      return;
+    case "model_event":
+      if (event.event.type === "message_end") {
+        telemetry.trackFeatureLoopStage({
+          module: "session",
+          loopStage: "model_response",
+          outcome: "success",
+          sessionId: context.sessionId,
+          projectPath: context.projectPath,
+          metadata: { runId: context.runId },
+        });
+      }
+      if (event.event.type === "error") {
+        telemetry.trackError(event.event.error, {
+          module: "session",
+          loopStage: "model_request",
+          errorCategory: "model_request_error",
+          sessionId: context.sessionId,
+          projectPath: context.projectPath,
+          code: event.event.error.code,
+          metadata: { runId: context.runId },
+        });
+      }
+      return;
+    case "tool_calls_detected":
+      telemetry.trackFeatureLoopStage({
+        module: "session",
+        loopStage: "tool_prepare",
+        outcome: "success",
+        sessionId: context.sessionId,
+        projectPath: context.projectPath,
+        metadata: {
+          runId: context.runId,
+          toolCount: event.calls.length,
+          toolNames: event.calls.map((call) => call.name),
+        },
+      });
+      return;
+    case "pre_tool_execute":
+      telemetry.trackFeatureLoopStage({
+        module: "session",
+        loopStage: "tool_call",
+        outcome: "success",
+        sessionId: context.sessionId,
+        projectPath: context.projectPath,
+        metadata: {
+          runId: context.runId,
+          toolName: event.toolName,
+          toolCallId: event.toolCallId,
+        },
+      });
+      return;
+    case "post_tool_execute":
+      telemetry.trackFeatureLoopStage({
+        module: "session",
+        loopStage: "tool_call",
+        outcome: event.success ? "success" : "failed",
+        errorCategory: event.success ? undefined : "tool_runtime_error",
+        sessionId: context.sessionId,
+        projectPath: context.projectPath,
+        metadata: {
+          runId: context.runId,
+          toolName: event.toolName,
+          toolCallId: event.toolCallId,
+          success: event.success,
+        },
+      });
+      return;
+    case "tool_result":
+      if (event.result.type === "error") {
+        const code = event.result.error.code;
+        telemetry.trackError(event.result.error.message, {
+          module: "session",
+          loopStage: "tool_call",
+          errorCategory: inferToolErrorCategory(code),
+          sessionId: context.sessionId,
+          projectPath: context.projectPath,
+          code,
+          metadata: {
+            runId: context.runId,
+            toolName: event.result.toolName,
+            toolCallId: event.result.toolCallId,
+          },
+        });
+      }
+      return;
+    case "permission_requested":
+      telemetry.trackFeatureLoopStage({
+        module: "session",
+        loopStage: "permission_check",
+        outcome: "success",
+        sessionId: context.sessionId,
+        projectPath: context.projectPath,
+        metadata: {
+          runId: context.runId,
+          toolName: event.toolName,
+          toolCallId: event.toolCallId,
+        },
+      });
+      return;
+    case "permission_denied":
+      telemetry.trackError(event.reason, {
+        module: "session",
+        loopStage: "permission_check",
+        errorCategory: "permission_error",
+        sessionId: context.sessionId,
+        projectPath: context.projectPath,
+        code: "permission_denied",
+        metadata: {
+          runId: context.runId,
+          toolName: event.toolName,
+        },
+      });
+      return;
+    case "turn_completed":
+      telemetry.trackFeatureLoopStage({
+        module: "session",
+        loopStage: "loop_end",
+        outcome: "success",
+        sessionId: context.sessionId,
+        projectPath: context.projectPath,
+        metadata: {
+          runId: context.runId,
+          stopReason: event.result.stopReason,
+          turns: event.result.turns,
+        },
+      });
+      return;
+    case "turn_failed":
+      telemetry.trackError(event.error, {
+        module: "session",
+        loopStage: "loop_end",
+        errorCategory: "loop_error",
+        sessionId: context.sessionId,
+        projectPath: context.projectPath,
+        code: event.error.code,
+        metadata: {
+          runId: context.runId,
+        },
+      });
+      return;
+    case "session_aborted":
+      telemetry.trackFeatureLoopStage({
+        module: "session",
+        loopStage: "loop_end",
+        outcome: "aborted",
+        sessionId: context.sessionId,
+        projectPath: context.projectPath,
+        metadata: {
+          runId: context.runId,
+          reason: event.reason,
+        },
+      });
+      return;
+    default:
+      return;
+  }
+}
+
+function inferToolErrorCategory(code: string | undefined):
+  | "tool_param_error"
+  | "tool_runtime_error"
+  | "tool_result_parse_error" {
+  if (!code) return "tool_runtime_error";
+  if (/(invalid|argument|param|schema)/i.test(code)) return "tool_param_error";
+  if (/(parse|json|decode|format)/i.test(code)) return "tool_result_parse_error";
+  return "tool_runtime_error";
 }
 
 export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] {

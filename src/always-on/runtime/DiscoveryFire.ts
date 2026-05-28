@@ -29,6 +29,7 @@ import { generateWorkspaceDiff } from "../workspace/WorkspaceApply.js";
 import { buildDiscoveryPrompt, buildExecutionPrompt, buildWorkspacePrompt, buildReportPrompt, buildApplyPrompt } from "./discoveryPrompts.js";
 import type { SessionConfigOverrides } from "./SessionConfigOverrides.js";
 import type { PermissionRule } from "../../permission/index.js";
+import type { TelemetryClient } from "../../telemetry/index.js";
 
 export type DiscoveryFireDependencies = {
   config: AlwaysOnConfig;
@@ -47,6 +48,7 @@ export type DiscoveryFireDependencies = {
   now: () => Date;
   logger?: { info: (msg: string, data?: Record<string, unknown>) => void; warn: (msg: string, data?: Record<string, unknown>) => void };
   onTurnEvent?: (sessionKey: string, channelKey: string, event: GatewayEvent) => void;
+  telemetry?: TelemetryClient;
 };
 
 export type DiscoveryFireRunInput = {
@@ -166,6 +168,32 @@ export class DiscoveryFire {
     phase: AlwaysOnEventPhase,
     extra?: { title?: string; planId?: string; outcome?: AlwaysOnDiscoveryOutcome; error?: { code: string; message: string } },
   ): void {
+    this.deps.telemetry?.trackFeatureLoopStage({
+      module: "always_on",
+      loopStage: "module_event",
+      outcome: phase === "run_failed" ? "failed" : "success",
+      projectPath: this.deps.projectKey,
+      metadata: {
+        phase,
+        runId,
+        planId: extra?.planId,
+        outcome: extra?.outcome,
+      },
+    });
+    if (extra?.error) {
+      this.deps.telemetry?.trackError(extra.error.message, {
+        module: "always_on",
+        loopStage: "loop_end",
+        errorCategory: "loop_error",
+        code: extra.error.code,
+        projectPath: this.deps.projectKey,
+        metadata: {
+          runId,
+          phase,
+          planId: extra.planId,
+        },
+      });
+    }
     this.deps.eventStore
       .appendEvent({
         schemaVersion: 1,
