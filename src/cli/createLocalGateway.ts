@@ -1133,7 +1133,7 @@ function ensureRouterConfig(
 
 function buildDefaultTokenSaver(defaultRef: { id: string; provider: string; model: string }) {
   return {
-    enabled: false,
+    enabled: true,
     judge: defaultRef,
     defaultTier: "medium",
     judgeTimeoutMs: DEFAULT_JUDGE_TIMEOUT_MS,
@@ -1148,7 +1148,7 @@ function buildDefaultTokenSaver(defaultRef: { id: string; provider: string; mode
 
 function buildDefaultAutoOrchestrate() {
   return {
-    enabled: false,
+    enabled: true,
     triggerTiers: [...DEFAULT_TRIGGER_TIERS],
     slimSystemPrompt: true,
     allowedTools: [...DEFAULT_ALLOWED_TOOLS],

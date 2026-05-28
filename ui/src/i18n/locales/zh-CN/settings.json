@@ -765,49 +765,53 @@
         }
       },
       "router": {
-        "title": "路由",
-        "description": "根据任务复杂度自动选择模型。为四个层级指定模型，其余规则可在高级设置中调整。",
+        "title": "PilotDeck Router",
+        "description": "内嵌路由器，跨提供商路由分发（按层级分流、Token 节省、自动编排）。",
+        "enabled": { "label": "启用", "description": "启用后，智能体通过路由器而非直接使用配置的提供商。" },
         "advancedToggle": "高级设置",
-        "enabled": { "label": "启用路由", "description": "启用后，智能体请求会先进入路由器，再由路由器选择模型。" },
-        "zeroUsageRetry": {
-          "label": "空响应重试",
-          "description": "上游返回空用量响应时自动重试。",
-          "maxAttempts": { "label": "最大重试次数", "description": "放弃前的最大重试次数。" }
-        },
-        "tierRouting": {
-          "modelPlaceholder": "选择模型",
+        "levels": {
+          "modelPlaceholder": "选择已配置模型",
+          "default": {
+            "label": "Default",
+            "description": "没有命中特定层级时使用的主路由。"
+          },
           "simple": {
-            "label": "简单任务",
+            "label": "Simple",
             "description": "快速问答、确认、轻量改写和简单文件操作。"
           },
           "medium": {
-            "label": "标准任务",
-            "description": "日常对话、短文本生成、少量文件读写和一般代码修改。"
+            "label": "Medium",
+            "description": "单次工具调用、短文本生成、少量文件修改和常规代码变更。"
           },
           "complex": {
-            "label": "复杂任务",
-            "description": "需要拆分、并行处理或多个子智能体协作的任务。"
+            "label": "Complex",
+            "description": "需要拆分或交给子智能体处理的任务。"
           },
           "reasoning": {
-            "label": "推理任务",
-            "description": "多文件分析、长上下文、研究报告和需要深度推理的任务。"
+            "label": "Reasoning",
+            "description": "多文件分析、长上下文、报告和深度推理任务。"
           }
         },
+        "zeroUsageRetry": {
+          "label": "Zero-usage 重试",
+          "description": "上游返回零 Token 用量响应时自动重试。",
+          "maxAttempts": { "label": "最大重试次数", "description": "放弃前的最大重试次数。" }
+        },
         "tokenSaver": {
-          "title": "智能分流",
-          "description": "判定任务复杂度，并按层级选择模型。",
+          "title": "Token 节省",
+          "description": "轻量级判定器将每轮对话分类到对应层级，并路由到成本适合的模型。",
           "judgeModel": "判定模型",
           "defaultTier": "默认层级",
           "judgeTimeout": { "label": "判定超时（毫秒）", "description": "等待判定结果的最长时间。" },
-          "subagentPolicy": { "label": "子智能体策略", "description": "judge 会重新判断每个子智能体轮次；inherit 会沿用父级层级。" }
+          "subagentPolicy": { "label": "子智能体策略", "description": "子智能体的路由方式：'judge' 重新评估每个子智能体轮次，'skip' 保持子智能体直接路由。" }
         },
         "autoOrchestrate": {
-          "title": "复杂任务自动拆分",
-          "description": "命中特定层级时，将任务拆给多个子智能体并行处理。",
+          "title": "自动编排",
+          "description": "当判定器分配到特定层级时，自动将复杂轮次展开为并行子智能体。",
           "triggerTiers": "触发层级",
           "slimPrompt": { "label": "精简系统提示", "description": "为编排的子智能体使用更短的系统提示以节省 Token。" }
         },
-        "stats": { "label": "用量统计", "description": "记录每个会话的 Token 用量和成本。" },
+        "stats": { "label": "统计收集", "description": "跟踪每个会话的 Token 用量和成本。为仪表板提供数据。" },
         "pricing": {
           "title": "模型定价",
           "description": "每个模型的自定义定价（$/百万 Token）。在 API 不报告成本时使用。",
@@ -820,27 +824,27 @@
           "add": "添加"
         },
         "scenarios": {
-          "title": "自定义场景",
-          "description": "仅当系统或插件传入对应场景名时生效。default 是默认路由。",
-          "empty": "未配置自定义场景。",
+          "title": "场景",
+          "description": "将场景名称映射到模型。default 是主要路由。",
+          "empty": "未配置场景。",
           "add": "添加"
         },
         "fallback": {
-          "title": "失败备用模型",
-          "description": "某个场景的主模型失败后，按顺序尝试备用模型。",
-          "empty": "未配置备用模型。",
-          "addModel": "添加备用模型",
+          "title": "回退链",
+          "description": "每个场景的有序回退模型。如果主模型失败，路由器尝试下一个。",
+          "empty": "未配置回退链。",
+          "addModel": "添加回退模型",
           "add": "添加"
         },
         "tiers": {
-          "title": "层级高级设置",
-          "description": "调整判定器使用的层级描述，或添加自定义层级。",
-          "placeholder": "描述什么时候选择这个层级…",
+          "title": "层级",
+          "description": "判定器可路由到的复杂度层级。为每个层级选择模型——描述已预填。",
+          "placeholder": "描述判定器何时应选择此层级…",
           "add": "添加"
         },
         "rules": {
           "title": "判定规则",
-          "empty": "未配置自定义规则，判定器只使用层级描述。",
+          "empty": "无自定义规则。判定器仅使用层级描述。",
           "placeholder": "为判定器添加规则…",
           "add": "添加"
         }

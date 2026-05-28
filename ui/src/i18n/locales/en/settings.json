@@ -765,49 +765,53 @@
         }
       },
       "router": {
-        "title": "Routing",
-        "description": "Choose models by task complexity. Assign a model to each tier; advanced rules stay in Advanced settings.",
+        "title": "PilotDeck Router",
+        "description": "Embedded router for fan-out across providers (tier-based routing, token saver, auto-orchestrate).",
+        "enabled": { "label": "Enabled", "description": "When on, agents use the router instead of the configured provider directly." },
         "advancedToggle": "Advanced settings",
-        "enabled": { "label": "Enable routing", "description": "When enabled, agent requests go through the router before a model is selected." },
-        "zeroUsageRetry": {
-          "label": "Empty response retry",
-          "description": "Retry automatically when the upstream returns an empty-usage response.",
-          "maxAttempts": { "label": "Max attempts", "description": "Maximum retry attempts before giving up." }
-        },
-        "tierRouting": {
-          "modelPlaceholder": "Select a model",
+        "levels": {
+          "modelPlaceholder": "Select a configured model",
+          "default": {
+            "label": "Default",
+            "description": "Primary route used when no tier-specific decision applies."
+          },
           "simple": {
-            "label": "Simple tasks",
+            "label": "Simple",
             "description": "Quick Q&A, confirmations, light rewrites, and simple file operations."
           },
           "medium": {
-            "label": "Standard tasks",
-            "description": "Everyday chat, short generation, small file edits, and normal coding changes."
+            "label": "Medium",
+            "description": "Single tool calls, short generation, small file edits, and standard coding changes."
           },
           "complex": {
-            "label": "Complex tasks",
-            "description": "Tasks that need decomposition, parallel work, or multiple sub-agents."
+            "label": "Complex",
+            "description": "Work that should be decomposed or delegated to sub-agents."
           },
           "reasoning": {
-            "label": "Reasoning tasks",
-            "description": "Multi-file analysis, long context, research reports, and deep reasoning."
+            "label": "Reasoning",
+            "description": "Multi-file analysis, long-context work, reports, and deep reasoning."
           }
         },
+        "zeroUsageRetry": {
+          "label": "Zero-usage retry",
+          "description": "Automatically retry when the upstream returns a response with zero tokens used.",
+          "maxAttempts": { "label": "Max attempts", "description": "Maximum retry attempts before giving up." }
+        },
         "tokenSaver": {
-          "title": "Smart routing",
-          "description": "Classify task complexity and route each tier to a model.",
+          "title": "Token Saver",
+          "description": "A lightweight judge classifies each turn into a tier and routes it to a cost-appropriate model.",
           "judgeModel": "Judge model",
           "defaultTier": "Default tier",
           "judgeTimeout": { "label": "Judge timeout (ms)", "description": "Maximum time to wait for the judge decision." },
-          "subagentPolicy": { "label": "Sub-agent policy", "description": "judge re-evaluates each sub-agent turn; inherit reuses the parent tier." }
+          "subagentPolicy": { "label": "Sub-agent policy", "description": "How sub-agents are routed: 'judge' re-evaluates each sub-agent turn, 'skip' keeps the direct sub-agent route." }
         },
         "autoOrchestrate": {
-          "title": "Split complex tasks",
-          "description": "Fan out selected tiers into parallel sub-agents.",
+          "title": "Auto Orchestrate",
+          "description": "Automatically fan out complex turns into parallel sub-agents when the judge assigns certain tiers.",
           "triggerTiers": "Trigger tiers",
           "slimPrompt": { "label": "Slim system prompt", "description": "Use a shorter system prompt for orchestrated sub-agents to save tokens." }
         },
-        "stats": { "label": "Usage stats", "description": "Track token usage and cost per session." },
+        "stats": { "label": "Stats collection", "description": "Track token usage and cost per session. Powers the Dashboard tab." },
         "pricing": {
           "title": "Model Pricing",
           "description": "Custom pricing per model ($/million tokens). Used when the API doesn't report cost.",
@@ -820,27 +824,27 @@
           "add": "Add"
         },
         "scenarios": {
-          "title": "Custom scenarios",
-          "description": "Only applies when the system or a plugin passes a matching scenario name. default is the primary route.",
-          "empty": "No custom scenarios configured.",
+          "title": "Scenarios",
+          "description": "Map scenario names to models. default is the primary route.",
+          "empty": "No scenarios configured.",
           "add": "Add"
         },
         "fallback": {
-          "title": "Fallback models",
-          "description": "If a scenario's primary model fails, the router tries these models in order.",
-          "empty": "No fallback models configured.",
+          "title": "Fallback Chains",
+          "description": "Ordered fallback models per scenario. If the primary fails, the router tries the next.",
+          "empty": "No fallback chains configured.",
           "addModel": "Add fallback model",
           "add": "Add"
         },
         "tiers": {
-          "title": "Tier advanced settings",
-          "description": "Adjust the tier descriptions used by the judge, or add custom tiers.",
+          "title": "Tiers",
+          "description": "Complexity tiers the judge can route to. Pick a model for each — descriptions are pre-filled.",
           "placeholder": "Describe when the judge should pick this tier…",
           "add": "Add"
         },
         "rules": {
           "title": "Judge Rules",
-          "empty": "No custom rules configured. The judge uses tier descriptions only.",
+          "empty": "No custom rules. The judge uses tier descriptions only.",
           "placeholder": "Add a rule for the judge…",
           "add": "Add"
         }

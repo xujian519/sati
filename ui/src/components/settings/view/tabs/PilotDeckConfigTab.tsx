@@ -2255,8 +2255,9 @@ function RouterFallbackEditor({ config, onChange }: { config: PilotDeckConfig; o
 }
 
 const ROUTER_TIER_KEYS = ['simple', 'medium', 'complex', 'reasoning'] as const;
+type RouterTierKey = typeof ROUTER_TIER_KEYS[number];
 
-const DEFAULT_TIERS: Record<string, { description: string }> = {
+const DEFAULT_TIERS: Record<RouterTierKey, { description: string }> = {
   simple: { description: 'Simple greetings, confirmations, single-step Q&A, trivial file writes, remembering rules' },
   medium: { description: 'Single tool call, short text generation, 1-2 file read/write, code generation' },
   complex: { description: 'Needs sub-agent orchestration: parallel workstreams, delegation to specialized agents' },
@@ -2269,51 +2270,6 @@ const DEFAULT_RULES: string[] = [
   'Simple file creation (1-2 files) or single code generation is medium',
   'Trivial greetings, confirmations, remembering rules, or reading one file and answering a short question is simple',
 ];
-
-function RouterTierRoutingEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
-  const { t } = useTranslation('settings');
-  const tiers = config.router?.tokenSaver?.tiers ?? {};
-  const modelOpts = buildModelRefOptions(config);
-
-  const setTierModel = (key: typeof ROUTER_TIER_KEYS[number], model: string) => {
-    const existing = tiers[key] ?? {};
-    let next = patch(config, ['router', 'tokenSaver', 'tiers', key], {
-      ...existing,
-      model,
-      description: existing.description ?? DEFAULT_TIERS[key]?.description ?? '',
-    });
-
-    if (!next.router?.tokenSaver?.defaultTier) {
-      next = patch(next, ['router', 'tokenSaver', 'defaultTier'], 'medium');
-    }
-    if ((next.router?.tokenSaver?.rules ?? []).length === 0) {
-      next = patch(next, ['router', 'tokenSaver', 'rules'], [...DEFAULT_RULES]);
-    }
-
-    onChange(next);
-  };
-
-  return (
-    <SettingsCard>
-      <div className="divide-y divide-border">
-        {ROUTER_TIER_KEYS.map((key) => (
-          <FormRow
-            key={key}
-            label={t(`pilotDeckConfig.panels.router.tierRouting.${key}.label`)}
-            description={t(`pilotDeckConfig.panels.router.tierRouting.${key}.description`)}
-          >
-            <ModelRefInput
-              value={tiers[key]?.model ?? ''}
-              options={modelOpts}
-              placeholder={t('pilotDeckConfig.panels.router.tierRouting.modelPlaceholder')}
-              onChange={(v) => setTierModel(key, v)}
-            />
-          </FormRow>
-        ))}
-      </div>
-    </SettingsCard>
-  );
-}
 
 function TokenSaverTierEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const { t } = useTranslation('settings');
@@ -2454,41 +2410,109 @@ function TokenSaverRulesEditor({ config, onChange }: { config: PilotDeckConfig; 
   );
 }
 
+function RouterLevelEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
+  const modelOpts = buildModelRefOptions(config);
+  const defaultValue = config.router?.scenarios?.default ?? '';
+  const tiers = config.router?.tokenSaver?.tiers ?? {};
+
+  const setDefault = (value: string) => {
+    let next = patch(config, ['router', 'scenarios', 'default'], value);
+    const fallbackDefault = config.router?.fallback?.default ?? [];
+    if (
+      fallbackDefault.length === 0 ||
+      (fallbackDefault.length === 1 && fallbackDefault[0] === defaultValue)
+    ) {
+      next = patch(next, ['router', 'fallback', 'default'], value ? [value] : []);
+    }
+    onChange(next);
+  };
+
+  const setTierModel = (key: RouterTierKey, model: string) => {
+    const existing = tiers[key] ?? {};
+    onChange(patch(config, ['router', 'tokenSaver', 'tiers', key], {
+      ...existing,
+      model,
+      description: existing.description ?? DEFAULT_TIERS[key].description,
+    }));
+  };
+
+  return (
+    <SettingsCard divided>
+      <FormRow
+        label={t('pilotDeckConfig.panels.router.levels.default.label')}
+        description={t('pilotDeckConfig.panels.router.levels.default.description')}
+      >
+        <ModelRefInput
+          value={defaultValue}
+          options={modelOpts}
+          placeholder={t('pilotDeckConfig.panels.router.levels.modelPlaceholder')}
+          onChange={setDefault}
+        />
+      </FormRow>
+
+      {ROUTER_TIER_KEYS.map((key) => (
+        <FormRow
+          key={key}
+          label={t(`pilotDeckConfig.panels.router.levels.${key}.label`)}
+          description={t(`pilotDeckConfig.panels.router.levels.${key}.description`)}
+        >
+          <ModelRefInput
+            value={tiers[key]?.model ?? ''}
+            options={modelOpts}
+            placeholder={t('pilotDeckConfig.panels.router.levels.modelPlaceholder')}
+            onChange={(v) => setTierModel(key, v)}
+          />
+        </FormRow>
+      ))}
+    </SettingsCard>
+  );
+}
+
 function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const { t } = useTranslation('settings');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const r = config.router ?? {};
-  const enabled = Boolean(r.enabled);
-  const statsEnabled = r.stats?.enabled !== false;
+  const enabled = r.enabled !== false;
   const modelOpts = buildModelRefOptions(config);
 
   const ts = r.tokenSaver ?? {};
   const ao = r.autoOrchestrate ?? {};
   const zr = r.zeroUsageRetry ?? {};
+  const statsEnabled = r.stats?.enabled !== false;
+  const zeroUsageEnabled = zr.enabled !== false;
+  const tokenSaverEnabled = ts.enabled !== false;
+  const autoOrchestrateEnabled = ao.enabled !== false;
 
   const availableTierNames = Object.keys(ts.tiers ?? {});
 
-  const seedDefaultScenario = (base: PilotDeckConfig) => {
-    if (base.router?.scenarios?.default) return base;
-    const defaultRef =
-      typeof base.agent?.model === 'string' && base.agent.model.trim()
-        ? base.agent.model.trim()
-        : modelOpts[0]?.value ?? '';
-    return defaultRef ? patch(base, ['router', 'scenarios', 'default'], defaultRef) : base;
-  };
+  const getDefaultModel = (base: PilotDeckConfig) =>
+    (typeof base.router?.scenarios?.default === 'string' && base.router.scenarios.default.trim())
+      || (typeof base.agent?.model === 'string' && base.agent.model.trim())
+      || modelOpts[0]?.value
+      || '';
 
-  const seedTokenSaver = (base: PilotDeckConfig) => {
+  const seedRouterDefaults = (base: PilotDeckConfig) => {
     let next = base;
-    if (Object.keys(next.router?.tokenSaver?.tiers ?? {}).length === 0) {
-      const defaultModel = modelOpts[0]?.value ?? '';
-      const seeded: Record<string, { model: string; description: string }> = {};
-      for (const [k, def] of Object.entries(DEFAULT_TIERS)) {
-        seeded[k] = { model: defaultModel, description: def.description };
-      }
-      next = patch(next, ['router', 'tokenSaver', 'tiers'], seeded);
+    const defaultModel = getDefaultModel(next);
+
+    if (defaultModel && !next.router?.scenarios?.default) {
+      next = patch(next, ['router', 'scenarios', 'default'], defaultModel);
     }
-    if ((next.router?.tokenSaver?.rules ?? []).length === 0) {
-      next = patch(next, ['router', 'tokenSaver', 'rules'], [...DEFAULT_RULES]);
+    if (defaultModel && !(next.router?.fallback?.default?.length)) {
+      next = patch(next, ['router', 'fallback', 'default'], [defaultModel]);
+    }
+    if (next.router?.zeroUsageRetry?.enabled !== true) {
+      next = patch(next, ['router', 'zeroUsageRetry', 'enabled'], true);
+    }
+    if (next.router?.zeroUsageRetry?.maxAttempts == null) {
+      next = patch(next, ['router', 'zeroUsageRetry', 'maxAttempts'], 2);
+    }
+    if (next.router?.tokenSaver?.enabled !== true) {
+      next = patch(next, ['router', 'tokenSaver', 'enabled'], true);
+    }
+    if (defaultModel && !next.router?.tokenSaver?.judge) {
+      next = patch(next, ['router', 'tokenSaver', 'judge'], defaultModel);
     }
     if (!next.router?.tokenSaver?.defaultTier) {
       next = patch(next, ['router', 'tokenSaver', 'defaultTier'], 'medium');
@@ -2496,6 +2520,32 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
     if (!next.router?.tokenSaver?.judgeTimeoutMs) {
       next = patch(next, ['router', 'tokenSaver', 'judgeTimeoutMs'], 15000);
     }
+    for (const key of ROUTER_TIER_KEYS) {
+      const existing = next.router?.tokenSaver?.tiers?.[key] ?? {};
+      if (!existing.model || !existing.description) {
+        next = patch(next, ['router', 'tokenSaver', 'tiers', key], {
+          ...existing,
+          model: existing.model ?? defaultModel,
+          description: existing.description ?? DEFAULT_TIERS[key].description,
+        });
+      }
+    }
+    if ((next.router?.tokenSaver?.rules ?? []).length === 0) {
+      next = patch(next, ['router', 'tokenSaver', 'rules'], [...DEFAULT_RULES]);
+    }
+    if (next.router?.autoOrchestrate?.enabled !== true) {
+      next = patch(next, ['router', 'autoOrchestrate', 'enabled'], true);
+    }
+    if ((next.router?.autoOrchestrate?.triggerTiers ?? []).length === 0) {
+      next = patch(next, ['router', 'autoOrchestrate', 'triggerTiers'], ['complex']);
+    }
+    if (next.router?.autoOrchestrate?.slimSystemPrompt == null) {
+      next = patch(next, ['router', 'autoOrchestrate', 'slimSystemPrompt'], true);
+    }
+    if (next.router?.stats?.enabled !== true) {
+      next = patch(next, ['router', 'stats', 'enabled'], true);
+    }
+
     return next;
   };
 
@@ -2505,220 +2555,214 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
       description={t('pilotDeckConfig.panels.router.description')}
     >
       <div className="space-y-4">
-        <RouterTierRoutingEditor config={config} onChange={onChange} />
+        {/* ── Master toggle ─────────────────────────────────────────── */}
+        <SettingsCard divided>
+          <SettingsRow
+            label={t('pilotDeckConfig.panels.router.enabled.label')}
+            description={t('pilotDeckConfig.panels.router.enabled.description')}
+          >
+            <SettingsToggle
+              checked={enabled}
+              ariaLabel={t('pilotDeckConfig.panels.router.enabled.label')}
+              onChange={(v) => {
+                let next = patch(config, ['router', 'enabled'], v);
+                if (v) {
+                  next = seedRouterDefaults(next);
+                }
+                onChange(next);
+              }}
+            />
+          </SettingsRow>
+        </SettingsCard>
 
-        <button
-          type="button"
-          onClick={() => setShowAdvanced((next) => !next)}
-          aria-expanded={showAdvanced}
-          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium leading-5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showAdvanced && 'rotate-180')} />
-          {t('pilotDeckConfig.panels.router.advancedToggle')}
-        </button>
-
-        {showAdvanced && (
+        {enabled && (
           <>
-            <SettingsCard divided>
-              <SettingsRow
-                label={t('pilotDeckConfig.panels.router.enabled.label')}
-                description={t('pilotDeckConfig.panels.router.enabled.description')}
-              >
-                <SettingsToggle
-                  checked={enabled}
-                  ariaLabel={t('pilotDeckConfig.panels.router.enabled.label')}
-                  onChange={(v) => {
-                    let next = patch(config, ['router', 'enabled'], v);
-                    if (v) {
-                      next = seedDefaultScenario(next);
-                    }
-                    onChange(next);
-                  }}
-                />
-              </SettingsRow>
-            </SettingsCard>
+            <RouterLevelEditor config={config} onChange={onChange} />
 
-            {/* ── Scenarios ──────────────────────────────────────────── */}
-            {enabled && <RouterScenarioEditor config={config} onChange={onChange} />}
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((next) => !next)}
+              aria-expanded={showAdvanced}
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium leading-5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showAdvanced && 'rotate-180')} />
+              {t('pilotDeckConfig.panels.router.advancedToggle')}
+            </button>
 
-            {/* ── Fallback chains ────────────────────────────────────── */}
-            {enabled && <RouterFallbackEditor config={config} onChange={onChange} />}
+            {showAdvanced && (
+              <>
+                {/* ── Fallback chains ────────────────────────────────────── */}
+                <RouterFallbackEditor config={config} onChange={onChange} />
 
-            {/* ── Zero-usage retry ───────────────────────────────────── */}
-            {enabled && (
-              <SettingsCard divided>
-                <SettingsRow
-                  label={t('pilotDeckConfig.panels.router.zeroUsageRetry.label')}
-                  description={t('pilotDeckConfig.panels.router.zeroUsageRetry.description')}
-                >
-                  <SettingsToggle
-                    checked={Boolean(zr.enabled)}
-                    ariaLabel={t('pilotDeckConfig.panels.router.zeroUsageRetry.label')}
-                    onChange={(v) => onChange(patch(config, ['router', 'zeroUsageRetry', 'enabled'], v))}
-                  />
-                </SettingsRow>
-                {zr.enabled && (
-                  <FormRow label={t('pilotDeckConfig.panels.router.zeroUsageRetry.maxAttempts.label')} description={t('pilotDeckConfig.panels.router.zeroUsageRetry.maxAttempts.description')}>
-                    <NumberInput
-                      value={zr.maxAttempts}
-                      placeholder="5"
-                      onChange={(v) => onChange(patch(config, ['router', 'zeroUsageRetry', 'maxAttempts'], v))}
+                {/* ── Zero-usage retry ───────────────────────────────────── */}
+                <SettingsCard divided>
+                  <SettingsRow
+                    label={t('pilotDeckConfig.panels.router.zeroUsageRetry.label')}
+                    description={t('pilotDeckConfig.panels.router.zeroUsageRetry.description')}
+                  >
+                    <SettingsToggle
+                      checked={zeroUsageEnabled}
+                      ariaLabel={t('pilotDeckConfig.panels.router.zeroUsageRetry.label')}
+                      onChange={(v) => onChange(patch(config, ['router', 'zeroUsageRetry', 'enabled'], v))}
                     />
-                  </FormRow>
-                )}
-              </SettingsCard>
-            )}
-
-            {/* ── TokenSaver ─────────────────────────────────────────── */}
-            {enabled && (
-              <SettingsCard className="space-y-4 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-semibold text-foreground">{t('pilotDeckConfig.panels.router.tokenSaver.title')}</div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">
-                      {t('pilotDeckConfig.panels.router.tokenSaver.description')}
-                    </div>
-                  </div>
-                  <SettingsToggle
-                    checked={Boolean(ts.enabled)}
-                    ariaLabel={t('pilotDeckConfig.panels.router.tokenSaver.title')}
-                    onChange={(v) => {
-                      let next = patch(config, ['router', 'tokenSaver', 'enabled'], v);
-                      if (v) {
-                        next = seedTokenSaver(next);
-                      }
-                      onChange(next);
-                    }}
-                  />
-                </div>
-
-                {ts.enabled && (
-                  <div className="space-y-4 border-t border-border pt-4">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-foreground">{t('pilotDeckConfig.panels.router.tokenSaver.judgeModel')}</label>
-                        <ModelRefInput
-                          value={ts.judge ?? ''}
-                          options={modelOpts}
-                          onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'judge'], v))}
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-foreground">{t('pilotDeckConfig.panels.router.tokenSaver.defaultTier')}</label>
-                        <Select
-                          value={ts.defaultTier ?? 'medium'}
-                          options={
-                            availableTierNames.length > 0
-                              ? availableTierNames.map((t) => ({ value: t, label: t }))
-                              : ROUTER_TIER_KEYS.map((t) => ({ value: t, label: t }))
-                          }
-                          onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'defaultTier'], v))}
-                        />
-                      </div>
-                    </div>
-                    <FormRow label={t('pilotDeckConfig.panels.router.tokenSaver.judgeTimeout.label')} description={t('pilotDeckConfig.panels.router.tokenSaver.judgeTimeout.description')}>
+                  </SettingsRow>
+                  {zeroUsageEnabled && (
+                    <FormRow label={t('pilotDeckConfig.panels.router.zeroUsageRetry.maxAttempts.label')} description={t('pilotDeckConfig.panels.router.zeroUsageRetry.maxAttempts.description')}>
                       <NumberInput
-                        value={ts.judgeTimeoutMs}
-                        placeholder="15000"
-                        onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'judgeTimeoutMs'], v))}
+                        value={zr.maxAttempts}
+                        placeholder="2"
+                        onChange={(v) => onChange(patch(config, ['router', 'zeroUsageRetry', 'maxAttempts'], v))}
                       />
                     </FormRow>
-                    <FormRow label={t('pilotDeckConfig.panels.router.tokenSaver.subagentPolicy.label')} description={t('pilotDeckConfig.panels.router.tokenSaver.subagentPolicy.description')}>
-                      <Select
-                        value={ts.subagent?.policy ?? 'judge'}
-                        options={[
-                          { value: 'judge', label: 'judge' },
-                          { value: 'inherit', label: 'inherit' },
-                        ]}
-                        onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'subagent', 'policy'], v))}
-                      />
-                    </FormRow>
+                  )}
+                </SettingsCard>
 
-                    <TokenSaverTierEditor config={config} onChange={onChange} />
-                    <TokenSaverRulesEditor config={config} onChange={onChange} />
-                  </div>
-                )}
-              </SettingsCard>
-            )}
-
-            {/* ── Auto-orchestrate ───────────────────────────────────── */}
-            {enabled && (
-              <SettingsCard className="space-y-4 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-semibold text-foreground">{t('pilotDeckConfig.panels.router.autoOrchestrate.title')}</div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">
-                      {t('pilotDeckConfig.panels.router.autoOrchestrate.description')}
-                    </div>
-                  </div>
-                  <SettingsToggle
-                    checked={Boolean(ao.enabled)}
-                    ariaLabel={t('pilotDeckConfig.panels.router.autoOrchestrate.title')}
-                    onChange={(v) => onChange(patch(config, ['router', 'autoOrchestrate', 'enabled'], v))}
-                  />
-                </div>
-
-                {ao.enabled && (
-                  <div className="space-y-3 border-t border-border pt-4">
+                {/* ── TokenSaver ─────────────────────────────────────────── */}
+                <SettingsCard className="space-y-4 p-4">
+                  <div className="flex items-center justify-between">
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-foreground">{t('pilotDeckConfig.panels.router.autoOrchestrate.triggerTiers')}</label>
-                      <div className="mt-1 flex flex-wrap gap-2">
-                        {(availableTierNames.length > 0 ? availableTierNames : [...ROUTER_TIER_KEYS]).map((tier) => {
-                          const active = (ao.triggerTiers ?? []).includes(tier);
-                          return (
-                            <button
-                              key={tier}
-                              type="button"
-                              className={cn(
-                                'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                                active
-                                  ? 'border-primary bg-primary/10 text-primary'
-                                  : 'border-border bg-background text-muted-foreground hover:bg-muted',
-                              )}
-                              onClick={() => {
-                                const prev = ao.triggerTiers ?? [];
-                                const next = active ? prev.filter((t) => t !== tier) : [...prev, tier];
-                                onChange(patch(config, ['router', 'autoOrchestrate', 'triggerTiers'], next));
-                              }}
-                            >
-                              {tier}
-                            </button>
-                          );
-                        })}
+                      <div className="text-sm font-semibold text-foreground">{t('pilotDeckConfig.panels.router.tokenSaver.title')}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {t('pilotDeckConfig.panels.router.tokenSaver.description')}
                       </div>
                     </div>
-                    <SettingsRow
-                      label={t('pilotDeckConfig.panels.router.autoOrchestrate.slimPrompt.label')}
-                      description={t('pilotDeckConfig.panels.router.autoOrchestrate.slimPrompt.description')}
-                    >
-                      <SettingsToggle
-                        checked={Boolean(ao.slimSystemPrompt)}
-                        ariaLabel={t('pilotDeckConfig.panels.router.autoOrchestrate.slimPrompt.label')}
-                        onChange={(v) => onChange(patch(config, ['router', 'autoOrchestrate', 'slimSystemPrompt'], v))}
-                      />
-                    </SettingsRow>
+                    <SettingsToggle
+                      checked={tokenSaverEnabled}
+                      ariaLabel={t('pilotDeckConfig.panels.router.tokenSaver.title')}
+                      onChange={(v) => {
+                        let next = patch(config, ['router', 'tokenSaver', 'enabled'], v);
+                        if (v) {
+                          next = seedRouterDefaults(next);
+                        }
+                        onChange(next);
+                      }}
+                    />
                   </div>
-                )}
-              </SettingsCard>
-            )}
 
-            {/* ── Stats ──────────────────────────────────────────────── */}
-            {enabled && (
-              <SettingsCard divided>
-                <SettingsRow
-                  label={t('pilotDeckConfig.panels.router.stats.label')}
-                  description={t('pilotDeckConfig.panels.router.stats.description')}
-                >
-                  <SettingsToggle
-                    checked={statsEnabled}
-                    ariaLabel={t('pilotDeckConfig.panels.router.stats.label')}
-                    onChange={(v) => onChange(patch(config, ['router', 'stats', 'enabled'], v))}
-                  />
-                </SettingsRow>
-              </SettingsCard>
-            )}
+                  {tokenSaverEnabled && (
+                    <div className="space-y-4 border-t border-border pt-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-foreground">{t('pilotDeckConfig.panels.router.tokenSaver.judgeModel')}</label>
+                          <ModelRefInput
+                            value={ts.judge ?? ''}
+                            options={modelOpts}
+                            onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'judge'], v))}
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-foreground">{t('pilotDeckConfig.panels.router.tokenSaver.defaultTier')}</label>
+                          <Select
+                            value={ts.defaultTier ?? 'medium'}
+                            options={
+                              availableTierNames.length > 0
+                                ? availableTierNames.map((t) => ({ value: t, label: t }))
+                                : ROUTER_TIER_KEYS.map((t) => ({ value: t, label: t }))
+                            }
+                            onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'defaultTier'], v))}
+                          />
+                        </div>
+                      </div>
+                      <FormRow label={t('pilotDeckConfig.panels.router.tokenSaver.judgeTimeout.label')} description={t('pilotDeckConfig.panels.router.tokenSaver.judgeTimeout.description')}>
+                        <NumberInput
+                          value={ts.judgeTimeoutMs}
+                          placeholder="15000"
+                          onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'judgeTimeoutMs'], v))}
+                        />
+                      </FormRow>
+                      <FormRow label={t('pilotDeckConfig.panels.router.tokenSaver.subagentPolicy.label')} description={t('pilotDeckConfig.panels.router.tokenSaver.subagentPolicy.description')}>
+                        <Select
+                          value={ts.subagent?.policy ?? 'judge'}
+                          options={[
+                            { value: 'judge', label: 'judge' },
+                            { value: 'skip', label: 'skip' },
+                          ]}
+                          onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'subagent', 'policy'], v))}
+                        />
+                      </FormRow>
 
-            {enabled && statsEnabled && <ModelPricingEditor config={config} onChange={onChange} />}
+                      <TokenSaverTierEditor config={config} onChange={onChange} />
+                      <TokenSaverRulesEditor config={config} onChange={onChange} />
+                    </div>
+                  )}
+                </SettingsCard>
+
+                {/* ── Auto-orchestrate ───────────────────────────────────── */}
+                <SettingsCard className="space-y-4 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">{t('pilotDeckConfig.panels.router.autoOrchestrate.title')}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {t('pilotDeckConfig.panels.router.autoOrchestrate.description')}
+                      </div>
+                    </div>
+                    <SettingsToggle
+                      checked={autoOrchestrateEnabled}
+                      ariaLabel={t('pilotDeckConfig.panels.router.autoOrchestrate.title')}
+                      onChange={(v) => onChange(patch(config, ['router', 'autoOrchestrate', 'enabled'], v))}
+                    />
+                  </div>
+
+                  {autoOrchestrateEnabled && (
+                    <div className="space-y-3 border-t border-border pt-4">
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-foreground">{t('pilotDeckConfig.panels.router.autoOrchestrate.triggerTiers')}</label>
+                        <div className="mt-1 flex flex-wrap gap-2">
+                          {(availableTierNames.length > 0 ? availableTierNames : [...ROUTER_TIER_KEYS]).map((tier) => {
+                            const active = (ao.triggerTiers ?? ['complex']).includes(tier);
+                            return (
+                              <button
+                                key={tier}
+                                type="button"
+                                className={cn(
+                                  'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                                  active
+                                    ? 'border-primary bg-primary/10 text-primary'
+                                    : 'border-border bg-background text-muted-foreground hover:bg-muted',
+                                )}
+                                onClick={() => {
+                                  const prev = ao.triggerTiers ?? ['complex'];
+                                  const next = active ? prev.filter((t) => t !== tier) : [...prev, tier];
+                                  onChange(patch(config, ['router', 'autoOrchestrate', 'triggerTiers'], next));
+                                }}
+                              >
+                                {tier}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <SettingsRow
+                        label={t('pilotDeckConfig.panels.router.autoOrchestrate.slimPrompt.label')}
+                        description={t('pilotDeckConfig.panels.router.autoOrchestrate.slimPrompt.description')}
+                      >
+                        <SettingsToggle
+                          checked={ao.slimSystemPrompt !== false}
+                          ariaLabel={t('pilotDeckConfig.panels.router.autoOrchestrate.slimPrompt.label')}
+                          onChange={(v) => onChange(patch(config, ['router', 'autoOrchestrate', 'slimSystemPrompt'], v))}
+                        />
+                      </SettingsRow>
+                    </div>
+                  )}
+                </SettingsCard>
+
+                {/* ── Stats ──────────────────────────────────────────────── */}
+                <SettingsCard divided>
+                  <SettingsRow
+                    label={t('pilotDeckConfig.panels.router.stats.label')}
+                    description={t('pilotDeckConfig.panels.router.stats.description')}
+                  >
+                    <SettingsToggle
+                      checked={statsEnabled}
+                      ariaLabel={t('pilotDeckConfig.panels.router.stats.label')}
+                      onChange={(v) => onChange(patch(config, ['router', 'stats', 'enabled'], v))}
+                    />
+                  </SettingsRow>
+                </SettingsCard>
+
+                {statsEnabled && <ModelPricingEditor config={config} onChange={onChange} />}
+              </>
+            )}
           </>
         )}
       </div>
