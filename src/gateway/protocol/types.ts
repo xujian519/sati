@@ -256,6 +256,16 @@ export type ReloadConfigResult = {
   changedPaths?: string[];
 };
 
+export type ReloadExtensionsInput = {
+  projectKey?: string;
+  changedPaths?: string[];
+};
+
+export type ReloadExtensionsResult = {
+  reloaded: boolean;
+  changedPaths?: string[];
+};
+
 export type AlwaysOnApplyInput = {
   projectKey: string;
   workCycleId: string;
@@ -335,6 +345,13 @@ export interface Gateway {
    * capability) may leave it undefined.
    */
   reloadConfig?(): Promise<ReloadConfigResult>;
+
+  /**
+   * Trigger a plugin/skill/MCP extension reload without waiting for the file
+   * watcher. Used by UI config writers that already know an extension-backed
+   * file changed (for example `mcp.json`).
+   */
+  reloadExtensions?(input?: ReloadExtensionsInput): Promise<ReloadExtensionsResult>;
 
   /**
    * Skill-management RPCs. The gateway is the authoritative owner of

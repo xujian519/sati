@@ -64,7 +64,12 @@ router.put('/config/:scope', async (req, res) => {
     let reload = null;
     try {
       const gateway = await getPilotDeckGateway();
-      reload = await gateway.reloadConfig?.();
+      reload = gateway.reloadExtensions
+        ? await gateway.reloadExtensions({
+            projectKey: scope === 'project' ? projectPath : undefined,
+            changedPaths: [saved.path],
+          })
+        : await gateway.reloadConfig?.();
     } catch (error) {
       reload = { reloaded: false, error: error.message };
     }

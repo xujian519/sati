@@ -243,6 +243,28 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       }
       return { reloaded: true, changedPaths };
     },
+    async reloadExtensions(input) {
+      const changedPaths = input?.changedPaths ?? [];
+      if (input?.projectKey) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[pilotdeck] Extensions reload requested for project ${input.projectKey}:`,
+          changedPaths.join(", ") || "(manual)",
+        );
+        registry.invalidate(input.projectKey);
+        router?.markProjectDirty(input.projectKey, "extension_changed");
+      } else {
+        // eslint-disable-next-line no-console
+        console.log("[pilotdeck] Extensions reload requested for all runtimes:", changedPaths.join(", ") || "(manual)");
+        registry.invalidate();
+        router?.markAllDirty("extension_changed");
+      }
+      boundServer?.broadcastNotification("config_changed", {
+        changedPaths,
+        changeClasses: ["extension-changed"],
+      });
+      return { reloaded: true, changedPaths };
+    },
     // Defensive: re-check the on-disk config at the start of every
     // turn so an apiKey/url edit applied between two messages takes
     // effect on the next one, even if the fs watcher missed it.

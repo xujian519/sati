@@ -13,6 +13,8 @@ import type {
   ListSessionsResult,
   NewSessionInput,
   ReloadConfigResult,
+  ReloadExtensionsInput,
+  ReloadExtensionsResult,
   WebDescribeProjectInput,
   WebListProjectsResult,
   WebProjectSummary,
@@ -136,6 +138,10 @@ export class RemoteGateway implements Gateway {
 
   async reloadConfig(): Promise<ReloadConfigResult> {
     return (await this.client.request("reload_config", {})) as ReloadConfigResult;
+  }
+
+  async reloadExtensions(input: ReloadExtensionsInput = {}): Promise<ReloadExtensionsResult> {
+    return (await this.client.request("reload_extensions", input)) as ReloadExtensionsResult;
   }
 
   async skillsList(input: SkillsListInput): Promise<SkillsListResult> {
