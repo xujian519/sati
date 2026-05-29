@@ -613,8 +613,33 @@
       },
       "models": {
         "title": "模型池",
-        "description": "配置想使用的模型提供商、API Key、Base URL 与启用模型。智能体、记忆和路由会从这里的已启用模型中选择。",
-        "providerIdDuplicate": "已有同名 Provider id。"
+        "description": "配置想使用的模型提供商、API 密钥、接口地址与启用模型。智能体、记忆和路由会从这里的已启用模型中选择。",
+        "providerIdDuplicate": "已有同名 Provider id。",
+        "addProvider": "添加提供商",
+        "addProviderTitle": "添加提供商",
+        "cancel": "取消",
+        "customProvider": "自定义",
+        "manualSetup": "手动配置",
+        "modelCount": "共 {{count}} 个模型",
+        "emptyProviders": "尚未配置提供商。点击“添加提供商”开始配置。",
+        "providerId": "ID",
+        "protocol": "协议",
+        "protocolOptions": {
+          "openai": "openai（聊天补全）",
+          "anthropic": "anthropic（消息 API）"
+        },
+        "baseUrl": "接口地址",
+        "defaultsTo": "默认使用目录中的",
+        "fromCatalog": "。",
+        "effective": "实际地址：",
+        "apiKey": "API 密钥",
+        "maskedKeyPlaceholder": "已保留现有密钥，如需替换请重新输入",
+        "keyHidden": "密钥已隐藏；留空会继续保留，重新输入可替换。",
+        "enabledModels": "已启用模型",
+        "supportsImageInput": "支持图片输入",
+        "clickEnable": "点击启用",
+        "clickDisable": "点击禁用",
+        "customModelPlaceholder": "自定义模型 ID"
       },
       "agents": {
         "title": "智能体",
@@ -721,9 +746,11 @@
           "custom": "自定义"
         },
         "apiKey": {
-          "label": "API Key",
-          "description": "当前提供商的 API Key。",
-          "placeholder": "provider API key"
+          "label": "API 密钥",
+          "description": "当前提供商的 API 密钥。",
+          "placeholder": "提供商 API Key",
+          "maskedPlaceholder": "已保留现有密钥，如需替换请重新输入",
+          "keyHidden": "密钥已隐藏；留空会继续保留，重新输入可替换。"
         },
         "endpoint": {
           "label": "接口地址",

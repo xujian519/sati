@@ -449,10 +449,10 @@ function hasUsableSecret(value: string | undefined): boolean {
   return Boolean(trimmed) && !isMaskedSecret(trimmed) && trimmed !== 'PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE' && !trimmed.startsWith('PLACEHOLDER_');
 }
 
-function providerDisplayName(providerId: string, catalogEntry?: CatalogProvider): string {
+function providerDisplayName(providerId: string, catalogEntry?: CatalogProvider, emptyFallback = 'Custom Provider'): string {
   if (catalogEntry?.displayName) return catalogEntry.displayName;
   const normalized = providerId.trim();
-  if (!normalized) return 'Custom Provider';
+  if (!normalized) return emptyFallback;
   return normalized
     .split(/[-_\s]+/)
     .filter(Boolean)
@@ -499,6 +499,7 @@ function SecretTextInput({
   onChange,
   placeholder,
   emptyPlaceholder,
+  maskedPlaceholder,
   className,
   monospace,
 }: {
@@ -506,6 +507,7 @@ function SecretTextInput({
   onChange: (next: string) => void;
   placeholder?: string;
   emptyPlaceholder?: string;
+  maskedPlaceholder?: string;
   className?: string;
   monospace?: boolean;
 }) {
@@ -514,7 +516,7 @@ function SecretTextInput({
     <TextInput
       type="password"
       value={secretDisplayValue(value)}
-      placeholder={placeholder ?? (masked ? 'Existing key kept — type to replace' : emptyPlaceholder)}
+      placeholder={placeholder ?? (masked ? (maskedPlaceholder ?? 'Existing key kept — type to replace') : emptyPlaceholder)}
       monospace={monospace}
       className={className}
       onChange={onChange}
@@ -693,7 +695,11 @@ function ProviderCard({
   const [newModelId, setNewModelId] = useState('');
   const [providerIdDraft, setProviderIdDraft] = useState(providerId);
   const [providerIdError, setProviderIdError] = useState('');
-  const displayName = providerDisplayName(providerIdDraft || providerId, catalogEntry);
+  const displayName = providerDisplayName(
+    providerIdDraft || providerId,
+    catalogEntry,
+    t('pilotDeckConfig.panels.models.customProvider'),
+  );
 
   useEffect(() => {
     setProviderIdDraft(providerId);
@@ -745,7 +751,7 @@ function ProviderCard({
             <div className="text-sm font-semibold text-foreground">{displayName}</div>
           </div>
           <div className="mt-1 flex items-center gap-2">
-            <span className="text-[11px] text-muted-foreground">id</span>
+            <span className="text-[11px] text-muted-foreground">{t('pilotDeckConfig.panels.models.providerId')}</span>
             <input
               value={providerIdDraft}
               onChange={(e) => {
@@ -781,18 +787,18 @@ function ProviderCard({
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-[160px_1fr]">
         <label className="text-xs text-muted-foreground">
-          <span className="mb-1 block">Protocol</span>
+          <span className="mb-1 block">{t('pilotDeckConfig.panels.models.protocol')}</span>
           <Select
             value={protocol}
             onChange={(v) => update({ protocol: v as 'openai' | 'anthropic' })}
             options={[
-              { value: 'openai',    label: 'openai (chat-completions)' },
-              { value: 'anthropic', label: 'anthropic (messages API)' },
+              { value: 'openai',    label: t('pilotDeckConfig.panels.models.protocolOptions.openai') },
+              { value: 'anthropic', label: t('pilotDeckConfig.panels.models.protocolOptions.anthropic') },
             ]}
           />
         </label>
         <label className="text-xs text-muted-foreground">
-          <span className="mb-1 block">Base URL</span>
+          <span className="mb-1 block">{t('pilotDeckConfig.panels.models.baseUrl')}</span>
           <TextInput
             value={provider.url}
             placeholder={catalogEntry?.defaultUrl || 'https://api.example.com/v1'}
@@ -801,12 +807,15 @@ function ProviderCard({
           />
           {!provider.url && catalogEntry && (
             <span className="mt-0.5 block text-[10px] text-muted-foreground/70">
-              Defaults to <code className="font-mono">{catalogEntry.defaultUrl}</code> from catalog.
+              {t('pilotDeckConfig.panels.models.defaultsTo')}{' '}
+              <code className="font-mono">{catalogEntry.defaultUrl}</code>
+              {' '}{t('pilotDeckConfig.panels.models.fromCatalog')}
             </span>
           )}
           {effectiveUrl && provider.url && (
             <span className="mt-0.5 block text-[10px] text-muted-foreground/70">
-              Effective: <code className="font-mono">{effectiveUrl}</code>
+              {t('pilotDeckConfig.panels.models.effective')}{' '}
+              <code className="font-mono">{effectiveUrl}</code>
             </span>
           )}
         </label>
@@ -814,16 +823,17 @@ function ProviderCard({
 
       {/* API key — the only required field */}
       <label className="block text-xs text-muted-foreground">
-        <span className="mb-1 block">API key</span>
+        <span className="mb-1 block">{t('pilotDeckConfig.panels.models.apiKey')}</span>
         <SecretTextInput
           value={provider.apiKey}
           emptyPlaceholder="sk-..."
+          maskedPlaceholder={t('pilotDeckConfig.panels.models.maskedKeyPlaceholder')}
           onChange={(v) => update({ apiKey: v })}
         />
         {isMaskedKey && (
           <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
             <Info className="h-3 w-3" />
-            Key hidden; leave as-is to keep, retype to replace.
+            {t('pilotDeckConfig.panels.models.keyHidden')}
           </span>
         )}
       </label>
@@ -831,9 +841,9 @@ function ProviderCard({
       {/* Models — chip-style toggles for catalog models + a free-form input. */}
       <div>
         <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-          <span>Enabled models</span>
+          <span>{t('pilotDeckConfig.panels.models.enabledModels')}</span>
           <span className="text-[10px] text-muted-foreground/60">
-            · <ImageIcon className="inline h-2.5 w-2.5" /> supports image input
+            · <ImageIcon className="inline h-2.5 w-2.5" /> {t('pilotDeckConfig.panels.models.supportsImageInput')}
           </span>
         </div>
         {catalogEntry && catalogEntry.models.length > 0 && (
@@ -854,7 +864,7 @@ function ProviderCard({
                     type="button"
                     onClick={() => toggleCatalogModel(m.id)}
                     className="inline-flex items-center gap-1 px-2 py-1"
-                    title={on ? 'Click to disable' : 'Click to enable'}
+                    title={on ? t('pilotDeckConfig.panels.models.clickDisable') : t('pilotDeckConfig.panels.models.clickEnable')}
                   >
                     {on && <Check className="h-3 w-3 text-foreground" strokeWidth={2.5} />}
                     {m.displayName}
@@ -891,13 +901,13 @@ function ProviderCard({
           <input
             value={newModelId}
             onChange={(e) => setNewModelId(e.target.value)}
-            placeholder="Custom model ID"
+            placeholder={t('pilotDeckConfig.panels.models.customModelPlaceholder')}
             className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-[11px] text-foreground outline-none focus:ring-1 focus:ring-ring"
             onKeyDown={(e) => { if (e.key === 'Enter' && !isImeEnterEvent(e)) addModel(newModelId); }}
           />
           <Button variant="outline" size="sm" className="shrink-0" onClick={() => addModel(newModelId)} disabled={!newModelId.trim()}>
             <Plus className="mr-1 h-3 w-3" />
-            Add
+            {t('pilotDeckConfig.actions.add')}
           </Button>
         </div>
       </div>
@@ -914,21 +924,22 @@ function CatalogPicker({
   onPick: (catalog: CatalogProvider) => void;
   onCustom: () => void;
 }) {
+  const { t } = useTranslation('settings');
   const [open, setOpen] = useState(false);
   const available = CATALOG_PROVIDERS.filter((p) => !existingIds.has(p.id));
   if (!open) {
     return (
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
         <Plus className="mr-1 h-3.5 w-3.5" />
-        Add provider
+        {t('pilotDeckConfig.panels.models.addProvider')}
       </Button>
     );
   }
   return (
     <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
       <div className="flex items-center justify-between">
-        <div className="text-sm font-medium text-foreground">Add a provider</div>
-        <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+        <div className="text-sm font-medium text-foreground">{t('pilotDeckConfig.panels.models.addProviderTitle')}</div>
+        <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>{t('pilotDeckConfig.panels.models.cancel')}</Button>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {available.map((p) => (
@@ -939,7 +950,9 @@ function CatalogPicker({
             className="rounded-md border border-border bg-background px-3 py-2 text-left text-sm transition-colors hover:border-foreground/40 hover:bg-muted"
           >
             <div className="font-medium text-foreground">{p.displayName}</div>
-            <div className="mt-0.5 text-[10px] text-muted-foreground">{p.models.length} models</div>
+            <div className="mt-0.5 text-[10px] text-muted-foreground">
+              {t('pilotDeckConfig.panels.models.modelCount', { count: p.models.length })}
+            </div>
           </button>
         ))}
         <button
@@ -947,8 +960,8 @@ function CatalogPicker({
           onClick={() => { onCustom(); setOpen(false); }}
           className="rounded-md border border-dashed border-border bg-background px-3 py-2 text-left text-sm transition-colors hover:border-foreground/40 hover:bg-muted"
         >
-          <div className="font-medium text-foreground">+ Custom</div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">Manual setup</div>
+          <div className="font-medium text-foreground">+ {t('pilotDeckConfig.panels.models.customProvider')}</div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">{t('pilotDeckConfig.panels.models.manualSetup')}</div>
         </button>
       </div>
     </div>
@@ -1016,7 +1029,7 @@ function ModelsSection({ config, onChange }: { config: PilotDeckConfig; onChange
         </div>
         {ids.length === 0 && (
           <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-            No providers configured yet. Click "Add provider" to get started.
+            {t('pilotDeckConfig.panels.models.emptyProviders')}
           </div>
         )}
         {ids.map((id) => (
@@ -1897,13 +1910,14 @@ function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange:
           <SecretTextInput
             value={apiKey}
             emptyPlaceholder={t('pilotDeckConfig.panels.tools.apiKey.placeholder')}
+            maskedPlaceholder={t('pilotDeckConfig.panels.tools.apiKey.maskedPlaceholder')}
             monospace
             onChange={(v) => setField('apiKey', v)}
           />
           {isMaskedSecret(apiKey) && (
             <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
               <Info className="h-3 w-3" />
-              Key hidden; leave as-is to keep, retype to replace.
+              {t('pilotDeckConfig.panels.tools.apiKey.keyHidden')}
             </p>
           )}
         </FormRow>

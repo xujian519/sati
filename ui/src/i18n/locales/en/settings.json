@@ -614,7 +614,32 @@
       "models": {
         "title": "Model Pool",
         "description": "Configure model providers, API keys, base URLs, and enabled models. Agents, memory, and routing choose from the enabled models here.",
-        "providerIdDuplicate": "A Provider id with this name already exists."
+        "providerIdDuplicate": "A Provider id with this name already exists.",
+        "addProvider": "Add provider",
+        "addProviderTitle": "Add a provider",
+        "cancel": "Cancel",
+        "customProvider": "Custom",
+        "manualSetup": "Manual setup",
+        "modelCount": "{{count}} models",
+        "emptyProviders": "No providers configured yet. Click \"Add provider\" to get started.",
+        "providerId": "id",
+        "protocol": "Protocol",
+        "protocolOptions": {
+          "openai": "openai (chat-completions)",
+          "anthropic": "anthropic (messages API)"
+        },
+        "baseUrl": "Base URL",
+        "defaultsTo": "Defaults to",
+        "fromCatalog": "from catalog.",
+        "effective": "Effective:",
+        "apiKey": "API key",
+        "maskedKeyPlaceholder": "Existing key kept — type to replace",
+        "keyHidden": "Key hidden; leave as-is to keep, retype to replace.",
+        "enabledModels": "Enabled models",
+        "supportsImageInput": "supports image input",
+        "clickEnable": "Click to enable",
+        "clickDisable": "Click to disable",
+        "customModelPlaceholder": "Custom model ID"
       },
       "agents": {
         "title": "Agents",
@@ -723,7 +748,9 @@
         "apiKey": {
           "label": "API key",
           "description": "API key for the selected provider.",
-          "placeholder": "provider API key"
+          "placeholder": "provider API key",
+          "maskedPlaceholder": "Existing key kept — type to replace",
+          "keyHidden": "Key hidden; leave as-is to keep, retype to replace."
         },
         "endpoint": {
           "label": "Endpoint",
