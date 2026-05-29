@@ -101,6 +101,7 @@ import { runServerStartupBeforeListen, startServerAfterStartup } from './service
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { DISABLE_LOCAL_AUTH, IS_PLATFORM } from './constants/config.js';
 import { getConnectableHost } from '../shared/networkHosts.js';
+import { contentDispositionAttachment } from './utils/downloadHeaders.js';
 
 // PilotDeck-only mode: chat execution always goes through src/gateway via
 // cursor-cli, openai-codex, gemini-cli) has been removed.
@@ -1184,7 +1185,7 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
 
         if (req.query.download) {
             const basename = path.basename(resolved);
-            res.setHeader('Content-Disposition', `attachment; filename="${basename}"`);
+            res.setHeader('Content-Disposition', contentDispositionAttachment(basename));
         }
 
         // Stream the file
@@ -1261,12 +1262,8 @@ app.get('/api/projects/:projectName/download', authenticateToken, async (req, re
         await addDirectoryToZip(zip, projectRoot, projectRoot);
 
         const filename = getSafeZipFilename(projectName);
-        const asciiFilename = filename.replace(/[^\x20-\x7e]/g, '_');
         res.setHeader('Content-Type', 'application/zip');
-        res.setHeader(
-            'Content-Disposition',
-            `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-        );
+        res.setHeader('Content-Disposition', contentDispositionAttachment(filename));
 
         const zipStream = zip.generateNodeStream({
             type: 'nodebuffer',
