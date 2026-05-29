@@ -28,7 +28,7 @@ const SESSION_PAGE_SIZE = 30;
 
 const serialize = (value: unknown) => JSON.stringify(value ?? null);
 
-const projectsHaveChanges = (
+export const projectsHaveChanges = (
   prevProjects: Project[],
   nextProjects: Project[],
   includeExternalSessions: boolean,
@@ -84,7 +84,7 @@ const isTemporarySessionId = (id: unknown): boolean =>
 const normalizeSessionId = (id: string): string => id.replace(/^web:s_/, 'web-s_');
 const sessionTranscriptFilename = (id: string): string => `${normalizeSessionId(id)}.jsonl`;
 
-const preserveLoadedSessions = (prevProjects: Project[], nextProjects: Project[]): Project[] =>
+export const preserveLoadedSessions = (prevProjects: Project[], nextProjects: Project[]): Project[] =>
   nextProjects.map((updated) => {
     const prev = prevProjects.find((p) => p.name === updated.name);
     if (!prev) return updated;
@@ -124,6 +124,25 @@ const preserveLoadedSessions = (prevProjects: Project[], nextProjects: Project[]
       },
     };
   });
+
+/**
+ * Merge a `projects_updated` payload into local state without spurious
+ * reference churn. Returns `prevProjects` when nothing meaningful changed
+ * so React can skip re-renders and effects won't re-fire on `projects`.
+ */
+export function applyProjectsSocketUpdate(
+  prevProjects: Project[],
+  updatedProjects: Project[],
+): Project[] {
+  if (prevProjects.length === 0) {
+    return updatedProjects;
+  }
+  const merged = preserveLoadedSessions(prevProjects, updatedProjects);
+  if (!projectsHaveChanges(prevProjects, merged, true)) {
+    return prevProjects;
+  }
+  return merged;
+}
 
 const resetProjectSessionPreview = (project: Project): Project => {
   const sessions = project.sessions ?? [];
@@ -380,12 +399,14 @@ export function useProjectsState({
     // the user manually refreshed.
     const skipSelectedReplacement =
       hasActiveSession &&
-      !isUpdateAdditive(projects, updatedProjects, selectedProject, selectedSession);
+      !isUpdateAdditive(
+        projectsRef.current,
+        updatedProjects,
+        selectedProject,
+        selectedSession,
+      );
 
-    setProjects((prevProjects) => {
-      if (prevProjects.length === 0) return updatedProjects;
-      return preserveLoadedSessions(prevProjects, updatedProjects);
-    });
+    setProjects((prevProjects) => applyProjectsSocketUpdate(prevProjects, updatedProjects));
 
     if (skipSelectedReplacement) {
       return;
@@ -433,7 +454,7 @@ export function useProjectsState({
     if (serialize(normalizedUpdatedSelectedSession) !== serialize(selectedSession)) {
       setSelectedSession(normalizedUpdatedSelectedSession);
     }
-  }, [latestMessage, selectedProject, selectedSession, activeSessions, projects]);
+  }, [latestMessage, selectedProject, selectedSession, activeSessions]);
 
   useEffect(() => {
     return () => {
