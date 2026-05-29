@@ -649,6 +649,7 @@
       "agents": {
         "title": "Agents",
         "description": "Set the main agent, subagents, and model parameters.",
+        "advancedToggle": "Advanced settings",
         "mainModel": {
           "label": "Main agent model",
           "description": "Model used for the main conversation."
@@ -670,8 +671,9 @@
         },
         "subagents": {
           "label": "Subagents default",
-          "description": "Default model for subagents.",
-          "inherit": "Inherit main agent model"
+          "description": "Default model for subagents on non-router paths.",
+          "inherit": "Inherit main agent model",
+          "routerNote": "When PilotDeck Router or Token Saver is enabled, subagent requests enter the router first. By default, the subagent policy re-judges each subagent turn and picks a tier model. This default only acts as a direct subagent fallback or inherited baseline; it does not override the subagent routing policy in Router advanced settings."
         }
       },
       "customEnv": {

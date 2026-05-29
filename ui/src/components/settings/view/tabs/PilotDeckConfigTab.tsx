@@ -1142,6 +1142,7 @@ function activeModelCapabilities(config: PilotDeckConfig): {
 
 function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const { t } = useTranslation('settings');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const refOptions = buildModelRefOptions(config);
   const mainRef = config.agent?.model ?? '';
   const subDefault = config.agent?.subagents?.default ?? 'inherit';
@@ -1324,13 +1325,33 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
           </div>
         )}
 
-        <FormRow label={t('pilotDeckConfig.panels.agents.subagents.label')} description={t('pilotDeckConfig.panels.agents.subagents.description')}>
-          <Select
-            value={subDefault}
-            options={subOptions}
-            onChange={(v) => onChange(patch(ensureModelRefConfigured(config, v), ['agent', 'subagents', 'default'], v))}
-          />
-        </FormRow>
+        <div className="px-4 py-2.5">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((next) => !next)}
+            aria-expanded={showAdvanced}
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium leading-5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showAdvanced && 'rotate-180')} />
+            {t('pilotDeckConfig.panels.agents.advancedToggle')}
+          </button>
+        </div>
+
+        {showAdvanced && (
+          <div className="divide-y divide-border">
+            <FormRow label={t('pilotDeckConfig.panels.agents.subagents.label')} description={t('pilotDeckConfig.panels.agents.subagents.description')}>
+              <Select
+                value={subDefault}
+                options={subOptions}
+                onChange={(v) => onChange(patch(ensureModelRefConfigured(config, v), ['agent', 'subagents', 'default'], v))}
+              />
+            </FormRow>
+            <div className="flex gap-2 px-4 py-3 text-[11px] leading-5 text-muted-foreground">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <p>{t('pilotDeckConfig.panels.agents.subagents.routerNote')}</p>
+            </div>
+          </div>
+        )}
       </SettingsCard>
     </SettingsSection>
   );

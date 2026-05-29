@@ -649,6 +649,7 @@
       "agents": {
         "title": "智能体",
         "description": "设置主智能体、子智能体和模型参数。",
+        "advancedToggle": "高级设置",
         "mainModel": {
           "label": "主智能体模型",
           "description": "主对话使用的模型。"
@@ -670,8 +671,9 @@
         },
         "subagents": {
           "label": "子智能体默认模型",
-          "description": "子智能体默认使用的模型。",
-          "inherit": "继承主智能体模型"
+          "description": "非路由路径下子智能体默认使用的模型。",
+          "inherit": "继承主智能体模型",
+          "routerNote": "启用 PilotDeck Router 或 Token 节省后，子智能体请求会先进入路由器；默认会按子智能体策略重新判定层级并选择模型。这里的默认模型只作为直接子智能体路径或继承兜底，不会覆盖 Router 高级设置中的子智能体路由策略。"
         }
       },
       "customEnv": {
