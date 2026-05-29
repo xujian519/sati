@@ -997,12 +997,12 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
         // Resolve and normalize the path
         targetPath = path.resolve(targetPath);
 
-        // Security check - ensure path is within allowed workspace root
-        const validation = await validateWorkspacePath(targetPath);
-        if (!validation.valid) {
-            return res.status(403).json({ error: validation.error });
-        }
-        const resolvedPath = validation.resolvedPath || targetPath;
+        // Browsing a directory is read-only — we only list its children.
+        // The actual workspace-selection validation happens in the
+        // create-workspace / clone-progress endpoints, so we don't gate
+        // browsing with validateWorkspacePath (which would block navigating
+        // through forbidden directories like "/" to reach valid children).
+        const resolvedPath = targetPath;
 
         // Security check - ensure path is accessible
         try {

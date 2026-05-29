@@ -191,10 +191,11 @@ function toolCallEvents(
     }
 
     if (!state.toolCalls.has(index)) {
+      current.id = readNonEmptyString(current.id) ?? generateStreamToolCallId(index);
       state.toolCalls.set(index, current);
       events.push({
         type: "tool_call_start",
-        id: current.id ?? String(index),
+        id: current.id,
         name: current.name ?? "",
         raw,
       });
@@ -204,7 +205,7 @@ function toolCallEvents(
       current.argumentsBuffer = `${current.argumentsBuffer ?? ""}${fn.arguments}`;
       events.push({
         type: "tool_call_delta",
-        id: current.id ?? String(index),
+        id: current.id ?? generateStreamToolCallId(index),
         delta: fn.arguments,
         raw,
       });
@@ -253,7 +254,7 @@ function finishToolCalls(state: OpenAIStreamState, raw: unknown): CanonicalModel
     events.push({
       type: "tool_call_end",
       toolCall: {
-        id: toolCall.id ?? String(index),
+        id: readNonEmptyString(toolCall.id) ?? generateStreamToolCallId(index),
         name: toolCall.name ?? "",
         input,
         raw,
@@ -270,4 +271,12 @@ function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function readNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function generateStreamToolCallId(index: number): string {
+  return `call_${index}`;
 }

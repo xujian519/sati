@@ -103,10 +103,10 @@ export default function SkillsV2({ selectedProject, projects }: SkillsV2Props) {
   const { isDarkMode } = useTheme() as { isDarkMode: boolean };
 
   const cwd = projectCwd(selectedProject);
-  const generalCwd = isGeneralProject(selectedProject);
-  const effectiveProjectPath = generalCwd ? null : cwd;
+  const localGeneralCwd = isGeneralProject(selectedProject);
 
   const [skills, setSkills] = useState<SkillsListResponse | null>(null);
+  const [serverGeneralCwdPath, setServerGeneralCwdPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
   const [activeScope, setActiveScope] = useState<'user' | 'project' | null>(null);
@@ -116,6 +116,10 @@ export default function SkillsV2({ selectedProject, projects }: SkillsV2Props) {
   const [saving, setSaving] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+
+  const serverGeneralCwd = Boolean(cwd && serverGeneralCwdPath === cwd);
+  const generalCwd = localGeneralCwd || serverGeneralCwd;
+  const effectiveProjectPath = generalCwd ? null : cwd;
 
   const flashToast = useCallback((toastValue: ToastState, ms = 2400) => {
     setToast(toastValue);
@@ -131,16 +135,29 @@ export default function SkillsV2({ selectedProject, projects }: SkillsV2Props) {
         projectPath: effectiveProjectPath,
       });
       setSkills(data);
+      setServerGeneralCwdPath((prev) => {
+        if (!cwd) return null;
+        if (data.isGeneralCwd) return cwd;
+        if (effectiveProjectPath === null && (localGeneralCwd || prev === cwd)) return prev;
+        return prev === cwd ? null : prev;
+      });
     } catch (e) {
       flashToast({ kind: 'error', text: (e as Error).message });
     } finally {
       setLoading(false);
     }
-  }, [effectiveProjectPath, flashToast]);
+  }, [cwd, effectiveProjectPath, flashToast, localGeneralCwd]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (generalCwd && activeScope === 'project') {
+      setActiveScope(null);
+      setActiveSlug(null);
+    }
+  }, [activeScope, generalCwd]);
 
   const activeSkill = useMemo(() => {
     if (!skills || !activeSlug) return null;
@@ -1011,6 +1028,10 @@ function InstallFromClawHub({
   const debounceRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
+    if (!projectAvailable && scope === 'project') setScope('user');
+  }, [projectAvailable, scope]);
+
+  useEffect(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     if (!query.trim()) {
       setResults([]);
@@ -1037,10 +1058,11 @@ function InstallFromClawHub({
     setInstalling(slug);
     setErrorText(null);
     try {
+      const effectiveScope = projectAvailable ? scope : 'user';
       const r = await api<InstallResponse>('/api/skills/clawhub/install', {
         slug,
-        scope,
-        projectPath: scope === 'project' ? projectPath : null,
+        scope: effectiveScope,
+        projectPath: effectiveScope === 'project' ? projectPath : null,
         force,
       });
       if (r.installed) {
@@ -1061,7 +1083,7 @@ function InstallFromClawHub({
     } finally {
       setInstalling(null);
     }
-  }, [scope, projectPath, onInstalled, t]);
+  }, [projectAvailable, scope, projectPath, onInstalled, t]);
 
   return (
     <div className="flex h-full flex-col">
@@ -1223,6 +1245,10 @@ function ImportFromFolder({
   const [scanning, setScanning] = useState(false);
 
   const batchMode = batchCandidates !== null;
+
+  useEffect(() => {
+    if (!projectAvailable && scope === 'project') setScope('user');
+  }, [projectAvailable, scope]);
   const skillCandidates = batchCandidates?.filter((c) => c.hasSkillMd) ?? [];
   const selectedCount = selectedFolders.size;
 
@@ -1447,13 +1473,14 @@ function ImportFromFolder({
       setBatchResults(new Map(results));
 
       try {
+        const effectiveScope = projectAvailable ? scope : 'user';
         if (candidate.sourcePath) {
           // Scan mode — use path-based import
           await api<{ ok: boolean }>('/api/skills/import', {
             sourcePath: candidate.sourcePath,
             slug: candidate.folderName,
-            scope,
-            projectPath: scope === 'project' ? projectPath : null,
+            scope: effectiveScope,
+            projectPath: effectiveScope === 'project' ? projectPath : null,
             mode,
             force,
           });
@@ -1471,8 +1498,8 @@ function ImportFromFolder({
           }
           formData.append('paths', JSON.stringify(paths));
           formData.append('slug', candidate.folderName);
-          formData.append('scope', scope);
-          if (scope === 'project' && projectPath) formData.append('projectPath', projectPath);
+          formData.append('scope', effectiveScope);
+          if (effectiveScope === 'project' && projectPath) formData.append('projectPath', projectPath);
           if (force) formData.append('force', 'true');
 
           const r = await authenticatedFetch('/api/skills/import-upload', {
@@ -1501,15 +1528,20 @@ function ImportFromFolder({
     setBatchDone(true);
 
     if (successCount > 0) {
-      onImported({ slug: selected[0].folderName, name: selected[0].name || selected[0].folderName, scope });
+      onImported({
+        slug: selected[0].folderName,
+        name: selected[0].name || selected[0].folderName,
+        scope: projectAvailable ? scope : 'user',
+      });
     }
-  }, [batchCandidates, selectedCount, selectedFolders, scope, projectPath, mode, force, batchParentName, onImported]);
+  }, [batchCandidates, selectedCount, selectedFolders, projectAvailable, scope, projectPath, mode, force, batchParentName, onImported]);
 
   const submit = useCallback(async () => {
     if (!canSubmit) return;
     setImporting(true);
     setErrorText(null);
     try {
+      const effectiveScope = projectAvailable ? scope : 'user';
       if (picked) {
         // Multipart upload path. We send the relativePath array as a
         // separate JSON field because multer drops folder paths from
@@ -1523,8 +1555,8 @@ function ImportFromFolder({
         }
         formData.append('paths', JSON.stringify(picked.manifest.map((m) => m.relativePath)));
         if (slug) formData.append('slug', slug);
-        formData.append('scope', scope);
-        if (scope === 'project' && projectPath) formData.append('projectPath', projectPath);
+        formData.append('scope', effectiveScope);
+        if (effectiveScope === 'project' && projectPath) formData.append('projectPath', projectPath);
         if (force) formData.append('force', 'true');
 
         const r = await authenticatedFetch('/api/skills/import-upload', {
@@ -1552,8 +1584,8 @@ function ImportFromFolder({
         }>('/api/skills/import', {
           sourcePath,
           slug: slug || undefined,
-          scope,
-          projectPath: scope === 'project' ? projectPath : null,
+          scope: effectiveScope,
+          projectPath: effectiveScope === 'project' ? projectPath : null,
           mode,
           force,
         });
@@ -1569,7 +1601,7 @@ function ImportFromFolder({
     } finally {
       setImporting(false);
     }
-  }, [canSubmit, picked, sourcePath, slug, scope, projectPath, mode, force, onImported, t]);
+  }, [canSubmit, picked, sourcePath, slug, projectAvailable, scope, projectPath, mode, force, onImported, t]);
 
   return (
     <div className="flex h-full flex-col">
@@ -2044,6 +2076,10 @@ function CreateFromScratch({
   const [creating, setCreating] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!projectAvailable && scope === 'project') setScope('user');
+  }, [projectAvailable, scope]);
+
   const slugValid = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(slug);
   const canSubmit = slugValid && (description.trim().length > 0 || body.trim().length > 0);
 
@@ -2052,6 +2088,7 @@ function CreateFromScratch({
     setCreating(true);
     setErrorText(null);
     try {
+      const effectiveScope = projectAvailable ? scope : 'user';
       const r = await api<{ ok: boolean; slug: string; scope: 'user' | 'project'; skill: Skill }>(
         '/api/skills/create',
         {
@@ -2059,8 +2096,8 @@ function CreateFromScratch({
           name: name.trim() || slug,
           description,
           body,
-          scope,
-          projectPath: scope === 'project' ? projectPath : null,
+          scope: effectiveScope,
+          projectPath: effectiveScope === 'project' ? projectPath : null,
         },
       );
       onCreated({ slug: r.slug, name: r.skill?.name || r.slug, scope: r.scope });
@@ -2069,7 +2106,7 @@ function CreateFromScratch({
     } finally {
       setCreating(false);
     }
-  }, [canSubmit, slug, name, description, body, scope, projectPath, onCreated]);
+  }, [canSubmit, slug, name, description, body, projectAvailable, scope, projectPath, onCreated]);
 
   return (
     <div className="flex h-full flex-col">
