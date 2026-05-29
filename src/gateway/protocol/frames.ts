@@ -38,6 +38,7 @@ export type WsGatewayMethod =
   | "list_projects"
   | "describe_project"
   | "reload_config"
+  | "reload_extensions"
   | "skill_list"
   | "skill_read"
   | "skill_write"

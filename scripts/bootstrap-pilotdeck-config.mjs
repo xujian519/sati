@@ -47,16 +47,17 @@ model:
           capabilities:
             maxOutputTokens: 16384
 router:
+  enabled: true
   scenarios:
     default: _placeholder/_placeholder
   fallback:
     default:
       - _placeholder/_placeholder
   zeroUsageRetry:
-    enabled: false
+    enabled: true
     maxAttempts: 2
   tokenSaver:
-    enabled: false
+    enabled: true
     judge: _placeholder/_placeholder
     defaultTier: medium
     judgeTimeoutMs: 15000
@@ -79,7 +80,7 @@ router:
       - "Simple file creation (1-2 files) or single code generation is medium"
       - "Trivial greetings, confirmations, remembering rules, or reading one file and answering a short question is simple"
   autoOrchestrate:
-    enabled: false
+    enabled: true
     triggerTiers:
       - complex
     slimSystemPrompt: true
@@ -91,7 +92,7 @@ router:
       - read_skill
     subagentMaxTokens: 48000
   stats:
-    enabled: false
+    enabled: true
 `;
 
 function resolvePilotHome() {

@@ -97,6 +97,11 @@ export type InProcessGatewayOptions = {
    */
   reloadConfig?: () => Promise<ReloadConfigResult>;
   /**
+   * Pluggable extension/MCP reload handler wired by `createLocalGateway`.
+   * Unlike `reloadConfig`, this does not depend on `pilotdeck.yaml` changing.
+   */
+  reloadExtensions?: (input?: import("../protocol/types.js").ReloadExtensionsInput) => Promise<import("../protocol/types.js").ReloadExtensionsResult>;
+  /**
    * Optional pre-turn hook that lets the host re-read disk config before
    * `submitTurn` resolves a session and starts streaming. Wired by
    * `createLocalGateway` to `configStore.reload("turn-start")` so that
@@ -491,6 +496,13 @@ export class InProcessGateway implements Gateway {
       return { reloaded: false };
     }
     return this.options.reloadConfig();
+  }
+
+  async reloadExtensions(input?: import("../protocol/types.js").ReloadExtensionsInput): Promise<import("../protocol/types.js").ReloadExtensionsResult> {
+    if (!this.options.reloadExtensions) {
+      return { reloaded: false };
+    }
+    return this.options.reloadExtensions(input);
   }
 
   setCronController(cron: GatewayCronController | undefined): void {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { DEFAULT_CODE_EDITOR_SETTINGS } from '../constants/constants';
 import type {
   CodeEditorSettingsState,
@@ -53,7 +53,7 @@ const readCodeEditorSettings = (): CodeEditorSettingsState => ({
 export function useSettingsController({ isOpen, initialTab }: UseSettingsControllerArgs) {
   const [activeTab, setActiveTab] = useState<SettingsMainTab>(() => normalizeMainTab(initialTab));
   const [saveStatus, setSaveStatus] = useState<'success' | 'error' | null>(null);
-  const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('name');
+  const [projectSortOrder, setProjectSortOrderState] = useState<ProjectSortOrder>('name');
   const [codeEditorSettings, setCodeEditorSettings] = useState<CodeEditorSettingsState>(
     () => readCodeEditorSettings(),
   );
@@ -68,7 +68,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       localStorage.getItem('pilotdeck-settings'),
       {},
     );
-    setProjectSortOrder(stored.projectSortOrder === 'date' ? 'date' : 'name');
+    setProjectSortOrderState(stored.projectSortOrder === 'date' ? 'date' : 'name');
   }, [isOpen, initialTab]);
 
   // Persist code-editor preferences as the user toggles them — the editor
@@ -82,43 +82,29 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     window.dispatchEvent(new Event('codeEditorSettingsChanged'));
   }, [codeEditorSettings]);
 
-  // Auto-save the Appearance preferences (currently only `projectSortOrder`)
-  // back into the same `pilotdeck-settings` storage key the Settings
-  // panel used. Other consumers still read from this key, so we keep the
-  // shape stable.
-  const isInitialLoadRef = useRef(true);
-  useEffect(() => {
-    if (isInitialLoadRef.current) {
-      isInitialLoadRef.current = false;
-      return;
+  const setProjectSortOrder = useCallback((value: ProjectSortOrder) => {
+    setProjectSortOrderState(value);
+    try {
+      const existing = parseJson<Record<string, unknown>>(
+        localStorage.getItem('pilotdeck-settings'),
+        {},
+      );
+      localStorage.setItem(
+        'pilotdeck-settings',
+        JSON.stringify({
+          ...existing,
+          projectSortOrder: value,
+          lastUpdated: new Date().toISOString(),
+        }),
+      );
+      // Sidebar listens for this event to live-resort the project list.
+      window.dispatchEvent(new Event('pilotdeck-settings-changed'));
+      setSaveStatus(null);
+    } catch (err) {
+      console.error('Failed to persist Appearance settings:', err);
+      setSaveStatus('error');
     }
-    const timer = window.setTimeout(() => {
-      try {
-        const existing = parseJson<Record<string, unknown>>(
-          localStorage.getItem('pilotdeck-settings'),
-          {},
-        );
-        localStorage.setItem(
-          'pilotdeck-settings',
-          JSON.stringify({
-            ...existing,
-            projectSortOrder,
-            lastUpdated: new Date().toISOString(),
-          }),
-        );
-        // Sidebar listens for this event to live-resort the project list,
-        // and the Permissions tab uses the same channel to refresh after
-        // imports. Without the dispatch the dropdown looks dead until you
-        // reload the page.
-        window.dispatchEvent(new Event('pilotdeck-settings-changed'));
-        setSaveStatus('success');
-      } catch (err) {
-        console.error('Failed to persist Appearance settings:', err);
-        setSaveStatus('error');
-      }
-    }, 500);
-    return () => window.clearTimeout(timer);
-  }, [projectSortOrder]);
+  }, []);
 
   // Reset save indicator after 2s.
   useEffect(() => {
@@ -126,12 +112,6 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     const timer = window.setTimeout(() => setSaveStatus(null), 2000);
     return () => window.clearTimeout(timer);
   }, [saveStatus]);
-
-  // Reset the "first run" guard whenever the dialog re-opens so the first
-  // change after re-opening still triggers an auto-save.
-  useEffect(() => {
-    if (isOpen) isInitialLoadRef.current = true;
-  }, [isOpen]);
 
   const updateCodeEditorSetting = useCallback(
     <K extends keyof CodeEditorSettingsState>(key: K, value: CodeEditorSettingsState[K]) => {

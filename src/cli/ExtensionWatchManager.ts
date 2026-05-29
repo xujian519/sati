@@ -95,12 +95,13 @@ export class ExtensionWatchManager {
   private getWatchedPaths(scope: ExtensionWatchScope): string[] {
     if (scope.kind === "global") {
       return [
+        resolve(this.options.pilotHome, "mcp.json"),
         resolve(this.options.pilotHome, "plugins"),
         resolve(this.options.pilotHome, "skills"),
       ];
     }
     const paths = getPilotExtensionPaths(scope.projectRoot, this.options.pilotHome);
-    return [paths.projectPluginsDir, paths.projectSkillsDir];
+    return [resolve(scope.projectRoot, ".pilotdeck", "mcp.json"), paths.projectPluginsDir, paths.projectSkillsDir];
   }
 
   private createWatchers(scope: ExtensionWatchScope, watchedPaths: string[]): FSWatcher[] {

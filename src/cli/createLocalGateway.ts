@@ -49,6 +49,7 @@ import {
 import {
   McpRuntime,
   createMcpToolDefinitionsFromRuntime,
+  loadMcpServerConfig,
   parsePluginMcpServers,
 } from "../mcp/index.js";
 import { createModelRuntime, type ModelRuntime } from "../model/index.js";
@@ -240,6 +241,28 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       } finally {
         unsubscribe();
       }
+      return { reloaded: true, changedPaths };
+    },
+    async reloadExtensions(input) {
+      const changedPaths = input?.changedPaths ?? [];
+      if (input?.projectKey) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[pilotdeck] Extensions reload requested for project ${input.projectKey}:`,
+          changedPaths.join(", ") || "(manual)",
+        );
+        registry.invalidate(input.projectKey);
+        router?.markProjectDirty(input.projectKey, "extension_changed");
+      } else {
+        // eslint-disable-next-line no-console
+        console.log("[pilotdeck] Extensions reload requested for all runtimes:", changedPaths.join(", ") || "(manual)");
+        registry.invalidate();
+        router?.markAllDirty("extension_changed");
+      }
+      boundServer?.broadcastNotification("config_changed", {
+        changedPaths,
+        changeClasses: ["extension-changed"],
+      });
       return { reloaded: true, changedPaths };
     },
     // Defensive: re-check the on-disk config at the start of every
@@ -608,7 +631,15 @@ class ProjectRuntimeRegistry {
     if (runtime.mcpReady) return runtime.mcpReady;
     runtime.mcpReady = (async () => {
       try {
-        const rawServers = runtime.pluginRuntime.mcpServers();
+        const configServers = loadMcpServerConfig(runtime.projectRoot, this.options.pilotHome);
+        for (const diagnostic of configServers.diagnostics) {
+          // eslint-disable-next-line no-console
+          console.warn(`[pilotdeck] Ignoring invalid MCP config ${diagnostic.path}: ${diagnostic.message}`);
+        }
+        const rawServers = {
+          ...runtime.pluginRuntime.mcpServers(),
+          ...configServers.servers,
+        };
         const { servers } = parsePluginMcpServers(rawServers);
         if (servers.length === 0) return;
 
@@ -1133,7 +1164,7 @@ function ensureRouterConfig(
 
 function buildDefaultTokenSaver(defaultRef: { id: string; provider: string; model: string }) {
   return {
-    enabled: false,
+    enabled: true,
     judge: defaultRef,
     defaultTier: "medium",
     judgeTimeoutMs: DEFAULT_JUDGE_TIMEOUT_MS,
@@ -1148,7 +1179,7 @@ function buildDefaultTokenSaver(defaultRef: { id: string; provider: string; mode
 
 function buildDefaultAutoOrchestrate() {
   return {
-    enabled: false,
+    enabled: true,
     triggerTiers: [...DEFAULT_TRIGGER_TIERS],
     slimSystemPrompt: true,
     allowedTools: [...DEFAULT_ALLOWED_TOOLS],

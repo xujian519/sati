@@ -1,24 +1,32 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AlertCircle,
+  Bot,
+  Brain,
   Check,
   CheckCircle2,
-  Code2,
+  ChevronLeft,
+  ChevronDown,
+  ChevronRight,
+  Database,
   FileCog,
   FolderOpen,
   Gauge,
   Image as ImageIcon,
   Info,
-  LayoutList,
   Loader2,
   Plus,
   RefreshCw,
+  Route,
   Save,
-  Settings2,
-  Star,
+  Search,
+  Server,
   Trash2,
+  Wifi,
   XCircle,
+  Zap,
+  type LucideIcon,
 } from 'lucide-react';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { Button } from '../../../../shared/view/ui';
@@ -174,27 +182,39 @@ type PilotDeckConfig = {
 type SectionId = 'models' | 'agents' | 'memory' | 'tools' | 'router' | 'gateway' | 'customEnv' | 'alwaysOn' | 'advanced';
 
 const SECTIONS: Array<{ id: SectionId; labelKey: string; descriptionKey: string }> = [
+  { id: 'advanced',  labelKey: 'runtime',   descriptionKey: 'runtime' },
   { id: 'models',    labelKey: 'models',    descriptionKey: 'models' },
   { id: 'agents',    labelKey: 'agents',    descriptionKey: 'agents' },
+  { id: 'alwaysOn',  labelKey: 'alwaysOn',  descriptionKey: 'alwaysOn' },
   { id: 'memory',    labelKey: 'memory',    descriptionKey: 'memory' },
   { id: 'tools',     labelKey: 'tools',     descriptionKey: 'tools' },
   { id: 'router',    labelKey: 'router',    descriptionKey: 'router' },
   { id: 'gateway',   labelKey: 'gateway',   descriptionKey: 'gateway' },
   { id: 'customEnv', labelKey: 'customEnv', descriptionKey: 'customEnv' },
-  { id: 'alwaysOn',  labelKey: 'alwaysOn',  descriptionKey: 'alwaysOn' },
-  { id: 'advanced',  labelKey: 'runtime',   descriptionKey: 'runtime' },
 ];
 
-// ── Reload-status presentation (kept identical to legacy raw view) ──────
+const SECTION_GROUPS: Array<{ id: 'basic' | 'features' | 'advanced'; sections: SectionId[] }> = [
+  { id: 'basic', sections: ['models', 'agents'] },
+  { id: 'features', sections: ['router', 'memory', 'tools', 'alwaysOn', 'gateway'] },
+  { id: 'advanced', sections: ['advanced', 'customEnv'] },
+];
 
-type SubsystemKey = 'processEnv' | 'memory' | 'router' | 'gateway' | 'proxy';
-const SUBSYSTEM_LABELS: Record<SubsystemKey, string> = {
-  processEnv: 'Process Env',
-  memory: 'Memory',
-  router: 'PilotDeck Router',
-  gateway: 'Gateway',
-  proxy: 'Proxy',
+const SECTION_ICONS: Record<SectionId, LucideIcon> = {
+  models: Database,
+  agents: Bot,
+  router: Route,
+  memory: Brain,
+  tools: Search,
+  alwaysOn: Zap,
+  gateway: Wifi,
+  advanced: Server,
+  customEnv: FileCog,
 };
+
+// ── Config status presentation ──────────────────────────────────────────
+
+type SubsystemKey = 'processEnv' | 'memory' | 'router' | 'gateway';
+type StatusState = 'ok' | 'skipped' | 'error' | 'unknown';
 
 type SubsystemResult = {
   reloaded?: boolean;
@@ -204,7 +224,14 @@ type SubsystemResult = {
   note?: string;
 };
 
-function classifySubsystem(result: SubsystemResult | undefined): 'ok' | 'skipped' | 'error' | 'unknown' {
+const STATUS_ITEMS: Array<{ key: SubsystemKey; labelKey: string }> = [
+  { key: 'processEnv', labelKey: 'processEnv' },
+  { key: 'memory', labelKey: 'memory' },
+  { key: 'router', labelKey: 'router' },
+  { key: 'gateway', labelKey: 'gateway' },
+];
+
+function classifySubsystem(result: SubsystemResult | undefined): StatusState {
   if (!result) return 'unknown';
   if (result.error) return 'error';
   if (result.reloaded) return 'ok';
@@ -212,53 +239,76 @@ function classifySubsystem(result: SubsystemResult | undefined): 'ok' | 'skipped
   return 'unknown';
 }
 
-function subsystemBadgeClasses(state: 'ok' | 'skipped' | 'error' | 'unknown'): string {
-  if (state === 'ok') return 'border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-300';
-  if (state === 'skipped') return 'border-border bg-muted text-muted-foreground';
-  if (state === 'error') return 'border-destructive/40 bg-destructive/10 text-destructive';
-  return 'border-border bg-muted text-muted-foreground';
+function statusDotClasses(state: StatusState): string {
+  if (state === 'ok') return 'bg-green-500';
+  if (state === 'error') return 'bg-destructive';
+  return 'bg-muted-foreground/60';
 }
 
-function SubsystemIcon({ state }: { state: 'ok' | 'skipped' | 'error' | 'unknown' }) {
-  if (state === 'ok') return <CheckCircle2 className="h-4 w-4" />;
-  if (state === 'error') return <XCircle className="h-4 w-4" />;
-  if (state === 'skipped') return <Info className="h-4 w-4" />;
-  return <Info className="h-4 w-4 opacity-50" />;
-}
-
-function ReloadSummary({ reload }: { reload: ConfigReload | null }) {
-  if (!reload) {
-    return <div className="text-sm text-muted-foreground">No reload has run yet.</div>;
+function fallbackSubsystemStatus(key: SubsystemKey, config: PilotDeckConfig | null): { state: StatusState; detailKey: string } {
+  if (!config) {
+    return { state: 'unknown', detailKey: 'pending' };
   }
-  const keys: SubsystemKey[] = ['processEnv', 'memory', 'router', 'gateway', 'proxy'];
+  if (key === 'processEnv') {
+    return { state: 'ok', detailKey: 'processEnv.applied' };
+  }
+  if (key === 'memory') {
+    return config?.memory?.enabled === false
+      ? { state: 'skipped', detailKey: 'memory.disabled' }
+      : { state: 'ok', detailKey: 'memory.enabled' };
+  }
+  if (key === 'router') {
+    return config?.router?.enabled === false
+      ? { state: 'skipped', detailKey: 'router.disabled' }
+      : { state: 'ok', detailKey: 'router.enabled' };
+  }
+  return config?.gateway?.enabled
+    ? { state: 'ok', detailKey: 'gateway.enabled' }
+    : { state: 'skipped', detailKey: 'gateway.disabled' };
+}
+
+function subsystemStatus(key: SubsystemKey, config: PilotDeckConfig | null, reload: ConfigReload | null): { state: StatusState; detailKey: string; detail?: string } {
+  const fallback = fallbackSubsystemStatus(key, config);
+  const result = reload?.[key] as SubsystemResult | undefined;
+
+  if (!result) return fallback;
+  if (result.error) return { state: 'error', detailKey: fallback.detailKey, detail: result.error };
+  if ((key === 'memory' || key === 'router' || key === 'gateway') && fallback.state === 'skipped') {
+    return fallback;
+  }
+
+  const state = classifySubsystem(result);
+  if (state === 'unknown') return fallback;
+  if (state === 'skipped') return fallback;
+  return { state, detailKey: fallback.detailKey, detail: result.note };
+}
+
+function ConfigStatusGrid({
+  config,
+  reload,
+}: {
+  config: PilotDeckConfig | null;
+  reload: ConfigReload | null;
+}) {
+  const { t } = useTranslation('settings');
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-      {keys.map((key) => {
-        const result = reload[key] as SubsystemResult | undefined;
-        const state = classifySubsystem(result);
-        const detail = result?.error || result?.reason || result?.note || (state === 'ok' ? 'Reloaded' : state === 'unknown' ? 'No data' : '');
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      {STATUS_ITEMS.map((item) => {
+        const status = subsystemStatus(item.key, config, reload);
         return (
-          <div key={key} className={`flex flex-col gap-1 rounded-lg border px-3 py-2 text-xs ${subsystemBadgeClasses(state)}`}>
-            <div className="flex items-center gap-1.5 font-medium">
-              <SubsystemIcon state={state} />
-              <span>{SUBSYSTEM_LABELS[key]}</span>
+          <div key={item.key} className="rounded-lg bg-muted/30 px-3.5 py-2.5">
+            <div className="flex items-center gap-2 text-[13px] font-semibold leading-5 text-foreground">
+              <span className={cn('h-2.5 w-2.5 rounded-full', statusDotClasses(status.state))} />
+              <span>{t(`pilotDeckConfig.status.subsystems.${item.labelKey}.label`)}</span>
             </div>
-            {detail && <div className="text-[11px] opacity-80">{detail}</div>}
+            <div className={cn('mt-0.5 text-[11px] leading-4', status.state === 'error' ? 'text-destructive' : 'text-muted-foreground')}>
+              {status.detail ?? t(`pilotDeckConfig.status.subsystems.${status.detailKey}`)}
+            </div>
           </div>
         );
       })}
     </div>
   );
-}
-
-function sourceLabel(source: string): string {
-  switch (source) {
-    case 'ui-save':   return 'UI save';
-    case 'ui-reload': return 'UI reload';
-    case 'watcher':   return 'External file edit';
-    case 'refresh':   return 'Manual refresh';
-    default:          return source;
-  }
 }
 
 // ── Form-mode helpers ──────────────────────────────────────────────────
@@ -300,48 +350,79 @@ function patch<T extends PilotDeckConfig>(config: T, path: Path, value: unknown)
   return next as T;
 }
 
-function replaceRouterModelRefs(config: PilotDeckConfig, oldRef: string, newRef: string): PilotDeckConfig {
-  if (!oldRef || !newRef || oldRef === newRef || !config.router) return config;
+function rewriteProviderRef(value: unknown, oldProviderId: string, newProviderId: string): unknown {
+  const oldPrefix = `${oldProviderId}/`;
+  if (typeof value !== 'string' || !value.startsWith(oldPrefix)) return value;
+  return `${newProviderId}/${value.slice(oldPrefix.length)}`;
+}
 
+function rewriteProviderRefs(config: PilotDeckConfig, oldProviderId: string, newProviderId: string): PilotDeckConfig {
   let next = config;
-  const oldSlash = oldRef.indexOf('/');
-  const newSlash = newRef.indexOf('/');
-  const oldProviderId = oldSlash > 0 ? oldRef.slice(0, oldSlash) : '';
-  const oldModelId = oldSlash > 0 ? oldRef.slice(oldSlash + 1) : '';
-  const newModelId = newSlash > 0 ? newRef.slice(newSlash + 1) : '';
-  const scenarios = config.router.scenarios;
-  if (scenarios && Object.values(scenarios).some((ref) => ref === oldRef)) {
-    next = patch(next, ['router', 'scenarios'], Object.fromEntries(
-      Object.entries(scenarios).map(([key, ref]) => [key, ref === oldRef ? newRef : ref]),
-    ));
+
+  const agentModel = rewriteProviderRef(next.agent?.model, oldProviderId, newProviderId);
+  if (agentModel !== next.agent?.model) {
+    next = patch(next, ['agent', 'model'], agentModel);
   }
 
-  const fallback = next.router?.fallback;
-  if (fallback && Object.values(fallback).some((refs) => refs.some((ref) => ref === oldRef))) {
-    next = patch(next, ['router', 'fallback'], Object.fromEntries(
-      Object.entries(fallback).map(([key, refs]) => [key, refs.map((ref) => ref === oldRef ? newRef : ref)]),
-    ));
+  const subagentDefault = rewriteProviderRef(next.agent?.subagents?.default, oldProviderId, newProviderId);
+  if (subagentDefault !== next.agent?.subagents?.default) {
+    next = patch(next, ['agent', 'subagents', 'default'], subagentDefault);
   }
 
-  if (next.router?.tokenSaver?.judge === oldRef) {
-    next = patch(next, ['router', 'tokenSaver', 'judge'], newRef);
-  }
-
-  const tiers = next.router?.tokenSaver?.tiers;
-  if (tiers && Object.values(tiers).some((tier) => tier.model === oldRef)) {
-    next = patch(next, ['router', 'tokenSaver', 'tiers'], Object.fromEntries(
-      Object.entries(tiers).map(([key, tier]) => [
-        key,
-        tier.model === oldRef ? { ...tier, model: newRef } : tier,
-      ]),
-    ));
+  const memoryModel = rewriteProviderRef(next.memory?.model, oldProviderId, newProviderId);
+  if (memoryModel !== next.memory?.model) {
+    next = patch(next, ['memory', 'model'], memoryModel);
   }
 
   const memoryLlm = (next.memory as Record<string, unknown> | undefined)?.llm;
   if (memoryLlm && typeof memoryLlm === 'object' && !Array.isArray(memoryLlm)) {
     const llm = memoryLlm as Record<string, unknown>;
-    if (llm.provider === oldProviderId && llm.model === oldModelId) {
-      next = patch(next, ['memory', 'llm', 'model'], newModelId);
+    if (llm.provider === oldProviderId) {
+      next = patch(next, ['memory', 'llm', 'provider'], newProviderId);
+    }
+  }
+
+  const scenarios = next.router?.scenarios;
+  if (scenarios) {
+    const rewritten = Object.fromEntries(
+      Object.entries(scenarios).map(([key, ref]) => [key, rewriteProviderRef(ref, oldProviderId, newProviderId) as string]),
+    );
+    if (Object.entries(scenarios).some(([key, ref]) => rewritten[key] !== ref)) {
+      next = patch(next, ['router', 'scenarios'], rewritten);
+    }
+  }
+
+  const fallback = next.router?.fallback;
+  if (fallback) {
+    const rewritten = Object.fromEntries(
+      Object.entries(fallback).map(([key, refs]) => [
+        key,
+        refs.map((ref) => rewriteProviderRef(ref, oldProviderId, newProviderId) as string),
+      ]),
+    );
+    if (Object.entries(fallback).some(([key, refs]) => rewritten[key].some((ref, index) => ref !== refs[index]))) {
+      next = patch(next, ['router', 'fallback'], rewritten);
+    }
+  }
+
+  const judge = rewriteProviderRef(next.router?.tokenSaver?.judge, oldProviderId, newProviderId);
+  if (judge !== next.router?.tokenSaver?.judge) {
+    next = patch(next, ['router', 'tokenSaver', 'judge'], judge);
+  }
+
+  const tiers = next.router?.tokenSaver?.tiers;
+  if (tiers) {
+    const rewritten = Object.fromEntries(
+      Object.entries(tiers).map(([key, tier]) => [
+        key,
+        {
+          ...tier,
+          model: rewriteProviderRef(tier.model, oldProviderId, newProviderId) as string | undefined,
+        },
+      ]),
+    );
+    if (Object.entries(tiers).some(([key, tier]) => rewritten[key].model !== tier.model)) {
+      next = patch(next, ['router', 'tokenSaver', 'tiers'], rewritten);
     }
   }
 
@@ -366,6 +447,17 @@ function secretDisplayValue(value: string | undefined): string {
 function hasUsableSecret(value: string | undefined): boolean {
   const trimmed = (value ?? '').trim();
   return Boolean(trimmed) && !isMaskedSecret(trimmed) && trimmed !== 'PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE' && !trimmed.startsWith('PLACEHOLDER_');
+}
+
+function providerDisplayName(providerId: string, catalogEntry?: CatalogProvider, emptyFallback = 'Custom Provider'): string {
+  if (catalogEntry?.displayName) return catalogEntry.displayName;
+  const normalized = providerId.trim();
+  if (!normalized) return emptyFallback;
+  return normalized
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 // ── Reusable inputs ────────────────────────────────────────────────────
@@ -393,7 +485,7 @@ function TextInput({
       placeholder={placeholder}
       spellCheck={false}
       className={cn(
-        'w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground outline-none',
+        'w-full rounded-md border border-border bg-background px-2 py-1.5 text-[13px] leading-5 text-foreground outline-none',
         'focus:ring-1 focus:ring-ring',
         monospace && 'font-mono text-xs',
         className,
@@ -407,6 +499,7 @@ function SecretTextInput({
   onChange,
   placeholder,
   emptyPlaceholder,
+  maskedPlaceholder,
   className,
   monospace,
 }: {
@@ -414,6 +507,7 @@ function SecretTextInput({
   onChange: (next: string) => void;
   placeholder?: string;
   emptyPlaceholder?: string;
+  maskedPlaceholder?: string;
   className?: string;
   monospace?: boolean;
 }) {
@@ -422,7 +516,7 @@ function SecretTextInput({
     <TextInput
       type="password"
       value={secretDisplayValue(value)}
-      placeholder={placeholder ?? (masked ? 'Existing key kept — type to replace' : emptyPlaceholder)}
+      placeholder={placeholder ?? (masked ? (maskedPlaceholder ?? 'Existing key kept — type to replace') : emptyPlaceholder)}
       monospace={monospace}
       className={className}
       onChange={onChange}
@@ -465,7 +559,7 @@ function Select({
   const selectedLabel = options.find((opt) => opt.value === value)?.label ?? '';
   return (
     <div className="relative min-w-0">
-      <div className="pointer-events-none flex w-full min-w-0 items-center rounded-md border border-border bg-background px-2 py-1.5 pr-8 text-sm text-foreground">
+      <div className="pointer-events-none flex w-full min-w-0 items-center rounded-md border border-border bg-background px-2 py-1.5 pr-8 text-[13px] leading-5 text-foreground">
         <span className="block min-w-0 truncate" title={selectedLabel}>{selectedLabel}</span>
       </div>
       <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
@@ -483,8 +577,6 @@ function Select({
   );
 }
 
-let _datalistCounter = 0;
-
 function ModelRefInput({
   value,
   onChange,
@@ -496,33 +588,24 @@ function ModelRefInput({
   options: Array<{ value: string; label: string }>;
   placeholder?: string;
 }) {
-  const [id] = useState(() => `model-ref-dl-${++_datalistCounter}`);
+  const selected = value ?? '';
+  const hasSelected = !selected || options.some((opt) => opt.value === selected);
+  const selectOptions = [
+    { value: '', label: placeholder ?? 'Select a configured model' },
+    ...options,
+    ...(!hasSelected ? [{ value: selected, label: `Missing: ${selected}` }] : []),
+  ];
   return (
-    <>
-      <input
-        type="text"
-        list={id}
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder ?? 'provider/model-name'}
-        spellCheck={false}
-        className="w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
-      />
-      <datalist id={id}>
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </datalist>
-    </>
+    <Select value={selected} onChange={onChange} options={selectOptions} />
   );
 }
 
 function FormRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-1 items-start gap-2 px-4 py-3 sm:grid-cols-[200px_1fr] sm:gap-4 sm:py-3.5">
+    <div className="grid grid-cols-1 items-start gap-2 px-4 py-2.5 sm:grid-cols-[180px_1fr] sm:gap-4">
       <div className="min-w-0">
-        <div className="text-sm font-medium text-foreground">{label}</div>
-        {description && <div className="mt-0.5 text-xs text-muted-foreground">{description}</div>}
+        <div className="text-[13px] font-medium leading-5 text-foreground">{label}</div>
+        {description && <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{description}</div>}
       </div>
       <div className="min-w-0">{children}</div>
     </div>
@@ -531,8 +614,9 @@ function FormRow({ label, description, children }: { label: string; description?
 
 // ── Section components ─────────────────────────────────────────────────
 
-function AdvancedSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+function ServiceSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const { t } = useTranslation('settings');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const r = config.webui?.runtime ?? {};
   const set = (key: string, value: unknown) =>
     onChange(patch(config, ['webui', 'runtime', key], value));
@@ -541,31 +625,48 @@ function AdvancedSection({ config, onChange }: { config: PilotDeckConfig; onChan
       title={t('pilotDeckConfig.panels.runtime.title')}
       description={t('pilotDeckConfig.panels.runtime.description')}
     >
-      <SettingsCard divided>
-        <FormRow label={t('pilotDeckConfig.panels.runtime.fields.host.label')} description={t('pilotDeckConfig.panels.runtime.fields.host.description')}>
-          <TextInput value={r.host} placeholder="0.0.0.0" onChange={(v) => set('host', v)} />
-        </FormRow>
-        <FormRow label={t('pilotDeckConfig.panels.runtime.fields.serverPort.label')} description={t('pilotDeckConfig.panels.runtime.fields.serverPort.description')}>
-          <NumberInput value={r.serverPort} placeholder="3001" onChange={(v) => set('serverPort', v)} />
-        </FormRow>
-        <FormRow label={t('pilotDeckConfig.panels.runtime.fields.vitePort.label')} description={t('pilotDeckConfig.panels.runtime.fields.vitePort.description')}>
-          <NumberInput value={r.vitePort} placeholder="5173" onChange={(v) => set('vitePort', v)} />
-        </FormRow>
-        <FormRow label={t('pilotDeckConfig.panels.runtime.fields.proxyPort.label')} description={t('pilotDeckConfig.panels.runtime.fields.proxyPort.description')}>
-          <NumberInput value={r.proxyPort} placeholder="18080" onChange={(v) => set('proxyPort', v)} />
-        </FormRow>
-        <FormRow label={t('pilotDeckConfig.panels.runtime.fields.apiTimeout.label')} description={t('pilotDeckConfig.panels.runtime.fields.apiTimeout.description')}>
-          <NumberInput value={r.apiTimeoutMs} placeholder="120000" onChange={(v) => set('apiTimeoutMs', v)} />
-        </FormRow>
-        <FormRow label={t('pilotDeckConfig.panels.runtime.fields.databasePath.label')} description={t('pilotDeckConfig.panels.runtime.fields.databasePath.description')}>
-          <TextInput value={r.databasePath} placeholder="~/.pilotdeck/auth.db" monospace onChange={(v) => set('databasePath', v)} />
-        </FormRow>
-        <FormRow label={t('pilotDeckConfig.panels.runtime.fields.workspacesRoot.label')} description={t('pilotDeckConfig.panels.runtime.fields.workspacesRoot.description')}>
-          <TextInput value={r.workspacesRoot} placeholder="~" monospace onChange={(v) => set('workspacesRoot', v)} />
-        </FormRow>
-        <FormRow label={t('pilotDeckConfig.panels.runtime.fields.httpsProxy.label')} description={t('pilotDeckConfig.panels.runtime.fields.httpsProxy.description')}>
-          <TextInput value={r.httpsProxy} placeholder="http://127.0.0.1:7890" monospace onChange={(v) => set('httpsProxy', v)} />
-        </FormRow>
+      <SettingsCard>
+        <div className="divide-y divide-border">
+          <FormRow label={t('pilotDeckConfig.panels.runtime.fields.host.label')} description={t('pilotDeckConfig.panels.runtime.fields.host.description')}>
+            <TextInput value={r.host} placeholder="0.0.0.0" onChange={(v) => set('host', v)} />
+          </FormRow>
+          <FormRow label={t('pilotDeckConfig.panels.runtime.fields.serverPort.label')} description={t('pilotDeckConfig.panels.runtime.fields.serverPort.description')}>
+            <NumberInput value={r.serverPort} placeholder="3001" onChange={(v) => set('serverPort', v)} />
+          </FormRow>
+          <FormRow label={t('pilotDeckConfig.panels.runtime.fields.proxyPort.label')} description={t('pilotDeckConfig.panels.runtime.fields.proxyPort.description')}>
+            <NumberInput value={r.proxyPort} placeholder="18080" onChange={(v) => set('proxyPort', v)} />
+          </FormRow>
+          <FormRow label={t('pilotDeckConfig.panels.runtime.fields.workspacesRoot.label')} description={t('pilotDeckConfig.panels.runtime.fields.workspacesRoot.description')}>
+            <TextInput value={r.workspacesRoot} placeholder="~" monospace onChange={(v) => set('workspacesRoot', v)} />
+          </FormRow>
+        </div>
+        <div className="border-t border-border px-4 py-2.5">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((next) => !next)}
+            aria-expanded={showAdvanced}
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium leading-5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showAdvanced && 'rotate-180')} />
+            {t('pilotDeckConfig.panels.runtime.advancedToggle')}
+          </button>
+        </div>
+        {showAdvanced && (
+          <div className="divide-y divide-border border-t border-border">
+            <FormRow label={t('pilotDeckConfig.panels.runtime.fields.vitePort.label')} description={t('pilotDeckConfig.panels.runtime.fields.vitePort.description')}>
+              <NumberInput value={r.vitePort} placeholder="5173" onChange={(v) => set('vitePort', v)} />
+            </FormRow>
+            <FormRow label={t('pilotDeckConfig.panels.runtime.fields.apiTimeout.label')} description={t('pilotDeckConfig.panels.runtime.fields.apiTimeout.description')}>
+              <NumberInput value={r.apiTimeoutMs} placeholder="120000" onChange={(v) => set('apiTimeoutMs', v)} />
+            </FormRow>
+            <FormRow label={t('pilotDeckConfig.panels.runtime.fields.databasePath.label')} description={t('pilotDeckConfig.panels.runtime.fields.databasePath.description')}>
+              <TextInput value={r.databasePath} placeholder="~/.pilotdeck/auth.db" monospace onChange={(v) => set('databasePath', v)} />
+            </FormRow>
+            <FormRow label={t('pilotDeckConfig.panels.runtime.fields.httpsProxy.label')} description={t('pilotDeckConfig.panels.runtime.fields.httpsProxy.description')}>
+              <TextInput value={r.httpsProxy} placeholder="http://127.0.0.1:7890" monospace onChange={(v) => set('httpsProxy', v)} />
+            </FormRow>
+          </div>
+        )}
       </SettingsCard>
     </SettingsSection>
   );
@@ -578,17 +679,13 @@ function ProviderCard({
   onRemove,
   onRename,
   catalogEntry,
-  activeModelRef,
-  onSetActive,
 }: {
   providerId: string;
   provider: V2Provider;
   onChange: (next: V2Provider) => void;
   onRemove: () => void;
-  onRename: (newId: string) => void;
+  onRename: (newId: string) => boolean;
   catalogEntry?: CatalogProvider;
-  activeModelRef: string;
-  onSetActive: (modelRef: string) => void;
 }) {
   const { t } = useTranslation('settings');
   const isMaskedKey = isMaskedSecret(provider.apiKey);
@@ -596,47 +693,33 @@ function ProviderCard({
   const effectiveUrl = provider.url || catalogEntry?.defaultUrl || '';
   const enabledModels = Object.keys(provider.models ?? {});
   const [newModelId, setNewModelId] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [providerIdDraft, setProviderIdDraft] = useState(providerId);
+  const [providerIdError, setProviderIdError] = useState('');
+  const displayName = providerDisplayName(
+    providerIdDraft || providerId,
+    catalogEntry,
+    t('pilotDeckConfig.panels.models.customProvider'),
+  );
+
+  useEffect(() => {
+    setProviderIdDraft(providerId);
+    setProviderIdError('');
+  }, [providerId]);
 
   const update = (patch: Partial<V2Provider>) => onChange({ ...provider, ...patch });
-
-  // Read `models.<modelId>.capabilities.maxOutputTokens` if set as a positive
-  // number. Anything else (missing, null, non-numeric) reads as undefined so
-  // the input shows blank and the model falls back to catalog/protocol default.
-  const getModelMaxOutputTokens = (modelId: string): number | undefined => {
-    const def = provider.models?.[modelId];
-    if (!def || typeof def !== 'object') return undefined;
-    const caps = (def as Record<string, unknown>).capabilities;
-    if (!caps || typeof caps !== 'object') return undefined;
-    const v = (caps as Record<string, unknown>).maxOutputTokens;
-    return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined;
-  };
-
-  // Patch `models.<modelId>.capabilities.maxOutputTokens` immutably. Passing
-  // undefined removes the key (and removes the empty `capabilities` block) so
-  // the YAML stays minimal — matches the round-trip behaviour the rest of
-  // this form already uses.
-  const setModelMaxOutputTokens = (modelId: string, value: number | undefined) => {
-    const models = { ...(provider.models ?? {}) };
-    const existing = models[modelId];
-    const def: Record<string, unknown> = existing && typeof existing === 'object'
-      ? { ...(existing as Record<string, unknown>) }
-      : {};
-    const capabilities: Record<string, unknown> = def.capabilities && typeof def.capabilities === 'object'
-      ? { ...(def.capabilities as Record<string, unknown>) }
-      : {};
-    if (value === undefined) {
-      delete capabilities.maxOutputTokens;
-    } else {
-      capabilities.maxOutputTokens = value;
+  const commitProviderId = () => {
+    const nextId = providerIdDraft.trim();
+    if (!nextId || nextId === providerId) {
+      setProviderIdDraft(providerId);
+      setProviderIdError('');
+      return;
     }
-    if (Object.keys(capabilities).length > 0) {
-      def.capabilities = capabilities;
+    if (onRename(nextId)) {
+      setProviderIdError('');
     } else {
-      delete def.capabilities;
+      setProviderIdDraft(providerId);
+      setProviderIdError(t('pilotDeckConfig.panels.models.providerIdDuplicate'));
     }
-    models[modelId] = def as Record<string, unknown>;
-    update({ models });
   };
 
   const addModel = (mid: string) => {
@@ -650,9 +733,6 @@ function ProviderCard({
     const next = { ...(provider.models ?? {}) };
     delete next[mid];
     update({ models: next });
-    // If the removed model was the main agent, clear agent.model so
-    // validation flags it explicitly instead of silently breaking.
-    if (`${providerId}/${mid}` === activeModelRef) onSetActive('');
   };
   const toggleCatalogModel = (mid: string) => {
     if (provider.models && mid in provider.models) {
@@ -662,36 +742,38 @@ function ProviderCard({
     }
   };
 
-  const containsActive = activeModelRef.startsWith(`${providerId}/`) &&
-    enabledModels.includes(activeModelRef.slice(providerId.length + 1));
-
   return (
-    <div className={cn(
-      'space-y-3 rounded-lg border bg-background/50 p-4 transition-colors',
-      containsActive ? 'border-foreground/40 ring-1 ring-foreground/10' : 'border-border',
-    )}>
+    <div className="space-y-3 rounded-lg border border-border bg-background/50 p-4 transition-colors">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            {catalogEntry && (
-              <div className="text-sm font-semibold text-foreground">{catalogEntry.displayName}</div>
-            )}
-            {containsActive && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-foreground/30 bg-foreground/5 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
-                <Star className="h-2.5 w-2.5 fill-current" strokeWidth={0} />
-                Main agent
-              </span>
-            )}
+            <div className="text-sm font-semibold text-foreground">{displayName}</div>
           </div>
           <div className="mt-1 flex items-center gap-2">
-            <span className="text-[11px] text-muted-foreground">id</span>
+            <span className="text-[11px] text-muted-foreground">{t('pilotDeckConfig.panels.models.providerId')}</span>
             <input
-              value={providerId}
-              onChange={(e) => onRename(e.target.value.trim())}
+              value={providerIdDraft}
+              onChange={(e) => {
+                setProviderIdDraft(e.target.value);
+                setProviderIdError('');
+              }}
+              onBlur={commitProviderId}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.currentTarget.blur();
+                } else if (e.key === 'Escape') {
+                  setProviderIdDraft(providerId);
+                  setProviderIdError('');
+                  e.currentTarget.blur();
+                }
+              }}
               className="rounded-md border border-border bg-background px-2 py-0.5 font-mono text-[11px] text-foreground outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
+          {providerIdError && (
+            <div className="mt-1 text-[10px] text-destructive">{providerIdError}</div>
+          )}
         </div>
         <Button
           variant="ghost"
@@ -703,51 +785,78 @@ function ProviderCard({
         </Button>
       </div>
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[160px_1fr]">
+        <label className="text-xs text-muted-foreground">
+          <span className="mb-1 block">{t('pilotDeckConfig.panels.models.protocol')}</span>
+          <Select
+            value={protocol}
+            onChange={(v) => update({ protocol: v as 'openai' | 'anthropic' })}
+            options={[
+              { value: 'openai',    label: t('pilotDeckConfig.panels.models.protocolOptions.openai') },
+              { value: 'anthropic', label: t('pilotDeckConfig.panels.models.protocolOptions.anthropic') },
+            ]}
+          />
+        </label>
+        <label className="text-xs text-muted-foreground">
+          <span className="mb-1 block">{t('pilotDeckConfig.panels.models.baseUrl')}</span>
+          <TextInput
+            value={provider.url}
+            placeholder={catalogEntry?.defaultUrl || 'https://api.example.com/v1'}
+            monospace
+            onChange={(v) => update({ url: v })}
+          />
+          {!provider.url && catalogEntry && (
+            <span className="mt-0.5 block text-[10px] text-muted-foreground/70">
+              {t('pilotDeckConfig.panels.models.defaultsTo')}{' '}
+              <code className="font-mono">{catalogEntry.defaultUrl}</code>
+              {' '}{t('pilotDeckConfig.panels.models.fromCatalog')}
+            </span>
+          )}
+          {effectiveUrl && provider.url && (
+            <span className="mt-0.5 block text-[10px] text-muted-foreground/70">
+              {t('pilotDeckConfig.panels.models.effective')}{' '}
+              <code className="font-mono">{effectiveUrl}</code>
+            </span>
+          )}
+        </label>
+      </div>
+
       {/* API key — the only required field */}
       <label className="block text-xs text-muted-foreground">
-        <span className="mb-1 block">API key</span>
+        <span className="mb-1 block">{t('pilotDeckConfig.panels.models.apiKey')}</span>
         <SecretTextInput
           value={provider.apiKey}
           emptyPlaceholder="sk-..."
+          maskedPlaceholder={t('pilotDeckConfig.panels.models.maskedKeyPlaceholder')}
           onChange={(v) => update({ apiKey: v })}
         />
         {isMaskedKey && (
           <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
             <Info className="h-3 w-3" />
-            Key hidden; leave as-is to keep, retype to replace.
+            {t('pilotDeckConfig.panels.models.keyHidden')}
           </span>
         )}
       </label>
 
-      {/* Models — chip-style toggles for catalog models + a free-form input.
-          Each enabled chip has a star icon: filled when this is the main
-          agent model, outlined (hover-revealed) otherwise. Click the chip
-          body to enable/disable; click the star to set as main. */}
+      {/* Models — chip-style toggles for catalog models + a free-form input. */}
       <div>
         <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-          <span>Enabled models</span>
+          <span>{t('pilotDeckConfig.panels.models.enabledModels')}</span>
           <span className="text-[10px] text-muted-foreground/60">
-            click <Star className="inline h-2.5 w-2.5" /> to set main agent
-          </span>
-          <span className="text-[10px] text-muted-foreground/60">
-            · <ImageIcon className="inline h-2.5 w-2.5" /> supports image input
+            · <ImageIcon className="inline h-2.5 w-2.5" /> {t('pilotDeckConfig.panels.models.supportsImageInput')}
           </span>
         </div>
         {catalogEntry && catalogEntry.models.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1.5">
             {catalogEntry.models.map((m) => {
               const on = provider.models && m.id in provider.models;
-              const ref = `${providerId}/${m.id}`;
-              const isActive = on && ref === activeModelRef;
               return (
                 <div
                   key={m.id}
                   className={cn(
                     'group inline-flex items-center rounded-md border text-[11px] transition-colors',
                     on
-                      ? isActive
-                        ? 'border-primary bg-primary/15 text-primary ring-1 ring-primary/30'
-                        : 'border-foreground/30 bg-muted/60 text-foreground'
+                      ? 'border-foreground/30 bg-muted/60 text-foreground'
                       : 'border-border bg-muted text-muted-foreground hover:border-foreground/30 hover:text-foreground',
                   )}
                 >
@@ -755,9 +864,9 @@ function ProviderCard({
                     type="button"
                     onClick={() => toggleCatalogModel(m.id)}
                     className="inline-flex items-center gap-1 px-2 py-1"
-                    title={on ? 'Click to disable' : 'Click to enable'}
+                    title={on ? t('pilotDeckConfig.panels.models.clickDisable') : t('pilotDeckConfig.panels.models.clickEnable')}
                   >
-                    {isActive && <Check className="h-3 w-3 text-primary" strokeWidth={2.5} />}
+                    {on && <Check className="h-3 w-3 text-foreground" strokeWidth={2.5} />}
                     {m.displayName}
                     {m.supportsImage && (
                       <ImageIcon
@@ -766,19 +875,6 @@ function ProviderCard({
                       />
                     )}
                   </button>
-                  {on && (
-                    <button
-                      type="button"
-                      onClick={() => onSetActive(ref)}
-                      title={isActive ? 'Currently the main agent model' : 'Set as main agent model'}
-                      className={cn(
-                        'border-l px-1.5 py-1 transition-opacity',
-                        isActive ? 'border-primary/30 text-primary opacity-100' : 'border-current/20 opacity-30 hover:opacity-100',
-                      )}
-                    >
-                      <Star className={cn('h-3 w-3', isActive && 'fill-current')} strokeWidth={isActive ? 0 : 2} />
-                    </button>
-                  )}
                 </div>
               );
             })}
@@ -786,25 +882,9 @@ function ProviderCard({
         )}
         {/* Custom (off-catalog) models currently enabled */}
         {enabledModels.filter((mid) => !catalogEntry || !catalogEntry.models.some((m) => m.id === mid)).map((mid) => {
-          const ref = `${providerId}/${mid}`;
-          const isActive = ref === activeModelRef;
           return (
-            <div key={mid} className={cn(
-              'mb-1 flex items-center gap-2 rounded-md border px-2 py-1 text-[11px]',
-              isActive ? 'border-primary bg-primary/15 text-primary ring-1 ring-primary/30' : 'border-border bg-muted/40',
-            )}>
+            <div key={mid} className="mb-1 flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px]">
               <code className="flex-1 truncate font-mono">{mid}</code>
-              <button
-                type="button"
-                onClick={() => onSetActive(ref)}
-                title={isActive ? 'Currently the main agent model' : 'Set as main agent model'}
-                className={cn(
-                  'transition-opacity',
-                  isActive ? 'text-primary opacity-100' : 'text-muted-foreground opacity-40 hover:opacity-100',
-                )}
-              >
-                <Star className={cn('h-3 w-3', isActive && 'fill-current')} strokeWidth={isActive ? 0 : 2} />
-              </button>
               <button
                 type="button"
                 onClick={() => removeModel(mid)}
@@ -821,133 +901,15 @@ function ProviderCard({
           <input
             value={newModelId}
             onChange={(e) => setNewModelId(e.target.value)}
-            placeholder="Custom model ID"
+            placeholder={t('pilotDeckConfig.panels.models.customModelPlaceholder')}
             className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-[11px] text-foreground outline-none focus:ring-1 focus:ring-ring"
             onKeyDown={(e) => { if (e.key === 'Enter' && !isImeEnterEvent(e)) addModel(newModelId); }}
           />
           <Button variant="outline" size="sm" className="shrink-0" onClick={() => addModel(newModelId)} disabled={!newModelId.trim()}>
             <Plus className="mr-1 h-3 w-3" />
-            Add
+            {t('pilotDeckConfig.actions.add')}
           </Button>
         </div>
-      </div>
-
-      {/* Per-model overrides — currently just maxOutputTokens. Always shown
-          so users discover that every enabled model has this knob, not just
-          the ones that already happen to have an override on disk. Maps
-          directly to `models.<modelId>.capabilities.maxOutputTokens` in the
-          yaml. */}
-      {enabledModels.length > 0 && (
-        <div className="border-t border-border/60 pt-3">
-          <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-foreground">
-            <Settings2 className="h-3 w-3" />
-            Per-model max output tokens
-          </div>
-          <div className="space-y-1.5">
-            {enabledModels.map((mid) => {
-              const ref = `${providerId}/${mid}`;
-              const isActive = ref === activeModelRef;
-              const current = getModelMaxOutputTokens(mid);
-              const catalogModel = catalogEntry?.models.find((m) => m.id === mid);
-              const label = catalogModel?.displayName || mid;
-              return (
-                <div key={mid} className={cn(
-                  'grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-md border px-2 py-1.5',
-                  current !== undefined
-                    ? 'border-foreground/30 bg-foreground/5'
-                    : 'border-border bg-background/40',
-                )}>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-[11px] font-medium text-foreground">{label}</span>
-                      {isActive && (
-                        <Star className="h-2.5 w-2.5 fill-current text-foreground" strokeWidth={0} />
-                      )}
-                    </div>
-                    {label !== mid && (
-                      <code className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">{mid}</code>
-                    )}
-                  </div>
-                  <input
-                    type="number"
-                    min={1}
-                    value={current ?? ''}
-                    placeholder="32768"
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (v === '') return setModelMaxOutputTokens(mid, undefined);
-                      const n = Number(v);
-                      if (Number.isFinite(n) && n > 0) setModelMaxOutputTokens(mid, Math.floor(n));
-                    }}
-                    className="w-24 rounded-md border border-border bg-background px-2 py-1 text-right text-[11px] text-foreground outline-none focus:ring-1 focus:ring-ring"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setModelMaxOutputTokens(mid, undefined)}
-                    disabled={current === undefined}
-                    className={cn(
-                      'rounded p-1 text-muted-foreground transition-colors',
-                      current === undefined
-                        ? 'opacity-30'
-                        : 'hover:bg-muted hover:text-foreground',
-                    )}
-                    title={current === undefined ? 'Already using default' : 'Reset to catalog/protocol default'}
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-            Cap on tokens each model may generate per turn (sent as <code className="font-mono">max_tokens</code>). Leave blank to fall back to the protocol default (~8k for openai, ~4k for anthropic). 32k is a safe modern recommendation; raise it for long-form / thinking models — too small a value cuts the response off mid-stream.
-          </p>
-        </div>
-      )}
-
-      {/* Advanced — protocol + URL (filled from catalog by default) */}
-      <div className="border-t border-border/60 pt-2">
-        <button
-          type="button"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-          className="text-[11px] text-muted-foreground hover:text-foreground"
-        >
-          {showAdvanced ? 'Hide' : 'Show'} advanced (protocol &amp; URL)
-        </button>
-        {showAdvanced && (
-          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[140px_1fr]">
-            <label className="text-[11px] text-muted-foreground">
-              <span className="mb-1 block">Protocol</span>
-              <Select
-                value={protocol}
-                onChange={(v) => update({ protocol: v as 'openai' | 'anthropic' })}
-                options={[
-                  { value: 'openai',    label: 'openai (chat-completions)' },
-                  { value: 'anthropic', label: 'anthropic (messages API)' },
-                ]}
-              />
-            </label>
-            <label className="text-[11px] text-muted-foreground">
-              <span className="mb-1 block">Base URL</span>
-              <TextInput
-                value={provider.url}
-                placeholder={catalogEntry?.defaultUrl || 'https://api.example.com/v1'}
-                monospace
-                onChange={(v) => update({ url: v })}
-              />
-              {!provider.url && catalogEntry && (
-                <span className="mt-0.5 block text-[10px] text-muted-foreground/70">
-                  Defaults to <code className="font-mono">{catalogEntry.defaultUrl}</code> from catalog.
-                </span>
-              )}
-            </label>
-            {effectiveUrl && (
-              <div className="col-span-full text-[10px] text-muted-foreground">
-                Effective: <code className="font-mono">{effectiveUrl}</code>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -962,21 +924,22 @@ function CatalogPicker({
   onPick: (catalog: CatalogProvider) => void;
   onCustom: () => void;
 }) {
+  const { t } = useTranslation('settings');
   const [open, setOpen] = useState(false);
   const available = CATALOG_PROVIDERS.filter((p) => !existingIds.has(p.id));
   if (!open) {
     return (
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
         <Plus className="mr-1 h-3.5 w-3.5" />
-        Add provider
+        {t('pilotDeckConfig.panels.models.addProvider')}
       </Button>
     );
   }
   return (
     <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
       <div className="flex items-center justify-between">
-        <div className="text-sm font-medium text-foreground">Add a provider</div>
-        <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+        <div className="text-sm font-medium text-foreground">{t('pilotDeckConfig.panels.models.addProviderTitle')}</div>
+        <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>{t('pilotDeckConfig.panels.models.cancel')}</Button>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {available.map((p) => (
@@ -987,7 +950,9 @@ function CatalogPicker({
             className="rounded-md border border-border bg-background px-3 py-2 text-left text-sm transition-colors hover:border-foreground/40 hover:bg-muted"
           >
             <div className="font-medium text-foreground">{p.displayName}</div>
-            <div className="mt-0.5 text-[10px] text-muted-foreground">{p.models.length} models</div>
+            <div className="mt-0.5 text-[10px] text-muted-foreground">
+              {t('pilotDeckConfig.panels.models.modelCount', { count: p.models.length })}
+            </div>
           </button>
         ))}
         <button
@@ -995,8 +960,8 @@ function CatalogPicker({
           onClick={() => { onCustom(); setOpen(false); }}
           className="rounded-md border border-dashed border-border bg-background px-3 py-2 text-left text-sm transition-colors hover:border-foreground/40 hover:bg-muted"
         >
-          <div className="font-medium text-foreground">+ Custom</div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">Manual setup</div>
+          <div className="font-medium text-foreground">+ {t('pilotDeckConfig.panels.models.customProvider')}</div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">{t('pilotDeckConfig.panels.models.manualSetup')}</div>
         </button>
       </div>
     </div>
@@ -1007,36 +972,22 @@ function ModelsSection({ config, onChange }: { config: PilotDeckConfig; onChange
   const { t } = useTranslation('settings');
   const providers = config.model?.providers ?? {};
   const ids = Object.keys(providers);
-  const activeModelRef = config.agent?.model ?? '';
 
   const setProvider = (id: string, prov: V2Provider) =>
     onChange(patch(config, ['model', 'providers', id], prov));
   const removeProvider = (id: string) => {
     const next = { ...providers };
     delete next[id];
-    let nextConfig = patch(config, ['model', 'providers'], next);
-    // Clear agent.model if its provider was just removed.
-    if (activeModelRef.startsWith(`${id}/`)) {
-      nextConfig = patch(nextConfig, ['agent', 'model'], '');
-    }
-    onChange(nextConfig);
+    onChange(patch(config, ['model', 'providers'], next));
   };
   const renameProvider = (oldId: string, newId: string) => {
-    if (!newId || newId === oldId || providers[newId]) return;
+    const id = newId.trim();
+    if (!id || id === oldId) return true;
+    if (providers[id]) return false;
     const next: Record<string, V2Provider> = {};
-    for (const [k, v] of Object.entries(providers)) next[k === oldId ? newId : k] = v;
-    let nextConfig = patch(config, ['model', 'providers'], next);
-    // Update agent.model if it referenced the renamed provider.
-    if (activeModelRef.startsWith(`${oldId}/`)) {
-      const modelPart = activeModelRef.slice(oldId.length + 1);
-      nextConfig = patch(nextConfig, ['agent', 'model'], `${newId}/${modelPart}`);
-    }
-    onChange(nextConfig);
-  };
-  const setActive = (ref: string) => {
-    const previousRef = config.agent?.model ?? '';
-    const nextConfig = patch(config, ['agent', 'model'], ref);
-    onChange(replaceRouterModelRefs(nextConfig, previousRef, ref));
+    for (const [k, v] of Object.entries(providers)) next[k === oldId ? id : k] = v;
+    onChange(rewriteProviderRefs(patch(config, ['model', 'providers'], next), oldId, id));
+    return true;
   };
 
   const handleCatalogPick = (cp: CatalogProvider) => {
@@ -1069,9 +1020,16 @@ function ModelsSection({ config, onChange }: { config: PilotDeckConfig; onChange
       description={t('pilotDeckConfig.panels.models.description')}
     >
       <div className="space-y-3">
+        <div className="flex justify-start">
+          <CatalogPicker
+            existingIds={new Set(ids)}
+            onPick={handleCatalogPick}
+            onCustom={handleCustom}
+          />
+        </div>
         {ids.length === 0 && (
           <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-            No providers configured yet. Click "Add provider" to get started.
+            {t('pilotDeckConfig.panels.models.emptyProviders')}
           </div>
         )}
         {ids.map((id) => (
@@ -1080,38 +1038,63 @@ function ModelsSection({ config, onChange }: { config: PilotDeckConfig; onChange
             providerId={id}
             provider={providers[id] ?? {}}
             catalogEntry={findCatalogProviderById(id)}
-            activeModelRef={activeModelRef}
-            onSetActive={setActive}
             onChange={(next) => setProvider(id, next)}
             onRemove={() => removeProvider(id)}
             onRename={(newId) => renameProvider(id, newId)}
           />
         ))}
-        <CatalogPicker
-          existingIds={new Set(ids)}
-          onPick={handleCatalogPick}
-          onCustom={handleCustom}
-        />
       </div>
     </SettingsSection>
   );
 }
 
-// Build the "provider/model" options for agent / memory model dropdowns
-// from the currently-enabled providers and their enabled model ids.
+function splitModelRef(ref: string | undefined): { providerId: string; modelId: string } | null {
+  const value = ref?.trim() ?? '';
+  const slash = value.indexOf('/');
+  if (slash <= 0 || slash === value.length - 1) return null;
+  return { providerId: value.slice(0, slash), modelId: value.slice(slash + 1) };
+}
+
+function ensureModelRefConfigured<T extends PilotDeckConfig>(config: T, ref: string | undefined): T {
+  const parsed = splitModelRef(ref);
+  if (!parsed) return config;
+
+  const provider = config.model?.providers?.[parsed.providerId];
+  if (!provider) return config;
+  if (provider.models && Object.prototype.hasOwnProperty.call(provider.models, parsed.modelId)) return config;
+
+  return patch(config, ['model', 'providers', parsed.providerId, 'models', parsed.modelId], {});
+}
+
+function ensureModelRefsConfigured<T extends PilotDeckConfig>(config: T, refs: Array<string | undefined>): T {
+  return refs.reduce((next, ref) => ensureModelRefConfigured(next, ref), config);
+}
+
+// Build the "provider/model" options for agent / memory / router model dropdowns
+// from configured providers. Catalog providers expose every catalog model, while
+// custom/off-catalog models come from the provider's saved models map.
 function buildModelRefOptions(config: PilotDeckConfig): Array<{ value: string; label: string }> {
   const out: Array<{ value: string; label: string }> = [];
   const providers = config.model?.providers ?? {};
   for (const [pid, prov] of Object.entries(providers)) {
-    if (!prov?.models) continue;
     const catalog = findCatalogProviderById(pid);
-    for (const mid of Object.keys(prov.models)) {
-      const catalogModel = catalog?.models.find((m) => m.id === mid);
+    const seen = new Set<string>();
+
+    if (catalog) {
+      for (const model of catalog.models) {
+        seen.add(model.id);
+        out.push({
+          value: `${pid}/${model.id}`,
+          label: `${catalog.displayName}: ${model.displayName}`,
+        });
+      }
+    }
+
+    for (const mid of Object.keys(prov.models ?? {})) {
+      if (seen.has(mid)) continue;
       out.push({
         value: `${pid}/${mid}`,
-        label: catalog && catalogModel
-          ? `${catalog.displayName}: ${catalogModel.displayName}`
-          : `${pid}/${mid}`,
+        label: catalog ? `${catalog.displayName}: ${mid}` : `${pid}/${mid}`,
       });
     }
   }
@@ -1159,17 +1142,17 @@ function activeModelCapabilities(config: PilotDeckConfig): {
 
 function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const { t } = useTranslation('settings');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const refOptions = buildModelRefOptions(config);
   const mainRef = config.agent?.model ?? '';
   const subDefault = config.agent?.subagents?.default ?? 'inherit';
-  const [showSubagents, setShowSubagents] = useState(subDefault !== 'inherit');
 
   const mainOptions = [
     { value: '', label: '— pick a model —' },
     ...refOptions,
   ];
   const subOptions = [
-    { value: 'inherit', label: 'inherit (use main agent\'s model)' },
+    { value: 'inherit', label: t('pilotDeckConfig.panels.agents.subagents.inherit') },
     ...refOptions,
   ];
 
@@ -1194,32 +1177,13 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
       ? { ...(existingDef as Record<string, unknown>) }
       : {};
 
-    if (enable === Boolean(caps.catalogModel?.supportsImage) && !userOverrideActive) {
-      // Already matches catalog default — no override needed.
-      return;
-    }
-
-    if (enable) {
-      def.multimodal = { input: ['text', 'image'] };
+    const catalogDefault = Boolean(caps.catalogModel?.supportsImage);
+    if (enable === catalogDefault) {
+      delete def.multimodal;
     } else {
-      def.multimodal = { input: ['text'] };
+      def.multimodal = { input: enable ? ['text', 'image'] : ['text'] };
     }
     models[modelId] = def as Record<string, unknown>;
-    onChange(patch(config, ['model', 'providers', providerId, 'models'], models));
-  };
-
-  const clearOverride = () => {
-    if (!caps) return;
-    const { providerId, modelId } = caps;
-    const providers = config.model?.providers ?? {};
-    const provider = providers[providerId] ?? {};
-    const models = { ...(provider.models ?? {}) };
-    const existingDef = models[modelId];
-    if (existingDef && typeof existingDef === 'object') {
-      const next = { ...(existingDef as Record<string, unknown>) };
-      delete next.multimodal;
-      models[modelId] = next as Record<string, unknown>;
-    }
     onChange(patch(config, ['model', 'providers', providerId, 'models'], models));
   };
 
@@ -1260,7 +1224,7 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
           <Select
             value={mainRef}
             options={mainOptions}
-            onChange={(v) => onChange(patch(config, ['agent', 'model'], v))}
+            onChange={(v) => onChange(patch(ensureModelRefConfigured(config, v), ['agent', 'model'], v))}
           />
         </FormRow>
 
@@ -1291,15 +1255,6 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
                     {supportsImageEffective ? t('pilotDeckConfig.panels.agents.capabilities.enabled') : t('pilotDeckConfig.panels.agents.capabilities.disabled')}
                   </span>
                 </label>
-                {userOverrideActive && (
-                  <button
-                    type="button"
-                    onClick={clearOverride}
-                    className="text-[10px] text-muted-foreground underline hover:text-foreground"
-                  >
-                    {t('pilotDeckConfig.panels.agents.capabilities.resetCatalog')}
-                  </button>
-                )}
               </div>
               <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
                 {userOverrideActive
@@ -1329,23 +1284,6 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
                     }}
                     className="w-28 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
                   />
-                  <span className={cn(
-                    'rounded px-1.5 py-0.5 text-[10px] font-medium',
-                    caps.maxOutputTokensOverride !== undefined
-                      ? 'border border-foreground/30 bg-foreground/10 text-foreground'
-                      : 'border border-border bg-muted text-muted-foreground',
-                  )}>
-                    {caps.maxOutputTokensOverride !== undefined ? t('pilotDeckConfig.panels.agents.capabilities.override') : t('pilotDeckConfig.panels.agents.capabilities.default')}
-                  </span>
-                  {caps.maxOutputTokensOverride !== undefined && (
-                    <button
-                      type="button"
-                      onClick={() => setMaxOutputTokens(undefined)}
-                      className="text-[10px] text-muted-foreground underline hover:text-foreground"
-                    >
-                      {t('pilotDeckConfig.panels.agents.capabilities.resetDefault')}
-                    </button>
-                  )}
                 </div>
                 <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
                   {t('pilotDeckConfig.panels.agents.capabilities.maxOutputDescription')}
@@ -1378,27 +1316,6 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
                     }}
                     className="w-28 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
                   />
-                  <span className={cn(
-                    'rounded px-1.5 py-0.5 text-[10px] font-medium',
-                    config.agent?.maxContextTokens !== undefined
-                      ? 'border border-foreground/30 bg-foreground/10 text-foreground'
-                      : 'border border-border bg-muted text-muted-foreground',
-                  )}>
-                    {config.agent?.maxContextTokens !== undefined ? t('pilotDeckConfig.panels.agents.capabilities.override') : t('pilotDeckConfig.panels.agents.capabilities.default')}
-                  </span>
-                  {config.agent?.maxContextTokens !== undefined && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = { ...(config.agent ?? {}) };
-                        delete next.maxContextTokens;
-                        onChange(patch(config, ['agent'], next));
-                      }}
-                      className="text-[10px] text-muted-foreground underline hover:text-foreground"
-                    >
-                      {t('pilotDeckConfig.panels.agents.capabilities.resetDefault')}
-                    </button>
-                  )}
                 </div>
                 <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
                   {t('pilotDeckConfig.panels.agents.capabilities.maxContextDescription')}
@@ -1408,23 +1325,32 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
           </div>
         )}
 
-        <div className="px-4 py-2">
+        <div className="px-4 py-2.5">
           <button
             type="button"
-            onClick={() => setShowSubagents(!showSubagents)}
-            className="text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => setShowAdvanced((next) => !next)}
+            aria-expanded={showAdvanced}
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium leading-5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            {showSubagents ? t('pilotDeckConfig.panels.agents.subagents.hide') : t('pilotDeckConfig.panels.agents.subagents.show')} {t('pilotDeckConfig.panels.agents.subagents.toggle')}
+            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showAdvanced && 'rotate-180')} />
+            {t('pilotDeckConfig.panels.agents.advancedToggle')}
           </button>
         </div>
-        {showSubagents && (
-          <FormRow label={t('pilotDeckConfig.panels.agents.subagents.label')} description={t('pilotDeckConfig.panels.agents.subagents.description')}>
-            <Select
-              value={subDefault}
-              options={subOptions}
-              onChange={(v) => onChange(patch(config, ['agent', 'subagents', 'default'], v))}
-            />
-          </FormRow>
+
+        {showAdvanced && (
+          <div className="divide-y divide-border">
+            <FormRow label={t('pilotDeckConfig.panels.agents.subagents.label')} description={t('pilotDeckConfig.panels.agents.subagents.description')}>
+              <Select
+                value={subDefault}
+                options={subOptions}
+                onChange={(v) => onChange(patch(ensureModelRefConfigured(config, v), ['agent', 'subagents', 'default'], v))}
+              />
+            </FormRow>
+            <div className="flex gap-2 px-4 py-3 text-[11px] leading-5 text-muted-foreground">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <p>{t('pilotDeckConfig.panels.agents.subagents.routerNote')}</p>
+            </div>
+          </div>
         )}
       </SettingsCard>
     </SettingsSection>
@@ -1851,7 +1777,10 @@ function MemorySection({ config, onChange }: { config: PilotDeckConfig; onChange
             <Select
               value={selected}
               options={options}
-              onChange={(v) => onChange(patch(config, ['memory', 'model'], v === 'inherit' ? '' : v))}
+              onChange={(v) => {
+                const nextValue = v === 'inherit' ? '' : v;
+                onChange(patch(ensureModelRefConfigured(config, nextValue), ['memory', 'model'], nextValue));
+              }}
             />
           </FormRow>
         )}
@@ -2002,13 +1931,14 @@ function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange:
           <SecretTextInput
             value={apiKey}
             emptyPlaceholder={t('pilotDeckConfig.panels.tools.apiKey.placeholder')}
+            maskedPlaceholder={t('pilotDeckConfig.panels.tools.apiKey.maskedPlaceholder')}
             monospace
             onChange={(v) => setField('apiKey', v)}
           />
           {isMaskedSecret(apiKey) && (
             <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
               <Info className="h-3 w-3" />
-              Key hidden; leave as-is to keep, retype to replace.
+              {t('pilotDeckConfig.panels.tools.apiKey.keyHidden')}
             </p>
           )}
         </FormRow>
@@ -2231,7 +2161,7 @@ function RouterScenarioEditor({ config, onChange }: { config: PilotDeckConfig; o
   const [newKey, setNewKey] = useState('');
 
   const setScenario = (key: string, value: string) =>
-    onChange(patch(config, ['router', 'scenarios', key], value));
+    onChange(patch(ensureModelRefConfigured(config, value), ['router', 'scenarios', key], value));
   const removeScenario = (key: string) => {
     const next = { ...scenarios };
     delete next[key];
@@ -2240,7 +2170,8 @@ function RouterScenarioEditor({ config, onChange }: { config: PilotDeckConfig; o
   const addScenario = () => {
     const key = newKey.trim();
     if (!key || scenarios[key]) return;
-    onChange(patch(config, ['router', 'scenarios', key], modelOpts[0]?.value ?? ''));
+    const value = modelOpts[0]?.value ?? '';
+    onChange(patch(ensureModelRefConfigured(config, value), ['router', 'scenarios', key], value));
     setNewKey('');
   };
 
@@ -2300,7 +2231,7 @@ function RouterFallbackEditor({ config, onChange }: { config: PilotDeckConfig; o
   const [newKey, setNewKey] = useState('');
 
   const setChain = (scenario: string, chain: string[]) =>
-    onChange(patch(config, ['router', 'fallback', scenario], chain));
+    onChange(patch(ensureModelRefsConfigured(config, chain), ['router', 'fallback', scenario], chain));
   const removeChain = (scenario: string) => {
     const next = { ...fallback };
     delete next[scenario];
@@ -2309,7 +2240,8 @@ function RouterFallbackEditor({ config, onChange }: { config: PilotDeckConfig; o
   const addChain = () => {
     const key = newKey.trim();
     if (!key || fallback[key]) return;
-    onChange(patch(config, ['router', 'fallback', key], [modelOpts[0]?.value ?? '']));
+    const value = modelOpts[0]?.value ?? '';
+    onChange(patch(ensureModelRefConfigured(config, value), ['router', 'fallback', key], [value]));
     setNewKey('');
   };
 
@@ -2394,7 +2326,10 @@ function RouterFallbackEditor({ config, onChange }: { config: PilotDeckConfig; o
   );
 }
 
-const DEFAULT_TIERS: Record<string, { description: string }> = {
+const ROUTER_TIER_KEYS = ['simple', 'medium', 'complex', 'reasoning'] as const;
+type RouterTierKey = typeof ROUTER_TIER_KEYS[number];
+
+const DEFAULT_TIERS: Record<RouterTierKey, { description: string }> = {
   simple: { description: 'Simple greetings, confirmations, single-step Q&A, trivial file writes, remembering rules' },
   medium: { description: 'Single tool call, short text generation, 1-2 file read/write, code generation' },
   complex: { description: 'Needs sub-agent orchestration: parallel workstreams, delegation to specialized agents' },
@@ -2416,7 +2351,11 @@ function TokenSaverTierEditor({ config, onChange }: { config: PilotDeckConfig; o
   const [newKey, setNewKey] = useState('');
 
   const setTier = (key: string, field: 'model' | 'description', value: string) =>
-    onChange(patch(config, ['router', 'tokenSaver', 'tiers', key, field], value));
+    onChange(patch(
+      field === 'model' ? ensureModelRefConfigured(config, value) : config,
+      ['router', 'tokenSaver', 'tiers', key, field],
+      value,
+    ));
   const removeTier = (key: string) => {
     const next = { ...tiers };
     delete next[key];
@@ -2426,8 +2365,9 @@ function TokenSaverTierEditor({ config, onChange }: { config: PilotDeckConfig; o
     const key = newKey.trim();
     if (!key || tiers[key]) return;
     const preset = DEFAULT_TIERS[key];
-    onChange(patch(config, ['router', 'tokenSaver', 'tiers', key], {
-      model: modelOpts[0]?.value ?? '',
+    const model = modelOpts[0]?.value ?? '';
+    onChange(patch(ensureModelRefConfigured(config, model), ['router', 'tokenSaver', 'tiers', key], {
+      model,
       description: preset?.description ?? '',
     }));
     setNewKey('');
@@ -2547,19 +2487,162 @@ function TokenSaverRulesEditor({ config, onChange }: { config: PilotDeckConfig; 
   );
 }
 
+function RouterLevelEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
+  const modelOpts = buildModelRefOptions(config);
+  const defaultValue = config.router?.scenarios?.default ?? '';
+  const judgeValue = config.router?.tokenSaver?.judge ?? '';
+  const tiers = config.router?.tokenSaver?.tiers ?? {};
+
+  const setDefault = (value: string) => {
+    let next = patch(ensureModelRefConfigured(config, value), ['router', 'scenarios', 'default'], value);
+    const fallbackDefault = config.router?.fallback?.default ?? [];
+    if (
+      fallbackDefault.length === 0 ||
+      (fallbackDefault.length === 1 && fallbackDefault[0] === defaultValue)
+    ) {
+      next = patch(next, ['router', 'fallback', 'default'], value ? [value] : []);
+    }
+    onChange(next);
+  };
+
+  const setTierModel = (key: RouterTierKey, model: string) => {
+    const existing = tiers[key] ?? {};
+    onChange(patch(ensureModelRefConfigured(config, model), ['router', 'tokenSaver', 'tiers', key], {
+      ...existing,
+      model,
+      description: existing.description ?? DEFAULT_TIERS[key].description,
+    }));
+  };
+
+  const setJudgeModel = (value: string) => {
+    onChange(patch(ensureModelRefConfigured(config, value), ['router', 'tokenSaver', 'judge'], value));
+  };
+
+  return (
+    <SettingsCard divided>
+      <FormRow
+        label={t('pilotDeckConfig.panels.router.levels.default.label')}
+        description={t('pilotDeckConfig.panels.router.levels.default.description')}
+      >
+        <ModelRefInput
+          value={defaultValue}
+          options={modelOpts}
+          placeholder={t('pilotDeckConfig.panels.router.levels.modelPlaceholder')}
+          onChange={setDefault}
+        />
+      </FormRow>
+
+      <FormRow
+        label={t('pilotDeckConfig.panels.router.levels.judge.label')}
+        description={t('pilotDeckConfig.panels.router.levels.judge.description')}
+      >
+        <ModelRefInput
+          value={judgeValue}
+          options={modelOpts}
+          placeholder={t('pilotDeckConfig.panels.router.levels.modelPlaceholder')}
+          onChange={setJudgeModel}
+        />
+      </FormRow>
+
+      {ROUTER_TIER_KEYS.map((key) => (
+        <FormRow
+          key={key}
+          label={t(`pilotDeckConfig.panels.router.levels.${key}.label`)}
+          description={t(`pilotDeckConfig.panels.router.levels.${key}.description`)}
+        >
+          <ModelRefInput
+            value={tiers[key]?.model ?? ''}
+            options={modelOpts}
+            placeholder={t('pilotDeckConfig.panels.router.levels.modelPlaceholder')}
+            onChange={(v) => setTierModel(key, v)}
+          />
+        </FormRow>
+      ))}
+    </SettingsCard>
+  );
+}
+
 function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const { t } = useTranslation('settings');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const r = config.router ?? {};
-  const enabled = Boolean(r.enabled);
-  const statsEnabled = r.stats?.enabled !== false;
+  const enabled = r.enabled !== false;
   const modelOpts = buildModelRefOptions(config);
 
   const ts = r.tokenSaver ?? {};
   const ao = r.autoOrchestrate ?? {};
   const zr = r.zeroUsageRetry ?? {};
+  const statsEnabled = r.stats?.enabled !== false;
+  const zeroUsageEnabled = zr.enabled !== false;
+  const tokenSaverEnabled = ts.enabled !== false;
+  const autoOrchestrateEnabled = ao.enabled !== false;
 
-  const TIER_PRESETS = ['simple', 'medium', 'complex', 'reasoning'] as const;
   const availableTierNames = Object.keys(ts.tiers ?? {});
+
+  const getDefaultModel = (base: PilotDeckConfig) =>
+    (typeof base.router?.scenarios?.default === 'string' && base.router.scenarios.default.trim())
+      || (typeof base.agent?.model === 'string' && base.agent.model.trim())
+      || modelOpts[0]?.value
+      || '';
+
+  const seedRouterDefaults = (base: PilotDeckConfig) => {
+    let next = base;
+    const defaultModel = getDefaultModel(next);
+    next = ensureModelRefConfigured(next, defaultModel);
+
+    if (defaultModel && !next.router?.scenarios?.default) {
+      next = patch(next, ['router', 'scenarios', 'default'], defaultModel);
+    }
+    if (defaultModel && !(next.router?.fallback?.default?.length)) {
+      next = patch(next, ['router', 'fallback', 'default'], [defaultModel]);
+    }
+    if (next.router?.zeroUsageRetry?.enabled !== true) {
+      next = patch(next, ['router', 'zeroUsageRetry', 'enabled'], true);
+    }
+    if (next.router?.zeroUsageRetry?.maxAttempts == null) {
+      next = patch(next, ['router', 'zeroUsageRetry', 'maxAttempts'], 2);
+    }
+    if (next.router?.tokenSaver?.enabled !== true) {
+      next = patch(next, ['router', 'tokenSaver', 'enabled'], true);
+    }
+    if (defaultModel && !next.router?.tokenSaver?.judge) {
+      next = patch(next, ['router', 'tokenSaver', 'judge'], defaultModel);
+    }
+    if (!next.router?.tokenSaver?.defaultTier) {
+      next = patch(next, ['router', 'tokenSaver', 'defaultTier'], 'medium');
+    }
+    if (!next.router?.tokenSaver?.judgeTimeoutMs) {
+      next = patch(next, ['router', 'tokenSaver', 'judgeTimeoutMs'], 15000);
+    }
+    for (const key of ROUTER_TIER_KEYS) {
+      const existing = next.router?.tokenSaver?.tiers?.[key] ?? {};
+      if (!existing.model || !existing.description) {
+        next = patch(next, ['router', 'tokenSaver', 'tiers', key], {
+          ...existing,
+          model: existing.model ?? defaultModel,
+          description: existing.description ?? DEFAULT_TIERS[key].description,
+        });
+      }
+    }
+    if ((next.router?.tokenSaver?.rules ?? []).length === 0) {
+      next = patch(next, ['router', 'tokenSaver', 'rules'], [...DEFAULT_RULES]);
+    }
+    if (next.router?.autoOrchestrate?.enabled !== true) {
+      next = patch(next, ['router', 'autoOrchestrate', 'enabled'], true);
+    }
+    if ((next.router?.autoOrchestrate?.triggerTiers ?? []).length === 0) {
+      next = patch(next, ['router', 'autoOrchestrate', 'triggerTiers'], ['complex']);
+    }
+    if (next.router?.autoOrchestrate?.slimSystemPrompt == null) {
+      next = patch(next, ['router', 'autoOrchestrate', 'slimSystemPrompt'], true);
+    }
+    if (next.router?.stats?.enabled !== true) {
+      next = patch(next, ['router', 'stats', 'enabled'], true);
+    }
+
+    return next;
+  };
 
   return (
     <SettingsSection
@@ -2578,18 +2661,8 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
               ariaLabel={t('pilotDeckConfig.panels.router.enabled.label')}
               onChange={(v) => {
                 let next = patch(config, ['router', 'enabled'], v);
-                // Seed `scenarios.default` on enable if missing so the
-                // gateway-side parser never sees a `router: { enabled: true }`
-                // without a default routing target. Mirrors the same
-                // auto-seed we already do for `tokenSaver.tiers` below.
-                if (v && !next.router?.scenarios?.default) {
-                  const defaultRef =
-                    typeof next.agent?.model === 'string' && next.agent.model.trim()
-                      ? next.agent.model.trim()
-                      : modelOpts[0]?.value ?? '';
-                  if (defaultRef) {
-                    next = patch(next, ['router', 'scenarios', 'default'], defaultRef);
-                  }
+                if (v) {
+                  next = seedRouterDefaults(next);
                 }
                 onChange(next);
               }}
@@ -2599,193 +2672,182 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
 
         {enabled && (
           <>
-            {/* ── Scenarios ──────────────────────────────────────────── */}
-            <RouterScenarioEditor config={config} onChange={onChange} />
+            <RouterLevelEditor config={config} onChange={onChange} />
 
-            {/* ── Fallback chains ────────────────────────────────────── */}
-            <RouterFallbackEditor config={config} onChange={onChange} />
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((next) => !next)}
+              aria-expanded={showAdvanced}
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium leading-5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showAdvanced && 'rotate-180')} />
+              {t('pilotDeckConfig.panels.router.advancedToggle')}
+            </button>
 
-            {/* ── Zero-usage retry ───────────────────────────────────── */}
-            <SettingsCard divided>
-              <SettingsRow
-                label={t('pilotDeckConfig.panels.router.zeroUsageRetry.label')}
-                description={t('pilotDeckConfig.panels.router.zeroUsageRetry.description')}
-              >
-                <SettingsToggle
-                  checked={Boolean(zr.enabled)}
-                  ariaLabel={t('pilotDeckConfig.panels.router.zeroUsageRetry.label')}
-                  onChange={(v) => onChange(patch(config, ['router', 'zeroUsageRetry', 'enabled'], v))}
-                />
-              </SettingsRow>
-              {zr.enabled && (
-                <FormRow label={t('pilotDeckConfig.panels.router.zeroUsageRetry.maxAttempts.label')} description={t('pilotDeckConfig.panels.router.zeroUsageRetry.maxAttempts.description')}>
-                  <NumberInput
-                    value={zr.maxAttempts}
-                    placeholder="5"
-                    onChange={(v) => onChange(patch(config, ['router', 'zeroUsageRetry', 'maxAttempts'], v))}
-                  />
-                </FormRow>
-              )}
-            </SettingsCard>
+            {showAdvanced && (
+              <>
+                {/* ── Fallback chains ────────────────────────────────────── */}
+                <RouterFallbackEditor config={config} onChange={onChange} />
 
-            {/* ── TokenSaver ─────────────────────────────────────────── */}
-            <SettingsCard className="space-y-4 p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-semibold text-foreground">{t('pilotDeckConfig.panels.router.tokenSaver.title')}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    {t('pilotDeckConfig.panels.router.tokenSaver.description')}
-                  </div>
-                </div>
-                <SettingsToggle
-                  checked={Boolean(ts.enabled)}
-                  ariaLabel={t('pilotDeckConfig.panels.router.tokenSaver.title')}
-                  onChange={(v) => {
-                    let next = patch(config, ['router', 'tokenSaver', 'enabled'], v);
-                    if (v && Object.keys(next.router?.tokenSaver?.tiers ?? {}).length === 0) {
-                      const defaultModel = modelOpts[0]?.value ?? '';
-                      const seeded: Record<string, { model: string; description: string }> = {};
-                      for (const [k, def] of Object.entries(DEFAULT_TIERS)) {
-                        seeded[k] = { model: defaultModel, description: def.description };
-                      }
-                      next = patch(next, ['router', 'tokenSaver', 'tiers'], seeded);
-                      if ((next.router?.tokenSaver?.rules ?? []).length === 0) {
-                        next = patch(next, ['router', 'tokenSaver', 'rules'], [...DEFAULT_RULES]);
-                      }
-                      if (!next.router?.tokenSaver?.defaultTier) {
-                        next = patch(next, ['router', 'tokenSaver', 'defaultTier'], 'medium');
-                      }
-                      if (!next.router?.tokenSaver?.judgeTimeoutMs) {
-                        next = patch(next, ['router', 'tokenSaver', 'judgeTimeoutMs'], 15000);
-                      }
-                    }
-                    onChange(next);
-                  }}
-                />
-              </div>
-
-              {ts.enabled && (
-                <div className="space-y-4 border-t border-border pt-4">
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-foreground">{t('pilotDeckConfig.panels.router.tokenSaver.judgeModel')}</label>
-                      <ModelRefInput
-                        value={ts.judge ?? ''}
-                        options={modelOpts}
-                        onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'judge'], v))}
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-foreground">{t('pilotDeckConfig.panels.router.tokenSaver.defaultTier')}</label>
-                      <Select
-                        value={ts.defaultTier ?? 'medium'}
-                        options={
-                          availableTierNames.length > 0
-                            ? availableTierNames.map((t) => ({ value: t, label: t }))
-                            : TIER_PRESETS.map((t) => ({ value: t, label: t }))
-                        }
-                        onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'defaultTier'], v))}
-                      />
-                    </div>
-                  </div>
-                  <FormRow label={t('pilotDeckConfig.panels.router.tokenSaver.judgeTimeout.label')} description={t('pilotDeckConfig.panels.router.tokenSaver.judgeTimeout.description')}>
-                    <NumberInput
-                      value={ts.judgeTimeoutMs}
-                      placeholder="15000"
-                      onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'judgeTimeoutMs'], v))}
-                    />
-                  </FormRow>
-                  <FormRow label={t('pilotDeckConfig.panels.router.tokenSaver.subagentPolicy.label')} description={t('pilotDeckConfig.panels.router.tokenSaver.subagentPolicy.description')}>
-                    <Select
-                      value={ts.subagent?.policy ?? 'judge'}
-                      options={[
-                        { value: 'judge', label: 'judge' },
-                        { value: 'inherit', label: 'inherit' },
-                      ]}
-                      onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'subagent', 'policy'], v))}
-                    />
-                  </FormRow>
-
-                  <TokenSaverTierEditor config={config} onChange={onChange} />
-                  <TokenSaverRulesEditor config={config} onChange={onChange} />
-                </div>
-              )}
-            </SettingsCard>
-
-            {/* ── Auto-orchestrate ───────────────────────────────────── */}
-            <SettingsCard className="space-y-4 p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-semibold text-foreground">{t('pilotDeckConfig.panels.router.autoOrchestrate.title')}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    {t('pilotDeckConfig.panels.router.autoOrchestrate.description')}
-                  </div>
-                </div>
-                <SettingsToggle
-                  checked={Boolean(ao.enabled)}
-                  ariaLabel={t('pilotDeckConfig.panels.router.autoOrchestrate.title')}
-                  onChange={(v) => onChange(patch(config, ['router', 'autoOrchestrate', 'enabled'], v))}
-                />
-              </div>
-
-              {ao.enabled && (
-                <div className="space-y-3 border-t border-border pt-4">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-foreground">{t('pilotDeckConfig.panels.router.autoOrchestrate.triggerTiers')}</label>
-                    <div className="mt-1 flex flex-wrap gap-2">
-                      {(availableTierNames.length > 0 ? availableTierNames : [...TIER_PRESETS]).map((tier) => {
-                        const active = (ao.triggerTiers ?? []).includes(tier);
-                        return (
-                          <button
-                            key={tier}
-                            type="button"
-                            className={cn(
-                              'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                              active
-                                ? 'border-primary bg-primary/10 text-primary'
-                                : 'border-border bg-background text-muted-foreground hover:bg-muted',
-                            )}
-                            onClick={() => {
-                              const prev = ao.triggerTiers ?? [];
-                              const next = active ? prev.filter((t) => t !== tier) : [...prev, tier];
-                              onChange(patch(config, ['router', 'autoOrchestrate', 'triggerTiers'], next));
-                            }}
-                          >
-                            {tier}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                {/* ── Zero-usage retry ───────────────────────────────────── */}
+                <SettingsCard divided>
                   <SettingsRow
-                    label={t('pilotDeckConfig.panels.router.autoOrchestrate.slimPrompt.label')}
-                    description={t('pilotDeckConfig.panels.router.autoOrchestrate.slimPrompt.description')}
+                    label={t('pilotDeckConfig.panels.router.zeroUsageRetry.label')}
+                    description={t('pilotDeckConfig.panels.router.zeroUsageRetry.description')}
                   >
                     <SettingsToggle
-                      checked={Boolean(ao.slimSystemPrompt)}
-                      ariaLabel={t('pilotDeckConfig.panels.router.autoOrchestrate.slimPrompt.label')}
-                      onChange={(v) => onChange(patch(config, ['router', 'autoOrchestrate', 'slimSystemPrompt'], v))}
+                      checked={zeroUsageEnabled}
+                      ariaLabel={t('pilotDeckConfig.panels.router.zeroUsageRetry.label')}
+                      onChange={(v) => onChange(patch(config, ['router', 'zeroUsageRetry', 'enabled'], v))}
                     />
                   </SettingsRow>
-                </div>
-              )}
-            </SettingsCard>
+                  {zeroUsageEnabled && (
+                    <FormRow label={t('pilotDeckConfig.panels.router.zeroUsageRetry.maxAttempts.label')} description={t('pilotDeckConfig.panels.router.zeroUsageRetry.maxAttempts.description')}>
+                      <NumberInput
+                        value={zr.maxAttempts}
+                        placeholder="2"
+                        onChange={(v) => onChange(patch(config, ['router', 'zeroUsageRetry', 'maxAttempts'], v))}
+                      />
+                    </FormRow>
+                  )}
+                </SettingsCard>
 
-            {/* ── Stats ──────────────────────────────────────────────── */}
-            <SettingsCard divided>
-              <SettingsRow
-                label={t('pilotDeckConfig.panels.router.stats.label')}
-                description={t('pilotDeckConfig.panels.router.stats.description')}
-              >
-                <SettingsToggle
-                  checked={statsEnabled}
-                  ariaLabel={t('pilotDeckConfig.panels.router.stats.label')}
-                  onChange={(v) => onChange(patch(config, ['router', 'stats', 'enabled'], v))}
-                />
-              </SettingsRow>
-            </SettingsCard>
+                {/* ── TokenSaver ─────────────────────────────────────────── */}
+                <SettingsCard className="space-y-4 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">{t('pilotDeckConfig.panels.router.tokenSaver.title')}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {t('pilotDeckConfig.panels.router.tokenSaver.description')}
+                      </div>
+                    </div>
+                    <SettingsToggle
+                      checked={tokenSaverEnabled}
+                      ariaLabel={t('pilotDeckConfig.panels.router.tokenSaver.title')}
+                      onChange={(v) => {
+                        let next = patch(config, ['router', 'tokenSaver', 'enabled'], v);
+                        if (v) {
+                          next = seedRouterDefaults(next);
+                        }
+                        onChange(next);
+                      }}
+                    />
+                  </div>
 
-            {statsEnabled && <ModelPricingEditor config={config} onChange={onChange} />}
+                  {tokenSaverEnabled && (
+                    <div className="space-y-4 border-t border-border pt-4">
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-foreground">{t('pilotDeckConfig.panels.router.tokenSaver.defaultTier')}</label>
+                        <Select
+                          value={ts.defaultTier ?? 'medium'}
+                          options={
+                            availableTierNames.length > 0
+                              ? availableTierNames.map((t) => ({ value: t, label: t }))
+                              : ROUTER_TIER_KEYS.map((t) => ({ value: t, label: t }))
+                          }
+                          onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'defaultTier'], v))}
+                        />
+                      </div>
+                      <FormRow label={t('pilotDeckConfig.panels.router.tokenSaver.judgeTimeout.label')} description={t('pilotDeckConfig.panels.router.tokenSaver.judgeTimeout.description')}>
+                        <NumberInput
+                          value={ts.judgeTimeoutMs}
+                          placeholder="15000"
+                          onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'judgeTimeoutMs'], v))}
+                        />
+                      </FormRow>
+                      <FormRow label={t('pilotDeckConfig.panels.router.tokenSaver.subagentPolicy.label')} description={t('pilotDeckConfig.panels.router.tokenSaver.subagentPolicy.description')}>
+                        <Select
+                          value={ts.subagent?.policy ?? 'judge'}
+                          options={[
+                            { value: 'judge', label: 'judge' },
+                            { value: 'skip', label: 'skip' },
+                          ]}
+                          onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'subagent', 'policy'], v))}
+                        />
+                      </FormRow>
+
+                      <TokenSaverTierEditor config={config} onChange={onChange} />
+                      <TokenSaverRulesEditor config={config} onChange={onChange} />
+                    </div>
+                  )}
+                </SettingsCard>
+
+                {/* ── Auto-orchestrate ───────────────────────────────────── */}
+                <SettingsCard className="space-y-4 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">{t('pilotDeckConfig.panels.router.autoOrchestrate.title')}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {t('pilotDeckConfig.panels.router.autoOrchestrate.description')}
+                      </div>
+                    </div>
+                    <SettingsToggle
+                      checked={autoOrchestrateEnabled}
+                      ariaLabel={t('pilotDeckConfig.panels.router.autoOrchestrate.title')}
+                      onChange={(v) => onChange(patch(config, ['router', 'autoOrchestrate', 'enabled'], v))}
+                    />
+                  </div>
+
+                  {autoOrchestrateEnabled && (
+                    <div className="space-y-3 border-t border-border pt-4">
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-foreground">{t('pilotDeckConfig.panels.router.autoOrchestrate.triggerTiers')}</label>
+                        <div className="mt-1 flex flex-wrap gap-2">
+                          {(availableTierNames.length > 0 ? availableTierNames : [...ROUTER_TIER_KEYS]).map((tier) => {
+                            const active = (ao.triggerTiers ?? ['complex']).includes(tier);
+                            return (
+                              <button
+                                key={tier}
+                                type="button"
+                                className={cn(
+                                  'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                                  active
+                                    ? 'border-primary bg-primary/10 text-primary'
+                                    : 'border-border bg-background text-muted-foreground hover:bg-muted',
+                                )}
+                                onClick={() => {
+                                  const prev = ao.triggerTiers ?? ['complex'];
+                                  const next = active ? prev.filter((t) => t !== tier) : [...prev, tier];
+                                  onChange(patch(config, ['router', 'autoOrchestrate', 'triggerTiers'], next));
+                                }}
+                              >
+                                {tier}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <SettingsRow
+                        label={t('pilotDeckConfig.panels.router.autoOrchestrate.slimPrompt.label')}
+                        description={t('pilotDeckConfig.panels.router.autoOrchestrate.slimPrompt.description')}
+                      >
+                        <SettingsToggle
+                          checked={ao.slimSystemPrompt !== false}
+                          ariaLabel={t('pilotDeckConfig.panels.router.autoOrchestrate.slimPrompt.label')}
+                          onChange={(v) => onChange(patch(config, ['router', 'autoOrchestrate', 'slimSystemPrompt'], v))}
+                        />
+                      </SettingsRow>
+                    </div>
+                  )}
+                </SettingsCard>
+
+                {/* ── Stats ──────────────────────────────────────────────── */}
+                <SettingsCard divided>
+                  <SettingsRow
+                    label={t('pilotDeckConfig.panels.router.stats.label')}
+                    description={t('pilotDeckConfig.panels.router.stats.description')}
+                  >
+                    <SettingsToggle
+                      checked={statsEnabled}
+                      ariaLabel={t('pilotDeckConfig.panels.router.stats.label')}
+                      onChange={(v) => onChange(patch(config, ['router', 'stats', 'enabled'], v))}
+                    />
+                  </SettingsRow>
+                </SettingsCard>
+
+                {statsEnabled && <ModelPricingEditor config={config} onChange={onChange} />}
+              </>
+            )}
           </>
         )}
       </div>
@@ -2819,83 +2881,88 @@ function GatewaySection({ config, onChange }: { config: PilotDeckConfig; onChang
   );
 }
 
-// ── Raw YAML view (kept very close to the original textarea panel) ──────
-
-function RawYamlView({
-  raw, setRaw, validation, error, message, isDirty, externalChangeNotice, dismissExternalNotice,
-}: {
-  raw: string;
-  setRaw: (value: string) => void;
-  validation: { valid: boolean; errors: string[]; warnings: string[] } | null;
-  error: string | null;
-  message: string | null;
-  isDirty: boolean;
-  externalChangeNotice: string | null;
-  dismissExternalNotice: () => void;
-}) {
-  const { t } = useTranslation('settings');
+function ConfigSectionGroup({ title, description, children }: { title: ReactNode; description?: ReactNode; children: ReactNode }) {
   return (
-    <div className="space-y-4">
-      {externalChangeNotice && (
-        <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-          <div className="flex-1">{externalChangeNotice}</div>
-          <button
-            type="button"
-            onClick={dismissExternalNotice}
-            className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide hover:bg-amber-500/20"
-          >
-            {t('pilotDeckConfig.actions.dismiss')}
-          </button>
-        </div>
-      )}
-      <SettingsCard className="overflow-hidden">
-        <textarea
-          value={raw}
-          onChange={(event) => setRaw(event.target.value)}
-          spellCheck={false}
-          className="min-h-[480px] w-full resize-y border-0 bg-background p-4 font-mono text-xs leading-5 text-foreground outline-none"
-        />
-      </SettingsCard>
-
-      <div className="flex items-center gap-2">
-        {validation?.valid ? (
-          <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            {t('pilotDeckConfig.rawYaml.configValid')} {isDirty && <span className="text-muted-foreground">{t('pilotDeckConfig.rawYaml.unsaved')}</span>}
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-xs text-destructive">
-            <AlertCircle className="h-3.5 w-3.5" />
-            {t('pilotDeckConfig.rawYaml.configInvalid')}
-          </div>
+    <section className="space-y-2.5">
+      <div>
+        <h3 className="text-[15px] font-semibold leading-5 text-foreground">{title}</h3>
+        {description && (
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
         )}
       </div>
+      {children}
+    </section>
+  );
+}
 
-      {validation && validation.errors.length > 0 && (
-        <div className="text-destructive">
-          <div className="mb-1 text-xs font-semibold">{t('pilotDeckConfig.rawYaml.errors')}</div>
-          <ul className="list-disc space-y-1 pl-4 text-xs">
-            {validation.errors.map((item) => <li key={item}>{item}</li>)}
-          </ul>
-        </div>
+function ConfigGroupedCard({ children, divided }: { children: ReactNode; divided?: boolean }) {
+  return (
+    <div
+      className={cn(
+        'overflow-hidden rounded-lg border border-border bg-card/60',
+        divided && 'divide-y divide-border',
       )}
-      {validation && validation.warnings.length > 0 && (
-        <div className="text-amber-600 dark:text-amber-400">
-          <div className="mb-1 text-xs font-semibold">{t('pilotDeckConfig.rawYaml.warnings')}</div>
-          <ul className="list-disc space-y-1 pl-4 text-xs">
-            {validation.warnings.map((item) => <li key={item}>{item}</li>)}
-          </ul>
+    >
+      {children}
+    </div>
+  );
+}
+
+function ConfigNavigationRow({
+  section,
+  onSelect,
+}: {
+  section: SectionId;
+  onSelect: (section: SectionId) => void;
+}) {
+  const { t } = useTranslation('settings');
+  const Icon = SECTION_ICONS[section];
+  const meta = SECTIONS.find((item) => item.id === section);
+  if (!meta) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(section)}
+      className="flex min-h-[66px] w-full items-center gap-3.5 px-5 py-3 text-left transition-colors hover:bg-accent/35 active:bg-accent/50"
+    >
+      <Icon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <div className="text-[15px] font-semibold leading-5 text-foreground">
+          {t(`pilotDeckConfig.sections.${meta.labelKey}.label`)}
         </div>
-      )}
-      {error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
-      {message && <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-700 dark:text-green-300">{message}</div>}
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
+          {t(`pilotDeckConfig.sections.${meta.descriptionKey}.description`)}
+        </div>
+      </div>
+      <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+    </button>
+  );
+}
+
+function ConfigSectionHome({ onSelect }: { onSelect: (section: SectionId) => void }) {
+  const { t } = useTranslation('settings');
+
+  return (
+    <div className="space-y-8">
+      {SECTION_GROUPS.map((group) => (
+        <ConfigSectionGroup
+          key={group.id}
+          title={t(`pilotDeckConfig.sectionGroups.${group.id}`)}
+          description={group.id === 'basic' ? t('pilotDeckConfig.sectionGroups.basicDescription') : undefined}
+        >
+          <ConfigGroupedCard divided={group.sections.length > 1}>
+            {group.sections.map((section) => (
+              <ConfigNavigationRow key={section} section={section} onSelect={onSelect} />
+            ))}
+          </ConfigGroupedCard>
+        </ConfigSectionGroup>
+      ))}
     </div>
   );
 }
 
 // ── Main tab ───────────────────────────────────────────────────────────
-
-type ViewMode = 'form' | 'raw';
 
 export default function PilotDeckConfigTab({ projects = [] }: { projects?: SettingsProject[] }) {
   const { t } = useTranslation('settings');
@@ -2903,37 +2970,26 @@ export default function PilotDeckConfigTab({ projects = [] }: { projects?: Setti
     path,
     raw,
     setRaw,
-    exists,
-    validation,
-    reload,
-    lastReloadInfo,
-    isDirty,
-    externalChangeNotice,
-    dismissExternalNotice,
-    loading,
-    saving,
-    opening,
-    error,
-    message,
-    refresh,
-    save,
-    reloadConfig,
-    openFile,
-  } = usePilotDeckConfig();
+	    exists,
+	    validation,
+	    reload,
+	    isDirty,
+	    externalChangeNotice,
+	    dismissExternalNotice,
+	    loading,
+	    saving,
+	    opening,
+	    error,
+	    refresh,
+	    save,
+	    reloadConfig,
+	    openFile,
+	  } = usePilotDeckConfig();
 
-  // View mode persists across mounts so power users who prefer the textarea
-  // don't get bumped back to form-mode every time they re-open Settings.
-  const [view, setView] = useState<ViewMode>(() => {
-    if (typeof localStorage === 'undefined') return 'form';
-    return (localStorage.getItem('pilotdeck:configView') as ViewMode) || 'form';
-  });
-  useEffect(() => {
-    try { localStorage.setItem('pilotdeck:configView', view); } catch { /* swallow */ }
-  }, [view]);
-
-  // Active form section. Keeping it local — sections aren't deep-linkable
-  // since the surrounding modal already owns its own URL.
-  const [activeSection, setActiveSection] = useState<SectionId>('models');
+	  // Active form section. Null means the config page is showing its grouped
+  // navigation home, matching the outer Settings page interaction model.
+  const [activeSection, setActiveSection] = useState<SectionId | null>(null);
+  const [showConfigDetails, setShowConfigDetails] = useState(false);
 
   // Parse `raw` into a typed config for the form. Memoised so we don't
   // reparse on every keystroke unrelated to YAML, but raw IS the source of
@@ -2958,9 +3014,16 @@ export default function PilotDeckConfigTab({ projects = [] }: { projects?: Setti
     }
   };
 
+  const configHasErrors = parseError || validation?.valid === false;
+  const configStatusLabel = configHasErrors
+    ? t('pilotDeckConfig.rawYaml.configInvalid')
+    : isDirty
+      ? t('pilotDeckConfig.status.unsavedChanges')
+      : t('pilotDeckConfig.status.noUnsavedChanges');
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+      <div className="flex items-center justify-center py-12 text-xs text-muted-foreground">
         {t('pilotDeckConfig.loading')}
       </div>
     );
@@ -2968,198 +3031,172 @@ export default function PilotDeckConfigTab({ projects = [] }: { projects?: Setti
 
   return (
     <div className="space-y-6">
-      {/* Header card: file path, view-mode toggle, reveal/refresh actions. */}
-      <SettingsCard className="space-y-3 p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <FileCog className="h-4 w-4" />
-              {exists ? t('pilotDeckConfig.header.configFile') : t('pilotDeckConfig.header.configPreview')}
-              {isDirty && (
-                <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
-                  {t('pilotDeckConfig.header.unsaved')}
-                </span>
+      <SettingsCard className="p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <button
+            type="button"
+            onClick={() => setShowConfigDetails((next) => !next)}
+            className="flex min-w-0 flex-1 items-start gap-3 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-accent/35"
+            aria-expanded={showConfigDetails}
+          >
+            <FileCog className="mt-0.5 h-5 w-5 flex-shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[15px] font-semibold leading-5 text-foreground">
+                {exists ? t('pilotDeckConfig.header.configFile') : t('pilotDeckConfig.header.configPreview')}
+              </div>
+              <code className="mt-1.5 block truncate rounded-md bg-muted px-2.5 py-1.5 font-mono text-[11px] leading-4 text-muted-foreground">
+                {path}
+              </code>
+            </div>
+          </button>
+
+          <div className="flex flex-wrap items-center gap-2 md:justify-end">
+            <span
+              className={cn(
+                'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium leading-4',
+                configHasErrors
+                  ? 'bg-destructive/10 text-destructive'
+                  : isDirty
+                    ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                    : 'bg-muted text-muted-foreground',
               )}
-            </div>
-            <code className="mt-1 block truncate rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
-              {path}
-            </code>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Mode pill — Form / Raw YAML. Same visual idiom Cursor uses
-                for its "Edit in JSON" affordance. */}
-            <div className="inline-flex rounded-md border border-border bg-muted p-0.5">
-              <button
-                type="button"
-                onClick={() => setView('form')}
+            >
+              <span
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs',
-                  view === 'form' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                  'h-2 w-2 rounded-full',
+                  configHasErrors ? 'bg-destructive' : isDirty ? 'bg-amber-500' : 'bg-green-500',
                 )}
-              >
-                <LayoutList className="h-3.5 w-3.5" />
-                {t('pilotDeckConfig.viewMode.form')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setView('raw')}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs',
-                  view === 'raw' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <Code2 className="h-3.5 w-3.5" />
-                {t('pilotDeckConfig.viewMode.rawYaml')}
-              </button>
-            </div>
-            <Button variant="outline" size="sm" onClick={openFile} disabled={opening}>
-              <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
-              {opening ? t('pilotDeckConfig.actions.opening') : t('pilotDeckConfig.actions.revealFile')}
+              />
+              {configStatusLabel}
+            </span>
+            <Button type="button" size="sm" onClick={save} disabled={saving || !isDirty} className="h-8 gap-1.5 px-2.5 text-xs">
+              <Save className="mr-1.5 h-3.5 w-3.5" />
+              {saving ? t('pilotDeckConfig.actions.saving') : t('pilotDeckConfig.actions.saveAndReloadShort')}
             </Button>
-            <Button variant="outline" size="sm" onClick={() => void refresh()}>
-              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-              {t('pilotDeckConfig.actions.refresh')}
-            </Button>
+            <button
+              type="button"
+              onClick={() => setShowConfigDetails((next) => !next)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              aria-label={showConfigDetails ? t('pilotDeckConfig.actions.hideDetails') : t('pilotDeckConfig.actions.showDetails')}
+              title={showConfigDetails ? t('pilotDeckConfig.actions.hideDetails') : t('pilotDeckConfig.actions.showDetails')}
+            >
+              <ChevronDown className={cn('h-4 w-4 transition-transform', showConfigDetails && 'rotate-180')} />
+            </button>
           </div>
         </div>
 
-        {/* External-change banner — relevant in both views. */}
-        {externalChangeNotice && view === 'form' && (
-          <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-            <div className="flex-1">{externalChangeNotice}</div>
-            <button
-              type="button"
-              onClick={dismissExternalNotice}
-              className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide hover:bg-amber-500/20"
-            >
-              {t('pilotDeckConfig.actions.dismiss')}
-            </button>
-          </div>
-        )}
-        {parseError && view === 'form' && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-            {t('pilotDeckConfig.rawYaml.yamlParseError')}
-          </div>
+        {showConfigDetails && (
+          <>
+            <div className="mt-3 space-y-3 border-t border-border pt-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" size="sm" onClick={openFile} disabled={opening} className="h-8 gap-1.5 px-2.5 text-xs">
+                  <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
+                  {opening ? t('pilotDeckConfig.actions.opening') : t('pilotDeckConfig.actions.revealFile')}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => void refresh()} className="h-8 gap-1.5 px-2.5 text-xs">
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                  {t('pilotDeckConfig.actions.refresh')}
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={reloadConfig} disabled={saving} className="h-8 gap-1.5 px-2.5 text-xs">
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                  {t('pilotDeckConfig.actions.reloadCurrent')}
+                </Button>
+              </div>
+
+            {validation?.valid ? (
+              <div className="rounded-lg bg-muted/30 px-3.5 py-2.5">
+                <div className="flex items-center gap-2 text-[13px] font-semibold leading-5 text-foreground">
+                  <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
+                  {t('pilotDeckConfig.rawYaml.configValid')}
+                </div>
+                <div className="mt-0.5 pl-4 text-[11px] leading-4 text-muted-foreground">
+                  {isDirty ? t('pilotDeckConfig.status.unsavedChanges') : t('pilotDeckConfig.status.noUnsavedChanges')}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 text-destructive">
+                <div className="flex items-center gap-2 text-[13px] font-semibold leading-5">
+                  <AlertCircle className="h-4 w-4" />
+                  {t('pilotDeckConfig.rawYaml.configInvalid')}
+                </div>
+                <div className="mt-0.5 pl-6 text-[11px] leading-4">
+                  {t('pilotDeckConfig.status.fixYamlInFilesystem')}
+                </div>
+              </div>
+            )}
+            <ConfigStatusGrid config={parsedConfig} reload={reload} />
+            {validation && validation.errors.length > 0 && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                <div className="mb-1 font-semibold">{t('pilotDeckConfig.rawYaml.errors')}</div>
+                <ul className="list-disc space-y-1 pl-4">
+                  {validation.errors.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              </div>
+            )}
+            {validation && validation.warnings.length > 0 && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+                <div className="mb-1 font-semibold">{t('pilotDeckConfig.rawYaml.warnings')}</div>
+                <ul className="list-disc space-y-1 pl-4">
+                  {validation.warnings.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              </div>
+            )}
+              {error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">{error}</div>}
+            </div>
+
+            {externalChangeNotice && (
+              <div className="mt-3 flex items-start justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+                <div className="flex-1">{externalChangeNotice}</div>
+                <button
+                  type="button"
+                  onClick={dismissExternalNotice}
+                  className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide hover:bg-amber-500/20"
+                >
+                  {t('pilotDeckConfig.actions.dismiss')}
+                </button>
+              </div>
+            )}
+            {parseError && (
+              <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                {t('pilotDeckConfig.rawYaml.yamlParseError')}
+              </div>
+            )}
+          </>
         )}
       </SettingsCard>
 
-      {view === 'form' ? (
-        // Form-mode body: split nav (left) + sections (right). On narrow
-        // viewports nav becomes a horizontal scroller above the body so we
-        // never hide it behind a hamburger.
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[180px_1fr]">
-          <aside className="md:sticky md:top-0 md:self-start">
-            <nav className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
-              {SECTIONS.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => setActiveSection(s.id)}
-                  className={cn(
-                    'whitespace-nowrap rounded-md px-3 py-2 text-left text-sm transition-colors md:whitespace-normal',
-                    activeSection === s.id
-                      ? 'bg-accent text-accent-foreground'
-                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
-                  )}
-                >
-                  {t(`pilotDeckConfig.sections.${s.labelKey}.label`)}
-                </button>
-              ))}
-            </nav>
-          </aside>
-          <main className="min-w-0 space-y-6">
-            {parsedConfig ? (
-              <>
-                {activeSection === 'models'   && <ModelsSection  config={parsedConfig} onChange={onFormChange} />}
-                {activeSection === 'agents'   && <AgentsSection  config={parsedConfig} onChange={onFormChange} />}
-                {activeSection === 'memory'   && <MemorySection  config={parsedConfig} onChange={onFormChange} />}
-                {activeSection === 'tools'    && <ToolsSection   config={parsedConfig} onChange={onFormChange} />}
-                {activeSection === 'router'   && <RouterSection  config={parsedConfig} onChange={onFormChange} />}
-                {activeSection === 'gateway'  && <GatewaySection config={parsedConfig} onChange={onFormChange} />}
-                {activeSection === 'customEnv' && <CustomEnvSection config={parsedConfig} onChange={onFormChange} />}
-                {activeSection === 'alwaysOn' && <AlwaysOnSection config={parsedConfig} projects={projects} onChange={onFormChange} />}
-                {activeSection === 'advanced' && <AdvancedSection config={parsedConfig} onChange={onFormChange} />}
-              </>
-            ) : (
-              <SettingsCard className="p-6 text-sm text-muted-foreground">
-                {t('pilotDeckConfig.rawYaml.cannotParse', { rawYaml: '' })}<strong className="font-medium text-foreground">{t('pilotDeckConfig.rawYaml.rawYaml')}</strong>
-              </SettingsCard>
-            )}
-
-            {/* Validation summary lives below the form so users see it after
-                tweaking values. Errors/warnings are server-validated — not a
-                client mirror — so this stays accurate for cross-section
-                rules (e.g. agents.main.model must reference a known entry). */}
-            <div className="space-y-2">
-              {validation?.valid ? (
-                <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  {t('pilotDeckConfig.rawYaml.configValid')} {isDirty && <span className="text-muted-foreground">{t('pilotDeckConfig.rawYaml.unsaved')}</span>}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-xs text-destructive">
-                  <AlertCircle className="h-3.5 w-3.5" />
-                  {t('pilotDeckConfig.rawYaml.configInvalidSeeBelow')}
-                </div>
-              )}
-              {validation && validation.errors.length > 0 && (
-                <ul className="list-disc space-y-1 pl-4 text-xs text-destructive">
-                  {validation.errors.map((item) => <li key={item}>{item}</li>)}
-                </ul>
-              )}
-              {validation && validation.warnings.length > 0 && (
-                <ul className="list-disc space-y-1 pl-4 text-xs text-amber-600 dark:text-amber-400">
-                  {validation.warnings.map((item) => <li key={item}>{item}</li>)}
-                </ul>
-              )}
-              {error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
-              {message && <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-700 dark:text-green-300">{message}</div>}
+      {parsedConfig ? (
+        activeSection ? (
+          <div className="space-y-4">
+            <button
+              type="button"
+              onClick={() => setActiveSection(null)}
+              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              {t('pilotDeckConfig.sections.backToMenu')}
+            </button>
+            <div className="min-w-0 space-y-6">
+              {activeSection === 'models' && <ModelsSection config={parsedConfig} onChange={onFormChange} />}
+              {activeSection === 'agents' && <AgentsSection config={parsedConfig} onChange={onFormChange} />}
+              {activeSection === 'memory' && <MemorySection config={parsedConfig} onChange={onFormChange} />}
+              {activeSection === 'tools' && <ToolsSection config={parsedConfig} onChange={onFormChange} />}
+              {activeSection === 'router' && <RouterSection config={parsedConfig} onChange={onFormChange} />}
+              {activeSection === 'gateway' && <GatewaySection config={parsedConfig} onChange={onFormChange} />}
+              {activeSection === 'customEnv' && <CustomEnvSection config={parsedConfig} onChange={onFormChange} />}
+              {activeSection === 'alwaysOn' && <AlwaysOnSection config={parsedConfig} projects={projects} onChange={onFormChange} />}
+              {activeSection === 'advanced' && <ServiceSection config={parsedConfig} onChange={onFormChange} />}
             </div>
-          </main>
-        </div>
+          </div>
+        ) : (
+          <ConfigSectionHome onSelect={setActiveSection} />
+        )
       ) : (
-        <RawYamlView
-          raw={raw}
-          setRaw={setRaw}
-          validation={validation}
-          error={error}
-          message={message}
-          isDirty={isDirty}
-          externalChangeNotice={externalChangeNotice}
-          dismissExternalNotice={dismissExternalNotice}
-        />
+        <SettingsCard className="p-5 text-xs text-muted-foreground">
+          {t('pilotDeckConfig.rawYaml.cannotParse')}
+        </SettingsCard>
       )}
 
-      {/* Subsystem reload card — same in both modes, stays at the bottom so
-          users always see the impact of their last save. */}
-      <SettingsSection
-        title={t('pilotDeckConfig.panels.subsystemReload.title')}
-        description={lastReloadInfo
-          ? t('pilotDeckConfig.panels.subsystemReload.lastReload', {
-              source: sourceLabel(lastReloadInfo.source),
-              time: new Date(lastReloadInfo.at).toLocaleTimeString(),
-            })
-          : t('pilotDeckConfig.panels.subsystemReload.fallbackDescription')}
-      >
-        <SettingsCard className="p-4">
-          <ReloadSummary reload={reload} />
-        </SettingsCard>
-      </SettingsSection>
-
-      {/* Sticky save bar. Save & Reload routes through the same PUT endpoint
-          regardless of which view edited `raw` — that's how form edits and
-          textarea edits both pick up the unified hot-reload. */}
-      <div className="sticky bottom-0 z-10 flex items-center justify-end gap-2 rounded-xl border border-border bg-card/90 p-3 backdrop-blur">
-        <div className="pointer-events-none min-h-9 flex-1" aria-hidden />
-        <Button type="button" variant="outline" size="sm" onClick={reloadConfig} disabled={saving}>
-          <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-          {t('pilotDeckConfig.actions.reloadCurrent')}
-        </Button>
-        <Button type="button" size="sm" onClick={save} disabled={saving || !isDirty}>
-          <Save className="mr-1.5 h-3.5 w-3.5" />
-          {saving ? t('pilotDeckConfig.actions.saving') : t('pilotDeckConfig.actions.saveAndReload')}
-        </Button>
-      </div>
     </div>
   );
 }
