@@ -70,6 +70,34 @@ function isGeneralCwd(projectPath) {
   return GENERAL_CWD_PATHS.includes(path.resolve(projectPath));
 }
 
+function resolveRequestedScope(scope, projectPath, { defaultToProjectWhenAvailable = false } = {}) {
+  const generalCwd = isGeneralCwd(projectPath);
+  const effectiveProjectPath = generalCwd ? null : projectPath || null;
+
+  if (scope === 'project') {
+    if (generalCwd) {
+      return { ok: true, scope: 'user', projectPath: null, wantProject: false };
+    }
+    if (!effectiveProjectPath) {
+      return {
+        ok: false,
+        error: "project scope requires a real project (general chat doesn't qualify)",
+      };
+    }
+    return { ok: true, scope: 'project', projectPath: effectiveProjectPath, wantProject: true };
+  }
+
+  if (scope === 'user') {
+    return { ok: true, scope: 'user', projectPath: null, wantProject: false };
+  }
+
+  if (defaultToProjectWhenAvailable && effectiveProjectPath) {
+    return { ok: true, scope: 'project', projectPath: effectiveProjectPath, wantProject: true };
+  }
+
+  return { ok: true, scope: 'user', projectPath: null, wantProject: false };
+}
+
 function userSkillsRoot() {
   return path.join(PILOT_HOME, SKILLS_SUBDIR);
 }
@@ -229,16 +257,12 @@ router.post('/write', async (req, res) => {
 router.post('/create', async (req, res) => {
   try {
     const { scope, projectPath, slug, name, description, body, content } = req.body || {};
-    const wantProject = scope === 'project';
-    if (wantProject && (!projectPath || isGeneralCwd(projectPath))) {
-      return res.status(400).json({
-        error: "project scope requires a real project (general chat doesn't qualify)",
-      });
-    }
+    const resolved = resolveRequestedScope(scope, projectPath);
+    if (!resolved.ok) return res.status(400).json({ error: resolved.error });
     const result = await callGateway('skillCreate', {
-      scope: wantProject ? 'project' : 'user',
+      scope: resolved.scope,
       slug,
-      projectKey: wantProject ? projectPath : null,
+      projectKey: resolved.wantProject ? resolved.projectPath : null,
       name,
       description,
       body,
@@ -282,17 +306,13 @@ router.post('/validate', async (req, res) => {
 router.post('/import', async (req, res) => {
   try {
     const { sourcePath, slug, scope, projectPath, mode, force } = req.body || {};
-    const wantProject = scope === 'project';
-    if (wantProject && (!projectPath || isGeneralCwd(projectPath))) {
-      return res.status(400).json({
-        error: "project scope requires a real project (general chat doesn't qualify)",
-      });
-    }
+    const resolved = resolveRequestedScope(scope, projectPath);
+    if (!resolved.ok) return res.status(400).json({ error: resolved.error });
     const result = await callGateway('skillImport', {
       sourcePath,
       slug,
-      scope: wantProject ? 'project' : 'user',
-      projectKey: wantProject ? projectPath : null,
+      scope: resolved.scope,
+      projectKey: resolved.wantProject ? resolved.projectPath : null,
       mode,
       force,
     });
@@ -361,13 +381,9 @@ router.post('/import-upload', upload.array('files', 500), async (req, res) => {
       return res.status(422).json({ error: 'Validation failed', validation });
     }
 
-    const wantProject = scope === 'project';
-    if (wantProject && (!projectPath || isGeneralCwd(projectPath))) {
-      return res
-        .status(400)
-        .json({ error: "project scope requires a real project (general chat doesn't qualify)." });
-    }
-    const root = wantProject ? projectSkillsRoot(projectPath) : userSkillsRoot();
+    const resolved = resolveRequestedScope(scope, projectPath);
+    if (!resolved.ok) return res.status(400).json({ error: resolved.error });
+    const root = resolved.wantProject ? projectSkillsRoot(resolved.projectPath) : userSkillsRoot();
     const inferredSlug =
       (typeof requestedSlug === 'string' && requestedSlug.trim()) ||
       (paths[0] && paths[0].split('/')[0]) ||
@@ -422,9 +438,9 @@ router.post('/import-upload', upload.array('files', 500), async (req, res) => {
     let skillSummary = null;
     try {
       const list = await callGateway('skillsList', {
-        projectKey: wantProject ? projectPath : null,
+        projectKey: resolved.wantProject ? resolved.projectPath : null,
       });
-      const bucket = wantProject ? list.project : list.user;
+      const bucket = resolved.wantProject ? list.project : list.user;
       skillSummary = bucket.find((s) => s.slug === inferredSlug) ?? null;
     } catch {
       /* best-effort; the file is on disk regardless */
@@ -433,7 +449,7 @@ router.post('/import-upload', upload.array('files', 500), async (req, res) => {
     res.json({
       ok: true,
       mode: 'upload',
-      scope: wantProject ? 'project' : 'user',
+      scope: resolved.scope,
       slug: inferredSlug,
       skillPath: targetDir,
       skill: skillSummary,
@@ -514,18 +530,15 @@ router.post('/clawhub/install', async (req, res) => {
     if (!safeSlug(slug)) {
       return res.status(400).json({ error: `Invalid slug "${slug}".` });
     }
-    const generalCwd = isGeneralCwd(projectPath);
-    const effectiveProjectPath = generalCwd ? null : projectPath || null;
-    const resolvedScope =
-      scope === 'project' || scope === 'user' ? scope : effectiveProjectPath ? 'project' : 'user';
+    const resolved = resolveRequestedScope(scope, projectPath, {
+      defaultToProjectWhenAvailable: true,
+    });
+    if (!resolved.ok) return res.status(400).json({ error: resolved.error });
 
     let workdir;
     let dir;
-    if (resolvedScope === 'project') {
-      if (!effectiveProjectPath) {
-        return res.status(400).json({ error: 'project scope requires a real project context' });
-      }
-      workdir = effectiveProjectPath;
+    if (resolved.wantProject) {
+      workdir = resolved.projectPath;
       dir = path.join(PROJECT_DIR, SKILLS_SUBDIR);
     } else {
       workdir = PILOT_HOME;
@@ -564,8 +577,10 @@ router.post('/clawhub/install', async (req, res) => {
       installed = true;
       // Pull the summary back through the gateway so descriptions reflect
       // the same frontmatter parser the agent will use.
-      const list = await callGateway('skillsList', { projectKey: effectiveProjectPath });
-      const bucket = resolvedScope === 'project' ? list.project : list.user;
+      const list = await callGateway('skillsList', {
+        projectKey: resolved.wantProject ? resolved.projectPath : null,
+      });
+      const bucket = resolved.wantProject ? list.project : list.user;
       skill = bucket.find((s) => s.slug === slug) ?? null;
     } catch {
       /* not installed */
@@ -577,7 +592,7 @@ router.post('/clawhub/install', async (req, res) => {
     res.json({
       ok: installed,
       slug,
-      scope: resolvedScope,
+      scope: resolved.scope,
       installPath,
       installed,
       skill,
