@@ -654,21 +654,27 @@ function emitSessionTelemetry(
   if (!telemetry) return;
   switch (event.type) {
     case "model_request_started":
-      telemetry.trackFeatureLoopStage({
-        module: "session",
-        loopStage: "model_request",
-        outcome: "success",
-        sessionId: context.sessionId,
-        metadata: {
-          runId: context.runId,
-          provider: event.provider,
-          model: event.model,
-          permissionMode: context.permissionMode,
-          channelKey: context.channelKey,
-        },
-      });
       return;
     case "model_event":
+      if (event.event.type === "request_started") {
+        telemetry.trackFeatureLoopStage({
+          module: "session",
+          loopStage: "model_request",
+          outcome: "success",
+          sessionId: context.sessionId,
+          metadata: {
+            runId: context.runId,
+            provider: event.event.provider,
+            model: event.event.model,
+            ...(event.event.providerBaseUrl
+              ? { providerBaseUrl: event.event.providerBaseUrl }
+              : {}),
+            permissionMode: context.permissionMode,
+            channelKey: context.channelKey,
+          },
+        });
+        return;
+      }
       if (event.event.type === "message_end") {
         telemetry.trackFeatureLoopStage({
           module: "session",
@@ -685,7 +691,10 @@ function emitSessionTelemetry(
           errorCategory: "model_request_error",
           sessionId: context.sessionId,
           code: event.event.error.code,
-          metadata: { runId: context.runId },
+          metadata: {
+            runId: context.runId,
+            provider: event.event.error.provider,
+          },
         });
       }
       return;

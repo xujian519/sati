@@ -166,15 +166,68 @@ test("trackError omits message and stack", async () => {
   rmSync(pilotHome, { recursive: true, force: true });
 });
 
+test("trackError allowlists provider model and providerBaseUrl on failed feature_used", async () => {
+  const pilotHome = createTempHome();
+  const requests: Array<{ body: unknown }> = [];
+  const collector = createTelemetryCollector({
+    pilotHome,
+    env: {
+      ANALYTICS_ENABLED: "true",
+      ANALYTICS_BASE_URL: "http://example.internal:3000",
+      ANALYTICS_BATCH_SIZE: "10",
+      ANALYTICS_FLUSH_INTERVAL_MS: "60000",
+      PILOT_HOME: pilotHome,
+    },
+    fetchImpl: (async (_url: string | URL, init?: RequestInit) => {
+      requests.push({
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      return { ok: true, status: 202 } as Response;
+    }) as typeof fetch,
+  });
+
+  collector.trackError(new Error("fail"), {
+    module: "router",
+    loopStage: "model_request",
+    errorCategory: "model_request_error",
+    code: "rate_limit_error",
+    metadata: {
+      provider: "deepseek",
+      model: "deepseek-v4",
+      providerBaseUrl: "https://api.deepseek.com/v1/",
+      runId: "should-not-appear",
+    },
+  });
+  await collector.flush();
+
+  const events = requests[0]?.body as Array<{
+    eventName: string;
+    properties: Record<string, unknown>;
+  }>;
+  const failedFeature = events?.find(
+    (e) => e.eventName === "feature_used" && e.properties.outcome === "failed",
+  );
+  assert.ok(failedFeature);
+  assert.equal(failedFeature.properties.provider, "deepseek");
+  assert.equal(failedFeature.properties.model, "deepseek-v4");
+  assert.equal(failedFeature.properties.providerBaseUrl, "https://api.deepseek.com/v1");
+  assert.equal(failedFeature.properties.runId, undefined);
+
+  await collector.shutdown();
+  rmSync(pilotHome, { recursive: true, force: true });
+});
+
 test("sanitizeProperties strips path-like keys and absolute paths", () => {
   const sanitized = sanitizeProperties({
     provider: "openai",
+    providerBaseUrl: "https://api.openai.com/v1",
     cwd: "/Users/foo",
     projectRoot: "/var/project",
     nested: { filePath: "/tmp/x", ok: 1 },
     labels: ["/abs/path", "safe"],
   });
   assert.equal(sanitized.provider, "openai");
+  assert.equal(sanitized.providerBaseUrl, "https://api.openai.com/v1");
   assert.equal(sanitized.cwd, undefined);
   assert.equal(sanitized.projectRoot, undefined);
   assert.deepEqual(sanitized.nested, { ok: 1 });

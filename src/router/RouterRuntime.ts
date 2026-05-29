@@ -573,6 +573,7 @@ export function createRouterRuntime(
           metadata: {
             provider: attempt.provider,
             model: attempt.model,
+            providerBaseUrl: deps.modelRuntime.getProviderBaseUrl(attempt.provider),
             scenarioType: attemptDecision.scenarioType,
             resolvedFrom: attemptDecision.resolvedFrom,
             role: decision.isSubagent ? "subagent" : "main",
@@ -592,6 +593,7 @@ export function createRouterRuntime(
         metadata: {
           provider: lastAttempt.provider,
           model: lastAttempt.model,
+          providerBaseUrl: deps.modelRuntime.getProviderBaseUrl(lastAttempt.provider),
           scenarioType: lastDecision.scenarioType,
         },
       });

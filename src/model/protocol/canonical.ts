@@ -208,7 +208,13 @@ export type CanonicalFinishReason =
   | "unknown";
 
 export type CanonicalModelEvent =
-  | { type: "request_started"; provider: string; model: string; metadata?: Record<string, unknown> }
+  | {
+      type: "request_started";
+      provider: string;
+      model: string;
+      providerBaseUrl?: string;
+      metadata?: Record<string, unknown>;
+    }
   | { type: "message_start"; role: "assistant"; raw?: unknown }
   | { type: "text_delta"; text: string; raw?: unknown }
   | { type: "thinking_delta"; text: string; signature?: string; raw?: unknown }

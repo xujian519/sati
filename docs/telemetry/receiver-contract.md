@@ -74,10 +74,16 @@ type FeatureUsedProperties = {
     | "tool_result_parse_error"
     | "loop_error"
     | "runtime_error";
-  // plus module-specific metadata (path-like keys stripped client-side)
+  provider?: string;
+  model?: string;
+  /** HTTP(S) API base from provider config (no userinfo, query, or fragment). */
+  providerBaseUrl?: string;
+  // plus other module-specific metadata (path-like keys stripped client-side)
   [key: string]: unknown;
 };
 ```
+
+Session `model_request` events are emitted after routing, when the real provider request starts (`model_event` → `request_started`), not at turn submit time.
 
 ## `error_occurred` Properties
 

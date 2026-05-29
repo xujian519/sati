@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
+import { normalizeProviderBaseUrl } from "../model/normalizeProviderBaseUrl.js";
 import { resolvePilotHome } from "../pilot/paths.js";
 import { hashTelemetryId, resolveTelemetryRuntimeContext } from "./context.js";
 import { TelemetrySender } from "./sender.js";
@@ -87,7 +88,7 @@ export function createTelemetryCollector(
         outcome: "failed",
         errorCategory: normalizeErrorCategory(errorCategory),
         sessionId: inputError.sessionId,
-        metadata: { code },
+        metadata: sanitizeProperties(pickErrorFeatureMetadata(code, inputError.metadata)),
       });
     },
     flush() {
@@ -148,6 +149,29 @@ function buildEvent(input: {
     platform: input.runtimeContext.platform,
     properties: input.properties,
   };
+}
+
+function pickErrorFeatureMetadata(
+  code: string,
+  metadata: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { code };
+  if (!metadata) {
+    return out;
+  }
+  if (typeof metadata.provider === "string") {
+    out.provider = metadata.provider;
+  }
+  if (typeof metadata.model === "string") {
+    out.model = metadata.model;
+  }
+  if (typeof metadata.providerBaseUrl === "string") {
+    const normalized = normalizeProviderBaseUrl(metadata.providerBaseUrl);
+    if (normalized) {
+      out.providerBaseUrl = normalized;
+    }
+  }
+  return out;
 }
 
 export function sanitizeProperties(

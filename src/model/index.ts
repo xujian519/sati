@@ -1,4 +1,5 @@
 export { createModelRuntime, type ModelRuntime } from "./ModelRuntime.js";
+export { normalizeProviderBaseUrl } from "./normalizeProviderBaseUrl.js";
 export { parseModelConfig, type ParseModelConfigOptions } from "./config/parseModelConfig.js";
 export { resolveApiKey, type CredentialEnv } from "./config/resolveCredentials.js";
 export { ModelProviderRegistry, type ModelProviderAdapter } from "./providers/registry.js";
