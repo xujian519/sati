@@ -84,6 +84,7 @@ type PermissionsExport = {
   source: 'pilotdeck';
   allowedTools: string[];
   disallowedTools: string[];
+  skipPermissions: boolean;
 };
 
 function buildExportPayload(): PermissionsExport {
@@ -94,6 +95,7 @@ function buildExportPayload(): PermissionsExport {
     source: 'pilotdeck',
     allowedTools: settings.allowedTools,
     disallowedTools: settings.disallowedTools,
+    skipPermissions: settings.skipPermissions,
   };
 }
 
@@ -119,6 +121,7 @@ function downloadJson(filename: string, payload: unknown) {
 function parsePermissionsImport(raw: string): {
   allowedTools: string[];
   disallowedTools: string[];
+  skipPermissions?: boolean;
 } | null {
   let parsed: unknown;
   try {
@@ -137,11 +140,15 @@ function parsePermissionsImport(raw: string): {
   const allowedTools = toStringArray(obj.allowedTools);
   const disallowedTools = toStringArray(obj.disallowedTools);
 
-  if (allowedTools.length === 0 && disallowedTools.length === 0) {
+  if (allowedTools.length === 0 && disallowedTools.length === 0 && typeof obj.skipPermissions !== 'boolean') {
     return null;
   }
 
-  return { allowedTools, disallowedTools };
+  return {
+    allowedTools,
+    disallowedTools,
+    skipPermissions: typeof obj.skipPermissions === 'boolean' ? obj.skipPermissions : undefined,
+  };
 }
 
 const mergeUnique = (a: string[], b: string[]): string[] => {
@@ -327,11 +334,15 @@ export default function PermissionsSettingsTab() {
     const updates: Partial<PilotDeckSettings> = {
       allowedTools: nextAllowed,
       disallowedTools: nextBlocked,
+      ...(parsed.skipPermissions !== undefined ? { skipPermissions: parsed.skipPermissions } : {}),
     };
     persist(updates);
 
     setAllowedTools(nextAllowed);
     setDisallowedTools(nextBlocked);
+    if (parsed.skipPermissions !== undefined) {
+      setSkipPermissions(parsed.skipPermissions);
+    }
 
     const addedAllowed = nextAllowed.length - current.allowedTools.length;
     const addedBlocked = nextBlocked.length - current.disallowedTools.length;
