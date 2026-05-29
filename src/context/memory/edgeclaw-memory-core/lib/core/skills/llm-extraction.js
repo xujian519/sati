@@ -1628,6 +1628,20 @@ function extractResponsesText(payload) {
 function looksLikeEnvVarName(value) {
     return /^[A-Z0-9_]+$/.test(value);
 }
+function resolveMemoryTelemetry(runtime) {
+    const telemetry = runtime?.telemetry;
+    return typeof telemetry === "object" && telemetry !== null ? telemetry : undefined;
+}
+function memoryPhaseFromLabel(label) {
+    const normalized = label.toLowerCase();
+    if (normalized.includes("retrieve") || normalized.includes("retrieval") || normalized.includes("recall"))
+        return "retrieve";
+    if (normalized.includes("dream") || normalized.includes("rewrite"))
+        return "dream";
+    if (normalized.includes("capture") || normalized.includes("extract"))
+        return "capture";
+    return "index";
+}
 export class LlmMemoryExtractor {
     config;
     runtime;
@@ -1708,6 +1722,21 @@ export class LlmMemoryExtractor {
         if (!selection.baseUrl) {
             throw new Error(`${input.requestLabel} provider "${selection.provider}" does not have a baseUrl`);
         }
+        const telemetry = resolveMemoryTelemetry(this.runtime);
+        telemetry?.trackFeatureLoopStage?.({
+            module: "memory",
+            ownerModule: "memory",
+            executionKind: "memory",
+            phase: memoryPhaseFromLabel(input.requestLabel),
+            loopStage: "model_request",
+            outcome: "success",
+            metadata: {
+                provider: selection.provider,
+                model: selection.model,
+                providerBaseUrl: selection.baseUrl,
+                requestLabel: input.requestLabel,
+            },
+        });
         const apiKey = await this.resolveApiKey(selection.provider);
         const headers = new Headers(selection.headers);
         if (!headers.has("content-type"))
@@ -1793,13 +1822,59 @@ export class LlmMemoryExtractor {
             response = await executeWithRetry(body);
         }
         catch (error) {
-            if (!("response_format" in body))
+            if (!("response_format" in body)) {
+                telemetry?.trackError?.(error, {
+                    module: "memory",
+                    ownerModule: "memory",
+                    executionKind: "memory",
+                    phase: memoryPhaseFromLabel(input.requestLabel),
+                    loopStage: "model_request",
+                    errorCategory: "model_request_error",
+                    metadata: {
+                        provider: selection.provider,
+                        model: selection.model,
+                        providerBaseUrl: selection.baseUrl,
+                    },
+                });
                 throw error;
+            }
             const fallbackBody = { ...body };
             delete fallbackBody.response_format;
-            response = await executeWithRetry(fallbackBody);
+            try {
+                response = await executeWithRetry(fallbackBody);
+            }
+            catch (fallbackError) {
+                telemetry?.trackError?.(fallbackError, {
+                    module: "memory",
+                    ownerModule: "memory",
+                    executionKind: "memory",
+                    phase: memoryPhaseFromLabel(input.requestLabel),
+                    loopStage: "model_request",
+                    errorCategory: "model_request_error",
+                    metadata: {
+                        provider: selection.provider,
+                        model: selection.model,
+                        providerBaseUrl: selection.baseUrl,
+                    },
+                });
+                throw fallbackError;
+            }
         }
         const payload = await response.json();
+        telemetry?.trackFeatureLoopStage?.({
+            module: "memory",
+            ownerModule: "memory",
+            executionKind: "memory",
+            phase: memoryPhaseFromLabel(input.requestLabel),
+            loopStage: "model_response",
+            outcome: "success",
+            metadata: {
+                provider: selection.provider,
+                model: selection.model,
+                providerBaseUrl: selection.baseUrl,
+                requestLabel: input.requestLabel,
+            },
+        });
         return apiType === "openai-responses" || apiType === "responses"
             ? extractResponsesText(payload)
             : extractChatCompletionsText(payload);

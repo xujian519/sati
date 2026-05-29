@@ -209,6 +209,8 @@ export function createRouterRuntime(
           messages: input.request.messages,
           judgeRuntime,
           previousTier: input.metadata?.previousTier,
+          sessionId: input.sessionId,
+          telemetry,
         });
         if (tokenSaver) {
           if (tokenSaver.failureReason) {
@@ -334,6 +336,22 @@ export function createRouterRuntime(
       type: "pilotdeck_router_decision",
       sessionId: input.sessionId,
       decision,
+    });
+    telemetry?.trackFeatureLoopStage({
+      module: "router",
+      ownerModule: "router",
+      phase: "decision",
+      loopStage: "module_event",
+      outcome: "success",
+      sessionId: input.sessionId,
+      metadata: {
+        scenarioType: decision.scenarioType,
+        resolvedFrom: decision.resolvedFrom,
+        tokenSaverTier: decision.tokenSaverTier,
+        provider: decision.provider,
+        model: decision.model,
+        role: decision.isSubagent ? "subagent" : "main",
+      },
     });
 
     return decision;
@@ -473,6 +491,24 @@ export function createRouterRuntime(
                 toModel: next.model,
                 error: outcome.error,
               });
+              telemetry?.trackFeatureLoopStage({
+                module: "router",
+                ownerModule: "router",
+                phase: "fallback",
+                loopStage: "module_event",
+                outcome: "success",
+                sessionId: ctx.sessionId,
+                metadata: {
+                  event: "fallback_attempt",
+                  scenarioType: attemptDecision.scenarioType,
+                  attempt: attemptIndex + 1,
+                  fromProvider: attempt.provider,
+                  fromModel: attempt.model,
+                  toProvider: next.provider,
+                  toModel: next.model,
+                  errorCode: outcome.error.code,
+                },
+              });
               continue outer;
             }
           }
@@ -498,6 +534,22 @@ export function createRouterRuntime(
               provider: attempt.provider,
               model: attempt.model,
               errorCode: outcome.error.code,
+            });
+            telemetry?.trackFeatureLoopStage({
+              module: "router",
+              ownerModule: "router",
+              phase: "fallback",
+              loopStage: "module_event",
+              outcome: "success",
+              sessionId: ctx.sessionId,
+              metadata: {
+                event: "transient_retry",
+                attempt: transientRetryCount + 1,
+                delayMs: Math.round(delay),
+                provider: attempt.provider,
+                model: attempt.model,
+                errorCode: outcome.error.code,
+              },
             });
             await abortableDelay(delay, ctx.abortSignal);
             transientRetryCount++;
@@ -530,6 +582,20 @@ export function createRouterRuntime(
             attempt: zeroUsageAttempt,
             provider: attempt.provider,
             model: attempt.model,
+          });
+          telemetry?.trackFeatureLoopStage({
+            module: "router",
+            ownerModule: "router",
+            phase: "fallback",
+            loopStage: "module_event",
+            outcome: "success",
+            sessionId: ctx.sessionId,
+            metadata: {
+              event: "zero_usage_retry",
+              attempt: zeroUsageAttempt,
+              provider: attempt.provider,
+              model: attempt.model,
+            },
           });
           await abortableDelay(500 * zeroUsageAttempt, ctx.abortSignal);
           continue;
@@ -565,38 +631,11 @@ export function createRouterRuntime(
           startedAt,
           endedAt,
         });
-        telemetry?.trackFeatureLoopStage({
-          module: "router",
-          loopStage: "model_response",
-          outcome: "success",
-          sessionId: ctx.sessionId,
-          metadata: {
-            provider: attempt.provider,
-            model: attempt.model,
-            providerBaseUrl: deps.modelRuntime.getProviderBaseUrl(attempt.provider),
-            scenarioType: attemptDecision.scenarioType,
-            resolvedFrom: attemptDecision.resolvedFrom,
-            role: decision.isSubagent ? "subagent" : "main",
-          },
-        });
         return;
       }
     }
 
     if (lastError && lastAttempt) {
-      telemetry?.trackError(lastError, {
-        module: "router",
-        loopStage: "model_request",
-        errorCategory: "model_request_error",
-        sessionId: ctx.sessionId,
-        code: lastError.code,
-        metadata: {
-          provider: lastAttempt.provider,
-          model: lastAttempt.model,
-          providerBaseUrl: deps.modelRuntime.getProviderBaseUrl(lastAttempt.provider),
-          scenarioType: lastDecision.scenarioType,
-        },
-      });
       events.emit({
         type: "pilotdeck_router_execute_failed",
         sessionId: ctx.sessionId,
@@ -836,4 +875,3 @@ function classifyNetworkErrorCode(error: unknown): string {
   if (msg.includes("abort") || error.name === "AbortError") return "aborted";
   return "network_error";
 }
-

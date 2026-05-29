@@ -562,6 +562,7 @@ class ProjectRuntimeRegistry {
       modelConfig: snapshot.config.model,
       projectRoot,
       now: this.options.now,
+      telemetry: this.options.telemetry,
     });
 
     const runtime: ProjectRuntime = {
@@ -596,6 +597,9 @@ class ProjectRuntimeRegistry {
           await service.runDueScheduledMaintenance("scheduled");
           this.options.telemetry.trackFeatureLoopStage({
             module: "memory",
+            ownerModule: "memory",
+            executionKind: "memory",
+            phase: "maintenance",
             loopStage: "module_event",
             outcome: "success",
             metadata: {
@@ -605,6 +609,9 @@ class ProjectRuntimeRegistry {
         } catch (error) {
           this.options.telemetry.trackError(error, {
             module: "memory",
+            ownerModule: "memory",
+            executionKind: "memory",
+            phase: "maintenance",
             loopStage: "loop_end",
             errorCategory: "loop_error",
             code: error instanceof Error ? error.name : "UnknownError",

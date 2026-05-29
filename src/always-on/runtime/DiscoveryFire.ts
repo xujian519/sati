@@ -85,6 +85,14 @@ export const ALWAYS_ON_EXECUTION_DENY_RULES: PermissionRule[] = [
   { source: "policy", behavior: "deny", toolName: "bash", pattern: "*git remote*" },
 ];
 
+function toTelemetryAlwaysOnPhase(phase: AlwaysOnEventPhase): "discovery" | "workspace" | "execution" | "report" | "apply" {
+  if (phase.startsWith("workspace_")) return "workspace";
+  if (phase.startsWith("execution_")) return "execution";
+  if (phase.startsWith("report_")) return "report";
+  if (phase.startsWith("apply_")) return "apply";
+  return "discovery";
+}
+
 export type EnsureActiveWorkCycleInput = {
   state: AlwaysOnDiscoveryState;
   projectKey: string;
@@ -166,14 +174,25 @@ export class DiscoveryFire {
   private emitEvent(
     runId: string,
     phase: AlwaysOnEventPhase,
-    extra?: { title?: string; planId?: string; outcome?: AlwaysOnDiscoveryOutcome; error?: { code: string; message: string } },
+    extra?: {
+      title?: string;
+      planId?: string;
+      outcome?: AlwaysOnDiscoveryOutcome;
+      error?: { code: string; message: string };
+      telemetryPhase?: "discovery" | "workspace" | "execution" | "report" | "apply";
+    },
   ): void {
+    const telemetryPhase = extra?.telemetryPhase ?? toTelemetryAlwaysOnPhase(phase);
+    const { telemetryPhase: _telemetryPhase, ...eventExtra } = extra ?? {};
     this.deps.telemetry?.trackFeatureLoopStage({
       module: "always_on",
+      ownerModule: "always_on",
+      executionKind: "always_on",
+      phase: telemetryPhase,
       loopStage: "module_event",
       outcome: phase === "run_failed" ? "failed" : "success",
       metadata: {
-        phase,
+        event: phase,
         runId,
         planId: extra?.planId,
         outcome: extra?.outcome,
@@ -182,6 +201,9 @@ export class DiscoveryFire {
     if (extra?.error) {
       this.deps.telemetry?.trackError(extra.error.message, {
         module: "always_on",
+        ownerModule: "always_on",
+        executionKind: "always_on",
+        phase: telemetryPhase,
         loopStage: "loop_end",
         errorCategory: "loop_error",
         code: extra.error.code,
@@ -200,7 +222,7 @@ export class DiscoveryFire {
         projectKey: this.deps.projectKey,
         phase,
         timestamp: this.deps.now().toISOString(),
-        ...extra,
+        ...eventExtra,
       })
       .catch(() => undefined);
   }
@@ -241,6 +263,7 @@ export class DiscoveryFire {
     );
 
     const sessionKey = DiscoveryFire.deriveApplySessionKey(this.deps.projectKey, input.runId);
+    this.emitEvent(input.runId, "apply_started", { outcome: "executed" });
     this.deps.sessionOverrides.set(sessionKey, {
       cwd: projectRoot,
       permissionMode: "bypassPermissions",
@@ -270,6 +293,15 @@ export class DiscoveryFire {
         persistEvents: true,
       });
       const error = pickFirstError(events);
+      if (error) {
+        this.emitEvent(input.runId, "run_failed", {
+          outcome: "failed",
+          telemetryPhase: "apply",
+          error: { code: error.code ?? "apply_failed", message: error.message },
+        });
+      } else {
+        this.emitEvent(input.runId, "apply_completed", { outcome: "executed" });
+      }
       return {
         events,
         sessionKey,
@@ -327,6 +359,7 @@ export class DiscoveryFire {
     const state = await this.deps.stateStore.read(startedAt);
 
     // Phase 2: Workspace
+    this.emitEvent(runId, "workspace_started", { planId });
     let workspace: WorkspaceHandle;
     let workCycle: WorkCycleRecord;
     try {
@@ -337,7 +370,7 @@ export class DiscoveryFire {
       const finishedAt = this.deps.now();
       const code = error instanceof AlwaysOnError ? error.code : "workspace_prepare_failed";
       const message = error instanceof Error ? error.message : String(error);
-      this.emitEvent(runId, "run_failed", { planId, error: { code, message }, outcome: "failed" });
+      this.emitEvent(runId, "run_failed", { planId, error: { code, message }, outcome: "failed", telemetryPhase: "workspace" });
       await this.deps.stateStore.markFireCompleted({ outcome: "failed", runId, planId, now: finishedAt });
       await this.deps.reportStore.appendHistory({ ...baseHistory, outcome: "failed", finishedAt: finishedAt.toISOString(), error: { code, message } });
       return { outcome: "failed", runId, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), planId, error: { code, message } };
@@ -345,6 +378,7 @@ export class DiscoveryFire {
 
     this.assertWorkspaceCwdSafe(workspace);
     workspace.metadata.startedAt = startedAt.toISOString();
+    this.emitEvent(runId, "workspace_ready", { planId });
 
     // Phase 3: Execution
     const executionSessionKey = DiscoveryFire.deriveExecutionSessionKey(this.deps.projectKey, runId);
@@ -395,7 +429,7 @@ export class DiscoveryFire {
     }
 
     if (executionError) {
-      this.emitEvent(runId, "run_failed", { planId, error: { code: executionError.code ?? "execution_failed", message: executionError.message }, outcome: "failed" });
+      this.emitEvent(runId, "run_failed", { planId, error: { code: executionError.code ?? "execution_failed", message: executionError.message }, outcome: "failed", telemetryPhase: "execution" });
       const finishedAt = this.deps.now();
       const reportFilePath = await this.writeFallbackReport({ runId, plan: planRecord, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), reason: `execution_failed: ${executionError.message}`, workspaceStrategy: workspace.strategy, workspaceHandle: workspace.cwd });
       await this.deps.planStore.updateStatus(planId, { status: "failed", reportFilePath, workCycleId: workCycle.id });
@@ -407,6 +441,7 @@ export class DiscoveryFire {
     this.emitEvent(runId, "execution_completed", { planId, title: planRecord.title });
 
     // Phase 4: Report
+    this.emitEvent(runId, "report_started", { planId, title: planRecord.title });
     const reportSessionKey = DiscoveryFire.deriveReportSessionKey(this.deps.projectKey, runId);
     this.deps.sessionOverrides.set(reportSessionKey, { cwd: workspace.cwd, permissionMode: "bypassPermissions", bypassAvailable: true, canPrompt: false, excludeTools: ALWAYS_ON_EXCLUDED_TOOLS });
 
@@ -447,7 +482,7 @@ export class DiscoveryFire {
       this.emitEvent(runId, "report_produced", { planId, title: planRecord.title, outcome });
       this.emitEvent(runId, "run_completed", { planId, title: planRecord.title, outcome });
     } else {
-      this.emitEvent(runId, "run_failed", { planId, error: reportError ? { code: reportError.code ?? "report_failed", message: reportError.message } : { code: "report_tool_not_invoked", message: "Report tool was not invoked" }, outcome });
+      this.emitEvent(runId, "run_failed", { planId, error: reportError ? { code: reportError.code ?? "report_failed", message: reportError.message } : { code: "report_tool_not_invoked", message: "Report tool was not invoked" }, outcome, telemetryPhase: "report" });
     }
 
     let reportFilePath = reportCtx.report?.filePath;
@@ -597,6 +632,7 @@ export class DiscoveryFire {
     this.emitEvent(runId, "plan_produced", { title: planRecord.title, planId: planRecord.id });
 
     // ── Phase 2: Workspace (bypassPermissions, agent-driven) ──
+    this.emitEvent(runId, "workspace_started", { planId: planRecord.id });
     let workspace: WorkspaceHandle;
     let workCycle: WorkCycleRecord;
     try {
@@ -611,6 +647,7 @@ export class DiscoveryFire {
         planId: planRecord.id,
         error: { code, message },
         outcome: "failed",
+        telemetryPhase: "workspace",
       });
       await this.deps.stateStore.markFireCompleted({
         outcome: "failed",
@@ -699,6 +736,7 @@ export class DiscoveryFire {
         planId: planRecord.id,
         error: { code: executionError.code ?? "execution_failed", message: executionError.message },
         outcome: "failed",
+        telemetryPhase: "execution",
       });
       const finishedAt = this.deps.now();
       const reportFilePath = await this.writeFallbackReport({
@@ -740,6 +778,7 @@ export class DiscoveryFire {
     this.emitEvent(runId, "execution_completed", { planId: planRecord.id, title: planRecord.title });
 
     // ── Phase 4: Report (bypassPermissions, independent agent loop) ──
+    this.emitEvent(runId, "report_started", { planId: planRecord.id, title: planRecord.title });
     const reportSessionKey = DiscoveryFire.deriveReportSessionKey(this.deps.projectKey, runId);
     this.deps.sessionOverrides.set(reportSessionKey, {
       cwd: workspace.cwd,
@@ -800,6 +839,7 @@ export class DiscoveryFire {
           ? { code: reportError.code ?? "report_failed", message: reportError.message }
           : { code: "report_tool_not_invoked", message: "Report tool was not invoked" },
         outcome,
+        telemetryPhase: "report",
       });
     }
 
@@ -983,6 +1023,13 @@ export class DiscoveryFire {
       mode: input.mode,
       runId: input.runId,
       projectKey: this.deps.projectKey,
+      telemetry: {
+        ownerModule: "always_on",
+        executionKind: "always_on",
+        phase: String(input.channelKey).startsWith("always-on/")
+          ? String(input.channelKey).slice("always-on/".length)
+          : undefined,
+      },
     })) {
       events.push(event);
       this.deps.onTurnEvent?.(input.sessionKey, input.channelKey, event);

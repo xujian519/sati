@@ -49,6 +49,7 @@ test("telemetry collector sends to configured endpoint", async () => {
   assert.equal(requests.length, 1);
   assert.equal(requests[0]?.url, "http://example.internal:3000/collect");
   const payload = requests[0]?.body as Array<{
+    schemaVersion: string;
     eventName: string;
     commitHash: string;
     deploymentMode: string;
@@ -56,13 +57,15 @@ test("telemetry collector sends to configured endpoint", async () => {
     sessionId: string;
     projectPath?: string;
     projectCommitHash?: string;
-    properties: { module: string; loopStage: string };
+    properties: { module: string; ownerModule: string; executionKind: string; phase: string; loopStage: string };
   }>;
+  assert.equal(payload[0]?.schemaVersion, "analytics.v2");
   assert.equal(payload[0]?.eventName, "feature_used");
   assert.equal(payload[0]?.commitHash, "abc123");
   assert.equal(typeof payload[0]?.deploymentMode, "string");
   assert.equal(typeof payload[0]?.instanceId, "string");
   assert.equal(payload[0]?.properties.module, "router");
+  assert.equal(payload[0]?.properties.ownerModule, "router");
   assert.equal(payload[0]?.properties.loopStage, "model_response");
   assert.equal(payload[0]?.projectPath, undefined);
   assert.equal(payload[0]?.projectCommitHash, undefined);
@@ -188,6 +191,9 @@ test("trackError allowlists provider model and providerBaseUrl on failed feature
 
   collector.trackError(new Error("fail"), {
     module: "router",
+    ownerModule: "router",
+    executionKind: "router_judge",
+    phase: "judge",
     loopStage: "model_request",
     errorCategory: "model_request_error",
     code: "rate_limit_error",
@@ -211,6 +217,9 @@ test("trackError allowlists provider model and providerBaseUrl on failed feature
   assert.equal(failedFeature.properties.provider, "deepseek");
   assert.equal(failedFeature.properties.model, "deepseek-v4");
   assert.equal(failedFeature.properties.providerBaseUrl, "https://api.deepseek.com/v1");
+  assert.equal(failedFeature.properties.ownerModule, "router");
+  assert.equal(failedFeature.properties.executionKind, "router_judge");
+  assert.equal(failedFeature.properties.phase, "judge");
   assert.equal(failedFeature.properties.runId, undefined);
 
   await collector.shutdown();
@@ -221,6 +230,9 @@ test("sanitizeProperties strips path-like keys and absolute paths", () => {
   const sanitized = sanitizeProperties({
     provider: "openai",
     providerBaseUrl: "https://api.openai.com/v1",
+    ownerModule: "session",
+    executionKind: "user_session",
+    phase: "discovery",
     cwd: "/Users/foo",
     projectRoot: "/var/project",
     nested: { filePath: "/tmp/x", ok: 1 },
@@ -228,6 +240,9 @@ test("sanitizeProperties strips path-like keys and absolute paths", () => {
   });
   assert.equal(sanitized.provider, "openai");
   assert.equal(sanitized.providerBaseUrl, "https://api.openai.com/v1");
+  assert.equal(sanitized.ownerModule, "session");
+  assert.equal(sanitized.executionKind, "user_session");
+  assert.equal(sanitized.phase, "discovery");
   assert.equal(sanitized.cwd, undefined);
   assert.equal(sanitized.projectRoot, undefined);
   assert.deepEqual(sanitized.nested, { ok: 1 });

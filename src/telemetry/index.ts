@@ -12,6 +12,7 @@ export {
   type TelemetryDeploymentMode,
   type TelemetryErrorInput,
   type TelemetryErrorCategory,
+  type TelemetryExecutionKind,
   type TelemetryLoopStage,
   type TelemetryModule,
   type TelemetryOutcome,

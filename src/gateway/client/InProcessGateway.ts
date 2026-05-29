@@ -74,6 +74,7 @@ import type {
   SkillsListResult,
 } from "../../extension/skills/types.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
+import type { TelemetryExecutionKind, TelemetryModule } from "../../telemetry/index.js";
 
 export type InProcessGatewayOptions = {
   now?: () => Date;
@@ -268,6 +269,8 @@ export class InProcessGateway implements Gateway {
       this.options.setSessionCwd(input.sessionKey, input.workspaceCwd);
     }
 
+    const telemetryContext = resolveSubmitTurnTelemetry(input);
+
     // Background pump: agent events → queue.
     const pump = (async () => {
       try {
@@ -282,6 +285,9 @@ export class InProcessGateway implements Gateway {
         const sessionAllowRules = this.sessionPermissionGrants.get(input.sessionKey) ?? [];
         this.options.telemetry?.trackFeatureLoopStage({
           module: "session",
+          ownerModule: telemetryContext.ownerModule,
+          executionKind: telemetryContext.executionKind,
+          phase: telemetryContext.phase,
           loopStage: "loop_start",
           outcome: "success",
           sessionId: input.sessionKey,
@@ -315,6 +321,9 @@ export class InProcessGateway implements Gateway {
             runId,
             channelKey: input.channelKey,
             permissionMode: permissionMode ?? "default",
+            ownerModule: telemetryContext.ownerModule,
+            executionKind: telemetryContext.executionKind,
+            phase: telemetryContext.phase,
           });
           for (const gatewayEvent of mapAgentEvent(event, runId)) {
             this.recordActiveTurnEvent(input.sessionKey, gatewayEvent);
@@ -324,6 +333,9 @@ export class InProcessGateway implements Gateway {
       } catch (error) {
         this.options.telemetry?.trackError(error, {
           module: "session",
+          ownerModule: telemetryContext.ownerModule,
+          executionKind: telemetryContext.executionKind,
+          phase: telemetryContext.phase,
           loopStage: "loop_end",
           errorCategory: "loop_error",
           sessionId: input.sessionKey,
@@ -641,6 +653,32 @@ function cloneGatewayEvent(event: GatewayEvent): GatewayEvent {
   return JSON.parse(JSON.stringify(event)) as GatewayEvent;
 }
 
+function resolveSubmitTurnTelemetry(input: GatewaySubmitTurnInput): {
+  ownerModule: TelemetryModule;
+  executionKind: TelemetryExecutionKind;
+  phase?: string;
+} {
+  if (input.telemetry?.ownerModule && input.telemetry.executionKind) {
+    return {
+      ownerModule: input.telemetry.ownerModule,
+      executionKind: input.telemetry.executionKind,
+      phase: input.telemetry.phase,
+    };
+  }
+  if (String(input.channelKey).startsWith("always-on/")) {
+    return {
+      ownerModule: "always_on",
+      executionKind: "always_on",
+      phase: String(input.channelKey).slice("always-on/".length) || input.telemetry?.phase,
+    };
+  }
+  return {
+    ownerModule: input.telemetry?.ownerModule ?? "session",
+    executionKind: input.telemetry?.executionKind ?? "user_session",
+    phase: input.telemetry?.phase,
+  };
+}
+
 function emitSessionTelemetry(
   telemetry: TelemetryClient | undefined,
   event: AgentEvent,
@@ -649,6 +687,9 @@ function emitSessionTelemetry(
     runId: string;
     channelKey: string;
     permissionMode: string;
+    ownerModule: TelemetryModule;
+    executionKind: TelemetryExecutionKind;
+    phase?: string;
   },
 ): void {
   if (!telemetry) return;
@@ -659,6 +700,9 @@ function emitSessionTelemetry(
       if (event.event.type === "request_started") {
         telemetry.trackFeatureLoopStage({
           module: "session",
+          ownerModule: context.ownerModule,
+          executionKind: context.executionKind,
+          phase: context.phase,
           loopStage: "model_request",
           outcome: "success",
           sessionId: context.sessionId,
@@ -678,6 +722,9 @@ function emitSessionTelemetry(
       if (event.event.type === "message_end") {
         telemetry.trackFeatureLoopStage({
           module: "session",
+          ownerModule: context.ownerModule,
+          executionKind: context.executionKind,
+          phase: context.phase,
           loopStage: "model_response",
           outcome: "success",
           sessionId: context.sessionId,
@@ -687,6 +734,9 @@ function emitSessionTelemetry(
       if (event.event.type === "error") {
         telemetry.trackError(event.event.error, {
           module: "session",
+          ownerModule: context.ownerModule,
+          executionKind: context.executionKind,
+          phase: context.phase,
           loopStage: "model_request",
           errorCategory: "model_request_error",
           sessionId: context.sessionId,
@@ -701,6 +751,9 @@ function emitSessionTelemetry(
     case "tool_calls_detected":
       telemetry.trackFeatureLoopStage({
         module: "session",
+        ownerModule: context.ownerModule,
+        executionKind: context.executionKind,
+        phase: context.phase,
         loopStage: "tool_prepare",
         outcome: "success",
         sessionId: context.sessionId,
@@ -714,6 +767,9 @@ function emitSessionTelemetry(
     case "pre_tool_execute":
       telemetry.trackFeatureLoopStage({
         module: "session",
+        ownerModule: context.ownerModule,
+        executionKind: context.executionKind,
+        phase: context.phase,
         loopStage: "tool_call",
         outcome: "success",
         sessionId: context.sessionId,
@@ -727,6 +783,9 @@ function emitSessionTelemetry(
     case "post_tool_execute":
       telemetry.trackFeatureLoopStage({
         module: "session",
+        ownerModule: context.ownerModule,
+        executionKind: context.executionKind,
+        phase: context.phase,
         loopStage: "tool_call",
         outcome: event.success ? "success" : "failed",
         errorCategory: event.success ? undefined : "tool_runtime_error",
@@ -744,6 +803,9 @@ function emitSessionTelemetry(
         const code = event.result.error.code;
         telemetry.trackError(event.result.error.message, {
           module: "session",
+          ownerModule: context.ownerModule,
+          executionKind: context.executionKind,
+          phase: context.phase,
           loopStage: "tool_call",
           errorCategory: inferToolErrorCategory(code),
           sessionId: context.sessionId,
@@ -759,6 +821,9 @@ function emitSessionTelemetry(
     case "permission_requested":
       telemetry.trackFeatureLoopStage({
         module: "session",
+        ownerModule: context.ownerModule,
+        executionKind: context.executionKind,
+        phase: context.phase,
         loopStage: "permission_check",
         outcome: "success",
         sessionId: context.sessionId,
@@ -772,6 +837,9 @@ function emitSessionTelemetry(
     case "permission_denied":
       telemetry.trackError(event.reason, {
         module: "session",
+        ownerModule: context.ownerModule,
+        executionKind: context.executionKind,
+        phase: context.phase,
         loopStage: "permission_check",
         errorCategory: "permission_error",
         sessionId: context.sessionId,
@@ -785,6 +853,9 @@ function emitSessionTelemetry(
     case "turn_completed":
       telemetry.trackFeatureLoopStage({
         module: "session",
+        ownerModule: context.ownerModule,
+        executionKind: context.executionKind,
+        phase: context.phase,
         loopStage: "loop_end",
         outcome: "success",
         sessionId: context.sessionId,
@@ -798,6 +869,9 @@ function emitSessionTelemetry(
     case "turn_failed":
       telemetry.trackError(event.error, {
         module: "session",
+        ownerModule: context.ownerModule,
+        executionKind: context.executionKind,
+        phase: context.phase,
         loopStage: "loop_end",
         errorCategory: "loop_error",
         sessionId: context.sessionId,
@@ -810,12 +884,126 @@ function emitSessionTelemetry(
     case "session_aborted":
       telemetry.trackFeatureLoopStage({
         module: "session",
+        ownerModule: context.ownerModule,
+        executionKind: context.executionKind,
+        phase: context.phase,
         loopStage: "loop_end",
         outcome: "aborted",
         sessionId: context.sessionId,
         metadata: {
           runId: context.runId,
           reason: event.reason,
+        },
+      });
+      return;
+    case "subagent_model_event":
+      if (event.event.type === "request_started") {
+        telemetry.trackFeatureLoopStage({
+          module: "session",
+          ownerModule: context.ownerModule,
+          executionKind: "subagent",
+          phase: context.phase,
+          loopStage: "model_request",
+          outcome: "success",
+          sessionId: context.sessionId,
+          metadata: {
+            runId: context.runId,
+            provider: event.event.provider,
+            model: event.event.model,
+            ...(event.event.providerBaseUrl ? { providerBaseUrl: event.event.providerBaseUrl } : {}),
+            subagentId: event.subagentId,
+            subagentType: event.subagentType,
+          },
+        });
+      }
+      if (event.event.type === "message_end") {
+        telemetry.trackFeatureLoopStage({
+          module: "session",
+          ownerModule: context.ownerModule,
+          executionKind: "subagent",
+          phase: context.phase,
+          loopStage: "model_response",
+          outcome: "success",
+          sessionId: context.sessionId,
+          metadata: {
+            runId: context.runId,
+            subagentId: event.subagentId,
+            subagentType: event.subagentType,
+          },
+        });
+      }
+      if (event.event.type === "error") {
+        telemetry.trackError(event.event.error, {
+          module: "session",
+          ownerModule: context.ownerModule,
+          executionKind: "subagent",
+          phase: context.phase,
+          loopStage: "model_request",
+          errorCategory: "model_request_error",
+          sessionId: context.sessionId,
+          code: event.event.error.code,
+          metadata: {
+            runId: context.runId,
+            provider: event.event.error.provider,
+            subagentId: event.subagentId,
+            subagentType: event.subagentType,
+          },
+        });
+      }
+      return;
+    case "subagent_tool_calls_detected":
+      telemetry.trackFeatureLoopStage({
+        module: "session",
+        ownerModule: context.ownerModule,
+        executionKind: "subagent",
+        phase: context.phase,
+        loopStage: "tool_prepare",
+        outcome: "success",
+        sessionId: context.sessionId,
+        metadata: {
+          runId: context.runId,
+          subagentId: event.subagentId,
+          subagentType: event.subagentType,
+          toolCount: event.calls.length,
+          toolNames: event.calls.map((call) => call.name),
+        },
+      });
+      return;
+    case "subagent_tool_result":
+      if (event.result.type === "error") {
+        telemetry.trackError(event.result.error.message, {
+          module: "session",
+          ownerModule: context.ownerModule,
+          executionKind: "subagent",
+          phase: context.phase,
+          loopStage: "tool_call",
+          errorCategory: inferToolErrorCategory(event.result.error.code),
+          sessionId: context.sessionId,
+          code: event.result.error.code,
+          metadata: {
+            runId: context.runId,
+            subagentId: event.subagentId,
+            subagentType: event.subagentType,
+            toolName: event.result.toolName,
+            toolCallId: event.result.toolCallId,
+          },
+        });
+        return;
+      }
+      telemetry.trackFeatureLoopStage({
+        module: "session",
+        ownerModule: context.ownerModule,
+        executionKind: "subagent",
+        phase: context.phase,
+        loopStage: "tool_call",
+        outcome: "success",
+        sessionId: context.sessionId,
+        metadata: {
+          runId: context.runId,
+          subagentId: event.subagentId,
+          subagentType: event.subagentType,
+          toolName: event.result.toolName,
+          toolCallId: event.result.toolCallId,
         },
       });
       return;

@@ -152,10 +152,14 @@ export type AlwaysOnEventPhase =
   | "discovery_started"
   | "plan_produced"
   | "no_plan"
+  | "workspace_started"
   | "workspace_ready"
   | "execution_started"
   | "execution_completed"
+  | "report_started"
   | "report_produced"
+  | "apply_started"
+  | "apply_completed"
   | "run_completed"
   | "run_failed";
 

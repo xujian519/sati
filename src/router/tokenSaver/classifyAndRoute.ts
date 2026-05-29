@@ -3,6 +3,7 @@ import type {
   CanonicalModelRequest,
   ModelRuntime,
 } from "../../model/index.js";
+import type { TelemetryClient } from "../../telemetry/index.js";
 import type { RouterModelRef, RouterTokenSaverConfig } from "../config/schema.js";
 import { extractLastUserMessage } from "./extractLastUserMessage.js";
 import { generateJudgePrompt } from "./generateJudgePrompt.js";
@@ -22,6 +23,8 @@ export type ClassifyAndRouteInput = {
   abortSignal?: AbortSignal;
   /** Tier from the previous turn; passed to the judge for context-aware classification. */
   previousTier?: string;
+  sessionId?: string;
+  telemetry?: TelemetryClient;
 };
 
 export async function classifyAndRoute(
@@ -65,12 +68,41 @@ export async function classifyAndRoute(
 
   const timeoutMs = Math.max(500, config.judgeTimeoutMs ?? 5_000);
   const maxAttempts = 3;
+  input.telemetry?.trackFeatureLoopStage({
+    module: "router",
+    ownerModule: "router",
+    executionKind: "router_judge",
+    phase: "judge",
+    loopStage: "module_event",
+    outcome: "success",
+    sessionId: input.sessionId,
+    metadata: {
+      event: "judge_enabled",
+      provider: config.judge.provider,
+      model: config.judge.model,
+    },
+  });
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {
       await new Promise((r) => setTimeout(r, 1_000));
     }
     let timeout: NodeJS.Timeout | undefined;
     try {
+      input.telemetry?.trackFeatureLoopStage({
+        module: "router",
+        ownerModule: "router",
+        executionKind: "router_judge",
+        phase: "judge",
+        loopStage: "model_request",
+        outcome: "success",
+        sessionId: input.sessionId,
+        metadata: {
+          event: "request_started",
+          attempt,
+          provider: config.judge.provider,
+          model: config.judge.model,
+        },
+      });
       const response = await Promise.race([
         input.judgeRuntime.complete(judgeRequest),
         new Promise<never>((_, reject) => {
@@ -91,6 +123,22 @@ export async function classifyAndRoute(
         if (attempt < maxAttempts) {
           continue;
         }
+        input.telemetry?.trackFeatureLoopStage({
+          module: "router",
+          ownerModule: "router",
+          executionKind: "router_judge",
+          phase: "judge",
+          loopStage: "model_response",
+          outcome: "failed",
+          errorCategory: "runtime_error",
+          sessionId: input.sessionId,
+          metadata: {
+            event: "parse_failed",
+            attempt,
+            provider: config.judge.provider,
+            model: config.judge.model,
+          },
+        });
         console.warn("[token-saver] Judge returned empty after retries");
         return {
           tier: config.defaultTier,
@@ -105,6 +153,22 @@ export async function classifyAndRoute(
         if (attempt < maxAttempts) {
           continue;
         }
+        input.telemetry?.trackFeatureLoopStage({
+          module: "router",
+          ownerModule: "router",
+          executionKind: "router_judge",
+          phase: "judge",
+          loopStage: "model_response",
+          outcome: "failed",
+          errorCategory: "runtime_error",
+          sessionId: input.sessionId,
+          metadata: {
+            event: "parse_failed",
+            attempt,
+            provider: config.judge.provider,
+            model: config.judge.model,
+          },
+        });
         console.warn(
           "[token-saver] parseTier failed. Judge text:",
           JSON.stringify(text).slice(0, 300),
@@ -118,6 +182,23 @@ export async function classifyAndRoute(
       }
       const selection = config.tiers[tier]?.model;
       if (!selection) {
+        input.telemetry?.trackFeatureLoopStage({
+          module: "router",
+          ownerModule: "router",
+          executionKind: "router_judge",
+          phase: "judge",
+          loopStage: "model_response",
+          outcome: "failed",
+          errorCategory: "runtime_error",
+          sessionId: input.sessionId,
+          metadata: {
+            event: "parse_failed",
+            attempt,
+            tier,
+            provider: config.judge.provider,
+            model: config.judge.model,
+          },
+        });
         return {
           tier: config.defaultTier,
           selection: defaultTier.model,
@@ -125,11 +206,44 @@ export async function classifyAndRoute(
           failureReason: "parse_error",
         };
       }
+      input.telemetry?.trackFeatureLoopStage({
+        module: "router",
+        ownerModule: "router",
+        executionKind: "router_judge",
+        phase: "judge",
+        loopStage: "model_response",
+        outcome: "success",
+        sessionId: input.sessionId,
+        metadata: {
+          event: "request_succeeded",
+          attempt,
+          tier,
+          provider: config.judge.provider,
+          model: config.judge.model,
+        },
+      });
       return { tier, selection, resolvedFrom: "judge" };
     } catch (error) {
       if (attempt < maxAttempts && !(error instanceof TokenSaverTimeoutError)) {
         continue;
       }
+      const timedOut = error instanceof TokenSaverTimeoutError;
+      input.telemetry?.trackError(error, {
+        module: "router",
+        ownerModule: "router",
+        executionKind: "router_judge",
+        phase: "judge",
+        loopStage: "model_request",
+        errorCategory: timedOut ? "runtime_error" : "model_request_error",
+        sessionId: input.sessionId,
+        code: timedOut ? "judge_timeout" : "judge_model_error",
+        metadata: {
+          event: timedOut ? "timeout" : "request_failed",
+          attempt,
+          provider: config.judge.provider,
+          model: config.judge.model,
+        },
+      });
       return {
         tier: config.defaultTier,
         selection: defaultTier.model,

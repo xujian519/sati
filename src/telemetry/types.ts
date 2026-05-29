@@ -1,4 +1,4 @@
-export const ANALYTICS_SCHEMA_VERSION = "analytics.v1" as const;
+export const ANALYTICS_SCHEMA_VERSION = "analytics.v2" as const;
 
 export type AnalyticsSchemaVersion = typeof ANALYTICS_SCHEMA_VERSION;
 
@@ -16,6 +16,16 @@ export type TelemetryModule =
   | "memory"
   | "cron_job"
   | "session";
+
+export type TelemetryExecutionKind =
+  | "user_session"
+  | "subagent"
+  | "always_on"
+  | "router_judge"
+  | "memory"
+  | "cron_job"
+  | "compaction"
+  | "tool_secondary";
 
 export type TelemetryLoopStage =
   | "module_event"
@@ -75,6 +85,9 @@ export type TelemetryTrackContext = {
 
 export type TelemetryFeatureUsedInput = TelemetryTrackContext & {
   module: TelemetryModule;
+  ownerModule?: TelemetryModule;
+  executionKind?: TelemetryExecutionKind;
+  phase?: string;
   loopStage: TelemetryLoopStage;
   outcome?: TelemetryOutcome;
   errorCategory?: TelemetryErrorCategory;
@@ -83,6 +96,9 @@ export type TelemetryFeatureUsedInput = TelemetryTrackContext & {
 
 export type TelemetryErrorInput = TelemetryTrackContext & {
   module?: TelemetryModule | "runtime" | "ui";
+  ownerModule?: TelemetryModule;
+  executionKind?: TelemetryExecutionKind;
+  phase?: string;
   loopStage?: TelemetryLoopStage;
   errorCategory?: TelemetryErrorCategory;
   code?: string;

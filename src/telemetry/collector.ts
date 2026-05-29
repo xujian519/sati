@@ -14,6 +14,7 @@ import {
   type TelemetryErrorCategory,
   type TelemetryErrorInput,
   type TelemetryFeatureUsedInput,
+  type TelemetryExecutionKind,
   type TelemetryLoopStage,
   type TelemetryModule,
   type TelemetryOutcome,
@@ -56,6 +57,9 @@ export function createTelemetryCollector(
     trackFeatureLoopStage(inputFeature) {
       const {
         module,
+        ownerModule,
+        executionKind,
+        phase,
         loopStage,
         outcome = "success",
         errorCategory,
@@ -64,6 +68,9 @@ export function createTelemetryCollector(
       } = inputFeature;
       this.track("feature_used", {
         module,
+        ownerModule: ownerModule ?? module,
+        ...(executionKind ? { executionKind } : {}),
+        ...(phase ? { phase } : {}),
         loopStage,
         outcome,
         ...(errorCategory ? { errorCategory } : {}),
@@ -73,17 +80,24 @@ export function createTelemetryCollector(
     trackError(error, inputError = {}) {
       const err = normalizeErrorCode(error);
       const module = inputError.module ?? "runtime";
+      const ownerModule = inputError.ownerModule ?? normalizeModule(module);
       const loopStage = inputError.loopStage ?? "loop_end";
       const errorCategory = inputError.errorCategory ?? "runtime_error";
       const code = inputError.code ?? err;
       this.track("error_occurred", {
         module,
+        ownerModule,
+        ...(inputError.executionKind ? { executionKind: inputError.executionKind } : {}),
+        ...(inputError.phase ? { phase: inputError.phase } : {}),
         loopStage,
         errorCategory,
         code,
       }, inputError);
       this.trackFeatureLoopStage({
         module: normalizeModule(module),
+        ownerModule,
+        executionKind: normalizeExecutionKind(inputError.executionKind),
+        phase: inputError.phase,
         loopStage: normalizeLoopStage(loopStage),
         outcome: "failed",
         errorCategory: normalizeErrorCategory(errorCategory),
@@ -282,4 +296,20 @@ function normalizeErrorCategory(value: string): TelemetryErrorCategory {
     return value;
   }
   return "runtime_error";
+}
+
+function normalizeExecutionKind(value: TelemetryExecutionKind | undefined): TelemetryExecutionKind | undefined {
+  if (
+    value === "user_session" ||
+    value === "subagent" ||
+    value === "always_on" ||
+    value === "router_judge" ||
+    value === "memory" ||
+    value === "cron_job" ||
+    value === "compaction" ||
+    value === "tool_secondary"
+  ) {
+    return value;
+  }
+  return undefined;
 }
