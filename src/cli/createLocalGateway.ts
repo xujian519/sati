@@ -147,9 +147,6 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   const now = () => new Date();
   const telemetry = options.telemetry ?? createTelemetryCollector({ env, pilotHome });
   const ownsTelemetry = !options.telemetry;
-  telemetry.trackAppStarted({
-    channel: "gateway",
-  });
   let registry!: ProjectRuntimeRegistry;
   let router: SessionRouter | undefined;
   const extensionWatchManager = new ExtensionWatchManager({

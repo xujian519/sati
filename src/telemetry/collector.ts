@@ -90,9 +90,6 @@ export function createTelemetryCollector(
         metadata: { code },
       });
     },
-    trackAppStarted(metadata = {}) {
-      this.track("app_started", sanitizeProperties(metadata), {});
-    },
     flush() {
       return sender.flush();
     },

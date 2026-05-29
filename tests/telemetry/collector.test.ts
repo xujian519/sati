@@ -94,7 +94,11 @@ test("telemetry collector retries failed uploads", async () => {
     }) as typeof fetch,
   });
 
-  collector.track("session_active", { source: "test" }, { sessionId: "s-2" });
+  collector.track(
+    "feature_used",
+    { module: "session", loopStage: "loop_start", outcome: "success" },
+    { sessionId: "s-2" },
+  );
   await collector.flush();
   const first = collector.snapshot();
   assert.equal(first.sendFailures, 1);

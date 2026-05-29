@@ -43,11 +43,7 @@ export type TelemetryErrorCategory =
   | "loop_error"
   | "runtime_error";
 
-export type AnalyticsEventName =
-  | "app_started"
-  | "feature_used"
-  | "error_occurred"
-  | "session_active";
+export type AnalyticsEventName = "feature_used" | "error_occurred";
 
 export type AnalyticsEventProperties = Record<string, unknown>;
 
@@ -132,7 +128,6 @@ export type TelemetryClient = {
   trackFeatureUsed(input: TelemetryFeatureUsedInput): void;
   trackFeatureLoopStage(input: TelemetryFeatureUsedInput): void;
   trackError(error: unknown, input?: TelemetryErrorInput): void;
-  trackAppStarted(metadata?: Record<string, unknown>): void;
   flush(): Promise<void>;
   shutdown(): Promise<void>;
   snapshot(): TelemetrySenderMetrics;

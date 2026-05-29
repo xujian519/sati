@@ -22,7 +22,7 @@
 type AnalyticsEvent = {
   schemaVersion: "analytics.v1";
   eventId: string;
-  eventName: "app_started" | "feature_used" | "error_occurred" | "session_active";
+  eventName: "feature_used" | "error_occurred";
   occurredAt: string; // ISO timestamp
   installationId: string; // installation-level identity (stable across shared server-token)
   instanceId: string; // instance-level identity (distinguishes multi-instance same machine)
@@ -47,6 +47,7 @@ type AnalyticsEvent = {
 - Removed field: `projectPath` (no filesystem paths in outbound events).
 - `sessionId` is now a hashed anonymous id, not the raw `sessionKey` (which may embed paths).
 - `error_occurred` no longer includes `message` or `stack`; only classification fields below.
+- Removed event types: `app_started`, `session_active` (DAU uses any `feature_used` / `error_occurred`).
 
 ## `feature_used` Two-Layer Model
 
@@ -94,7 +95,7 @@ No `message`, `stack`, or caller-supplied metadata is included.
 
 ## Aggregation Guidance
 
-- Installation-level active users (DAU): distinct `installationId` per day.
+- Installation-level active users (DAU): distinct `installationId` per day with any event (`feature_used` or `error_occurred`).
 - Instance-level active users: distinct `instanceId` per day.
 - Module metrics: group by `properties.module`.
 - Loop-stage funnel/error rates: group by `properties.module + properties.loopStage + properties.outcome`.
