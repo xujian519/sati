@@ -683,6 +683,7 @@
           "anthropic": "anthropic (messages API)"
         },
         "baseUrl": "Base URL",
+        "baseUrlHint": "For OpenAI-compatible providers, include the /v1 suffix, for example https://api.example.com/v1.",
         "defaultsTo": "Defaults to",
         "fromCatalog": "from catalog.",
         "effective": "Effective:",

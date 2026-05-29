@@ -805,6 +805,9 @@ function ProviderCard({
             monospace
             onChange={(v) => update({ url: v })}
           />
+          <span className="mt-0.5 block text-[10px] text-muted-foreground/70">
+            {t('pilotDeckConfig.panels.models.baseUrlHint')}
+          </span>
           {!provider.url && catalogEntry && (
             <span className="mt-0.5 block text-[10px] text-muted-foreground/70">
               {t('pilotDeckConfig.panels.models.defaultsTo')}{' '}

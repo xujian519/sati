@@ -683,6 +683,7 @@
           "anthropic": "anthropic（消息 API）"
         },
         "baseUrl": "接口地址",
+        "baseUrlHint": "OpenAI 兼容接口请填到 /v1，例如 https://api.example.com/v1。",
         "defaultsTo": "默认使用目录中的",
         "fromCatalog": "。",
         "effective": "实际地址：",
