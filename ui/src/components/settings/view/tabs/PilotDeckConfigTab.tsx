@@ -2470,6 +2470,7 @@ function RouterLevelEditor({ config, onChange }: { config: PilotDeckConfig; onCh
   const { t } = useTranslation('settings');
   const modelOpts = buildModelRefOptions(config);
   const defaultValue = config.router?.scenarios?.default ?? '';
+  const judgeValue = config.router?.tokenSaver?.judge ?? '';
   const tiers = config.router?.tokenSaver?.tiers ?? {};
 
   const setDefault = (value: string) => {
@@ -2493,6 +2494,10 @@ function RouterLevelEditor({ config, onChange }: { config: PilotDeckConfig; onCh
     }));
   };
 
+  const setJudgeModel = (value: string) => {
+    onChange(patch(ensureModelRefConfigured(config, value), ['router', 'tokenSaver', 'judge'], value));
+  };
+
   return (
     <SettingsCard divided>
       <FormRow
@@ -2504,6 +2509,18 @@ function RouterLevelEditor({ config, onChange }: { config: PilotDeckConfig; onCh
           options={modelOpts}
           placeholder={t('pilotDeckConfig.panels.router.levels.modelPlaceholder')}
           onChange={setDefault}
+        />
+      </FormRow>
+
+      <FormRow
+        label={t('pilotDeckConfig.panels.router.levels.judge.label')}
+        description={t('pilotDeckConfig.panels.router.levels.judge.description')}
+      >
+        <ModelRefInput
+          value={judgeValue}
+          options={modelOpts}
+          placeholder={t('pilotDeckConfig.panels.router.levels.modelPlaceholder')}
+          onChange={setJudgeModel}
         />
       </FormRow>
 
@@ -2698,27 +2715,17 @@ function RouterSection({ config, onChange }: { config: PilotDeckConfig; onChange
 
                   {tokenSaverEnabled && (
                     <div className="space-y-4 border-t border-border pt-4">
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div>
-                          <label className="mb-1 block text-xs font-medium text-foreground">{t('pilotDeckConfig.panels.router.tokenSaver.judgeModel')}</label>
-                          <ModelRefInput
-                            value={ts.judge ?? ''}
-                            options={modelOpts}
-                            onChange={(v) => onChange(patch(ensureModelRefConfigured(config, v), ['router', 'tokenSaver', 'judge'], v))}
-                          />
-                        </div>
-                        <div>
-                          <label className="mb-1 block text-xs font-medium text-foreground">{t('pilotDeckConfig.panels.router.tokenSaver.defaultTier')}</label>
-                          <Select
-                            value={ts.defaultTier ?? 'medium'}
-                            options={
-                              availableTierNames.length > 0
-                                ? availableTierNames.map((t) => ({ value: t, label: t }))
-                                : ROUTER_TIER_KEYS.map((t) => ({ value: t, label: t }))
-                            }
-                            onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'defaultTier'], v))}
-                          />
-                        </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-foreground">{t('pilotDeckConfig.panels.router.tokenSaver.defaultTier')}</label>
+                        <Select
+                          value={ts.defaultTier ?? 'medium'}
+                          options={
+                            availableTierNames.length > 0
+                              ? availableTierNames.map((t) => ({ value: t, label: t }))
+                              : ROUTER_TIER_KEYS.map((t) => ({ value: t, label: t }))
+                          }
+                          onChange={(v) => onChange(patch(config, ['router', 'tokenSaver', 'defaultTier'], v))}
+                        />
                       </div>
                       <FormRow label={t('pilotDeckConfig.panels.router.tokenSaver.judgeTimeout.label')} description={t('pilotDeckConfig.panels.router.tokenSaver.judgeTimeout.description')}>
                         <NumberInput

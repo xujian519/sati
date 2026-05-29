@@ -802,6 +802,10 @@
             "label": "Default",
             "description": "Primary route used when no tier-specific decision applies."
           },
+          "judge": {
+            "label": "Judge model",
+            "description": "Model used to classify the request before choosing a token-saving tier."
+          },
           "simple": {
             "label": "Simple",
             "description": "Quick Q&A, confirmations, light rewrites, and simple file operations."

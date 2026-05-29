@@ -802,6 +802,10 @@
             "label": "Default",
             "description": "没有命中特定层级时使用的主路由。"
           },
+          "judge": {
+            "label": "判定模型",
+            "description": "用于先判定请求复杂度，再选择省 Token 层级的模型。"
+          },
           "simple": {
             "label": "Simple",
             "description": "快速问答、确认、轻量改写和简单文件操作。"
