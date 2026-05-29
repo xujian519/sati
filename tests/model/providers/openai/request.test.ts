@@ -95,3 +95,105 @@ test("buildOpenAIRequest preserves existing items and does not mutate original s
   assert.equal((originalProps.ids as Record<string, unknown>).items, undefined);
   assert.deepEqual((originalProps.labels as Record<string, unknown>).items, { type: "string" });
 });
+
+test("buildOpenAIRequest repairs assistant tool calls missing OpenAI-required fields", () => {
+  const request: CanonicalModelRequest = {
+    model: "openai/test",
+    provider: "openai",
+    messages: [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_call",
+            id: "",
+            name: "find_skills",
+            input: { query: "popular skills" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            toolCallId: "",
+            content: [{ type: "text", text: "[]" }],
+          },
+        ],
+      },
+    ],
+    tools: [{ name: "find_skills", inputSchema: { type: "object", properties: {} } }],
+  };
+
+  const body = buildOpenAIRequest(request, TEST_MODEL);
+  const assistant = body.messages[0]!;
+  const toolCall = assistant.tool_calls?.[0] as {
+    id: string;
+    type: string;
+    function: { name: string; arguments: string };
+  };
+
+  assert.equal(assistant.role, "assistant");
+  assert.equal(toolCall.id, "call_0_0");
+  assert.equal(toolCall.type, "function");
+  assert.equal(toolCall.function.name, "find_skills");
+  assert.equal(toolCall.function.arguments, JSON.stringify({ query: "popular skills" }));
+  assert.deepEqual(
+    body.messages.filter((message) => message.role === "tool").map((message) => message.tool_call_id),
+    ["call_0_0"],
+  );
+});
+
+test("buildOpenAIRequest drops orphaned tool messages that are not responses to tool calls", () => {
+  const request: CanonicalModelRequest = {
+    model: "openai/test",
+    provider: "openai",
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            toolCallId: "orphaned_call",
+            content: [{ type: "text", text: "stale result" }],
+          },
+          { type: "text", text: "continue" },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_call",
+            id: "call_valid",
+            name: "find_skills",
+            input: { query: "popular skills" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            toolCallId: "wrong_call",
+            content: [{ type: "text", text: "wrong result" }],
+          },
+          {
+            type: "tool_result",
+            toolCallId: "call_valid",
+            content: [{ type: "text", text: "valid result" }],
+          },
+        ],
+      },
+    ],
+    tools: [{ name: "find_skills", inputSchema: { type: "object", properties: {} } }],
+  };
+
+  const body = buildOpenAIRequest(request, TEST_MODEL);
+  const toolMessages = body.messages.filter((message) => message.role === "tool");
+
+  assert.deepEqual(toolMessages.map((message) => message.tool_call_id), ["call_valid"]);
+  assert.equal(toolMessages[0]?.content, "valid result");
+});
