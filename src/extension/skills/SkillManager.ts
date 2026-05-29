@@ -489,21 +489,76 @@ function buildInitialSkillContent(input: {
  * treat the skill as still loadable in those cases (we surface name +
  * description for display only).
  */
+type FrontmatterParseResult = {
+  frontmatter: Record<string, unknown>;
+  usedCompatibilityFallback: boolean;
+};
+
 function parseSkillFrontmatter(content: string): Record<string, unknown> {
-  if (!content.startsWith("---")) return {};
+  return parseSkillFrontmatterWithMeta(content).frontmatter;
+}
+
+function parseSkillFrontmatterWithMeta(content: string): FrontmatterParseResult {
+  if (!content.startsWith("---")) {
+    return { frontmatter: {}, usedCompatibilityFallback: false };
+  }
   // Accept both `\n---\n` and `\n---` (no trailing newline) closing
   // fences; some editors strip the trailing newline on save.
   const endRel = content.slice(3).search(/\r?\n---/);
-  if (endRel === -1) return {};
+  if (endRel === -1) {
+    return { frontmatter: {}, usedCompatibilityFallback: false };
+  }
   const fmRaw = content.slice(3, 3 + endRel).replace(/^\r?\n/, "");
   try {
     const parsed = parseYaml(fmRaw);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
+    return {
+      frontmatter:
+        parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>)
+          : {},
+      usedCompatibilityFallback: false,
+    };
   } catch {
-    return {};
+    const compat = parseCompatFrontmatter(fmRaw);
+    return {
+      frontmatter: compat,
+      usedCompatibilityFallback: Object.keys(compat).length > 0,
+    };
   }
+}
+
+function parseCompatFrontmatter(fmRaw: string): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  const lines = fmRaw.split(/\r?\n/);
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const scalarMatch = line.match(/^([A-Za-z][A-Za-z0-9_-]*)\s*:\s*(.+?)\s*$/);
+    if (!scalarMatch) continue;
+
+    const key = scalarMatch[1];
+    const rawValue = scalarMatch[2];
+    const blockMatch = rawValue.match(/^([>|])\s*$/);
+    if (blockMatch) {
+      const blockLines: string[] = [];
+      i += 1;
+      while (i < lines.length) {
+        const next = lines[i];
+        if (/^[A-Za-z][A-Za-z0-9_-]*\s*:/.test(next)) {
+          i -= 1;
+          break;
+        }
+        blockLines.push(next.replace(/^ {1,2}/, ""));
+        i += 1;
+      }
+      result[key] = blockLines.join("\n").trim();
+      continue;
+    }
+
+    result[key] = rawValue.trim().replace(/^["']|["']$/g, "");
+  }
+
+  return result;
 }
 
 async function readSkillMeta(skillDir: string, scope: SkillScope): Promise<SkillSummary | null> {
@@ -587,10 +642,18 @@ function validateRequiredFrontmatter(
     pushIssue(hardFails, "no_skill_md", "SKILL.md is empty or missing.");
     return null;
   }
-  const fm = parseSkillFrontmatter(skillMdContent);
+  const parsed = parseSkillFrontmatterWithMeta(skillMdContent);
+  const fm = parsed.frontmatter;
   if (Object.keys(fm).length === 0 && !skillMdContent.startsWith("---")) {
     pushIssue(hardFails, "frontmatter_missing", "SKILL.md does not start with a YAML frontmatter block.");
     return fm;
+  }
+  if (parsed.usedCompatibilityFallback) {
+    pushIssue(
+      warnings,
+      "frontmatter_compat_fallback",
+      "Frontmatter was parsed with compatibility fallback; consider standard YAML formatting.",
+    );
   }
   if (typeof fm.name !== "string" || !fm.name.trim()) {
     pushIssue(hardFails, "frontmatter_missing_name", "Frontmatter is missing required field: name.");

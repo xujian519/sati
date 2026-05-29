@@ -192,3 +192,6 @@ test-results/
 
 # Auto-Research-Skills (local-only)
 Auto-Research-Skills/
+
+# Local agent notes
+CLAUDE.md
