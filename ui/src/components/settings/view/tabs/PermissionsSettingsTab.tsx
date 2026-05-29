@@ -12,7 +12,9 @@ import {
 } from '../../../chat/utils/chatStorage';
 import type { PilotDeckSettings } from '../../../chat/types/types';
 import SettingsCard from '../SettingsCard';
+import SettingsRow from '../SettingsRow';
 import SettingsSection from '../SettingsSection';
+import SettingsToggle from '../SettingsToggle';
 
 const IS_WINDOWS = typeof navigator !== 'undefined'
   && /win/i.test(navigator.userAgent)
@@ -163,6 +165,7 @@ export default function PermissionsSettingsTab() {
   const { t } = useTranslation('settings');
   const [allowedTools, setAllowedTools] = useState<string[]>([]);
   const [disallowedTools, setDisallowedTools] = useState<string[]>([]);
+  const [skipPermissions, setSkipPermissions] = useState(false);
   const [newAllowed, setNewAllowed] = useState('');
   const [newBlocked, setNewBlocked] = useState('');
   const [banner, setBanner] = useState<StatusBanner>(null);
@@ -172,6 +175,7 @@ export default function PermissionsSettingsTab() {
     const settings = getPilotDeckSettings();
     setAllowedTools(settings.allowedTools);
     setDisallowedTools(settings.disallowedTools);
+    setSkipPermissions(settings.skipPermissions);
   }, []);
 
   useEffect(() => {
@@ -181,6 +185,7 @@ export default function PermissionsSettingsTab() {
         safeLocalStorage.setItem(PILOTDECK_SETTINGS_KEY, JSON.stringify(settings));
         setAllowedTools(settings.allowedTools);
         setDisallowedTools(settings.disallowedTools);
+        setSkipPermissions(settings.skipPermissions);
       })
       .catch((error) => {
         console.error('Failed to load permission settings from backend:', error);
@@ -225,6 +230,11 @@ export default function PermissionsSettingsTab() {
     const next = removeValue(disallowedTools, value);
     setDisallowedTools(next);
     persist({ disallowedTools: next });
+  };
+
+  const handleSkipPermissionsChange = (value: boolean) => {
+    setSkipPermissions(value);
+    persist({ skipPermissions: value });
   };
 
   // Auto-dismiss the import/export banner after 4s. The user gets to read
@@ -393,6 +403,35 @@ export default function PermissionsSettingsTab() {
             {banner.message}
           </div>
         ) : null}
+
+        <SettingsCard divided>
+          <SettingsRow
+            label={
+              <span className="inline-flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                {t('permissions.skipPermissions.title', { defaultValue: 'Skip permission prompts' })}
+              </span>
+            }
+            description={t('permissions.skipPermissions.description', {
+              defaultValue:
+                'Run tool calls without asking for confirmation. This maps to bypassPermissions and should only be used in trusted workspaces.',
+            })}
+          >
+            <SettingsToggle
+              checked={skipPermissions}
+              ariaLabel={t('permissions.skipPermissions.title', { defaultValue: 'Skip permission prompts' })}
+              onChange={handleSkipPermissionsChange}
+            />
+          </SettingsRow>
+          {skipPermissions ? (
+            <div className="border-t border-border px-4 py-2.5 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
+              {t('permissions.skipPermissions.warning', {
+                defaultValue:
+                  'Permission prompts are currently bypassed. Allowed and blocked rules below are still saved, but this global mode lets the agent run without asking.',
+              })}
+            </div>
+          ) : null}
+        </SettingsCard>
       </SettingsSection>
 
       <SettingsSection
