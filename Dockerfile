@@ -17,8 +17,12 @@ COPY src/context/memory/edgeclaw-memory-core/ src/context/memory/edgeclaw-memory
 COPY ui/package.json ui/
 COPY ui/scripts/ ui/scripts/
 
-# Single pnpm install resolves root + workspace (ui) + file dep (edgeclaw-memory-core)
-RUN npm install -g pnpm && HUSKY=0 pnpm install --frozen-lockfile
+# Single pnpm install resolves root + workspace (ui) + file dep (edgeclaw-memory-core).
+# Pin pnpm so CI builds do not pick up stricter build-script policy changes
+# before the lockfile/workspace config is updated.
+RUN npm install -g pnpm@10.32.1 \
+    && pnpm --version \
+    && HUSKY=0 pnpm install --frozen-lockfile
 
 # Copy all source files
 COPY src/ src/
@@ -63,14 +67,22 @@ COPY --from=builder /build/ui/scripts/ ui/scripts/
 COPY --from=builder /build/ui/shared/ ui/shared/
 COPY --from=builder /build/ui/vite.config.js ui/vite.config.js
 
-# Create pilotdeck home directory
-RUN mkdir -p /root/.pilotdeck/projects /root/.pilotdeck/router
+# Create PilotDeck state/workspace directories used by the gateway, UI server,
+# permissions, skills/plugins, memory, auth, and router stats.
+RUN mkdir -p \
+    /root/.pilotdeck/projects \
+    /root/.pilotdeck/router \
+    /root/.pilotdeck/skills \
+    /root/.pilotdeck/plugins \
+    /root/.pilotdeck/memory \
+    /workspace
 
 # Entrypoint
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 ENV NODE_ENV=production
+ENV PILOT_HOME=/root/.pilotdeck
 ENV HOST=0.0.0.0
 ENV SERVER_PORT=3001
 ENV PILOTDECK_GATEWAY_PORT=18789
