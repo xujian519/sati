@@ -112,6 +112,9 @@
     "config": {
       "detail": "模型池、智能体、路由、记忆、搜索和服务参数"
     },
+    "mcp": {
+      "detail": "通过全局或项目 JSON 配置 MCP 工具"
+    },
     "appearanceMode": {
       "title": "主题模式",
       "detail": "跟随系统外观，或固定为浅色 / 深色主题。",
@@ -489,6 +492,52 @@
     "help": {
       "title": "关于 Codex MCP",
       "description": "Codex 支持基于 stdio 的 MCP 服务器。您可以添加服务器，通过额外的工具和资源来扩展 Codex 的功能。"
+    }
+  },
+  "mcpConfig": {
+    "title": "MCP 服务器",
+    "description": "编辑 PilotDeck MCP 配置。全局配置位于 ~/.pilotdeck/mcp.json；项目配置位于 .pilotdeck/mcp.json，同名服务器会覆盖全局配置。",
+    "project": "项目级配置对应的项目",
+    "scopes": {
+      "global": "全局",
+      "project": "项目"
+    },
+    "serverCount": "已配置 {{count}} 个服务器",
+    "serverCount_plural": "已配置 {{count}} 个服务器",
+    "noPath": "配置路径不可用",
+    "addStdio": "添加 stdio 模板",
+    "addRemote": "添加远程模板",
+    "saved": "MCP 配置已保存。新的会话和下一次运行时重建会使用它。",
+    "fixJsonBeforeTemplate": "请先修复 JSON，再插入模板。",
+    "empty": "还没有配置 MCP 服务器。",
+    "advanced": "高级：原始 JSON",
+    "expand": "展开",
+    "unnamed": "未命名服务器",
+    "noSummary": "未配置命令或 URL",
+    "nameRequired": "保存前每个 MCP 服务器都需要填写名称。",
+    "transport": {
+      "http": "流式 HTTP"
+    },
+    "fields": {
+      "name": "名称",
+      "command": "启动命令",
+      "args": "参数",
+      "env": "环境变量",
+      "envPassThrough": "环境变量传递",
+      "perSession": "每个会话独立启动",
+      "perSessionHelp": "每个 Agent 会话启动一个新的 MCP 进程。",
+      "url": "URL",
+      "headers": "请求头"
+    },
+    "placeholders": {
+      "key": "键",
+      "value": "值"
+    },
+    "actions": {
+      "addArg": "添加参数",
+      "addEnv": "添加环境变量",
+      "addVariable": "添加变量",
+      "addHeader": "添加请求头"
     }
   },
   "pilotDeckConfig": {

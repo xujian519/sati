@@ -112,6 +112,9 @@
     "config": {
       "detail": "Model pool, agents, routing, memory, search, and service settings"
     },
+    "mcp": {
+      "detail": "Configure MCP tools from global or project JSON"
+    },
     "appearanceMode": {
       "title": "Theme Mode",
       "detail": "Follow the system appearance, or pin a light / dark theme.",
@@ -489,6 +492,52 @@
     "help": {
       "title": "About Codex MCP",
       "description": "Codex supports stdio-based MCP servers. You can add servers that extend Codex's capabilities with additional tools and resources."
+    }
+  },
+  "mcpConfig": {
+    "title": "MCP Servers",
+    "description": "Edit PilotDeck MCP config. Global config lives in ~/.pilotdeck/mcp.json; project config lives in .pilotdeck/mcp.json and overrides global servers with the same name.",
+    "project": "Project for project-scoped config",
+    "scopes": {
+      "global": "Global",
+      "project": "Project"
+    },
+    "serverCount": "{{count}} configured server",
+    "serverCount_plural": "{{count}} configured servers",
+    "noPath": "Config path unavailable",
+    "addStdio": "Add stdio template",
+    "addRemote": "Add remote template",
+    "saved": "MCP config saved. New sessions and the next runtime rebuild will use it.",
+    "fixJsonBeforeTemplate": "Fix the JSON before inserting a template.",
+    "empty": "No MCP servers configured yet.",
+    "advanced": "Advanced: raw JSON",
+    "expand": "Expand",
+    "unnamed": "Unnamed server",
+    "noSummary": "No command or URL configured",
+    "nameRequired": "Every MCP server needs a name before saving.",
+    "transport": {
+      "http": "Streamable HTTP"
+    },
+    "fields": {
+      "name": "Name",
+      "command": "Launch command",
+      "args": "Arguments",
+      "env": "Environment variables",
+      "envPassThrough": "Environment variable pass-through",
+      "perSession": "Per-session server",
+      "perSessionHelp": "Start a fresh MCP process for each agent session.",
+      "url": "URL",
+      "headers": "Headers"
+    },
+    "placeholders": {
+      "key": "Key",
+      "value": "Value"
+    },
+    "actions": {
+      "addArg": "Add argument",
+      "addEnv": "Add environment variable",
+      "addVariable": "Add variable",
+      "addHeader": "Add header"
     }
   },
   "pilotDeckConfig": {

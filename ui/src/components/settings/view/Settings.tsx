@@ -8,6 +8,7 @@ import {
   Globe2,
   MessageSquare,
   Palette,
+  Server,
   Shield,
   X,
   type LucideIcon,
@@ -29,13 +30,15 @@ import SettingsRow from './SettingsRow';
 import SettingsSection from './SettingsSection';
 import SettingsToggle from './SettingsToggle';
 import PilotDeckConfigTab from './tabs/PilotDeckConfigTab';
+import McpServersTab from './tabs/McpServersTab';
 import PermissionsSettingsTab from './tabs/PermissionsSettingsTab';
 
-type SettingsPage = 'main' | 'config' | 'permissions' | 'chatInput' | 'codeEditor';
+type SettingsPage = 'main' | 'config' | 'mcp' | 'permissions' | 'chatInput' | 'codeEditor';
 type ThemeMode = 'system' | 'light' | 'dark';
 
 const pageFromInitialTab = (tab: string): SettingsPage => {
   if (tab === 'config') return 'config';
+  if (tab === 'mcp') return 'mcp';
   if (tab === 'permissions') return 'permissions';
   return 'main';
 };
@@ -63,6 +66,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'appearance' }:
   const title = {
     main: t('title'),
     config: t('mainTabs.config'),
+    mcp: t('mcpConfig.title'),
     permissions: t('mainTabs.permissions'),
     chatInput: t('settingsHome.chatInput.title'),
     codeEditor: t('appearanceSettings.codeEditor.title'),
@@ -112,6 +116,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'appearance' }:
             )}
 
             {page === 'config' && <PilotDeckConfigTab projects={projects} />}
+            {page === 'mcp' && <McpServersTab projects={projects} />}
             {page === 'permissions' && <PermissionsSettingsTab />}
             {page === 'chatInput' && <ChatInputSettingsPage />}
             {page === 'codeEditor' && (
@@ -156,6 +161,12 @@ function SettingsHome({ projectSortOrder, onProjectSortOrderChange, onOpenPage }
             title={t('mainTabs.config')}
             detail={t('settingsHome.config.detail')}
             onClick={() => onOpenPage('config')}
+          />
+          <NavigationRow
+            icon={Server}
+            title={t('mcpConfig.title')}
+            detail={t('settingsHome.mcp.detail')}
+            onClick={() => onOpenPage('mcp')}
           />
         </GroupedCard>
       </SettingsGroup>

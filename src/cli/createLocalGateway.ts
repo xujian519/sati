@@ -49,6 +49,7 @@ import {
 import {
   McpRuntime,
   createMcpToolDefinitionsFromRuntime,
+  loadMcpServerConfig,
   parsePluginMcpServers,
 } from "../mcp/index.js";
 import { createModelRuntime, type ModelRuntime } from "../model/index.js";
@@ -608,7 +609,15 @@ class ProjectRuntimeRegistry {
     if (runtime.mcpReady) return runtime.mcpReady;
     runtime.mcpReady = (async () => {
       try {
-        const rawServers = runtime.pluginRuntime.mcpServers();
+        const configServers = loadMcpServerConfig(runtime.projectRoot, this.options.pilotHome);
+        for (const diagnostic of configServers.diagnostics) {
+          // eslint-disable-next-line no-console
+          console.warn(`[pilotdeck] Ignoring invalid MCP config ${diagnostic.path}: ${diagnostic.message}`);
+        }
+        const rawServers = {
+          ...runtime.pluginRuntime.mcpServers(),
+          ...configServers.servers,
+        };
         const { servers } = parsePluginMcpServers(rawServers);
         if (servers.length === 0) return;
 
