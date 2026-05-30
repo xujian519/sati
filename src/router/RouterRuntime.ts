@@ -337,22 +337,6 @@ export function createRouterRuntime(
       sessionId: input.sessionId,
       decision,
     });
-    telemetry?.trackFeatureLoopStage({
-      module: "router",
-      ownerModule: "router",
-      phase: "decision",
-      loopStage: "module_event",
-      outcome: "success",
-      sessionId: input.sessionId,
-      metadata: {
-        scenarioType: decision.scenarioType,
-        resolvedFrom: decision.resolvedFrom,
-        tokenSaverTier: decision.tokenSaverTier,
-        provider: decision.provider,
-        model: decision.model,
-        role: decision.isSubagent ? "subagent" : "main",
-      },
-    });
 
     return decision;
   }
