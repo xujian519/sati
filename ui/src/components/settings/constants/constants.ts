@@ -4,7 +4,7 @@ import type {
   SettingsMainTab,
 } from '../types/types';
 
-export const SETTINGS_MAIN_TABS: SettingsMainTab[] = ['appearance', 'permissions', 'config'];
+export const SETTINGS_MAIN_TABS: SettingsMainTab[] = ['appearance', 'permissions', 'config', 'mcp'];
 
 export const DEFAULT_PROJECT_SORT_ORDER: ProjectSortOrder = 'name';
 export const DEFAULT_SAVE_STATUS = null;

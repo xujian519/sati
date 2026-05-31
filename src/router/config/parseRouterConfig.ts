@@ -230,7 +230,7 @@ function parseTokenSaver(
     return undefined;
   }
 
-  const enabled = typeof raw.enabled === "boolean" ? raw.enabled : false;
+  const enabled = typeof raw.enabled === "boolean" ? raw.enabled : true;
   const judgeRef = consumeRef(raw.judge, "router.tokenSaver.judge", modelConfig, diagnostics);
   if (!judgeRef) {
     return undefined;
@@ -372,7 +372,7 @@ function parseAutoOrchestrate(
     });
     return undefined;
   }
-  const enabled = typeof raw.enabled === "boolean" ? raw.enabled : false;
+  const enabled = typeof raw.enabled === "boolean" ? raw.enabled : true;
   const mainAgentModel = optionalRef(
     raw.mainAgentModel,
     "router.autoOrchestrate.mainAgentModel",
@@ -505,7 +505,7 @@ function parseStats(
     });
     return undefined;
   }
-  const enabled = typeof raw.enabled === "boolean" ? raw.enabled : false;
+  const enabled = typeof raw.enabled === "boolean" ? raw.enabled : true;
   let modelPricing: RouterStatsConfig["modelPricing"];
   if (raw.modelPricing !== undefined) {
     if (!isRecord(raw.modelPricing)) {

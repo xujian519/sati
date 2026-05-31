@@ -1,2 +1,15 @@
 packages:
   - 'ui'
+
+# Native/build-time packages that are allowed to run lifecycle scripts during
+# pnpm install. Keeping this at the workspace root makes Docker/CI installs
+# deterministic and prevents ERR_PNPM_IGNORED_BUILDS failures.
+onlyBuiltDependencies:
+  - bcrypt
+  - better-sqlite3
+  - esbuild
+  - node-pty
+  - protobufjs
+  - sharp
+  - sqlite3
+  - unrs-resolver

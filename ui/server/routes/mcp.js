@@ -5,10 +5,80 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { spawn } from 'child_process';
+import { getPilotDeckGateway } from '../pilotdeck-bridge.js';
+import {
+  listMcpConfigFiles,
+  readMcpConfigFile,
+  writeMcpConfigFile,
+  normalizeMcpConfig,
+} from '../services/mcpConfig.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+router.get('/config', async (req, res) => {
+  try {
+    const projectPath = typeof req.query.projectPath === 'string' ? req.query.projectPath : undefined;
+    const configs = await listMcpConfigFiles(projectPath);
+    res.json({ success: true, ...configs });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to read MCP config', details: error.message });
+  }
+});
+
+router.get('/config/:scope', async (req, res) => {
+  try {
+    const { scope } = req.params;
+    if (scope !== 'global' && scope !== 'project') {
+      return res.status(400).json({ error: 'Invalid scope. Use global or project.' });
+    }
+    const projectPath = typeof req.query.projectPath === 'string' ? req.query.projectPath : undefined;
+    const config = await readMcpConfigFile(scope, projectPath);
+    res.json({ success: true, scope, ...config });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to read MCP config', details: error.message });
+  }
+});
+
+router.post('/config/validate', async (req, res) => {
+  try {
+    const raw = typeof req.body?.raw === 'string' ? req.body.raw : JSON.stringify(req.body ?? {});
+    normalizeMcpConfig(JSON.parse(raw));
+    res.json({ valid: true, errors: [] });
+  } catch (error) {
+    res.json({ valid: false, errors: [error.message] });
+  }
+});
+
+router.put('/config/:scope', async (req, res) => {
+  try {
+    const { scope } = req.params;
+    if (scope !== 'global' && scope !== 'project') {
+      return res.status(400).json({ error: 'Invalid scope. Use global or project.' });
+    }
+    const raw = typeof req.body?.raw === 'string' ? req.body.raw : JSON.stringify(req.body ?? {});
+    const projectPath = typeof req.body?.projectPath === 'string' ? req.body.projectPath : undefined;
+    const saved = await writeMcpConfigFile(scope, raw, projectPath);
+
+    let reload = null;
+    try {
+      const gateway = await getPilotDeckGateway();
+      reload = gateway.reloadExtensions
+        ? await gateway.reloadExtensions({
+            projectKey: scope === 'project' ? projectPath : undefined,
+            changedPaths: [saved.path],
+          })
+        : await gateway.reloadConfig?.();
+    } catch (error) {
+      reload = { reloaded: false, error: error.message };
+    }
+
+    res.json({ success: true, scope, reload, ...saved });
+  } catch (error) {
+    res.status(400).json({ error: 'Failed to save MCP config', details: error.message });
+  }
+});
 
 router.get('/cli/list', async (req, res) => {
   try {

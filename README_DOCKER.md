@@ -1,19 +1,44 @@
-# PilotDeck
+# PilotDeck Docker
 
-PilotDeck is an AI-powered coding agent with a web-based UI. It runs as two cooperating Node.js processes — a **Gateway** (agent runtime, port 18789) and a **UI Server** (web frontend + REST/WebSocket adapter, port 3001).
+PilotDeck runs as two cooperating Node.js processes in the container:
+
+- **Gateway**: agent runtime on `PILOTDECK_GATEWAY_PORT` (default `18789`)
+- **UI Server**: web frontend + REST/WebSocket adapter on `SERVER_PORT` (default `3001`)
+
+The Docker Compose setup persists the full `PILOT_HOME` directory, including generated config, auth DB, permissions, sessions/projects, memory, skills/plugins, and router stats.
 
 ## Quick Start with Docker Compose
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/) (v20+)
-- [Docker Compose](https://docs.docker.com/compose/) (v2+)
+- [Docker](https://docs.docker.com/get-docker/) v20+
+- [Docker Compose](https://docs.docker.com/compose/) v2+
 
-### Option A: Configure via YAML file
+### Option A: Configure via environment variables
 
-Create a config file at `~/.pilotdeck/pilotdeck.yaml`:
+Set the model provider variables in `docker-compose.yml` or an `.env` file:
 
-```yaml
+```env
+PILOTDECK_MODEL=openai/gpt-4.1
+PILOTDECK_API_KEY=sk-your-api-key
+PILOTDECK_API_URL=https://api.openai.com/v1
+```
+
+Then start:
+
+```bash
+docker compose up -d --build
+```
+
+If `/root/.pilotdeck/pilotdeck.yaml` does not exist in the `pilotdeck-home` volume, the entrypoint generates it from the `PILOTDECK_*` environment variables on first start.
+
+### Option B: Configure via YAML file
+
+Create the host config file first:
+
+```bash
+mkdir -p ~/.pilotdeck
+cat > ~/.pilotdeck/pilotdeck.yaml <<'YAML'
 schemaVersion: 1
 agent:
   model: openai/gpt-4.1
@@ -25,36 +50,36 @@ model:
       apiKey: sk-your-api-key
       models:
         gpt-4.1: {}
+YAML
 ```
 
-Then start:
+Then uncomment the config bind mount in `docker-compose.yml`:
+
+```yaml
+volumes:
+  - pilotdeck-home:/root/.pilotdeck
+  - ${PILOTDECK_CONFIG:-${HOME}/.pilotdeck/pilotdeck.yaml}:/root/.pilotdeck/pilotdeck.yaml:ro
+```
+
+Start the service:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 The UI is available at **http://localhost:3001**.
 
-### Option B: Configure via environment variables
+## Workspace Mounts
 
-If you don't have a YAML config file, set environment variables in `docker-compose.yml`:
+Agents run inside the container. To let them access a host project, mount it into `/workspace` by uncommenting the workspace bind mount:
 
 ```yaml
-services:
-  pilotdeck:
-    build: .
-    image: pilotdeck:latest
-    ports:
-      - "3001:3001"
-    environment:
-      - NODE_ENV=production
-      - PILOTDECK_MODEL=openai/gpt-4.1
-      - PILOTDECK_API_KEY=sk-your-api-key
-      - PILOTDECK_API_URL=https://api.openai.com/v1
-    restart: unless-stopped
+volumes:
+  - pilotdeck-home:/root/.pilotdeck
+  - ${PILOTDECK_WORKSPACE:-${PWD}}:/workspace
 ```
 
-The entrypoint will auto-generate `pilotdeck.yaml` from these env vars on first start.
+You can set `PILOTDECK_WORKSPACE=/path/to/project` before running `docker compose up`.
 
 ## Manual Docker Build & Run
 
@@ -64,31 +89,47 @@ The entrypoint will auto-generate `pilotdeck.yaml` from these env vars on first 
 docker build -t pilotdeck:latest .
 ```
 
-### Run with a config file
+### Run with environment variables
 
 ```bash
 docker run -d --name pilotdeck \
   -p 3001:3001 \
-  -v ~/.pilotdeck/pilotdeck.yaml:/root/.pilotdeck/pilotdeck.yaml \
-  pilotdeck:latest
-```
-
-### Run with environment variables (no config file needed)
-
-```bash
-docker run -d --name pilotdeck \
-  -p 3001:3001 \
+  -v pilotdeck-home:/root/.pilotdeck \
   -e PILOTDECK_MODEL=openai/gpt-4.1 \
   -e PILOTDECK_API_KEY=sk-your-api-key \
   -e PILOTDECK_API_URL=https://api.openai.com/v1 \
   pilotdeck:latest
 ```
 
-### With proxy
+### Run with a config file
 
 ```bash
 docker run -d --name pilotdeck \
   -p 3001:3001 \
+  -v pilotdeck-home:/root/.pilotdeck \
+  -v ~/.pilotdeck/pilotdeck.yaml:/root/.pilotdeck/pilotdeck.yaml:ro \
+  pilotdeck:latest
+```
+
+### Run with a workspace mount
+
+```bash
+docker run -d --name pilotdeck \
+  -p 3001:3001 \
+  -v pilotdeck-home:/root/.pilotdeck \
+  -v "$PWD":/workspace \
+  -e PILOTDECK_MODEL=openai/gpt-4.1 \
+  -e PILOTDECK_API_KEY=sk-your-api-key \
+  -e PILOTDECK_API_URL=https://api.openai.com/v1 \
+  pilotdeck:latest
+```
+
+### Run with a proxy
+
+```bash
+docker run -d --name pilotdeck \
+  -p 3001:3001 \
+  -v pilotdeck-home:/root/.pilotdeck \
   -e PILOTDECK_MODEL=openai/gpt-4.1 \
   -e PILOTDECK_API_KEY=sk-your-api-key \
   -e PILOTDECK_API_URL=https://api.openai.com/v1 \
@@ -100,20 +141,22 @@ docker run -d --name pilotdeck \
 
 | Variable | Description | Default |
 |---|---|---|
-| `PILOTDECK_MODEL` | Model identifier (e.g. `openai/gpt-4.1`) | `anthropic/claude-sonnet-4.6` |
-| `PILOTDECK_API_KEY` | API key for the model provider | — |
-| `PILOTDECK_API_URL` | Base URL for the model provider API | `https://api.anthropic.com` |
+| `PILOT_HOME` | PilotDeck state directory inside the container | `/root/.pilotdeck` |
+| `PILOTDECK_MODEL` | Main model identifier, formatted as `provider/model` | `openrouter/deepseek/deepseek-v4-flash` |
+| `PILOTDECK_LIGHT_MODEL` | Lightweight routing/judge model identifier | `openrouter/qwen/qwen3-8b` |
+| `PILOTDECK_API_KEY` | API key for the main model provider | `PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE` |
+| `PILOTDECK_API_URL` | Base URL for the main model provider API | `https://openrouter.ai/api/v1` |
+| `PILOTDECK_LIGHT_API_KEY` | API key for a different light-model provider | Falls back to `PILOTDECK_API_KEY` |
+| `PILOTDECK_LIGHT_API_URL` | Base URL for a different light-model provider | Falls back to `PILOTDECK_API_URL` |
 | `PILOTDECK_PROXY` | HTTP/HTTPS proxy URL | — |
 | `SERVER_PORT` | UI server port | `3001` |
+| `PILOTDECK_GATEWAY_PORT` | Gateway port used by the UI bridge | `18789` |
 
 ## Architecture
 
-```
+```text
 Browser (localhost:3001) ──► UI Server (port 3001) ──► Gateway (port 18789)
 ```
-
-- **Gateway**: Agent runtime — manages sessions, tools, model calls
-- **UI Server**: Web frontend (Vite-built SPA) + WebSocket/REST bridge to the Gateway
 
 Both processes are managed by `concurrently` inside the Docker container.
 
@@ -124,4 +167,4 @@ npm install
 npm run dev
 ```
 
-This starts the Gateway and UI dev server with hot-reload.
+This starts the Gateway and UI dev server with hot reload.

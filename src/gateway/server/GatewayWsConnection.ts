@@ -217,6 +217,11 @@ export class GatewayWsConnection {
           return this.options.gateway.reloadConfig();
         }
         return Promise.resolve({ reloaded: false });
+      case "reload_extensions":
+        if (this.options.gateway.reloadExtensions) {
+          return this.options.gateway.reloadExtensions(frame.params as never);
+        }
+        return Promise.resolve({ reloaded: false });
       case "skill_list":
         return requireSkillMethod(this.options.gateway.skillsList, this.options.gateway)(frame.params as never);
       case "skill_read":

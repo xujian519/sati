@@ -4,7 +4,18 @@ set -euo pipefail
 PILOT_HOME="${PILOT_HOME:-/root/.pilotdeck}"
 CONFIG_FILE="$PILOT_HOME/pilotdeck.yaml"
 
-mkdir -p "$PILOT_HOME/projects" "$PILOT_HOME/router"
+mkdir -p \
+  "$PILOT_HOME/projects" \
+  "$PILOT_HOME/router" \
+  "$PILOT_HOME/skills" \
+  "$PILOT_HOME/plugins" \
+  "$PILOT_HOME/memory"
+
+if [ -d "$CONFIG_FILE" ]; then
+  echo "[pilotdeck-docker] ERROR: $CONFIG_FILE is a directory, not a config file." >&2
+  echo "[pilotdeck-docker] If you intended to mount a YAML config, create the host file first or remove the bind mount and use PILOTDECK_* env vars." >&2
+  exit 1
+fi
 
 # ── Generate config from env vars if no config file is mounted ────────
 if [ ! -f "$CONFIG_FILE" ]; then

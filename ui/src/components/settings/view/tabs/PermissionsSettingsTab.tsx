@@ -79,7 +79,7 @@ function persist(updates: Partial<PilotDeckSettings>) {
 // without breaking older exports — we'll widen the validator if/when the
 // shape changes.
 type PermissionsExport = {
-  version: 1;
+  version: 2;
   exportedAt: string;
   source: 'pilotdeck';
   allowedTools: string[];
@@ -90,12 +90,12 @@ type PermissionsExport = {
 function buildExportPayload(): PermissionsExport {
   const settings = getPilotDeckSettings();
   return {
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     source: 'pilotdeck',
     allowedTools: settings.allowedTools,
     disallowedTools: settings.disallowedTools,
-    skipPermissions: Boolean(settings.skipPermissions),
+    skipPermissions: settings.skipPermissions,
   };
 }
 
@@ -121,7 +121,7 @@ function downloadJson(filename: string, payload: unknown) {
 function parsePermissionsImport(raw: string): {
   allowedTools: string[];
   disallowedTools: string[];
-  skipPermissions: boolean | null;
+  skipPermissions?: boolean;
 } | null {
   let parsed: unknown;
   try {
@@ -139,14 +139,16 @@ function parsePermissionsImport(raw: string): {
 
   const allowedTools = toStringArray(obj.allowedTools);
   const disallowedTools = toStringArray(obj.disallowedTools);
-  const skipPermissions =
-    typeof obj.skipPermissions === 'boolean' ? obj.skipPermissions : null;
 
-  if (allowedTools.length === 0 && disallowedTools.length === 0 && skipPermissions === null) {
+  if (allowedTools.length === 0 && disallowedTools.length === 0 && typeof obj.skipPermissions !== 'boolean') {
     return null;
   }
 
-  return { allowedTools, disallowedTools, skipPermissions };
+  return {
+    allowedTools,
+    disallowedTools,
+    skipPermissions: typeof obj.skipPermissions === 'boolean' ? obj.skipPermissions : undefined,
+  };
 }
 
 const mergeUnique = (a: string[], b: string[]): string[] => {
@@ -170,10 +172,7 @@ export default function PermissionsSettingsTab() {
   const { t } = useTranslation('settings');
   const [allowedTools, setAllowedTools] = useState<string[]>([]);
   const [disallowedTools, setDisallowedTools] = useState<string[]>([]);
-  // Initial render before `reload()` reads from localStorage. Keep in
-  // sync with the chatStorage default so the toggle doesn't flicker
-  // off → on for fresh installs.
-  const [skipPermissions, setSkipPermissions] = useState(true);
+  const [skipPermissions, setSkipPermissions] = useState(false);
   const [newAllowed, setNewAllowed] = useState('');
   const [newBlocked, setNewBlocked] = useState('');
   const [banner, setBanner] = useState<StatusBanner>(null);
@@ -183,7 +182,7 @@ export default function PermissionsSettingsTab() {
     const settings = getPilotDeckSettings();
     setAllowedTools(settings.allowedTools);
     setDisallowedTools(settings.disallowedTools);
-    setSkipPermissions(Boolean(settings.skipPermissions));
+    setSkipPermissions(settings.skipPermissions);
   }, []);
 
   useEffect(() => {
@@ -193,7 +192,7 @@ export default function PermissionsSettingsTab() {
         safeLocalStorage.setItem(PILOTDECK_SETTINGS_KEY, JSON.stringify(settings));
         setAllowedTools(settings.allowedTools);
         setDisallowedTools(settings.disallowedTools);
-        setSkipPermissions(Boolean(settings.skipPermissions));
+        setSkipPermissions(settings.skipPermissions);
       })
       .catch((error) => {
         console.error('Failed to load permission settings from backend:', error);
@@ -240,7 +239,7 @@ export default function PermissionsSettingsTab() {
     persist({ disallowedTools: next });
   };
 
-  const handleSkipChange = (value: boolean) => {
+  const handleSkipPermissionsChange = (value: boolean) => {
     setSkipPermissions(value);
     persist({ skipPermissions: value });
   };
@@ -308,7 +307,7 @@ export default function PermissionsSettingsTab() {
         kind: 'error',
         message: t('permissions.importInvalid', {
           defaultValue:
-            'Not a valid permissions export. Expected JSON with allowedTools / disallowedTools / skipPermissions.',
+            'Not a valid permissions export. Expected JSON with allowedTools / disallowedTools.',
         }),
       });
       return;
@@ -335,15 +334,13 @@ export default function PermissionsSettingsTab() {
     const updates: Partial<PilotDeckSettings> = {
       allowedTools: nextAllowed,
       disallowedTools: nextBlocked,
+      ...(parsed.skipPermissions !== undefined ? { skipPermissions: parsed.skipPermissions } : {}),
     };
-    if (parsed.skipPermissions !== null) {
-      updates.skipPermissions = parsed.skipPermissions;
-    }
     persist(updates);
 
     setAllowedTools(nextAllowed);
     setDisallowedTools(nextBlocked);
-    if (parsed.skipPermissions !== null) {
+    if (parsed.skipPermissions !== undefined) {
       setSkipPermissions(parsed.skipPermissions);
     }
 
@@ -418,28 +415,33 @@ export default function PermissionsSettingsTab() {
           </div>
         ) : null}
 
-        <SettingsCard className="border-orange-200 bg-orange-50/40 dark:border-orange-900/40 dark:bg-orange-950/30">
+        <SettingsCard divided>
           <SettingsRow
             label={
-              <span className="inline-flex items-center gap-2 text-orange-900 dark:text-orange-100">
-                <AlertTriangle className="h-4 w-4" />
-                {t('permissions.skipPermissions.label', {
-                  defaultValue: 'Skip permission prompts (use with care)',
-                })}
+              <span className="inline-flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                {t('permissions.skipPermissions.title', { defaultValue: 'Skip permission prompts' })}
               </span>
             }
-            description={t('permissions.skipPermissions.pilotdeckDescription', {
-              defaultValue: 'Equivalent to passing --dangerously-skip-permissions.',
+            description={t('permissions.skipPermissions.description', {
+              defaultValue:
+                'Run tool calls without asking for confirmation. This maps to bypassPermissions and should only be used in trusted workspaces.',
             })}
           >
             <SettingsToggle
               checked={skipPermissions}
-              onChange={handleSkipChange}
-              ariaLabel={t('permissions.skipPermissions.label', {
-                defaultValue: 'Skip permission prompts',
-              })}
+              ariaLabel={t('permissions.skipPermissions.title', { defaultValue: 'Skip permission prompts' })}
+              onChange={handleSkipPermissionsChange}
             />
           </SettingsRow>
+          {skipPermissions ? (
+            <div className="border-t border-border px-4 py-2.5 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
+              {t('permissions.skipPermissions.warning', {
+                defaultValue:
+                  'Permission prompts are currently bypassed. Allowed and blocked rules below are still saved, but this global mode lets the agent run without asking.',
+              })}
+            </div>
+          ) : null}
         </SettingsCard>
       </SettingsSection>
 

@@ -9,6 +9,13 @@ export {
   type ParsePluginMcpServersResult,
 } from "./runtime/parsePluginMcpServers.js";
 export {
+  MCP_CONFIG_FILE_NAME,
+  getGlobalMcpConfigFilePath,
+  getProjectMcpConfigFilePath,
+  loadMcpServerConfig,
+  type LoadMcpServerConfigResult,
+} from "./config/loadMcpServerConfig.js";
+export {
   createMcpToolDefinitionsFromRuntime,
   type CreateToolDefinitionsOptions,
 } from "./runtime/PluginToToolBridge.js";
