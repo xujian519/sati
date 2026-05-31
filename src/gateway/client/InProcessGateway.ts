@@ -810,6 +810,7 @@ function emitSessionTelemetry(
           errorCategory: inferToolErrorCategory(code),
           sessionId: context.sessionId,
           code,
+          toolName: event.result.toolName,
           metadata: {
             runId: context.runId,
             toolName: event.result.toolName,
@@ -844,6 +845,7 @@ function emitSessionTelemetry(
         errorCategory: "permission_error",
         sessionId: context.sessionId,
         code: "permission_denied",
+        toolName: event.toolName,
         metadata: {
           runId: context.runId,
           toolName: event.toolName,
@@ -980,6 +982,7 @@ function emitSessionTelemetry(
           errorCategory: inferToolErrorCategory(event.result.error.code),
           sessionId: context.sessionId,
           code: event.result.error.code,
+          toolName: event.result.toolName,
           metadata: {
             runId: context.runId,
             subagentId: event.subagentId,

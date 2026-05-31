@@ -96,12 +96,13 @@ export type TelemetryFeatureUsedInput = TelemetryTrackContext & {
 
 export type TelemetryErrorInput = TelemetryTrackContext & {
   module?: TelemetryModule | "runtime" | "ui";
-  ownerModule?: TelemetryModule;
+  ownerModule?: TelemetryModule | "runtime" | "ui";
   executionKind?: TelemetryExecutionKind;
   phase?: string;
   loopStage?: TelemetryLoopStage;
   errorCategory?: TelemetryErrorCategory;
   code?: string;
+  toolName?: string;
   metadata?: Record<string, unknown>;
 };
 

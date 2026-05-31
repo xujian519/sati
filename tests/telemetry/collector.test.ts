@@ -142,6 +142,7 @@ test("trackError omits message and stack", async () => {
     module: "session",
     loopStage: "tool_call",
     errorCategory: "tool_runtime_error",
+    toolName: "bash",
     metadata: { cwd: "/Users/secret/project", runId: "run-1" },
   });
   await collector.flush();
@@ -154,6 +155,7 @@ test("trackError omits message and stack", async () => {
   assert.ok(errorEvent);
   assert.equal(errorEvent.properties.code, "ToolExecutionError");
   assert.equal(errorEvent.properties.errorCategory, "tool_runtime_error");
+  assert.equal(errorEvent.properties.toolName, "bash");
   assert.equal(errorEvent.properties.message, undefined);
   assert.equal(errorEvent.properties.stack, undefined);
   assert.equal(errorEvent.properties.cwd, undefined);
@@ -163,7 +165,44 @@ test("trackError omits message and stack", async () => {
   );
   assert.ok(failedFeature);
   assert.equal(failedFeature.properties.code, "ToolExecutionError");
+  assert.equal(failedFeature.properties.toolName, "bash");
   assert.equal(failedFeature.properties.runId, undefined);
+
+  await collector.shutdown();
+  rmSync(pilotHome, { recursive: true, force: true });
+});
+
+test("runtime errors do not emit synthetic session failures", async () => {
+  const pilotHome = createTempHome();
+  const requests: Array<{ body: unknown }> = [];
+  const collector = createTelemetryCollector({
+    pilotHome,
+    env: {
+      ANALYTICS_ENABLED: "true",
+      ANALYTICS_BASE_URL: "http://example.internal:3000",
+      ANALYTICS_BATCH_SIZE: "10",
+      ANALYTICS_FLUSH_INTERVAL_MS: "60000",
+      PILOT_HOME: pilotHome,
+    },
+    fetchImpl: (async (_url: string | URL, init?: RequestInit) => {
+      requests.push({
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      return { ok: true, status: 202 } as Response;
+    }) as typeof fetch,
+  });
+
+  collector.trackError(new Error("uncaught"), { module: "runtime" });
+  await collector.flush();
+
+  const events = requests[0]?.body as Array<{
+    eventName: string;
+    properties: Record<string, unknown>;
+  }>;
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.eventName, "error_occurred");
+  assert.equal(events[0]?.properties.module, "runtime");
+  assert.equal(events[0]?.properties.ownerModule, "runtime");
 
   await collector.shutdown();
   rmSync(pilotHome, { recursive: true, force: true });

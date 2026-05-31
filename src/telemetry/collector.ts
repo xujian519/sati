@@ -80,7 +80,7 @@ export function createTelemetryCollector(
     trackError(error, inputError = {}) {
       const err = normalizeErrorCode(error);
       const module = inputError.module ?? "runtime";
-      const ownerModule = inputError.ownerModule ?? normalizeModule(module);
+      const ownerModule = inputError.ownerModule ?? module;
       const loopStage = inputError.loopStage ?? "loop_end";
       const errorCategory = inputError.errorCategory ?? "runtime_error";
       const code = inputError.code ?? err;
@@ -92,9 +92,13 @@ export function createTelemetryCollector(
         loopStage,
         errorCategory,
         code,
+        ...(inputError.toolName ? { toolName: inputError.toolName } : {}),
       }, inputError);
+      if (!isTelemetryModule(module) || !isTelemetryModule(ownerModule)) {
+        return;
+      }
       this.trackFeatureLoopStage({
-        module: normalizeModule(module),
+        module,
         ownerModule,
         executionKind: normalizeExecutionKind(inputError.executionKind),
         phase: inputError.phase,
@@ -102,7 +106,7 @@ export function createTelemetryCollector(
         outcome: "failed",
         errorCategory: normalizeErrorCategory(errorCategory),
         sessionId: inputError.sessionId,
-        metadata: sanitizeProperties(pickErrorFeatureMetadata(code, inputError.metadata)),
+        metadata: sanitizeProperties(pickErrorFeatureMetadata(code, inputError.toolName, inputError.metadata)),
       });
     },
     flush() {
@@ -167,9 +171,13 @@ function buildEvent(input: {
 
 function pickErrorFeatureMetadata(
   code: string,
+  toolName: string | undefined,
   metadata: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { code };
+  if (toolName) {
+    out.toolName = toolName;
+  }
   if (!metadata) {
     return out;
   }
@@ -265,6 +273,10 @@ function normalizeModule(value: string): TelemetryModule {
     return value;
   }
   return "session";
+}
+
+function isTelemetryModule(value: string): value is TelemetryModule {
+  return normalizeModule(value) === value;
 }
 
 function normalizeLoopStage(value: string): TelemetryLoopStage {
