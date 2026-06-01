@@ -102,6 +102,10 @@ router:
     subagentMaxTokens: 48000
   stats:
     enabled: true
+cron:
+  enabled: true
+  timezone: Asia/Shanghai
+  maxConcurrentRuns: 2
 `;
 
 function resolvePilotHome() {
@@ -192,8 +196,16 @@ adapters:
     # domainName: feishu
 `;
 
+const DEFAULT_CRON_SNIPPET = `
+cron:
+  enabled: true
+  timezone: Asia/Shanghai
+  maxConcurrentRuns: 2
+`;
+
 const PATCH_SECTIONS = [
   { key: 'adapters', snippet: DEFAULT_ADAPTERS_SNIPPET },
+  { key: 'cron', snippet: DEFAULT_CRON_SNIPPET },
 ];
 
 function patchMissingSections(configPath) {
