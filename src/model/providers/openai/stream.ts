@@ -158,12 +158,9 @@ export function normalizeOpenAIStreamEvent(
     }
 
     if (choiceRecord.finish_reason) {
-      events.push(...finishToolCalls(state, raw));
-      events.push({
-        type: "message_end",
-        finishReason: normalizeOpenAIFinishReason(choiceRecord.finish_reason),
-        raw,
-      });
+      const fr = normalizeOpenAIFinishReason(choiceRecord.finish_reason);
+      events.push(...finishToolCalls(state, raw, fr));
+      events.push({ type: "message_end", finishReason: fr, raw });
     }
   }
 
@@ -217,18 +214,25 @@ function toolCallEvents(
   return events;
 }
 
-function finishToolCalls(state: OpenAIStreamState, raw: unknown): CanonicalModelEvent[] {
+function finishToolCalls(
+  state: OpenAIStreamState,
+  raw: unknown,
+  finishReason?: string,
+): CanonicalModelEvent[] {
   const events: CanonicalModelEvent[] = [];
+  const isTruncation = finishReason === "length";
 
   for (const [index, toolCall] of state.toolCalls.entries()) {
     const rawArguments = toolCall.argumentsBuffer ?? "{}";
     let input: unknown;
+    let wasRepaired = false;
     try {
       input = JSON.parse(rawArguments);
     } catch {
       try {
         const repaired = jsonrepair(rawArguments);
         input = JSON.parse(repaired);
+        wasRepaired = true;
         console.warn(
           `[openai-stream] repaired invalid JSON for tool "${toolCall.name ?? "?"}" (buf_len=${rawArguments.length})`,
         );
@@ -236,19 +240,39 @@ function finishToolCalls(state: OpenAIStreamState, raw: unknown): CanonicalModel
         const preview = rawArguments.length > 500
           ? rawArguments.slice(0, 250) + "\n…[truncated]…\n" + rawArguments.slice(-250)
           : rawArguments;
+        const code = isTruncation ? "max_output_reached" : "invalid_tool_arguments";
         console.error(
-          `[openai-stream] invalid_tool_arguments for tool "${toolCall.name ?? "?"}" (index=${index}, `
+          `[openai-stream] ${code} for tool "${toolCall.name ?? "?"}" (index=${index}, `
           + `buf_len=${rawArguments.length}):\n${preview}`,
         );
         throw new ModelProviderError({
           provider: "openai",
           protocol: "openai",
-          code: "invalid_tool_arguments",
-          message: "OpenAI stream tool call arguments are not valid JSON.",
+          code,
+          message: isTruncation
+            ? "Output token limit reached — tool call arguments were truncated."
+            : "OpenAI stream tool call arguments are not valid JSON.",
           retryable: true,
           raw,
         });
       }
+    }
+
+    // jsonrepair may silently produce truncated content values; when the
+    // response was cut by max_tokens, treat repaired tool calls the same
+    // as parse failures so the recovery loop retries with more tokens.
+    if (wasRepaired && isTruncation) {
+      console.warn(
+        `[openai-stream] discarding repaired-but-truncated tool call "${toolCall.name ?? "?"}" (index=${index})`,
+      );
+      throw new ModelProviderError({
+        provider: "openai",
+        protocol: "openai",
+        code: "max_output_reached",
+        message: "Output token limit reached — repaired tool call arguments are likely incomplete.",
+        retryable: true,
+        raw,
+      });
     }
 
     events.push({
@@ -259,6 +283,7 @@ function finishToolCalls(state: OpenAIStreamState, raw: unknown): CanonicalModel
         input,
         raw,
       },
+      wasRepaired,
       raw,
     });
   }

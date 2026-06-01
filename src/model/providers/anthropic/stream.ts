@@ -4,13 +4,23 @@ import { ModelProviderError } from "../../protocol/errors.js";
 import { normalizeAnthropicFinishReason } from "../../response/normalizeFinishReason.js";
 import { normalizeAnthropicUsage } from "../../response/normalizeUsage.js";
 
+type FailedToolCall = {
+  index: number;
+  rawInput: string;
+  name: string | undefined;
+  id: string | undefined;
+  raw: unknown;
+};
+
 export type AnthropicStreamState = {
   toolCalls: Map<number, Partial<CanonicalToolCall> & { inputBuffer?: string }>;
+  failedToolCalls: FailedToolCall[];
 };
 
 export function createAnthropicStreamState(): AnthropicStreamState {
   return {
     toolCalls: new Map(),
+    failedToolCalls: [],
   };
 }
 
@@ -37,16 +47,16 @@ export function normalizeAnthropicStreamEvent(
         events.push({ type: "usage", usage, raw });
       }
       if (delta.stop_reason) {
-        events.push({
-          type: "message_end",
-          finishReason: normalizeAnthropicFinishReason(delta.stop_reason),
-          raw,
-        });
+        const fr = normalizeAnthropicFinishReason(delta.stop_reason);
+        events.push(...flushFailedToolCalls(state, fr, raw));
+        events.push({ type: "message_end", finishReason: fr, raw });
       }
       return events;
     }
     case "message_stop":
-      return [];
+      // Safety net: if message_delta never carried a stop_reason (some
+      // third-party proxies), flush any deferred failures as unknown.
+      return flushFailedToolCalls(state, "unknown", raw);
     case "error": {
       const errObj = asRecord(event.error);
       const errType = readString(errObj.type) ?? "provider_error";
@@ -153,31 +163,30 @@ function contentBlockStopEvents(
 
   const rawInput = toolCall.inputBuffer ?? "{}";
   let input: unknown;
+  let wasRepaired = false;
   try {
     input = rawInput.length > 0 ? JSON.parse(rawInput) : {};
   } catch {
     try {
       const repaired = jsonrepair(rawInput);
       input = JSON.parse(repaired);
+      wasRepaired = true;
       console.warn(
         `[anthropic-stream] repaired invalid JSON for tool "${toolCall.name ?? "?"}" (buf_len=${rawInput.length})`,
       );
     } catch {
-      const preview = rawInput.length > 500
-        ? rawInput.slice(0, 250) + "\n…[truncated]…\n" + rawInput.slice(-250)
-        : rawInput;
-      console.error(
-        `[anthropic-stream] invalid_tool_arguments for tool "${toolCall.name ?? "?"}" (index=${index}, `
-        + `buf_len=${rawInput.length}):\n${preview}`,
-      );
-      throw new ModelProviderError({
-        provider: "anthropic",
-        protocol: "anthropic",
-        code: "invalid_tool_arguments",
-        message: "Anthropic stream tool call arguments are not valid JSON.",
-        retryable: true,
+      // Defer the error — finishReason is not yet known (content_block_stop
+      // arrives before message_delta). flushFailedToolCalls() will emit the
+      // correct error code once message_delta delivers the stop_reason.
+      state.failedToolCalls.push({
+        index,
+        rawInput,
+        name: toolCall.name,
+        id: toolCall.id,
         raw,
       });
+      state.toolCalls.delete(index);
+      return [];
     }
   }
 
@@ -191,7 +200,55 @@ function contentBlockStopEvents(
         input,
         raw,
       },
+      wasRepaired,
       raw,
+    },
+  ];
+}
+
+/**
+ * Emit deferred errors for tool calls whose JSON could not be parsed.
+ * Called when message_delta arrives and finishReason is known, so the
+ * error code can distinguish truncation (max_output_reached) from a
+ * genuine model JSON error (invalid_tool_arguments).
+ */
+function flushFailedToolCalls(
+  state: AnthropicStreamState,
+  finishReason: string,
+  raw: unknown,
+): CanonicalModelEvent[] {
+  if (state.failedToolCalls.length === 0) {
+    return [];
+  }
+
+  const failed = state.failedToolCalls.splice(0);
+  const isTruncation = finishReason === "length";
+  const code = isTruncation ? "max_output_reached" : "invalid_tool_arguments";
+  const message = isTruncation
+    ? "Output token limit reached — tool call arguments were truncated."
+    : "Anthropic stream tool call arguments are not valid JSON.";
+
+  for (const entry of failed) {
+    const preview = entry.rawInput.length > 500
+      ? entry.rawInput.slice(0, 250) + "\n…[truncated]…\n" + entry.rawInput.slice(-250)
+      : entry.rawInput;
+    console.error(
+      `[anthropic-stream] ${code} for tool "${entry.name ?? "?"}" (index=${entry.index}, `
+      + `buf_len=${entry.rawInput.length}):\n${preview}`,
+    );
+  }
+
+  return [
+    {
+      type: "error",
+      error: {
+        provider: "anthropic",
+        protocol: "anthropic" as const,
+        code,
+        message,
+        retryable: true,
+        raw,
+      },
     },
   ];
 }

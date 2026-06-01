@@ -20,6 +20,7 @@ export type ModelMessageAssemblerState = {
   finishReason?: CanonicalFinishReason;
   error?: CanonicalModelError;
   toolCalls: CanonicalToolCall[];
+  hasRepairedToolCalls?: boolean;
 };
 
 export type AssembledAssistantMessage = {
@@ -28,6 +29,7 @@ export type AssembledAssistantMessage = {
   usage?: CanonicalUsage;
   toolCalls: CanonicalToolCall[];
   error?: CanonicalModelError;
+  hasRepairedToolCalls?: boolean;
 };
 
 export function createModelMessageAssemblerState(): ModelMessageAssemblerState {
@@ -66,6 +68,9 @@ export function applyModelEventToAssembler(
         type: "tool_call",
         ...event.toolCall,
       });
+      if (event.wasRepaired) {
+        state.hasRepairedToolCalls = true;
+      }
       return;
     case "message_end":
       flushTextBuffers(state);
@@ -116,6 +121,7 @@ export function assembleAssistantMessage(state: ModelMessageAssemblerState): Ass
     usage: hasUsage(state.usage) ? state.usage : undefined,
     toolCalls: [...state.toolCalls],
     error: state.error,
+    hasRepairedToolCalls: state.hasRepairedToolCalls,
   };
 }
 

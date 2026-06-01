@@ -214,7 +214,7 @@ export type CanonicalModelEvent =
   | { type: "thinking_delta"; text: string; signature?: string; raw?: unknown }
   | { type: "tool_call_start"; id: string; name: string; raw?: unknown }
   | { type: "tool_call_delta"; id: string; delta: string; raw?: unknown }
-  | { type: "tool_call_end"; toolCall: CanonicalToolCall; raw?: unknown }
+  | { type: "tool_call_end"; toolCall: CanonicalToolCall; wasRepaired?: boolean; raw?: unknown }
   | { type: "message_end"; finishReason: CanonicalFinishReason; raw?: unknown }
   | { type: "usage"; usage: CanonicalUsage; raw?: unknown }
   | { type: "error"; error: CanonicalModelError };
