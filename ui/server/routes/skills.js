@@ -10,7 +10,7 @@
  * onto a single gateway RPC:
  *
  *   - `/import-upload` — multipart browser folder picker. We stream the
- *     buffers into the project skill dir directly, then ask the gateway
+ *     buffers into a staging dir next to the target skill root, then ask the gateway
  *     to refresh its in-memory caches via a follow-up `skill_validate`
  *     call to compute the validation result. A future revision can lift
  *     this onto a gateway RPC that accepts base64 chunks.
@@ -34,6 +34,7 @@ import { promisify } from 'util';
 import multer from 'multer';
 import { getPilotDeckGateway } from '../pilotdeck-bridge.js';
 import { resolvePilotHome } from '../utils/pilotPaths.js';
+import { moveDirectoryAcrossDevicesSafe } from '../utils/fileMoves.js';
 
 const execFileAsync = promisify(execFile);
 const router = express.Router();
@@ -417,7 +418,8 @@ router.post('/import-upload', upload.array('files', 500), async (req, res) => {
       }
     }
 
-    stagingDir = await fs.mkdtemp(path.join(os.tmpdir(), 'skill-upload-'));
+    await fs.mkdir(root, { recursive: true });
+    stagingDir = await fs.mkdtemp(path.join(root, '.tmp-skill-upload-'));
     for (const m of manifest) {
       const rel =
         stripPrefix && m.relativePath.startsWith(stripPrefix)
@@ -428,9 +430,8 @@ router.post('/import-upload', upload.array('files', 500), async (req, res) => {
       await fs.mkdir(path.dirname(out), { recursive: true });
       await fs.writeFile(out, m.buffer);
     }
-    await fs.mkdir(root, { recursive: true });
     if (exists) await fs.rm(targetDir, { recursive: true, force: true });
-    await fs.rename(stagingDir, targetDir);
+    await moveDirectoryAcrossDevicesSafe(stagingDir, targetDir);
     stagingDir = null;
 
     // Round-trip through the gateway once more so the response shape
