@@ -49,7 +49,7 @@ function resolveInstallationId(
       return hashStableId(token);
     }
   }
-  const fallbackSeed = `${process.platform}:${process.arch}:${process.env.HOME ?? "unknown-home"}`;
+  const fallbackSeed = `${process.platform}:${process.arch}:${env.HOME ?? "unknown-home"}`;
   return hashStableId(fallbackSeed);
 }
 

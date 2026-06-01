@@ -126,21 +126,24 @@ export class TelemetrySender {
       const raw = readFileSync(this.config.queueFilePath, "utf8");
       const lines = raw.split("\n").map((line) => line.trim()).filter(Boolean);
       for (const line of lines) {
-        const parsed = JSON.parse(line) as AnalyticsEventEnvelope;
-        if (parsed?.event?.eventId) {
-          this.queue.push({
-            event: parsed.event,
-            attempts: Math.max(0, Number(parsed.attempts) || 0),
-          });
+        try {
+          const parsed = JSON.parse(line) as AnalyticsEventEnvelope;
+          if (parsed?.event?.eventId) {
+            this.queue.push({
+              event: parsed.event,
+              attempts: Math.max(0, Number(parsed.attempts) || 0),
+            });
+          }
+        } catch {
+          // Ignore malformed lines.
         }
       }
       this.syncQueueDepth();
-      if (lines.length > 0) {
-        writeFileSync(this.config.queueFilePath, "", "utf8");
-      }
+      // Keep the queue file on disk; it will be overwritten on clean shutdown.
     } catch {
       // noop: file might not exist or malformed lines were ignored.
     }
+  }
   }
 
   private persistQueue(): void {

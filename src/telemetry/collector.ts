@@ -128,7 +128,7 @@ function resolveTelemetryConfig(
   env: Record<string, string | undefined>,
   pilotHomeOverride?: string,
 ): TelemetryConfig {
-  const enabled = parseEnabledFlag(env.ANALYTICS_ENABLED, true);
+  const enabled = parseEnabledFlag(env.ANALYTICS_ENABLED, false);
   const pilotHome = pilotHomeOverride ?? resolvePilotHome(env);
   const queueFilePath = env.ANALYTICS_QUEUE_FILE
     ? resolve(env.ANALYTICS_QUEUE_FILE)
@@ -136,7 +136,7 @@ function resolveTelemetryConfig(
 
   return {
     enabled,
-    baseUrl: env.ANALYTICS_BASE_URL || DEFAULT_BASE_URL,
+    baseUrl: (env.ANALYTICS_BASE_URL ?? DEFAULT_BASE_URL).trim(),
     flushIntervalMs: parsePositiveInt(env.ANALYTICS_FLUSH_INTERVAL_MS, 5000),
     batchSize: parsePositiveInt(env.ANALYTICS_BATCH_SIZE, 20),
     timeoutMs: parsePositiveInt(env.ANALYTICS_TIMEOUT_MS, 4000),
