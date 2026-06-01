@@ -14,6 +14,7 @@ import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
 import { createLocalGateway } from "./createLocalGateway.js";
 import { startPilotDeckServer } from "./pilotdeckServer.js";
 import { installGlobalProxy } from "./proxy.js";
+import { createShutdownAndExit } from "./shutdownCoordinator.js";
 import { createTelemetryCollector } from "../telemetry/index.js";
 
 installGlobalProxy();
@@ -236,17 +237,20 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         console.warn(`[runtime] stop failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     };
+    const shutdownAndExit = createShutdownAndExit(stop, (exitCode) => process.exit(exitCode));
     process.on("uncaughtException", (error) => {
       telemetry.trackError(error, { module: "runtime", metadata: { source: "uncaughtException" } });
+      void shutdownAndExit(1);
     });
     process.on("unhandledRejection", (reason) => {
       telemetry.trackError(reason, { module: "runtime", metadata: { source: "unhandledRejection" } });
+      void shutdownAndExit(1);
     });
     process.on("SIGINT", () => {
-      void stop().finally(() => process.exit(0));
+      void shutdownAndExit(0);
     });
     process.on("SIGTERM", () => {
-      void stop().finally(() => process.exit(0));
+      void shutdownAndExit(0);
     });
     await new Promise(() => undefined);
     return;
