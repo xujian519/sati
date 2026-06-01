@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
+import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { DingTalkSessionMapper } from "./DingTalkSessionMapper.js";
 import { renderDingTalkEvent } from "./dingtalk-render.js";
 
@@ -34,6 +35,7 @@ export class DingTalkChannel implements ChannelAdapter {
   private logger?: ChannelLogger;
   private client: any = null;
   private activeChats = new Set<string>();
+  private readonly elicitation = new ImElicitationHelper();
   private sessionWebhooks = new Map<string, string>();
   private seenIds = new Set<string>();
 
@@ -122,6 +124,16 @@ export class DingTalkChannel implements ChannelAdapter {
       this.rememberWebhook(chatId, webhook);
     }
 
+    if (this.elicitation.hasPending(chatId) && this.gateway) {
+      try {
+        const confirmation = await this.elicitation.answer(chatId, text.trim(), this.gateway);
+        if (confirmation) await this.sendReply(chatId, confirmation);
+      } catch (e) {
+        this.logger?.error?.(`dingtalk: elicitation answer error: ${e}`);
+      }
+      return;
+    }
+
     if (this.activeChats.has(chatId)) {
       this.logger?.info?.(`dingtalk: chat ${chatId} already active, skipping`);
       return;
@@ -178,6 +190,11 @@ export class DingTalkChannel implements ChannelAdapter {
         channelKey: "dingtalk",
         message,
       })) {
+        if (event.type === "elicitation_request") {
+          const questionText = this.elicitation.capture(chatId, sessionKey, event);
+          await this.sendReply(chatId, questionText);
+          continue;
+        }
         const fragment = renderDingTalkEvent(event);
         if (fragment != null) replyText += fragment;
       }
@@ -186,6 +203,7 @@ export class DingTalkChannel implements ChannelAdapter {
       replyText = "处理消息时发生错误，请重试。";
     }
 
+    this.elicitation.clear(chatId);
     const finalText = replyText.trim();
     if (finalText) {
       await this.sendReply(chatId, finalText);

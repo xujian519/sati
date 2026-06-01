@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
+import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { WhatsAppSessionMapper } from "./WhatsAppSessionMapper.js";
 import { renderWhatsAppEvent } from "./whatsapp-render.js";
 
@@ -38,6 +39,7 @@ export class WhatsAppChannel implements ChannelAdapter {
   private pollAbort = new AbortController();
   private seenIds = new Set<string>();
   private activeChats = new Set<string>();
+  private readonly elicitation = new ImElicitationHelper();
   private running = false;
 
   constructor(options: WhatsAppChannelOptions = {}) {
@@ -187,6 +189,16 @@ export class WhatsAppChannel implements ChannelAdapter {
   private async dispatch(msg: InboundMessage): Promise<void> {
     if (!msg.text) return;
 
+    if (this.elicitation.hasPending(msg.chatId) && this.gateway) {
+      try {
+        const confirmation = await this.elicitation.answer(msg.chatId, msg.text, this.gateway);
+        if (confirmation) await this.sendReply(msg.chatId, confirmation);
+      } catch (e) {
+        this.logger?.error?.(`whatsapp: elicitation answer error: ${e}`);
+      }
+      return;
+    }
+
     if (this.activeChats.has(msg.chatId)) {
       this.logger?.info?.(`whatsapp: chat ${msg.chatId} already active, skipping`);
       return;
@@ -217,6 +229,11 @@ export class WhatsAppChannel implements ChannelAdapter {
         channelKey: "whatsapp",
         message,
       })) {
+        if (event.type === "elicitation_request") {
+          const questionText = this.elicitation.capture(chatId, sessionKey, event);
+          await this.sendReply(chatId, questionText);
+          continue;
+        }
         const fragment = renderWhatsAppEvent(event);
         if (fragment != null) replyText += fragment;
       }
@@ -225,6 +242,7 @@ export class WhatsAppChannel implements ChannelAdapter {
       replyText = "处理消息时发生错误，请重试。";
     }
 
+    this.elicitation.clear(chatId);
     const finalText = replyText.trim();
     if (finalText) {
       await this.sendReply(chatId, finalText);

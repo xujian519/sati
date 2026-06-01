@@ -5,6 +5,7 @@ import { ILinkClient, loginWithQR, MessageItemType } from "weixin-ilink";
 import type { WeixinMessage, LoginResult } from "weixin-ilink";
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
+import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { WeixinSessionMapper } from "./WeixinSessionMapper.js";
 import { renderWeixinEvent } from "./weixin-render.js";
 
@@ -34,6 +35,7 @@ export class WeixinChannel implements ChannelAdapter {
   private loopAbort = new AbortController();
   private pollPromise: Promise<void> | null = null;
   private activeChats = new Set<string>();
+  private readonly elicitation = new ImElicitationHelper();
   private contextTokens = new Map<string, string>();
 
   constructor(options: WeixinChannelOptions = {}) {
@@ -166,6 +168,16 @@ export class WeixinChannel implements ChannelAdapter {
 
     if (!text.trim()) return;
 
+    if (this.elicitation.hasPending(fromUser) && this.gateway) {
+      try {
+        const confirmation = await this.elicitation.answer(fromUser, text, this.gateway);
+        if (confirmation) await this.sendReply(fromUser, confirmation);
+      } catch (e) {
+        this.logger?.error?.(`weixin: elicitation answer error: ${e}`);
+      }
+      return;
+    }
+
     if (this.activeChats.has(fromUser)) {
       this.logger?.info?.(`weixin: chat ${fromUser} already active, skipping`);
       return;
@@ -203,6 +215,11 @@ export class WeixinChannel implements ChannelAdapter {
         channelKey: "weixin",
         message,
       })) {
+        if (event.type === "elicitation_request") {
+          const questionText = this.elicitation.capture(userId, sessionKey, event);
+          await this.sendReply(userId, questionText);
+          continue;
+        }
         const fragment = renderWeixinEvent(event);
         if (fragment != null) replyText += fragment;
       }
@@ -211,6 +228,7 @@ export class WeixinChannel implements ChannelAdapter {
       replyText = "处理消息时发生错误，请重试。";
     }
 
+    this.elicitation.clear(userId);
     const finalText = replyText.trim();
     if (finalText) {
       await this.sendReply(userId, finalText);

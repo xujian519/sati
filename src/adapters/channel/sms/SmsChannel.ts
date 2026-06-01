@@ -4,6 +4,7 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { SmsSessionMapper } from "./SmsSessionMapper.js";
 import { renderSmsEvent } from "./sms-render.js";
+import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 
 let twilioFactory: any;
 try {
@@ -42,6 +43,7 @@ export class SmsChannel implements ChannelAdapter {
   private port = DEFAULT_PORT;
   private path = DEFAULT_PATH;
   private activeChats = new Set<string>();
+  private readonly elicitation = new ImElicitationHelper();
 
   constructor(options: SmsChannelOptions = {}) {
     this.mapper = options.mapper ?? new SmsSessionMapper();
@@ -194,6 +196,16 @@ export class SmsChannel implements ChannelAdapter {
   }
 
   private async handleIncoming(chatId: string, text: string): Promise<void> {
+    if (this.elicitation.hasPending(chatId) && this.gateway) {
+      try {
+        const confirmation = await this.elicitation.answer(chatId, text, this.gateway);
+        if (confirmation) await this.sendReply(chatId, confirmation);
+      } catch (e) {
+        this.logger?.error?.(`sms: elicitation answer error: ${e}`);
+      }
+      return;
+    }
+
     if (this.activeChats.has(chatId)) {
       this.logger?.info?.(`sms: chat ${chatId} already active, skipping`);
       return;
@@ -224,6 +236,11 @@ export class SmsChannel implements ChannelAdapter {
         channelKey: "sms",
         message,
       })) {
+        if (event.type === "elicitation_request") {
+          const questionText = this.elicitation.capture(chatId, sessionKey, event);
+          await this.sendReply(chatId, questionText);
+          continue;
+        }
         const fragment = renderSmsEvent(event);
         if (fragment != null) replyText += fragment;
       }
@@ -231,6 +248,8 @@ export class SmsChannel implements ChannelAdapter {
       this.logger?.error?.(`sms: submitTurn error: ${e}`);
       replyText = "处理消息时发生错误，请重试。";
     }
+
+    this.elicitation.clear(chatId);
 
     const finalText = replyText.trim();
     if (finalText) {

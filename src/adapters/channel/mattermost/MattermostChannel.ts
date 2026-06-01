@@ -2,6 +2,7 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { MattermostSessionMapper } from "./MattermostSessionMapper.js";
 import { renderMattermostEvent } from "./mattermost-render.js";
+import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 
 let WebSocketImpl: any;
 try {
@@ -38,6 +39,7 @@ export class MattermostChannel implements ChannelAdapter {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
   private activeChats = new Set<string>();
+  private readonly elicitation = new ImElicitationHelper();
 
   constructor(options: MattermostChannelOptions = {}) {
     this.mapper = options.mapper ?? new MattermostSessionMapper();
@@ -158,6 +160,16 @@ export class MattermostChannel implements ChannelAdapter {
     // Treat each thread as its own session bucket (channel root vs thread reply).
     const chatId = rootId ? `${channelId}:${rootId}` : channelId;
 
+    if (this.elicitation.hasPending(chatId) && this.gateway) {
+      try {
+        const confirmation = await this.elicitation.answer(chatId, text, this.gateway);
+        if (confirmation) await this.sendReply({ channelId, rootId }, confirmation);
+      } catch (e) {
+        this.logger?.error?.(`mattermost: elicitation answer error: ${e}`);
+      }
+      return;
+    }
+
     if (this.activeChats.has(chatId)) {
       this.logger?.info?.(`mattermost: chat ${chatId} already active, skipping`);
       return;
@@ -194,6 +206,12 @@ export class MattermostChannel implements ChannelAdapter {
         channelKey: "mattermost",
         message,
       })) {
+        if (event.type === "elicitation_request") {
+          const chatId = ctx.rootId ? `${ctx.channelId}:${ctx.rootId}` : ctx.channelId;
+          const questionText = this.elicitation.capture(chatId, sessionKey, event);
+          await this.sendReply(ctx, questionText);
+          continue;
+        }
         const fragment = renderMattermostEvent(event);
         if (fragment != null) replyText += fragment;
       }
@@ -201,6 +219,9 @@ export class MattermostChannel implements ChannelAdapter {
       this.logger?.error?.(`mattermost: submitTurn error: ${e}`);
       replyText = "处理消息时发生错误，请重试。";
     }
+
+    const chatId = ctx.rootId ? `${ctx.channelId}:${ctx.rootId}` : ctx.channelId;
+    this.elicitation.clear(chatId);
 
     const finalText = replyText.trim();
     if (finalText) {

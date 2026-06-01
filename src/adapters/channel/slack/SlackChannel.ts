@@ -1,5 +1,6 @@
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
+import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { SlackSessionMapper } from "./SlackSessionMapper.js";
 import { renderSlackEvent } from "./slack-render.js";
 
@@ -31,6 +32,7 @@ export class SlackChannel implements ChannelAdapter {
   private app: any = null;
   private botUserId: string | null = null;
   private activeChats = new Set<string>();
+  private readonly elicitation = new ImElicitationHelper();
 
   constructor(options: SlackChannelOptions = {}) {
     this.mapper = options.mapper ?? new SlackSessionMapper();
@@ -116,6 +118,16 @@ export class SlackChannel implements ChannelAdapter {
 
     if (!text) return;
 
+    if (this.elicitation.hasPending(chatId) && this.gateway) {
+      try {
+        const confirmation = await this.elicitation.answer(chatId, text, this.gateway);
+        if (confirmation) await this.sendReply({ channelId, threadTs }, confirmation);
+      } catch (e) {
+        this.logger?.error?.(`slack: elicitation answer error: ${e}`);
+      }
+      return;
+    }
+
     if (this.activeChats.has(chatId)) {
       this.logger?.info?.(`slack: chat ${chatId} already active, skipping`);
       return;
@@ -144,6 +156,7 @@ export class SlackChannel implements ChannelAdapter {
     message: string,
   ): Promise<void> {
     if (!this.gateway) return;
+    const chatId = ctx.threadTs ? `${ctx.channelId}:${ctx.threadTs}` : ctx.channelId;
 
     let replyText = "";
     try {
@@ -152,6 +165,11 @@ export class SlackChannel implements ChannelAdapter {
         channelKey: "slack",
         message,
       })) {
+        if (event.type === "elicitation_request") {
+          const questionText = this.elicitation.capture(chatId, sessionKey, event);
+          await this.sendReply(ctx, questionText);
+          continue;
+        }
         const fragment = renderSlackEvent(event);
         if (fragment != null) replyText += fragment;
       }
@@ -160,6 +178,7 @@ export class SlackChannel implements ChannelAdapter {
       replyText = "处理消息时发生错误，请重试。";
     }
 
+    this.elicitation.clear(chatId);
     const finalText = replyText.trim();
     if (finalText) {
       await this.sendReply(ctx, finalText);
