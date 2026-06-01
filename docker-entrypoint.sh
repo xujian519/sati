@@ -98,6 +98,8 @@ model:
         ${LIGHT_MODEL_ID}:
           capabilities:
             maxOutputTokens: 16384
+cron:
+  enabled: true
 ${ROUTER_SECTION}
 YAML
   else
@@ -126,6 +128,8 @@ model:
         ${LIGHT_MODEL_ID}:
           capabilities:
             maxOutputTokens: 16384
+cron:
+  enabled: true
 ${ROUTER_SECTION}
 YAML
   fi
