@@ -3,7 +3,6 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Gateway } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { FeishuSessionMapper } from "./FeishuSessionMapper.js";
-import { renderFeishuEvent } from "./feishu-render.js";
 
 let Lark: any = null;
 let larkLoadAttempted = false;
@@ -21,6 +20,8 @@ async function loadLarkSdk(): Promise<any> {
 
 const TENANT_TOKEN_URL = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal";
 const SEND_MESSAGE_URL = "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id";
+const REACTION_URL = "https://open.feishu.cn/open-apis/im/v1/messages";
+const PROCESSING_EMOJI = "OnIt";
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 const SEEN_EVENTS_MAX = 2000;
 
@@ -55,7 +56,7 @@ export type FeishuChannelOptions = {
 
 type ParsedEvent =
   | { kind: "url_verification"; challenge: string }
-  | { kind: "message"; eventId: string; chatId: string; text: string }
+  | { kind: "message"; eventId: string; chatId: string; text: string; messageId?: string }
   | { kind: "ignore" };
 
 export class FeishuChannel implements ChannelAdapter {
@@ -190,12 +191,13 @@ export class FeishuChannel implements ChannelAdapter {
     if (!chatId || message.content === undefined) return;
 
     const text = extractTextContent(message.content);
-    const eventId = message.message_id ?? `stream:${chatId}:${Date.now()}`;
+    const messageId = message.message_id;
+    const eventId = messageId ?? `stream:${chatId}:${Date.now()}`;
 
     if (this.seenEvents.has(eventId)) return;
     this.rememberEvent(eventId);
 
-    await this.processInboundMessage(chatId, text);
+    await this.processInboundMessage(chatId, text, messageId);
   }
 
   async handleWebhook(request: IncomingMessage, response: ServerResponse, body: string): Promise<boolean> {
@@ -223,20 +225,32 @@ export class FeishuChannel implements ChannelAdapter {
     this.rememberEvent(parsed.eventId);
 
     respondJson(response, 200, { ok: true });
-    void this.processInboundMessage(parsed.chatId, parsed.text).catch((e) => {
+    void this.processInboundMessage(parsed.chatId, parsed.text, parsed.messageId).catch((e) => {
       this.logger?.error?.(`feishu: processInboundMessage error: ${e}`);
     });
     return true;
   }
 
-  private async processInboundMessage(chatId: string, text: string): Promise<void> {
+  private async processInboundMessage(chatId: string, text: string, messageId?: string): Promise<void> {
     if (!this.gateway) return;
 
     const mapped = this.mapper.resolve({ chatId, text });
+
     if (mapped.command === "new" && !mapped.message) {
       await this.send({ chatId, text: "已创建新会话。" });
       return;
     }
+
+    if (mapped.command === "projects") {
+      await this.handleListProjects(chatId);
+      return;
+    }
+
+    if (mapped.command === "switch-project") {
+      await this.handleSwitchProject(chatId, mapped.commandArg);
+      return;
+    }
+
     if (!mapped.message) return;
 
     if (this.activeChats.has(chatId)) {
@@ -244,28 +258,114 @@ export class FeishuChannel implements ChannelAdapter {
       return;
     }
 
+    const reactionId = messageId ? await this.addReaction(messageId) : undefined;
+
     this.activeChats.add(chatId);
     try {
-      let buffer = "";
+      let lastTextSegment = "";
+      let errorMessages = "";
+      let inToolCall = false;
       try {
         for await (const event of this.gateway.submitTurn({
           sessionKey: mapped.sessionKey,
           channelKey: "feishu",
           message: mapped.message,
+          ...(mapped.projectKey ? { projectKey: mapped.projectKey } : {}),
         })) {
-          buffer += renderFeishuEvent(event) ?? "";
+          switch (event.type) {
+            case "assistant_text_delta":
+              if (!inToolCall) lastTextSegment += event.text;
+              break;
+            case "tool_call_started":
+              inToolCall = true;
+              lastTextSegment = "";
+              break;
+            case "tool_call_finished":
+              inToolCall = false;
+              if (!event.ok) {
+                const name = event.toolName ?? event.toolCallId;
+                errorMessages += `⚠️ ${name} 执行失败\n`;
+              }
+              break;
+            case "error":
+              errorMessages += `❌ ${event.message}\n`;
+              break;
+          }
         }
       } catch (e) {
         this.logger?.error?.(`feishu: submitTurn error: ${e}`);
-        buffer = "处理消息时发生错误，请重试。";
+        lastTextSegment = "处理消息时发生错误，请重试。";
       }
 
-      const reply = buffer.trim();
+      const reply = (lastTextSegment.trim() || errorMessages.trim());
       if (reply) {
         await this.send({ chatId, text: reply });
       }
     } finally {
+      if (reactionId && messageId) {
+        await this.removeReaction(messageId, reactionId);
+      }
       this.activeChats.delete(chatId);
+    }
+  }
+
+  private async handleListProjects(chatId: string): Promise<void> {
+    if (!this.gateway) return;
+    try {
+      const result = await this.gateway.listProjects();
+      const projects = result.projects;
+      if (projects.length === 0) {
+        await this.send({ chatId, text: "暂无项目。使用 Web UI 创建 WorkSpace 后即可在此切换。" });
+        return;
+      }
+
+      const currentProject = this.mapper.getProject(chatId);
+      const lines = ["📂 项目列表：", ""];
+      for (const p of projects) {
+        const marker = currentProject === p.projectKey ? " ✅" : "";
+        lines.push(`• ${p.name}${marker}`);
+      }
+      lines.push("", '发送 /switch-project <项目名> 切换 WorkSpace');
+      await this.send({ chatId, text: lines.join("\n") });
+    } catch (e) {
+      this.logger?.error?.(`feishu: listProjects error: ${e}`);
+      await this.send({ chatId, text: "获取项目列表失败，请重试。" });
+    }
+  }
+
+  private async handleSwitchProject(chatId: string, projectName?: string): Promise<void> {
+    if (!this.gateway) return;
+
+    if (!projectName) {
+      await this.send({ chatId, text: "用法：/switch-project <项目名>\n\n发送 /projects 查看可用项目。" });
+      return;
+    }
+
+    try {
+      const result = await this.gateway.listProjects();
+      const lower = projectName.toLowerCase();
+      const target =
+        result.projects.find((p) => p.name === projectName) ??
+        result.projects.find((p) => p.name.toLowerCase() === lower) ??
+        result.projects.find((p) => p.name.toLowerCase().includes(lower));
+
+      if (!target) {
+        await this.send({
+          chatId,
+          text: `未找到匹配「${projectName}」的项目。\n\n发送 /projects 查看可用项目。`,
+        });
+        return;
+      }
+
+      this.mapper.bindProject(chatId, target.projectKey);
+      const sessionKey = `feishu:chat=${chatId}:s_${Date.now().toString(36)}`;
+      await this.send({
+        chatId,
+        text: `已切换到项目：${target.name}\n路径：${target.fullPath}`,
+      });
+    } catch (e) {
+      this.logger?.error?.(`feishu: switchProject error: ${e}`);
+      await this.send({ chatId, text: "切换项目失败，请重试。" });
     }
   }
 
@@ -302,6 +402,45 @@ export class FeishuChannel implements ChannelAdapter {
       }
     } catch (e) {
       this.logger?.error?.(`feishu: send threw: ${e}`);
+    }
+  }
+
+  private async addReaction(messageId: string): Promise<string | undefined> {
+    if (!this.appId || !this.appSecret) return undefined;
+    try {
+      const token = await this.getTenantAccessToken();
+      const res = await fetch(`${REACTION_URL}/${messageId}/reactions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reaction_type: { emoji_type: PROCESSING_EMOJI } }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        code?: number;
+        data?: { reaction_id?: string };
+      };
+      if (json.code === 0 && json.data?.reaction_id) {
+        return json.data.reaction_id;
+      }
+      this.logger?.info?.(`feishu: addReaction non-zero code=${json.code}`);
+    } catch (e) {
+      this.logger?.info?.(`feishu: addReaction failed: ${e}`);
+    }
+    return undefined;
+  }
+
+  private async removeReaction(messageId: string, reactionId: string): Promise<void> {
+    if (!this.appId || !this.appSecret) return;
+    try {
+      const token = await this.getTenantAccessToken();
+      await fetch(`${REACTION_URL}/${messageId}/reactions/${reactionId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch (e) {
+      this.logger?.info?.(`feishu: removeReaction failed: ${e}`);
     }
   }
 
@@ -406,7 +545,7 @@ function parseDirectShape(raw: Record<string, unknown>): ParsedEvent | undefined
 function parseV2Event(raw: Record<string, unknown>): ParsedEvent | undefined {
   const header = raw.header as { event_id?: string; event_type?: string } | undefined;
   const event = raw.event as
-    | { message?: { chat_id?: string; content?: string; message_type?: string } }
+    | { message?: { chat_id?: string; content?: string; message_type?: string; message_id?: string } }
     | undefined;
 
   if (!header?.event_id || !event?.message) return undefined;
@@ -418,7 +557,7 @@ function parseV2Event(raw: Record<string, unknown>): ParsedEvent | undefined {
   if (!chatId || content === undefined) return undefined;
 
   const text = extractTextContent(content);
-  return { kind: "message", eventId: header.event_id, chatId, text };
+  return { kind: "message", eventId: header.event_id, chatId, text, messageId: event.message.message_id };
 }
 
 function parseV1Event(raw: Record<string, unknown>): ParsedEvent | undefined {
