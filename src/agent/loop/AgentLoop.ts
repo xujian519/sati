@@ -127,9 +127,18 @@ export class AgentLoop {
     /**
      * Single-shot guard for `max_output_reached` retries. The loop bumps
      * `config.maxOutputTokens` (capped at `OUTPUT_TOKEN_RETRY_CEILING`) once
-     * and retries; a second hit falls through to the recovery policy.
+     * and retries; a second hit falls through to the continuation recovery.
      */
     let hasAttemptedOutputRetry = false;
+    /**
+     * Multi-turn continuation recovery counter for `max_output_reached`.
+     * After the single-shot token bump, the loop injects a continuation
+     * prompt and preserves the truncated assistant message so the model can
+     * resume from where it was cut off — up to MAX_OUTPUT_RECOVERY_LIMIT
+     * times.
+     */
+    const MAX_OUTPUT_RECOVERY_LIMIT = 3;
+    let maxOutputRecoveryCount = 0;
     const MAX_JSON_SELF_CORRECT_RETRIES = 3;
     let jsonSelfCorrectCount = 0;
 
@@ -402,26 +411,52 @@ export class AgentLoop {
           continue;
         }
 
-        // `max_output_reached` (legacy: maximum output tokens hit).
-        // Single-shot bump `maxOutputTokens` and retry; a second hit falls
-        // through to RouterRuntime's fallback chain via `classifyModelError`.
-        // Strip the partial assistant message so the retry doesn't replay a
-        // truncated tool_call.
-        if (
-          assembled.error.code === "max_output_reached" &&
-          !hasAttemptedOutputRetry
-        ) {
-          messages = stripTrailingErrorPair(messages);
-          const previous = this.config.maxOutputTokens ?? OUTPUT_TOKEN_RETRY_DEFAULT;
-          this.config.maxOutputTokens = Math.min(previous * 2, OUTPUT_TOKEN_RETRY_CEILING);
-          hasAttemptedOutputRetry = true;
-          yield {
-            type: "turn_continued",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            reason: "model_error",
-          };
-          continue;
+        // `max_output_reached`: output token limit hit (or truncated JSON
+        // reclassified from invalid_tool_arguments when finishReason=length).
+        //
+        // Phase A — single-shot token doubling: strip the partial response
+        // and retry with 2x maxOutputTokens (capped at CEILING).
+        // Phase B — multi-turn continuation: keep the truncated assistant
+        // message in context and inject a "resume" prompt so the model can
+        // pick up where it was cut off (up to MAX_OUTPUT_RECOVERY_LIMIT).
+        // Phase C — exhausted: fall through to error surfacing.
+        if (assembled.error.code === "max_output_reached") {
+          // Phase A
+          if (!hasAttemptedOutputRetry) {
+            messages = stripTrailingErrorPair(messages);
+            const previous = this.config.maxOutputTokens ?? OUTPUT_TOKEN_RETRY_DEFAULT;
+            this.config.maxOutputTokens = Math.min(previous * 2, OUTPUT_TOKEN_RETRY_CEILING);
+            hasAttemptedOutputRetry = true;
+            yield {
+              type: "turn_continued",
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              reason: "model_error",
+            };
+            continue;
+          }
+
+          // Phase B
+          if (maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
+            maxOutputRecoveryCount++;
+            messages.push({
+              role: "user",
+              content: [{
+                type: "text",
+                text: "Output token limit hit. Resume directly — no apology, no recap of what you were doing. "
+                  + "Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.",
+              }],
+              metadata: { synthetic: true, purpose: "max_output_recovery" },
+            });
+            yield {
+              type: "turn_continued",
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              reason: "model_error",
+            };
+            continue;
+          }
+          // Phase C: fall through to error surfacing
         }
 
         // Cross-provider fallback decisions are now owned by RouterRuntime
@@ -501,6 +536,55 @@ export class AgentLoop {
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
       }
+      // When jsonrepair silently "fixed" truncated JSON and the response
+      // was cut by max_tokens, the tool call arguments are likely incomplete
+      // (e.g. half-written file content). Apply the same recovery as
+      // max_output_reached: token doubling → continuation prompt → give up.
+      if (assembled.hasRepairedToolCalls && assembled.finishReason === "length") {
+        console.warn(
+          `[AgentLoop] Blocking ${toolCalls.length} repaired-but-truncated tool call(s) — entering max_output recovery`,
+        );
+
+        // Phase A: token doubling (if not yet attempted)
+        if (!hasAttemptedOutputRetry) {
+          messages = stripTrailingErrorPair(messages);
+          const previous = this.config.maxOutputTokens ?? OUTPUT_TOKEN_RETRY_DEFAULT;
+          this.config.maxOutputTokens = Math.min(previous * 2, OUTPUT_TOKEN_RETRY_CEILING);
+          hasAttemptedOutputRetry = true;
+          yield {
+            type: "turn_continued",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            reason: "model_error",
+          };
+          continue;
+        }
+
+        // Phase B: continuation recovery
+        if (maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
+          maxOutputRecoveryCount++;
+          messages.push({
+            role: "user",
+            content: [{
+              type: "text",
+              text: "Output token limit hit. Resume directly — no apology, no recap of what you were doing. "
+                + "Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.",
+            }],
+            metadata: { synthetic: true, purpose: "max_output_recovery" },
+          });
+          yield {
+            type: "turn_continued",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            reason: "model_error",
+          };
+          continue;
+        }
+
+        // Phase C: exhausted — let tool execution proceed with
+        // outputTruncated=true so formatValidationError can provide hints.
+      }
+
       let results: PilotDeckToolResult[];
       try {
         const toolContext = this.createToolContext(input, messages);
@@ -641,6 +725,8 @@ export class AgentLoop {
         }
       } else {
         consecutiveAllInvalidTurns = 0;
+        maxOutputRecoveryCount = 0;
+        hasAttemptedOutputRetry = false;
       }
 
       if (this.config.stopOnStructuredOutput && structuredOutput !== undefined) {
