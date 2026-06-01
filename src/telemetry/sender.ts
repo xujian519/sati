@@ -144,7 +144,6 @@ export class TelemetrySender {
       // noop: file might not exist or malformed lines were ignored.
     }
   }
-  }
 
   private persistQueue(): void {
     try {
