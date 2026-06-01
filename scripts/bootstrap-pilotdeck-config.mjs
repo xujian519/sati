@@ -8,8 +8,10 @@
  * Behaviour:
  *   1. Every run: discover repo skills and copy missing slugs into
  *      $PILOT_HOME/skills, skipping existing targets.
- *   2. If $PILOT_HOME/pilotdeck.yaml already exists -> skip config bootstrap.
- *   3. Otherwise write a minimal V2 yaml that:
+ *   2. Every run: if pilotdeck.yaml exists but is missing known sections
+ *      (e.g. adapters), append the default snippet so new features are
+ *      discoverable without requiring users to recreate the config.
+ *   3. If $PILOT_HOME/pilotdeck.yaml does not exist, write a minimal V2 yaml that:
  *        - has a valid agent.model that resolves to a catalog provider/model,
  *          so the engine's parseModelConfig won't crash on startup
  *        - uses a sentinel apiKey ("PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE")
@@ -19,7 +21,7 @@
  * Override the target via $PILOT_HOME (same env var the engine reads).
  * Skip the whole step via $PILOTDECK_SKIP_BOOTSTRAP=1.
  */
-import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +48,13 @@ model:
         _placeholder:
           capabilities:
             maxOutputTokens: 16384
+adapters:
+  feishu:
+    enabled: false
+    appId: ""
+    appSecret: ""
+    # connectionMode: stream
+    # domainName: feishu
 router:
   enabled: true
   scenarios:
@@ -93,6 +102,10 @@ router:
     subagentMaxTokens: 48000
   stats:
     enabled: true
+cron:
+  enabled: true
+  timezone: Asia/Shanghai
+  maxConcurrentRuns: 2
 `;
 
 function resolvePilotHome() {
@@ -173,6 +186,57 @@ function syncRepoSkillsToPilotHome(pilotHome) {
   return { created, skippedExisting, skippedDuplicateSlug };
 }
 
+const DEFAULT_ADAPTERS_SNIPPET = `
+adapters:
+  feishu:
+    enabled: false
+    appId: ""
+    appSecret: ""
+    # connectionMode: stream
+    # domainName: feishu
+`;
+
+const DEFAULT_CRON_SNIPPET = `
+cron:
+  enabled: true
+  timezone: Asia/Shanghai
+  maxConcurrentRuns: 2
+`;
+
+const PATCH_SECTIONS = [
+  { key: 'adapters', snippet: DEFAULT_ADAPTERS_SNIPPET },
+  { key: 'cron', snippet: DEFAULT_CRON_SNIPPET },
+];
+
+function patchMissingSections(configPath) {
+  let content;
+  try {
+    content = readFileSync(configPath, 'utf8');
+  } catch {
+    return;
+  }
+
+  let patched = false;
+  for (const { key, snippet } of PATCH_SECTIONS) {
+    const pattern = new RegExp(`^${key}\\s*:`, 'm');
+    if (!pattern.test(content)) {
+      try {
+        appendFileSync(configPath, snippet, 'utf8');
+        patched = true;
+        console.log(`[pilotdeck] Appended missing "${key}" section to ${configPath}.`);
+      } catch (error) {
+        console.warn(
+          `[pilotdeck] Could not append "${key}" to ${configPath}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+  }
+
+  return patched;
+}
+
 function main() {
   if (process.env.PILOTDECK_SKIP_BOOTSTRAP === '1') {
     return;
@@ -190,6 +254,7 @@ function main() {
   }
 
   if (existsSync(configPath)) {
+    patchMissingSections(configPath);
     return;
   }
 
