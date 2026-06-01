@@ -12,6 +12,7 @@ import { AlwaysOnEventStore } from "../storage/AlwaysOnEventStore.js";
 import { WorkspaceProviderRegistry } from "../workspace/WorkspaceProviderRegistry.js";
 import { AlwaysOnRunContextRegistry } from "./AlwaysOnRunContextRegistry.js";
 import { defaultAlwaysOnConfig, type AlwaysOnConfig } from "../config/parseAlwaysOnConfig.js";
+import type { TelemetryClient } from "../../telemetry/index.js";
 
 export type CreateApplyHandlerDeps = {
   gateway: Gateway;
@@ -19,6 +20,7 @@ export type CreateApplyHandlerDeps = {
   sessionOverrides: SessionConfigOverrides;
   onTurnEvent?: DiscoveryFireDependencies["onTurnEvent"];
   alwaysOnConfig?: AlwaysOnConfig;
+  telemetry?: TelemetryClient;
 };
 
 /**
@@ -75,6 +77,7 @@ export function createApplyHandler(
       uuid: () => randomUUID(),
       now: () => new Date(),
       onTurnEvent: deps.onTurnEvent,
+      telemetry: deps.telemetry,
     };
 
     const fire = new DiscoveryFire(minimalDeps);

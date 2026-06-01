@@ -11,6 +11,7 @@ import type {
 import { ModelProviderError } from "../protocol/errors.js";
 import { parseModelResponse } from "../response/parseModelResponse.js";
 import { createStreamNormalizerState, normalizeStreamEvent } from "./normalizeStreamEvent.js";
+import { normalizeProviderBaseUrl } from "../normalizeProviderBaseUrl.js";
 import { StreamingCheckpointManager } from "./StreamingCheckpoint.js";
 
 export type ModelTransport = typeof fetch;
@@ -55,6 +56,7 @@ export async function* streamModel(
     type: "request_started",
     provider: provider.id,
     model: streamingRequest.model,
+    providerBaseUrl: normalizeProviderBaseUrl(provider.url),
     metadata: streamingRequest.metadata,
   };
 

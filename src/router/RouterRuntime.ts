@@ -36,6 +36,7 @@ import {
 import { TokenStatsCollector } from "./stats/TokenStatsCollector.js";
 import { classifyAndRoute } from "./tokenSaver/classifyAndRoute.js";
 import { countMessagesTokens, countResponseTokens, dispose as disposeTokenizer } from "./utils/countTokens.js";
+import type { TelemetryClient } from "../telemetry/index.js";
 
 export type RouterRuntimeDeps = {
   modelRuntime: ModelRuntime;
@@ -44,6 +45,7 @@ export type RouterRuntimeDeps = {
   /** Optional skill prompt loader for AutoOrchestrate; receives extension id, returns text. */
   loadSkillPrompt?: (extensionId: string) => Promise<string | undefined>;
   events?: RouterEventBus;
+  telemetry?: TelemetryClient;
   now?: () => Date;
   /**
    * Externally-owned session store that survives config-reload cycles.
@@ -99,6 +101,7 @@ export function createRouterRuntime(
   const customRouters = deps.customRouterRegistry ?? noopCustomRouterRegistry;
   const judgeRuntime = deps.judgeRuntime ?? deps.modelRuntime;
   const events = deps.events ?? { emit: () => undefined };
+  const telemetry = deps.telemetry;
 
   async function resolveCustom(
     input: RouterDecisionInput,
@@ -206,6 +209,8 @@ export function createRouterRuntime(
           messages: input.request.messages,
           judgeRuntime,
           previousTier: input.metadata?.previousTier,
+          sessionId: input.sessionId,
+          telemetry,
         });
         if (tokenSaver) {
           if (tokenSaver.failureReason) {
@@ -470,6 +475,24 @@ export function createRouterRuntime(
                 toModel: next.model,
                 error: outcome.error,
               });
+              telemetry?.trackFeatureLoopStage({
+                module: "router",
+                ownerModule: "router",
+                phase: "fallback",
+                loopStage: "module_event",
+                outcome: "success",
+                sessionId: ctx.sessionId,
+                metadata: {
+                  event: "fallback_attempt",
+                  scenarioType: attemptDecision.scenarioType,
+                  attempt: attemptIndex + 1,
+                  fromProvider: attempt.provider,
+                  fromModel: attempt.model,
+                  toProvider: next.provider,
+                  toModel: next.model,
+                  errorCode: outcome.error.code,
+                },
+              });
               continue outer;
             }
           }
@@ -495,6 +518,22 @@ export function createRouterRuntime(
               provider: attempt.provider,
               model: attempt.model,
               errorCode: outcome.error.code,
+            });
+            telemetry?.trackFeatureLoopStage({
+              module: "router",
+              ownerModule: "router",
+              phase: "fallback",
+              loopStage: "module_event",
+              outcome: "success",
+              sessionId: ctx.sessionId,
+              metadata: {
+                event: "transient_retry",
+                attempt: transientRetryCount + 1,
+                delayMs: Math.round(delay),
+                provider: attempt.provider,
+                model: attempt.model,
+                errorCode: outcome.error.code,
+              },
             });
             await abortableDelay(delay, ctx.abortSignal);
             transientRetryCount++;
@@ -527,6 +566,20 @@ export function createRouterRuntime(
             attempt: zeroUsageAttempt,
             provider: attempt.provider,
             model: attempt.model,
+          });
+          telemetry?.trackFeatureLoopStage({
+            module: "router",
+            ownerModule: "router",
+            phase: "fallback",
+            loopStage: "module_event",
+            outcome: "success",
+            sessionId: ctx.sessionId,
+            metadata: {
+              event: "zero_usage_retry",
+              attempt: zeroUsageAttempt,
+              provider: attempt.provider,
+              model: attempt.model,
+            },
           });
           await abortableDelay(500 * zeroUsageAttempt, ctx.abortSignal);
           continue;
@@ -806,4 +859,3 @@ function classifyNetworkErrorCode(error: unknown): string {
   if (msg.includes("abort") || error.name === "AbortError") return "aborted";
   return "network_error";
 }
-

@@ -12,6 +12,7 @@ import type {
   CronStopResult,
 } from "../../cron/protocol/types.js";
 import type { CanonicalUsage } from "../../model/index.js";
+import type { TelemetryExecutionKind, TelemetryModule } from "../../telemetry/index.js";
 import type { SessionInfo as ProjectSessionInfo } from "../../session/index.js";
 import type {
   PilotDeckElicitationAnswer,
@@ -76,6 +77,11 @@ export type GatewaySubmitTurnInput = {
   mode?: GatewayMode;
   runId?: string;
   maxTurns?: number;
+  telemetry?: {
+    ownerModule?: TelemetryModule;
+    executionKind?: TelemetryExecutionKind;
+    phase?: string;
+  };
 };
 
 export type GatewayEvent =

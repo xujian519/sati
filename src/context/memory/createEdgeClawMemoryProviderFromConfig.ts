@@ -20,6 +20,7 @@ import { EdgeClawMemoryService, type EdgeClawMemoryLlmOptions } from "edgeclaw-m
 import { EdgeClawMemoryProvider } from "./EdgeClawMemoryProvider.js";
 import type { ModelConfig } from "../../model/protocol/canonical.js";
 import type { PilotMemoryConfig } from "../../pilot/config/types.js";
+import type { TelemetryClient } from "../../telemetry/index.js";
 
 export type CreateEdgeClawMemoryProviderOptions = {
   config: PilotMemoryConfig | undefined;
@@ -33,6 +34,7 @@ export type CreateEdgeClawMemoryProviderOptions = {
   };
   /** Optional `now` for deterministic tests. */
   now?: () => Date;
+  telemetry?: TelemetryClient;
 };
 
 export function createEdgeClawMemoryProviderFromConfig(
@@ -58,12 +60,14 @@ export function createEdgeClawMemoryProviderFromConfig(
     source: "pilotdeck",
     logger: options.logger,
     llm,
+    runtime: options.telemetry ? { telemetry: options.telemetry } : undefined,
   });
 
   const provider = new EdgeClawMemoryProvider({
     service,
     source: "pilotdeck",
     now: options.now,
+    telemetry: options.telemetry,
   });
 
   return { provider, service };

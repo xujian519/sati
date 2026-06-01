@@ -1,4 +1,5 @@
 import { canonicalMessagesToMemoryMessages, type MemoryCaptureTurnInput, type MemoryResolver, type MemoryRetrieveInput, type MemoryRetrieveResult, type ContextMemoryMessage } from "./MemoryResolver.js";
+import type { TelemetryClient } from "../../telemetry/index.js";
 
 type EdgeClawCaseTraceRecord = {
   sessionKey: string;
@@ -61,6 +62,7 @@ export type EdgeClawMemoryProviderOptions = {
   retrievalMode?: "auto" | "explicit";
   source?: string;
   now?: () => Date;
+  telemetry?: TelemetryClient;
 };
 
 export class EdgeClawMemoryProvider implements MemoryResolver {
@@ -77,6 +79,15 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
 
   async retrieve(input: MemoryRetrieveInput): Promise<MemoryRetrieveResult> {
     const startedAt = this.now().toISOString();
+    this.options.telemetry?.trackFeatureLoopStage({
+      module: "memory",
+      ownerModule: "memory",
+      executionKind: "memory",
+      phase: "retrieve",
+      loopStage: "loop_start",
+      outcome: "success",
+      sessionId: input.sessionId,
+    });
     try {
       const recentMessages = canonicalMessagesToMemoryMessages(input.recentMessages);
       const result = await this.options.service.retrieveContext(input.query, {
@@ -92,6 +103,16 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
       });
       const systemContext = (result.systemContext ?? result.context ?? "").trim();
       if (!systemContext) {
+        this.options.telemetry?.trackFeatureLoopStage({
+          module: "memory",
+          ownerModule: "memory",
+          executionKind: "memory",
+          phase: "retrieve",
+          loopStage: "loop_end",
+          outcome: "success",
+          sessionId: input.sessionId,
+          metadata: { injected: false },
+        });
         return {
           diagnostics: [
             {
@@ -104,12 +125,31 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
         };
       }
 
+      this.options.telemetry?.trackFeatureLoopStage({
+        module: "memory",
+        ownerModule: "memory",
+        executionKind: "memory",
+        phase: "retrieve",
+        loopStage: "loop_end",
+        outcome: "success",
+        sessionId: input.sessionId,
+        metadata: { injected: true },
+      });
       return {
         systemContext,
         diagnostics: [],
         metadata: { trace: result.trace, debug: result.debug },
       };
     } catch (error) {
+      this.options.telemetry?.trackError(error, {
+        module: "memory",
+        ownerModule: "memory",
+        executionKind: "memory",
+        phase: "retrieve",
+        loopStage: "loop_end",
+        errorCategory: "loop_error",
+        sessionId: input.sessionId,
+      });
       return {
         diagnostics: [
           {
@@ -124,13 +164,41 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
 
   async captureTurn(input: MemoryCaptureTurnInput): Promise<void> {
     const normalizedMessages = canonicalMessagesToMemoryMessages(input.messages);
+    this.options.telemetry?.trackFeatureLoopStage({
+      module: "memory",
+      ownerModule: "memory",
+      executionKind: "memory",
+      phase: "capture",
+      loopStage: "loop_start",
+      outcome: "success",
+      sessionId: input.sessionId,
+    });
     try {
       this.options.service.captureTurn(normalizedMessages, {
         sessionKey: input.sessionId,
         timestamp: this.now().toISOString(),
         source: this.options.source ?? "pilotdeck",
       });
+      this.options.telemetry?.trackFeatureLoopStage({
+        module: "memory",
+        ownerModule: "memory",
+        executionKind: "memory",
+        phase: "capture",
+        loopStage: "loop_end",
+        outcome: "success",
+        sessionId: input.sessionId,
+      });
     } catch {
+      this.options.telemetry?.trackFeatureLoopStage({
+        module: "memory",
+        ownerModule: "memory",
+        executionKind: "memory",
+        phase: "capture",
+        loopStage: "loop_end",
+        outcome: "failed",
+        errorCategory: "loop_error",
+        sessionId: input.sessionId,
+      });
       // Memory capture should not break the agent turn.
     }
     this.savePendingCaseTrace(input, normalizedMessages);

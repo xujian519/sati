@@ -72,6 +72,7 @@ import type { EdgeClawMemoryProvider } from "../context/index.js";
 import { loadBuiltinPlugins } from "../extension/plugins/builtin/loadBuiltinPlugins.js";
 import { SkillManager } from "../extension/skills/index.js";
 import { ExtensionWatchManager, type ExtensionWatchEvent } from "./ExtensionWatchManager.js";
+import { createTelemetryCollector, type TelemetryClient } from "../telemetry/index.js";
 
 export type CreateLocalGatewayOptions = {
   projectRoot?: string;
@@ -108,6 +109,7 @@ export type CreateLocalGatewayOptions = {
    * benchmark / headless runs where no interactive user is present.
    */
   autoElicitation?: boolean;
+  telemetry?: TelemetryClient;
 };
 
 export type SubsystemUpdate = {
@@ -144,6 +146,8 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   const pilotHome = options.pilotHome ?? resolvePilotHome(baseEnv);
   const env = options.pilotHome ? { ...baseEnv, PILOT_HOME: pilotHome } : baseEnv;
   const now = () => new Date();
+  const telemetry = options.telemetry ?? createTelemetryCollector({ env, pilotHome });
+  const ownsTelemetry = !options.telemetry;
   let registry!: ProjectRuntimeRegistry;
   let router: SessionRouter | undefined;
   const extensionWatchManager = new ExtensionWatchManager({
@@ -170,6 +174,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     additionalWorkingDirectories: options.additionalWorkingDirectories,
     modelFactory: options.__testModelFactory,
     autoElicitation: options.autoElicitation,
+    telemetry,
     onProjectActivated: (activeProjectRoot) => extensionWatchManager.watchProject(activeProjectRoot),
   });
   const defaultRuntime = registry.resolve();
@@ -217,6 +222,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   const gateway = new InProcessGateway(router, {
     now,
     serverInfo: { mode: "in_process", projectKey: projectRoot },
+    telemetry,
     toolResultsDir: resolve(tmpdir(), "pilotdeck-tool-output", process.pid.toString()),
     cron: options.cron,
     skillManager,
@@ -290,6 +296,9 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       registry.invalidate();
       stopConfigWatching();
       stopExtensionWatching();
+      if (ownsTelemetry) {
+        void telemetry.shutdown();
+      }
     },
     bindServer: (server) => { boundServer = server; },
     isProjectBusy: (projectKey: string) => router!.hasActiveUserTurn(projectKey),
@@ -317,6 +326,7 @@ type ProjectRuntimeRegistryOptions = {
   /** @internal Test hook from `CreateLocalGatewayOptions.__testModelFactory`. */
   modelFactory?: (snapshot: PilotConfigSnapshot) => ModelRuntime;
   autoElicitation?: boolean;
+  telemetry: TelemetryClient;
   onProjectActivated?: (projectRoot: string) => void;
 };
 
@@ -542,6 +552,7 @@ class ProjectRuntimeRegistry {
       customRouterRegistry: pluginRuntime,
       loadSkillPrompt: (extensionId) => pluginRuntime.loadSkillPrompt(extensionId),
       events: this.buildRouterEventBus(),
+      telemetry: this.options.telemetry,
     });
     const backgroundTasks = new BackgroundTaskRuntime({ now: this.options.now });
     const webSearchConfig = snapshot.config.tools?.webSearch;
@@ -574,6 +585,7 @@ class ProjectRuntimeRegistry {
       modelConfig: snapshot.config.model,
       projectRoot,
       now: this.options.now,
+      telemetry: this.options.telemetry,
     });
 
     const runtime: ProjectRuntime = {
@@ -606,7 +618,27 @@ class ProjectRuntimeRegistry {
         runtime.memoryMaintenanceRequested = false;
         try {
           await service.runDueScheduledMaintenance("scheduled");
+          this.options.telemetry.trackFeatureLoopStage({
+            module: "memory",
+            ownerModule: "memory",
+            executionKind: "memory",
+            phase: "maintenance",
+            loopStage: "module_event",
+            outcome: "success",
+            metadata: {
+              phase: "maintenance_completed",
+            },
+          });
         } catch (error) {
+          this.options.telemetry.trackError(error, {
+            module: "memory",
+            ownerModule: "memory",
+            executionKind: "memory",
+            phase: "maintenance",
+            loopStage: "loop_end",
+            errorCategory: "loop_error",
+            code: error instanceof Error ? error.name : "UnknownError",
+          });
           // eslint-disable-next-line no-console
           console.warn(
             `[pilotdeck] memory maintenance failed for project ${runtime.projectRoot}:`,
