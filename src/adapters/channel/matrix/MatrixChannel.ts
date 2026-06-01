@@ -3,6 +3,7 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { MatrixSessionMapper } from "./MatrixSessionMapper.js";
 import { renderMatrixEvent } from "./matrix-render.js";
+import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 
 let MatrixSdk: any;
 try {
@@ -36,6 +37,7 @@ export class MatrixChannel implements ChannelAdapter {
   private client: any = null;
   private userId: string | null = null;
   private activeChats = new Set<string>();
+  private readonly elicitation = new ImElicitationHelper();
 
   constructor(options: MatrixChannelOptions = {}) {
     this.mapper = options.mapper ?? new MatrixSessionMapper();
@@ -123,6 +125,16 @@ export class MatrixChannel implements ChannelAdapter {
     const text = String(content.body ?? "").trim();
     if (!text) return;
 
+    if (this.elicitation.hasPending(roomId) && this.gateway) {
+      try {
+        const confirmation = await this.elicitation.answer(roomId, text, this.gateway);
+        if (confirmation) await this.sendReply(roomId, confirmation);
+      } catch (e) {
+        this.logger?.error?.(`matrix: elicitation answer error: ${e}`);
+      }
+      return;
+    }
+
     if (this.activeChats.has(roomId)) {
       this.logger?.info?.(`matrix: room ${roomId} already active, skipping`);
       return;
@@ -153,6 +165,11 @@ export class MatrixChannel implements ChannelAdapter {
         channelKey: "matrix",
         message,
       })) {
+        if (event.type === "elicitation_request") {
+          const questionText = this.elicitation.capture(roomId, sessionKey, event);
+          await this.sendReply(roomId, questionText);
+          continue;
+        }
         const fragment = renderMatrixEvent(event);
         if (fragment != null) replyText += fragment;
       }
@@ -160,6 +177,8 @@ export class MatrixChannel implements ChannelAdapter {
       this.logger?.error?.(`matrix: submitTurn error: ${e}`);
       replyText = "处理消息时发生错误，请重试。";
     }
+
+    this.elicitation.clear(roomId);
 
     const finalText = replyText.trim();
     if (finalText) {

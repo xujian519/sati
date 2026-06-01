@@ -1,6 +1,7 @@
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { QQBotGateway, type QQBotCredentials, type QQGroupMessageEvent, type QQC2CMessageEvent } from "./qqbot-gateway.js";
+import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { QQSessionMapper } from "./QQSessionMapper.js";
 import { renderQQEvent } from "./qq-render.js";
 
@@ -29,6 +30,7 @@ export class QQChannel implements ChannelAdapter {
   private logger?: ChannelLogger;
   private botGateway?: QQBotGateway;
   private activeChats = new Set<string>();
+  private readonly elicitation = new ImElicitationHelper();
 
   constructor(options: QQChannelOptions = {}) {
     this.credentials = {
@@ -120,6 +122,17 @@ export class QQChannel implements ChannelAdapter {
     if (!text) return;
 
     const chatKey = `${groupOpenId}:${userOpenId}`;
+
+    if (this.elicitation.hasPending(chatKey) && this.gateway) {
+      try {
+        const confirmation = await this.elicitation.answer(chatKey, text, this.gateway);
+        if (confirmation) await this.sendReply(groupOpenId, confirmation);
+      } catch (e) {
+        this.logger?.error?.(`qq: elicitation answer error: ${e}`);
+      }
+      return;
+    }
+
     if (this.activeChats.has(chatKey)) {
       this.logger?.info?.(`qq: chat ${chatKey} already active, skipping`);
       return;
@@ -150,6 +163,17 @@ export class QQChannel implements ChannelAdapter {
     if (!rawText) return;
 
     const chatKey = `c2c:${userOpenId}`;
+
+    if (this.elicitation.hasPending(chatKey) && this.gateway) {
+      try {
+        const confirmation = await this.elicitation.answer(chatKey, rawText, this.gateway);
+        if (confirmation) await this.sendC2CReply(userOpenId, confirmation);
+      } catch (e) {
+        this.logger?.error?.(`qq: elicitation answer error (c2c): ${e}`);
+      }
+      return;
+    }
+
     if (this.activeChats.has(chatKey)) {
       this.logger?.info?.(`qq: c2c ${chatKey} already active, skipping`);
       return;
@@ -171,6 +195,7 @@ export class QQChannel implements ChannelAdapter {
     msgId: string,
   ): Promise<void> {
     if (!this.gateway) return;
+    const chatKey = `c2c:${userOpenId}`;
 
     let replyText = "";
     try {
@@ -179,6 +204,11 @@ export class QQChannel implements ChannelAdapter {
         channelKey: "qq",
         message,
       })) {
+        if (event.type === "elicitation_request") {
+          const questionText = this.elicitation.capture(chatKey, sessionKey, event);
+          await this.sendC2CReplyChunked(userOpenId, questionText, msgId);
+          continue;
+        }
         const fragment = renderQQEvent(event);
         if (fragment != null) replyText += fragment;
       }
@@ -187,6 +217,7 @@ export class QQChannel implements ChannelAdapter {
       replyText = "处理消息时发生错误，请重试。";
     }
 
+    this.elicitation.clear(chatKey);
     const finalText = replyText.trim();
     if (finalText) {
       await this.sendC2CReplyChunked(userOpenId, finalText, msgId);
@@ -238,6 +269,11 @@ export class QQChannel implements ChannelAdapter {
         channelKey: "qq",
         message,
       })) {
+        if (event.type === "elicitation_request") {
+          const questionText = this.elicitation.capture(groupOpenId, sessionKey, event);
+          await this.sendReplyChunked(groupOpenId, questionText, msgId);
+          continue;
+        }
         const fragment = renderQQEvent(event);
         if (fragment != null) replyText += fragment;
       }
@@ -246,6 +282,7 @@ export class QQChannel implements ChannelAdapter {
       replyText = "处理消息时发生错误，请重试。";
     }
 
+    this.elicitation.clear(groupOpenId);
     const finalText = replyText.trim();
     if (finalText) {
       await this.sendReplyChunked(groupOpenId, finalText, msgId);

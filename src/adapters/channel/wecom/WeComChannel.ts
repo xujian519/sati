@@ -3,6 +3,7 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { WeComSessionMapper } from "./WeComSessionMapper.js";
 import { renderWeComEvent } from "./wecom-render.js";
+import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 
 let WebSocketCtor: any = null;
 try {
@@ -47,6 +48,7 @@ export class WeComChannel implements ChannelAdapter {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private listenStopped = false;
   private activeChats = new Set<string>();
+  private readonly elicitation = new ImElicitationHelper();
 
   constructor(options: WeComChannelOptions = {}) {
     this.mapper = options.mapper ?? new WeComSessionMapper();
@@ -219,6 +221,16 @@ export class WeComChannel implements ChannelAdapter {
     const text = this.extractText(body);
     if (!text.trim()) return;
 
+    if (this.elicitation.hasPending(chatId) && this.gateway) {
+      try {
+        const confirmation = await this.elicitation.answer(chatId, text, this.gateway);
+        if (confirmation) await this.sendReply(chatId, confirmation);
+      } catch (e) {
+        this.logger?.error?.(`wecom: elicitation answer error: ${e}`);
+      }
+      return;
+    }
+
     if (this.activeChats.has(chatId)) {
       this.logger?.info?.(`wecom: chat ${chatId} already active, skipping`);
       return;
@@ -274,6 +286,11 @@ export class WeComChannel implements ChannelAdapter {
         channelKey: "wecom",
         message,
       })) {
+        if (event.type === "elicitation_request") {
+          const questionText = this.elicitation.capture(chatId, sessionKey, event);
+          await this.sendReply(chatId, questionText);
+          continue;
+        }
         const fragment = renderWeComEvent(event);
         if (fragment != null) replyText += fragment;
       }
@@ -281,6 +298,8 @@ export class WeComChannel implements ChannelAdapter {
       this.logger?.error?.(`wecom: submitTurn error: ${e}`);
       replyText = "处理消息时发生错误，请重试。";
     }
+
+    this.elicitation.clear(chatId);
 
     const finalText = replyText.trim();
     if (finalText) {
