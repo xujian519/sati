@@ -2941,6 +2941,52 @@ const HOST = process.env.HOST || '0.0.0.0';
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
 
+const PORT_FALLBACK_ATTEMPTS = 5;
+
+// Pick a random high port in the 20000–59999 range. Random (rather than the
+// preferred port + 1) because adjacent ports are frequently held by the same
+// multi-port app that already took the preferred one.
+function pickRandomHighPort() {
+    return 20000 + Math.floor(Math.random() * 40000);
+}
+
+// Listen on `preferredPort`; on EADDRINUSE retry on random high ports up to
+// PORT_FALLBACK_ATTEMPTS times. Resolves with the actually-bound port, or null
+// if every attempt was in use. Non-EADDRINUSE errors reject — real failures
+// (bad host, permissions) must not be silently retried.
+function listenWithPortFallback(srv, preferredPort, host) {
+    let port = preferredPort;
+    let attempt = 0;
+    return new Promise((resolve, reject) => {
+        const tryListen = () => {
+            attempt += 1;
+            const onError = (err) => {
+                srv.removeListener('listening', onListening);
+                if (err && err.code === 'EADDRINUSE') {
+                    if (attempt >= PORT_FALLBACK_ATTEMPTS) {
+                        resolve(null);
+                        return;
+                    }
+                    const nextPort = pickRandomHighPort();
+                    console.log(`${c.warn('[WARN]')} Port ${port} is in use; retrying on random port ${nextPort} (attempt ${attempt}/${PORT_FALLBACK_ATTEMPTS})...`);
+                    port = nextPort;
+                    setImmediate(tryListen);
+                    return;
+                }
+                reject(err);
+            };
+            const onListening = () => {
+                srv.removeListener('error', onError);
+                resolve(srv.address().port);
+            };
+            srv.once('error', onError);
+            srv.once('listening', onListening);
+            srv.listen(port, host);
+        };
+        tryListen();
+    });
+}
+
 async function ensureLocalUserWhenAuthDisabled() {
     if (!DISABLE_LOCAL_AUTH || userDb.hasUsers()) {
         return;
@@ -2970,12 +3016,21 @@ async function startServer() {
                 console.log('');
 
                 if (isProduction) {
-                    console.log(`${c.info('[INFO]')} To run in production mode, go to http://${DISPLAY_HOST}:${SERVER_PORT}`);
+                    console.log(`${c.info('[INFO]')} Starting in production mode...`);
                 } else {
                     console.log(`${c.info('[INFO]')} No production frontend build found; development mode expects Vite at http://${DISPLAY_HOST}:${VITE_PORT}`);
                 }
 
-                server.listen(SERVER_PORT, HOST, async () => {
+                const boundPort = await listenWithPortFallback(server, Number(SERVER_PORT), HOST);
+                if (boundPort === null) {
+                    console.error(`${c.warn('[ERROR]')} Could not bind a port after ${PORT_FALLBACK_ATTEMPTS} attempts (preferred ${SERVER_PORT}). All tried ports were in use. Set SERVER_PORT to a free port and retry.`);
+                    process.exit(1);
+                }
+                // Sync the actually-bound port back to the env so other modules
+                // that self-reference SERVER_PORT (e.g. routes/taskmaster.js) hit
+                // the right port after a fallback.
+                process.env.SERVER_PORT = String(boundPort);
+                {
                     const appInstallPath = path.join(__dirname, '..');
 
                     console.log('');
@@ -2983,7 +3038,7 @@ async function startServer() {
                     console.log(`  ${c.bright('PilotDeck Server - Ready')}`);
                     console.log(c.dim('═'.repeat(63)));
                     console.log('');
-                    console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://' + DISPLAY_HOST + ':' + SERVER_PORT)}`);
+                    console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://' + DISPLAY_HOST + ':' + boundPort)}`);
                     console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
                     console.log(`${c.tip('[TIP]')}  Run "pilotdeck status" for full configuration details`);
                     console.log('');
@@ -2994,7 +3049,7 @@ async function startServer() {
                         process.env.PILOTDECK_DESKTOP === '1'
                         || process.env.PILOTDECK_SKIP_BROWSER_OPEN === '1';
                     if (!skipAutoOpen) {
-                        const serverUrl = `http://${DISPLAY_HOST === '0.0.0.0' ? 'localhost' : DISPLAY_HOST}:${SERVER_PORT}`;
+                        const serverUrl = `http://${DISPLAY_HOST === '0.0.0.0' ? 'localhost' : DISPLAY_HOST}:${boundPort}`;
                         const openCmd = process.platform === 'darwin' ? 'open'
                                       : process.platform === 'win32' ? 'start'
                                       : 'xdg-open';
@@ -3022,7 +3077,7 @@ async function startServer() {
                             process.emit('pilotdeck:config-broadcast', payload);
                         },
                     });
-                });
+                }
             }
         });
 
