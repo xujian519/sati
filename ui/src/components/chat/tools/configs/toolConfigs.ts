@@ -626,14 +626,16 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   AskUserQuestion: {
     input: {
       type: 'collapsible',
-      title: (input: any) => {
+      title: (input: any, helpers?: any) => {
         const questions = Array.isArray(input.questions) ? input.questions : [];
         const count = questions.length;
+        const resultAnswers = helpers?.toolResult?.toolUseResult?.answers;
+        const answers = input.answers || resultAnswers;
         const hasAnswers =
-          input.answers &&
-          typeof input.answers === 'object' &&
-          !Array.isArray(input.answers) &&
-          Object.keys(input.answers).length > 0;
+          answers &&
+          typeof answers === 'object' &&
+          !Array.isArray(answers) &&
+          Object.keys(answers).length > 0;
         if (count === 1) {
           const header = questions[0]?.header || 'Question';
           return hasAnswers ? `${header} — answered` : header;
@@ -645,10 +647,13 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       },
       defaultOpen: true,
       contentType: 'question-answer',
-      getContentProps: (input: any) => ({
-        questions: input.questions,
-        answers: input.answers || {}
-      }),
+      getContentProps: (input: any, helpers?: any) => {
+        const resultAnswers = helpers?.toolResult?.toolUseResult?.answers;
+        return {
+          questions: input.questions,
+          answers: input.answers || resultAnswers || {},
+        };
+      },
     },
     result: {
       hideOnSuccess: true
