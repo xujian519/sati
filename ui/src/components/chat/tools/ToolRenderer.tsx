@@ -202,7 +202,7 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
         'title getter',
         toolName,
         () => typeof displayConfig.title === 'function'
-          ? displayConfig.title(parsedData)
+          ? displayConfig.title(parsedData, { toolResult })
           : displayConfig.title,
         'Details',
       ),
@@ -219,7 +219,8 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
       () => displayConfig.getContentProps?.(parsedData, {
         selectedProject,
         createDiff,
-        onFileOpen
+        onFileOpen,
+        toolResult,
       }),
       {},
     ));

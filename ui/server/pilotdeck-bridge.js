@@ -399,6 +399,9 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                               planSummary: event.data.planSummary,
                           }
                         : {}),
+                    ...(event.toolName === 'ask_user_question' && event.data
+                        ? { toolUseResult: event.data }
+                        : {}),
                 }),
             ];
         }
