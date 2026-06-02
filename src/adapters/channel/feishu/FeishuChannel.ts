@@ -2,6 +2,7 @@ import { createDecipheriv, createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Gateway } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
+import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { FeishuSessionMapper } from "./FeishuSessionMapper.js";
 
 let Lark: any = null;
@@ -79,6 +80,7 @@ export class FeishuChannel implements ChannelAdapter {
   private tokenInflight?: Promise<string>;
   private readonly seenEvents = new Set<string>();
   private readonly activeChats = new Set<string>();
+  private readonly elicitation = new ImElicitationHelper();
 
   private wsClient: any = null;
 
@@ -234,6 +236,16 @@ export class FeishuChannel implements ChannelAdapter {
   private async processInboundMessage(chatId: string, text: string, messageId?: string): Promise<void> {
     if (!this.gateway) return;
 
+    if (this.elicitation.hasPending(chatId)) {
+      try {
+        const confirmation = await this.elicitation.answer(chatId, text, this.gateway);
+        if (confirmation) await this.send({ chatId, text: confirmation });
+      } catch (e) {
+        this.logger?.error?.(`feishu: elicitation answer error: ${e}`);
+      }
+      return;
+    }
+
     const mapped = this.mapper.resolve({ chatId, text });
 
     if (mapped.command === "new" && !mapped.message) {
@@ -287,6 +299,11 @@ export class FeishuChannel implements ChannelAdapter {
                 errorMessages += `⚠️ ${name} 执行失败\n`;
               }
               break;
+            case "elicitation_request": {
+              const questionText = this.elicitation.capture(chatId, mapped.sessionKey, event);
+              await this.send({ chatId, text: questionText });
+              break;
+            }
             case "error":
               errorMessages += `❌ ${event.message}\n`;
               break;
@@ -297,6 +314,7 @@ export class FeishuChannel implements ChannelAdapter {
         lastTextSegment = "处理消息时发生错误，请重试。";
       }
 
+      this.elicitation.clear(chatId);
       const reply = (lastTextSegment.trim() || errorMessages.trim());
       if (reply) {
         await this.send({ chatId, text: reply });

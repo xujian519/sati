@@ -4,6 +4,7 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { BlueBubblesSessionMapper } from "./BlueBubblesSessionMapper.js";
 import { renderBlueBubblesEvent } from "./bluebubbles-render.js";
+import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 
 const POLL_MS = 2500;
 const MESSAGE_LIMIT = 50;
@@ -41,6 +42,7 @@ export class BlueBubblesChannel implements ChannelAdapter {
   private lastTimestamp = 0;
   private seenGuids = new Set<string>();
   private activeChats = new Set<string>();
+  private readonly elicitation = new ImElicitationHelper();
   private running = false;
 
   constructor(options: BlueBubblesChannelOptions = {}) {
@@ -137,6 +139,16 @@ export class BlueBubblesChannel implements ChannelAdapter {
     );
     if (!chatGuid || !text) return;
 
+    if (this.elicitation.hasPending(chatGuid) && this.gateway) {
+      try {
+        const confirmation = await this.elicitation.answer(chatGuid, text, this.gateway);
+        if (confirmation) await this.sendReply(chatGuid, confirmation);
+      } catch (e) {
+        this.logger?.error?.(`bluebubbles: elicitation answer error: ${e}`);
+      }
+      return;
+    }
+
     if (this.activeChats.has(chatGuid)) {
       this.logger?.info?.(`bluebubbles: chat ${chatGuid} already active, skipping`);
       return;
@@ -167,6 +179,11 @@ export class BlueBubblesChannel implements ChannelAdapter {
         channelKey: "bluebubbles",
         message,
       })) {
+        if (event.type === "elicitation_request") {
+          const questionText = this.elicitation.capture(chatGuid, sessionKey, event);
+          await this.sendReply(chatGuid, questionText);
+          continue;
+        }
         const fragment = renderBlueBubblesEvent(event);
         if (fragment != null) replyText += fragment;
       }
@@ -174,6 +191,8 @@ export class BlueBubblesChannel implements ChannelAdapter {
       this.logger?.error?.(`bluebubbles: submitTurn error: ${e}`);
       replyText = "处理消息时发生错误，请重试。";
     }
+
+    this.elicitation.clear(chatGuid);
 
     const finalText = replyText.trim();
     if (finalText) {

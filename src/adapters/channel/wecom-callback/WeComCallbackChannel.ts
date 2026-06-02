@@ -5,6 +5,7 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { WeComCallbackSessionMapper } from "./WeComCallbackSessionMapper.js";
 import { renderWeComCallbackEvent } from "./wecom-callback-render.js";
+import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 
 const QYAPI = "https://qyapi.weixin.qq.com/cgi-bin";
 const DEFAULT_PORT = 8780;
@@ -88,6 +89,7 @@ export class WeComCallbackChannel implements ChannelAdapter {
   private accessToken: string | null = null;
   private accessTokenExpires = 0;
   private activeChats = new Set<string>();
+  private readonly elicitation = new ImElicitationHelper();
 
   constructor(options: WeComCallbackChannelOptions = {}) {
     this.mapper = options.mapper ?? new WeComCallbackSessionMapper();
@@ -203,6 +205,16 @@ export class WeComCallbackChannel implements ChannelAdapter {
 
     const chatId = from;
 
+    if (this.elicitation.hasPending(chatId) && this.gateway) {
+      try {
+        const confirmation = await this.elicitation.answer(chatId, text, this.gateway);
+        if (confirmation) await this.sendReply(chatId, confirmation);
+      } catch (e) {
+        this.logger?.error?.(`wecom_callback: elicitation answer error: ${e}`);
+      }
+      return;
+    }
+
     if (this.activeChats.has(chatId)) {
       this.logger?.info?.(`wecom_callback: chat ${chatId} already active, skipping`);
       return;
@@ -233,6 +245,11 @@ export class WeComCallbackChannel implements ChannelAdapter {
         channelKey: "wecom_callback",
         message,
       })) {
+        if (event.type === "elicitation_request") {
+          const questionText = this.elicitation.capture(chatId, sessionKey, event);
+          await this.sendReply(chatId, questionText);
+          continue;
+        }
         const fragment = renderWeComCallbackEvent(event);
         if (fragment != null) replyText += fragment;
       }
@@ -240,6 +257,8 @@ export class WeComCallbackChannel implements ChannelAdapter {
       this.logger?.error?.(`wecom_callback: submitTurn error: ${e}`);
       replyText = "处理消息时发生错误，请重试。";
     }
+
+    this.elicitation.clear(chatId);
 
     const finalText = replyText.trim();
     if (finalText) {

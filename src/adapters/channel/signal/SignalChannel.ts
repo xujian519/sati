@@ -2,6 +2,7 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { SignalSessionMapper } from "./SignalSessionMapper.js";
 import { renderSignalEvent } from "./signal-render.js";
+import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 
 const MAX_MESSAGE_LENGTH = 2000;
 const DEFAULT_REST_URL = "http://127.0.0.1:8080";
@@ -70,6 +71,7 @@ export class SignalChannel implements ChannelAdapter {
   private receivePromise: Promise<void> | null = null;
   private running = false;
   private activeChats = new Set<string>();
+  private readonly elicitation = new ImElicitationHelper();
   private recipientByChat = new Map<string, string>();
 
   constructor(options: SignalChannelOptions = {}) {
@@ -172,6 +174,16 @@ export class SignalChannel implements ChannelAdapter {
     const recipient = sourceNumber ?? sessionChatId.replace(/^(dm:|group:)/, "");
     if (recipient) this.recipientByChat.set(sessionChatId, recipient);
 
+    if (this.elicitation.hasPending(sessionChatId) && this.gateway) {
+      try {
+        const confirmation = await this.elicitation.answer(sessionChatId, text, this.gateway);
+        if (confirmation) await this.sendReply(sessionChatId, confirmation);
+      } catch (e) {
+        this.logger?.error?.(`signal: elicitation answer error: ${e}`);
+      }
+      return;
+    }
+
     if (this.activeChats.has(sessionChatId)) {
       this.logger?.info?.(`signal: chat ${sessionChatId} already active, skipping`);
       return;
@@ -202,6 +214,11 @@ export class SignalChannel implements ChannelAdapter {
         channelKey: "signal",
         message,
       })) {
+        if (event.type === "elicitation_request") {
+          const questionText = this.elicitation.capture(chatId, sessionKey, event);
+          await this.sendReply(chatId, questionText);
+          continue;
+        }
         const fragment = renderSignalEvent(event);
         if (fragment != null) replyText += fragment;
       }
@@ -209,6 +226,8 @@ export class SignalChannel implements ChannelAdapter {
       this.logger?.error?.(`signal: submitTurn error: ${e}`);
       replyText = "处理消息时发生错误，请重试。";
     }
+
+    this.elicitation.clear(chatId);
 
     const finalText = replyText.trim();
     if (finalText) {
