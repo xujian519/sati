@@ -373,9 +373,6 @@ export function buildRuntimeEnv(config) {
       || providerProtocolToMemoryApi(memory.provider.protocol);
   }
 
-  // Telemetry opt-in (default off).
-  env.ANALYTICS_ENABLED = normalized.telemetry?.enabled ? '1' : '0';
-
   // Pass through customEnv (UI-managed escape hatch).
   if (isRecord(normalized.customEnv)) {
     for (const [key, value] of Object.entries(normalized.customEnv)) {

@@ -194,6 +194,10 @@ export type PilotAdaptersConfig = {
   webhook?: PilotPlatformAdapterConfig;
 };
 
+export type PilotTelemetryConfig = {
+  enabled: boolean;
+};
+
 export type PilotConfig = {
   agent: PilotAgentConfig;
   model: ModelConfig;
@@ -205,6 +209,7 @@ export type PilotConfig = {
   alwaysOn?: AlwaysOnConfig;
   cron?: CronConfig;
   tools?: PilotToolsConfig;
+  telemetry?: PilotTelemetryConfig;
 };
 
 export type PilotConfigSnapshot = {
