@@ -183,8 +183,13 @@ function toolCallEvents(
     if (typeof record.id === "string") {
       current.id = record.id;
     }
-    if (typeof fn.name === "string") {
-      current.name = fn.name;
+    // Only adopt a non-empty name. Some providers send the real name in the
+    // first chunk, then `function.name: ""` in later argument-only chunks;
+    // overwriting with the empty string would emit a nameless tool call and
+    // trigger a `tool_not_found: Tool "" does not exist` loop.
+    const name = readNonEmptyString(fn.name);
+    if (name !== undefined) {
+      current.name = name;
     }
 
     if (!state.toolCalls.has(index)) {
