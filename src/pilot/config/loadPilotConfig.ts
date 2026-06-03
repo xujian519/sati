@@ -299,11 +299,11 @@ function validateTopLevel(rawConfig: PilotRawConfig, diagnostics: PilotConfigDia
     "alwaysOn",
     "cron",
     "tools",
-    // Reserved namespace for ui/server (Web UI Express bridge). The PilotDeck
-    // gateway does not parse `webui.*` itself but tolerates it so a single
-    // ~/.pilotdeck/pilotdeck.yaml can carry both gateway-side and ui-side
-    // config without producing diagnostic noise.
+    // Reserved namespaces for ui/server. The PilotDeck gateway does not parse
+    // these itself but tolerates them so a single ~/.pilotdeck/pilotdeck.yaml
+    // can carry both gateway-side and ui-side config without diagnostic noise.
     "webui",
+    "telemetry",
   ]);
   for (const key of Object.keys(rawConfig)) {
     if (!allowedKeys.has(key)) {

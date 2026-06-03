@@ -45,6 +45,7 @@ export type PilotRawConfig = {
   alwaysOn?: unknown;
   cron?: unknown;
   tools?: unknown;
+  telemetry?: unknown;
 };
 
 export type PilotExtensionConfig = {

@@ -92,6 +92,9 @@ export function buildDefaultPilotDeckConfig() {
         workspacesRoot: os.homedir(),
       },
     },
+    telemetry: {
+      enabled: false,
+    },
   };
 }
 
@@ -369,6 +372,9 @@ export function buildRuntimeEnv(config) {
     env.PILOTDECK_MEMORY_API_TYPE = normalizeString(normalized.memory?.apiType)
       || providerProtocolToMemoryApi(memory.provider.protocol);
   }
+
+  // Telemetry opt-in (default off).
+  env.ANALYTICS_ENABLED = normalized.telemetry?.enabled ? '1' : '0';
 
   // Pass through customEnv (UI-managed escape hatch).
   if (isRecord(normalized.customEnv)) {
