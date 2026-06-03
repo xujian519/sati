@@ -628,6 +628,10 @@
         "label": "常驻",
         "description": "自动发现和工作区启用设置"
       },
+      "cron": {
+        "label": "Cron",
+        "description": "定时后台任务运行时"
+      },
       "memory": {
         "label": "记忆",
         "description": "PilotDeck 记忆服务"
@@ -777,6 +781,22 @@
           "title": "工作区接入",
           "description": "只有勾选的工作区会收到常驻模式心跳和定时发现检查。",
           "empty": "尚未识别到项目。请先添加或打开一个工作区。"
+        }
+      },
+      "cron": {
+        "title": "Cron",
+        "description": "配置 Cron 任务使用的后台调度器。任务创建和管理仍在 Always-On > Plans & Cron Jobs 中完成。",
+        "enabled": {
+          "label": "启用",
+          "description": "定时 Cron 后台任务的总开关。"
+        },
+        "timezone": {
+          "label": "时区",
+          "description": "调度器默认使用的 IANA 时区。"
+        },
+        "maxConcurrentRuns": {
+          "label": "最大并发运行数",
+          "description": "同一时间允许执行的 Cron 运行数量上限。"
         }
       },
       "memory": {
