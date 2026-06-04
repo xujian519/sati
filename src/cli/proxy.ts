@@ -15,30 +15,43 @@ export function getProxyUrl(env: EnvLike = process.env): string | undefined {
 }
 
 /**
- * Install a global undici ProxyAgent so that all native `fetch()` calls
- * in the process are routed through the configured HTTP/HTTPS proxy.
+ * Install a global undici EnvHttpProxyAgent so that all native
+ * `fetch()` and `WebSocket` calls in the process are routed through
+ * the configured HTTP/HTTPS proxy, while respecting `NO_PROXY`.
  *
- * Node.js native fetch (backed by undici) does NOT respect the standard
- * HTTPS_PROXY / HTTP_PROXY env vars — unlike curl or Python requests.
- * This function bridges that gap by calling `setGlobalDispatcher`.
+ * `127.0.0.1` and `localhost` are always excluded — the gateway
+ * WebSocket lives on loopback and must never be routed through an
+ * external proxy.
+ *
+ * Node.js native fetch (backed by undici) does NOT respect the
+ * standard HTTPS_PROXY / HTTP_PROXY env vars — unlike curl or Python
+ * requests. This function bridges that gap via `setGlobalDispatcher`.
  *
  * Safe to call multiple times; only the first effective call installs.
  * Returns the proxy URL that was activated, or undefined if none.
  */
 let installed = false;
 
-export function installGlobalProxy(explicitUrl?: string): string | undefined {
+export async function installGlobalProxy(explicitUrl?: string): Promise<string | undefined> {
   if (installed) return undefined;
 
   const proxyUrl = explicitUrl ?? getProxyUrl();
   if (!proxyUrl) return undefined;
 
   try {
-    const { ProxyAgent, setGlobalDispatcher } = require("undici") as typeof import("undici");
-    const agent = new ProxyAgent(proxyUrl);
+    const { EnvHttpProxyAgent, setGlobalDispatcher } = await import("undici");
+    const userNoProxy = process.env.no_proxy || process.env.NO_PROXY || "";
+    const noProxy = [userNoProxy, "127.0.0.1", "localhost"]
+      .filter(Boolean)
+      .join(",");
+    const agent = new EnvHttpProxyAgent({
+      httpProxy: proxyUrl,
+      httpsProxy: proxyUrl,
+      noProxy,
+    });
     setGlobalDispatcher(agent);
     installed = true;
-    console.log(`[proxy] Global fetch proxy → ${proxyUrl}`);
+    console.log(`[proxy] Global fetch proxy → ${proxyUrl} (noProxy: ${noProxy})`);
     return proxyUrl;
   } catch (error) {
     console.warn(

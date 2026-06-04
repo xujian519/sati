@@ -658,7 +658,6 @@
           "host": { "label": "Host", "description": "Bind interface for the HTTP/WebSocket server." },
           "serverPort": { "label": "Server port", "description": "Express + WebSocket port." },
           "vitePort": { "label": "Vite port", "description": "Frontend dev server (only used when running `npm run dev`)." },
-          "proxyPort": { "label": "Proxy port", "description": "Local LLM proxy (PilotDeck agent target)." },
           "apiTimeout": { "label": "API timeout (ms)", "description": "Per-request upstream timeout." },
           "databasePath": { "label": "Database path", "description": "SQLite auth/projects database (~ expands to home)." },
           "workspacesRoot": { "label": "Workspaces root", "description": "Directory under which projects are scanned." },

@@ -92,7 +92,6 @@ type PilotDeckConfig = {
       host?: string;
       serverPort?: number;
       vitePort?: number;
-      proxyPort?: number;
       apiTimeoutMs?: number;
       httpsProxy?: string;
       databasePath?: string;
@@ -632,9 +631,6 @@ function ServiceSection({ config, onChange }: { config: PilotDeckConfig; onChang
           </FormRow>
           <FormRow label={t('pilotDeckConfig.panels.runtime.fields.serverPort.label')} description={t('pilotDeckConfig.panels.runtime.fields.serverPort.description')}>
             <NumberInput value={r.serverPort} placeholder="3001" onChange={(v) => set('serverPort', v)} />
-          </FormRow>
-          <FormRow label={t('pilotDeckConfig.panels.runtime.fields.proxyPort.label')} description={t('pilotDeckConfig.panels.runtime.fields.proxyPort.description')}>
-            <NumberInput value={r.proxyPort} placeholder="18080" onChange={(v) => set('proxyPort', v)} />
           </FormRow>
           <FormRow label={t('pilotDeckConfig.panels.runtime.fields.workspacesRoot.label')} description={t('pilotDeckConfig.panels.runtime.fields.workspacesRoot.description')}>
             <TextInput value={r.workspacesRoot} placeholder="~" monospace onChange={(v) => set('workspacesRoot', v)} />

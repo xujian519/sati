@@ -17,7 +17,7 @@ import { installGlobalProxy } from "./proxy.js";
 import { createShutdownAndExit } from "./shutdownCoordinator.js";
 import { createTelemetryCollector } from "../telemetry/index.js";
 
-installGlobalProxy();
+await installGlobalProxy();
 
 async function main(argv = process.argv.slice(2)): Promise<void> {
   const command = argv[0];
