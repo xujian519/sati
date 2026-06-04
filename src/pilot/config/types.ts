@@ -45,6 +45,8 @@ export type PilotRawConfig = {
   alwaysOn?: unknown;
   cron?: unknown;
   tools?: unknown;
+  proxy?: unknown;
+  webui?: unknown;
 };
 
 export type PilotExtensionConfig = {
@@ -149,6 +151,11 @@ export type PilotToolsConfig = {
   webSearch?: PilotWebSearchConfig;
 };
 
+export type PilotProxyConfig = {
+  url: string;
+  noProxy?: string;
+};
+
 export type PilotPlatformAdapterConfig = {
   enabled: boolean;
   token?: string;
@@ -204,6 +211,7 @@ export type PilotConfig = {
   alwaysOn?: AlwaysOnConfig;
   cron?: CronConfig;
   tools?: PilotToolsConfig;
+  proxy?: PilotProxyConfig;
 };
 
 export type PilotConfigSnapshot = {

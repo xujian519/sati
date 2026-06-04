@@ -86,7 +86,6 @@ export function buildDefaultPilotDeckConfig() {
         serverPort: 3001,
         vitePort: 5173,
         apiTimeoutMs: 120000,
-        httpsProxy: '',
         databasePath: path.join(PILOT_HOME_DIR, 'auth.db'),
         workspacesRoot: os.homedir(),
       },
@@ -316,9 +315,12 @@ export function buildRuntimeEnv(config) {
 
   if (runtime.databasePath) env.DATABASE_PATH = expandTilde(runtime.databasePath);
   if (runtime.workspacesRoot) env.WORKSPACES_ROOT = expandTilde(runtime.workspacesRoot);
-  if (runtime.httpsProxy) {
-    env.HTTPS_PROXY = runtime.httpsProxy;
-    env.https_proxy = runtime.httpsProxy;
+  const proxyUrl = normalized.proxy?.url
+    || (typeof normalized.proxy === 'string' ? normalized.proxy : '')
+    || runtime.httpsProxy || '';
+  if (proxyUrl) {
+    env.HTTPS_PROXY = proxyUrl;
+    env.https_proxy = proxyUrl;
   }
 
   if (main) {

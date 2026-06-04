@@ -28,6 +28,7 @@ export function getProxyUrl(env: EnvLike = process.env): string | undefined {
  * requests. This function bridges that gap via `setGlobalDispatcher`.
  *
  * Safe to call multiple times; only the first effective call installs.
+ * Use {@link reinstallGlobalProxy} when the proxy URL changes at runtime.
  * Returns the proxy URL that was activated, or undefined if none.
  */
 let installed = false;
@@ -38,10 +39,41 @@ export async function installGlobalProxy(explicitUrl?: string): Promise<string |
   const proxyUrl = explicitUrl ?? getProxyUrl();
   if (!proxyUrl) return undefined;
 
+  return applyGlobalProxy(proxyUrl);
+}
+
+/**
+ * Unconditionally (re-)install the global proxy dispatcher.
+ * Called by hot-reload paths when `proxy.*` config changes at runtime.
+ * Passing `undefined` or empty string removes the proxy (resets to
+ * a no-op agent so outbound requests go direct).
+ */
+export async function reinstallGlobalProxy(
+  proxyUrl: string | undefined,
+  extraNoProxy?: string,
+): Promise<string | undefined> {
+  if (!proxyUrl) {
+    try {
+      const { Agent, setGlobalDispatcher } = await import("undici");
+      setGlobalDispatcher(new Agent());
+      installed = false;
+      console.log("[proxy] Global fetch proxy removed");
+    } catch {
+      // best effort
+    }
+    return undefined;
+  }
+  return applyGlobalProxy(proxyUrl, extraNoProxy);
+}
+
+async function applyGlobalProxy(
+  proxyUrl: string,
+  extraNoProxy?: string,
+): Promise<string | undefined> {
   try {
     const { EnvHttpProxyAgent, setGlobalDispatcher } = await import("undici");
     const userNoProxy = process.env.no_proxy || process.env.NO_PROXY || "";
-    const noProxy = [userNoProxy, "127.0.0.1", "localhost"]
+    const noProxy = [userNoProxy, extraNoProxy, "127.0.0.1", "localhost"]
       .filter(Boolean)
       .join(",");
     const agent = new EnvHttpProxyAgent({
