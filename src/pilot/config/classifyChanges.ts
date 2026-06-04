@@ -72,6 +72,17 @@ function diffValues(left: unknown, right: unknown, prefix = ""): string[] {
     return [];
   }
 
+  if (Array.isArray(left) && Array.isArray(right)) {
+    if (left.length !== right.length) {
+      return [prefix || "<root>"];
+    }
+    const changes: string[] = [];
+    for (let i = 0; i < left.length; i++) {
+      changes.push(...diffValues(left[i], right[i], `${prefix}[${i}]`));
+    }
+    return changes;
+  }
+
   if (!isDiffableObject(left) || !isDiffableObject(right)) {
     return [prefix || "<root>"];
   }
