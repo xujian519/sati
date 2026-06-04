@@ -991,5 +991,18 @@
     "installAriaLabel": "Plugin git repository URL",
     "tab": "tab",
     "runningStatus": "running"
+  },
+  "about": {
+    "title": "About",
+    "version": "Version",
+    "checking": "Checking for updates...",
+    "upToDate": "Up to date",
+    "updateAvailable": "Update available",
+    "updateNow": "Update Now",
+    "updating": "Updating...",
+    "updateComplete": "Update complete!",
+    "updateFailed": "Update failed",
+    "restartToApply": "Restart to Apply",
+    "dismiss": "Dismiss"
   }
 }
