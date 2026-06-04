@@ -32,14 +32,19 @@ export function getProxyUrl(env: EnvLike = process.env): string | undefined {
  * Returns the proxy URL that was activated, or undefined if none.
  */
 let installed = false;
+let pendingInstall: Promise<string | undefined> | null = null;
 
 export async function installGlobalProxy(explicitUrl?: string): Promise<string | undefined> {
   if (installed) return undefined;
+  if (pendingInstall) return pendingInstall;
 
   const proxyUrl = explicitUrl ?? getProxyUrl();
   if (!proxyUrl) return undefined;
 
-  return applyGlobalProxy(proxyUrl);
+  pendingInstall = applyGlobalProxy(proxyUrl).finally(() => {
+    pendingInstall = null;
+  });
+  return pendingInstall;
 }
 
 /**
@@ -52,6 +57,8 @@ export async function reinstallGlobalProxy(
   proxyUrl: string | undefined,
   extraNoProxy?: string,
 ): Promise<string | undefined> {
+  if (pendingInstall) await pendingInstall;
+
   if (!proxyUrl) {
     try {
       const { Agent, setGlobalDispatcher } = await import("undici");
