@@ -63,14 +63,12 @@ export function formatValidationError(
   if (
     toolName === "write_file" &&
     issues.some((i) => i.code === "required" && i.path.includes("content"))
-    && options?.outputTruncated
   ) {
     message +=
-      "\n\nHint: Please use an incremental, multi-step approach to write large files:\n"
-      + "Step 1: Create the file with the first section using write_file (keep content short, ~50-100 lines max per call).\n"
-      + "Step 2: Append subsequent sections using bash({command: \"cat <<'SECTION' >> /path/to/file\\n...next section...\\nSECTION\"}).\n"
-      + "Step 3: Repeat Step 2 until the full file is written.\n"
-      + "Important: Break the file into logical sections (imports, classes, functions, etc.) and write one section per step.";
+      "\n\nHint: For large files, recover by creating a smaller but valid draft workspace file first. "
+      + "Use write_file with a complete content field that fits comfortably within the output budget. "
+      + "After the draft exists, read it with read_file and extend or patch it using small focused write_file/edit_file calls. "
+      + "Do not use shell heredocs or paths outside the workspace.";
   }
 
   return message;

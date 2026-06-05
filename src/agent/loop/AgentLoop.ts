@@ -39,6 +39,7 @@ import type { ContextRecoveryDecision } from "../../context/index.js";
 import type { PermissionMode, PermissionRule, PermissionRuleSet } from "../../permission/index.js";
 import { collectToolCalls } from "./collectToolCalls.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
+import { LargeFileRepair, type LargeFileRepairDecision } from "./LargeFileRepair.js";
 import { projectToolResults } from "./projectToolResults.js";
 
 const TOOL_EVENT_PUMP_INTERVAL_MS = 500;
@@ -141,6 +142,7 @@ export class AgentLoop {
     let maxOutputRecoveryCount = 0;
     const MAX_JSON_SELF_CORRECT_RETRIES = 3;
     let jsonSelfCorrectCount = 0;
+    const largeFileRepair = new LargeFileRepair();
 
     /**
      * Circuit breaker: consecutive turns where ALL tool calls are
@@ -154,6 +156,55 @@ export class AgentLoop {
 
     const stickyInfo = this.dependencies.router.invalidateSticky?.(input.sessionId);
     let previousTier: string | undefined = stickyInfo?.previousTier;
+
+    const continueWithSyntheticPrompt = async (decision: LargeFileRepairDecision): Promise<{
+      type: "continue";
+      event: AgentEvent;
+    } | {
+      type: "completed";
+      result: AgentTurnResult;
+    }> => {
+      if (decision.type === "stop") {
+        const result = this.createTurnResult(input, {
+          type: "error",
+          stopReason: "tool_error",
+          usage,
+          permissionDenials,
+          turns: turnCount,
+          startedAt,
+          finalMessage,
+          structuredOutput,
+          errors: [agentError("agent_tool_error_loop", decision.reason)],
+        });
+        return { type: "completed", result };
+      }
+      if (decision.strip === "error_pair") {
+        messages = stripTrailingErrorPair(messages);
+      } else if (decision.strip === "assistant") {
+        const last = messages[messages.length - 1];
+        if (last?.role === "assistant") {
+          messages = messages.slice(0, -1);
+        }
+      }
+      messages.push({
+        role: "user",
+        content: [{ type: "text", text: decision.prompt }],
+        metadata: { synthetic: true, purpose: decision.purpose },
+      });
+      if (this.config.maxOutputTokens !== undefined
+        && this.config.maxOutputTokens < largeFileRepair.recommendedMaxOutputTokens) {
+        this.config.maxOutputTokens = largeFileRepair.recommendedMaxOutputTokens;
+      }
+      return {
+        type: "continue",
+        event: {
+          type: "turn_continued",
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          reason: "model_error",
+        },
+      };
+    };
 
     while (true) {
       if (input.abortSignal?.aborted) {
@@ -482,6 +533,19 @@ export class AgentLoop {
       }
 
       if (toolCalls.length === 0) {
+        const largeFileDecision = largeFileRepair.onNoToolCalls();
+        if (largeFileDecision) {
+          const continued = await continueWithSyntheticPrompt(largeFileDecision);
+          if (continued.type === "completed") {
+            yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: continued.result.errors![0]! };
+            await captureTurn(continued.result.type === "error");
+            yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result: continued.result };
+            return { result: continued.result, messages };
+          }
+          yield continued.event;
+          continue;
+        }
+
         const stopHooks = await this.dispatchLifecycle(input, "Stop", {
           stopHookActive: false,
           lastAssistantMessage: textFromMessage(assembled.message),
@@ -544,6 +608,19 @@ export class AgentLoop {
         console.warn(
           `[AgentLoop] Blocking ${toolCalls.length} repaired-but-truncated tool call(s) — entering max_output recovery`,
         );
+
+        const largeFileDecision = largeFileRepair.recoverFromRepairedTruncation(toolCalls);
+        if (largeFileDecision) {
+          const continued = await continueWithSyntheticPrompt(largeFileDecision);
+          if (continued.type === "completed") {
+            yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: continued.result.errors![0]! };
+            await captureTurn(continued.result.type === "error");
+            yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result: continued.result };
+            return { result: continued.result, messages };
+          }
+          yield continued.event;
+          continue;
+        }
 
         // Phase A: token doubling (if not yet attempted)
         if (!hasAttemptedOutputRetry) {
@@ -618,6 +695,11 @@ export class AgentLoop {
       yield* this.drainEventBuffer();
 
       const pairedResults = ensureToolResultPairing(toolCalls, results, this.now);
+      const toolResultRepair = largeFileRepair.analyzeToolResults(pairedResults, {
+        outputTruncated: assembled.finishReason === "length",
+        repairedToolCalls: assembled.hasRepairedToolCalls === true,
+        finishReason: assembled.finishReason,
+      });
       permissionDenials = [...permissionDenials, ...collectPermissionDenials(pairedResults)];
       for (const result of pairedResults) {
         if (result.type === "success" && result.metadata?.structuredOutput) {
@@ -674,6 +756,18 @@ export class AgentLoop {
       await input.onDurableMessage?.(toolResultMsg);
       for (const supplemental of supplementalMsgs) {
         await input.onDurableMessage?.(supplemental);
+      }
+
+      if (toolResultRepair) {
+        const continued = await continueWithSyntheticPrompt(toolResultRepair);
+        if (continued.type === "completed") {
+          yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: continued.result.errors![0]! };
+          await captureTurn(continued.result.type === "error");
+          yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result: continued.result };
+          return { result: continued.result, messages };
+        }
+        yield continued.event;
+        continue;
       }
 
       const lifecycleBlock = findToolLifecycleBlock(pairedResults);
