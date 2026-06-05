@@ -1286,7 +1286,7 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
                     type="number"
                     min={1}
                     value={caps.maxOutputTokensOverride ?? ''}
-                    placeholder="8192"
+                    placeholder="16384"
                     onChange={(e) => {
                       const v = e.target.value;
                       if (v === '') return setMaxOutputTokens(undefined);
