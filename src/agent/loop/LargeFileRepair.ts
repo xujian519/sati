@@ -62,7 +62,9 @@ export class LargeFileRepair {
     if (this.wroteFile) {
       const risk = hasPostDraftRisk(results);
       if (!risk) {
-        this.pendingLargeFileRepair = false;
+        if (results.every((r) => r.type === "success")) {
+          this.pendingLargeFileRepair = false;
+        }
         return undefined;
       }
       return this.tryPostDraft("large_file_post_draft_repair");
