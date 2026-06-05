@@ -15,7 +15,7 @@ export type LargeFileRepairToolContext = {
 
 const MAX_PRE_DRAFT_REPAIR_ATTEMPTS = 3;
 const MAX_POST_DRAFT_REPAIR_ATTEMPTS = 3;
-const LARGE_FILE_OUTPUT_RETRY_TOKENS = 8_192;
+const LARGE_FILE_OUTPUT_RETRY_TOKENS = 16_384;
 const FILE_WRITE_TOOLS = new Set(["write_file", "edit_file"]);
 const FILE_READ_TOOLS = new Set(["read_file", "grep", "glob"]);
 

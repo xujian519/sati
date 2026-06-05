@@ -191,10 +191,10 @@ export class AgentLoop {
         content: [{ type: "text", text: decision.prompt }],
         metadata: { synthetic: true, purpose: decision.purpose },
       });
-      this.config.maxOutputTokens = Math.max(
-        this.config.maxOutputTokens ?? 0,
-        largeFileRepair.recommendedMaxOutputTokens,
-      );
+      if (this.config.maxOutputTokens !== undefined
+        && this.config.maxOutputTokens < largeFileRepair.recommendedMaxOutputTokens) {
+        this.config.maxOutputTokens = largeFileRepair.recommendedMaxOutputTokens;
+      }
       return {
         type: "continue",
         event: {
