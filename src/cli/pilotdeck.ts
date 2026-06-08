@@ -26,7 +26,10 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     const env = process.env;
     const pilotHome = resolvePilotHome(env);
     const snapshot = loadPilotConfig({ projectRoot, env });
-    const telemetry = createTelemetryCollector({ env, pilotHome });
+    const telemetry = createTelemetryCollector({
+      env, pilotHome,
+      enabled: snapshot.config.telemetry?.enabled,
+    });
 
     let alwaysOn: AlwaysOnManager | undefined;
     let cron: CronRuntime | undefined;
@@ -128,6 +131,10 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     let reloadChain = Promise.resolve();
 
     configStore.subscribe((event) => {
+      if (event.changedPaths.some((p) => p.startsWith("telemetry."))) {
+        telemetry.setEnabled(event.nextSnapshot.config.telemetry?.enabled ?? false);
+      }
+
       const aoChanged = event.changedPaths.some((p) => p.startsWith("alwaysOn."));
       const cronChanged = event.changedPaths.some((p) => p.startsWith("cron."));
       if (!aoChanged && !cronChanged) return;

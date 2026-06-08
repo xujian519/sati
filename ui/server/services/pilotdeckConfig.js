@@ -92,6 +92,9 @@ export function buildDefaultPilotDeckConfig() {
         workspacesRoot: os.homedir(),
       },
     },
+    telemetry: {
+      enabled: false,
+    },
   };
 }
 

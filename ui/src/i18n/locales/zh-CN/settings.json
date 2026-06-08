@@ -131,6 +131,10 @@
     },
     "permissions": {
       "detail": "管理允许和禁用的工具规则"
+    },
+    "telemetry": {
+      "title": "遥测",
+      "detail": "发送匿名使用数据以帮助改进产品"
     }
   },
   "notifications": {

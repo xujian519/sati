@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  Activity,
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
@@ -17,10 +18,12 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { Button } from '../../../shared/view/ui';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { languages } from '../../../i18n/languages';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
+import { usePilotDeckConfig } from '../../../hooks/usePilotDeckConfig';
 import { useSettingsController } from '../hooks/useSettingsController';
 import { useGitVersion } from '../../../hooks/useGitVersion';
 import type {
@@ -151,6 +154,28 @@ function SettingsHome({ projectSortOrder, onProjectSortOrderChange, onOpenPage }
     themeMode?: ThemeMode;
     setThemeMode?: (mode: ThemeMode) => void;
   };
+  const { raw, setRaw, save, loading } = usePilotDeckConfig();
+
+  const telemetryEnabled = useMemo(() => {
+    try {
+      const config = parseYaml(raw);
+      return config?.telemetry?.enabled === true;
+    } catch {
+      return false;
+    }
+  }, [raw]);
+
+  const handleTelemetryToggle = useCallback((value: boolean) => {
+    try {
+      const config = parseYaml(raw) ?? {};
+      config.telemetry = { ...config.telemetry, enabled: value };
+      const next = stringifyYaml(config, { indent: 2, lineWidth: 0 });
+      setRaw(next);
+      void save();
+    } catch {
+      // YAML parse/stringify failure — ignore silently.
+    }
+  }, [raw, setRaw, save]);
 
   const currentLanguage = languages.some((language) => language.value === i18n.language)
     ? i18n.language
@@ -244,13 +269,25 @@ function SettingsHome({ projectSortOrder, onProjectSortOrderChange, onOpenPage }
       </SettingsGroup>
 
       <SettingsGroup title={t('settingsHome.advanced')}>
-        <GroupedCard>
+        <GroupedCard divided>
           <NavigationRow
             icon={Shield}
             title={t('mainTabs.permissions')}
             detail={t('settingsHome.permissions.detail')}
             onClick={() => onOpenPage('permissions')}
           />
+          <MenuRow
+            icon={Activity}
+            title={t('settingsHome.telemetry.title')}
+            detail={t('settingsHome.telemetry.detail')}
+          >
+            <SettingsToggle
+              checked={telemetryEnabled}
+              onChange={handleTelemetryToggle}
+              ariaLabel={t('settingsHome.telemetry.title')}
+              disabled={loading}
+            />
+          </MenuRow>
         </GroupedCard>
       </SettingsGroup>
 

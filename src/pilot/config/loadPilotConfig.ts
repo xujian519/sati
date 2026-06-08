@@ -23,6 +23,7 @@ import {
   type PilotConfigSnapshot,
   type PilotConfigSource,
   type PilotRawConfig,
+  type PilotTelemetryConfig,
 } from "./types.js";
 
 const SUPPORTED_SCHEMA_VERSION = 1;
@@ -122,6 +123,7 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
   const alwaysOn = parseAlwaysOnConfig(rawConfig.alwaysOn, diagnostics);
   const cron = parseCronConfig(rawConfig.cron, diagnostics);
   const tools = parseToolsConfig(rawConfig.tools, diagnostics);
+  const telemetry = parseTelemetryConfig(rawConfig.telemetry);
   throwConfigErrorIfFatal(diagnostics);
 
   const redactedSnapshotConfig = redactConfig({
@@ -135,6 +137,7 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
     alwaysOn,
     cron,
     tools,
+    telemetry,
   });
   return deepFreeze({
     version: options.version ?? 1,
@@ -154,6 +157,7 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
       ...(alwaysOn ? { alwaysOn } : {}),
       ...(cron ? { cron } : {}),
       ...(tools ? { tools } : {}),
+      telemetry,
     },
   });
 }
@@ -299,11 +303,11 @@ function validateTopLevel(rawConfig: PilotRawConfig, diagnostics: PilotConfigDia
     "alwaysOn",
     "cron",
     "tools",
-    // Reserved namespace for ui/server (Web UI Express bridge). The PilotDeck
-    // gateway does not parse `webui.*` itself but tolerates it so a single
-    // ~/.pilotdeck/pilotdeck.yaml can carry both gateway-side and ui-side
-    // config without producing diagnostic noise.
+    // Reserved namespaces for ui/server. The PilotDeck gateway does not parse
+    // these itself but tolerates them so a single ~/.pilotdeck/pilotdeck.yaml
+    // can carry both gateway-side and ui-side config without diagnostic noise.
     "webui",
+    "telemetry",
   ]);
   for (const key of Object.keys(rawConfig)) {
     if (!allowedKeys.has(key)) {
@@ -611,6 +615,12 @@ function parseRouterSection(
     });
   }
   return result.config;
+}
+
+function parseTelemetryConfig(raw: unknown): PilotTelemetryConfig {
+  return {
+    enabled: isRecord(raw) && (raw as Record<string, unknown>).enabled === true,
+  };
 }
 
 function deepFreeze<T>(value: T): T {
