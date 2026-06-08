@@ -13,11 +13,11 @@ import {
 import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
 import { createLocalGateway } from "./createLocalGateway.js";
 import { startPilotDeckServer } from "./pilotdeckServer.js";
-import { installGlobalProxy } from "./proxy.js";
+import { installGlobalProxy, reinstallGlobalProxy } from "./proxy.js";
 import { createShutdownAndExit } from "./shutdownCoordinator.js";
 import { createTelemetryCollector } from "../telemetry/index.js";
 
-installGlobalProxy();
+await installGlobalProxy();
 
 async function main(argv = process.argv.slice(2)): Promise<void> {
   const command = argv[0];
@@ -26,7 +26,16 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     const env = process.env;
     const pilotHome = resolvePilotHome(env);
     const snapshot = loadPilotConfig({ projectRoot, env });
-    const telemetry = createTelemetryCollector({ env, pilotHome });
+    const telemetry = createTelemetryCollector({
+      env, pilotHome,
+      enabled: snapshot.config.telemetry?.enabled,
+    });
+
+    // Apply proxy from config (env-based proxy from top-level installGlobalProxy
+    // takes precedence; this fills in when only pilotdeck.yaml has a proxy).
+    if (snapshot.config.proxy?.url) {
+      await installGlobalProxy(snapshot.config.proxy.url);
+    }
 
     let alwaysOn: AlwaysOnManager | undefined;
     let cron: CronRuntime | undefined;
@@ -128,8 +137,19 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     let reloadChain = Promise.resolve();
 
     configStore.subscribe((event) => {
+      if (event.changedPaths.some((p) => p.startsWith("telemetry."))) {
+        telemetry.setEnabled(event.nextSnapshot.config.telemetry?.enabled ?? false);
+      }
+
       const aoChanged = event.changedPaths.some((p) => p.startsWith("alwaysOn."));
       const cronChanged = event.changedPaths.some((p) => p.startsWith("cron."));
+      const proxyChanged = event.changedPaths.some((p) => p.startsWith("proxy.") || p === "proxy");
+
+      if (proxyChanged) {
+        const proxyConfig = event.nextSnapshot.config.proxy;
+        void reinstallGlobalProxy(proxyConfig?.url, proxyConfig?.noProxy);
+      }
+
       if (!aoChanged && !cronChanged) return;
 
       reloadChain = reloadChain
