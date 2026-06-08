@@ -45,7 +45,7 @@ import { promises as fsPromises } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
 import { installGlobalProxy } from '../../src/cli/proxy.js';
-installGlobalProxy();
+await installGlobalProxy();
 
 import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from './utils/pilotPaths.js';
 // Read the gateway client straight from TypeScript source via tsx — the UI

@@ -666,11 +666,11 @@
           "host": { "label": "主机", "description": "HTTP/WebSocket 服务器的绑定接口。" },
           "serverPort": { "label": "服务器端口", "description": "Express + WebSocket 端口。" },
           "vitePort": { "label": "Vite 端口", "description": "前端开发服务器（仅在运行 npm run dev 时使用）。" },
-          "proxyPort": { "label": "代理端口", "description": "本地 LLM 代理（PilotDeck 智能体目标）。" },
           "apiTimeout": { "label": "API 超时（毫秒）", "description": "每次请求的上游超时。" },
           "databasePath": { "label": "数据库路径", "description": "SQLite 认证/项目数据库（~ 展开为主目录）。" },
           "workspacesRoot": { "label": "工作区根目录", "description": "项目扫描的根目录。" },
-          "httpsProxy": { "label": "HTTPS 代理", "description": "出站 HTTPS 代理 URL（HTTPS_PROXY / https_proxy）。" }
+          "proxyUrl": { "label": "HTTPS 代理", "description": "出站 HTTPS 代理 URL，同时作用于 Gateway 和 UI Server（对应 pilotdeck.yaml 中的 proxy.url）。" },
+          "proxyNoProxy": { "label": "代理排除列表", "description": "逗号分隔的主机名/IP，这些地址不走代理（对应 pilotdeck.yaml 中的 proxy.noProxy）。127.0.0.1 和 localhost 始终排除。" }
         }
       },
       "models": {

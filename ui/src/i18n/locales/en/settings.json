@@ -666,11 +666,11 @@
           "host": { "label": "Host", "description": "Bind interface for the HTTP/WebSocket server." },
           "serverPort": { "label": "Server port", "description": "Express + WebSocket port." },
           "vitePort": { "label": "Vite port", "description": "Frontend dev server (only used when running `npm run dev`)." },
-          "proxyPort": { "label": "Proxy port", "description": "Local LLM proxy (PilotDeck agent target)." },
           "apiTimeout": { "label": "API timeout (ms)", "description": "Per-request upstream timeout." },
           "databasePath": { "label": "Database path", "description": "SQLite auth/projects database (~ expands to home)." },
           "workspacesRoot": { "label": "Workspaces root", "description": "Directory under which projects are scanned." },
-          "httpsProxy": { "label": "HTTPS proxy", "description": "Outbound HTTPS proxy URL (HTTPS_PROXY / https_proxy)." }
+          "proxyUrl": { "label": "HTTPS proxy", "description": "Outbound HTTPS proxy URL. Applies to both Gateway and UI Server (proxy.url in pilotdeck.yaml)." },
+          "proxyNoProxy": { "label": "No-proxy list", "description": "Comma-separated hostnames/IPs that bypass the proxy (proxy.noProxy in pilotdeck.yaml). 127.0.0.1 and localhost are always excluded." }
         }
       },
       "models": {

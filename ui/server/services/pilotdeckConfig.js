@@ -12,7 +12,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 //   agent:    { model: "provider/model", params, subagents }
 //   model:    { providers: { [pid]: { protocol, url, apiKey, models, headers, timeoutMs } } }
 //   memory:   { enabled, model, apiType?, reasoningMode, ... }
-//   webui:    { runtime: { host, serverPort, vitePort, proxyPort, ... } }
+//   webui:    { runtime: { host, serverPort, vitePort, ... } }
 //   router:   { enabled, stats: { enabled, modelPricing }, ... }
 //   gateway:  { enabled, home, ... }
 //   alwaysOn: { enabled, trigger, dormancy, workspace, execution, projects }
@@ -85,9 +85,7 @@ export function buildDefaultPilotDeckConfig() {
         host: '0.0.0.0',
         serverPort: 3001,
         vitePort: 5173,
-        proxyPort: 18080,
         apiTimeoutMs: 120000,
-        httpsProxy: '',
         databasePath: path.join(PILOT_HOME_DIR, 'auth.db'),
         workspacesRoot: os.homedir(),
       },
@@ -309,11 +307,8 @@ export function buildRuntimeEnv(config) {
   const normalized = normalizePilotDeckConfig(config);
   const main = resolveModel(normalized, normalized.agent.model, { allowMissing: true });
   const runtime = normalized.webui?.runtime ?? {};
-  const proxyPort = String(runtime.proxyPort ?? 18080);
 
   const env = {
-    PILOTDECK_PROXY_PORT: process.env.PILOTDECK_PROXY_PORT || proxyPort,
-    PROXY_PORT: process.env.PROXY_PORT || proxyPort,
     SERVER_PORT: process.env.SERVER_PORT || String(runtime.serverPort ?? 3001),
     VITE_PORT: process.env.VITE_PORT || String(runtime.vitePort ?? 5173),
     HOST: process.env.HOST || String(runtime.host ?? '0.0.0.0'),
@@ -323,9 +318,12 @@ export function buildRuntimeEnv(config) {
 
   if (runtime.databasePath) env.DATABASE_PATH = expandTilde(runtime.databasePath);
   if (runtime.workspacesRoot) env.WORKSPACES_ROOT = expandTilde(runtime.workspacesRoot);
-  if (runtime.httpsProxy) {
-    env.HTTPS_PROXY = runtime.httpsProxy;
-    env.https_proxy = runtime.httpsProxy;
+  const proxyUrl = normalized.proxy?.url
+    || (typeof normalized.proxy === 'string' ? normalized.proxy : '')
+    || runtime.httpsProxy || '';
+  if (proxyUrl) {
+    env.HTTPS_PROXY = proxyUrl;
+    env.https_proxy = proxyUrl;
   }
 
   if (main) {
@@ -338,7 +336,6 @@ export function buildRuntimeEnv(config) {
     env.ANTHROPIC_API_KEY = main.provider.apiKey || '';
     env.ANTHROPIC_MODEL = main.model;
   }
-  env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${proxyPort}`;
 
   // Reasoning models (DeepSeek-R1, MiniMax-M2.7, etc.) need a generous
   // output token cap; honor agent.params.maxOutputTokens / max_tokens.

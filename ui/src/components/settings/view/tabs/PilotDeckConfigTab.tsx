@@ -88,14 +88,16 @@ type PilotDeckConfig = {
     maxMessageChars?: number;
     heartbeatBatchSize?: number;
   };
+  proxy?: {
+    url?: string;
+    noProxy?: string;
+  };
   webui?: {
     runtime?: {
       host?: string;
       serverPort?: number;
       vitePort?: number;
-      proxyPort?: number;
       apiTimeoutMs?: number;
-      httpsProxy?: string;
       databasePath?: string;
       workspacesRoot?: string;
     };
@@ -641,9 +643,6 @@ function ServiceSection({ config, onChange }: { config: PilotDeckConfig; onChang
           <FormRow label={t('pilotDeckConfig.panels.runtime.fields.serverPort.label')} description={t('pilotDeckConfig.panels.runtime.fields.serverPort.description')}>
             <NumberInput value={r.serverPort} placeholder="3001" onChange={(v) => set('serverPort', v)} />
           </FormRow>
-          <FormRow label={t('pilotDeckConfig.panels.runtime.fields.proxyPort.label')} description={t('pilotDeckConfig.panels.runtime.fields.proxyPort.description')}>
-            <NumberInput value={r.proxyPort} placeholder="18080" onChange={(v) => set('proxyPort', v)} />
-          </FormRow>
           <FormRow label={t('pilotDeckConfig.panels.runtime.fields.workspacesRoot.label')} description={t('pilotDeckConfig.panels.runtime.fields.workspacesRoot.description')}>
             <TextInput value={r.workspacesRoot} placeholder="~" monospace onChange={(v) => set('workspacesRoot', v)} />
           </FormRow>
@@ -670,8 +669,11 @@ function ServiceSection({ config, onChange }: { config: PilotDeckConfig; onChang
             <FormRow label={t('pilotDeckConfig.panels.runtime.fields.databasePath.label')} description={t('pilotDeckConfig.panels.runtime.fields.databasePath.description')}>
               <TextInput value={r.databasePath} placeholder="~/.pilotdeck/auth.db" monospace onChange={(v) => set('databasePath', v)} />
             </FormRow>
-            <FormRow label={t('pilotDeckConfig.panels.runtime.fields.httpsProxy.label')} description={t('pilotDeckConfig.panels.runtime.fields.httpsProxy.description')}>
-              <TextInput value={r.httpsProxy} placeholder="http://127.0.0.1:7890" monospace onChange={(v) => set('httpsProxy', v)} />
+            <FormRow label={t('pilotDeckConfig.panels.runtime.fields.proxyUrl.label')} description={t('pilotDeckConfig.panels.runtime.fields.proxyUrl.description')}>
+              <TextInput value={config.proxy?.url} placeholder="http://127.0.0.1:7890" monospace onChange={(v) => onChange(patch(config, ['proxy', 'url'], v))} />
+            </FormRow>
+            <FormRow label={t('pilotDeckConfig.panels.runtime.fields.proxyNoProxy.label')} description={t('pilotDeckConfig.panels.runtime.fields.proxyNoProxy.description')}>
+              <TextInput value={config.proxy?.noProxy} placeholder="127.0.0.1,localhost" monospace onChange={(v) => onChange(patch(config, ['proxy', 'noProxy'], v))} />
             </FormRow>
           </div>
         )}

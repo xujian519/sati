@@ -9,7 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import net from 'net';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -140,111 +140,6 @@ const alwaysOnHeartbeat = createAlwaysOnHeartbeatManager({
 });
 registerAlwaysOnNotificationForwarding(connectedClients);
 let isGetProjectsRunning = false; // Flag to prevent reentrant calls
-let pilotDeckProxyProcess = null;
-
-function resolveBunExecutable() {
-    const candidates = [
-        process.env.BUN_BIN,
-        process.env.BUN,
-        process.env.BUN_INSTALL ? path.join(process.env.BUN_INSTALL, 'bin', 'bun') : null,
-        path.join(os.homedir(), '.bun', 'bin', 'bun'),
-        '/opt/homebrew/bin/bun',
-        '/usr/local/bin/bun',
-        'bun',
-    ].filter(Boolean);
-
-    for (const candidate of candidates) {
-        if (candidate === 'bun' || fs.existsSync(candidate)) {
-            return candidate;
-        }
-    }
-
-    return 'bun';
-}
-
-function isLocalPortListening(port, host = '127.0.0.1', timeoutMs = 400) {
-    return new Promise(resolve => {
-        const socket = net.createConnection({ port, host });
-        const finalize = (isOpen) => {
-            socket.destroy();
-            resolve(isOpen);
-        };
-
-        socket.setTimeout(timeoutMs);
-        socket.once('connect', () => finalize(true));
-        socket.once('timeout', () => finalize(false));
-        socket.once('error', () => finalize(false));
-    });
-}
-
-async function waitForLocalPort(port, host = '127.0.0.1', timeoutMs = 4000) {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-        if (await isLocalPortListening(port, host)) {
-            return true;
-        }
-        await new Promise(resolve => setTimeout(resolve, 120));
-    }
-    return false;
-}
-
-async function ensurePilotDeckProxyRunning() {
-    // The legacy in-process proxy bootstrap was tied to a bundled CCR pipeline
-    // that we removed during the PilotDeck-only migration.
-    // Model traffic now flows through `src/gateway` directly. Returning
-    // immediately keeps any callers happy without touching dead code.
-    return;
-    // The unreachable body below is left as historical scaffolding.
-    // eslint-disable-next-line no-unreachable
-    const proxyPort = parseInt(process.env.PROXY_PORT || process.env.PILOTDECK_PROXY_PORT || '18080', 10);
-    if (!proxyPort) return;
-    if (await isLocalPortListening(proxyPort)) {
-        console.log(`${c.info('[INFO]')} Reusing existing PilotDeck-friendly proxy on http://127.0.0.1:${proxyPort}`);
-        return;
-    }
-
-    console.error(`[ERROR] PilotDeck proxy did not become ready on http://127.0.0.1:${proxyPort}`);
-}
-
-async function stopPilotDeckProxy() {
-    if (!pilotDeckProxyProcess) {
-        return;
-    }
-
-    const proxyProcess = pilotDeckProxyProcess;
-    pilotDeckProxyProcess = null;
-
-    if (proxyProcess.exitCode !== null || proxyProcess.signalCode !== null) {
-        return;
-    }
-
-    await new Promise(resolve => {
-        const timeout = setTimeout(() => {
-            proxyProcess.kill('SIGKILL');
-        }, 2000);
-
-        proxyProcess.once('exit', () => {
-            clearTimeout(timeout);
-            resolve();
-        });
-
-        proxyProcess.kill('SIGTERM');
-    });
-}
-
-process.on('pilotdeck:restart-proxy', async (done) => {
-    try {
-        await stopPilotDeckProxy();
-        await ensurePilotDeckProxyRunning();
-        if (typeof done === 'function') {
-            done(null);
-        }
-    } catch (error) {
-        if (typeof done === 'function') {
-            done(error);
-        }
-    }
-});
 
 // Broadcast progress to all connected WebSocket clients
 function broadcastProgress(progress) {
@@ -3063,8 +2958,6 @@ async function startServer() {
                     // Start watching the projects folder for changes
                     await setupProjectsWatcher();
 
-                    await ensurePilotDeckProxyRunning();
-
                     // Start background memory scheduler for auto index/dream.
                     startMemoryScheduler();
 
@@ -3096,7 +2989,6 @@ async function startServer() {
                     stopMemoryScheduler();
                     closeMemoryServices();
                     stopPilotDeckConfigWatcher();
-                    await stopPilotDeckProxy();
                     await stopAllPlugins();
                     // helpers were retired with the four-provider runtime.
                     try {

@@ -19,6 +19,7 @@ import {
   type PilotAgentModelSelection,
   type PilotConfigDiagnostic,
   type PilotExtensionConfig,
+  type PilotProxyConfig,
   type PilotConfigLoadOptions,
   type PilotConfigSnapshot,
   type PilotConfigSource,
@@ -124,6 +125,7 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
   const cron = parseCronConfig(rawConfig.cron, diagnostics);
   const tools = parseToolsConfig(rawConfig.tools, diagnostics);
   const telemetry = parseTelemetryConfig(rawConfig.telemetry);
+  const proxy = parseProxyConfig(rawConfig, diagnostics);
   throwConfigErrorIfFatal(diagnostics);
 
   const redactedSnapshotConfig = redactConfig({
@@ -138,6 +140,7 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
     cron,
     tools,
     telemetry,
+    proxy,
   });
   return deepFreeze({
     version: options.version ?? 1,
@@ -158,6 +161,7 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
       ...(cron ? { cron } : {}),
       ...(tools ? { tools } : {}),
       telemetry,
+      ...(proxy ? { proxy } : {}),
     },
   });
 }
@@ -303,9 +307,11 @@ function validateTopLevel(rawConfig: PilotRawConfig, diagnostics: PilotConfigDia
     "alwaysOn",
     "cron",
     "tools",
-    // Reserved namespaces for ui/server. The PilotDeck gateway does not parse
-    // these itself but tolerates them so a single ~/.pilotdeck/pilotdeck.yaml
-    // can carry both gateway-side and ui-side config without diagnostic noise.
+    "proxy",
+    // Reserved namespace for ui/server (Web UI Express bridge). The PilotDeck
+    // gateway does not parse `webui.*` itself but tolerates it so a single
+    // ~/.pilotdeck/pilotdeck.yaml can carry both gateway-side and ui-side
+    // config without producing diagnostic noise.
     "webui",
     "telemetry",
   ]);
@@ -621,6 +627,64 @@ function parseTelemetryConfig(raw: unknown): PilotTelemetryConfig {
   return {
     enabled: isRecord(raw) && (raw as Record<string, unknown>).enabled === true,
   };
+}
+
+function parseProxyConfig(
+  rawConfig: PilotRawConfig,
+  diagnostics: PilotConfigDiagnostic[],
+): PilotProxyConfig | undefined {
+  let raw = rawConfig.proxy;
+
+  // Backward-compat: migrate webui.runtime.httpsProxy → proxy.url
+  if (raw === undefined && isRecord(rawConfig.webui)) {
+    const webui = rawConfig.webui as Record<string, unknown>;
+    if (isRecord(webui.runtime)) {
+      const runtime = webui.runtime as Record<string, unknown>;
+      if (typeof runtime.httpsProxy === "string" && runtime.httpsProxy) {
+        raw = { url: runtime.httpsProxy };
+        diagnostics.push({
+          code: "CONFIG_PROXY_MIGRATED",
+          severity: "info",
+          message:
+            "webui.runtime.httpsProxy has been migrated to the top-level proxy.url field. " +
+            "Please update your pilotdeck.yaml to use proxy.url instead.",
+          path: "webui.runtime.httpsProxy",
+          recoverable: true,
+        });
+      }
+    }
+  }
+
+  if (raw === undefined) return undefined;
+
+  if (typeof raw === "string") {
+    return { url: raw };
+  }
+
+  if (!isRecord(raw)) {
+    diagnostics.push({
+      code: "CONFIG_PROXY_INVALID",
+      severity: "warning",
+      message: "proxy must be a string or an object with a url field.",
+      path: "proxy",
+      recoverable: true,
+    });
+    return undefined;
+  }
+
+  if (typeof raw.url !== "string" || !raw.url) {
+    diagnostics.push({
+      code: "CONFIG_PROXY_URL_MISSING",
+      severity: "warning",
+      message: "proxy.url must be a non-empty string.",
+      path: "proxy.url",
+      recoverable: true,
+    });
+    return undefined;
+  }
+
+  const noProxy = typeof raw.noProxy === "string" ? raw.noProxy : undefined;
+  return { url: raw.url, ...(noProxy ? { noProxy } : {}) };
 }
 
 function deepFreeze<T>(value: T): T {
