@@ -135,6 +135,9 @@
     "telemetry": {
       "title": "Telemetry",
       "detail": "Send anonymous usage data to help improve the product"
+    },
+    "gateway": {
+      "detail": "Connect Feishu, WeChat, and other IM channels"
     }
   },
   "notifications": {
@@ -1028,5 +1031,44 @@
     "updateFailed": "Update failed",
     "restartToApply": "Restart to Apply",
     "dismiss": "Dismiss"
+  },
+  "gateway": {
+    "title": "IM Channels",
+    "description": "Configure instant messaging channels (Feishu, WeChat) so the agent can be reached from IM apps.",
+    "connected": "Connected",
+    "notConfigured": "Not configured",
+    "enabled": "Enabled",
+    "edit": "Edit",
+    "setup": "Set Up",
+    "testConnection": "Test Connection",
+    "save": "Save",
+    "disable": "Disable",
+    "cancel": "Cancel",
+    "dismiss": "Dismiss",
+    "feishu": {
+      "title": "Feishu / Lark",
+      "label": "Feishu Bot",
+      "domain": "Domain",
+      "connectionMode": "Connection Mode",
+      "chooseMethod": "Choose how to configure the Feishu bot:",
+      "qrScan": "QR Code Scan",
+      "qrScanDesc": "Scan with Feishu app to auto-create a bot",
+      "manualInput": "Manual Input",
+      "manualInputDesc": "Enter App ID and Secret from Developer Console",
+      "startQr": "Generate QR Code",
+      "connecting": "Connecting to Feishu…",
+      "scanPrompt": "Open Feishu / Lark app and scan the QR code",
+      "qrSuccess": "App created successfully — config saved and enabled",
+      "retry": "Retry"
+    },
+    "weixin": {
+      "title": "WeChat (iLink)",
+      "label": "WeChat Bot",
+      "qrLogin": "QR Code Login",
+      "relogin": "Re-login",
+      "loadingQr": "Generating QR code…",
+      "scanPrompt": "Open WeChat and scan the QR code to log in",
+      "loginSuccess": "Login successful — credentials saved"
+    }
   }
 }
