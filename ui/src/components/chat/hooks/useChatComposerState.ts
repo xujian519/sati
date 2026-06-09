@@ -518,6 +518,8 @@ export function useChatComposerState({
     setInput,
     textareaRef,
     onExecuteCommand: executeCommand,
+    inputValueRef,
+    handleSubmitRef,
   });
 
   const {
