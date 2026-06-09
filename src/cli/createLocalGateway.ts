@@ -761,7 +761,7 @@ class ProjectRuntimeRegistry {
             sanitizeSessionIdForPath(context.sessionKey),
           );
           mkdirSyncFs(outDir, { recursive: true });
-          return { ...spec, args: [...(spec.args ?? []), `--output-dir=${outDir}`] };
+          return { ...spec, cwd: outDir, args: [...(spec.args ?? []), `--output-dir=${outDir}`] };
         }
         return spec;
       });

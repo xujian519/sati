@@ -10,17 +10,22 @@
  *          reflected onto the PilotDeck tool flags so the permission
  *          engine can decide whether to ask.
  *
- * Result transformation (M14): we currently emit a single `json` result
- * block. The existing `ToolRuntime` already truncates oversized payloads
- * via `maxResultBytes`; deferring the persisted-large-blob path for now
- * (recorded as `intentional_difference` in the parity table).
+ * Result transformation (M14): MCP ContentBlock types `text` and `image`
+ * are mapped to their PilotDeck equivalents so that images (e.g. Playwright
+ * screenshots) render inline in the chat UI. Remaining block types
+ * (`audio`, `resource`, `resource_link`) fall through as a single `json`
+ * block until the downstream pipeline supports them.
  */
+
+import { readFileSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
 
 import { PilotDeckToolRuntimeError } from "../../tool/protocol/errors.js";
 import type {
   PilotDeckToolDefinition,
   PilotDeckToolExecutionOutput,
   PilotDeckToolInputSchema,
+  PilotDeckToolResultContent,
 } from "../../tool/index.js";
 import type { McpClient } from "../client/McpClient.js";
 import type { McpRuntime } from "./McpRuntime.js";
@@ -85,7 +90,7 @@ function buildToolDefinition(
           );
         }
         return {
-          content: [{ type: "json", value: content }],
+          content: marshalMcpContent(content, client.spec.transport === "stdio" ? client.spec.cwd : undefined),
           data: content,
           metadata: {
             mcp: { serverId: spec.serverId, toolName: spec.toolName, wireName: spec.wireName },
@@ -116,6 +121,91 @@ function buildToolDefinition(
       }
     },
   };
+}
+
+type McpContentBlock = { type: string; [key: string]: unknown };
+
+/**
+ * Map MCP `ContentBlock[]` → `PilotDeckToolResultContent[]`.
+ *
+ * `TextContent`  → `{ type: "text" }`
+ * `ImageContent` → `{ type: "image" }` (renders inline in chat)
+ * Everything else falls through as a single `json` block.
+ *
+ * When `cwd` is provided and no inline image block is present, the function
+ * scans text blocks for Markdown image links (`[…](./file.png)`) and reads
+ * the referenced files from disk so that screenshots taken with a
+ * user-specified `filename` (which `@playwright/mcp` saves without returning
+ * base64 data) still render inline in the chat UI.
+ */
+function marshalMcpContent(raw: unknown, cwd?: string): PilotDeckToolResultContent[] {
+  if (!Array.isArray(raw)) return [{ type: "json", value: raw }];
+
+  const result: PilotDeckToolResultContent[] = [];
+  const remainder: unknown[] = [];
+  let hasImageBlock = false;
+
+  for (const block of raw as McpContentBlock[]) {
+    if (!block || typeof block !== "object" || typeof block.type !== "string") {
+      remainder.push(block);
+      continue;
+    }
+    if (block.type === "text" && typeof block.text === "string") {
+      result.push({ type: "text", text: block.text });
+    } else if (
+      block.type === "image" &&
+      typeof block.data === "string" &&
+      typeof block.mimeType === "string"
+    ) {
+      result.push({ type: "image", mimeType: block.mimeType as string, data: block.data as string });
+      hasImageBlock = true;
+    } else {
+      remainder.push(block);
+    }
+  }
+
+  if (!hasImageBlock && cwd) {
+    for (const block of raw as McpContentBlock[]) {
+      if (block?.type === "text" && typeof block.text === "string") {
+        const images = extractFileImages(block.text as string, cwd);
+        for (const img of images) result.push(img);
+      }
+    }
+  }
+
+  if (remainder.length > 0) {
+    result.push({ type: "json", value: remainder });
+  }
+  if (result.length === 0) {
+    result.push({ type: "json", value: raw });
+  }
+  return result;
+}
+
+const IMAGE_LINK_RE = /\[.*?\]\((\.[^)]*\.(?:png|jpe?g|gif|webp))\)/gi;
+
+/**
+ * Extract image file references from Markdown text, read the files from disk,
+ * and return them as base64 image blocks.
+ */
+function extractFileImages(text: string, cwd: string): PilotDeckToolResultContent[] {
+  const results: PilotDeckToolResultContent[] = [];
+  for (const match of text.matchAll(IMAGE_LINK_RE)) {
+    const relPath = match[1];
+    try {
+      const absPath = resolvePath(cwd, relPath);
+      const data = readFileSync(absPath);
+      const ext = relPath.split(".").pop()?.toLowerCase() ?? "png";
+      const mimeType = ext === "jpg" || ext === "jpeg" ? "image/jpeg"
+        : ext === "gif" ? "image/gif"
+        : ext === "webp" ? "image/webp"
+        : "image/png";
+      results.push({ type: "image", mimeType, data: data.toString("base64") });
+    } catch {
+      // File not readable — skip silently; the text link remains as-is.
+    }
+  }
+  return results;
 }
 
 function extractMcpErrorText(

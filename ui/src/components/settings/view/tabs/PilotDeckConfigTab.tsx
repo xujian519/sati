@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronDown,
   ChevronRight,
+  Clock,
   Database,
   FileCog,
   FolderOpen,
@@ -87,14 +88,16 @@ type PilotDeckConfig = {
     maxMessageChars?: number;
     heartbeatBatchSize?: number;
   };
+  proxy?: {
+    url?: string;
+    noProxy?: string;
+  };
   webui?: {
     runtime?: {
       host?: string;
       serverPort?: number;
       vitePort?: number;
-      proxyPort?: number;
       apiTimeoutMs?: number;
-      httpsProxy?: string;
       databasePath?: string;
       workspacesRoot?: string;
     };
@@ -127,6 +130,11 @@ type PilotDeckConfig = {
       timeoutMinutes?: number;
     };
     projects?: Record<string, { enabled?: boolean }>;
+  };
+  cron?: {
+    enabled?: boolean;
+    timezone?: string;
+    maxConcurrentRuns?: number;
   };
   customEnv?: Record<string, string>;
   router?: {
@@ -179,13 +187,14 @@ type PilotDeckConfig = {
   };
 };
 
-type SectionId = 'models' | 'agents' | 'memory' | 'tools' | 'router' | 'gateway' | 'customEnv' | 'alwaysOn' | 'advanced';
+type SectionId = 'models' | 'agents' | 'memory' | 'tools' | 'router' | 'gateway' | 'customEnv' | 'alwaysOn' | 'cron' | 'advanced';
 
 const SECTIONS: Array<{ id: SectionId; labelKey: string; descriptionKey: string }> = [
   { id: 'advanced',  labelKey: 'runtime',   descriptionKey: 'runtime' },
   { id: 'models',    labelKey: 'models',    descriptionKey: 'models' },
   { id: 'agents',    labelKey: 'agents',    descriptionKey: 'agents' },
   { id: 'alwaysOn',  labelKey: 'alwaysOn',  descriptionKey: 'alwaysOn' },
+  { id: 'cron',      labelKey: 'cron',      descriptionKey: 'cron' },
   { id: 'memory',    labelKey: 'memory',    descriptionKey: 'memory' },
   { id: 'tools',     labelKey: 'tools',     descriptionKey: 'tools' },
   { id: 'router',    labelKey: 'router',    descriptionKey: 'router' },
@@ -195,7 +204,7 @@ const SECTIONS: Array<{ id: SectionId; labelKey: string; descriptionKey: string 
 
 const SECTION_GROUPS: Array<{ id: 'basic' | 'features' | 'advanced'; sections: SectionId[] }> = [
   { id: 'basic', sections: ['models', 'agents'] },
-  { id: 'features', sections: ['router', 'memory', 'tools', 'alwaysOn', 'gateway'] },
+  { id: 'features', sections: ['router', 'memory', 'tools', 'alwaysOn', 'cron', 'gateway'] },
   { id: 'advanced', sections: ['advanced', 'customEnv'] },
 ];
 
@@ -206,6 +215,7 @@ const SECTION_ICONS: Record<SectionId, LucideIcon> = {
   memory: Brain,
   tools: Search,
   alwaysOn: Zap,
+  cron: Clock,
   gateway: Wifi,
   advanced: Server,
   customEnv: FileCog,
@@ -633,9 +643,6 @@ function ServiceSection({ config, onChange }: { config: PilotDeckConfig; onChang
           <FormRow label={t('pilotDeckConfig.panels.runtime.fields.serverPort.label')} description={t('pilotDeckConfig.panels.runtime.fields.serverPort.description')}>
             <NumberInput value={r.serverPort} placeholder="3001" onChange={(v) => set('serverPort', v)} />
           </FormRow>
-          <FormRow label={t('pilotDeckConfig.panels.runtime.fields.proxyPort.label')} description={t('pilotDeckConfig.panels.runtime.fields.proxyPort.description')}>
-            <NumberInput value={r.proxyPort} placeholder="18080" onChange={(v) => set('proxyPort', v)} />
-          </FormRow>
           <FormRow label={t('pilotDeckConfig.panels.runtime.fields.workspacesRoot.label')} description={t('pilotDeckConfig.panels.runtime.fields.workspacesRoot.description')}>
             <TextInput value={r.workspacesRoot} placeholder="~" monospace onChange={(v) => set('workspacesRoot', v)} />
           </FormRow>
@@ -662,8 +669,11 @@ function ServiceSection({ config, onChange }: { config: PilotDeckConfig; onChang
             <FormRow label={t('pilotDeckConfig.panels.runtime.fields.databasePath.label')} description={t('pilotDeckConfig.panels.runtime.fields.databasePath.description')}>
               <TextInput value={r.databasePath} placeholder="~/.pilotdeck/auth.db" monospace onChange={(v) => set('databasePath', v)} />
             </FormRow>
-            <FormRow label={t('pilotDeckConfig.panels.runtime.fields.httpsProxy.label')} description={t('pilotDeckConfig.panels.runtime.fields.httpsProxy.description')}>
-              <TextInput value={r.httpsProxy} placeholder="http://127.0.0.1:7890" monospace onChange={(v) => set('httpsProxy', v)} />
+            <FormRow label={t('pilotDeckConfig.panels.runtime.fields.proxyUrl.label')} description={t('pilotDeckConfig.panels.runtime.fields.proxyUrl.description')}>
+              <TextInput value={config.proxy?.url} placeholder="http://127.0.0.1:7890" monospace onChange={(v) => onChange(patch(config, ['proxy', 'url'], v))} />
+            </FormRow>
+            <FormRow label={t('pilotDeckConfig.panels.runtime.fields.proxyNoProxy.label')} description={t('pilotDeckConfig.panels.runtime.fields.proxyNoProxy.description')}>
+              <TextInput value={config.proxy?.noProxy} placeholder="127.0.0.1,localhost" monospace onChange={(v) => onChange(patch(config, ['proxy', 'noProxy'], v))} />
             </FormRow>
           </div>
         )}
@@ -1278,7 +1288,7 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
                     type="number"
                     min={1}
                     value={caps.maxOutputTokensOverride ?? ''}
-                    placeholder="8192"
+                    placeholder="16384"
                     onChange={(e) => {
                       const v = e.target.value;
                       if (v === '') return setMaxOutputTokens(undefined);
@@ -1740,6 +1750,53 @@ function AlwaysOnSection({
           </>
         )}
       </div>
+    </SettingsSection>
+  );
+}
+
+function CronSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
+  const cron = config.cron ?? {};
+  const enabled = cron.enabled !== false;
+
+  return (
+    <SettingsSection
+      title={t('pilotDeckConfig.panels.cron.title')}
+      description={t('pilotDeckConfig.panels.cron.description')}
+    >
+      <SettingsCard divided>
+        <SettingsRow
+          label={t('pilotDeckConfig.panels.cron.enabled.label')}
+          description={t('pilotDeckConfig.panels.cron.enabled.description')}
+        >
+          <SettingsToggle
+            checked={enabled}
+            ariaLabel={t('pilotDeckConfig.panels.cron.enabled.label')}
+            onChange={(value) => onChange(patch(config, ['cron', 'enabled'], value))}
+          />
+        </SettingsRow>
+        <FormRow
+          label={t('pilotDeckConfig.panels.cron.timezone.label')}
+          description={t('pilotDeckConfig.panels.cron.timezone.description')}
+        >
+          <TextInput
+            value={cron.timezone}
+            placeholder="Asia/Shanghai"
+            monospace
+            onChange={(value) => onChange(patch(config, ['cron', 'timezone'], value || undefined))}
+          />
+        </FormRow>
+        <FormRow
+          label={t('pilotDeckConfig.panels.cron.maxConcurrentRuns.label')}
+          description={t('pilotDeckConfig.panels.cron.maxConcurrentRuns.description')}
+        >
+          <NumberInput
+            value={cron.maxConcurrentRuns}
+            placeholder="2"
+            onChange={(value) => onChange(patch(config, ['cron', 'maxConcurrentRuns'], value))}
+          />
+        </FormRow>
+      </SettingsCard>
     </SettingsSection>
   );
 }
@@ -3188,6 +3245,7 @@ export default function PilotDeckConfigTab({ projects = [] }: { projects?: Setti
               {activeSection === 'gateway' && <GatewaySection config={parsedConfig} onChange={onFormChange} />}
               {activeSection === 'customEnv' && <CustomEnvSection config={parsedConfig} onChange={onFormChange} />}
               {activeSection === 'alwaysOn' && <AlwaysOnSection config={parsedConfig} projects={projects} onChange={onFormChange} />}
+              {activeSection === 'cron' && <CronSection config={parsedConfig} onChange={onFormChange} />}
               {activeSection === 'advanced' && <ServiceSection config={parsedConfig} onChange={onFormChange} />}
             </div>
           </div>
