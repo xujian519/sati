@@ -104,9 +104,13 @@ export default function MainAreaV2(props: MainAreaV2Props) {
         const payload = (await response.json()) as AlwaysOnDashboardEventsResponse;
 
         if (!cancelled) {
-          setLatestAlwaysOnEventMarker(
-            Array.isArray(payload.events) ? getBadgeEventMarker(payload.events) : null,
-          );
+          const marker = Array.isArray(payload.events) ? getBadgeEventMarker(payload.events) : null;
+          setLatestAlwaysOnEventMarker(marker);
+
+          if (marker && !localStorage.getItem(ALWAYS_ON_LAST_VIEWED_MARKER_KEY)) {
+            setLastViewedAlwaysOnEventMarker(marker);
+            localStorage.setItem(ALWAYS_ON_LAST_VIEWED_MARKER_KEY, marker);
+          }
         }
       } catch {
         // Keep the previous marker when the lightweight notification poll fails.
