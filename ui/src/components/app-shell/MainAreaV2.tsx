@@ -43,6 +43,7 @@ const TABS: Tab[] = [
 ];
 
 const ALWAYS_ON_EVENT_BADGE_POLL_INTERVAL_MS = 15_000;
+const ALWAYS_ON_LAST_VIEWED_MARKER_KEY = 'pilotdeck:always-on-last-viewed-marker';
 const ALWAYS_ON_EVENT_BADGE_LIMIT = 200;
 
 const BADGE_EVENT_PHASES = new Set<AlwaysOnDashboardEvent['phase']>([
@@ -80,7 +81,9 @@ export default function MainAreaV2(props: MainAreaV2Props) {
   } = props;
   const [alwaysOnSubTab, setAlwaysOnSubTab] = useState<AlwaysOnSubTab>('dashboard');
   const [latestAlwaysOnEventMarker, setLatestAlwaysOnEventMarker] = useState<string | null>(null);
-  const [lastViewedAlwaysOnEventMarker, setLastViewedAlwaysOnEventMarker] = useState<string | null>(null);
+  const [lastViewedAlwaysOnEventMarker, setLastViewedAlwaysOnEventMarker] = useState<string | null>(
+    () => localStorage.getItem(ALWAYS_ON_LAST_VIEWED_MARKER_KEY),
+  );
 
   useEffect(() => {
     if (activeTab === 'home') {
@@ -124,6 +127,7 @@ export default function MainAreaV2(props: MainAreaV2Props) {
   useEffect(() => {
     if (activeTab === 'always-on' && latestAlwaysOnEventMarker) {
       setLastViewedAlwaysOnEventMarker(latestAlwaysOnEventMarker);
+      localStorage.setItem(ALWAYS_ON_LAST_VIEWED_MARKER_KEY, latestAlwaysOnEventMarker);
     }
   }, [activeTab, latestAlwaysOnEventMarker]);
 
