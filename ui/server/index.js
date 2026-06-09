@@ -82,6 +82,7 @@ import commandsRoutes from './routes/commands.js';
 import skillsRoutes from './routes/skills.js';
 import settingsRoutes from './routes/settings.js';
 import configRoutes from './routes/config.js';
+import gatewayRoutes from './routes/gateway.js';
 import { startPilotDeckConfigWatcher, stopPilotDeckConfigWatcher } from './services/pilotdeckConfigWatcher.js';
 import { getAlwaysOnDashboardEvents } from './services/always-on-events.js';
 import agentRoutes from './routes/agent.js';
@@ -444,6 +445,9 @@ app.use('/api/settings', authenticateToken, settingsRoutes);
 
 // PilotDeck unified YAML config routes (protected)
 app.use('/api/config', authenticateToken, configRoutes);
+
+// Gateway IM channel setup routes (protected)
+app.use('/api/gateway', authenticateToken, gatewayRoutes);
 
 // User API Routes (protected)
 app.use('/api/user', authenticateToken, userRoutes);
