@@ -232,6 +232,21 @@ export function useSlashCommands({
     [selectedProject],
   );
 
+  const shouldAutoExecute = useCallback((command: SlashCommand): boolean => {
+    const type = command.metadata?.type as string | undefined;
+    const hasArgHint = Boolean(command.metadata?.argumentHint);
+    return !hasArgHint && (type === 'skill' || type === 'bundled-skill');
+  }, []);
+
+  const autoExecuteCommand = useCallback(
+    (command: SlashCommand) => {
+      resetCommandMenuState();
+      setInput('');
+      onExecuteCommand(command, command.name);
+    },
+    [resetCommandMenuState, setInput, onExecuteCommand],
+  );
+
   // Insert the picked command name into the textarea and leave the caret right
   // after `<command> `. We DO NOT auto-submit — the user reviews/edits args
   // and presses Enter themselves, mirroring how the TUI behaves and avoiding
@@ -275,9 +290,13 @@ export function useSlashCommands({
 
   const selectCommandFromKeyboard = useCallback(
     (command: SlashCommand) => {
+      if (shouldAutoExecute(command)) {
+        autoExecuteCommand(command);
+        return;
+      }
       insertCommandIntoInput(command);
     },
-    [insertCommandIntoInput],
+    [shouldAutoExecute, autoExecuteCommand, insertCommandIntoInput],
   );
 
   const handleCommandSelect = useCallback(
@@ -292,9 +311,13 @@ export function useSlashCommands({
       }
 
       trackCommandUsage(command);
+      if (shouldAutoExecute(command)) {
+        autoExecuteCommand(command);
+        return;
+      }
       insertCommandIntoInput(command);
     },
-    [selectedProject, trackCommandUsage, insertCommandIntoInput],
+    [selectedProject, trackCommandUsage, shouldAutoExecute, autoExecuteCommand, insertCommandIntoInput],
   );
 
   const handleToggleCommandMenu = useCallback(() => {
