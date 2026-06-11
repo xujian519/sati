@@ -144,10 +144,21 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       const aoChanged = event.changedPaths.some((p) => p.startsWith("alwaysOn."));
       const cronChanged = event.changedPaths.some((p) => p.startsWith("cron."));
       const proxyChanged = event.changedPaths.some((p) => p.startsWith("proxy.") || p === "proxy");
+      const adapterChanged = event.changedPaths.some((p) => p.startsWith("adapters."));
 
       if (proxyChanged) {
         const proxyConfig = event.nextSnapshot.config.proxy;
         void reinstallGlobalProxy(proxyConfig?.url, proxyConfig?.noProxy);
+      }
+
+      if (adapterChanged) {
+        reloadChain = reloadChain
+          .then(() => handleAdapterHotReload(event.nextSnapshot.config))
+          .catch((err) =>
+            console.warn(
+              `[pilotdeck] adapter hot-reload failed: ${err instanceof Error ? err.message : String(err)}`,
+            ),
+          );
       }
 
       if (!aoChanged && !cronChanged) return;
@@ -212,6 +223,39 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       console.log(`[pilotdeck] Subsystem hot-reload complete: ${parts.join(", ")}`);
     }
 
+    // --- Adapter hot-reload ---
+
+    let serverRef: Awaited<ReturnType<typeof startPilotDeckServer>> | undefined;
+
+    async function handleAdapterHotReload(config: (typeof snapshot)["config"]): Promise<void> {
+      if (!serverRef) return;
+      const parts: string[] = [];
+
+      const fCfg = config.adapters?.feishu;
+      if (fCfg?.enabled === true) {
+        const ch = new FeishuChannel({
+          appId: fCfg.appId,
+          appSecret: fCfg.appSecret,
+          encryptKey: fCfg.encryptKey,
+          verifyToken: fCfg.verifyToken,
+          connectionMode: fCfg.connectionMode,
+          domainName: fCfg.domainName,
+        });
+        await serverRef.hotStartChannel(ch);
+        parts.push("feishu=started");
+      }
+
+      const wCfg = config.adapters?.weixin;
+      if (wCfg?.enabled === true) {
+        await serverRef.hotStartChannel(new WeixinChannel());
+        parts.push("weixin=started");
+      }
+
+      if (parts.length) {
+        console.log(`[pilotdeck] Adapter hot-reload complete: ${parts.join(", ")}`);
+      }
+    }
+
     // --- Server startup ---
 
     const envPort = Number.parseInt(env.PILOTDECK_GATEWAY_PORT ?? "", 10);
@@ -239,6 +283,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       channels: extraChannels,
       config: snapshot.config,
     });
+    serverRef = server;
     bindServer(server);
     deferredBroadcast = (name, payload) => server.broadcastNotification(name, payload);
     console.log(`PilotDeck server listening: ${server.url}`);
@@ -273,6 +318,18 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       void shutdownAndExit(0);
     });
     await new Promise(() => undefined);
+    return;
+  }
+
+  if (command === "gateway") {
+    const sub = argv[1];
+    if (sub === "setup") {
+      const { runGatewaySetup } = await import("./commands/gatewaySetup.js");
+      await runGatewaySetup(argv.slice(2));
+      return;
+    }
+    console.error("Usage: pilotdeck gateway setup [feishu|weixin]");
+    process.exitCode = 1;
     return;
   }
 
