@@ -13,7 +13,7 @@ import type {
 import { isBackgroundTaskSession, type Project, type ProjectSession, type SessionProvider } from '../../types/app';
 import { getIntrinsicMessageKey } from '../chat/utils/messageKeys';
 import MessageRowV2 from './MessageRowV2';
-import { ProcessLiveStatus, ProcessRunHeader, type ProcessTraceStep } from './ProcessTrace';
+import { ProcessLiveStatus, ProcessRunHeader, StreamingThinkingPreview, type ProcessTraceStep } from './ProcessTrace';
 import { formatProcessDuration } from './processTraceUtils';
 import {
   buildRenderableMessageItems,
@@ -402,6 +402,19 @@ export default function MessagesPaneV2({
   );
   const hasOpenEndedLiveProcessGroup = liveProcessGroups.some((group) => group.isRunning);
   const shouldRenderBottomLiveStatus = isAssistantWorking && !hasOpenEndedLiveProcessGroup;
+  const streamingThinkingContent = useMemo(() => {
+    if (!showThinking || !isAssistantWorking || liveStatusStep.phase !== 'thinking') {
+      return null;
+    }
+    for (let i = renderableMessages.length - 1; i >= 0; i--) {
+      const msg = renderableMessages[i];
+      if (msg.isThinking && typeof msg.content === 'string' && msg.content.trim()) {
+        return msg.content;
+      }
+      if (msg.type === 'user') break;
+    }
+    return null;
+  }, [showThinking, isAssistantWorking, liveStatusStep.phase, renderableMessages]);
 
   const bumpHeightVersion = useCallback(() => {
     if (heightVersionRafRef.current !== null) return;
@@ -784,11 +797,16 @@ export default function MessagesPaneV2({
           ) : null}
 
           {shouldRenderBottomLiveStatus ? (
-            <ProcessLiveStatus step={liveStatusStep}>
-              {liveProcessDetailMessages.length > 0
-                ? renderLiveProcessDetailMessages(liveProcessDetailMessages, 'bottom-live-process')
-                : null}
-            </ProcessLiveStatus>
+            <>
+              <ProcessLiveStatus step={liveStatusStep}>
+                {liveProcessDetailMessages.length > 0
+                  ? renderLiveProcessDetailMessages(liveProcessDetailMessages, 'bottom-live-process')
+                  : null}
+              </ProcessLiveStatus>
+              {streamingThinkingContent ? (
+                <StreamingThinkingPreview content={streamingThinkingContent} />
+              ) : null}
+            </>
           ) : null}
         </div>
       )}
