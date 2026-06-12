@@ -302,8 +302,9 @@ function MessageRowV2({
     );
   }
 
-  // Thinking: collapsible accordion
+  // Thinking: collapsible accordion (hidden when showThinking is off)
   if (message.isThinking) {
+    if (!showThinking) return null;
     return withProcessRows(
       <div className="min-w-0 text-[14px] leading-relaxed">
         <details className="group">

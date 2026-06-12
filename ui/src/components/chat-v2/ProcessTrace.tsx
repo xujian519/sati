@@ -301,7 +301,6 @@ export function ProcessTrace({
 
       {expanded ? (
         <div className="mt-1.5 space-y-1.5 pl-5">
-          {statusStep ? <ProcessTraceLine step={statusStep} /> : null}
           {steps.map((step, index) => (
             <ProcessTraceLine key={step.id || `${step.title || 'process-step'}-${index}`} step={step} />
           ))}

@@ -301,8 +301,11 @@ export default function MessagesPaneV2({
     [activityMessages],
   );
   const renderableMessages = useMemo(
-    () => visibleMessages.filter((message) => !message.isAgentActivity),
-    [visibleMessages],
+    () => visibleMessages.filter((message) =>
+      !message.isAgentActivity &&
+      !(message.isThinking && !showThinking)
+    ),
+    [visibleMessages, showThinking],
   );
   const liveProcessDetailMessages = useMemo(
     () => isAssistantWorking ? getLiveProcessDetailMessages(renderableMessages) : [],
