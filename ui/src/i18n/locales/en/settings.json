@@ -705,7 +705,15 @@
         "supportsImageInput": "supports image input",
         "clickEnable": "Click to enable",
         "clickDisable": "Click to disable",
-        "customModelPlaceholder": "Custom model ID"
+        "customModelPlaceholder": "Custom model ID",
+        "providerAdvancedToggle": "Advanced retry settings",
+        "providerRetry": {
+          "requestMaxRetries": { "label": "Request max retries", "description": "Maximum retries for non-streaming requests." },
+          "streamMaxRetries": { "label": "Stream max retries", "description": "Maximum retries for streaming requests." },
+          "streamIdleTimeoutMs": { "label": "Stream idle timeout (ms)", "description": "Abort a stream if no data is received for this duration." },
+          "baseDelayMs": { "label": "Base delay (ms)", "description": "Initial delay before the first retry." },
+          "maxDelayMs": { "label": "Max delay (ms)", "description": "Maximum delay between retries." }
+        }
       },
       "agents": {
         "title": "Agents",
@@ -912,6 +920,13 @@
           "label": "Zero-usage retry",
           "description": "Automatically retry when the upstream returns a response with zero tokens used.",
           "maxAttempts": { "label": "Max attempts", "description": "Maximum retry attempts before giving up." }
+        },
+        "transientRetry": {
+          "label": "Transient error retry",
+          "description": "Automatically retry on transient errors (rate limits, server errors, overloaded) with exponential backoff.",
+          "maxAttempts": { "label": "Max attempts", "description": "Maximum retry attempts before giving up." },
+          "baseDelayMs": { "label": "Base delay (ms)", "description": "Initial delay before the first retry, in milliseconds." },
+          "maxDelayMs": { "label": "Max delay (ms)", "description": "Maximum delay between retries, in milliseconds." }
         },
         "tokenSaver": {
           "title": "Token Saver",

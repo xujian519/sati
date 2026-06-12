@@ -495,6 +495,7 @@ export function useChatRealtimeHandlers({
             tokens: msg.tokens || 0,
             can_interrupt: msg.canInterrupt !== undefined ? msg.canInterrupt : true,
             compactProgress: msg.compactProgress || msg.compact_progress || null,
+            retryProgress: msg.retryProgress || null,
           });
           setIsLoading(true);
           setCanAbortSession(msg.canInterrupt !== false);

@@ -826,6 +826,28 @@ function getLiveStatusStep(
     return activityToLiveStep(latestActivity);
   }
 
+  const retryProgress = (workingStatus as any)?.retryProgress;
+  if (retryProgress) {
+    const parts: string[] = [];
+    if (retryProgress.reason) parts.push(retryProgress.reason);
+    if (retryProgress.provider) parts.push(retryProgress.provider);
+    if (retryProgress.model) parts.push(retryProgress.model);
+    const delayStr = retryProgress.delayMs ? ` (${Math.round(retryProgress.delayMs / 1000)}s)` : '';
+    return {
+      id: 'live-retry',
+      title: t('working.retrying', {
+        defaultValue: 'Reconnecting {{attempt}}/{{max}}{{delay}}',
+        attempt: retryProgress.attempt,
+        max: retryProgress.maxAttempts,
+        delay: delayStr,
+      }),
+      detail: parts.join(' · '),
+      phase: 'retry',
+      state: 'running',
+      severity: 'warning',
+    };
+  }
+
   if (workingStatus?.compactProgress) {
     const progress = workingStatus.compactProgress;
     return {

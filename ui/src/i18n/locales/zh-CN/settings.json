@@ -705,7 +705,15 @@
         "supportsImageInput": "支持图片输入",
         "clickEnable": "点击启用",
         "clickDisable": "点击禁用",
-        "customModelPlaceholder": "自定义模型 ID"
+        "customModelPlaceholder": "自定义模型 ID",
+        "providerAdvancedToggle": "高级重试设置",
+        "providerRetry": {
+          "requestMaxRetries": { "label": "请求最大重试次数", "description": "非流式请求的最大重试次数。" },
+          "streamMaxRetries": { "label": "流式最大重试次数", "description": "流式请求的最大重试次数。" },
+          "streamIdleTimeoutMs": { "label": "流式空闲超时（毫秒）", "description": "在此时间内没有收到数据则中止流。" },
+          "baseDelayMs": { "label": "基础延迟（毫秒）", "description": "首次重试前的初始等待时间。" },
+          "maxDelayMs": { "label": "最大延迟（毫秒）", "description": "两次重试之间的最长等待时间。" }
+        }
       },
       "agents": {
         "title": "智能体",
@@ -912,6 +920,13 @@
           "label": "Zero-usage 重试",
           "description": "上游返回零 Token 用量响应时自动重试。",
           "maxAttempts": { "label": "最大重试次数", "description": "放弃前的最大重试次数。" }
+        },
+        "transientRetry": {
+          "label": "瞬态错误重试",
+          "description": "遇到瞬态错误（限流、服务端错误、过载）时自动重试，采用指数退避策略。",
+          "maxAttempts": { "label": "最大重试次数", "description": "放弃前的最大重试次数。" },
+          "baseDelayMs": { "label": "基础延迟（毫秒）", "description": "首次重试前的初始等待时间。" },
+          "maxDelayMs": { "label": "最大延迟（毫秒）", "description": "两次重试之间的最长等待时间。" }
         },
         "tokenSaver": {
           "title": "Token 节省",

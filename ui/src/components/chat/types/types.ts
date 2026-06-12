@@ -130,11 +130,21 @@ export interface ClaudeWorkStatus {
   compactProgress?: CompactProgress | null;
 }
 
+export interface RetryProgress {
+  attempt: number;
+  maxAttempts: number;
+  delayMs?: number;
+  reason?: string;
+  provider?: string;
+  model?: string;
+}
+
 export interface PilotDeckWorkStatus {
   text: string;
   tokens: number;
   can_interrupt: boolean;
   compactProgress?: CompactProgress | null;
+  retryProgress?: RetryProgress | null;
 }
 
 export interface PilotDeckSettings {

@@ -51,7 +51,8 @@
     "generating": "Generating response",
     "compacting": "Compacting context...",
     "compactingLevel": "Triggering level {{level}} compaction: {{label}}",
-    "waitingForPermission": "Waiting for permission"
+    "waitingForPermission": "Waiting for permission",
+    "retrying": "Reconnecting {{attempt}}/{{max}}{{delay}}"
   },
   "process": {
     "summary": {

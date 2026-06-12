@@ -1140,6 +1140,7 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
           code: event.error.code,
           message: event.error.message,
           recoverable: false,
+          userHint: event.error.userHint,
         },
       ];
     case "session_aborted":

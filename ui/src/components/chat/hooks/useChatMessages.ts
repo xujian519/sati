@@ -152,6 +152,7 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
           type: 'error',
           content: msg.content || 'Unknown error',
           timestamp: msg.timestamp,
+          ...(msg.userHint ? { userHint: msg.userHint } : {}),
         });
         break;
 

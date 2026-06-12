@@ -519,6 +519,7 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                     content: event.message,
                     code: event.code,
                     recoverable: event.recoverable,
+                    userHint: event.userHint,
                 }),
             ];
         case 'agent_status': {
