@@ -12,6 +12,7 @@ import {
   Wrench,
   type LucideIcon,
 } from 'lucide-react';
+import { AgentTimeline } from './AgentTimeline';
 
 export type ProcessTraceMetric = {
   key: string;
@@ -302,9 +303,13 @@ export function ProcessTrace({
       {expanded ? (
         <div className="mt-1.5 space-y-1.5 pl-5">
           {statusStep ? <ProcessTraceLine step={statusStep} /> : null}
-          {steps.map((step, index) => (
-            <ProcessTraceLine key={step.id || `${step.title || 'process-step'}-${index}`} step={step} />
-          ))}
+          {steps.length > 3 ? (
+            <AgentTimeline steps={steps} />
+          ) : (
+            steps.map((step, index) => (
+              <ProcessTraceLine key={step.id || `${step.title || 'process-step'}-${index}`} step={step} />
+            ))
+          )}
           {children ? <div className="space-y-1.5 pt-0.5">{children}</div> : null}
         </div>
       ) : null}
