@@ -1,7 +1,7 @@
 import { memo, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { AlertTriangle, Check, ChevronRight, Copy, FileText } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Copy, FileText, Loader2 } from 'lucide-react';
 import { copyTextToClipboard } from '../../utils/clipboard';
 import type { Project, SessionProvider } from '../../types/app';
 import type {
@@ -302,14 +302,31 @@ function MessageRowV2({
     );
   }
 
-  // Thinking: collapsible accordion
+  // Thinking: streaming = expanded with loader + fade; completed = collapsible
   if (message.isThinking) {
+    const isThinkingStreaming = !!message.isStreaming;
+
+    if (isThinkingStreaming) {
+      return withProcessRows(
+        <div className="min-w-0 text-[14px] leading-relaxed">
+          <div className="flex items-center gap-1.5 text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
+            <span>{t('thinking.title', { defaultValue: 'Thinking...' })}</span>
+          </div>
+          <div className="relative mt-1.5 max-h-48 overflow-hidden border-l-2 border-blue-400/50 pl-3 text-[13px] text-neutral-500 dark:border-blue-500/40 dark:text-neutral-400">
+            <Markdown projectName={selectedProject?.name}>{formattedContent}</Markdown>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white dark:from-neutral-900" />
+          </div>
+        </div>,
+      );
+    }
+
     return withProcessRows(
       <div className="min-w-0 text-[14px] leading-relaxed">
         <details className="group">
           <summary className="flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-medium text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
             <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" strokeWidth={2} />
-            <span>{t('thinking.title', { defaultValue: 'Thinking...' })}</span>
+            <span>{t('thinking.completed', { defaultValue: 'Thought process' })}</span>
           </summary>
           <div className="mt-1.5 border-l-2 border-neutral-300 pl-3 text-[13px] text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
             <Markdown projectName={selectedProject?.name}>{formattedContent}</Markdown>
