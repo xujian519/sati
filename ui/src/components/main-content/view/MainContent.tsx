@@ -1,13 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ChatInterfaceV2 from '../../chat-v2/ChatInterfaceV2';
-import AlwaysOnV2 from '../../main-content-v2/AlwaysOnV2';
-import FilesV2 from '../../main-content-v2/FilesV2';
-import ShellV2 from '../../main-content-v2/ShellV2';
-import GitV2 from '../../main-content-v2/GitV2';
 import PluginTabContent from '../../plugins/view/PluginTabContent';
-import DashboardV2 from '../../main-content-v2/DashboardV2';
-import TasksV2 from '../../main-content-v2/TasksV2';
 import { cn } from '../../../lib/utils.js';
 import type { MainContentProps } from '../types/types';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
@@ -28,8 +22,23 @@ import {
 } from '../../../utils/alwaysOnPresence';
 import MainContentStateView from './subcomponents/MainContentStateView';
 import ErrorBoundary from './ErrorBoundary';
-import MemoryPanel from './memory/MemoryPanel';
-import SkillsV2 from '../../main-content-v2/SkillsV2';
+
+const AlwaysOnV2 = React.lazy(() => import('../../main-content-v2/AlwaysOnV2'));
+const FilesV2 = React.lazy(() => import('../../main-content-v2/FilesV2'));
+const ShellV2 = React.lazy(() => import('../../main-content-v2/ShellV2'));
+const GitV2 = React.lazy(() => import('../../main-content-v2/GitV2'));
+const DashboardV2 = React.lazy(() => import('../../main-content-v2/DashboardV2'));
+const TasksV2 = React.lazy(() => import('../../main-content-v2/TasksV2'));
+const MemoryPanel = React.lazy(() => import('./memory/MemoryPanel'));
+const SkillsV2 = React.lazy(() => import('../../main-content-v2/SkillsV2'));
+
+function TabSkeleton() {
+  return (
+    <div className="flex h-full w-full items-center justify-center">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600 dark:border-neutral-600 dark:border-t-neutral-300" />
+    </div>
+  );
+}
 
 type TaskMasterContextValue = {
   currentProject?: Project | null;
@@ -625,7 +634,9 @@ function SplitBody(props: SplitBodyProps) {
       {/* Full-screen tool surface (Memory, Dashboard, Always-On, etc.) */}
       {showFullScreenTool && (
         <div className="flex h-full w-full min-w-0 flex-col overflow-hidden">
-          {renderTool()}
+          <Suspense fallback={<TabSkeleton />}>
+            {renderTool()}
+          </Suspense>
         </div>
       )}
 
@@ -694,12 +705,14 @@ function SplitBody(props: SplitBodyProps) {
             className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
             style={{ minWidth: `${FILES_TREE_MIN_WIDTH}px` }}
           >
-            <FilesV2
-              key={selectedProject?.name ?? ''}
-              selectedProject={selectedProject}
-              onFileOpen={handleFileOpen}
-              onClose={() => setActiveTab('chat')}
-            />
+            <Suspense fallback={<TabSkeleton />}>
+              <FilesV2
+                key={selectedProject?.name ?? ''}
+                selectedProject={selectedProject}
+                onFileOpen={handleFileOpen}
+                onClose={() => setActiveTab('chat')}
+              />
+            </Suspense>
           </div>
         </>
       ) : null}
