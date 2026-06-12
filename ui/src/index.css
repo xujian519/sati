@@ -730,6 +730,8 @@
     word-wrap: break-word;
     overflow-wrap: break-word;
     hyphens: auto;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 120px;
   }
 
   /* Force wrap long URLs and code */

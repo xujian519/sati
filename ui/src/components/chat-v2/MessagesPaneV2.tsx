@@ -77,7 +77,7 @@ export type VirtualMessageWindow = {
   totalHeight: number;
 };
 
-const MESSAGE_VIRTUALIZATION_THRESHOLD = 160;
+const MESSAGE_VIRTUALIZATION_THRESHOLD = 60;
 const MESSAGE_WINDOW_OVERSCAN = 12;
 const MESSAGE_GAP_PX = 16;
 
@@ -189,10 +189,22 @@ function MeasuredMessageItem({
       return undefined;
     }
 
-    const observer = new ResizeObserver(reportHeight);
+    let rafId: number | null = null;
+    const throttledReport = () => {
+      if (rafId != null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        reportHeight();
+      });
+    };
+
+    const observer = new ResizeObserver(throttledReport);
     observer.observe(node);
 
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (rafId != null) cancelAnimationFrame(rafId);
+    };
   }, [itemKey, onHeightChange]);
 
   return (
