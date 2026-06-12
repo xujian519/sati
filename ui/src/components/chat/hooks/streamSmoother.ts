@@ -22,13 +22,13 @@ export type SmoothTextStreamSnapshot = {
   isScheduled: boolean;
 };
 
-const DEFAULT_FRAME_MS = 33;
-const DEFAULT_TARGET_LAG_MS = 360;
-const DEFAULT_MAX_LAG_MS = 650;
+const DEFAULT_FRAME_MS = 16;
+const DEFAULT_TARGET_LAG_MS = 80;
+const DEFAULT_MAX_LAG_MS = 160;
 const DEFAULT_MIN_CHARS_PER_FRAME = 1;
-const DEFAULT_MAX_CHARS_PER_FRAME = 36;
-const DEFAULT_AVERAGE_CHARS_PER_SECOND = 90;
-const DEFAULT_FALLBACK_FRAME_MS = 80;
+const DEFAULT_MAX_CHARS_PER_FRAME = 80;
+const DEFAULT_AVERAGE_CHARS_PER_SECOND = 200;
+const DEFAULT_FALLBACK_FRAME_MS = 32;
 const RATE_ALPHA = 0.22;
 
 function clamp(value: number, min: number, max: number): number {
