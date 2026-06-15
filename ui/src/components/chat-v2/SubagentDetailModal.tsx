@@ -59,7 +59,7 @@ export default function SubagentDetailModal({
   } else if (messages.length === 0) {
     content = (
       <div className="px-6 py-12 text-center text-sm text-neutral-500 dark:text-neutral-400">
-        No messages found for this subagent.
+        No displayable subagent messages found.
       </div>
     );
   } else {

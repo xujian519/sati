@@ -8,6 +8,20 @@ interface SubagentMessagesResult {
   error: string | null;
 }
 
+function isPilotDeckForkDirective(message: ChatMessage): boolean {
+  if (typeof message.content !== 'string') return false;
+  return message.content.includes('<pilotdeck-fork>') &&
+    message.content.includes('Directive:');
+}
+
+function filterSubagentDetailMessages(messages: ChatMessage[]): ChatMessage[] {
+  return messages.filter((message) =>
+    !message.isThinking &&
+    !message.isSubagentContainer &&
+    !isPilotDeckForkDirective(message)
+  );
+}
+
 export function useSubagentMessages(
   sessionId: string | null,
   subagentId: string | null,
@@ -42,7 +56,7 @@ export function useSubagentMessages(
       .then((data) => {
         if (controller.signal.aborted) return;
         const normalized = Array.isArray(data.messages) ? data.messages : [];
-        setMessages(normalizedToChatMessages(normalized));
+        setMessages(filterSubagentDetailMessages(normalizedToChatMessages(normalized)));
         setIsLoading(false);
       })
       .catch((err) => {
