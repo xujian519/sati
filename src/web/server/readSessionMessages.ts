@@ -379,7 +379,7 @@ function flushBlock(
     case "tool_call":
       flushText();
       out.push({
-        id: `${context.sessionKey}-tool-${block.id}`,
+        id: `${context.sessionKey}-tool-${context.index}-${block.id}`,
         sessionKey: context.sessionKey,
         projectKey: context.projectKey,
         createdAt: stamp,
@@ -404,7 +404,7 @@ function flushBlock(
         }
       }
       out.push({
-        id: `${context.sessionKey}-tool-${block.toolCallId}-result`,
+        id: `${context.sessionKey}-tool-${context.index}-${block.toolCallId}-result`,
         sessionKey: context.sessionKey,
         projectKey: context.projectKey,
         createdAt: stamp,
@@ -424,7 +424,7 @@ function flushBlock(
     case "tool_result_reference":
       flushText();
       out.push({
-        id: `${context.sessionKey}-tool-${block.toolCallId}-result-ref`,
+        id: `${context.sessionKey}-tool-${context.index}-${block.toolCallId}-result-ref`,
         sessionKey: context.sessionKey,
         projectKey: context.projectKey,
         createdAt: stamp,
