@@ -9,26 +9,6 @@ function parseToolInput(toolInput: unknown): Record<string, unknown> {
   return (toolInput as Record<string, unknown>) || {};
 }
 
-function getCompactToolDisplay(toolName: string, toolInput: unknown): string {
-  const input = parseToolInput(toolInput);
-  switch (toolName) {
-    case 'Read':
-    case 'Write':
-    case 'Edit':
-    case 'ApplyPatch':
-      return (input.file_path as string)?.split('/').pop() || (input.file_path as string) || '';
-    case 'Grep':
-    case 'Glob':
-      return (input.pattern as string) || '';
-    case 'Bash': {
-      const cmd = (input.command as string) || '';
-      return cmd.length > 40 ? `${cmd.slice(0, 40)}...` : cmd;
-    }
-    default:
-      return '';
-  }
-}
-
 interface SubagentCardProps {
   message: ChatMessage;
   liveActivity?: ChatMessage;
@@ -50,27 +30,26 @@ export default function SubagentCard({ message, liveActivity, onOpenDetail }: Su
   const statusLine = useMemo(() => {
     if (liveActivity) {
       const state = String(liveActivity.state || 'running');
-      const text = liveActivity.detail || liveActivity.title || liveActivity.content || 'Subagent running';
+      const text = String(liveActivity.detail || liveActivity.content || '');
       if (state === 'failed') {
-        return { icon: 'failed' as const, text: text || 'Failed' };
+        return { icon: 'failed' as const, text: text || '执行失败' };
       }
       if (state === 'completed' || state === 'cancelled') {
-        return { icon: 'completed' as const, text: text || 'Completed' };
+        return { icon: 'completed' as const, text: text || '已完成' };
       }
-      return { icon: 'running' as const, text: text || 'Subagent running' };
+      return { icon: 'running' as const, text: text || '思考中' };
     }
     if (isComplete && isFailed) {
-      return { icon: 'failed' as const, text: `Failed (${childTools.length} tool${childTools.length !== 1 ? 's' : ''})` };
+      return { icon: 'failed' as const, text: '执行失败' };
     }
     if (isComplete) {
-      return { icon: 'completed' as const, text: `Completed (${childTools.length} tool${childTools.length !== 1 ? 's' : ''})` };
+      return { icon: 'completed' as const, text: '已完成' };
     }
     if (currentTool) {
-      const detail = getCompactToolDisplay(currentTool.toolName, currentTool.toolInput);
-      return { icon: 'running' as const, text: detail ? `${currentTool.toolName} / ${detail}` : currentTool.toolName };
+      return { icon: 'running' as const, text: `正在执行 ${currentTool.toolName}` };
     }
-    return { icon: 'running' as const, text: 'Thinking...' };
-  }, [isComplete, isFailed, childTools.length, currentTool, liveActivity]);
+    return { icon: 'running' as const, text: '思考中' };
+  }, [isComplete, isFailed, currentTool, liveActivity]);
 
   const handleClick = () => {
     if (subagentId && onOpenDetail) {

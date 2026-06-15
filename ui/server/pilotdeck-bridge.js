@@ -615,6 +615,7 @@ function createSubagentStatusFrames(event, base) {
         : Math.max(0, nowMs - startedAtMs);
     const isDone = status === 'completed' || status === 'failed';
     const title = formatSubagentActivityTitle(subagentType, status);
+    const activityDetail = formatSubagentActivityDetail(event.event, detail, status);
     const activity = createNormalizedMessage({
         ...base,
         id: `subagent_activity_${sanitizeMessageId(base.sessionId)}_${sanitizeMessageId(subagentId)}`,
@@ -624,7 +625,7 @@ function createSubagentStatusFrames(event, base) {
         phase: 'subagent',
         state: status,
         title,
-        detail: '',
+        detail: activityDetail,
         startedAt: new Date(startedAtMs).toISOString(),
         endedAt: isDone ? new Date(nowMs).toISOString() : null,
         durationMs,
@@ -656,6 +657,27 @@ function createSubagentStatusFrames(event, base) {
     }
 
     return frames;
+}
+
+function formatSubagentActivityDetail(eventName, detail, status) {
+    const toolName = typeof detail?.toolName === 'string' ? detail.toolName : '';
+    const rawStatus = String(detail?.status || '');
+    if (status === 'failed') {
+        return '执行失败';
+    }
+    if (status === 'completed') {
+        return '已完成';
+    }
+    if ((rawStatus === 'tool_started' || rawStatus === 'running') && toolName) {
+        return `正在执行 ${toolName}`;
+    }
+    if (rawStatus === 'tool_completed' && toolName) {
+        return `已完成 ${toolName}`;
+    }
+    if (eventName === 'subagent_started' || rawStatus === 'waiting_model' || !toolName) {
+        return '思考中';
+    }
+    return `正在执行 ${toolName}`;
 }
 
 function formatSubagentActivityTitle(subagentType, status) {
