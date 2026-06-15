@@ -37,7 +37,7 @@ const DEFAULTS: UiPreferences = {
   autoExpandTools: false,
   showRawParameters: false,
   showThinking: true,
-  inlineThinking: false,
+  inlineThinking: true,
   autoScrollToBottom: true,
   sendByCtrlEnter: false,
   sidebarVisible: true,
