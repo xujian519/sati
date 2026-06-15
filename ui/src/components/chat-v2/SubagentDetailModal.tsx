@@ -2,7 +2,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import type { ChatMessage } from '../chat/types/types';
 import type { Project, SessionProvider } from '../../types/app';
-import MessageRowV2 from './MessageRowV2';
+import SubagentDetailMessageFlow from './SubagentDetailMessageFlow';
 
 type DiffLine = { type: string; content: string; lineNum: number };
 
@@ -15,6 +15,8 @@ interface SubagentDetailModalProps {
   selectedProject: Project | null;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
+  showThinking?: boolean;
+  isRunning?: boolean;
   onClose: () => void;
 }
 
@@ -27,6 +29,8 @@ export default function SubagentDetailModal({
   selectedProject,
   createDiff,
   onFileOpen,
+  showThinking = true,
+  isRunning = false,
   onClose,
 }: SubagentDetailModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -64,21 +68,15 @@ export default function SubagentDetailModal({
     );
   } else {
     content = (
-      <div className="flex flex-col gap-3 px-6 py-4">
-        {messages.map((message, index) => (
-          <MessageRowV2
-            key={message.id || message.toolId || `subagent-msg-${index}`}
-            message={message}
-            prevMessage={index > 0 ? messages[index - 1] : null}
-            nextMessage={index < messages.length - 1 ? messages[index + 1] : null}
-            provider={provider}
-            selectedProject={selectedProject}
-            createDiff={createDiff}
-            onFileOpen={onFileOpen}
-            showThinking
-          />
-        ))}
-      </div>
+      <SubagentDetailMessageFlow
+        messages={messages}
+        provider={provider}
+        selectedProject={selectedProject}
+        createDiff={createDiff}
+        onFileOpen={onFileOpen}
+        showThinking={showThinking}
+        isRunning={isRunning}
+      />
     );
   }
 

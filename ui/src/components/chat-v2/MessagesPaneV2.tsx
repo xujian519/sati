@@ -337,6 +337,10 @@ export default function MessagesPaneV2({
   const openSubagentActivity = openSubagentId
     ? subagentActivityById.get(openSubagentId)
     : undefined;
+  const isOpenSubagentRunning = Boolean(
+    openSubagentActivity &&
+      !['completed', 'failed', 'cancelled'].includes(String(openSubagentActivity.state || '')),
+  );
   const subagentDetail = useSubagentMessages(
     openSubagentId ? sessionId : null,
     openSubagentId,
@@ -873,6 +877,8 @@ export default function MessagesPaneV2({
           selectedProject={selectedProject}
           createDiff={createDiff}
           onFileOpen={onFileOpen}
+          showThinking={showThinking}
+          isRunning={isOpenSubagentRunning}
           onClose={() => setOpenSubagentId(null)}
         />
       ) : null}

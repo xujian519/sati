@@ -294,6 +294,19 @@ export function useChatRealtimeHandlers({
       sid === activeViewSessionId;
 
     if (msg.kind === 'agent_activity') {
+      const activitySubagentId = typeof msg.subagentId === 'string'
+        ? msg.subagentId
+        : String(msg.activityId || '').startsWith('subagent:')
+          ? String(msg.activityId).slice('subagent:'.length)
+          : '';
+      if (
+        activitySubagentId &&
+        msg.phase === 'subagent' &&
+        ['completed', 'failed', 'cancelled'].includes(String(msg.state || ''))
+      ) {
+        sessionStore.finalizeSubagentDetailThinking?.(sid, activitySubagentId);
+        sessionStore.finalizeSubagentDetailStreaming?.(sid, activitySubagentId);
+      }
       sessionStore.upsertActivity?.(sid, msg as NormalizedMessage);
       return;
     }
@@ -305,7 +318,17 @@ export function useChatRealtimeHandlers({
 
     const subagentId = typeof msg.subagentId === 'string' ? msg.subagentId : '';
     if (msg.isSubagentDetail && subagentId) {
+      if (msg.kind === 'thinking') {
+        sessionStore.updateSubagentDetailThinking?.(
+          sid,
+          subagentId,
+          msg.content || '',
+          provider,
+        );
+        return;
+      }
       if (msg.kind === 'stream_delta') {
+        sessionStore.finalizeSubagentDetailThinking?.(sid, subagentId);
         sessionStore.updateSubagentDetailStreaming?.(
           sid,
           subagentId,
@@ -315,9 +338,11 @@ export function useChatRealtimeHandlers({
         return;
       }
       if (msg.kind === 'stream_end') {
+        sessionStore.finalizeSubagentDetailThinking?.(sid, subagentId);
         sessionStore.finalizeSubagentDetailStreaming?.(sid, subagentId);
         return;
       }
+      sessionStore.finalizeSubagentDetailThinking?.(sid, subagentId);
       sessionStore.finalizeSubagentDetailStreaming?.(sid, subagentId);
       sessionStore.appendSubagentDetailMessage?.(sid, subagentId, msg as NormalizedMessage);
       return;

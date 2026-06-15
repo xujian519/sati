@@ -619,6 +619,7 @@ function createSubagentStatusFrames(event, base) {
         state: status,
         title,
         detail: activityDetail,
+        subagentId,
         startedAt: new Date(startedAtMs).toISOString(),
         endedAt: isDone ? new Date(nowMs).toISOString() : null,
         durationMs,
@@ -672,7 +673,12 @@ function createSubagentDetailFrames(event, base, detail) {
                 content: detail.text || '',
             })];
         case 'subagent_thinking_delta':
-            return [];
+            return [createNormalizedMessage({
+                ...detailBase,
+                id: `subagent_detail_thinking_${sanitizeMessageId(detailSessionId)}_${Date.now()}`,
+                kind: 'thinking',
+                content: detail.text || '',
+            })];
         case 'subagent_tool_call_started': {
             const toolCallId = String(detail.toolCallId || randomUUID());
             return [createNormalizedMessage({

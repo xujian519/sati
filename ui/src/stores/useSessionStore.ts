@@ -723,6 +723,67 @@ export function useSessionStore() {
     notify(sessionId);
   }, [notify]);
 
+  const updateSubagentDetailThinking = useCallback((
+    sessionId: string,
+    subagentId: string,
+    delta: string,
+    msgProvider: SessionProvider,
+  ) => {
+    if (!delta) return;
+    const slot = getSlot(sessionId);
+    const streamId = `__subagent_thinking_${sessionId}_${subagentId}`;
+    const current = slot.subagentDetailMessages.get(subagentId) ?? [];
+    const existingIndex = current.findIndex((message) => message.id === streamId);
+    let updated: NormalizedMessage[];
+    if (existingIndex >= 0) {
+      updated = [...current];
+      const existing = updated[existingIndex];
+      updated[existingIndex] = {
+        ...existing,
+        content: `${existing.content || ''}${delta}`,
+        provider: msgProvider,
+      };
+    } else {
+      updated = [
+        ...current,
+        {
+          id: streamId,
+          sessionId,
+          timestamp: new Date().toISOString(),
+          provider: msgProvider,
+          kind: 'thinking',
+          role: 'assistant',
+          content: delta,
+          subagentId,
+          isSubagentDetail: true,
+        },
+      ];
+    }
+    const nextMap = new Map(slot.subagentDetailMessages);
+    nextMap.set(subagentId, updated);
+    slot.subagentDetailMessages = nextMap;
+    notify(sessionId);
+  }, [getSlot, notify]);
+
+  const finalizeSubagentDetailThinking = useCallback((sessionId: string, subagentId: string) => {
+    const slot = storeRef.current.get(sessionId);
+    if (!slot) return;
+    const streamId = `__subagent_thinking_${sessionId}_${subagentId}`;
+    const current = slot.subagentDetailMessages.get(subagentId) ?? [];
+    const existingIndex = current.findIndex((message) => message.id === streamId);
+    if (existingIndex < 0) return;
+    const stream = current[existingIndex];
+    const updated = [...current];
+    updated[existingIndex] = {
+      ...stream,
+      id: `subagent_thinking_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    };
+    const nextMap = new Map(slot.subagentDetailMessages);
+    nextMap.set(subagentId, updated);
+    slot.subagentDetailMessages = nextMap;
+    notify(sessionId);
+  }, [notify]);
+
   const getSubagentDetailMessages = useCallback((
     sessionId: string,
     subagentId: string,
@@ -1006,6 +1067,8 @@ export function useSessionStore() {
     appendSubagentDetailMessage,
     updateSubagentDetailStreaming,
     finalizeSubagentDetailStreaming,
+    updateSubagentDetailThinking,
+    finalizeSubagentDetailThinking,
   }), [
     getSlot, has, fetchFromServer, fetchMore,
     appendRealtime, upsertActivity, setActivities, appendRealtimeBatch, refreshFromServer,
@@ -1013,7 +1076,7 @@ export function useSessionStore() {
     updateStreamingThinking, finalizeStreamingThinking,
     clearRealtime, getMessages, getActivityMessages, getSubagentDetailMessages, getSessionSlot,
     recordSubagentLink, appendSubagentDetailMessage, updateSubagentDetailStreaming,
-    finalizeSubagentDetailStreaming,
+    finalizeSubagentDetailStreaming, updateSubagentDetailThinking, finalizeSubagentDetailThinking,
   ]);
 }
 

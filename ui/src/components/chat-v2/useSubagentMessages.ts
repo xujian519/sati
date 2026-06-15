@@ -17,10 +17,17 @@ function isPilotDeckForkDirective(message: ChatMessage): boolean {
 
 function filterSubagentDetailMessages(messages: ChatMessage[]): ChatMessage[] {
   return messages.filter((message) =>
-    !message.isThinking &&
-    !message.isSubagentContainer &&
     !isPilotDeckForkDirective(message)
   );
+}
+
+function normalizeSubagentDetailContainers(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((message) => {
+    if (message.isSubagentContainer && !message.subagentId) {
+      return { ...message, isSubagentContainer: false, subagentState: undefined };
+    }
+    return message;
+  });
 }
 
 function mergeSubagentDetailMessages(
@@ -59,7 +66,9 @@ export function useSubagentMessages(
   const useSnapshotOnly = refreshKey === 'completed' || refreshKey === 'failed';
   const messages = useMemo(() => {
     const normalized = mergeSubagentDetailMessages(snapshotMessages, realtimeMessages, useSnapshotOnly);
-    return filterSubagentDetailMessages(normalizedToChatMessages(normalized));
+    return normalizeSubagentDetailContainers(
+      filterSubagentDetailMessages(normalizedToChatMessages(normalized)),
+    );
   }, [snapshotMessages, realtimeMessages, useSnapshotOnly]);
 
   useEffect(() => {
