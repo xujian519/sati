@@ -47,7 +47,9 @@
   "working": {
     "default": "处理中",
     "processing": "处理中",
-    "thinking": "思考中",
+    "thinking": "连接中...",
+    "callingModel": "调用模型中...",
+    "executingTool": "执行工具中...",
     "generating": "正在生成回复",
     "compacting": "正在压缩上下文...",
     "compactingLevel": "正在触发 {{level}} 级压缩：{{label}}",
@@ -142,6 +144,7 @@
   },
   "thinking": {
     "title": "思考中...",
+    "completed": "思考过程",
     "emoji": "💭 思考中..."
   },
   "json": {
@@ -342,29 +345,29 @@
   },
   "pilotdeckStatus": {
     "actions": {
-      "thinking": "Thinking",
-      "processing": "Processing",
-      "analyzing": "Analyzing",
-      "working": "Working",
-      "computing": "Computing",
-      "reasoning": "Reasoning"
+      "thinking": "思考中",
+      "processing": "处理中",
+      "analyzing": "分析中",
+      "working": "工作中",
+      "computing": "计算中",
+      "reasoning": "推理中"
     },
     "state": {
-      "live": "Live",
-      "paused": "Paused"
+      "live": "运行中",
+      "paused": "已暂停"
     },
     "elapsed": {
       "seconds": "{{count}}s",
       "minutesSeconds": "{{minutes}}m {{seconds}}s",
-      "label": "{{time}} elapsed",
-      "startingNow": "Starting now"
+      "label": "已用时 {{time}}",
+      "startingNow": "刚刚开始"
     },
     "controls": {
-      "stopGeneration": "Stop Generation",
-      "pressEscToStop": "Press Esc anytime to stop"
+      "stopGeneration": "停止生成",
+      "pressEscToStop": "随时按 Esc 键停止"
     },
     "providers": {
-      "assistant": "Assistant"
+      "assistant": "助手"
     }
   },
   "projectSelection": {

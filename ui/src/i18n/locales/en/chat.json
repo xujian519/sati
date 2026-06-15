@@ -47,7 +47,9 @@
   "working": {
     "default": "Working",
     "processing": "Processing",
-    "thinking": "Thinking",
+    "thinking": "Connecting...",
+    "callingModel": "Calling model...",
+    "executingTool": "Running tool...",
     "generating": "Generating response",
     "compacting": "Compacting context...",
     "compactingLevel": "Triggering level {{level}} compaction: {{label}}",
@@ -142,6 +144,7 @@
   },
   "thinking": {
     "title": "Thinking...",
+    "completed": "Thought process",
     "emoji": "💭 Thinking..."
   },
   "json": {
