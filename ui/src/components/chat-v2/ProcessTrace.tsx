@@ -313,7 +313,7 @@ export function ProcessTrace({
 
 export function StreamingThinkingPreview({
   content,
-  maxLines = 5,
+  maxLines = 10,
 }: {
   content: string;
   maxLines?: number;
@@ -324,7 +324,7 @@ export function StreamingThinkingPreview({
 
   return (
     <div
-      className="relative mt-1 overflow-hidden rounded-md bg-neutral-50 px-3 py-2 font-mono text-xs leading-relaxed text-neutral-500 dark:bg-neutral-800/50 dark:text-neutral-400"
+      className="relative mt-1 overflow-hidden px-3 py-2 font-mono text-xs leading-relaxed text-neutral-500 dark:text-neutral-400"
       style={
         hasOverflow
           ? {
