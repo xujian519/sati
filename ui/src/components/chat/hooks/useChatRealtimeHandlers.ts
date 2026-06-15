@@ -127,6 +127,7 @@ export function useChatRealtimeHandlers({
   onSessionInactive,
   onSessionProcessing,
   onSessionNotProcessing,
+  selectedProject,
   onReplaceTemporarySession,
   onNavigateToSession,
   onWebSocketReconnect,
@@ -331,6 +332,11 @@ export function useChatRealtimeHandlers({
     if (msg.kind === 'stream_delta') {
       const text = msg.content || '';
       if (!text) return;
+      // Content starting means thinking is done
+      if (thinkingBySessionRef.current.has(sid)) {
+        thinkingBySessionRef.current.delete(sid);
+        sessionStore.finalizeStreamingThinking(sid);
+      }
       const slot = sessionStore.getSessionSlot?.(sid);
       const streamId = `__streaming_${sid}`;
       const existing = slot?.realtimeMessages.find((m: any) => m.id === streamId);
@@ -375,9 +381,13 @@ export function useChatRealtimeHandlers({
         thinkingBySessionRef.current.delete(sid);
         sessionStore.finalizeStreamingThinking(sid);
       }
-      // Finalize streams on complete/error
-      if (msg.kind === 'complete' || msg.kind === 'error') {
+      // Finalize content stream on tool_use / complete / error.
+      // The gateway may not send stream_end, so tool_use is the
+      // reliable signal that the text block has ended.
+      if (msg.kind === 'tool_use' || msg.kind === 'complete' || msg.kind === 'error') {
         sessionStore.finalizeStreaming(sid);
+      }
+      if (msg.kind === 'complete' || msg.kind === 'error') {
         sessionStore.finalizeStreamingThinking(sid);
       }
     }
@@ -452,7 +462,7 @@ export function useChatRealtimeHandlers({
           // stream created before tool_use). The server has the authoritative
           // copy with correct ordering. Retry if server hasn't committed yet.
           const doRefresh = (attempt: number) => {
-            sessionStore.refreshFromServer(sid, { provider }).then(() => {
+            sessionStore.refreshFromServer(sid, { provider, projectName: selectedProject?.name, projectPath: selectedProject?.fullPath || selectedProject?.path || '' }).then(() => {
               const slot = sessionStore.getSessionSlot?.(sid);
               if (slot && slot.serverMessages.length === 0 && attempt < 5) {
                 setTimeout(() => doRefresh(attempt + 1), 1500 * attempt);
@@ -499,7 +509,7 @@ export function useChatRealtimeHandlers({
         if (sid) {
           onSessionInactive?.(sid);
           onSessionNotProcessing?.(sid);
-          sessionStore.refreshFromServer(sid, { provider });
+          sessionStore.refreshFromServer(sid, { provider, projectName: selectedProject?.name, projectPath: selectedProject?.fullPath || selectedProject?.path || '' });
         }
         break;
       }
@@ -594,6 +604,7 @@ export function useChatRealtimeHandlers({
     onReplaceTemporarySession,
     onNavigateToSession,
     onWebSocketReconnect,
+    selectedProject,
     sessionStore,
   ]);
 
