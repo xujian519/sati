@@ -15,6 +15,7 @@ import { Markdown } from '../chat/view/subcomponents/Markdown';
 import { formatUsageLimitText } from '../chat/utils/chatFormatting';
 import { ProcessTrace } from './ProcessTrace';
 import { processSummaryToTrace, type ProcessAttachment } from './processGrouping';
+import SubagentCard from './SubagentCard';
 
 type DiffLine = { type: string; content: string; lineNum: number };
 
@@ -75,6 +76,8 @@ type MessageRowV2Props = {
   showThinking?: boolean;
   isProcessExpanded?: (processKey: string, defaultExpanded?: boolean) => boolean;
   onProcessExpandedChange?: (processKey: string, expanded: boolean) => void;
+  onOpenSubagentDetail?: (subagentId: string) => void;
+  subagentActivityById?: Map<string, ChatMessage>;
 };
 
 // Fall back to the heavy legacy renderer for anything that isn't a vanilla
@@ -82,9 +85,9 @@ type MessageRowV2Props = {
 // prompts, task notifications, subagent containers, etc. live there and we
 // don't want to re-implement them all.
 const shouldDelegate = (message: ChatMessage): boolean => {
+  if (message.isSubagentContainer) return false;
   if (message.isToolUse) return true;
   if (message.isInteractivePrompt) return true;
-  if (message.isSubagentContainer) return true;
   if (message.isTaskNotification) return true;
   const t = message.type;
   if (t !== 'user' && t !== 'assistant' && t !== 'error') return true;
@@ -108,6 +111,8 @@ function MessageRowV2({
   showThinking,
   isProcessExpanded,
   onProcessExpandedChange,
+  onOpenSubagentDetail,
+  subagentActivityById,
 }: MessageRowV2Props) {
   const { t } = useTranslation('chat');
   const delegate = useMemo(() => shouldDelegate(message), [message]);
@@ -163,6 +168,8 @@ function MessageRowV2({
           showThinking={showThinking}
           isProcessExpanded={isProcessExpanded}
           onProcessExpandedChange={onProcessExpandedChange}
+          onOpenSubagentDetail={onOpenSubagentDetail}
+          subagentActivityById={subagentActivityById}
         />
       )}
       isProcessExpanded={isProcessExpanded}
@@ -184,6 +191,14 @@ function MessageRowV2({
       </div>
     );
   };
+
+  if (message.isSubagentContainer) {
+    const subagentId = typeof message.subagentId === 'string' ? message.subagentId : '';
+    const liveActivity = subagentId ? subagentActivityById?.get(subagentId) : undefined;
+    return withProcessRows(
+      <SubagentCard message={message} liveActivity={liveActivity} onOpenDetail={onOpenSubagentDetail} />,
+    );
+  }
 
   if (delegate) {
     return withProcessRows(

@@ -335,12 +335,14 @@ export function isProcessMessage(message: ChatMessage): boolean {
   if (message.type === 'user' || message.type === 'error') {
     return false;
   }
+  if (message.isSubagentContainer) {
+    return false;
+  }
   if (message.isInteractivePrompt || isUserVisibleTool(message) || isPermissionToolError(message)) {
     return false;
   }
   return Boolean(
     message.isToolUse ||
-      message.isSubagentContainer ||
       message.isTaskNotification ||
       message.isCompactBoundary ||
       message.isThinking ||

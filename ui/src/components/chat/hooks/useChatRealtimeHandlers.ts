@@ -298,6 +298,11 @@ export function useChatRealtimeHandlers({
       return;
     }
 
+    if (msg.kind === 'subagent_link') {
+      sessionStore.recordSubagentLink?.(sid, msg as NormalizedMessage);
+      return;
+    }
+
     // --- Streaming: buffer for performance ---
     if (msg.kind === 'stream_delta') {
       const text = msg.content || '';

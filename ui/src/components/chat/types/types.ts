@@ -74,6 +74,7 @@ export interface ChatMessage {
   outputFile?: string;
   taskResult?: string;
   isSubagentContainer?: boolean;
+  subagentId?: string;
   isTaskNotification?: boolean;
   isInterruptedNotice?: boolean;
   isAgentActivity?: boolean;

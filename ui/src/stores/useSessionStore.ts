@@ -142,6 +142,8 @@ export interface SessionSlot {
   serverMessages: NormalizedMessage[];
   realtimeMessages: NormalizedMessage[];
   activityMessages: NormalizedMessage[];
+  /** toolCallId → { subagentId, subagentType } links from bridge subagent_link frames */
+  subagentLinks: Map<string, { subagentId: string; subagentType: string }>;
   merged: NormalizedMessage[];
   /** @internal Cache-invalidation refs for computeMerged */
   _lastServerRef: NormalizedMessage[];
@@ -162,6 +164,7 @@ function createEmptySlot(): SessionSlot {
     serverMessages: EMPTY,
     realtimeMessages: EMPTY,
     activityMessages: EMPTY,
+    subagentLinks: new Map(),
     merged: EMPTY,
     _lastServerRef: EMPTY,
     _lastRealtimeRef: EMPTY,
@@ -626,6 +629,19 @@ export function useSessionStore() {
     notify(sessionId);
   }, [getSlot, notify]);
 
+  const recordSubagentLink = useCallback((sessionId: string, msg: NormalizedMessage) => {
+    const slot = getSlot(sessionId);
+    const toolCallId = (msg as Record<string, unknown>).toolCallId as string | undefined;
+    const subagentId = (msg as Record<string, unknown>).subagentId as string | undefined;
+    const subagentType = (msg as Record<string, unknown>).subagentType as string | undefined;
+    if (toolCallId && subagentId) {
+      const nextLinks = new Map(slot.subagentLinks);
+      nextLinks.set(toolCallId, { subagentId, subagentType: subagentType || 'agent' });
+      slot.subagentLinks = nextLinks;
+      notify(sessionId);
+    }
+  }, [getSlot, notify]);
+
   const setActivities = useCallback((sessionId: string, msgs: NormalizedMessage[]) => {
     const slot = getSlot(sessionId);
     const byKey = new Map<string, NormalizedMessage>();
@@ -897,12 +913,13 @@ export function useSessionStore() {
     getMessages,
     getActivityMessages,
     getSessionSlot,
+    recordSubagentLink,
   }), [
     getSlot, has, fetchFromServer, fetchMore,
     appendRealtime, upsertActivity, setActivities, appendRealtimeBatch, refreshFromServer,
     setActiveSession, setStatus, isStale, updateStreaming, finalizeStreaming,
     updateStreamingThinking, finalizeStreamingThinking,
-    clearRealtime, getMessages, getActivityMessages, getSessionSlot,
+    clearRealtime, getMessages, getActivityMessages, getSessionSlot, recordSubagentLink,
   ]);
 }
 

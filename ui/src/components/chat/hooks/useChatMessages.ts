@@ -8,7 +8,10 @@ import type { ChatMessage, SubagentChildTool } from '../types/types';
 import { decodeHtmlEntities, unescapeWithMathProtection, formatUsageLimitText } from '../utils/chatFormatting';
 import { parseUserAttachmentNote } from '../utils/attachmentNotes';
 
-function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[] {
+function convertNormalizedMessages(
+  messages: NormalizedMessage[],
+  subagentLinks?: Map<string, { subagentId: string; subagentType: string }>,
+): ChatMessage[] {
   const converted: ChatMessage[] = [];
 
   // First pass: collect tool results for attachment
@@ -111,6 +114,11 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
             }
           : null;
 
+        const subagentLink = isSubagentContainer && msg.toolId
+          ? subagentLinks?.get(msg.toolId)
+          : undefined;
+        const msgSubagentId = (msg as Record<string, unknown>).subagentId as string | undefined;
+
         converted.push({
           id: msg.id,
           type: 'assistant',
@@ -122,6 +130,7 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
           toolId: msg.toolId,
           toolResult,
           isSubagentContainer,
+          subagentId: subagentLink?.subagentId || msgSubagentId,
           subagentState: isSubagentContainer
             ? {
                 childTools,
@@ -292,6 +301,9 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
  * that the existing UI components expect.
  *
  */
-export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMessage[] {
-  return convertNormalizedMessages(messages);
+export function normalizedToChatMessages(
+  messages: NormalizedMessage[],
+  subagentLinks?: Map<string, { subagentId: string; subagentType: string }>,
+): ChatMessage[] {
+  return convertNormalizedMessages(messages, subagentLinks);
 }

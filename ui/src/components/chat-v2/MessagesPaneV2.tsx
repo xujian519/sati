@@ -13,6 +13,8 @@ import type {
 import { isBackgroundTaskSession, type Project, type ProjectSession, type SessionProvider } from '../../types/app';
 import { getIntrinsicMessageKey } from '../chat/utils/messageKeys';
 import MessageRowV2 from './MessageRowV2';
+import SubagentDetailModal from './SubagentDetailModal';
+import { useSubagentMessages } from './useSubagentMessages';
 import { ProcessLiveStatus, ProcessRunHeader, StreamingThinkingPreview, type ProcessTraceStep } from './ProcessTrace';
 import { formatProcessDuration } from './processTraceUtils';
 import {
@@ -247,6 +249,19 @@ export default function MessagesPaneV2({
   const [heightVersion, setHeightVersion] = useState(0);
   const [scrollViewport, setScrollViewport] = useState({ scrollTop: 0, height: 0 });
   const [expandedProcessRows, setExpandedProcessRows] = useState<Map<string, boolean>>(() => new Map());
+  const [openSubagentId, setOpenSubagentId] = useState<string | null>(null);
+
+  const handleOpenSubagentDetail = useCallback((subagentId: string) => {
+    setOpenSubagentId(subagentId);
+  }, []);
+
+  const sessionId = selectedSession?.id ?? null;
+  const projectPath = selectedProject?.fullPath ?? undefined;
+  const subagentDetail = useSubagentMessages(
+    openSubagentId ? sessionId : null,
+    openSubagentId,
+    projectPath,
+  );
 
   const getMessageKey = useCallback((message: ChatMessage, index: number) => {
     const existingKey = messageKeyMapRef.current.get(message);
@@ -300,6 +315,27 @@ export default function MessagesPaneV2({
     () => activityMessages.filter((message) => message.isAgentActivity),
     [activityMessages],
   );
+  const subagentActivities = useMemo(
+    () => liveActivities.filter(isSubagentActivity),
+    [liveActivities],
+  );
+  const nonSubagentLiveActivities = useMemo(
+    () => liveActivities.filter((activity) => !isSubagentActivity(activity)),
+    [liveActivities],
+  );
+  const subagentActivityById = useMemo(() => {
+    const byId = new Map<string, ChatMessage>();
+    for (const activity of subagentActivities) {
+      const rawId = activity.activityId || activity.runId || '';
+      const subagentId = rawId.startsWith('subagent:')
+        ? rawId.slice('subagent:'.length)
+        : '';
+      if (subagentId) {
+        byId.set(subagentId, activity);
+      }
+    }
+    return byId;
+  }, [subagentActivities]);
   const renderableMessages = useMemo(
     () => visibleMessages.filter((message) =>
       !message.isAgentActivity &&
@@ -397,8 +433,8 @@ export default function MessagesPaneV2({
     ));
   }, [isAssistantWorking, keyedMessageItems, liveProcessHeaderIndex]);
   const liveStatusStep = useMemo(
-    () => getLiveStatusStep(liveActivities, workingStatus, hasLiveAssistantContent, t),
-    [hasLiveAssistantContent, liveActivities, t, workingStatus],
+    () => getLiveStatusStep(nonSubagentLiveActivities, workingStatus, hasLiveAssistantContent, t),
+    [hasLiveAssistantContent, nonSubagentLiveActivities, t, workingStatus],
   );
   const hasOpenEndedLiveProcessGroup = liveProcessGroups.some((group) => group.isRunning);
   const shouldRenderBottomLiveStatus = isAssistantWorking && !hasOpenEndedLiveProcessGroup;
@@ -511,17 +547,21 @@ export default function MessagesPaneV2({
         showThinking={showThinking}
         isProcessExpanded={isProcessExpanded}
         onProcessExpandedChange={handleProcessExpandedChange}
+        onOpenSubagentDetail={handleOpenSubagentDetail}
+        subagentActivityById={subagentActivityById}
       />
     ))
   ), [
     autoExpandTools,
     createDiff,
     getMessageKey,
+    handleOpenSubagentDetail,
     onFileOpen,
     onGrantSessionToolPermission,
     onShowSettings,
     provider,
     selectedProject,
+    subagentActivityById,
     isProcessExpanded,
     handleProcessExpandedChange,
     showRawParameters,
@@ -567,7 +607,7 @@ export default function MessagesPaneV2({
       <Fragment key={item.itemKey}>
         {liveProcessHeaderIndex === 0 && item.renderIndex === 0 ? (
           <LiveProcessHeader
-            activities={liveActivities}
+            activities={nonSubagentLiveActivities}
             startedAtMs={liveProcessStartedAtMs}
             t={t}
           />
@@ -602,10 +642,12 @@ export default function MessagesPaneV2({
             showThinking={showThinking}
             isProcessExpanded={isProcessExpanded}
             onProcessExpandedChange={handleProcessExpandedChange}
+            onOpenSubagentDetail={handleOpenSubagentDetail}
+            subagentActivityById={subagentActivityById}
           />
           {rendersLiveHeaderAfterItem ? (
             <LiveProcessHeader
-              activities={liveActivities}
+              activities={nonSubagentLiveActivities}
               startedAtMs={liveProcessStartedAtMs}
               t={t}
             />
@@ -628,11 +670,12 @@ export default function MessagesPaneV2({
     autoExpandTools,
     createDiff,
     handleMeasuredItemHeight,
+    handleOpenSubagentDetail,
     handleProcessExpandedChange,
     isProcessExpanded,
     isAssistantWorking,
     keyedMessageItems,
-    liveActivities,
+    nonSubagentLiveActivities,
     liveProcessHeaderIndex,
     liveProcessStartedAtMs,
     liveProcessGroupsByAnchor,
@@ -644,6 +687,7 @@ export default function MessagesPaneV2({
     selectedProject,
     showRawParameters,
     showThinking,
+    subagentActivityById,
     t,
   ]);
 
@@ -790,7 +834,7 @@ export default function MessagesPaneV2({
           liveProcessHeaderIndex === keyedMessageItems.length &&
           keyedMessageItems[liveProcessHeaderIndex - 1]?.message.type !== 'user' ? (
             <LiveProcessHeader
-              activities={liveActivities}
+              activities={nonSubagentLiveActivities}
               startedAtMs={liveProcessStartedAtMs}
               t={t}
             />
@@ -810,8 +854,27 @@ export default function MessagesPaneV2({
           ) : null}
         </div>
       )}
+
+      {openSubagentId ? (
+        <SubagentDetailModal
+          subagentId={openSubagentId}
+          messages={subagentDetail.messages}
+          isLoading={subagentDetail.isLoading}
+          error={subagentDetail.error}
+          provider={provider}
+          selectedProject={selectedProject}
+          createDiff={createDiff}
+          onFileOpen={onFileOpen}
+          onClose={() => setOpenSubagentId(null)}
+        />
+      ) : null}
     </div>
   );
+}
+
+function isSubagentActivity(activity: ChatMessage): boolean {
+  const activityId = String(activity.activityId || activity.runId || '');
+  return activity.phase === 'subagent' || activityId.startsWith('subagent:');
 }
 
 function getLatestActivity(activities: ChatMessage[]): ChatMessage | null {
