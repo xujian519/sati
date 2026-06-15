@@ -47,11 +47,12 @@
   "working": {
     "default": "Working",
     "processing": "Processing",
-    "thinking": "Thinking",
+    "thinking": "thinking",
     "generating": "Generating response",
     "compacting": "Compacting context...",
     "compactingLevel": "Triggering level {{level}} compaction: {{label}}",
-    "waitingForPermission": "Waiting for permission"
+    "waitingForPermission": "Waiting for permission",
+    "waitingForSubagent": "Waiting for subagent"
   },
   "process": {
     "summary": {
@@ -141,8 +142,8 @@
     "instructionDetail": "In the CLI, you would select this option interactively using arrow keys or by typing the number."
   },
   "thinking": {
-    "title": "Thinking...",
-    "emoji": "💭 Thinking..."
+    "title": "Thoughts",
+    "emoji": "💭 Thoughts"
   },
   "json": {
     "response": "JSON Response"

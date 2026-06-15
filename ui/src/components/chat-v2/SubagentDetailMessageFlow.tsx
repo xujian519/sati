@@ -74,7 +74,7 @@ export default function SubagentDetailMessageFlow({
   }, [isRunning, messages, showThinking]);
   const thinkingStatusStep = useMemo<ProcessTraceStep>(() => ({
     id: 'subagent-detail-thinking',
-    title: t('working.thinking', { defaultValue: 'Thinking' }),
+    title: t('working.thinking', { defaultValue: 'thinking' }),
     phase: 'thinking',
     state: 'running',
   }), [t]);

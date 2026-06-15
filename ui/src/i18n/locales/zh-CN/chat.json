@@ -51,7 +51,8 @@
     "generating": "正在生成回复",
     "compacting": "正在压缩上下文...",
     "compactingLevel": "正在触发 {{level}} 级压缩：{{label}}",
-    "waitingForPermission": "等待授权"
+    "waitingForPermission": "等待授权",
+    "waitingForSubagent": "等待子任务完成"
   },
   "process": {
     "summary": {
@@ -141,8 +142,8 @@
     "instructionDetail": "在 CLI 中，您可以使用方向键或输入数字来交互式地选择此选项。"
   },
   "thinking": {
-    "title": "思考中...",
-    "emoji": "💭 思考中..."
+    "title": "思考过程",
+    "emoji": "💭 思考过程"
   },
   "json": {
     "response": "JSON 响应"

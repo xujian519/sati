@@ -325,7 +325,7 @@ function MessageRowV2({
         <details className="group">
           <summary className="flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-medium text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
             <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" strokeWidth={2} />
-            <span>{t('thinking.title', { defaultValue: 'Thinking...' })}</span>
+            <span>{t('thinking.title', { defaultValue: 'Thoughts' })}</span>
           </summary>
           <div className="mt-1.5 border-l-2 border-neutral-300 pl-3 text-[13px] text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
             <Markdown projectName={selectedProject?.name}>{formattedContent}</Markdown>

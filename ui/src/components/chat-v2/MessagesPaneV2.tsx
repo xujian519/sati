@@ -449,14 +449,12 @@ export default function MessagesPaneV2({
       item.message.content.trim().length > 0
     ));
   }, [isAssistantWorking, keyedMessageItems, liveProcessHeaderIndex]);
-  const liveStatusStep = useMemo(
-    () => getLiveStatusStep(nonSubagentLiveActivities, workingStatus, hasLiveAssistantContent, t),
-    [hasLiveAssistantContent, nonSubagentLiveActivities, t, workingStatus],
+  const runningSubagentActivity = useMemo(
+    () => [...subagentActivities].reverse().find(isRunningActivity) || null,
+    [subagentActivities],
   );
-  const hasOpenEndedLiveProcessGroup = liveProcessGroups.some((group) => group.isRunning);
-  const shouldRenderBottomLiveStatus = isAssistantWorking && !hasOpenEndedLiveProcessGroup;
   const streamingThinkingContent = useMemo(() => {
-    if (!showThinking || !isAssistantWorking || liveStatusStep.phase !== 'thinking') {
+    if (!showThinking || !isAssistantWorking) {
       return null;
     }
     for (let i = visibleMessages.length - 1; i >= 0; i--) {
@@ -467,7 +465,36 @@ export default function MessagesPaneV2({
       if (msg.type === 'user') break;
     }
     return null;
-  }, [showThinking, isAssistantWorking, liveStatusStep.phase, visibleMessages]);
+  }, [showThinking, isAssistantWorking, visibleMessages]);
+  const liveStatusStep = useMemo<ProcessTraceStep>(() => {
+    if (streamingThinkingContent) {
+      return {
+        id: 'live-thinking',
+        title: t('working.thinking', { defaultValue: 'thinking' }),
+        phase: 'thinking',
+        state: 'running',
+      };
+    }
+    if (runningSubagentActivity) {
+      return {
+        id: runningSubagentActivity.activityId || runningSubagentActivity.id || 'live-subagent-waiting',
+        title: t('working.waitingForSubagent', { defaultValue: 'Waiting for subagent' }),
+        phase: 'subagent',
+        state: 'running',
+        toolName: 'agent',
+      };
+    }
+    return getLiveStatusStep(nonSubagentLiveActivities, workingStatus, hasLiveAssistantContent, t);
+  }, [
+    hasLiveAssistantContent,
+    nonSubagentLiveActivities,
+    runningSubagentActivity,
+    streamingThinkingContent,
+    t,
+    workingStatus,
+  ]);
+  const hasOpenEndedLiveProcessGroup = liveProcessGroups.some((group) => group.isRunning);
+  const shouldRenderBottomLiveStatus = isAssistantWorking && !hasOpenEndedLiveProcessGroup;
 
   const bumpHeightVersion = useCallback(() => {
     if (heightVersionRafRef.current !== null) return;
@@ -896,6 +923,10 @@ function isSubagentActivity(activity: ChatMessage): boolean {
   return activity.phase === 'subagent' || activityId.startsWith('subagent:');
 }
 
+function isRunningActivity(activity: ChatMessage): boolean {
+  return !['completed', 'failed', 'cancelled'].includes(String(activity.state || 'running'));
+}
+
 function getLatestActivity(activities: ChatMessage[]): ChatMessage | null {
   const byId = new Map<string, ChatMessage>();
   for (const activity of activities) {
@@ -968,7 +999,7 @@ function getLiveStatusStep(
       }
     : {
         id: 'live-thinking',
-        title: t('working.thinking', { defaultValue: 'Thinking' }),
+        title: t('working.thinking', { defaultValue: 'thinking' }),
         phase: 'thinking',
         state: 'running',
       };

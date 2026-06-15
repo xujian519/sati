@@ -1054,7 +1054,7 @@ export function getRunningProcessTitle(
     return t('working.compacting', { defaultValue: 'Compacting context...' });
   }
   if (kind === 'thinking') {
-    return t('working.thinking', { defaultValue: 'Thinking' });
+    return t('working.thinking', { defaultValue: 'thinking' });
   }
   return latestMessage.title || latestMessage.content || latestMessage.toolName || t('working.processing', { defaultValue: 'Processing' });
 }
