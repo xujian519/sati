@@ -273,7 +273,9 @@ function isLocalInterruptDuplicate(
  * Realtime messages that aren't yet in server stay (in-flight streaming).
  */
 function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[]): NormalizedMessage[] {
-  if (realtime.length === 0) return server;
+  if (realtime.length === 0) {
+    return server;
+  }
   if (server.length === 0) return realtime;
   const serverIds = new Set(server.map(m => m.id));
   const serverToolIds = new Set(
@@ -547,7 +549,6 @@ export function useSessionStore() {
           if (m.id.startsWith('__streaming_')) return true;
           if (serverIds.has(m.id)) return false;
           if (m.kind === 'tool_use' && m.toolId && serverToolIds.has(m.toolId)) return false;
-          if (m.kind === 'thinking') return true;
           return (Date.parse(m.timestamp) || 0) > watermark;
         });
       }
