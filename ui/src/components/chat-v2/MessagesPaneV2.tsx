@@ -16,11 +16,7 @@ import MessageRowV2 from './MessageRowV2';
 import { ProcessLiveStatus, ProcessRunHeader, type ProcessTraceStep } from './ProcessTrace';
 import { formatProcessDuration } from './processTraceUtils';
 import {
-  buildRenderableMessageItems,
-  getLiveProcessDetailMessages,
-  getLiveProcessGroups,
   getLiveProcessGroupStep,
-  shouldRenderLiveProcessGroup,
   type LiveProcessGroup,
   type RenderableMessageItem,
 } from './processGrouping';
@@ -313,19 +309,19 @@ export default function MessagesPaneV2({
     [activityMessages],
   );
   const renderableMessages = useMemo(
-    () => visibleMessages.filter((message) => !message.isAgentActivity),
+    () => {
+      const filtered = visibleMessages.filter((message) => !message.isAgentActivity);
+      return filtered;
+    },
     [visibleMessages],
   );
   const liveProcessDetailMessages = useMemo(
-    () => isAssistantWorking ? getLiveProcessDetailMessages(renderableMessages) : [],
-    [isAssistantWorking, renderableMessages],
+    () => [] as ChatMessage[],
+    [],
   );
   const liveProcessGroups = useMemo(
-    () => isAssistantWorking
-      ? getLiveProcessGroups(renderableMessages, { isAssistantWorking })
-        .filter((group) => shouldRenderLiveProcessGroup(group, runMode))
-      : [],
-    [isAssistantWorking, renderableMessages, runMode],
+    () => [] as LiveProcessGroup[],
+    [],
   );
   const liveProcessGroupsByAnchor = useMemo(() => {
     const groupsByAnchor = new Map<number, LiveProcessGroup[]>();
@@ -336,9 +332,18 @@ export default function MessagesPaneV2({
     }
     return groupsByAnchor;
   }, [liveProcessGroups]);
+  // Chronological mode: render ALL messages in original order without collapsing
+  // process messages (tool_use, thinking) into separate groups.
   const renderableMessageItems = useMemo(
-    () => buildRenderableMessageItems(renderableMessages, { isAssistantWorking }),
-    [isAssistantWorking, renderableMessages],
+    () => renderableMessages.map((message, index): RenderableMessageItem => ({
+      message,
+      originalIndex: index,
+      beforeRunAttachment: null,
+      afterRunAttachment: null,
+      beforeProcessAttachments: [],
+      afterProcessAttachments: [],
+    })),
+    [renderableMessages],
   );
   const keyedMessageItems = useMemo<KeyedRenderableMessageItem[]>(
     () => renderableMessageItems.map((item, index) => ({
@@ -405,9 +410,20 @@ export default function MessagesPaneV2({
       item.message.content.trim().length > 0
     ));
   }, [isAssistantWorking, keyedMessageItems, liveProcessHeaderIndex]);
+  const hasPendingToolUse = useMemo(() => {
+    if (!isAssistantWorking || liveProcessHeaderIndex < 0) return false;
+    const liveItems = keyedMessageItems.slice(liveProcessHeaderIndex);
+    const lastToolUseIdx = liveItems.findLastIndex((item) => item.message.isToolUse);
+    if (lastToolUseIdx < 0) return false;
+    const hasContentAfterTool = liveItems.slice(lastToolUseIdx + 1).some((item) =>
+      item.message.type === 'assistant' && !item.message.isThinking && !item.message.isToolUse &&
+      typeof item.message.content === 'string' && item.message.content.trim().length > 0
+    );
+    return !hasContentAfterTool;
+  }, [isAssistantWorking, keyedMessageItems, liveProcessHeaderIndex]);
   const liveStatusStep = useMemo(
-    () => getLiveStatusStep(liveActivities, workingStatus, hasLiveAssistantContent, t),
-    [hasLiveAssistantContent, liveActivities, t, workingStatus],
+    () => getLiveStatusStep(liveActivities, workingStatus, hasLiveAssistantContent, hasPendingToolUse, t),
+    [hasLiveAssistantContent, hasPendingToolUse, liveActivities, t, workingStatus],
   );
   const hasOpenEndedLiveProcessGroup = liveProcessGroups.some((group) => group.isRunning);
   const shouldRenderBottomLiveStatus = isAssistantWorking && !hasOpenEndedLiveProcessGroup;
@@ -556,7 +572,7 @@ export default function MessagesPaneV2({
       ? keyedMessageItems[item.renderIndex + 1].message
       : null;
     const isLast = !isAssistantWorking && item.renderIndex === keyedMessageItems.length - 1;
-    const anchoredLiveGroups = liveProcessGroupsByAnchor.get(item.originalIndex) || [];
+    const anchoredLiveGroups: LiveProcessGroup[] = [];
     const rendersLiveHeaderAfterItem = item.renderIndex === liveProcessHeaderIndex - 1;
 
     return (
@@ -631,7 +647,6 @@ export default function MessagesPaneV2({
     liveActivities,
     liveProcessHeaderIndex,
     liveProcessStartedAtMs,
-    liveProcessGroupsByAnchor,
     onFileOpen,
     onGrantSessionToolPermission,
     onShowSettings,
@@ -831,6 +846,7 @@ function getLiveStatusStep(
   activities: ChatMessage[],
   workingStatus: ClaudeWorkStatus | PilotDeckWorkStatus | null | undefined,
   hasAssistantContent: boolean,
+  hasPendingToolUse: boolean,
   t: (key: string, options?: Record<string, unknown>) => string,
 ): ProcessTraceStep {
   const latestActivity = getLatestActivity(activities);
@@ -850,6 +866,22 @@ function getLiveStatusStep(
   }
 
   const rawStatus = String(workingStatus?.text || '').toLowerCase();
+  if (rawStatus.includes('model_request_started')) {
+    if (hasPendingToolUse) {
+      return {
+        id: 'live-tool-exec',
+        title: t('working.executingTool', { defaultValue: 'Running tool...' }),
+        phase: 'tool',
+        state: 'running',
+      };
+    }
+    return {
+      id: 'live-model-call',
+      title: t('working.callingModel', { defaultValue: 'Calling model...' }),
+      phase: 'generation',
+      state: 'running',
+    };
+  }
   if (rawStatus.includes('permission')) {
     return {
       id: 'live-permission',
@@ -877,7 +909,7 @@ function getLiveStatusStep(
       }
     : {
         id: 'live-thinking',
-        title: t('working.thinking', { defaultValue: 'Thinking' }),
+        title: t('working.thinking', { defaultValue: 'Connecting...' }),
         phase: 'thinking',
         state: 'running',
       };

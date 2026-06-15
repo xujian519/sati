@@ -343,7 +343,7 @@ export function isProcessMessage(message: ChatMessage): boolean {
       message.isSubagentContainer ||
       message.isTaskNotification ||
       message.isCompactBoundary ||
-      message.isThinking ||
+      (message.isThinking && !message.isStreaming) ||
       message.type === 'tool',
   );
 }
@@ -375,6 +375,7 @@ function canHostProcessSummary(message: ChatMessage): boolean {
 }
 
 function isCollapsibleCompletedProcessMessage(message: ChatMessage): boolean {
+  if (message.isThinking) return false;
   return isProcessMessage(message);
 }
 
