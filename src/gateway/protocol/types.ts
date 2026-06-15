@@ -88,6 +88,7 @@ export type GatewaySubmitTurnInput = {
 
 export type GatewayEvent =
   | { type: "turn_started"; runId: string }
+  | { type: "model_request_started"; model?: string; provider?: string }
   | { type: "assistant_text_delta"; text: string }
   | { type: "assistant_thinking_delta"; text: string }
   | { type: "tool_call_started"; toolCallId: string; name: string; argsPreview?: string }

@@ -1042,6 +1042,8 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
   switch (event.type) {
     case "turn_started":
       return [{ type: "turn_started", runId }];
+    case "model_request_started":
+      return [{ type: "model_request_started", model: event.model, provider: event.provider }];
     case "model_event":
       return mapModelEvent(event.event);
     case "tool_calls_detected":
@@ -1055,7 +1057,6 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
       const fullText = event.result.content.map(contentToText).join("\n");
       const lines = fullText.split("\n");
       const lineCount = lines.length;
-      const preview = lines.slice(0, 5).join("\n");
       const totalBytes = Buffer.byteLength(fullText, "utf-8");
 
       const PERSIST_THRESHOLD = 4096;
@@ -1092,7 +1093,7 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
           type: "tool_call_finished",
           toolCallId: event.result.toolCallId,
           ok: event.result.type === "success",
-          resultPreview: preview,
+          resultPreview: fullText,
           resultLineCount: lineCount,
           resultBytes: totalBytes,
           toolName: event.result.toolName,

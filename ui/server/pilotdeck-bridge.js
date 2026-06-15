@@ -341,6 +341,16 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                     text: 'started',
                 }),
             ];
+        case 'model_request_started':
+            return [
+                createNormalizedMessage({
+                    ...base,
+                    kind: 'status',
+                    text: 'model_request_started',
+                    model: event.model,
+                    provider: event.provider,
+                }),
+            ];
         case 'assistant_text_delta':
             return [
                 createNormalizedMessage({

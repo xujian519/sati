@@ -1083,6 +1083,7 @@ class ProjectRuntimeRegistry {
       jsonSelfCorrect: true,
       subagentTimeoutMs: agent.subagents?.timeoutMs,
       maxContextTokens,
+      thinking: agent.thinking,
       permissionContext: createDefaultPermissionContext({
         cwd,
         mode: permissionMode,
