@@ -15,9 +15,18 @@ function isPilotDeckForkDirective(message: ChatMessage): boolean {
     message.content.includes('Directive:');
 }
 
+function isPilotDeckForkPlaceholder(message: ChatMessage): boolean {
+  const content = typeof message.content === 'string' ? message.content : '';
+  const toolResultContent = typeof message.toolResult?.content === 'string'
+    ? message.toolResult.content
+    : '';
+  return `${content}\n${toolResultContent}`.includes('<pilotdeck-fork-placeholder>');
+}
+
 function filterSubagentDetailMessages(messages: ChatMessage[]): ChatMessage[] {
   return messages.filter((message) =>
-    !isPilotDeckForkDirective(message)
+    !isPilotDeckForkDirective(message) &&
+    !isPilotDeckForkPlaceholder(message)
   );
 }
 

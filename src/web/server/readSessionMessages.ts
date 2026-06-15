@@ -165,11 +165,11 @@ export async function readSubagentWebMessages(
 
   const sidechainPath = resolve(dirname(parentTranscriptPath), sidechainRelative);
   const { entries } = await readTranscript(sidechainPath);
-  const webReplay = extractWebVisibleMessages(entries);
+  const webReplay = extractSubagentExecutionMessages(entries);
 
-  const allMessages: WebMessage[] = webReplay.messages
+  const flattenedPerMessage: WebMessage[][] = webReplay.messages
     .filter((message) => !message.metadata?.synthetic)
-    .flatMap((message, index) =>
+    .map((message, index) =>
       flattenCanonicalMessage(message, {
         index,
         sessionKey: `${input.sessionKey}::sub::${input.subagentId}`,
@@ -178,6 +178,35 @@ export async function readSubagentWebMessages(
         entryTimestamp: webReplay.timestamps[index],
       }),
     );
+  const cumulativeWebCounts: number[] = [];
+  let cumulative = 0;
+  for (const group of flattenedPerMessage) {
+    cumulative += group.length;
+    cumulativeWebCounts.push(cumulative);
+  }
+
+  const allMessages: WebMessage[] = flattenedPerMessage.flat();
+
+  for (const boundary of [...webReplay.compactBoundaries].reverse()) {
+    const insertPos =
+      boundary.insertAfterMessageIndex >= 0
+        ? (cumulativeWebCounts[boundary.insertAfterMessageIndex] ?? 0)
+        : 0;
+    const meta = boundary.metadata ?? {};
+    const compactMsg: WebMessage = {
+      id: `${input.sessionKey}::sub::${input.subagentId}-compact-${boundary.timestamp}`,
+      sessionKey: `${input.sessionKey}::sub::${input.subagentId}`,
+      projectKey: input.projectKey,
+      createdAt: boundary.timestamp,
+      provider: "pilotdeck",
+      role: "system",
+      kind: "compact_boundary",
+      text: "Context compacted",
+      payload: meta,
+      source: "history",
+    };
+    allMessages.splice(insertPos, 0, compactMsg);
+  }
 
   return { messages: allMessages, total: allMessages.length };
 }
@@ -507,6 +536,65 @@ function extractWebVisibleMessages(entries: AgentTranscriptEntry[]): {
         break;
       case "control_boundary": {
         if (!beforeBoundary && entry.boundary && entry.boundary.kind === "compact") {
+          const meta: Record<string, unknown> = {};
+          if (entry.boundary.subtype === "compact_boundary" && "compactMetadata" in entry.boundary) {
+            const cm = entry.boundary.compactMetadata as Record<string, unknown>;
+            meta.trigger = cm.trigger;
+            meta.preTokens = cm.preTokens;
+            meta.level = cm.level;
+            meta.stage = cm.stage;
+            meta.stageLabel = cm.stageLabel;
+          }
+          compactBoundaries.push({
+            insertAfterMessageIndex: messages.length - 1,
+            timestamp: entry.createdAt,
+            metadata: meta,
+          });
+        }
+        break;
+      }
+    }
+  }
+
+  return { messages, timestamps, compactBoundaries };
+}
+
+function extractSubagentExecutionMessages(entries: AgentTranscriptEntry[]): {
+  messages: CanonicalMessage[];
+  timestamps: string[];
+  compactBoundaries: CompactBoundaryInfo[];
+} {
+  const lastBoundaryIndex = findLastCompactBoundaryIndex(entries);
+  const messages: CanonicalMessage[] = [];
+  const timestamps: string[] = [];
+  const compactBoundaries: CompactBoundaryInfo[] = [];
+  let sawExecutionMessage = false;
+
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    const beforeBoundary = lastBoundaryIndex !== -1 && index < lastBoundaryIndex;
+
+    switch (entry.type) {
+      case "accepted_input":
+        // Sidechain accepted_input is the fork prelude: parent assistant
+        // context + fork directive. It is model input, not subagent output.
+        break;
+      case "assistant_message":
+      case "tool_result_message":
+      case "durable_message":
+        sawExecutionMessage = true;
+        if (!beforeBoundary) {
+          messages.push(cloneMessage(entry.message));
+          timestamps.push(entry.createdAt);
+        }
+        break;
+      case "control_boundary": {
+        if (
+          !beforeBoundary &&
+          sawExecutionMessage &&
+          entry.boundary &&
+          entry.boundary.kind === "compact"
+        ) {
           const meta: Record<string, unknown> = {};
           if (entry.boundary.subtype === "compact_boundary" && "compactMetadata" in entry.boundary) {
             const cm = entry.boundary.compactMetadata as Record<string, unknown>;
