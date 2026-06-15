@@ -255,6 +255,11 @@ function isLocalInterruptDuplicate(
   });
 }
 
+// NOTE: isLocalFinalizedDuplicate was removed because it prematurely filtered
+// finalized thinking/text messages when ANY server data existed (even from
+// prior turns). The refreshFromServer cleanup already removes non-streaming
+// realtime messages once the server commits the current turn's data.
+
 /**
  * Compute merged messages: server + realtime, deduped by id.
  * Server messages take priority (they're the persisted source of truth).
@@ -264,10 +269,17 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
   if (realtime.length === 0) return server;
   if (server.length === 0) return realtime;
   const serverIds = new Set(server.map(m => m.id));
+  const serverToolIds = new Set(
+    server.filter(m => m.kind === 'tool_use' && m.toolId).map(m => m.toolId!)
+  );
   const extra = realtime.filter((message) => {
     if (serverIds.has(message.id)) return false;
     if (isConfirmedUserMessageDuplicate(message, server)) return false;
     if (isLocalInterruptDuplicate(message, server)) return false;
+    // Dedup tool_use by toolId (invocation ID) — the message envelope ID
+    // may differ between WebSocket replay and server-persisted copy, but
+    // the underlying tool invocation is the same.
+    if (message.kind === 'tool_use' && message.toolId && serverToolIds.has(message.toolId)) return false;
     return true;
   });
   if (extra.length === 0) return server;
@@ -298,7 +310,8 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
     }
   }
 
-  return [...server, ...extra];
+  const result = [...server, ...extra];
+  return result;
 }
 
 function upsertRealtimeMessages(
@@ -365,6 +378,7 @@ export function patchMergedStreamingMessage(
     content,
     ...(msgProvider != null ? { provider: msgProvider } : {}),
   };
+  slot.merged = slot.merged.slice();
   return true;
 }
 
@@ -518,8 +532,15 @@ export function useSessionStore() {
           (max, m) => Math.max(max, Date.parse(m.timestamp) || 0), 0,
         );
         const watermark = Math.max(fetchStartedAt, latestServerTs);
+        const serverIds = new Set(messages.map(m => m.id));
+        const serverToolIds = new Set(
+          messages.filter(m => m.kind === 'tool_use' && m.toolId).map(m => m.toolId!)
+        );
         slot.realtimeMessages = slot.realtimeMessages.filter(m => {
           if (m.id.startsWith('__streaming_')) return true;
+          if (serverIds.has(m.id)) return false;
+          if (m.kind === 'tool_use' && m.toolId && serverToolIds.has(m.toolId)) return false;
+          if (m.kind === 'thinking') return true;
           return (Date.parse(m.timestamp) || 0) > watermark;
         });
       }
@@ -604,8 +625,14 @@ export function useSessionStore() {
       updated = updated.slice(-MAX_REALTIME_MESSAGES);
     }
     slot.realtimeMessages = updated;
-    recomputeMergedIfNeeded(slot);
-    notify(sessionId);
+    // Skip expensive merged recomputation and React re-render for message
+    // kinds that are invisible in the UI (they return null from conversion).
+    // The next visible message will trigger the recompute anyway.
+    const INVISIBLE_KINDS = new Set(['status', 'session_created', 'permission_cancelled', 'compact_boundary']);
+    if (!INVISIBLE_KINDS.has(msg.kind)) {
+      recomputeMergedIfNeeded(slot);
+      notify(sessionId);
+    }
   }, [getSlot, notify]);
 
   const upsertActivity = useCallback((sessionId: string, msg: NormalizedMessage) => {
@@ -687,12 +714,25 @@ export function useSessionStore() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
 
-      slot.serverMessages = data.messages || [];
+      const incomingMessages = data.messages || [];
+      // Don't overwrite existing server messages with empty response
+      // (race condition: server hasn't committed yet after stop/complete).
+      if (incomingMessages.length > 0 || slot.serverMessages.length === 0) {
+        slot.serverMessages = incomingMessages;
+      }
       slot.total = data.total ?? slot.serverMessages.length;
       slot.hasMore = Boolean(data.hasMore);
       slot.fetchedAt = Date.now();
-      // drop realtime messages that the server has caught up with to prevent unbounded growth.
-      slot.realtimeMessages = [];
+      // Server is authoritative — keep only active streaming messages in
+      // realtime (they have live content the server hasn't persisted yet).
+      // All other realtime messages are now redundant.
+      // BUT: only clean realtime if server actually returned data THIS time.
+      // If server returned empty (messages not committed yet), keep realtime intact.
+      if (slot.realtimeMessages.length > 0 && incomingMessages.length > 0) {
+        slot.realtimeMessages = slot.realtimeMessages.filter(m =>
+          m.id.startsWith('__streaming_')
+        );
+      }
       recomputeMergedIfNeeded(slot);
       notify(sessionId);
     } catch (error) {
@@ -733,10 +773,13 @@ export function useSessionStore() {
       if (existing.content === accumulatedText && existing.provider === msgProvider) {
         return;
       }
-      existing.content = accumulatedText;
-      existing.provider = msgProvider;
       if (!patchMergedStreamingMessage(slot, streamId, accumulatedText, msgProvider)) {
+        existing.content = accumulatedText;
+        existing.provider = msgProvider;
         forceRecomputeMerged(slot);
+      } else {
+        existing.content = accumulatedText;
+        existing.provider = msgProvider;
       }
       notify(sessionId);
       return;
@@ -802,10 +845,14 @@ export function useSessionStore() {
       if (existing.content === accumulatedText && existing.provider === msgProvider) {
         return;
       }
-      existing.content = accumulatedText;
-      existing.provider = msgProvider;
+      // FIX: patch merged BEFORE mutating existing (same fix as updateStreaming)
       if (!patchMergedStreamingMessage(slot, streamId, accumulatedText, msgProvider)) {
+        existing.content = accumulatedText;
+        existing.provider = msgProvider;
         forceRecomputeMerged(slot);
+      } else {
+        existing.content = accumulatedText;
+        existing.provider = msgProvider;
       }
       notify(sessionId);
       return;
