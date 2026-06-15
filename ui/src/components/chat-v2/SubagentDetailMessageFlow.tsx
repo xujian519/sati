@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { ChatMessage, ChatRunMode } from '../chat/types/types';
 import type { Project, SessionProvider } from '../../types/app';
 import MessageRowV2 from './MessageRowV2';
-import { ProcessLiveStatus } from './ProcessTrace';
+import { ProcessLiveStatus, StreamingThinkingPreview, type ProcessTraceStep } from './ProcessTrace';
 import {
   buildRenderableMessageItems,
   getLiveProcessGroups,
@@ -41,6 +41,10 @@ function getMessageKey(message: ChatMessage, index: number): string {
   );
 }
 
+function isStreamingSubagentThinkingMessage(message: ChatMessage): boolean {
+  return Boolean(message.isThinking && String(message.id || '').startsWith('__subagent_thinking_'));
+}
+
 export default function SubagentDetailMessageFlow({
   messages,
   provider,
@@ -54,9 +58,31 @@ export default function SubagentDetailMessageFlow({
   const { t } = useTranslation('chat');
   const [expandedProcessRows, setExpandedProcessRows] = useState<Map<string, boolean>>(() => new Map());
 
+  const streamingThinkingContent = useMemo(() => {
+    if (!showThinking || !isRunning) return null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (
+        isStreamingSubagentThinkingMessage(message) &&
+        typeof message.content === 'string' &&
+        message.content.trim()
+      ) {
+        return message.content;
+      }
+    }
+    return null;
+  }, [isRunning, messages, showThinking]);
+  const thinkingStatusStep = useMemo<ProcessTraceStep>(() => ({
+    id: 'subagent-detail-thinking',
+    title: t('working.thinking', { defaultValue: 'Thinking' }),
+    phase: 'thinking',
+    state: 'running',
+  }), [t]);
+
   const renderableMessages = useMemo(
     () => messages.filter((message) =>
       !message.isAgentActivity &&
+      !isStreamingSubagentThinkingMessage(message) &&
       !(message.isThinking && !showThinking)
     ),
     [messages, showThinking],
@@ -158,7 +184,11 @@ export default function SubagentDetailMessageFlow({
     t,
   ]);
 
-  if (keyedItems.length === 0 && unanchoredLiveProcessGroups.length === 0) {
+  if (
+    keyedItems.length === 0 &&
+    unanchoredLiveProcessGroups.length === 0 &&
+    !streamingThinkingContent
+  ) {
     return null;
   }
 
@@ -200,6 +230,12 @@ export default function SubagentDetailMessageFlow({
           </Fragment>
         );
       })}
+      {streamingThinkingContent ? (
+        <div className="flex min-w-0 flex-col">
+          <ProcessLiveStatus step={thinkingStatusStep} />
+          <StreamingThinkingPreview content={streamingThinkingContent} />
+        </div>
+      ) : null}
     </div>
   );
 }

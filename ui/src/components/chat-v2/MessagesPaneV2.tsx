@@ -85,6 +85,10 @@ const MESSAGE_VIRTUALIZATION_THRESHOLD = 160;
 const MESSAGE_WINDOW_OVERSCAN = 12;
 const MESSAGE_GAP_PX = 16;
 
+function isStreamingThinkingMessage(message: ChatMessage): boolean {
+  return Boolean(message.isThinking && String(message.id || '').startsWith('__streaming_thinking_'));
+}
+
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -351,6 +355,7 @@ export default function MessagesPaneV2({
   const renderableMessages = useMemo(
     () => visibleMessages.filter((message) =>
       !message.isAgentActivity &&
+      !isStreamingThinkingMessage(message) &&
       !(message.isThinking && !showThinking)
     ),
     [visibleMessages, showThinking],
@@ -454,15 +459,15 @@ export default function MessagesPaneV2({
     if (!showThinking || !isAssistantWorking || liveStatusStep.phase !== 'thinking') {
       return null;
     }
-    for (let i = renderableMessages.length - 1; i >= 0; i--) {
-      const msg = renderableMessages[i];
-      if (msg.isThinking && typeof msg.content === 'string' && msg.content.trim()) {
+    for (let i = visibleMessages.length - 1; i >= 0; i--) {
+      const msg = visibleMessages[i];
+      if (isStreamingThinkingMessage(msg) && typeof msg.content === 'string' && msg.content.trim()) {
         return msg.content;
       }
       if (msg.type === 'user') break;
     }
     return null;
-  }, [showThinking, isAssistantWorking, liveStatusStep.phase, renderableMessages]);
+  }, [showThinking, isAssistantWorking, liveStatusStep.phase, visibleMessages]);
 
   const bumpHeightVersion = useCallback(() => {
     if (heightVersionRafRef.current !== null) return;
