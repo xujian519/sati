@@ -74,6 +74,7 @@ export interface ChatMessage {
   outputFile?: string;
   taskResult?: string;
   isSubagentContainer?: boolean;
+  subagentId?: string;
   isTaskNotification?: boolean;
   isInterruptedNotice?: boolean;
   isAgentActivity?: boolean;
@@ -212,6 +213,7 @@ export interface ChatInterfaceProps {
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
+  inlineThinking?: boolean;
   autoScrollToBottom?: boolean;
   sendByCtrlEnter?: boolean;
   externalMessageUpdate?: number;

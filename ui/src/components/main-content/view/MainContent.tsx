@@ -97,7 +97,7 @@ function MainContent({
 }: MainContentProps) {
   const { i18n } = useTranslation();
   const { preferences } = useUiPreferences();
-  const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter } = preferences;
+  const { autoExpandTools, showRawParameters, showThinking, inlineThinking, autoScrollToBottom, sendByCtrlEnter } = preferences;
 
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
@@ -372,6 +372,7 @@ function MainContent({
           autoExpandTools={autoExpandTools}
           showRawParameters={showRawParameters}
           showThinking={showThinking}
+          inlineThinking={inlineThinking}
           autoScrollToBottom={autoScrollToBottom}
           sendByCtrlEnter={sendByCtrlEnter}
           applyAndLaunchCycle={applyAndLaunchCycle}
@@ -447,6 +448,7 @@ type SplitBodyProps = {
   autoExpandTools: any;
   showRawParameters: any;
   showThinking: any;
+  inlineThinking: any;
   autoScrollToBottom: any;
   sendByCtrlEnter: any;
   applyAndLaunchCycle: (projectName: string, cycleId: string) => Promise<void>;
@@ -485,6 +487,7 @@ function SplitBody(props: SplitBodyProps) {
     autoExpandTools,
     showRawParameters,
     showThinking,
+    inlineThinking,
     autoScrollToBottom,
     sendByCtrlEnter,
     applyAndLaunchCycle,
@@ -679,6 +682,7 @@ function SplitBody(props: SplitBodyProps) {
             autoExpandTools={autoExpandTools}
             showRawParameters={showRawParameters}
             showThinking={showThinking}
+            inlineThinking={inlineThinking}
             autoScrollToBottom={autoScrollToBottom}
             sendByCtrlEnter={sendByCtrlEnter}
             externalMessageUpdate={externalMessageUpdate}

@@ -18,6 +18,7 @@ const msgConversionCache = new WeakMap<NormalizedMessage, ChatMessage | null>();
 function convertSingleMessage(
   msg: NormalizedMessage,
   toolResultMap: Map<string, NormalizedMessage>,
+  subagentLinks?: Map<string, { subagentId: string; subagentType: string }>,
 ): ChatMessage | null {
   switch (msg.kind) {
     case 'text': {
@@ -103,6 +104,11 @@ function convertSingleMessage(
           }
         : null;
 
+      const subagentLink = isSubagentContainer && msg.toolId
+        ? subagentLinks?.get(msg.toolId)
+        : undefined;
+      const msgSubagentId = (msg as Record<string, unknown>).subagentId as string | undefined;
+
       return {
         id: msg.id,
         type: 'assistant',
@@ -114,6 +120,7 @@ function convertSingleMessage(
         toolId: msg.toolId,
         toolResult,
         isSubagentContainer,
+        subagentId: subagentLink?.subagentId || msgSubagentId,
         subagentState: isSubagentContainer
           ? {
               childTools,
@@ -263,7 +270,10 @@ function convertSingleMessage(
   }
 }
 
-function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[] {
+function convertNormalizedMessages(
+  messages: NormalizedMessage[],
+  subagentLinks?: Map<string, { subagentId: string; subagentType: string }>,
+): ChatMessage[] {
   const converted: ChatMessage[] = [];
 
   // First pass: collect tool results for attachment to tool_use messages
@@ -275,9 +285,9 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
   }
 
   for (const msg of messages) {
-    // tool_use messages depend on toolResultMap (external state) so skip cache
+    // tool_use messages depend on toolResultMap + subagentLinks (external state) so skip cache
     if (msg.kind === 'tool_use') {
-      const result = convertSingleMessage(msg, toolResultMap);
+      const result = convertSingleMessage(msg, toolResultMap, subagentLinks);
       if (result) converted.push(result);
       continue;
     }
@@ -301,6 +311,9 @@ function convertNormalizedMessages(messages: NormalizedMessage[]): ChatMessage[]
  * Convert NormalizedMessage[] from the session store into ChatMessage[]
  * that the existing UI components expect.
  */
-export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMessage[] {
-  return convertNormalizedMessages(messages);
+export function normalizedToChatMessages(
+  messages: NormalizedMessage[],
+  subagentLinks?: Map<string, { subagentId: string; subagentType: string }>,
+): ChatMessage[] {
+  return convertNormalizedMessages(messages, subagentLinks);
 }

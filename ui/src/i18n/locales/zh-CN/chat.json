@@ -53,7 +53,8 @@
     "generating": "正在生成回复",
     "compacting": "正在压缩上下文...",
     "compactingLevel": "正在触发 {{level}} 级压缩：{{label}}",
-    "waitingForPermission": "等待授权"
+    "waitingForPermission": "等待授权",
+    "waitingForSubagent": "等待子任务完成"
   },
   "process": {
     "summary": {

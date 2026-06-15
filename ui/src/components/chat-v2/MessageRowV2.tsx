@@ -16,6 +16,7 @@ import { Markdown } from '../chat/view/subcomponents/Markdown';
 import { formatUsageLimitText } from '../chat/utils/chatFormatting';
 import { ProcessTrace } from './ProcessTrace';
 import { processSummaryToTrace, type ProcessAttachment } from './processGrouping';
+import SubagentCard from './SubagentCard';
 
 type DiffLine = { type: string; content: string; lineNum: number };
 
@@ -74,8 +75,11 @@ type MessageRowV2Props = {
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
+  inlineThinking?: boolean;
   isProcessExpanded?: (processKey: string, defaultExpanded?: boolean) => boolean;
   onProcessExpandedChange?: (processKey: string, expanded: boolean) => void;
+  onOpenSubagentDetail?: (subagentId: string) => void;
+  subagentActivityById?: Map<string, ChatMessage>;
 };
 
 // Fall back to the heavy legacy renderer for anything that isn't a vanilla
@@ -83,9 +87,9 @@ type MessageRowV2Props = {
 // prompts, task notifications, subagent containers, etc. live there and we
 // don't want to re-implement them all.
 const shouldDelegate = (message: ChatMessage): boolean => {
+  if (message.isSubagentContainer) return false;
   if (message.isToolUse) return true;
   if (message.isInteractivePrompt) return true;
-  if (message.isSubagentContainer) return true;
   if (message.isTaskNotification) return true;
   const t = message.type;
   if (t !== 'user' && t !== 'assistant' && t !== 'error') return true;
@@ -107,8 +111,11 @@ function MessageRowV2({
   autoExpandTools,
   showRawParameters,
   showThinking,
+  inlineThinking,
   isProcessExpanded,
   onProcessExpandedChange,
+  onOpenSubagentDetail,
+  subagentActivityById,
 }: MessageRowV2Props) {
   const { t } = useTranslation('chat');
   const delegate = useMemo(() => shouldDelegate(message), [message]);
@@ -166,6 +173,8 @@ function MessageRowV2({
           showThinking={showThinking}
           isProcessExpanded={isProcessExpanded}
           onProcessExpandedChange={onProcessExpandedChange}
+          onOpenSubagentDetail={onOpenSubagentDetail}
+          subagentActivityById={subagentActivityById}
         />
       )}
       isProcessExpanded={isProcessExpanded}
@@ -187,6 +196,14 @@ function MessageRowV2({
       </div>
     );
   };
+
+  if (message.isSubagentContainer) {
+    const subagentId = typeof message.subagentId === 'string' ? message.subagentId : '';
+    const liveActivity = subagentId ? subagentActivityById?.get(subagentId) : undefined;
+    return withProcessRows(
+      <SubagentCard message={message} liveActivity={liveActivity} onOpenDetail={onOpenSubagentDetail} />,
+    );
+  }
 
   if (delegate) {
     return withProcessRows(
@@ -305,33 +322,49 @@ function MessageRowV2({
     );
   }
 
-  // Thinking: unified <details> structure — `open` while streaming, collapsed when done.
-  // Using a single DOM structure avoids the flash that occurred when swapping between
-  // a plain <div> (streaming) and a <details> (completed).
   if (message.isThinking) {
+    if (!showThinking) return null;
     const isThinkingStreaming = !!message.isStreaming;
 
+    if (inlineThinking) {
+      // Inline mode: unified <details> with typewriter animation + blue theme
+      return withProcessRows(
+        <div className="min-w-0 text-[14px] leading-relaxed">
+          <details className="group" open={isThinkingStreaming || undefined}>
+            <summary className="flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-medium text-blue-600/70 hover:text-blue-700 dark:text-blue-400/70 dark:hover:text-blue-300">
+              {isThinkingStreaming
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
+                : <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" strokeWidth={2} />}
+              <span>
+                {isThinkingStreaming
+                  ? t('thinking.title', { defaultValue: 'Thinking...' })
+                  : t('thinking.completed', { defaultValue: 'Thought process' })}
+              </span>
+            </summary>
+            <div className={`mt-1.5 max-h-64 overflow-y-auto border-l-2 pl-3 text-[13px] ${
+              isThinkingStreaming
+                ? 'border-blue-400/50 text-neutral-600 dark:border-blue-500/40 dark:text-neutral-300'
+                : 'border-blue-400/30 text-neutral-600 dark:border-blue-500/30 dark:text-neutral-400'
+            }`}>
+              <Markdown projectName={selectedProject?.name} isStreaming={isThinkingStreaming}>
+                {isThinkingStreaming ? thinkingDisplayText : formattedContent}
+              </Markdown>
+            </div>
+          </details>
+        </div>,
+      );
+    }
+
+    // Default (status-bar preview mode): simple collapsible accordion
     return withProcessRows(
       <div className="min-w-0 text-[14px] leading-relaxed">
-        <details className="group" open={isThinkingStreaming || undefined}>
-          <summary className="flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-medium text-blue-600/70 hover:text-blue-700 dark:text-blue-400/70 dark:hover:text-blue-300">
-            {isThinkingStreaming
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
-              : <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" strokeWidth={2} />}
-            <span>
-              {isThinkingStreaming
-                ? t('thinking.title', { defaultValue: 'Thinking...' })
-                : t('thinking.completed', { defaultValue: 'Thought process' })}
-            </span>
+        <details className="group">
+          <summary className="flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-medium text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+            <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" strokeWidth={2} />
+            <span>{t('thinking.completed', { defaultValue: 'Thought process' })}</span>
           </summary>
-          <div className={`mt-1.5 max-h-64 overflow-y-auto border-l-2 pl-3 text-[13px] ${
-            isThinkingStreaming
-              ? 'border-blue-400/50 text-neutral-600 dark:border-blue-500/40 dark:text-neutral-300'
-              : 'border-blue-400/30 text-neutral-600 dark:border-blue-500/30 dark:text-neutral-400'
-          }`}>
-            <Markdown projectName={selectedProject?.name} isStreaming={isThinkingStreaming}>
-              {isThinkingStreaming ? thinkingDisplayText : formattedContent}
-            </Markdown>
+          <div className="mt-1.5 max-h-64 overflow-y-auto border-l-2 border-neutral-300 pl-3 text-[13px] text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+            <Markdown projectName={selectedProject?.name}>{formattedContent}</Markdown>
           </div>
         </details>
       </div>,

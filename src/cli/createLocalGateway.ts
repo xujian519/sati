@@ -60,7 +60,7 @@ import type { PilotAgentModelSelection, PilotConfigSnapshot } from "../pilot/con
 import { DEFAULT_JUDGE_TIMEOUT_MS, DEFAULT_SUBAGENT_MAX_TOKENS, DEFAULT_ALLOWED_TOOLS, DEFAULT_TRIGGER_TIERS, type RouterConfig } from "../router/config/schema.js";
 import { createAgentProjectSessionStorage, listProjectSessions, resumeAgentSession } from "../session/index.js";
 import { sanitizeSessionIdForPath } from "../session/storage/ProjectSessionStorage.js";
-import { readWebSessionMessages } from "../web/server/readSessionMessages.js";
+import { readWebSessionMessages, readSubagentWebMessages } from "../web/server/readSessionMessages.js";
 import { describeWebProject, listWebProjects } from "../web/server/listProjects.js";
 import { BackgroundTaskRuntime } from "../task/runtime/BackgroundTaskRuntime.js";
 import { createBuiltinRegistry, createPlanFileManager } from "../tool/index.js";
@@ -229,6 +229,12 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     setSessionCwd: (sessionKey, cwd) => registry.setSessionCwd(sessionKey, cwd),
     readSessionMessages: (input) =>
       readWebSessionMessages(input, {
+        projectRoot: input.projectKey ? input.projectKey : projectRoot,
+        pilotHome,
+        now,
+      }),
+    readSubagentMessages: (input) =>
+      readSubagentWebMessages(input, {
         projectRoot: input.projectKey ? input.projectKey : projectRoot,
         pilotHome,
         now,

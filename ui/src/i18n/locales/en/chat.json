@@ -47,13 +47,14 @@
   "working": {
     "default": "Working",
     "processing": "Processing",
-    "thinking": "Connecting...",
+    "thinking": "thinking",
     "callingModel": "Calling model...",
     "executingTool": "Running tool...",
     "generating": "Generating response",
     "compacting": "Compacting context...",
     "compactingLevel": "Triggering level {{level}} compaction: {{label}}",
-    "waitingForPermission": "Waiting for permission"
+    "waitingForPermission": "Waiting for permission",
+    "waitingForSubagent": "Waiting for subagent"
   },
   "process": {
     "summary": {

@@ -48,6 +48,7 @@ function ChatInterfaceV2({
   autoExpandTools,
   showRawParameters,
   showThinking,
+  inlineThinking,
   autoScrollToBottom,
   sendByCtrlEnter,
   externalMessageUpdate,
@@ -473,10 +474,12 @@ function ChatInterfaceV2({
         autoExpandTools={autoExpandTools}
         showRawParameters={showRawParameters}
         showThinking={showThinking}
+        inlineThinking={inlineThinking}
         setInput={setInput}
         isAssistantWorking={isLoading}
         workingStatus={claudeStatus || pilotDeckStatus}
         runMode={runMode}
+        sessionStore={sessionStore}
       />
       {composer}
     </div>

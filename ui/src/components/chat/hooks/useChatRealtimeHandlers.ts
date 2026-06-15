@@ -273,13 +273,61 @@ export function useChatRealtimeHandlers({
     }
 
     if (msg.kind === 'agent_activity') {
+      const activitySubagentId = typeof msg.subagentId === 'string'
+        ? msg.subagentId
+        : String(msg.activityId || '').startsWith('subagent:')
+          ? String(msg.activityId).slice('subagent:'.length)
+          : '';
+      if (
+        activitySubagentId &&
+        msg.phase === 'subagent' &&
+        ['completed', 'failed', 'cancelled'].includes(String(msg.state || ''))
+      ) {
+        sessionStore.finalizeSubagentDetailThinking?.(sid, activitySubagentId);
+        sessionStore.finalizeSubagentDetailStreaming?.(sid, activitySubagentId);
+      }
       sessionStore.upsertActivity?.(sid, msg as NormalizedMessage);
       return;
     }
 
+    if (msg.kind === 'subagent_link') {
+      sessionStore.recordSubagentLink?.(sid, msg as NormalizedMessage);
+      return;
+    }
+
+    const subagentId = typeof msg.subagentId === 'string' ? msg.subagentId : '';
+    if (msg.isSubagentDetail && subagentId) {
+      if (msg.kind === 'thinking') {
+        sessionStore.updateSubagentDetailThinking?.(
+          sid,
+          subagentId,
+          msg.content || '',
+          provider,
+        );
+        return;
+      }
+      if (msg.kind === 'stream_delta') {
+        sessionStore.finalizeSubagentDetailThinking?.(sid, subagentId);
+        sessionStore.updateSubagentDetailStreaming?.(
+          sid,
+          subagentId,
+          msg.content || '',
+          provider,
+        );
+        return;
+      }
+      if (msg.kind === 'stream_end') {
+        sessionStore.finalizeSubagentDetailThinking?.(sid, subagentId);
+        sessionStore.finalizeSubagentDetailStreaming?.(sid, subagentId);
+        return;
+      }
+      sessionStore.finalizeSubagentDetailThinking?.(sid, subagentId);
+      sessionStore.finalizeSubagentDetailStreaming?.(sid, subagentId);
+      sessionStore.appendSubagentDetailMessage?.(sid, subagentId, msg as NormalizedMessage);
+      return;
+    }
+
     // --- Streaming: direct accumulation (no smoother animation) ---
-    // LLM stream_deltas arrive token-by-token, which is already smooth.
-    // Adding client-side animation delays display and causes ordering issues.
     if (msg.kind === 'stream_delta') {
       const text = msg.content || '';
       if (!text) return;

@@ -675,6 +675,9 @@ function createFallbackGateway(): Gateway {
     readSessionMessages: async () => {
       throw new Error("read_session_messages is not configured.");
     },
+    readSubagentMessages: async () => {
+      throw new Error("read_subagent_messages is not configured.");
+    },
     listProjects: async () => ({ projects: [] }),
     describeProject: async (input) => ({
       projectKey: input.projectKey,

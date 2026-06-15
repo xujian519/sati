@@ -38,6 +38,8 @@ import type {
   WebProjectSummary,
   WebReadSessionMessagesInput,
   WebReadSessionMessagesResult,
+  WebReadSubagentMessagesInput,
+  WebReadSubagentMessagesResult,
 } from "../protocol/types.js";
 import type {
   CronCreateInput,
@@ -87,6 +89,7 @@ export type InProcessGatewayOptions = {
    * `read_session_messages` without leaking transcript paths.
    */
   readSessionMessages?: (input: WebReadSessionMessagesInput) => Promise<WebReadSessionMessagesResult>;
+  readSubagentMessages?: (input: WebReadSubagentMessagesInput) => Promise<WebReadSubagentMessagesResult>;
   /**
    * Web Phase 3 — pluggable project enumerator + describer.
    */
@@ -517,6 +520,15 @@ export class InProcessGateway implements Gateway {
       );
     }
     return this.options.readSessionMessages(input);
+  }
+
+  async readSubagentMessages(input: WebReadSubagentMessagesInput): Promise<WebReadSubagentMessagesResult> {
+    if (!this.options.readSubagentMessages) {
+      throw new Error(
+        "read_subagent_messages is not configured. Wire `readSubagentMessages` via createLocalGateway.",
+      );
+    }
+    return this.options.readSubagentMessages(input);
   }
 
   async listProjects(): Promise<WebListProjectsResult> {
@@ -1212,6 +1224,7 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
           toolCallId: event.result.toolCallId,
           toolName: event.result.toolName,
           ok: event.result.type === "success",
+          content: fullText,
           preview: lines.slice(0, 3).join("\n"),
           resultLineCount: lines.length,
           resultBytes: Buffer.byteLength(fullText, "utf-8"),

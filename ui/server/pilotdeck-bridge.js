@@ -75,6 +75,8 @@ const GATEWAY_CONNECT_TIMEOUT_MS =
     Number.parseInt(process.env.PILOTDECK_BRIDGE_TIMEOUT ?? '', 10) || 60_000;
 const GATEWAY_CONNECT_RETRY_INTERVAL_MS = 500;
 const subagentActivityStarts = new Map();
+/** @type {Map<string, string[]>} sessionId → [toolCallId, ...] for pending agent/Task tool calls */
+const pendingAgentToolCalls = new Map();
 
 function normalizeToolDisplayName(name) {
     const aliases = {
@@ -367,16 +369,24 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                     content: event.text,
                 }),
             ];
-        case 'tool_call_started':
+        case 'tool_call_started': {
+            const displayName = normalizeToolDisplayName(event.name);
+            const rawName = String(event.name || '').toLowerCase();
+            if (rawName === 'agent' || rawName === 'task') {
+                const pending = pendingAgentToolCalls.get(base.sessionId) || [];
+                pending.push(event.toolCallId);
+                pendingAgentToolCalls.set(base.sessionId, pending);
+            }
             return [
                 createNormalizedMessage({
                     ...base,
                     kind: 'tool_use',
                     toolId: event.toolCallId,
-                    toolName: normalizeToolDisplayName(event.name),
+                    toolName: displayName,
                     toolInput: tryParseJson(event.argsPreview),
                 }),
             ];
+        }
         case 'tool_call_finished': {
             const normalizedErrorCode = normalizeToolErrorCode(event.errorCode, event.resultPreview);
             return [
@@ -532,8 +542,8 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                 }),
             ];
         case 'agent_status': {
-            const subagentFrame = createSubagentStatusFrame(event, base);
-            if (subagentFrame) return [subagentFrame];
+            const subagentFrames = createSubagentStatusFrames(event, base);
+            if (subagentFrames && subagentFrames.length > 0) return subagentFrames;
 
             const detail = event.detail || {};
             if (event.event === 'compact_started') {
@@ -577,23 +587,16 @@ export function gatewayEventToFrames(event, sessionId, provider) {
     }
 }
 
-function createSubagentStatusFrame(event, base) {
+function createSubagentStatusFrames(event, base) {
     const detail = event?.detail || {};
+    const detailFrames = createSubagentDetailFrames(event, base, detail);
+    if (detailFrames) return detailFrames;
+
     const visibleEvents = [
         'subagent_started',
         'subagent_completed',
         'subagent_status',
     ];
-    const hiddenEvents = [
-        'subagent_text_delta',
-        'subagent_thinking_delta',
-        'subagent_tool_call_started',
-        'subagent_tool_result',
-        'subagent_model_error',
-    ];
-    if (hiddenEvents.includes(event?.event)) {
-        return null;
-    }
     if (!visibleEvents.includes(event?.event)) return null;
 
     const subagentId = String(detail.subagentId || 'unknown');
@@ -615,6 +618,7 @@ function createSubagentStatusFrame(event, base) {
         : Math.max(0, nowMs - startedAtMs);
     const isDone = status === 'completed' || status === 'failed';
     const title = formatSubagentActivityTitle(subagentType, status);
+    const activityDetail = formatSubagentActivityDetail(event.event, detail, status);
     const activity = createNormalizedMessage({
         ...base,
         id: `subagent_activity_${sanitizeMessageId(base.sessionId)}_${sanitizeMessageId(subagentId)}`,
@@ -624,7 +628,8 @@ function createSubagentStatusFrame(event, base) {
         phase: 'subagent',
         state: status,
         title,
-        detail: '',
+        detail: activityDetail,
+        subagentId,
         startedAt: new Date(startedAtMs).toISOString(),
         endedAt: isDone ? new Date(nowMs).toISOString() : null,
         durationMs,
@@ -634,7 +639,110 @@ function createSubagentStatusFrame(event, base) {
     if (isDone) {
         subagentActivityStarts.delete(activityKey);
     }
-    return activity;
+
+    const frames = [activity];
+
+    if (event.event === 'subagent_started') {
+        const pending = pendingAgentToolCalls.get(base.sessionId) || [];
+        const toolCallId = pending.shift();
+        if (pending.length === 0) {
+            pendingAgentToolCalls.delete(base.sessionId);
+        } else {
+            pendingAgentToolCalls.set(base.sessionId, pending);
+        }
+        frames.push(createNormalizedMessage({
+            ...base,
+            id: `subagent_link_${sanitizeMessageId(base.sessionId)}_${sanitizeMessageId(subagentId)}`,
+            kind: 'subagent_link',
+            subagentId,
+            subagentType,
+            toolCallId: toolCallId || undefined,
+        }));
+    }
+
+    return frames;
+}
+
+function createSubagentDetailFrames(event, base, detail) {
+    const subagentId = String(detail.subagentId || '');
+    if (!subagentId) return null;
+    const detailSessionId = `${base.sessionId}::sub::${subagentId}`;
+    const detailBase = {
+        ...base,
+        sessionId: base.sessionId,
+        subagentId,
+        isSubagentDetail: true,
+    };
+
+    switch (event?.event) {
+        case 'subagent_text_delta':
+            return [createNormalizedMessage({
+                ...detailBase,
+                id: `subagent_detail_delta_${sanitizeMessageId(detailSessionId)}_${Date.now()}`,
+                kind: 'stream_delta',
+                content: detail.text || '',
+            })];
+        case 'subagent_thinking_delta':
+            return [createNormalizedMessage({
+                ...detailBase,
+                id: `subagent_detail_thinking_${sanitizeMessageId(detailSessionId)}_${Date.now()}`,
+                kind: 'thinking',
+                content: detail.text || '',
+            })];
+        case 'subagent_tool_call_started': {
+            const toolCallId = String(detail.toolCallId || randomUUID());
+            return [createNormalizedMessage({
+                ...detailBase,
+                id: `${detailSessionId}-tool-${toolCallId}`,
+                kind: 'tool_use',
+                toolName: normalizeToolDisplayName(detail.toolName || ''),
+                toolInput: detail.input || {},
+                toolId: toolCallId,
+            })];
+        }
+        case 'subagent_tool_result': {
+            const toolCallId = String(detail.toolCallId || randomUUID());
+            return [createNormalizedMessage({
+                ...detailBase,
+                id: `${detailSessionId}-tool-${toolCallId}-result`,
+                kind: 'tool_result',
+                toolId: toolCallId,
+                content: detail.content || detail.preview || '',
+                isError: detail.ok === false,
+                ...(detail.errorCode ? { errorCode: detail.errorCode } : {}),
+            })];
+        }
+        case 'subagent_model_error':
+            return [createNormalizedMessage({
+                ...detailBase,
+                id: `subagent_detail_error_${sanitizeMessageId(detailSessionId)}_${Date.now()}`,
+                kind: 'error',
+                content: detail.message || detail.error || 'Subagent model error',
+            })];
+        default:
+            return null;
+    }
+}
+
+function formatSubagentActivityDetail(eventName, detail, status) {
+    const toolName = typeof detail?.toolName === 'string' ? detail.toolName : '';
+    const rawStatus = String(detail?.status || '');
+    if (status === 'failed') {
+        return '执行失败';
+    }
+    if (status === 'completed') {
+        return '已完成';
+    }
+    if ((rawStatus === 'tool_started' || rawStatus === 'running') && toolName) {
+        return `正在执行 ${toolName}`;
+    }
+    if (rawStatus === 'tool_completed' && toolName) {
+        return `已完成 ${toolName}`;
+    }
+    if (eventName === 'subagent_started' || rawStatus === 'waiting_model' || !toolName) {
+        return '思考中';
+    }
+    return `正在执行 ${toolName}`;
 }
 
 function formatSubagentActivityTitle(subagentType, status) {

@@ -23,6 +23,8 @@ import type {
   WebProjectSummary as WebUiProjectSummary,
   WebReadSessionMessagesInput as WebUiReadSessionMessagesInput,
   WebReadSessionMessagesResult as WebUiReadSessionMessagesResult,
+  WebReadSubagentMessagesInput as WebUiReadSubagentMessagesInput,
+  WebReadSubagentMessagesResult as WebUiReadSubagentMessagesResult,
 } from "../../web/client/protocol.js";
 import type {
   SkillCreateInput,
@@ -214,6 +216,8 @@ export type GatewaySessionPermissionGrantInput = {
 
 export type WebReadSessionMessagesInput = WebUiReadSessionMessagesInput;
 export type WebReadSessionMessagesResult = WebUiReadSessionMessagesResult;
+export type WebReadSubagentMessagesInput = WebUiReadSubagentMessagesInput;
+export type WebReadSubagentMessagesResult = WebUiReadSubagentMessagesResult;
 export type WebProjectSummary = WebUiProjectSummary;
 export type WebListProjectsResult = WebUiListProjectsResult;
 export type WebDescribeProjectInput = { projectKey: string };
@@ -335,6 +339,10 @@ export interface Gateway {
    * the Web `WebMessage` DTO.
    */
   readSessionMessages(input: WebReadSessionMessagesInput): Promise<WebReadSessionMessagesResult>;
+  /**
+   * Read a subagent's sidechain transcript and return its messages in WebMessage format.
+   */
+  readSubagentMessages(input: WebReadSubagentMessagesInput): Promise<WebReadSubagentMessagesResult>;
   /**
    * Web Phase 3 — enumerate projects from PilotDeck home + an optional
    * registry.

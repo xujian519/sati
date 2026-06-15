@@ -10,10 +10,13 @@ import type {
   PilotDeckPermissionSuggestion,
   PermissionGrantResult,
 } from '../chat/types/types';
+import type { SessionStore } from '../../stores/useSessionStore';
 import { isBackgroundTaskSession, type Project, type ProjectSession, type SessionProvider } from '../../types/app';
 import { getIntrinsicMessageKey } from '../chat/utils/messageKeys';
 import MessageRowV2 from './MessageRowV2';
-import { ProcessLiveStatus, ProcessRunHeader, type ProcessTraceStep } from './ProcessTrace';
+import SubagentDetailModal from './SubagentDetailModal';
+import { useSubagentMessages } from './useSubagentMessages';
+import { ProcessLiveStatus, ProcessRunHeader, StreamingThinkingPreview, type ProcessTraceStep } from './ProcessTrace';
 import { formatProcessDuration } from './processTraceUtils';
 import {
   getLiveProcessGroupStep,
@@ -53,10 +56,12 @@ type MessagesPaneV2Props = {
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
+  inlineThinking?: boolean;
   setInput: Dispatch<SetStateAction<string>>;
   isAssistantWorking?: boolean;
   workingStatus?: ClaudeWorkStatus | PilotDeckWorkStatus | null;
   runMode?: ChatRunMode;
+  sessionStore?: SessionStore;
 };
 
 type KeyedRenderableMessageItem = RenderableMessageItem & {
@@ -76,6 +81,10 @@ export type VirtualMessageWindow = {
 const MESSAGE_VIRTUALIZATION_THRESHOLD = 60;
 const MESSAGE_WINDOW_OVERSCAN = 12;
 const MESSAGE_GAP_PX = 16;
+
+function isStreamingThinkingMessage(message: ChatMessage): boolean {
+  return Boolean(message.isThinking && String(message.id || '').startsWith('__streaming_thinking_'));
+}
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -242,10 +251,12 @@ export default function MessagesPaneV2({
   autoExpandTools,
   showRawParameters,
   showThinking,
+  inlineThinking,
   setInput,
   isAssistantWorking = false,
   workingStatus,
   runMode = 'agent',
+  sessionStore,
 }: MessagesPaneV2Props) {
   const { t } = useTranslation('chat');
   const messageKeyMapRef = useRef<WeakMap<ChatMessage, string>>(new WeakMap());
@@ -255,6 +266,14 @@ export default function MessagesPaneV2({
   const [heightVersion, setHeightVersion] = useState(0);
   const [scrollViewport, setScrollViewport] = useState({ scrollTop: 0, height: 0 });
   const [expandedProcessRows, setExpandedProcessRows] = useState<Map<string, boolean>>(() => new Map());
+  const [openSubagentId, setOpenSubagentId] = useState<string | null>(null);
+
+  const handleOpenSubagentDetail = useCallback((subagentId: string) => {
+    setOpenSubagentId(subagentId);
+  }, []);
+
+  const sessionId = selectedSession?.id ?? null;
+  const projectPath = selectedProject?.fullPath ?? undefined;
 
   const getMessageKey = useCallback((message: ChatMessage, index: number) => {
     const existingKey = messageKeyMapRef.current.get(message);
@@ -308,12 +327,48 @@ export default function MessagesPaneV2({
     () => activityMessages.filter((message) => message.isAgentActivity),
     [activityMessages],
   );
+  const subagentActivities = useMemo(
+    () => liveActivities.filter(isSubagentActivity),
+    [liveActivities],
+  );
+  const nonSubagentLiveActivities = useMemo(
+    () => liveActivities.filter((activity) => !isSubagentActivity(activity)),
+    [liveActivities],
+  );
+  const subagentActivityById = useMemo(() => {
+    const byId = new Map<string, ChatMessage>();
+    for (const activity of subagentActivities) {
+      const rawId = activity.activityId || activity.runId || '';
+      const subagentId = rawId.startsWith('subagent:')
+        ? rawId.slice('subagent:'.length)
+        : '';
+      if (subagentId) {
+        byId.set(subagentId, activity);
+      }
+    }
+    return byId;
+  }, [subagentActivities]);
+  const openSubagentActivity = openSubagentId
+    ? subagentActivityById.get(openSubagentId)
+    : undefined;
+  const isOpenSubagentRunning = Boolean(
+    openSubagentActivity &&
+      !['completed', 'failed', 'cancelled'].includes(String(openSubagentActivity.state || '')),
+  );
+  const subagentDetail = useSubagentMessages(
+    openSubagentId ? sessionId : null,
+    openSubagentId,
+    projectPath,
+    sessionStore,
+    openSubagentActivity?.state,
+  );
   const renderableMessages = useMemo(
-    () => {
-      const filtered = visibleMessages.filter((message) => !message.isAgentActivity);
-      return filtered;
-    },
-    [visibleMessages],
+    () => visibleMessages.filter((message) =>
+      !message.isAgentActivity &&
+      (!inlineThinking && isStreamingThinkingMessage(message) ? false : true) &&
+      !(message.isThinking && !showThinking)
+    ),
+    [visibleMessages, showThinking, inlineThinking],
   );
   const liveProcessDetailMessages = useMemo(
     () => [] as ChatMessage[],
@@ -421,10 +476,51 @@ export default function MessagesPaneV2({
     );
     return !hasContentAfterTool;
   }, [isAssistantWorking, keyedMessageItems, liveProcessHeaderIndex]);
-  const liveStatusStep = useMemo(
-    () => getLiveStatusStep(liveActivities, workingStatus, hasLiveAssistantContent, hasPendingToolUse, t),
-    [hasLiveAssistantContent, hasPendingToolUse, liveActivities, t, workingStatus],
+  const runningSubagentActivity = useMemo(
+    () => [...subagentActivities].reverse().find(isRunningActivity) || null,
+    [subagentActivities],
   );
+  const streamingThinkingContent = useMemo(() => {
+    if (!showThinking || !isAssistantWorking) {
+      return null;
+    }
+    for (let i = visibleMessages.length - 1; i >= 0; i--) {
+      const msg = visibleMessages[i];
+      if (isStreamingThinkingMessage(msg) && typeof msg.content === 'string' && msg.content.trim()) {
+        return msg.content;
+      }
+      if (msg.type === 'user') break;
+    }
+    return null;
+  }, [showThinking, isAssistantWorking, visibleMessages]);
+  const liveStatusStep = useMemo<ProcessTraceStep>(() => {
+    if (streamingThinkingContent) {
+      return {
+        id: 'live-thinking',
+        title: t('working.thinking', { defaultValue: 'thinking' }),
+        phase: 'thinking',
+        state: 'running',
+      };
+    }
+    if (runningSubagentActivity) {
+      return {
+        id: runningSubagentActivity.activityId || runningSubagentActivity.id || 'live-subagent-waiting',
+        title: t('working.waitingForSubagent', { defaultValue: 'Waiting for subagent' }),
+        phase: 'subagent',
+        state: 'running',
+        toolName: 'agent',
+      };
+    }
+    return getLiveStatusStep(nonSubagentLiveActivities, workingStatus, hasLiveAssistantContent, hasPendingToolUse, t);
+  }, [
+    hasLiveAssistantContent,
+    hasPendingToolUse,
+    nonSubagentLiveActivities,
+    runningSubagentActivity,
+    streamingThinkingContent,
+    t,
+    workingStatus,
+  ]);
   const hasOpenEndedLiveProcessGroup = liveProcessGroups.some((group) => group.isRunning);
   const shouldRenderBottomLiveStatus = isAssistantWorking && !hasOpenEndedLiveProcessGroup;
 
@@ -521,19 +617,25 @@ export default function MessagesPaneV2({
         autoExpandTools={autoExpandTools}
         showRawParameters={showRawParameters}
         showThinking={showThinking}
+        inlineThinking={inlineThinking}
         isProcessExpanded={isProcessExpanded}
         onProcessExpandedChange={handleProcessExpandedChange}
+        onOpenSubagentDetail={handleOpenSubagentDetail}
+        subagentActivityById={subagentActivityById}
       />
     ))
   ), [
     autoExpandTools,
     createDiff,
     getMessageKey,
+    handleOpenSubagentDetail,
+    inlineThinking,
     onFileOpen,
     onGrantSessionToolPermission,
     onShowSettings,
     provider,
     selectedProject,
+    subagentActivityById,
     isProcessExpanded,
     handleProcessExpandedChange,
     showRawParameters,
@@ -579,7 +681,7 @@ export default function MessagesPaneV2({
       <Fragment key={item.itemKey}>
         {liveProcessHeaderIndex === 0 && item.renderIndex === 0 ? (
           <LiveProcessHeader
-            activities={liveActivities}
+            activities={nonSubagentLiveActivities}
             startedAtMs={liveProcessStartedAtMs}
             t={t}
           />
@@ -612,12 +714,15 @@ export default function MessagesPaneV2({
             autoExpandTools={autoExpandTools}
             showRawParameters={showRawParameters}
             showThinking={showThinking}
+            inlineThinking={inlineThinking}
             isProcessExpanded={isProcessExpanded}
             onProcessExpandedChange={handleProcessExpandedChange}
+            onOpenSubagentDetail={handleOpenSubagentDetail}
+            subagentActivityById={subagentActivityById}
           />
           {rendersLiveHeaderAfterItem ? (
             <LiveProcessHeader
-              activities={liveActivities}
+              activities={nonSubagentLiveActivities}
               startedAtMs={liveProcessStartedAtMs}
               t={t}
             />
@@ -640,11 +745,13 @@ export default function MessagesPaneV2({
     autoExpandTools,
     createDiff,
     handleMeasuredItemHeight,
+    handleOpenSubagentDetail,
     handleProcessExpandedChange,
+    inlineThinking,
     isProcessExpanded,
     isAssistantWorking,
     keyedMessageItems,
-    liveActivities,
+    nonSubagentLiveActivities,
     liveProcessHeaderIndex,
     liveProcessStartedAtMs,
     onFileOpen,
@@ -655,6 +762,7 @@ export default function MessagesPaneV2({
     selectedProject,
     showRawParameters,
     showThinking,
+    subagentActivityById,
     t,
   ]);
 
@@ -801,23 +909,53 @@ export default function MessagesPaneV2({
           liveProcessHeaderIndex === keyedMessageItems.length &&
           keyedMessageItems[liveProcessHeaderIndex - 1]?.message.type !== 'user' ? (
             <LiveProcessHeader
-              activities={liveActivities}
+              activities={nonSubagentLiveActivities}
               startedAtMs={liveProcessStartedAtMs}
               t={t}
             />
           ) : null}
 
           {shouldRenderBottomLiveStatus ? (
-            <ProcessLiveStatus step={liveStatusStep}>
-              {liveProcessDetailMessages.length > 0
-                ? renderLiveProcessDetailMessages(liveProcessDetailMessages, 'bottom-live-process')
-                : null}
-            </ProcessLiveStatus>
+            <>
+              <ProcessLiveStatus step={liveStatusStep}>
+                {liveProcessDetailMessages.length > 0
+                  ? renderLiveProcessDetailMessages(liveProcessDetailMessages, 'bottom-live-process')
+                  : null}
+              </ProcessLiveStatus>
+              {!inlineThinking && streamingThinkingContent ? (
+                <StreamingThinkingPreview content={streamingThinkingContent} />
+              ) : null}
+            </>
           ) : null}
         </div>
       )}
+
+      {openSubagentId ? (
+        <SubagentDetailModal
+          subagentId={openSubagentId}
+          messages={subagentDetail.messages}
+          isLoading={subagentDetail.isLoading}
+          error={subagentDetail.error}
+          provider={provider}
+          selectedProject={selectedProject}
+          createDiff={createDiff}
+          onFileOpen={onFileOpen}
+          showThinking={showThinking}
+          isRunning={isOpenSubagentRunning}
+          onClose={() => setOpenSubagentId(null)}
+        />
+      ) : null}
     </div>
   );
+}
+
+function isSubagentActivity(activity: ChatMessage): boolean {
+  const activityId = String(activity.activityId || activity.runId || '');
+  return activity.phase === 'subagent' || activityId.startsWith('subagent:');
+}
+
+function isRunningActivity(activity: ChatMessage): boolean {
+  return !['completed', 'failed', 'cancelled'].includes(String(activity.state || 'running'));
 }
 
 function getLatestActivity(activities: ChatMessage[]): ChatMessage | null {

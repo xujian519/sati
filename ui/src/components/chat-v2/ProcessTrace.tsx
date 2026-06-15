@@ -316,3 +316,35 @@ export function ProcessTrace({
     </div>
   );
 }
+
+export function StreamingThinkingPreview({
+  content,
+  maxLines = 10,
+}: {
+  content: string;
+  maxLines?: number;
+}) {
+  const lines = content.split('\n');
+  const visibleLines = lines.slice(-maxLines);
+  const hasOverflow = lines.length > maxLines;
+
+  return (
+    <div
+      className="relative mt-1 overflow-hidden px-3 py-2 font-mono text-xs leading-relaxed text-neutral-500 dark:text-neutral-400"
+      style={
+        hasOverflow
+          ? {
+              maskImage: 'linear-gradient(to bottom, transparent 0%, black 25%)',
+              WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 25%)',
+            }
+          : undefined
+      }
+    >
+      {visibleLines.map((line, i) => (
+        <div key={i} className="whitespace-pre-wrap break-words">
+          {line || '\u00A0'}
+        </div>
+      ))}
+    </div>
+  );
+}
