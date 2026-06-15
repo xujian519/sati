@@ -1,6 +1,7 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import type { ChatMessage } from '../chat/types/types';
 import { normalizedToChatMessages } from '../chat/hooks/useChatMessages';
+import type { NormalizedMessage, SessionStore } from '../../stores/useSessionStore';
 
 interface SubagentMessagesResult {
   messages: ChatMessage[];
@@ -22,19 +23,48 @@ function filterSubagentDetailMessages(messages: ChatMessage[]): ChatMessage[] {
   );
 }
 
+function mergeSubagentDetailMessages(
+  snapshotMessages: NormalizedMessage[],
+  realtimeMessages: NormalizedMessage[],
+  useSnapshotOnly: boolean,
+): NormalizedMessage[] {
+  if (useSnapshotOnly && snapshotMessages.length > 0) {
+    return snapshotMessages;
+  }
+
+  const merged = [...snapshotMessages];
+  const seen = new Set(snapshotMessages.map((message) => message.id));
+  for (const message of realtimeMessages) {
+    if (seen.has(message.id)) continue;
+    seen.add(message.id);
+    merged.push(message);
+  }
+  return merged;
+}
+
 export function useSubagentMessages(
   sessionId: string | null,
   subagentId: string | null,
   projectPath?: string,
+  sessionStore?: SessionStore,
+  refreshKey?: string,
 ): SubagentMessagesResult {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [snapshotMessages, setSnapshotMessages] = useState<NormalizedMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const realtimeMessages = sessionId && subagentId
+    ? sessionStore?.getSubagentDetailMessages?.(sessionId, subagentId) ?? []
+    : [];
+  const useSnapshotOnly = refreshKey === 'completed' || refreshKey === 'failed';
+  const messages = useMemo(() => {
+    const normalized = mergeSubagentDetailMessages(snapshotMessages, realtimeMessages, useSnapshotOnly);
+    return filterSubagentDetailMessages(normalizedToChatMessages(normalized));
+  }, [snapshotMessages, realtimeMessages, useSnapshotOnly]);
 
   useEffect(() => {
     if (!sessionId || !subagentId) {
-      setMessages([]);
+      setSnapshotMessages([]);
       setIsLoading(false);
       setError(null);
       return;
@@ -56,7 +86,7 @@ export function useSubagentMessages(
       .then((data) => {
         if (controller.signal.aborted) return;
         const normalized = Array.isArray(data.messages) ? data.messages : [];
-        setMessages(filterSubagentDetailMessages(normalizedToChatMessages(normalized)));
+        setSnapshotMessages(normalized);
         setIsLoading(false);
       })
       .catch((err) => {
@@ -66,7 +96,7 @@ export function useSubagentMessages(
       });
 
     return () => controller.abort();
-  }, [sessionId, subagentId, projectPath]);
+  }, [sessionId, subagentId, projectPath, refreshKey]);
 
   return { messages, isLoading, error };
 }

@@ -579,21 +579,14 @@ export function gatewayEventToFrames(event, sessionId, provider) {
 
 function createSubagentStatusFrames(event, base) {
     const detail = event?.detail || {};
+    const detailFrames = createSubagentDetailFrames(event, base, detail);
+    if (detailFrames) return detailFrames;
+
     const visibleEvents = [
         'subagent_started',
         'subagent_completed',
         'subagent_status',
     ];
-    const hiddenEvents = [
-        'subagent_text_delta',
-        'subagent_thinking_delta',
-        'subagent_tool_call_started',
-        'subagent_tool_result',
-        'subagent_model_error',
-    ];
-    if (hiddenEvents.includes(event?.event)) {
-        return null;
-    }
     if (!visibleEvents.includes(event?.event)) return null;
 
     const subagentId = String(detail.subagentId || 'unknown');
@@ -657,6 +650,62 @@ function createSubagentStatusFrames(event, base) {
     }
 
     return frames;
+}
+
+function createSubagentDetailFrames(event, base, detail) {
+    const subagentId = String(detail.subagentId || '');
+    if (!subagentId) return null;
+    const detailSessionId = `${base.sessionId}::sub::${subagentId}`;
+    const detailBase = {
+        ...base,
+        sessionId: base.sessionId,
+        subagentId,
+        isSubagentDetail: true,
+    };
+
+    switch (event?.event) {
+        case 'subagent_text_delta':
+            return [createNormalizedMessage({
+                ...detailBase,
+                id: `subagent_detail_delta_${sanitizeMessageId(detailSessionId)}_${Date.now()}`,
+                kind: 'stream_delta',
+                content: detail.text || '',
+            })];
+        case 'subagent_thinking_delta':
+            return [];
+        case 'subagent_tool_call_started': {
+            const toolCallId = String(detail.toolCallId || randomUUID());
+            return [createNormalizedMessage({
+                ...detailBase,
+                id: `${detailSessionId}-tool-${toolCallId}`,
+                kind: 'tool_use',
+                toolName: normalizeToolDisplayName(detail.toolName || ''),
+                toolInput: detail.input || {},
+                toolId: toolCallId,
+            })];
+        }
+        case 'subagent_tool_result': {
+            const toolCallId = String(detail.toolCallId || randomUUID());
+            return [createNormalizedMessage({
+                ...detailBase,
+                id: `${detailSessionId}-tool-${toolCallId}-result`,
+                kind: 'tool_result',
+                toolId: toolCallId,
+                content: detail.content || detail.preview || '',
+                isError: detail.ok === false,
+                ...(detail.errorCode ? { errorCode: detail.errorCode } : {}),
+            })];
+        }
+        case 'subagent_model_error':
+            return [createNormalizedMessage({
+                ...detailBase,
+                id: `subagent_detail_error_${sanitizeMessageId(detailSessionId)}_${Date.now()}`,
+                kind: 'error',
+                content: detail.message || detail.error || 'Subagent model error',
+            })];
+        default:
+            return null;
+    }
 }
 
 function formatSubagentActivityDetail(eventName, detail, status) {

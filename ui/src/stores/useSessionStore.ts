@@ -93,6 +93,8 @@ export interface NormalizedMessage {
   exitCode?: number;
   actualSessionId?: string;
   parentToolUseId?: string;
+  subagentId?: string;
+  isSubagentDetail?: boolean;
   subagentTools?: unknown[];
   taskId?: string;
   outputFile?: string;
@@ -142,6 +144,7 @@ export interface SessionSlot {
   serverMessages: NormalizedMessage[];
   realtimeMessages: NormalizedMessage[];
   activityMessages: NormalizedMessage[];
+  subagentDetailMessages: Map<string, NormalizedMessage[]>;
   /** toolCallId → { subagentId, subagentType } links from bridge subagent_link frames */
   subagentLinks: Map<string, { subagentId: string; subagentType: string }>;
   merged: NormalizedMessage[];
@@ -164,6 +167,7 @@ function createEmptySlot(): SessionSlot {
     serverMessages: EMPTY,
     realtimeMessages: EMPTY,
     activityMessages: EMPTY,
+    subagentDetailMessages: new Map(),
     subagentLinks: new Map(),
     merged: EMPTY,
     _lastServerRef: EMPTY,
@@ -642,6 +646,90 @@ export function useSessionStore() {
     }
   }, [getSlot, notify]);
 
+  const appendSubagentDetailMessage = useCallback((
+    sessionId: string,
+    subagentId: string,
+    msg: NormalizedMessage,
+  ) => {
+    const slot = getSlot(sessionId);
+    const current = slot.subagentDetailMessages.get(subagentId) ?? [];
+    const updated = upsertRealtimeMessages(current, [msg]);
+    const nextMap = new Map(slot.subagentDetailMessages);
+    nextMap.set(subagentId, updated);
+    slot.subagentDetailMessages = nextMap;
+    notify(sessionId);
+  }, [getSlot, notify]);
+
+  const updateSubagentDetailStreaming = useCallback((
+    sessionId: string,
+    subagentId: string,
+    delta: string,
+    msgProvider: SessionProvider,
+  ) => {
+    if (!delta) return;
+    const slot = getSlot(sessionId);
+    const streamId = `__subagent_streaming_${sessionId}_${subagentId}`;
+    const current = slot.subagentDetailMessages.get(subagentId) ?? [];
+    const existingIndex = current.findIndex((message) => message.id === streamId);
+    let updated: NormalizedMessage[];
+    if (existingIndex >= 0) {
+      updated = [...current];
+      const existing = updated[existingIndex];
+      updated[existingIndex] = {
+        ...existing,
+        content: `${existing.content || ''}${delta}`,
+        provider: msgProvider,
+      };
+    } else {
+      updated = [
+        ...current,
+        {
+          id: streamId,
+          sessionId,
+          timestamp: new Date().toISOString(),
+          provider: msgProvider,
+          kind: 'stream_delta',
+          role: 'assistant',
+          content: delta,
+          subagentId,
+          isSubagentDetail: true,
+        },
+      ];
+    }
+    const nextMap = new Map(slot.subagentDetailMessages);
+    nextMap.set(subagentId, updated);
+    slot.subagentDetailMessages = nextMap;
+    notify(sessionId);
+  }, [getSlot, notify]);
+
+  const finalizeSubagentDetailStreaming = useCallback((sessionId: string, subagentId: string) => {
+    const slot = storeRef.current.get(sessionId);
+    if (!slot) return;
+    const streamId = `__subagent_streaming_${sessionId}_${subagentId}`;
+    const current = slot.subagentDetailMessages.get(subagentId) ?? [];
+    const existingIndex = current.findIndex((message) => message.id === streamId);
+    if (existingIndex < 0) return;
+    const stream = current[existingIndex];
+    const updated = [...current];
+    updated[existingIndex] = {
+      ...stream,
+      id: `subagent_text_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      kind: 'text',
+      role: 'assistant',
+    };
+    const nextMap = new Map(slot.subagentDetailMessages);
+    nextMap.set(subagentId, updated);
+    slot.subagentDetailMessages = nextMap;
+    notify(sessionId);
+  }, [notify]);
+
+  const getSubagentDetailMessages = useCallback((
+    sessionId: string,
+    subagentId: string,
+  ): NormalizedMessage[] => {
+    return storeRef.current.get(sessionId)?.subagentDetailMessages.get(subagentId) ?? [];
+  }, []);
+
   const setActivities = useCallback((sessionId: string, msgs: NormalizedMessage[]) => {
     const slot = getSlot(sessionId);
     const byKey = new Map<string, NormalizedMessage>();
@@ -912,14 +1000,20 @@ export function useSessionStore() {
     clearRealtime,
     getMessages,
     getActivityMessages,
+    getSubagentDetailMessages,
     getSessionSlot,
     recordSubagentLink,
+    appendSubagentDetailMessage,
+    updateSubagentDetailStreaming,
+    finalizeSubagentDetailStreaming,
   }), [
     getSlot, has, fetchFromServer, fetchMore,
     appendRealtime, upsertActivity, setActivities, appendRealtimeBatch, refreshFromServer,
     setActiveSession, setStatus, isStale, updateStreaming, finalizeStreaming,
     updateStreamingThinking, finalizeStreamingThinking,
-    clearRealtime, getMessages, getActivityMessages, getSessionSlot, recordSubagentLink,
+    clearRealtime, getMessages, getActivityMessages, getSubagentDetailMessages, getSessionSlot,
+    recordSubagentLink, appendSubagentDetailMessage, updateSubagentDetailStreaming,
+    finalizeSubagentDetailStreaming,
   ]);
 }
 

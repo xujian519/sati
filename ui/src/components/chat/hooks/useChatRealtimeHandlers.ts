@@ -303,6 +303,26 @@ export function useChatRealtimeHandlers({
       return;
     }
 
+    const subagentId = typeof msg.subagentId === 'string' ? msg.subagentId : '';
+    if (msg.isSubagentDetail && subagentId) {
+      if (msg.kind === 'stream_delta') {
+        sessionStore.updateSubagentDetailStreaming?.(
+          sid,
+          subagentId,
+          msg.content || '',
+          provider,
+        );
+        return;
+      }
+      if (msg.kind === 'stream_end') {
+        sessionStore.finalizeSubagentDetailStreaming?.(sid, subagentId);
+        return;
+      }
+      sessionStore.finalizeSubagentDetailStreaming?.(sid, subagentId);
+      sessionStore.appendSubagentDetailMessage?.(sid, subagentId, msg as NormalizedMessage);
+      return;
+    }
+
     // --- Streaming: buffer for performance ---
     if (msg.kind === 'stream_delta') {
       const text = msg.content || '';

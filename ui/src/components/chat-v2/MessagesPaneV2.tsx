@@ -10,6 +10,7 @@ import type {
   PilotDeckPermissionSuggestion,
   PermissionGrantResult,
 } from '../chat/types/types';
+import type { SessionStore } from '../../stores/useSessionStore';
 import { isBackgroundTaskSession, type Project, type ProjectSession, type SessionProvider } from '../../types/app';
 import { getIntrinsicMessageKey } from '../chat/utils/messageKeys';
 import MessageRowV2 from './MessageRowV2';
@@ -63,6 +64,7 @@ type MessagesPaneV2Props = {
   isAssistantWorking?: boolean;
   workingStatus?: ClaudeWorkStatus | PilotDeckWorkStatus | null;
   runMode?: ChatRunMode;
+  sessionStore?: SessionStore;
 };
 
 type KeyedRenderableMessageItem = RenderableMessageItem & {
@@ -240,6 +242,7 @@ export default function MessagesPaneV2({
   isAssistantWorking = false,
   workingStatus,
   runMode = 'agent',
+  sessionStore,
 }: MessagesPaneV2Props) {
   const { t } = useTranslation('chat');
   const messageKeyMapRef = useRef<WeakMap<ChatMessage, string>>(new WeakMap());
@@ -257,11 +260,6 @@ export default function MessagesPaneV2({
 
   const sessionId = selectedSession?.id ?? null;
   const projectPath = selectedProject?.fullPath ?? undefined;
-  const subagentDetail = useSubagentMessages(
-    openSubagentId ? sessionId : null,
-    openSubagentId,
-    projectPath,
-  );
 
   const getMessageKey = useCallback((message: ChatMessage, index: number) => {
     const existingKey = messageKeyMapRef.current.get(message);
@@ -336,6 +334,16 @@ export default function MessagesPaneV2({
     }
     return byId;
   }, [subagentActivities]);
+  const openSubagentActivity = openSubagentId
+    ? subagentActivityById.get(openSubagentId)
+    : undefined;
+  const subagentDetail = useSubagentMessages(
+    openSubagentId ? sessionId : null,
+    openSubagentId,
+    projectPath,
+    sessionStore,
+    openSubagentActivity?.state,
+  );
   const renderableMessages = useMemo(
     () => visibleMessages.filter((message) =>
       !message.isAgentActivity &&

@@ -477,6 +477,7 @@ function ChatInterfaceV2({
         isAssistantWorking={isLoading}
         workingStatus={claudeStatus || pilotDeckStatus}
         runMode={runMode}
+        sessionStore={sessionStore}
       />
       {composer}
     </div>
