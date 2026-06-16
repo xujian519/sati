@@ -323,17 +323,25 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
   return result;
 }
 
+function getUpsertKey(message: NormalizedMessage): string {
+  if ((message.kind === 'tool_use' || message.kind === 'tool_result') && message.toolId) {
+    return `${message.id}::${message.kind}::${message.toolId}`;
+  }
+  return message.id;
+}
+
 function upsertRealtimeMessages(
   existing: NormalizedMessage[],
   incoming: NormalizedMessage[],
 ): NormalizedMessage[] {
   if (incoming.length === 0) return existing;
   const updated = [...existing];
-  const indexById = new Map(updated.map((message, index) => [message.id, index]));
+  const indexByKey = new Map(updated.map((message, index) => [getUpsertKey(message), index]));
   for (const message of incoming) {
-    const existingIndex = indexById.get(message.id);
+    const key = getUpsertKey(message);
+    const existingIndex = indexByKey.get(key);
     if (existingIndex === undefined) {
-      indexById.set(message.id, updated.length);
+      indexByKey.set(key, updated.length);
       updated.push(message);
     } else {
       updated[existingIndex] = message;
@@ -681,7 +689,18 @@ export function useSessionStore() {
   ) => {
     const slot = getSlot(sessionId);
     const current = slot.subagentDetailMessages.get(subagentId) ?? [];
-    const updated = upsertRealtimeMessages(current, [msg]);
+    let msgToStore = msg;
+    if ((msg.kind === 'tool_use' || msg.kind === 'tool_result') && msg.toolId) {
+      const existing = current.find(
+        (m) => m.kind === msg.kind && m.toolId === msg.toolId && m.id === msg.id,
+      );
+      if (!existing || existing.toolName !== msg.toolName) {
+        msgToStore = { ...msg, id: `${msg.id}::${msg.kind}::${msg.toolId}::${current.length}` };
+      } else {
+        msgToStore = { ...msg, id: existing.id };
+      }
+    }
+    const updated = upsertRealtimeMessages(current, [msgToStore]);
     const nextMap = new Map(slot.subagentDetailMessages);
     nextMap.set(subagentId, updated);
     slot.subagentDetailMessages = nextMap;

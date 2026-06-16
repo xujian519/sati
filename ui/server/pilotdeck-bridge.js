@@ -645,12 +645,22 @@ function createSubagentStatusFrames(event, base) {
     const frames = [activity];
 
     if (event.event === 'subagent_started') {
-        const pending = pendingAgentToolCalls.get(base.sessionId) || [];
-        const toolCallId = pending.shift();
-        if (pending.length === 0) {
-            pendingAgentToolCalls.delete(base.sessionId);
+        let toolCallId = detail.toolCallId;
+        if (!toolCallId) {
+            const pending = pendingAgentToolCalls.get(base.sessionId) || [];
+            toolCallId = pending.shift();
+            if (pending.length === 0) {
+                pendingAgentToolCalls.delete(base.sessionId);
+            } else {
+                pendingAgentToolCalls.set(base.sessionId, pending);
+            }
         } else {
-            pendingAgentToolCalls.set(base.sessionId, pending);
+            const pending = pendingAgentToolCalls.get(base.sessionId);
+            if (pending) {
+                const idx = pending.indexOf(toolCallId);
+                if (idx !== -1) pending.splice(idx, 1);
+                if (pending.length === 0) pendingAgentToolCalls.delete(base.sessionId);
+            }
         }
         frames.push(createNormalizedMessage({
             ...base,

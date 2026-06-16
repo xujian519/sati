@@ -42,12 +42,21 @@ export default function SubagentCard({ message, liveActivity, onOpenDetail, thin
         return { icon: 'failed' as const, text: text || t('subagent.status.failed') };
       }
       if (state === 'completed' || state === 'cancelled') {
+        if (!isSessionRunning && !hasToolResult) {
+          return { icon: 'failed' as const, text: t('subagent.status.stopped') };
+        }
         return { icon: 'completed' as const, text: text || t('subagent.status.completed') };
+      }
+      if (!isSessionRunning) {
+        return { icon: 'failed' as const, text: t('subagent.status.stopped') };
       }
       return { icon: 'running' as const, text: text || t('subagent.status.thinking') };
     }
     if (isFailed) {
       return { icon: 'failed' as const, text: t('subagent.status.stopped') };
+    }
+    if (isSessionRunning && !subagentId) {
+      return { icon: 'running' as const, text: t('subagent.status.connecting', '连接中…') };
     }
     if (isComplete || hasToolResult) {
       return { icon: 'completed' as const, text: t('subagent.status.completed') };

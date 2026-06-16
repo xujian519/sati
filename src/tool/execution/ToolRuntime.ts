@@ -195,17 +195,18 @@ export class ToolRuntime {
     }
 
     executeInput = decision.updatedInput ?? executeInput;
-    const executeContext: PilotDeckToolRuntimeContext = context.progress
+    const baseContext: PilotDeckToolRuntimeContext = { ...context, currentToolCallId: call.id };
+    const executeContext: PilotDeckToolRuntimeContext = baseContext.progress
       ? {
-          ...context,
+          ...baseContext,
           progress: (event) =>
-            context.progress!({
+            baseContext.progress!({
               ...event,
               toolCallId: event.toolCallId || call.id,
               toolName: event.toolName || tool.name,
             }),
         }
-      : context;
+      : baseContext;
     try {
       const output = await tool.execute(executeInput, executeContext);
       const maxResultBytes = tool.maxResultBytes ?? context.maxResultBytes;

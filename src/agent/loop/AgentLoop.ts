@@ -1186,7 +1186,7 @@ export class AgentLoop {
           description: d.description,
         })),
       isAllowedDefinition: (id: string) => getSubagentDefinition(id) !== undefined,
-      fork: async ({ definitionId, directive, subagentId, abortSignal, timeoutMs }) => {
+      fork: async ({ definitionId, directive, subagentId, toolCallId, abortSignal, timeoutMs }) => {
         // Defer SubAgentSession import to avoid the runtime cycle (sub → loop → sub).
         const { SubAgentSession } = await import("../sub/SubAgentSession.js");
         const def = getSubagentDefinition(definitionId);
@@ -1220,12 +1220,12 @@ export class AgentLoop {
           turnId: input.turnId,
           subagentId,
           subagentType: def.id,
+          toolCallId,
         });
 
         const subSession = new SubAgentSession({
           definition: def,
           directive,
-          parentMessages: messages,
           parentConfig: {
             ...this.config,
             subagentDepth: depth + 1,

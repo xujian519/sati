@@ -276,17 +276,27 @@ function convertNormalizedMessages(
 ): ChatMessage[] {
   const converted: ChatMessage[] = [];
 
-  // First pass: collect tool results for attachment to tool_use messages
-  const toolResultMap = new Map<string, NormalizedMessage>();
+  // First pass: collect tool results as ordered queues per toolId so that
+  // cross-turn reuse of the same toolId (call_0, call_1, …) pairs correctly.
+  const toolResultQueues = new Map<string, NormalizedMessage[]>();
   for (const msg of messages) {
     if (msg.kind === 'tool_result' && msg.toolId) {
-      toolResultMap.set(msg.toolId, msg);
+      const queue = toolResultQueues.get(msg.toolId);
+      if (queue) queue.push(msg);
+      else toolResultQueues.set(msg.toolId, [msg]);
     }
   }
+  const toolResultMap = new Map<string, NormalizedMessage>();
 
   for (const msg of messages) {
     // tool_use messages depend on toolResultMap + subagentLinks (external state) so skip cache
     if (msg.kind === 'tool_use') {
+      if (msg.toolId && !msg.toolResult) {
+        const queue = toolResultQueues.get(msg.toolId);
+        const next = queue?.shift();
+        if (next) toolResultMap.set(msg.toolId, next);
+        else toolResultMap.delete(msg.toolId);
+      }
       const result = convertSingleMessage(msg, toolResultMap, subagentLinks);
       if (result) converted.push(result);
       continue;
