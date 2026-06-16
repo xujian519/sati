@@ -2,6 +2,7 @@ import { PermissionRuntime } from "../../permission/index.js";
 import type { LifecycleRuntime, PilotDeckHookEffect } from "../../lifecycle/index.js";
 import { toolError } from "../protocol/errors.js";
 import type { PilotDeckToolErrorCode } from "../protocol/errors.js";
+import { PLAN_MODE_ALLOWED_TOOLS, buildPlanModeViolationMessage } from "../planModeConstraints.js";
 import {
   applyResultSizeLimit,
   type PilotDeckToolErrorResult,
@@ -39,6 +40,17 @@ export class ToolRuntime {
         call.name,
         "tool_not_found",
         `Tool ${call.name} does not exist.`,
+        startedAt,
+        context,
+      );
+    }
+
+    if (context.permissionMode === "plan" && !PLAN_MODE_ALLOWED_TOOLS.has(tool.name)) {
+      return this.errorResult(
+        call.id,
+        tool.name,
+        "plan_mode_violation",
+        buildPlanModeViolationMessage(tool.name),
         startedAt,
         context,
       );
