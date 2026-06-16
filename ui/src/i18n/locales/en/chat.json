@@ -47,11 +47,14 @@
   "working": {
     "default": "Working",
     "processing": "Processing",
-    "thinking": "Thinking",
+    "thinking": "thinking",
+    "callingModel": "Calling model...",
+    "executingTool": "Running tool...",
     "generating": "Generating response",
     "compacting": "Compacting context...",
     "compactingLevel": "Triggering level {{level}} compaction: {{label}}",
-    "waitingForPermission": "Waiting for permission"
+    "waitingForPermission": "Waiting for permission",
+    "waitingForSubagent": "Waiting for subagent"
   },
   "process": {
     "summary": {
@@ -142,6 +145,7 @@
   },
   "thinking": {
     "title": "Thinking...",
+    "completed": "Thought process",
     "emoji": "💭 Thinking..."
   },
   "json": {
@@ -392,5 +396,18 @@
   "composer": {
     "placeholder": "Tell PilotDeck what you want to get done…",
     "welcomePlaceholder": "Tell PilotDeck what you want to get done…"
+  },
+  "subagent": {
+    "detailTitle": "Subagent Detail",
+    "loadError": "Failed to load subagent messages: {{error}}",
+    "noMessages": "No displayable subagent messages found.",
+    "defaultDescription": "Running task",
+    "status": {
+      "failed": "Execution failed",
+      "completed": "Completed",
+      "stopped": "Stopped",
+      "thinking": "Thinking",
+      "executingTool": "Executing {{toolName}}"
+    }
   }
 }

@@ -349,6 +349,14 @@ export class AgentLoop {
         if (!stickyInfo?.orchestrating) previousTier = undefined;
       } catch (error) {
         if (input.abortSignal?.aborted) {
+          const partialAssembled = assembleAssistantMessage(assembler);
+          if (partialAssembled.message.content.length > 0) {
+            finalMessage = partialAssembled.message;
+            messages.push(partialAssembled.message);
+            usage = mergeUsage(usage, partialAssembled.usage);
+            yield { type: "assistant_message", sessionId: input.sessionId, turnId: input.turnId, message: partialAssembled.message };
+            await input.onDurableMessage?.(partialAssembled.message);
+          }
           const result = this.createTurnResult(input, {
             type: "aborted",
             stopReason: "aborted_streaming",
@@ -382,6 +390,14 @@ export class AgentLoop {
       }
 
       if (input.abortSignal?.aborted) {
+        const partialAssembled = assembleAssistantMessage(assembler);
+        if (partialAssembled.message.content.length > 0) {
+          finalMessage = partialAssembled.message;
+          messages.push(partialAssembled.message);
+          usage = mergeUsage(usage, partialAssembled.usage);
+          yield { type: "assistant_message", sessionId: input.sessionId, turnId: input.turnId, message: partialAssembled.message };
+          await input.onDurableMessage?.(partialAssembled.message);
+        }
         const result = this.createTurnResult(input, {
           type: "aborted",
           stopReason: "aborted_streaming",

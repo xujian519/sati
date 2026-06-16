@@ -83,6 +83,8 @@ export type WebMessage = {
    * uses this.
    */
   errorCode?: string;
+  /** UUID of the subagent spawned by this tool_use (agent/Task) call. */
+  subagentId?: string;
   payload?: unknown;
   source: "live" | "history";
   finishReason?: string;

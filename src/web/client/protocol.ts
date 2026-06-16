@@ -238,6 +238,17 @@ export type WebReadSessionMessagesResult = {
   session: WebSessionInfo;
 };
 
+export type WebReadSubagentMessagesInput = {
+  sessionKey: string;
+  subagentId: string;
+  projectKey?: string;
+};
+
+export type WebReadSubagentMessagesResult = {
+  messages: import("./webMessage.js").WebMessage[];
+  total: number;
+};
+
 export type WebActiveTurnSnapshotInput = {
   sessionKey: string;
 };
