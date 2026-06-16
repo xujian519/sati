@@ -135,14 +135,22 @@ export class AgentLoop {
      */
     let hasAttemptedOutputRetry = false;
     /**
+     * Single-shot guard for empty assistant responses (no text, no tool
+     * calls). The model's thinking may have consumed the full output
+     * budget leaving nothing visible; we prompt it once to retry.
+     */
+    let hasAttemptedEmptyRetry = false;
+    /**
      * Multi-turn continuation recovery counter for `max_output_reached`.
      * After the single-shot token bump, the loop injects a continuation
      * prompt and preserves the truncated assistant message so the model can
      * resume from where it was cut off — up to MAX_OUTPUT_RECOVERY_LIMIT
      * times.
      */
-    const MAX_OUTPUT_RECOVERY_LIMIT = 3;
+    const MAX_OUTPUT_RECOVERY_LIMIT = 50;
     let maxOutputRecoveryCount = 0;
+    const MAX_CONSECUTIVE_EMPTY = 3;
+    let consecutiveEmptyCount = 0;
     const MAX_JSON_SELF_CORRECT_RETRIES = 3;
     let jsonSelfCorrectCount = 0;
     const largeFileRepair = new LargeFileRepair();
@@ -536,6 +544,127 @@ export class AgentLoop {
       }
 
       if (toolCalls.length === 0) {
+        const assistantText = textFromMessage(assembled.message);
+
+        // Global guard: empty assistant response (no text, no tool calls).
+        // The model produced nothing visible — typically because extended
+        // thinking consumed the entire output budget.
+        if (assistantText.length === 0) {
+          messages.pop();
+
+          if (maxOutputRecoveryCount > 0) {
+            consecutiveEmptyCount++;
+            if (consecutiveEmptyCount < MAX_CONSECUTIVE_EMPTY
+              && maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
+              maxOutputRecoveryCount++;
+              messages.push({
+                role: "user",
+                content: [{
+                  type: "text",
+                  text: "Output token limit hit. Resume directly — no apology, no recap of what you were doing. "
+                    + "Pick up mid-sentence if that is where the cut happened.",
+                }],
+                metadata: { synthetic: true, purpose: "max_output_recovery" },
+              });
+              yield {
+                type: "turn_continued",
+                sessionId: input.sessionId,
+                turnId: input.turnId,
+                reason: "model_error",
+              };
+              continue;
+            }
+            // Exhausted consecutive empty retries — surface error via frontend banner.
+            finalMessage = messages.filter((m) => m.role === "assistant").at(-1);
+            const result = this.createTurnResult(input, {
+              type: "error",
+              stopReason: "model_error",
+              usage,
+              permissionDenials,
+              turns: turnCount,
+              startedAt,
+              finalMessage,
+              errors: [agentError(
+                "agent_model_error",
+                "The model returned multiple consecutive empty responses. "
+                  + "The max output token limit is likely too low — "
+                  + "try increasing it so the model has room for visible output after reasoning.",
+              )],
+            });
+            yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
+            await captureTurn(result.type === "error");
+            yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+            return { result, messages };
+          } else if (!hasAttemptedEmptyRetry) {
+            // First occurrence: prompt the model to produce visible output.
+            hasAttemptedEmptyRetry = true;
+            messages.push({
+              role: "user",
+              content: [{
+                type: "text",
+                text: "Your previous response was empty (thinking only, no visible text). "
+                  + "Please provide your answer as visible text output.",
+              }],
+              metadata: { synthetic: true, purpose: "empty_response_retry" },
+            });
+            yield {
+              type: "turn_continued",
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              reason: "model_error",
+            };
+            continue;
+          } else {
+            // Retry also returned empty — give user a diagnostic hint.
+            finalMessage = {
+              role: "assistant",
+              content: [{
+                type: "text",
+                text: "[The model returned an empty response. "
+                  + "This usually means the max output token limit is too low — "
+                  + "the model's reasoning/thinking consumed all available output "
+                  + "tokens before producing visible text. "
+                  + "Try increasing the max output tokens setting.]",
+              }],
+            };
+            messages.push(finalMessage);
+          }
+          // fall through to normal stop
+        }
+
+        // Pure-text output truncated by max_output_tokens: the model was
+        // mid-sentence with no tool calls. Unlike tool-call truncation we
+        // skip the "strip-and-retry-with-doubled-tokens" phase (Phase A)
+        // because (a) the text already generated is valid and discarding it
+        // wastes tokens, and (b) blindly doubling maxOutputTokens may
+        // exceed the provider's model cap and trigger a 400 error.
+        // Instead, keep the truncated assistant message in context and
+        // inject a continuation prompt so the model resumes from the cut.
+        if (assembled.finishReason === "length") {
+          consecutiveEmptyCount = 0;
+          if (maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
+            maxOutputRecoveryCount++;
+            messages.push({
+              role: "user",
+              content: [{
+                type: "text",
+                text: "Output token limit hit. Resume directly — no apology, no recap of what you were doing. "
+                  + "Pick up mid-sentence if that is where the cut happened.",
+              }],
+              metadata: { synthetic: true, purpose: "max_output_recovery" },
+            });
+            yield {
+              type: "turn_continued",
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              reason: "model_error",
+            };
+            continue;
+          }
+          // Exhausted — fall through to normal completion with whatever
+          // text was produced so far.
+        }
+
         const largeFileDecision = largeFileRepair.onNoToolCalls();
         if (largeFileDecision) {
           const continued = await continueWithSyntheticPrompt(largeFileDecision);
@@ -839,7 +968,9 @@ export class AgentLoop {
       } else {
         consecutiveAllInvalidTurns = 0;
         maxOutputRecoveryCount = 0;
+        consecutiveEmptyCount = 0;
         hasAttemptedOutputRetry = false;
+        hasAttemptedEmptyRetry = false;
       }
 
       if (this.config.stopOnStructuredOutput && structuredOutput !== undefined) {
