@@ -54,7 +54,7 @@ function parsePort(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function isPortFree(port, host = '0.0.0.0') {
+function isPortFreeOnHost(port, host) {
   return new Promise((resolveCheck) => {
     const probe = createServer();
     probe.once('error', () => resolveCheck(false));
@@ -63,6 +63,14 @@ function isPortFree(port, host = '0.0.0.0') {
     });
     probe.listen(port, host);
   });
+}
+
+async function isPortFree(port) {
+  const [loopback, wildcard] = await Promise.all([
+    isPortFreeOnHost(port, '127.0.0.1'),
+    isPortFreeOnHost(port, '0.0.0.0'),
+  ]);
+  return loopback && wildcard;
 }
 
 async function findFreePort(label, base, hardOverride) {
