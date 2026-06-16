@@ -26,6 +26,7 @@ import {
   getSubagentDefinition,
 } from "../sub/builtinSubagentTypes.js";
 import { buildPlanModeAgentToolSchema } from "../../tool/builtin/agent.js";
+import { PLAN_MODE_ALLOWED_TOOLS, PLAN_MODE_DESCRIPTION_SUFFIX } from "../../tool/planModeConstraints.js";
 import { agentError } from "../protocol/errors.js";
 import type { AgentEvent } from "../protocol/events.js";
 import type { AgentPermissionDenial, AgentTurnResult } from "../protocol/result.js";
@@ -912,7 +913,7 @@ export class AgentLoop {
     const planTodo = this.dependencies.planTodoManager?.forSession(input.sessionId);
     let tools = this.dependencies.tools.registry.toCanonicalSchemas();
     if (this.config.permissionMode === "plan") {
-      tools = applyPlanModeToolOverrides(tools);
+      tools = filterPlanModeTools(tools);
     }
 
     const prepared = await contextRuntime.prepareForModel({
@@ -1371,12 +1372,20 @@ export class AgentLoop {
   private readonly now = (): Date => this.dependencies.now?.() ?? new Date();
 }
 
-function applyPlanModeToolOverrides(tools: CanonicalToolSchema[]): CanonicalToolSchema[] {
-  const override = buildPlanModeAgentToolSchema();
-  return tools.map((tool) => {
-    if (tool.name !== "agent") return tool;
-    return { ...tool, description: override.description, inputSchema: override.inputSchema };
-  });
+function filterPlanModeTools(tools: CanonicalToolSchema[]): CanonicalToolSchema[] {
+  const agentOverride = buildPlanModeAgentToolSchema();
+  return tools
+    .filter((tool) => PLAN_MODE_ALLOWED_TOOLS.has(tool.name))
+    .map((tool) => {
+      if (tool.name === "agent") {
+        return { ...tool, description: agentOverride.description, inputSchema: agentOverride.inputSchema };
+      }
+      const suffix = PLAN_MODE_DESCRIPTION_SUFFIX[tool.name];
+      if (suffix) {
+        return { ...tool, description: tool.description + suffix };
+      }
+      return tool;
+    });
 }
 
 function mergeUserRules(target: PermissionRule[], userRules: PermissionRule[] | undefined): void {
