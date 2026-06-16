@@ -140,7 +140,7 @@ export class AgentLoop {
      * resume from where it was cut off — up to MAX_OUTPUT_RECOVERY_LIMIT
      * times.
      */
-    const MAX_OUTPUT_RECOVERY_LIMIT = 3;
+    const MAX_OUTPUT_RECOVERY_LIMIT = 50;
     let maxOutputRecoveryCount = 0;
     const MAX_JSON_SELF_CORRECT_RETRIES = 3;
     let jsonSelfCorrectCount = 0;
@@ -535,6 +535,40 @@ export class AgentLoop {
       }
 
       if (toolCalls.length === 0) {
+        const assistantText = textFromMessage(assembled.message);
+
+        // Pure-text output truncated by max_output_tokens: the model was
+        // mid-sentence with no tool calls. Unlike tool-call truncation we
+        // skip the "strip-and-retry-with-doubled-tokens" phase (Phase A)
+        // because (a) the text already generated is valid and discarding it
+        // wastes tokens, and (b) blindly doubling maxOutputTokens may
+        // exceed the provider's model cap and trigger a 400 error.
+        // Instead, keep the truncated assistant message in context and
+        // inject a continuation prompt so the model resumes from the cut.
+        if (assembled.finishReason === "length") {
+          if (maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
+            maxOutputRecoveryCount++;
+            messages.push({
+              role: "user",
+              content: [{
+                type: "text",
+                text: "Output token limit hit. Resume directly — no apology, no recap of what you were doing. "
+                  + "Pick up mid-sentence if that is where the cut happened.",
+              }],
+              metadata: { synthetic: true, purpose: "max_output_recovery" },
+            });
+            yield {
+              type: "turn_continued",
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              reason: "model_error",
+            };
+            continue;
+          }
+          // Exhausted — fall through to normal completion with whatever
+          // text was produced so far.
+        }
+
         const largeFileDecision = largeFileRepair.onNoToolCalls();
         if (largeFileDecision) {
           const continued = await continueWithSyntheticPrompt(largeFileDecision);
