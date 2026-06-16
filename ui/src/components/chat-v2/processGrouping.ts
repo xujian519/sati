@@ -380,7 +380,6 @@ function canHostProcessSummary(message: ChatMessage): boolean {
 }
 
 function isCollapsibleCompletedProcessMessage(message: ChatMessage): boolean {
-  if (message.isThinking) return false;
   return isProcessMessage(message);
 }
 

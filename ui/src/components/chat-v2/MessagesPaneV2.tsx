@@ -19,7 +19,11 @@ import { useSubagentMessages } from './useSubagentMessages';
 import { ProcessLiveStatus, ProcessRunHeader, StreamingThinkingPreview, type ProcessTraceStep } from './ProcessTrace';
 import { formatProcessDuration } from './processTraceUtils';
 import {
+  buildRenderableMessageItems,
+  getLiveProcessDetailMessages,
   getLiveProcessGroupStep,
+  getLiveProcessGroups,
+  shouldRenderLiveProcessGroup,
   type LiveProcessGroup,
   type RenderableMessageItem,
 } from './processGrouping';
@@ -401,12 +405,15 @@ export default function MessagesPaneV2({
     [visibleMessages, showThinking, inlineThinking],
   );
   const liveProcessDetailMessages = useMemo(
-    () => [] as ChatMessage[],
-    [],
+    () => isAssistantWorking ? getLiveProcessDetailMessages(renderableMessages) : [],
+    [isAssistantWorking, renderableMessages],
   );
   const liveProcessGroups = useMemo(
-    () => [] as LiveProcessGroup[],
-    [],
+    () => isAssistantWorking
+      ? getLiveProcessGroups(renderableMessages, { isAssistantWorking })
+        .filter((group) => shouldRenderLiveProcessGroup(group, runMode))
+      : [],
+    [isAssistantWorking, renderableMessages, runMode],
   );
   const liveProcessGroupsByAnchor = useMemo(() => {
     const groupsByAnchor = new Map<number, LiveProcessGroup[]>();
@@ -417,18 +424,9 @@ export default function MessagesPaneV2({
     }
     return groupsByAnchor;
   }, [liveProcessGroups]);
-  // Chronological mode: render ALL messages in original order without collapsing
-  // process messages (tool_use, thinking) into separate groups.
   const renderableMessageItems = useMemo(
-    () => renderableMessages.map((message, index): RenderableMessageItem => ({
-      message,
-      originalIndex: index,
-      beforeRunAttachment: null,
-      afterRunAttachment: null,
-      beforeProcessAttachments: [],
-      afterProcessAttachments: [],
-    })),
-    [renderableMessages],
+    () => buildRenderableMessageItems(renderableMessages, { isAssistantWorking }),
+    [isAssistantWorking, renderableMessages],
   );
   const keyedMessageItems = useMemo<KeyedRenderableMessageItem[]>(
     () => renderableMessageItems.map((item, index) => ({
@@ -708,7 +706,7 @@ export default function MessagesPaneV2({
       ? keyedMessageItems[item.renderIndex + 1].message
       : null;
     const isLast = !isAssistantWorking && item.renderIndex === keyedMessageItems.length - 1;
-    const anchoredLiveGroups: LiveProcessGroup[] = [];
+    const anchoredLiveGroups = liveProcessGroupsByAnchor.get(item.originalIndex) || [];
     const rendersLiveHeaderAfterItem = item.renderIndex === liveProcessHeaderIndex - 1;
 
     return (
@@ -788,6 +786,7 @@ export default function MessagesPaneV2({
     isAssistantWorking,
     keyedMessageItems,
     nonSubagentLiveActivities,
+    liveProcessGroupsByAnchor,
     liveProcessHeaderIndex,
     liveProcessStartedAtMs,
     onFileOpen,
