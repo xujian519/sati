@@ -1190,7 +1190,7 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
       return [{
         type: "agent_status",
         event: "subagent_started",
-        detail: { subagentId: event.subagentId, subagentType: event.subagentType },
+        detail: { subagentId: event.subagentId, subagentType: event.subagentType, toolCallId: event.toolCallId },
       }];
     case "subagent_completed":
       return [{
