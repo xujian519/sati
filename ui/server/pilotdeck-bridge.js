@@ -94,10 +94,12 @@ function normalizeToolDisplayName(name) {
 }
 
 function isPlanModeToolDenyText(text) {
-    return typeof text === 'string' && /plan mode denies side-effecting tool\b/i.test(text);
+    if (typeof text !== 'string') return false;
+    return /\[PLAN_MODE_VIOLATION\]/i.test(text) || /plan mode denies side-effecting tool\b/i.test(text);
 }
 
 function normalizeToolErrorCode(errorCode, resultPreview) {
+    if (errorCode === 'plan_mode_violation') return 'plan_mode_denied';
     if (isPlanModeToolDenyText(resultPreview)) return 'plan_mode_denied';
     return errorCode;
 }
