@@ -192,12 +192,8 @@ function formatPermissionMode(mode: string): string {
         "- Do NOT skip the planning phase — even for seemingly simple tasks, explore first",
         "- Do NOT call exit_plan_mode until you have a concrete, actionable plan",
       ].join("\n");
-    case "acceptEdits":
-      return "Permission mode: acceptEdits — file edits are auto-approved; shell still requires approval.";
     case "bypassPermissions":
       return "Permission mode: bypassPermissions — all tools are auto-approved; act conservatively.";
-    case "dontAsk":
-      return "Permission mode: dontAsk — do not prompt the user; deny anything ambiguous.";
     default:
       return `Permission mode: ${mode}`;
   }

@@ -6,7 +6,7 @@ import type {
 
 export type Provider = SessionProvider;
 
-export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
+export type PermissionMode = 'default' | 'bypassPermissions' | 'plan';
 export type ChatRunMode = 'agent' | 'plan';
 
 export interface ChatImage {

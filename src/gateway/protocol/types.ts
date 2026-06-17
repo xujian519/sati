@@ -54,7 +54,7 @@ export type GatewayChannelKey =
   | "api_server" | "webhook"
   | (string & {});
 
-export type GatewayMode = "default" | "plan" | "acceptEdits" | "bypassPermissions";
+export type GatewayMode = "default" | "plan" | "bypassPermissions";
 
 export type ChannelAttachment = {
   type: "file" | "image" | "text" | "unknown";

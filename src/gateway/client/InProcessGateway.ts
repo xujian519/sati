@@ -288,7 +288,9 @@ export class InProcessGateway implements Gateway {
           channelKey: input.channelKey,
         });
         const permissionSettings = readPermissionSettings();
-        const permissionMode = input.mode ?? (permissionSettings.skipPermissions ? "bypassPermissions" : undefined);
+        const inputMode = normalizeGatewayModeForLegacyInput((input as { mode?: unknown }).mode);
+        const permissionMode = inputMode ?? (permissionSettings.skipPermissions ? "bypassPermissions" : undefined);
+        const basePermissionMode = normalizeGatewayModeForLegacyInput((input as { basePermissionMode?: unknown }).basePermissionMode);
         const persistedRules = permissionSettingsToRuleSet(permissionSettings);
         const sessionAllowRules = this.sessionPermissionGrants.get(input.sessionKey) ?? [];
         this.options.telemetry?.trackFeatureLoopStage({
@@ -318,7 +320,7 @@ export class InProcessGateway implements Gateway {
             turnId: runId,
             maxTurns: input.maxTurns,
             permissionMode,
-            basePermissionMode: input.basePermissionMode,
+            basePermissionMode,
             permissionRules: {
               ...persistedRules,
               allow: [...sessionAllowRules, ...persistedRules.allow],
@@ -702,6 +704,16 @@ function resolveSubmitTurnTelemetry(input: GatewaySubmitTurnInput): {
     executionKind: input.telemetry?.executionKind ?? "user_session",
     phase: input.telemetry?.phase,
   };
+}
+
+export function normalizeGatewayModeForLegacyInput(value: unknown): GatewaySubmitTurnInput["mode"] | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  if (value === "default" || value === "plan" || value === "bypassPermissions") {
+    return value;
+  }
+  return "default";
 }
 
 function emitSessionTelemetry(

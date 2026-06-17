@@ -310,20 +310,25 @@ function uiFilesToAttachments(files) {
     return out.length > 0 ? out : undefined;
 }
 
+function normalizePermissionMode(value) {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (value === 'default' || value === 'plan' || value === 'bypassPermissions') return value;
+    return 'default';
+}
+
 function resolvePermissionMode(options) {
-    const explicit = options?.permissionMode || options?.mode;
+    const explicit = normalizePermissionMode(options?.permissionMode || options?.mode);
     // A literal "default" from the chat composer is the implicit
     // no-special-mode position of the per-turn picker, not a real
     // per-turn override. Let the user-level skipPermissions toggle
-    // win over it. Genuine non-default picks (plan / acceptEdits /
-    // bypassPermissions / dontAsk) still take precedence — they're a
-    // deliberate per-turn decision.
+    // win over it. Genuine non-default picks (plan / bypassPermissions)
+    // still take precedence — they're a deliberate per-turn decision.
     if (explicit && explicit !== 'default') return explicit;
     const persisted = readPermissionSettings();
     if (persisted.skipPermissions === true) {
         return 'bypassPermissions';
     }
-    return explicit || WEB_DEFAULT_PERMISSION_MODE;
+    return explicit || normalizePermissionMode(WEB_DEFAULT_PERMISSION_MODE) || 'default';
 }
 
 /**
@@ -866,7 +871,7 @@ export async function runChatViaGateway(
         ...(uiFilesToAttachments(options?.attachments) || []),
     ];
     const resolvedMode = resolvePermissionMode(options);
-    const basePermissionMode = options?.basePermissionMode || undefined;
+    const basePermissionMode = normalizePermissionMode(options?.basePermissionMode);
     console.log(`[pilotdeck-bridge] submitTurn mode=${resolvedMode} (options.permissionMode=${options?.permissionMode}, options.mode=${options?.mode})`);
 
     try {
