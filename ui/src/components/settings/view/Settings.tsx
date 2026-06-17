@@ -336,6 +336,15 @@ function ChatInputSettingsPage() {
               ariaLabel={t('quickSettings.showThinking')}
             />
           </SettingsRow>
+          {preferences.showThinking ? (
+            <SettingsRow label={t('quickSettings.inlineThinking')}>
+              <SettingsToggle
+                checked={preferences.inlineThinking}
+                onChange={(value) => setPreference('inlineThinking', value)}
+                ariaLabel={t('quickSettings.inlineThinking')}
+              />
+            </SettingsRow>
+          ) : null}
         </SettingsCard>
       </SettingsSection>
 
