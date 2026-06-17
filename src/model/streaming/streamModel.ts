@@ -8,7 +8,7 @@ import type {
   ModelProtocol,
   ProviderConfig,
 } from "../protocol/canonical.js";
-import { ModelProviderError } from "../protocol/errors.js";
+import { ModelProviderError, parseRetryAfterHeader } from "../protocol/errors.js";
 import { parseModelResponse } from "../response/parseModelResponse.js";
 import { createStreamNormalizerState, normalizeStreamEvent } from "./normalizeStreamEvent.js";
 import { normalizeProviderBaseUrl } from "../normalizeProviderBaseUrl.js";
@@ -21,6 +21,8 @@ export type ModelRuntimeOptions = {
   signal?: AbortSignal;
 };
 
+const DEFAULT_REQUEST_MAX_RETRIES = 2;
+
 export async function complete(
   request: CanonicalModelRequest,
   config: ModelConfig,
@@ -28,21 +30,44 @@ export async function complete(
 ) {
   const nonStreamingRequest = { ...request, stream: false };
   const { provider } = validateModelRequest(nonStreamingRequest, config);
-  const body = buildModelRequest(nonStreamingRequest, config);
-  const response = await sendProviderRequest(provider, body, false, options.fetch ?? fetch, options.signal);
+  const maxRetries = provider.retry?.requestMaxRetries ?? DEFAULT_REQUEST_MAX_RETRIES;
+  const retryBaseDelay = provider.retry?.baseDelayMs ?? DEFAULT_RETRY_BASE_DELAY_MS;
 
-  if (!response.ok) {
-    const raw = await safeReadJson(response);
-    throw new ModelProviderError(
-      normalizeModelError(provider.id, provider.protocol, raw, response.status),
-    );
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    throwIfAborted(options.signal);
+    const body = buildModelRequest(nonStreamingRequest, config);
+    let response: Response;
+    try {
+      response = await sendProviderRequest(provider, body, false, options.fetch ?? fetch, options.signal);
+    } catch (error) {
+      if (attempt < maxRetries && isRetryableRequestError(error)) {
+        const delayMs = retryBaseDelay * (attempt + 1);
+        console.warn(
+          `[PilotDeck] complete() retry: ${(error as Error).message} ` +
+          `(attempt ${attempt + 1}/${maxRetries}, delay=${delayMs}ms)`,
+        );
+        await delay(delayMs, options.signal);
+        continue;
+      }
+      throw error;
+    }
+
+    if (!response.ok) {
+      const raw = await safeReadJson(response);
+      throw new ModelProviderError(
+        normalizeModelError(provider.id, provider.protocol, raw, response.status),
+      );
+    }
+
+    const raw = await response.json();
+    return parseModelResponse(provider.protocol, raw, provider.id);
   }
 
-  const raw = await response.json();
-  return parseModelResponse(provider.protocol, raw, provider.id);
+  throw new Error("complete() exhausted all retry attempts without a result.");
 }
 
-const MAX_STREAM_RETRIES = 2;
+const DEFAULT_STREAM_MAX_RETRIES = 2;
+const DEFAULT_RETRY_BASE_DELAY_MS = 1000;
 
 export async function* streamModel(
   request: CanonicalModelRequest,
@@ -51,6 +76,8 @@ export async function* streamModel(
 ): AsyncIterable<CanonicalModelEvent> {
   const streamingRequest = { ...request, stream: true };
   const { provider } = validateModelRequest(streamingRequest, config);
+  const maxRetries = provider.retry?.streamMaxRetries ?? DEFAULT_STREAM_MAX_RETRIES;
+  const retryBaseDelay = provider.retry?.baseDelayMs ?? DEFAULT_RETRY_BASE_DELAY_MS;
 
   yield {
     type: "request_started",
@@ -63,7 +90,7 @@ export async function* streamModel(
   let currentRequest = streamingRequest;
   const checkpoint = new StreamingCheckpointManager();
 
-  for (let attempt = 0; attempt <= MAX_STREAM_RETRIES; attempt++) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     throwIfAborted(options.signal);
     const body = buildModelRequest(currentRequest, config);
     if (process.env.PILOTDECK_DUMP_REQUEST === "1") {
@@ -76,8 +103,8 @@ export async function* streamModel(
     try {
       response = await sendProviderRequest(provider, body, true, options.fetch ?? fetch, options.signal);
     } catch (error) {
-      if (attempt < MAX_STREAM_RETRIES && isRetryableStreamError(error)) {
-        await delay(1000 * (attempt + 1));
+      if (attempt < maxRetries && isRetryableStreamError(error)) {
+        await delay(retryBaseDelay * (attempt + 1));
         continue;
       }
       throw error;
@@ -85,10 +112,14 @@ export async function* streamModel(
 
     if (!response.ok) {
       const raw = await safeReadJson(response);
-      yield {
-        type: "error",
-        error: normalizeModelError(provider.id, provider.protocol, raw, response.status),
-      };
+      const error = normalizeModelError(provider.id, provider.protocol, raw, response.status);
+      if (error.retryAfterMs === undefined) {
+        const headerMs = parseRetryAfterHeader(response.headers.get("retry-after"));
+        if (headerMs !== undefined) {
+          error.retryAfterMs = headerMs;
+        }
+      }
+      yield { type: "error", error };
       return;
     }
 
@@ -103,8 +134,10 @@ export async function* streamModel(
     const state = createStreamNormalizerState(provider.protocol);
     let streamCompleted = false;
 
+    const streamIdleTimeoutMs = resolveStreamIdleTimeout(provider);
+
     try {
-      for await (const rawEvent of readServerSentEvents(response.body, options.signal)) {
+      for await (const rawEvent of readServerSentEvents(response.body, options.signal, streamIdleTimeoutMs)) {
         for (const event of normalizeStreamEvent(provider.protocol, rawEvent, state)) {
           checkpoint.onEvent(event);
           yield event;
@@ -113,18 +146,18 @@ export async function* streamModel(
       streamCompleted = true;
     } catch (error) {
       if (
-        attempt < MAX_STREAM_RETRIES &&
+        attempt < maxRetries &&
         isRetryableStreamError(error) &&
         checkpoint.hasSubstantialContent()
       ) {
         currentRequest = buildContinuationRequest(currentRequest, checkpoint.get().partialText);
         checkpoint.reset();
-        await delay(1000 * (attempt + 1), options.signal);
+        await delay(retryBaseDelay * (attempt + 1), options.signal);
         continue;
       }
 
-      if (isRetryableStreamError(error) && attempt < MAX_STREAM_RETRIES) {
-        await delay(1000 * (attempt + 1), options.signal);
+      if (isRetryableStreamError(error) && attempt < maxRetries) {
+        await delay(retryBaseDelay * (attempt + 1), options.signal);
         continue;
       }
 
@@ -137,12 +170,36 @@ export async function* streamModel(
   }
 }
 
+function isRetryableRequestError(error: unknown): boolean {
+  if (isAbortError(error)) return false;
+  if (error instanceof ModelProviderError) {
+    return error.error.retryable;
+  }
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return (
+      msg.includes("network") ||
+      msg.includes("econnreset") ||
+      msg.includes("socket hang up") ||
+      msg.includes("fetch failed") ||
+      msg.includes("timeout") ||
+      msg.includes("etimedout") ||
+      msg.includes("epipe") ||
+      msg.includes("econnrefused")
+    );
+  }
+  return false;
+}
+
 function isRetryableStreamError(error: unknown): boolean {
   if (isAbortError(error)) {
     return false;
   }
   if (error instanceof ModelProviderError) {
     return false;
+  }
+  if (error instanceof StreamIdleTimeoutError) {
+    return true;
   }
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
@@ -198,6 +255,24 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
+const UNDICI_LONG_TIMEOUT_MS = 600_000; // 10 minutes — must exceed application-level timeout
+
+let longTimeoutDispatcher: unknown;
+async function getLongTimeoutDispatcher(): Promise<unknown> {
+  if (longTimeoutDispatcher) return longTimeoutDispatcher;
+  try {
+    const { Agent } = await import("undici");
+    longTimeoutDispatcher = new Agent({
+      headersTimeout: UNDICI_LONG_TIMEOUT_MS,
+      bodyTimeout: UNDICI_LONG_TIMEOUT_MS,
+    });
+    return longTimeoutDispatcher;
+  } catch {
+    return undefined;
+  }
+}
+
 async function sendProviderRequest(
   provider: ProviderConfig,
   body: unknown,
@@ -207,21 +282,28 @@ async function sendProviderRequest(
 ): Promise<Response> {
   const controller = new AbortController();
   const detachAbort = signal ? forwardAbort(signal, controller) : undefined;
-  const timeout = provider.timeoutMs
-    ? setTimeout(() => controller.abort(), provider.timeoutMs)
+  const effectiveTimeoutMs = stream ? provider.timeoutMs : (provider.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
+  const timeout = effectiveTimeoutMs
+    ? setTimeout(() => controller.abort("request_timeout"), effectiveTimeoutMs)
     : undefined;
 
   const finalBody = provider.extraBody
     ? { ...(body as Record<string, unknown>), ...provider.extraBody }
     : body;
 
+  const dispatcher = await getLongTimeoutDispatcher();
+
   try {
-    return await transport(buildEndpoint(provider, stream), {
+    const fetchOptions: RequestInit & { dispatcher?: unknown } = {
       method: "POST",
       headers: buildHeaders(provider),
       body: JSON.stringify(finalBody),
       signal: controller.signal,
-    });
+    };
+    if (dispatcher) {
+      fetchOptions.dispatcher = dispatcher;
+    }
+    return await transport(buildEndpoint(provider, stream), fetchOptions as RequestInit);
   } catch (error) {
     if (signal?.aborted) {
       throw createAbortError(signal.reason);
@@ -285,13 +367,24 @@ async function safeReadJson(response: Response): Promise<unknown> {
   }
 }
 
+const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 300_000; // 5 minutes
+
+class StreamIdleTimeoutError extends Error {
+  constructor(idleMs: number) {
+    super(`Stream idle timeout: no data received for ${idleMs}ms`);
+    this.name = "StreamIdleTimeoutError";
+  }
+}
+
 async function* readServerSentEvents(
   body: ReadableStream<Uint8Array>,
   signal?: AbortSignal,
+  idleTimeoutMs?: number,
 ): AsyncIterable<unknown> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  const effectiveIdleMs = idleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS;
   const cancelReader = () => {
     reader.cancel(signal?.reason).catch(() => undefined);
   };
@@ -305,8 +398,9 @@ async function* readServerSentEvents(
   try {
     while (true) {
       throwIfAborted(signal);
-      const { value, done } = await reader.read();
+      const readResult = await readWithIdleTimeout(reader, effectiveIdleMs, signal);
       throwIfAborted(signal);
+      const { value, done } = readResult;
       if (done) {
         buffer += decoder.decode();
         break;
@@ -333,6 +427,61 @@ async function* readServerSentEvents(
   } finally {
     signal?.removeEventListener("abort", cancelReader);
   }
+}
+
+function readWithIdleTimeout(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  idleMs: number,
+  signal?: AbortSignal,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  return new Promise<ReadableStreamReadResult<Uint8Array>>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        reject(new StreamIdleTimeoutError(idleMs));
+      }
+    }, idleMs);
+    if (typeof timer === "object" && "unref" in timer) {
+      (timer as NodeJS.Timeout).unref();
+    }
+    const onAbort = () => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        reject(createAbortError(signal?.reason));
+      }
+    };
+    if (signal) {
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+    reader.read().then(
+      (result) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          if (signal) signal.removeEventListener("abort", onAbort);
+          resolve(result);
+        }
+      },
+      (err) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          if (signal) signal.removeEventListener("abort", onAbort);
+          reject(err);
+        }
+      },
+    );
+  });
+}
+
+function resolveStreamIdleTimeout(provider: ProviderConfig): number {
+  const retry = provider.retry;
+  if (retry && typeof retry.streamIdleTimeoutMs === "number" && retry.streamIdleTimeoutMs > 0) {
+    return retry.streamIdleTimeoutMs;
+  }
+  return DEFAULT_STREAM_IDLE_TIMEOUT_MS;
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

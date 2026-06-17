@@ -233,6 +233,30 @@ export class InProcessGateway implements Gateway {
     return true;
   }
 
+  broadcastRetryProgress(detail: {
+    sessionId: string;
+    attempt: number;
+    maxAttempts: number;
+    delayMs: number;
+    reason: string;
+    provider: string;
+    model: string;
+  }): void {
+    const event: GatewayEvent = {
+      type: "agent_status",
+      event: "retry_progress",
+      detail: {
+        attempt: detail.attempt,
+        maxAttempts: detail.maxAttempts,
+        delayMs: detail.delayMs,
+        reason: detail.reason,
+        provider: detail.provider,
+        model: detail.model,
+      },
+    };
+    this.emitForSession(detail.sessionId, event);
+  }
+
   async *submitTurn(input: GatewaySubmitTurnInput): AsyncIterable<GatewayEvent> {
     // Per-turn config refresh (defensive). The fs watcher path already
     // catches most edits, but this guarantees a fresh apiKey/url is in
@@ -1129,6 +1153,7 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
           code: event.error.code,
           message: event.error.message,
           recoverable: false,
+          userHint: event.error.userHint,
         },
       ];
     case "session_aborted":
@@ -1244,6 +1269,19 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
           toolName: event.toolName,
           success: event.success,
           durationMs: event.durationMs,
+        },
+      }];
+    case "retry_progress":
+      return [{
+        type: "agent_status",
+        event: "retry_progress",
+        detail: {
+          attempt: event.detail.attempt,
+          maxAttempts: event.detail.maxAttempts,
+          delayMs: event.detail.delayMs,
+          reason: event.detail.reason,
+          provider: event.detail.provider,
+          model: event.detail.model,
         },
       }];
     case "session_ended":
