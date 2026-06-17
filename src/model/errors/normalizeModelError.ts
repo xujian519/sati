@@ -6,6 +6,7 @@ import {
   MAX_OUTPUT_REACHED_PATTERN,
   MODEL_NOT_FOUND_PATTERN,
   MULTIMODAL_PROCESSOR_PATTERN,
+  NETWORK_TIMEOUT_PATTERN,
   PROMPT_TOO_LONG_ANTHROPIC_PATTERN,
   PROMPT_TOO_LONG_OPENAI_PATTERN,
   RATE_LIMIT_MESSAGE_PATTERN,
@@ -104,6 +105,9 @@ function classifySemanticError(
   }
   if (CONTEXT_OVERFLOW_PATTERN.test(message)) {
     return "context_overflow";
+  }
+  if (NETWORK_TIMEOUT_PATTERN.test(message)) {
+    return "timeout";
   }
 
   if (status === 413) {
@@ -221,7 +225,11 @@ function resolveUserHint(
       };
     case "timeout":
       return {
-        userHint: "Request timed out. Check your network connection; the system will retry.",
+        userHint: "Request timed out. For large prompts, try increasing provider.timeoutMs in config or use streaming mode.",
+        settingsFix: {
+          description: "Increase request timeout for this provider.",
+          configPath: "model.providers.<id>.timeoutMs",
+        },
       };
     case "server_error":
       return {

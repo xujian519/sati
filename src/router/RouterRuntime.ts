@@ -103,7 +103,15 @@ export function createRouterRuntime(
   const judgeRuntime = deps.judgeRuntime ?? deps.modelRuntime;
   const events = deps.events ?? { emit: () => undefined };
   const telemetry = deps.telemetry;
-  const healthTracker = new ProviderHealthTracker();
+  const healthTrackers = new Map<string, ProviderHealthTracker>();
+  function getHealthTracker(sessionId: string): ProviderHealthTracker {
+    let tracker = healthTrackers.get(sessionId);
+    if (!tracker) {
+      tracker = new ProviderHealthTracker();
+      healthTrackers.set(sessionId, tracker);
+    }
+    return tracker;
+  }
 
   async function resolveCustom(
     input: RouterDecisionInput,
@@ -392,7 +400,7 @@ export function createRouterRuntime(
       const attempt = attempts[attemptIndex];
       if (
         attemptIndex > 0 &&
-        healthTracker.shouldSkip(attempt.provider) &&
+        getHealthTracker(ctx.sessionId).shouldSkip(attempt.provider) &&
         attemptIndex < attempts.length - 1
       ) {
         continue;
@@ -467,7 +475,7 @@ export function createRouterRuntime(
 
         if (outcome.error) {
           lastError = outcome.error;
-          healthTracker.recordFailure(attempt.provider);
+          getHealthTracker(ctx.sessionId).recordFailure(attempt.provider);
           if (!hasYieldedContent && isFallbackEligible(outcome.error)) {
             if (attemptIndex < attempts.length - 1) {
               const next = attempts[attemptIndex + 1];
@@ -648,7 +656,7 @@ export function createRouterRuntime(
           continue;
         }
 
-        healthTracker.recordSuccess(attempt.provider);
+        getHealthTracker(ctx.sessionId).recordSuccess(attempt.provider);
 
         if (!hasYieldedContent) {
           for (const queued of pending) {
@@ -779,7 +787,7 @@ export function createRouterRuntime(
       disposeTokenizer();
       if (!externalStore) sessionStore.clear();
       usageCache.clear();
-      healthTracker.resetAll();
+      healthTrackers.clear();
     },
   };
 }
@@ -946,22 +954,41 @@ function extractPartialText(buffered: CanonicalModelEvent[]): string {
   return text;
 }
 
+const MID_STREAM_CONTINUATION_MARKER = "Continue from where you left off.";
+
 function buildMidStreamContinuationRequest(
   original: CanonicalModelRequest,
   partialText: string,
 ): CanonicalModelRequest {
+  const baseMessages = stripPriorContinuation(original.messages);
   return {
     ...original,
     messages: [
-      ...original.messages,
+      ...baseMessages,
       {
         role: "assistant" as const,
         content: [{ type: "text" as const, text: partialText }],
       },
       {
         role: "user" as const,
-        content: [{ type: "text" as const, text: "Continue from where you left off." }],
+        content: [{ type: "text" as const, text: MID_STREAM_CONTINUATION_MARKER }],
       },
     ],
   };
+}
+
+function stripPriorContinuation(messages: CanonicalModelRequest["messages"]): CanonicalModelRequest["messages"] {
+  if (messages.length < 2) return messages;
+  const last = messages[messages.length - 1];
+  const secondLast = messages[messages.length - 2];
+  if (
+    last.role === "user" &&
+    secondLast.role === "assistant" &&
+    last.content.length === 1 &&
+    last.content[0].type === "text" &&
+    (last.content[0] as { type: "text"; text: string }).text === MID_STREAM_CONTINUATION_MARKER
+  ) {
+    return messages.slice(0, -2);
+  }
+  return messages;
 }

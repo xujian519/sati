@@ -21,6 +21,8 @@ export type ModelRuntimeOptions = {
   signal?: AbortSignal;
 };
 
+const DEFAULT_REQUEST_MAX_RETRIES = 2;
+
 export async function complete(
   request: CanonicalModelRequest,
   config: ModelConfig,
@@ -28,18 +30,40 @@ export async function complete(
 ) {
   const nonStreamingRequest = { ...request, stream: false };
   const { provider } = validateModelRequest(nonStreamingRequest, config);
-  const body = buildModelRequest(nonStreamingRequest, config);
-  const response = await sendProviderRequest(provider, body, false, options.fetch ?? fetch, options.signal);
+  const maxRetries = provider.retry?.requestMaxRetries ?? DEFAULT_REQUEST_MAX_RETRIES;
+  const retryBaseDelay = provider.retry?.baseDelayMs ?? DEFAULT_RETRY_BASE_DELAY_MS;
 
-  if (!response.ok) {
-    const raw = await safeReadJson(response);
-    throw new ModelProviderError(
-      normalizeModelError(provider.id, provider.protocol, raw, response.status),
-    );
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    throwIfAborted(options.signal);
+    const body = buildModelRequest(nonStreamingRequest, config);
+    let response: Response;
+    try {
+      response = await sendProviderRequest(provider, body, false, options.fetch ?? fetch, options.signal);
+    } catch (error) {
+      if (attempt < maxRetries && isRetryableRequestError(error)) {
+        const delayMs = retryBaseDelay * (attempt + 1);
+        console.warn(
+          `[PilotDeck] complete() retry: ${(error as Error).message} ` +
+          `(attempt ${attempt + 1}/${maxRetries}, delay=${delayMs}ms)`,
+        );
+        await delay(delayMs, options.signal);
+        continue;
+      }
+      throw error;
+    }
+
+    if (!response.ok) {
+      const raw = await safeReadJson(response);
+      throw new ModelProviderError(
+        normalizeModelError(provider.id, provider.protocol, raw, response.status),
+      );
+    }
+
+    const raw = await response.json();
+    return parseModelResponse(provider.protocol, raw, provider.id);
   }
 
-  const raw = await response.json();
-  return parseModelResponse(provider.protocol, raw, provider.id);
+  throw new Error("complete() exhausted all retry attempts without a result.");
 }
 
 const DEFAULT_STREAM_MAX_RETRIES = 2;
@@ -146,6 +170,27 @@ export async function* streamModel(
   }
 }
 
+function isRetryableRequestError(error: unknown): boolean {
+  if (isAbortError(error)) return false;
+  if (error instanceof ModelProviderError) {
+    return error.error.retryable;
+  }
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return (
+      msg.includes("network") ||
+      msg.includes("econnreset") ||
+      msg.includes("socket hang up") ||
+      msg.includes("fetch failed") ||
+      msg.includes("timeout") ||
+      msg.includes("etimedout") ||
+      msg.includes("epipe") ||
+      msg.includes("econnrefused")
+    );
+  }
+  return false;
+}
+
 function isRetryableStreamError(error: unknown): boolean {
   if (isAbortError(error)) {
     return false;
@@ -210,6 +255,24 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
+const UNDICI_LONG_TIMEOUT_MS = 600_000; // 10 minutes — must exceed application-level timeout
+
+let longTimeoutDispatcher: unknown;
+async function getLongTimeoutDispatcher(): Promise<unknown> {
+  if (longTimeoutDispatcher) return longTimeoutDispatcher;
+  try {
+    const { Agent } = await import("undici");
+    longTimeoutDispatcher = new Agent({
+      headersTimeout: UNDICI_LONG_TIMEOUT_MS,
+      bodyTimeout: UNDICI_LONG_TIMEOUT_MS,
+    });
+    return longTimeoutDispatcher;
+  } catch {
+    return undefined;
+  }
+}
+
 async function sendProviderRequest(
   provider: ProviderConfig,
   body: unknown,
@@ -219,21 +282,28 @@ async function sendProviderRequest(
 ): Promise<Response> {
   const controller = new AbortController();
   const detachAbort = signal ? forwardAbort(signal, controller) : undefined;
-  const timeout = provider.timeoutMs
-    ? setTimeout(() => controller.abort(), provider.timeoutMs)
+  const effectiveTimeoutMs = stream ? provider.timeoutMs : (provider.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
+  const timeout = effectiveTimeoutMs
+    ? setTimeout(() => controller.abort("request_timeout"), effectiveTimeoutMs)
     : undefined;
 
   const finalBody = provider.extraBody
     ? { ...(body as Record<string, unknown>), ...provider.extraBody }
     : body;
 
+  const dispatcher = await getLongTimeoutDispatcher();
+
   try {
-    return await transport(buildEndpoint(provider, stream), {
+    const fetchOptions: RequestInit & { dispatcher?: unknown } = {
       method: "POST",
       headers: buildHeaders(provider),
       body: JSON.stringify(finalBody),
       signal: controller.signal,
-    });
+    };
+    if (dispatcher) {
+      fetchOptions.dispatcher = dispatcher;
+    }
+    return await transport(buildEndpoint(provider, stream), fetchOptions as RequestInit);
   } catch (error) {
     if (signal?.aborted) {
       throw createAbortError(signal.reason);
