@@ -66,11 +66,7 @@ function isPortFreeOnHost(port, host) {
 }
 
 async function isPortFree(port) {
-  const [loopback, wildcard] = await Promise.all([
-    isPortFreeOnHost(port, '127.0.0.1'),
-    isPortFreeOnHost(port, '0.0.0.0'),
-  ]);
-  return loopback && wildcard;
+  return isPortFreeOnHost(port, '0.0.0.0');
 }
 
 async function findFreePort(label, base, hardOverride) {
