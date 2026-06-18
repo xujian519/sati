@@ -256,22 +256,6 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
-const UNDICI_LONG_TIMEOUT_MS = 600_000; // 10 minutes — must exceed application-level timeout
-
-let longTimeoutDispatcher: unknown;
-async function getLongTimeoutDispatcher(): Promise<unknown> {
-  if (longTimeoutDispatcher) return longTimeoutDispatcher;
-  try {
-    const { Agent } = await import("undici");
-    longTimeoutDispatcher = new Agent({
-      headersTimeout: UNDICI_LONG_TIMEOUT_MS,
-      bodyTimeout: UNDICI_LONG_TIMEOUT_MS,
-    });
-    return longTimeoutDispatcher;
-  } catch {
-    return undefined;
-  }
-}
 
 async function sendProviderRequest(
   provider: ProviderConfig,
@@ -291,19 +275,14 @@ async function sendProviderRequest(
     ? { ...(body as Record<string, unknown>), ...provider.extraBody }
     : body;
 
-  const dispatcher = await getLongTimeoutDispatcher();
-
   try {
-    const fetchOptions: RequestInit & { dispatcher?: unknown } = {
+    const fetchOptions: RequestInit = {
       method: "POST",
       headers: buildHeaders(provider),
       body: JSON.stringify(finalBody),
       signal: controller.signal,
     };
-    if (dispatcher) {
-      fetchOptions.dispatcher = dispatcher;
-    }
-    return await transport(buildEndpoint(provider, stream), fetchOptions as RequestInit);
+    return await transport(buildEndpoint(provider, stream), fetchOptions);
   } catch (error) {
     if (signal?.aborted) {
       throw createAbortError(signal.reason);
