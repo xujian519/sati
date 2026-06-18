@@ -131,6 +131,8 @@ export type WebSubmitTurnInput = {
   projectKey?: string;
   attachments?: WebChannelAttachment[];
   mode?: WebGatewayMode;
+  basePermissionMode?: WebGatewayMode;
+  allowPlanModeTools?: boolean;
   runId?: string;
 };
 
