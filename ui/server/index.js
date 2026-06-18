@@ -532,7 +532,10 @@ app.get('/api/always-on/cron-jobs', authenticateToken, async (_req, res) => {
 app.post('/api/always-on/cron-jobs/:taskId/run-now', authenticateToken, async (req, res) => {
     try {
         const gateway = await getPilotDeckGateway();
-        const result = await gateway.cronRunNow({ taskId: req.params.taskId });
+        const result = await gateway.cronRunNow({
+            taskId: req.params.taskId,
+            projectKey: req.body?.projectKey || req.query?.projectKey || undefined,
+        });
         res.json(result);
     } catch (error) {
         console.error('[always-on-cron-run-now] failed:', error);
@@ -543,7 +546,10 @@ app.post('/api/always-on/cron-jobs/:taskId/run-now', authenticateToken, async (r
 app.post('/api/always-on/cron-jobs/:taskId/stop', authenticateToken, async (req, res) => {
     try {
         const gateway = await getPilotDeckGateway();
-        const result = await gateway.cronStop({ taskId: req.params.taskId });
+        const result = await gateway.cronStop({
+            taskId: req.params.taskId,
+            projectKey: req.body?.projectKey || req.query?.projectKey || undefined,
+        });
         res.json(result);
     } catch (error) {
         console.error('[always-on-cron-stop] failed:', error);
@@ -554,7 +560,11 @@ app.post('/api/always-on/cron-jobs/:taskId/stop', authenticateToken, async (req,
 app.delete('/api/always-on/cron-jobs/:taskId', authenticateToken, async (req, res) => {
     try {
         const gateway = await getPilotDeckGateway();
-        const result = await gateway.cronDelete({ taskId: req.params.taskId, stopRunning: true });
+        const result = await gateway.cronDelete({
+            taskId: req.params.taskId,
+            projectKey: req.body?.projectKey || req.query?.projectKey || undefined,
+            stopRunning: true,
+        });
         res.json(result);
     } catch (error) {
         console.error('[always-on-cron-delete] failed:', error);
@@ -1818,8 +1828,8 @@ function handleChatConnection(ws, request) {
     const userId = request?.user?.id ?? request?.user?.userId ?? null;
     ws.__pilotdeckUserId = userId;
     connectedClients.add(ws);
-    // PilotDeck's cron runtime lives inside `pilotdeck server`
-    // (src/cron via createCronRuntime); no legacy daemon lease needed.
+    // PilotDeck's cron manager lives inside `pilotdeck server`;
+    // no legacy daemon lease is needed.
     let cleanedUp = false;
 
     // Wrap WebSocket with writer for consistent interface with SSEStreamWriter

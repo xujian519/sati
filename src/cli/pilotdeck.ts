@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
 import { createAlwaysOnManager, createApplyHandler, SessionConfigOverrides, type AlwaysOnManager, type AlwaysOnConfig } from "../always-on/index.js";
-import { createCronRuntime, type CronRuntime, type CronConfig } from "../cron/index.js";
+import { createCronManager, type CronManager, type CronConfig } from "../cron/index.js";
 import { connectRemoteGatewayIfAvailable, type Gateway, type GatewayEvent, type GatewaySubmitTurnInput } from "../gateway/index.js";
 import { CliChannel, TuiChannel, FeishuChannel, WeixinChannel, QQChannel, loadEnabledChannels } from "../adapters/index.js";
 import {
@@ -38,8 +38,9 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     }
 
     let alwaysOn: AlwaysOnManager | undefined;
-    let cron: CronRuntime | undefined;
+    let cron: CronManager | undefined;
     let deferredBroadcast: ((name: string, payload?: unknown) => void) | undefined;
+    const sessionOverrides = new SessionConfigOverrides();
 
     const alwaysOnLogger = {
       info: (message: string, data?: Record<string, unknown>) =>
@@ -59,6 +60,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       return createAlwaysOnManager({
         config,
         pilotHome,
+        sessionOverrides,
         logger: alwaysOnLogger,
         telemetry,
         onWorktreeCreated: (runId, cwd) => {
@@ -73,12 +75,12 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       });
     }
 
-    function buildCron(config: CronConfig | undefined): CronRuntime | undefined {
+    function buildCron(config: CronConfig | undefined): CronManager | undefined {
       if (!config) return undefined;
-      return createCronRuntime({
+      return createCronManager({
         config,
         pilotHome,
-        projectKey: projectRoot,
+        sessionOverrides,
         logger: cronLogger,
         telemetry,
       });
@@ -96,7 +98,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       env,
       skipDefaultProject: !!env.PILOTDECK_SKIP_DEFAULT_PROJECT,
       extraTools: [...(alwaysOn?.getTools() ?? []), ...(cron?.getTools() ?? [])],
-      sessionOverrides: alwaysOn?.getSessionOverrides(),
+      sessionOverrides,
       cron,
       telemetry,
     });
@@ -104,7 +106,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     const standaloneApply = createApplyHandler({
       gateway,
       pilotHome,
-      sessionOverrides: alwaysOn?.getSessionOverrides() ?? new SessionConfigOverrides(),
+      sessionOverrides,
       alwaysOnConfig: snapshot.config.alwaysOn,
       telemetry,
       onTurnEvent: (sessionKey, channelKey, event) => {
@@ -118,7 +120,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     }
     updateSubsystems({
       extraTools: [...(alwaysOn?.getTools() ?? []), ...(cron?.getTools() ?? [])],
-      sessionOverrides: alwaysOn?.getSessionOverrides(),
+      sessionOverrides,
       cron,
       alwaysOnApply: alwaysOn
         ? (input) => alwaysOn!.applyCycle(input)
@@ -197,7 +199,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       const fallbackApply = createApplyHandler({
         gateway,
         pilotHome,
-        sessionOverrides: alwaysOn?.getSessionOverrides() ?? new SessionConfigOverrides(),
+        sessionOverrides,
         alwaysOnConfig: config.alwaysOn,
         telemetry,
         onTurnEvent: (sessionKey, channelKey, event) => {
@@ -207,7 +209,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
 
       updateSubsystems({
         extraTools: [...(alwaysOn?.getTools() ?? []), ...(cron?.getTools() ?? [])],
-        sessionOverrides: alwaysOn?.getSessionOverrides(),
+        sessionOverrides,
         cron,
         alwaysOnApply: alwaysOn ? (input) => alwaysOn!.applyCycle(input) : fallbackApply,
         alwaysOnRerunPlan: alwaysOn ? (input) => alwaysOn!.rerunPlan(input) : undefined,
