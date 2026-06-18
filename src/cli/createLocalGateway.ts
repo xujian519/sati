@@ -135,7 +135,7 @@ export type CreateLocalGatewayResult = {
   /**
    * Replace subsystem-owned tools, session overrides, and cron controller.
    * Called by the server command after tearing down and rebuilding
-   * AlwaysOnManager / CronRuntime in response to a config change.
+   * AlwaysOnManager / CronManager in response to a config change.
    */
   updateSubsystems: (update: SubsystemUpdate) => void;
 };
@@ -807,7 +807,7 @@ class ProjectRuntimeRegistry {
       );
     }
 
-    // -- excludeTools filtering (Always-On headless sessions) -----------
+    // -- excludeTools filtering (unattended sessions) -------------------
     const override = this._sessionOverrides?.get(context.sessionKey);
     if (override?.excludeTools && override.excludeTools.length > 0) {
       if (sessionTools === runtime.tools) {
@@ -821,8 +821,7 @@ class ProjectRuntimeRegistry {
     // -- Strip always_on_* tools from non-Always-On sessions -------------
     // These tools require an AlwaysOnRunContext to execute; surfacing them
     // in regular user sessions just pollutes the model's tool list.
-    const isAlwaysOnSession = override?.permissionMode === "bypassPermissions"
-      && override?.canPrompt === false;
+    const isAlwaysOnSession = context.sessionKey.startsWith("always-on/");
     if (!isAlwaysOnSession) {
       const alwaysOnNames = this._extraTools
         .filter((t) => t.name.startsWith("always_on_"))

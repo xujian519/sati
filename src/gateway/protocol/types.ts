@@ -81,6 +81,8 @@ export type GatewaySubmitTurnInput = {
   basePermissionMode?: GatewayMode;
   runId?: string;
   maxTurns?: number;
+  /** Hard wall-clock limit for this turn. The gateway aborts and closes the session when exceeded. */
+  timeoutMs?: number;
   telemetry?: {
     ownerModule?: TelemetryModule;
     executionKind?: TelemetryExecutionKind;

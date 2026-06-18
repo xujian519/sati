@@ -302,6 +302,8 @@ export class InProcessGateway implements Gateway {
     }
 
     const telemetryContext = resolveSubmitTurnTelemetry(input);
+    let timeoutHandle: NodeJS.Timeout | undefined;
+    let timedOut = false;
 
     // Background pump: agent events → queue.
     const pump = (async () => {
@@ -311,6 +313,28 @@ export class InProcessGateway implements Gateway {
           projectKey: input.projectKey,
           channelKey: input.channelKey,
         });
+        if (input.timeoutMs !== undefined && Number.isFinite(input.timeoutMs) && input.timeoutMs > 0) {
+          timeoutHandle = setTimeout(() => {
+            timedOut = true;
+            const gatewayEvent: GatewayEvent = {
+              type: "error",
+              code: "turn_timeout",
+              message: `Turn exceeded the ${input.timeoutMs}ms timeout.`,
+              recoverable: false,
+            };
+            this.recordActiveTurnEvent(input.sessionKey, gatewayEvent);
+            queue.enqueue(gatewayEvent);
+            this.elicitationBus.rejectSession(input.sessionKey, "turn_timeout");
+            this.permissionBus.rejectSession(input.sessionKey, "turn_timeout");
+            queue.close();
+            try {
+              session.abort(`timeout:${runId}`);
+            } catch {
+              // The queue is already closed, so a faulty abort implementation
+              // cannot defeat the hard turn timeout.
+            }
+          }, input.timeoutMs);
+        }
         const permissionSettings = readPermissionSettings();
         const permissionMode = input.mode ?? (permissionSettings.skipPermissions ? "bypassPermissions" : undefined);
         const persistedRules = permissionSettingsToRuleSet(permissionSettings);
@@ -349,6 +373,9 @@ export class InProcessGateway implements Gateway {
             },
           },
         )) {
+          if (this.turnCompletions.get(input.sessionKey) !== turnDone) {
+            break;
+          }
           emitSessionTelemetry(this.options.telemetry, event, {
             sessionId: input.sessionKey,
             runId,
@@ -377,15 +404,21 @@ export class InProcessGateway implements Gateway {
             channelKey: input.channelKey,
           },
         });
-        const gatewayEvent: GatewayEvent = {
-          type: "error",
-          code: "gateway_submit_failed",
-          message: error instanceof Error ? error.message : String(error),
-          recoverable: false,
-        };
-        this.recordActiveTurnEvent(input.sessionKey, gatewayEvent);
-        queue.enqueue(gatewayEvent);
+        if (this.turnCompletions.get(input.sessionKey) === turnDone) {
+          const gatewayEvent: GatewayEvent = {
+            type: "error",
+            code: "gateway_submit_failed",
+            message: error instanceof Error ? error.message : String(error),
+            recoverable: false,
+          };
+          this.recordActiveTurnEvent(input.sessionKey, gatewayEvent);
+          queue.enqueue(gatewayEvent);
+        }
       } finally {
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = undefined;
+        }
         queue.close();
       }
     })();
@@ -403,8 +436,15 @@ export class InProcessGateway implements Gateway {
       this.elicitationBus.rejectSession(input.sessionKey, "turn_ended");
       this.permissionBus.rejectSession(input.sessionKey, "turn_ended");
       this.router.endTurn(input.sessionKey, runId);
-      // Defensive — make sure the pump promise is settled before we resolve.
-      await pump.catch(() => undefined);
+      if (timedOut) {
+        // The timed-out AgentSession is never safe to reuse. Do not await a
+        // misbehaving tool here: the hard timeout must release the Cron run.
+        await this.router.close(input.sessionKey);
+        void pump.catch(() => undefined);
+      } else {
+        // Defensive — make sure the pump promise is settled before we resolve.
+        await pump.catch(() => undefined);
+      }
       // Signal any in-flight `abortTurn` awaiters that the session slot
       // has been released. Drop our deferred only if we still own it —
       // a later turn for the same session may have already installed
