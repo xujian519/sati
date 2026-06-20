@@ -79,7 +79,6 @@ import type { TelemetryClient } from "../../telemetry/index.js";
 import type { TelemetryExecutionKind, TelemetryModule } from "../../telemetry/index.js";
 
 const PLAN_COMMAND_USAGE = "用法：/plan <任务>\n例如：/plan 设计一个新功能";
-const PLAN_MODE_TOOL_CHANNELS = new Set(["web"]);
 
 export type InProcessGatewayOptions = {
   now?: () => Date;
@@ -357,7 +356,7 @@ export class InProcessGateway implements Gateway {
         const inputMode = normalizeGatewayModeForLegacyInput((input as { mode?: unknown }).mode);
         const permissionMode = inputMode ?? (permissionSettings.skipPermissions ? "bypassPermissions" : undefined);
         const basePermissionMode = normalizeGatewayModeForLegacyInput((input as { basePermissionMode?: unknown }).basePermissionMode);
-        const allowPlanModeTools = input.allowPlanModeTools ?? PLAN_MODE_TOOL_CHANNELS.has(input.channelKey);
+        const allowPlanModeTools = input.allowPlanModeTools ?? true;
         const persistedRules = permissionSettingsToRuleSet(permissionSettings);
         const sessionAllowRules = this.sessionPermissionGrants.get(input.sessionKey) ?? [];
         this.options.telemetry?.trackFeatureLoopStage({
