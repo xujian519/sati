@@ -48,7 +48,6 @@ export const projectsHaveChanges = (
       nextProject.displayName !== prevProject.displayName ||
       nextProject.fullPath !== prevProject.fullPath ||
       nextProject.lastActivity !== prevProject.lastActivity ||
-      serialize(nextProject.alwaysOn) !== serialize(prevProject.alwaysOn) ||
       serialize(nextProject.sessionMeta) !== serialize(prevProject.sessionMeta) ||
       serialize(nextProject.sessions) !== serialize(prevProject.sessions) ||
       serialize(nextProject.taskmaster) !== serialize(prevProject.taskmaster);
