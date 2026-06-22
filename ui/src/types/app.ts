@@ -64,6 +64,7 @@ export type DiscoveryPlanStatus =
   | 'queued'
   | 'running'
   | 'completed'
+  | 'completed_no_report'
   | 'failed'
   | 'archived';
 
