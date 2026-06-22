@@ -205,14 +205,6 @@ function decideByMode(
     });
   }
 
-  if (context.mode === "acceptEdits" && tool.kind === "filesystem" && !tool.isReadOnly(input)) {
-    return allow({
-      type: "mode",
-      mode: "acceptEdits",
-      message: `acceptEdits allows filesystem edit tool ${tool.name}.`,
-    });
-  }
-
   if (tool.isReadOnly(input)) {
     return allow({
       type: "mode",
@@ -308,18 +300,6 @@ function finalizeAsk(decision: PermissionDecision, context: PermissionContext): 
         mode: "bypassPermissions",
         message: "bypassPermissions mode skips permission prompts.",
       },
-    };
-  }
-
-  if (context.mode === "dontAsk") {
-    return {
-      type: "deny",
-      reason: {
-        type: "mode",
-        mode: "dontAsk",
-        message: "dontAsk mode denies permission prompts.",
-      },
-      message: "Permission prompt denied because dontAsk mode is active.",
     };
   }
 

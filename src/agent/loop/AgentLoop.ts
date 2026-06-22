@@ -1718,9 +1718,7 @@ function isPermissionMode(value: unknown): value is AgentRuntimeConfig["permissi
   return (
     value === "default" ||
     value === "plan" ||
-    value === "acceptEdits" ||
-    value === "bypassPermissions" ||
-    value === "dontAsk"
+    value === "bypassPermissions"
   );
 }
 
