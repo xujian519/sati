@@ -51,6 +51,7 @@ import {
   type CatalogModel,
 } from '../../../../shared/catalogProviders';
 import type { SettingsProject } from '../../types/types';
+import { isCronConfigEnabled, patch } from './pilotDeckConfigForm';
 
 // ── V2 schema types ────────────────────────────────────────────────────
 // Schema mirrors ~/.pilotdeck/pilotdeck.yaml exactly. No more
@@ -357,21 +358,6 @@ function safeParseYaml(text: string): PilotDeckConfig | null {
  */
 function configToYamlString(config: PilotDeckConfig): string {
   return stringifyYaml(config, { indent: 2, lineWidth: 0 });
-}
-
-type Path = readonly (string | number)[];
-
-function patch<T extends PilotDeckConfig>(config: T, path: Path, value: unknown): T {
-  // Immutable deep set. Each key cloned along the way so React picks up the
-  // change. Numeric segments materialise arrays; everything else materialises
-  // objects.
-  if (path.length === 0) return value as T;
-  const [head, ...rest] = path;
-  const isArrayKey = typeof head === 'number';
-  const current: any = config ?? (isArrayKey ? [] : {});
-  const next: any = isArrayKey ? [...(current as unknown[])] : { ...(current as object) };
-  next[head as string | number] = rest.length === 0 ? value : patch(current?.[head as string | number] ?? (typeof rest[0] === 'number' ? [] : {}), rest, value);
-  return next as T;
 }
 
 function rewriteProviderRef(value: unknown, oldProviderId: string, newProviderId: string): unknown {
@@ -1831,7 +1817,7 @@ function AlwaysOnSection({
 function CronSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const { t } = useTranslation('settings');
   const cron = config.cron ?? {};
-  const enabled = cron.enabled !== false;
+  const enabled = isCronConfigEnabled(config);
 
   return (
     <SettingsSection
