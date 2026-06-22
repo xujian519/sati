@@ -835,7 +835,6 @@ class ProjectRuntimeRegistry {
         }
       }
     }
-
     // Inject the gateway's interactive permission hook so the agent's
     // PermissionRequest lifecycle is round-tripped through whichever
     // client is streaming this session (Web UI, TUI, etc.) instead of
