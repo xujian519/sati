@@ -39,7 +39,7 @@ export type PromptAssemblerResult = {
  * commands / skills) but uses PilotDeck-authored copy.
  *
  * Sections (review decision 2026-05):
- *   1 default_system_prompt   — product identity + tool catalog + permission mode
+ *   1 default_system_prompt   — product identity + tool catalog + runtime permission note
  *                                + additional working directories + mcp instructions
  *   2 user_context            — cwd + env summary + active model
  *   3 system_context          — timestamp + extension commands/skills summary
@@ -121,7 +121,7 @@ export class PromptAssembler {
     lines.push(`cwd: ${input.cwd}`);
     lines.push("IMPORTANT: When the user does not specify an explicit file path, all file paths in tool calls MUST be relative to the cwd above — use \"foo.html\", not an absolute path like \"/home/user/foo.html\". If the user explicitly provides a path, respect their choice.");
     lines.push(`model: ${input.provider}/${input.model}`);
-    lines.push(`permission_mode: ${input.permissionMode}`);
+    lines.push("permission_mode: enforced at tool runtime");
     lines.push(`platform: ${process.platform}`);
     lines.push(`node: ${process.version}`);
     lines.push("</user-context>");
@@ -151,52 +151,8 @@ export class PromptAssembler {
 
 }
 
-function formatPermissionMode(mode: string): string {
-  switch (mode) {
-    case "default":
-      return "Permission mode: default — write/shell tools require explicit approval.";
-    case "plan":
-      return [
-        '<SYSTEM_OVERRIDE priority="critical">',
-        "You are STRICTLY in PLAN MODE (read-only). This overrides ALL other instructions.",
-        "",
-        "FORBIDDEN — calling these tools will FAIL with an error and waste your turn:",
-        "- write_file, edit_file (except .md files under .pilotdeck/plans/)",
-        "- edit_notebook",
-        "- bash with any write/modify/delete command (mkdir, rm, mv, cp, tee, git commit/push, npm install, etc.)",
-        "- agent (general-purpose type)",
-        "- task_create, task_stop",
-        "",
-        "ALLOWED tools:",
-        "- read_file, grep, glob, web_search, web_fetch, ask_user_question, todo_write, read_skill, structured_output",
-        "- bash — READ-ONLY commands only (ls, cat, git status, git log, git diff, pwd, echo, find, head, wc, etc.)",
-        "- write_file/edit_file ONLY for .md files under .pilotdeck/plans/",
-        "- agent (explore/plan type only)",
-        "- exit_plan_mode (when plan is ready)",
-        "</SYSTEM_OVERRIDE>",
-        "",
-        "## What To Do",
-        "1. Explore the codebase using read_file, grep, glob, bash (read-only) to understand existing patterns and structure",
-        "2. Identify the key files, functions, and data flows relevant to the task",
-        "3. Design your implementation approach — consider trade-offs between alternatives",
-        "4. Create or refine a markdown plan file under the project's `.pilotdeck/plans/` directory",
-        "5. When your plan is ready, call exit_plan_mode with the `plan_file_path` you want to submit for user approval",
-        "",
-        "## Rules",
-        "- DO NOT exit plan mode any other way; use exit_plan_mode when you want to leave it",
-        "- Do NOT call enter_plan_mode again — you are already in plan mode",
-        "- DO NOT call bash with write commands for any reason; use write_file/edit_file only for markdown plan files under `.pilotdeck/plans/`",
-        "- You may use read-only tools freely, and you may write only markdown plan files under `.pilotdeck/plans/` while plan mode is active",
-        "- You MAY use ask_user_question to clarify requirements or choose between approaches",
-        "- Focus on understanding before proposing — read first, plan second",
-        "- Do NOT skip the planning phase — even for seemingly simple tasks, explore first",
-        "- Do NOT call exit_plan_mode until you have a concrete, actionable plan",
-      ].join("\n");
-    case "bypassPermissions":
-      return "Permission mode: bypassPermissions — all tools are auto-approved; act conservatively.";
-    default:
-      return `Permission mode: ${mode}`;
-  }
+function formatPermissionMode(_mode: string): string {
+  return "Permission mode is controlled by PilotDeck and enforced at tool runtime.";
 }
 
 /**

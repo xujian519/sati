@@ -196,7 +196,6 @@ export {
 } from "./builtin/todoWrite.js";
 export {
   PLAN_MODE_ALLOWED_TOOLS,
-  PLAN_MODE_DESCRIPTION_SUFFIX,
   buildPlanModeViolationMessage,
   buildPlanModeBashViolationMessage,
   isPlanModeViolationText,
