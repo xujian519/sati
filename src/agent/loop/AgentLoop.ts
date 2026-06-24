@@ -12,6 +12,7 @@ import {
   type CanonicalModelError,
   type CanonicalModelRequest,
   type CanonicalUsage,
+  materializeMediaReferences,
 } from "../../model/index.js";
 import type {
   PilotDeckReadFileStateMap,
@@ -33,7 +34,7 @@ import type { LifecycleDispatchResult } from "../../lifecycle/index.js";
 import type { PilotDeckHookEvent } from "../../extension/hooks/protocol/events.js";
 import { NullContextRuntime } from "../../context/NullContextRuntime.js";
 import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
-import type { ContextRecoveryDecision } from "../../context/index.js";
+import type { ContextRecoveryDecision, ContextSupplementalToolResultMessage } from "../../context/index.js";
 import type { PermissionMode, PermissionRule, PermissionRuleSet } from "../../permission/index.js";
 import { collectToolCalls } from "./collectToolCalls.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
@@ -883,9 +884,9 @@ export class AgentLoop {
       // runtime so large payloads land on disk via `ToolResultBudget`. When
       // the runtime doesn't implement `applyToolResults` (e.g. NullContext),
       // we simply append the raw projection (legacy behaviour).
-      // Only the first message (containing tool_result blocks) goes through
-      // budget processing; supplemental messages (PDF/image data) are appended directly.
       const [toolResultMsg, ...supplementalMsgs] = projected;
+      const supplementalInputs = bindSupplementalMessagesToToolCalls(pairedResults, supplementalMsgs);
+      let appendedMessages: CanonicalMessage[] = projected;
       const ctxApply = this.dependencies.context?.applyToolResults;
       if (ctxApply) {
         try {
@@ -893,22 +894,20 @@ export class AgentLoop {
             sessionId: input.sessionId,
             turnId: input.turnId,
             toolResultMessage: toolResultMsg,
+            supplementalMessages: supplementalInputs,
             messages,
           });
           messages = applied.messages;
+          appendedMessages = applied.appendedMessages ?? projected;
         } catch {
-          messages.push(toolResultMsg);
+          messages.push(...projected);
         }
       } else {
-        messages.push(toolResultMsg);
+        messages.push(...projected);
       }
-      for (const supplemental of supplementalMsgs) {
-        messages.push(supplemental);
-      }
-      yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: toolResultMsg };
-      await input.onDurableMessage?.(toolResultMsg);
-      for (const supplemental of supplementalMsgs) {
-        await input.onDurableMessage?.(supplemental);
+      for (const appended of appendedMessages) {
+        yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: appended };
+        await input.onDurableMessage?.(appended);
       }
 
       if (toolResultRepair) {
@@ -1072,7 +1071,9 @@ export class AgentLoop {
     const planTodo = this.dependencies.planTodoManager?.forSession(input.sessionId);
     let tools = this.dependencies.tools.registry.toCanonicalSchemas();
     if (input.allowPlanModeTools !== true) {
-      tools = tools.filter((tool) => tool.name !== "enter_plan_mode");
+      tools = tools.filter(
+        (tool) => tool.name !== "enter_plan_mode" && tool.name !== "exit_plan_mode",
+      );
     }
     const prepared = await contextRuntime.prepareForModel({
       sessionId: input.sessionId,
@@ -1100,12 +1101,20 @@ export class AgentLoop {
       hasSystemPrompt: !!prepared.systemPrompt,
     });
 
+    const materialized = await materializeMediaReferences(prepared.messages);
+    for (const diagnostic of materialized.diagnostics) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[pilotdeck] ${diagnostic.code}: ${diagnostic.message} (${diagnostic.mediaType}, ${diagnostic.path})`,
+      );
+    }
+
     return {
       provider: this.config.provider,
       model: this.config.model,
       messages: this.config.permissionMode === "plan"
-        ? appendPlanModeReminder(prepared.messages)
-        : prepared.messages,
+        ? appendPlanModeReminder(materialized.messages)
+        : materialized.messages,
       systemPrompt: prepared.systemPrompt ?? this.config.systemPrompt,
       tools: prepared.tools,
       toolChoice: this.config.toolChoice,
@@ -1713,6 +1722,22 @@ function readRequestedMode(value: unknown): AgentRuntimeConfig["permissionMode"]
   }
   const requestedMode = (value as Record<string, unknown>).requestedMode;
   return isPermissionMode(requestedMode) ? requestedMode : undefined;
+}
+
+function bindSupplementalMessagesToToolCalls(
+  results: PilotDeckToolResult[],
+  supplementalMessages: CanonicalMessage[],
+): ContextSupplementalToolResultMessage[] {
+  const bound: ContextSupplementalToolResultMessage[] = [];
+  let index = 0;
+  for (const result of results) {
+    const count = result.supplementalMessages?.length ?? 0;
+    for (let offset = 0; offset < count && index < supplementalMessages.length; offset += 1) {
+      bound.push({ toolCallId: result.toolCallId, message: supplementalMessages[index] });
+      index += 1;
+    }
+  }
+  return bound;
 }
 
 function isPermissionMode(value: unknown): value is AgentRuntimeConfig["permissionMode"] {

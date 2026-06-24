@@ -13,6 +13,8 @@ import {
 } from "../../../src/tool/index.js";
 import { PermissionRuntime } from "../../../src/permission/index.js";
 
+const PLAN_SESSION_TOOLS = new Set(["enter_plan_mode", "exit_plan_mode"]);
+
 test("default and plan requests keep system prompt and non-plan tool schemas stable", async () => {
   const messages: CanonicalMessage[] = [
     { role: "user", content: [{ type: "text", text: "inspect plan mode" }] },
@@ -26,12 +28,14 @@ test("default and plan requests keep system prompt and non-plan tool schemas sta
   const normalTools = requireTools(normal);
   const planTools = requireTools(plan);
   const normalNonPlanTools = normalTools
-    .filter((tool) => tool.name !== "enter_plan_mode")
+    .filter((tool) => !PLAN_SESSION_TOOLS.has(tool.name))
     .sort((a, b) => a.name.localeCompare(b.name));
   const planNonPlanTools = planTools
-    .filter((tool) => tool.name !== "enter_plan_mode")
+    .filter((tool) => !PLAN_SESSION_TOOLS.has(tool.name))
     .sort((a, b) => a.name.localeCompare(b.name));
   assert.deepEqual(planNonPlanTools, normalNonPlanTools);
+  assert.equal(planTools.some((tool) => tool.name === "enter_plan_mode"), true);
+  assert.equal(planTools.some((tool) => tool.name === "exit_plan_mode"), true);
 
   const planMessageText = textBlocks(plan.messages.at(-1));
   assert.match(planMessageText, /Plan mode is active/);
@@ -39,14 +43,14 @@ test("default and plan requests keep system prompt and non-plan tool schemas sta
   assert.equal(normal.messages.length, messages.length);
 });
 
-test("ordinary turns hide enter_plan_mode but keep exit_plan_mode schema stable", async () => {
+test("ordinary turns hide plan mode tools", async () => {
   const request = await buildModelRequest("default", false, [
     { role: "user", content: [{ type: "text", text: "hello" }] },
   ]);
 
   const names = requireTools(request).map((tool) => tool.name);
   assert.equal(names.includes("enter_plan_mode"), false);
-  assert.equal(names.includes("exit_plan_mode"), true);
+  assert.equal(names.includes("exit_plan_mode"), false);
 });
 
 async function buildModelRequest(

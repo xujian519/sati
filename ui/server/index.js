@@ -96,8 +96,6 @@ import { createNormalizedMessage } from './pilotdeck-message.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames, userDb } from './database/db.js';
 import { configureWebPush } from './services/vapid-keys.js';
-import { sendCronDaemonRequest } from './services/cron-daemon-owner.js';
-import { createAlwaysOnHeartbeatManager } from './always-on-heartbeat.js';
 
 import { runServerStartupBeforeListen, startServerAfterStartup } from './services/server-startup.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
@@ -134,11 +132,6 @@ const WATCHER_DEBOUNCE_MS = 300;
 let projectsWatchers = [];
 let projectsWatcherDebounceTimer = null;
 const connectedClients = new Set();
-const alwaysOnHeartbeat = createAlwaysOnHeartbeatManager({
-    // Legacy four-provider session details have been removed; PilotDeck
-    // gateway sessions are tracked by `pilotdeck-bridge.js` instead.
-    getActivePilotDeckSessions: () => []
-});
 registerAlwaysOnNotificationForwarding(connectedClients);
 let isGetProjectsRunning = false; // Flag to prevent reentrant calls
 
@@ -1841,11 +1834,7 @@ function handleChatConnection(ws, request) {
 
             if (data.type === 'ping') return;
 
-            if (data.type === 'always-on-presence') {
-                await alwaysOnHeartbeat.handlePresence(ws, data);
-            } else if (data.type === 'always-on-presence-clear') {
-                await alwaysOnHeartbeat.clearPresence(ws);
-            } else if (
+            if (
                 data.type === 'pilotdeck-command' ||
                 // Deprecated: legacy per-provider frame types kept for back-compat.
                 data.type === 'claude-command' ||
@@ -1927,7 +1916,6 @@ function handleChatConnection(ws, request) {
         cleanedUp = true;
         // Remove from connected clients
         connectedClients.delete(ws);
-        void alwaysOnHeartbeat.clearPresence(ws);
     };
 
     ws.on('close', (code, reason) => {
