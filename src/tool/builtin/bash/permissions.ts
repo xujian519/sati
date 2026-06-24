@@ -128,9 +128,6 @@ export function isReadOnlyShellCommand(command: string): boolean {
 
 const GIT_GLOBAL_OPTIONS_WITH_VALUE = new Set([
   "-C",
-  "-c",
-  "--config-env",
-  "--exec-path",
   "--git-dir",
   "--namespace",
   "--super-prefix",
@@ -138,18 +135,25 @@ const GIT_GLOBAL_OPTIONS_WITH_VALUE = new Set([
 ]);
 
 const GIT_GLOBAL_OPTIONS_WITH_VALUE_PREFIXES = [
-  "--config-env=",
-  "--exec-path=",
   "--git-dir=",
   "--namespace=",
   "--super-prefix=",
   "--work-tree=",
 ];
 
+const GIT_UNSAFE_GLOBAL_OPTIONS_WITH_VALUE = new Set(["-c", "--config-env", "--exec-path"]);
+const GIT_UNSAFE_GLOBAL_OPTIONS_WITH_VALUE_PREFIXES = ["-c", "--config-env=", "--exec-path="];
+
 function getGitSubcommand(args: string[]): string | undefined {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
     if (arg === "--") {
+      return undefined;
+    }
+    if (
+      GIT_UNSAFE_GLOBAL_OPTIONS_WITH_VALUE.has(arg)
+      || GIT_UNSAFE_GLOBAL_OPTIONS_WITH_VALUE_PREFIXES.some((prefix) => arg.startsWith(prefix))
+    ) {
       return undefined;
     }
     if (GIT_GLOBAL_OPTIONS_WITH_VALUE.has(arg)) {
