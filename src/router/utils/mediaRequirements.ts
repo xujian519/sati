@@ -59,9 +59,6 @@ function collectFromBlock(
         }
       }
       return;
-    case "media_reference":
-      required.add(block.mediaType);
-      return;
     case "text":
     case "thinking":
     case "tool_call":

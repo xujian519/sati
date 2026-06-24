@@ -368,38 +368,16 @@ export function createRouterRuntime(
       `[router] decision: tier=${tokenSaverTier}, model=${selection.provider}/${selection.model}, orchGate=${orchGate}, alreadyOrch=${alreadyOrchestrating}, resolvedFrom=${resolvedFrom}`,
     );
 
-    let skillPrompt: string | undefined;
-    if (
-      config.autoOrchestrate?.enabled &&
-      orchGate &&
-      input.isMainAgent &&
-      config.autoOrchestrate.skillExtensionId &&
-      deps.loadSkillPrompt
-    ) {
-      try {
-        skillPrompt = await deps.loadSkillPrompt(config.autoOrchestrate.skillExtensionId);
-      } catch {
-        skillPrompt = undefined;
-      }
-    }
-
     let mutations: RouterMutationsLog = {};
     if (config.autoOrchestrate?.enabled && orchGate) {
       const orchestrated = applyOrchestration({
-        request: input.request,
         config: config.autoOrchestrate,
         isMainAgent: input.isMainAgent,
         tier: tokenSaverTier,
         alreadyOrchestrating,
-        skillPrompt,
       });
       if (orchestrated.applied) {
         mutations = { ...mutations, ...orchestrated.mutations };
-        decision.requestPatch = {
-          messages: orchestrated.request.messages,
-          tools: orchestrated.request.tools,
-          systemPrompt: orchestrated.request.systemPrompt,
-        };
         decision.orchestrating = true;
         if (config.autoOrchestrate.mainAgentModel) {
           decision.provider = config.autoOrchestrate.mainAgentModel.provider;
