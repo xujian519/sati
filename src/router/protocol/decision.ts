@@ -17,6 +17,11 @@ export type RouterMutationsLog = {
   asyncAgentLaunchedRewritten?: boolean;
   subagentTagStripped?: boolean;
   subagentModelOverride?: boolean;
+  mediaCapabilityRerouted?: {
+    required: import("../../model/protocol/multimodal.js").InputModality[];
+    from: string;
+    to: string;
+  };
 };
 
 export type RouterRequestPatch = Pick<
