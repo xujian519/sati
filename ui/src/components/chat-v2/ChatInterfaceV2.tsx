@@ -480,6 +480,7 @@ function ChatInterfaceV2({
         isAssistantWorking={isLoading}
         workingStatus={claudeStatus || pilotDeckStatus}
         runMode={runMode}
+        planModeActive={effectivePermissionMode === 'plan'}
         sessionStore={sessionStore}
       />
       {composer}
