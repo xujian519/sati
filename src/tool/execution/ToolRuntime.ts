@@ -1,8 +1,14 @@
+import { isAbsolute, relative, resolve } from "node:path";
 import { PermissionRuntime } from "../../permission/index.js";
 import type { LifecycleRuntime, PilotDeckHookEffect } from "../../lifecycle/index.js";
 import { toolError } from "../protocol/errors.js";
 import type { PilotDeckToolErrorCode } from "../protocol/errors.js";
-import { PLAN_MODE_ALLOWED_TOOLS, buildPlanModeViolationMessage } from "../planModeConstraints.js";
+import {
+  PLAN_MODE_ALLOWED_TOOLS,
+  buildPlanModeBashViolationMessage,
+  buildPlanModeViolationMessage,
+} from "../planModeConstraints.js";
+import { isReadOnlyShellCommand } from "../builtin/bash/permissions.js";
 import {
   applyResultSizeLimit,
   type PilotDeckToolErrorResult,
@@ -45,12 +51,13 @@ export class ToolRuntime {
       );
     }
 
-    if (context.permissionMode === "plan" && !PLAN_MODE_ALLOWED_TOOLS.has(tool.name)) {
+    const planModeViolation = getPlanModeViolation(tool.name, call.input, context);
+    if (planModeViolation) {
       return this.errorResult(
         call.id,
         tool.name,
         "plan_mode_violation",
-        buildPlanModeViolationMessage(tool.name),
+        planModeViolation,
         startedAt,
         context,
       );
@@ -343,6 +350,66 @@ export class ToolRuntime {
       nonBlockingErrors: [],
     };
   }
+}
+
+function getPlanModeViolation(
+  toolName: string,
+  input: unknown,
+  context: PilotDeckToolRuntimeContext,
+): string | undefined {
+  if (context.permissionMode !== "plan") {
+    return undefined;
+  }
+
+  if (!PLAN_MODE_ALLOWED_TOOLS.has(toolName)) {
+    return buildPlanModeViolationMessage(toolName);
+  }
+
+  if (toolName === "bash") {
+    const command = readStringProperty(input, "command");
+    if (!command || !isReadOnlyShellCommand(command)) {
+      return buildPlanModeBashViolationMessage(command ?? "");
+    }
+    return undefined;
+  }
+
+  if (toolName === "write_file" || toolName === "edit_file") {
+    const filePath = readStringProperty(input, "file_path") ?? readStringProperty(input, "filePath");
+    if (!isPlanMarkdownPath(filePath, context)) {
+      return buildPlanModeViolationMessage(toolName);
+    }
+  }
+
+  return undefined;
+}
+
+function readStringProperty(input: unknown, key: string): string | undefined {
+  if (!isRecord(input)) {
+    return undefined;
+  }
+  const value = input[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPlanMarkdownPath(filePath: string | undefined, context: PilotDeckToolRuntimeContext): boolean {
+  if (!filePath || !context.planDirectory?.path) {
+    return false;
+  }
+  const absolute = resolve(isAbsolute(filePath) ? filePath : resolve(context.cwd, filePath));
+  if (!absolute.toLowerCase().endsWith(".md")) {
+    return false;
+  }
+  const relativeToPlanDir = relative(context.planDirectory.path, absolute);
+  return (
+    relativeToPlanDir !== ""
+    && !isAbsolute(relativeToPlanDir)
+    && !relativeToPlanDir.startsWith("..")
+    && !relativeToPlanDir.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
+  );
 }
 
 function findEffect<Type extends PilotDeckHookEffect["type"]>(
