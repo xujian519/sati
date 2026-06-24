@@ -23,10 +23,12 @@ test("default and plan requests keep system prompt and non-plan tool schemas sta
 
   assert.equal(normal.systemPrompt, plan.systemPrompt);
 
-  const normalNonPlanTools = normal.tools
+  const normalTools = requireTools(normal);
+  const planTools = requireTools(plan);
+  const normalNonPlanTools = normalTools
     .filter((tool) => tool.name !== "enter_plan_mode")
     .sort((a, b) => a.name.localeCompare(b.name));
-  const planNonPlanTools = plan.tools
+  const planNonPlanTools = planTools
     .filter((tool) => tool.name !== "enter_plan_mode")
     .sort((a, b) => a.name.localeCompare(b.name));
   assert.deepEqual(planNonPlanTools, normalNonPlanTools);
@@ -42,7 +44,7 @@ test("ordinary turns hide enter_plan_mode but keep exit_plan_mode schema stable"
     { role: "user", content: [{ type: "text", text: "hello" }] },
   ]);
 
-  const names = request.tools.map((tool) => tool.name);
+  const names = requireTools(request).map((tool) => tool.name);
   assert.equal(names.includes("enter_plan_mode"), false);
   assert.equal(names.includes("exit_plan_mode"), true);
 });
@@ -71,7 +73,15 @@ async function buildModelRequest(
   const dependencies: AgentRuntimeDependencies = {
     router: {
       async decide({ request }) {
-        return { provider: request.provider, model: request.model };
+        return {
+          provider: request.provider,
+          model: request.model,
+          scenarioType: "default",
+          isSubagent: false,
+          orchestrating: false,
+          resolvedFrom: "scenario",
+          mutations: {},
+        };
       },
       async *execute() {},
       async *stream() {},
@@ -104,6 +114,11 @@ async function buildModelRequest(
     messages,
     allowPlanModeTools,
   });
+}
+
+function requireTools(request: CanonicalModelRequest): NonNullable<CanonicalModelRequest["tools"]> {
+  assert.ok(request.tools);
+  return request.tools;
 }
 
 function textBlocks(message: CanonicalMessage | undefined): string {
