@@ -90,6 +90,7 @@ export type EnsureActiveWorkCycleInput = {
   state: AlwaysOnDiscoveryState;
   projectKey: string;
   runId: string;
+  planTitle: string;
   cycleId: string;
   workspaceRegistry: WorkspaceProviderRegistry;
   stateStore: DiscoveryStateStore;
@@ -150,6 +151,7 @@ export async function ensureActiveWorkCycle(
   const prepared = await input.workspaceRegistry.prepare({
     projectRoot: input.projectKey,
     runId: input.runId,
+    planTitle: input.planTitle,
   });
   const cycle = await input.cycleStore.create(
     prepared.handle,
@@ -356,7 +358,7 @@ export class DiscoveryFire {
     let workspace: WorkspaceHandle;
     let workCycle: WorkCycleRecord;
     try {
-      const wsResult = await this.runWorkspacePhase({ runId, state });
+      const wsResult = await this.runWorkspacePhase({ runId, state, planTitle: planRecord.title });
       workspace = wsResult.handle;
       workCycle = wsResult.cycle;
     } catch (error) {
@@ -649,7 +651,7 @@ export class DiscoveryFire {
     let workspace: WorkspaceHandle;
     let workCycle: WorkCycleRecord;
     try {
-      const wsResult = await this.runWorkspacePhase({ runId, state });
+      const wsResult = await this.runWorkspacePhase({ runId, state, planTitle: planRecord.title });
       workspace = wsResult.handle;
       workCycle = wsResult.cycle;
     } catch (error) {
@@ -934,8 +936,9 @@ export class DiscoveryFire {
   private async runWorkspacePhase(input: {
     runId: string;
     state: AlwaysOnDiscoveryState;
+    planTitle: string;
   }): Promise<{ handle: WorkspaceHandle; cycle: WorkCycleRecord }> {
-    const { runId, state } = input;
+    const { runId, state, planTitle } = input;
 
     // ── Deterministic reuse check ──
     if (state.activeWorkCycleId) {
@@ -961,6 +964,7 @@ export class DiscoveryFire {
       kind: "workspace",
       sessionKey: workspaceSessionKey,
       runId,
+      planTitle,
       projectKey: this.deps.projectKey,
       paths: this.deps.paths,
       workspaceRegistry: this.deps.workspaceRegistry,
@@ -985,6 +989,7 @@ export class DiscoveryFire {
         message: buildWorkspacePrompt({
           projectRoot: this.deps.projectKey,
           runId,
+          planTitle,
           language: this.deps.config.language,
         }),
         mode: "bypassPermissions",
@@ -1013,6 +1018,7 @@ export class DiscoveryFire {
       state,
       projectKey: this.deps.projectKey,
       runId,
+      planTitle,
       cycleId,
       workspaceRegistry: this.deps.workspaceRegistry,
       stateStore: this.deps.stateStore,
