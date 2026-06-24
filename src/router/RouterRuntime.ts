@@ -3,6 +3,7 @@ import type {
   CanonicalModelRequest,
   ModelRuntime,
 } from "../model/index.js";
+import { ModelRequestError } from "../model/index.js";
 import type { InputModality } from "../model/index.js";
 import {
   DEFAULT_SUBAGENT_MAX_TOKENS,
@@ -953,7 +954,7 @@ async function* streamAttempt(
       throw error;
     }
     const fromError = (error as { error?: import("../model/index.js").CanonicalModelError })?.error;
-    providerError = fromError ?? {
+    providerError = fromError ?? canonicalizeModelRequestError(error, request) ?? {
       provider: request.provider,
       protocol: "anthropic",
       code: classifyNetworkErrorCode(error),
@@ -970,6 +971,24 @@ async function* streamAttempt(
       usage: state.observedUsage,
       shouldRetryZeroUsage: shouldRetryZeroUsage(state),
     },
+  };
+}
+
+function canonicalizeModelRequestError(
+  error: unknown,
+  request: CanonicalModelRequest,
+): import("../model/index.js").CanonicalModelError | undefined {
+  if (!(error instanceof ModelRequestError)) {
+    return undefined;
+  }
+
+  return {
+    provider: request.provider,
+    protocol: "anthropic",
+    code: error.code,
+    message: error.message,
+    retryable: false,
+    raw: error.details,
   };
 }
 
