@@ -382,7 +382,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                   message.toolResult.isError ? (
                     <div id={`tool-result-${message.toolId}`} className="scroll-mt-4">
                       {(() => {
-                        if (isWebSearchError(message.toolName)) {
+                        if (isWebSearchError(message.toolName) && message.toolResult?.errorCode === 'setup_required') {
                           return (
                             <div className="my-1.5 overflow-hidden rounded-lg border border-amber-200 bg-amber-50/70 dark:border-amber-800/50 dark:bg-amber-950/20">
                               <div className="flex items-start gap-3 px-4 py-3">
