@@ -23,7 +23,12 @@
   },
   "toolUseError": {
     "title": "Tool error",
-    "description": ""
+    "description": "",
+    "webSearchNotConfigured": {
+      "title": "Web Search Not Ready",
+      "description": "The search API key is missing or invalid. Please go to Settings -> Config -> Search to check your search provider and API key.",
+      "openSettings": "Go to Settings"
+    }
   },
   "setupRequired": {
     "title": "Configuration needed",
@@ -159,6 +164,18 @@
     "retry": "Retry in this chat to use the tool.",
     "error": "Unable to grant this chat permission. Please try again.",
     "openSettings": "Open settings"
+  },
+  "permissionBanner": {
+    "title": "Permission required",
+    "titleCount": "Permission required ({{count}})",
+    "tool": "Tool:",
+    "allowRule": "Allow rule:",
+    "viewToolInput": "View tool input",
+    "viewToolInputs": "View {{count}} tool inputs",
+    "allowOnce": "Allow once",
+    "allowRemember": "Allow & remember",
+    "allowSaved": "Allow (saved)",
+    "deny": "Deny"
   },
   "todo": {
     "updated": "Todo list has been updated successfully",

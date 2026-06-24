@@ -557,6 +557,9 @@
 	    "actions": {
 	      "opening": "Opening...",
 	      "revealFile": "Reveal in Finder",
+	      "revealFileMac": "Reveal in Finder",
+	      "revealFileWindows": "Reveal in Explorer",
+	      "revealFileGeneric": "Reveal in file manager",
 	      "refresh": "Refresh",
 	      "reloadCurrent": "Reload current config",
 	      "saving": "Saving...",
