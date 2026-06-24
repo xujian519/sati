@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FileText } from 'lucide-react';
+import { FileText, Search, Settings } from 'lucide-react';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import type {
   ChatMessage,
@@ -73,6 +73,11 @@ function isRecoverableToolUseError(content: unknown): boolean {
     (lower.includes('denied') || lower.includes('not allowed') || lower.includes('requires') || lower.includes('grant'));
 
   return !looksLikePermissionError;
+}
+
+function isWebSearchError(toolName: string | undefined): boolean {
+  const name = (toolName ?? '').toLowerCase();
+  return name === 'web_search' || name === 'websearch';
 }
 
 function getAttachmentTypeLabel(name?: string, mimeType?: string): string {
@@ -377,6 +382,38 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                   message.toolResult.isError ? (
                     <div id={`tool-result-${message.toolId}`} className="scroll-mt-4">
                       {(() => {
+                        if (isWebSearchError(message.toolName) && message.toolResult?.errorCode === 'setup_required') {
+                          return (
+                            <div className="my-1.5 overflow-hidden rounded-lg border border-amber-200 bg-amber-50/70 dark:border-amber-800/50 dark:bg-amber-950/20">
+                              <div className="flex items-start gap-3 px-4 py-3">
+                                <Search className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                                    {t('toolUseError.webSearchNotConfigured.title', { defaultValue: 'Web Search Not Ready' })}
+                                  </div>
+                                  <div className="mt-1 text-xs leading-5 text-amber-700/90 dark:text-amber-300/80">
+                                    {t('toolUseError.webSearchNotConfigured.description', { defaultValue: 'The search API key is missing or invalid. Please go to Settings -> Config -> Search to check your search provider and API key.' })}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (typeof window !== 'undefined' && window.openSettings) {
+                                        window.openSettings('config');
+                                      } else if (onShowSettings) {
+                                        onShowSettings();
+                                      }
+                                    }}
+                                    className="mt-2.5 inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white/80 px-3 py-1.5 text-xs font-medium text-amber-800 transition-colors hover:bg-white dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-200 dark:hover:bg-amber-900/50"
+                                  >
+                                    <Settings className="h-3 w-3" />
+                                    {t('toolUseError.webSearchNotConfigured.openSettings', { defaultValue: 'Go to Settings' })}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+
                         const recoverableToolError = isRecoverableToolUseError(message.toolResult?.content);
                         const renderedErrorContent = recoverableToolError
                           ? cleanToolUseErrorContent(message.toolResult?.content)
