@@ -117,7 +117,11 @@ export class TokenBudgetManager {
       case "tool_result_reference":
         // T13: PilotDeck-only block; preview only.
         return this.estimateTextTokens(block.preview);
+      case "media_reference":
+        // Media references materialize back to media blocks before provider requests.
+        return this.multimediaTokens;
     }
+    return 0;
   }
 
   /** T11: per-message estimate including overhead. */

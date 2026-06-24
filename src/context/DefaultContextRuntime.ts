@@ -254,9 +254,16 @@ export class DefaultContextRuntime implements ContextRuntime {
   async applyToolResults(input: ContextToolResultInput): Promise<ContextToolResultResult> {
     const diagnostics: ContextDiagnostic[] = [];
     let appended: CanonicalMessage = input.toolResultMessage;
+    let supplementalMessages = input.supplementalMessages ?? [];
     if (this.toolResultBudget) {
       try {
         appended = await this.toolResultBudget.applyToMessage(input.toolResultMessage);
+        supplementalMessages = await Promise.all(
+          supplementalMessages.map(async ({ toolCallId, message }) => ({
+            toolCallId,
+            message: await this.toolResultBudget!.applyToSupplementalMessage(message, toolCallId),
+          })),
+        );
       } catch (error) {
         diagnostics.push({
           code: "tool_result_persistence_failed",
@@ -265,7 +272,8 @@ export class DefaultContextRuntime implements ContextRuntime {
         });
       }
     }
-    return { messages: [...input.messages, appended], diagnostics };
+    const appendedMessages = [appended, ...supplementalMessages.map(({ message }) => message)];
+    return { messages: [...input.messages, ...appendedMessages], appendedMessages, diagnostics };
   }
 
   async captureTurn(input: ContextCaptureTurnInput): Promise<void> {

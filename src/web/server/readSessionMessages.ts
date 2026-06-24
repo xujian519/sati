@@ -444,6 +444,32 @@ function flushBlock(
         source: "history",
       });
       return;
+    case "media_reference":
+      flushText();
+      out.push({
+        id: `${context.sessionKey}-media-${context.index}-${out.length}`,
+        sessionKey: context.sessionKey,
+        projectKey: context.projectKey,
+        createdAt: stamp,
+        provider: "pilotdeck",
+        role: "tool",
+        kind: "tool_result",
+        toolCallId: block.toolCallId,
+        ok: true,
+        text: block.preview,
+        payload: {
+          path: block.path,
+          originalBytes: block.originalBytes,
+          hasMore: block.hasMore,
+          mimeType: block.mimeType,
+          mediaType: block.mediaType,
+          pages: block.pages,
+          detail: block.detail,
+          reason: block.reason,
+        },
+        source: "history",
+      });
+      return;
     case "image":
       if (role === "user") {
         appendImage(block);
