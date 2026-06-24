@@ -471,7 +471,7 @@ export class DiscoveryFire {
 
     const finishedAt = this.deps.now();
 
-    if (!reportCtx.report && !reportError) {
+    if (!reportCtx.report) {
       const assistantText = extractAssistantText(reportEvents);
       if (assistantText) {
         const metadata: ReportMetadata = {
@@ -489,25 +489,25 @@ export class DiscoveryFire {
       }
     }
 
-    const outcome: AlwaysOnDiscoveryOutcome = reportCtx.report && !reportError ? "executed" : "failed";
+    const reportDegraded = !reportCtx.report || !!reportError;
+    const outcome: AlwaysOnDiscoveryOutcome = "executed";
+    const planStatus = reportDegraded ? "completed_no_report" as const : "completed" as const;
 
-    if (reportCtx.report && !reportError) {
+    if (!reportDegraded) {
       this.emitEvent(runId, "report_produced", { planId, title: planRecord.title, outcome });
-      this.emitEvent(runId, "run_completed", { planId, title: planRecord.title, outcome });
-    } else {
-      this.emitEvent(runId, "run_failed", { planId, error: reportError ? { code: reportError.code ?? "report_failed", message: reportError.message } : { code: "report_tool_not_invoked", message: "Report tool was not invoked" }, outcome, telemetryPhase: "report" });
     }
+    this.emitEvent(runId, "run_completed", { planId, title: planRecord.title, outcome });
 
     let reportFilePath = reportCtx.report?.filePath;
     if (!reportCtx.report) {
       reportFilePath = await this.writeFallbackReport({ runId, plan: planRecord, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), reason: reportError ? `report_failed: ${reportError.message}` : "report_tool_not_invoked", workspaceStrategy: workspace.strategy, workspaceHandle: workspace.cwd });
     }
 
-    await this.deps.planStore.updateStatus(planId, { status: outcome === "executed" ? "completed" : "failed", reportFilePath, workCycleId: workCycle.id });
+    await this.deps.planStore.updateStatus(planId, { status: planStatus, reportFilePath, workCycleId: workCycle.id });
     await this.deps.stateStore.markFireCompleted({ outcome, runId, planId, now: finishedAt });
-    await this.deps.reportStore.appendHistory({ ...baseHistory, outcome, finishedAt: finishedAt.toISOString(), workCycleId: workCycle.id, workspace: { strategy: workspace.strategy, handle: workspace.cwd }, error: reportError ? { code: reportError.code ?? "report_failed", message: reportError.message } : undefined });
+    await this.deps.reportStore.appendHistory({ ...baseHistory, outcome, finishedAt: finishedAt.toISOString(), workCycleId: workCycle.id, workspace: { strategy: workspace.strategy, handle: workspace.cwd }, error: reportError ? { code: reportError.code ?? "report_degraded", message: reportError.message } : undefined });
 
-    return { outcome, runId, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), planId, workspace, reportFilePath, error: reportError ? { code: reportError.code ?? "report_failed", message: reportError.message } : undefined };
+    return { outcome, runId, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), planId, workspace, reportFilePath, error: reportError ? { code: reportError.code ?? "report_degraded", message: reportError.message } : undefined };
   }
 
   async run(input: DiscoveryFireRunInput): Promise<DiscoveryFireResult> {
@@ -842,7 +842,7 @@ export class DiscoveryFire {
 
     const finishedAt = this.deps.now();
 
-    if (!reportCtx.report && !reportError) {
+    if (!reportCtx.report) {
       const assistantText = extractAssistantText(reportEvents);
       if (assistantText) {
         const metadata: ReportMetadata = {
@@ -860,21 +860,14 @@ export class DiscoveryFire {
       }
     }
 
-    const outcome: AlwaysOnDiscoveryOutcome = reportCtx.report && !reportError ? "executed" : "failed";
+    const reportDegraded = !reportCtx.report || !!reportError;
+    const outcome: AlwaysOnDiscoveryOutcome = "executed";
+    const planStatus = reportDegraded ? "completed_no_report" as const : "completed" as const;
 
-    if (reportCtx.report && !reportError) {
+    if (!reportDegraded) {
       this.emitEvent(runId, "report_produced", { planId: planRecord.id, title: planRecord.title, outcome });
-      this.emitEvent(runId, "run_completed", { planId: planRecord.id, title: planRecord.title, outcome });
-    } else {
-      this.emitEvent(runId, "run_failed", {
-        planId: planRecord.id,
-        error: reportError
-          ? { code: reportError.code ?? "report_failed", message: reportError.message }
-          : { code: "report_tool_not_invoked", message: "Report tool was not invoked" },
-        outcome,
-        telemetryPhase: "report",
-      });
     }
+    this.emitEvent(runId, "run_completed", { planId: planRecord.id, title: planRecord.title, outcome });
 
     let reportFilePath = reportCtx.report?.filePath;
     if (!reportCtx.report) {
@@ -892,7 +885,7 @@ export class DiscoveryFire {
     }
 
     await this.deps.planStore.updateStatus(planRecord.id, {
-      status: outcome === "executed" ? "completed" : "failed",
+      status: planStatus,
       reportFilePath,
       workCycleId: workCycle.id,
     });
@@ -909,7 +902,7 @@ export class DiscoveryFire {
       finishedAt: finishedAt.toISOString(),
       workCycleId: workCycle.id,
       workspace: { strategy: workspace.strategy, handle: workspace.cwd },
-      error: reportError ? { code: reportError.code ?? "report_failed", message: reportError.message } : undefined,
+      error: reportError ? { code: reportError.code ?? "report_degraded", message: reportError.message } : undefined,
     });
 
     return {
@@ -920,7 +913,7 @@ export class DiscoveryFire {
       planId: planRecord.id,
       workspace,
       reportFilePath,
-      error: reportError ? { code: reportError.code ?? "report_failed", message: reportError.message } : undefined,
+      error: reportError ? { code: reportError.code ?? "report_degraded", message: reportError.message } : undefined,
     };
   }
 
