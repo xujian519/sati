@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { ForkSessionError, forkWebSession } from "../../src/web/server/forkSession.js";
+import { readSubagentWebMessages, readWebSessionMessages } from "../../src/web/server/readSessionMessages.js";
 import { readTranscript } from "../../src/session/transcript/TranscriptReader.js";
 import { createProjectId } from "../../src/pilot/paths.js";
 import { sanitizeSessionIdForPath } from "../../src/session/storage/ProjectSessionStorage.js";
@@ -415,6 +416,421 @@ test("forkWebSession rewrites copied auxiliary references to the new session", a
       }
     }
   }
+
+  await rm(pilotHome, { recursive: true, force: true });
+});
+
+
+test("readWebSessionMessages marks hidden media turns as unsupported fork targets", async () => {
+  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-fork-media-marker-"));
+  const projectRoot = join(pilotHome, "workspace");
+  const chatDir = join(pilotHome, "projects", createProjectId(projectRoot), "chats");
+  const sessionKey = "web:s_media_marker";
+  const transcriptPath = join(chatDir, `${sessionKey}.jsonl`);
+
+  await mkdir(chatDir, { recursive: true });
+
+  const lines = [
+    {
+      type: "accepted_input",
+      sessionId: sessionKey,
+      turnId: "turn-1",
+      sequence: 1,
+      createdAt: "2026-06-24T00:00:00.000Z",
+      entryId: "entry-1",
+      parentEntryId: null,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "please inspect this pdf" },
+            {
+              type: "pdf",
+              source: "base64",
+              data: "JVBERi0xLjQK",
+              mimeType: "application/pdf",
+              bytes: 9,
+              pages: 1,
+            },
+          ],
+        },
+      ],
+    },
+  ];
+
+  await writeFile(transcriptPath, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`, "utf8");
+
+  const result = await readWebSessionMessages(
+    { sessionKey, projectKey: projectRoot },
+    { projectRoot, pilotHome },
+  );
+
+  const userMessage = result.messages.find(
+    (message) => message.kind === "text" && message.entryId === "entry-1",
+  );
+  assert.ok(userMessage);
+  assert.equal((userMessage.payload as { forkUnsupportedContent?: boolean }).forkUnsupportedContent, true);
+
+  await rm(pilotHome, { recursive: true, force: true });
+});
+
+
+test("readWebSessionMessages reads background task transcripts by relative path", async () => {
+  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-background-read-"));
+  const projectRoot = join(pilotHome, "workspace");
+  const chatDir = join(pilotHome, "projects", createProjectId(projectRoot), "chats");
+  const parentSessionId = "web:s_parent_background";
+  const backgroundSessionId = "background-web-s_parent_background-agent-cron";
+  const relativeTranscriptPath = `${parentSessionId}/subagents/agent-cron.jsonl`;
+  const transcriptPath = join(chatDir, relativeTranscriptPath);
+
+  await mkdir(join(chatDir, parentSessionId, "subagents"), { recursive: true });
+  const lines = [
+    {
+      type: "accepted_input",
+      sessionId: backgroundSessionId,
+      turnId: "bg-turn-1",
+      sequence: 1,
+      createdAt: "2026-06-24T00:00:00.000Z",
+      entryId: "bg-entry-1",
+      parentEntryId: null,
+      messages: [{ role: "user", content: [{ type: "text", text: "background prompt" }] }],
+    },
+    {
+      type: "assistant_message",
+      sessionId: backgroundSessionId,
+      turnId: "bg-turn-1",
+      sequence: 2,
+      createdAt: "2026-06-24T00:00:01.000Z",
+      entryId: "bg-entry-2",
+      parentEntryId: "bg-entry-1",
+      message: { role: "assistant", content: [{ type: "text", text: "background result" }] },
+    },
+    {
+      type: "turn_result",
+      sessionId: backgroundSessionId,
+      turnId: "bg-turn-1",
+      sequence: 3,
+      createdAt: "2026-06-24T00:00:02.000Z",
+      entryId: "bg-entry-3",
+      parentEntryId: "bg-entry-2",
+      result: { stopReason: "completed", usage: {} },
+    },
+  ];
+  await writeFile(transcriptPath, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`, "utf8");
+
+  const result = await readWebSessionMessages(
+    {
+      sessionKey: backgroundSessionId,
+      projectKey: projectRoot,
+      sessionKind: "background_task",
+      parentSessionId,
+      relativeTranscriptPath,
+    },
+    { projectRoot, pilotHome },
+  );
+
+  assert.deepEqual(
+    result.messages.filter((message) => message.kind === "text").map((message) => message.text),
+    ["background prompt", "background result"],
+  );
+  assert.equal(result.session.sessionKind, "background_task");
+  assert.equal(result.session.parentSessionId, parentSessionId);
+  assert.equal(result.session.relativeTranscriptPath, relativeTranscriptPath);
+
+  await rm(pilotHome, { recursive: true, force: true });
+});
+
+
+test("readSubagentWebMessages resolves subagents from background task transcripts", async () => {
+  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-background-subagent-"));
+  const projectRoot = join(pilotHome, "workspace");
+  const chatDir = join(pilotHome, "projects", createProjectId(projectRoot), "chats");
+  const parentSessionId = "web:s_parent_background_subagent";
+  const backgroundSessionId = "background-web-s_parent_background_subagent-agent-cron";
+  const relativeTranscriptPath = `${parentSessionId}/subagents/agent-cron.jsonl`;
+  const backgroundDir = join(chatDir, parentSessionId, "subagents");
+  const subagentRelativePath = "agent-cron/subagents/sub-bg.jsonl";
+
+  await mkdir(join(backgroundDir, "agent-cron", "subagents"), { recursive: true });
+  const parentLines = [
+    {
+      type: "accepted_input",
+      sessionId: backgroundSessionId,
+      turnId: "bg-turn-1",
+      sequence: 1,
+      createdAt: "2026-06-24T00:00:00.000Z",
+      entryId: "bg-entry-1",
+      parentEntryId: null,
+      messages: [{ role: "user", content: [{ type: "text", text: "background prompt" }] }],
+    },
+    {
+      type: "subagent_started",
+      sessionId: backgroundSessionId,
+      turnId: "bg-turn-1",
+      sequence: 2,
+      createdAt: "2026-06-24T00:00:01.000Z",
+      entryId: "bg-entry-2",
+      parentEntryId: "bg-entry-1",
+      subagentId: "sub-bg",
+      subagentType: "general-purpose",
+      promptPreview: "inspect",
+      promptTruncated: false,
+      transcriptRelativePath: subagentRelativePath,
+    },
+  ];
+  const sidechainLines = [
+    {
+      type: "accepted_input",
+      sessionId: `${projectRoot}::sub::sub-bg`,
+      turnId: "sub-turn-1",
+      sequence: 1,
+      createdAt: "2026-06-24T00:00:01.100Z",
+      entryId: "sub-entry-1",
+      parentEntryId: null,
+      messages: [{ role: "user", content: [{ type: "text", text: "inspect" }] }],
+    },
+    {
+      type: "assistant_message",
+      sessionId: `${projectRoot}::sub::sub-bg`,
+      turnId: "sub-turn-1",
+      sequence: 2,
+      createdAt: "2026-06-24T00:00:01.200Z",
+      entryId: "sub-entry-2",
+      parentEntryId: "sub-entry-1",
+      message: { role: "assistant", content: [{ type: "text", text: "subagent result" }] },
+    },
+  ];
+  await writeFile(
+    join(chatDir, relativeTranscriptPath),
+    `${parentLines.map((line) => JSON.stringify(line)).join("\n")}\n`,
+    "utf8",
+  );
+  await writeFile(
+    join(backgroundDir, subagentRelativePath),
+    `${sidechainLines.map((line) => JSON.stringify(line)).join("\n")}\n`,
+    "utf8",
+  );
+
+  const result = await readSubagentWebMessages(
+    {
+      sessionKey: backgroundSessionId,
+      subagentId: "sub-bg",
+      projectKey: projectRoot,
+      sessionKind: "background_task",
+      parentSessionId,
+      relativeTranscriptPath,
+    },
+    { projectRoot, pilotHome },
+  );
+
+  assert.deepEqual(
+    result.messages.filter((message) => message.kind === "text").map((message) => message.text),
+    ["subagent result"],
+  );
+
+  await rm(pilotHome, { recursive: true, force: true });
+});
+
+
+test("readWebSessionMessages keeps entry ids aligned after synthetic messages are hidden", async () => {
+  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-fork-entryid-"));
+  const projectRoot = join(pilotHome, "workspace");
+  const chatDir = join(pilotHome, "projects", createProjectId(projectRoot), "chats");
+  const sessionKey = "web:s_entryid";
+  const transcriptPath = join(chatDir, `${sessionKey}.jsonl`);
+
+  await mkdir(chatDir, { recursive: true });
+  const lines = [
+    {
+      type: "accepted_input",
+      sessionId: sessionKey,
+      turnId: "turn-1",
+      sequence: 1,
+      createdAt: "2026-06-24T00:00:00.000Z",
+      entryId: "entry-visible-1",
+      parentEntryId: null,
+      messages: [{ role: "user", content: [{ type: "text", text: "first visible" }] }],
+    },
+    {
+      type: "durable_message",
+      sessionId: sessionKey,
+      turnId: "turn-1",
+      sequence: 2,
+      createdAt: "2026-06-24T00:00:01.000Z",
+      entryId: "entry-synthetic",
+      parentEntryId: "entry-visible-1",
+      message: {
+        role: "user",
+        metadata: { synthetic: true, purpose: "json_self_correct" },
+        content: [{ type: "text", text: "hidden synthetic" }],
+      },
+    },
+    {
+      type: "turn_result",
+      sessionId: sessionKey,
+      turnId: "turn-1",
+      sequence: 3,
+      createdAt: "2026-06-24T00:00:02.000Z",
+      entryId: "entry-result",
+      parentEntryId: "entry-synthetic",
+      result: { stopReason: "completed", usage: {} },
+    },
+    {
+      type: "accepted_input",
+      sessionId: sessionKey,
+      turnId: "turn-2",
+      sequence: 4,
+      createdAt: "2026-06-24T00:01:00.000Z",
+      entryId: "entry-visible-2",
+      parentEntryId: "entry-result",
+      messages: [{ role: "user", content: [{ type: "text", text: "second visible" }] }],
+    },
+  ];
+  await writeFile(transcriptPath, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`, "utf8");
+
+  const result = await readWebSessionMessages(
+    { sessionKey, projectKey: projectRoot },
+    { projectRoot, pilotHome, now: () => new Date("2026-06-24T01:00:00.000Z") },
+  );
+
+  assert.deepEqual(
+    result.messages.map((message) => message.entryId),
+    ["entry-visible-1", "entry-visible-2"],
+  );
+
+  await rm(pilotHome, { recursive: true, force: true });
+});
+
+
+test("readWebSessionMessages ignores pre-compact subagent refs when attaching visible tool rows", async () => {
+  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-fork-subagent-compact-"));
+  const projectRoot = join(pilotHome, "workspace");
+  const chatDir = join(pilotHome, "projects", createProjectId(projectRoot), "chats");
+  const sessionKey = "web:s_subagent_compact";
+  const transcriptPath = join(chatDir, `${sessionKey}.jsonl`);
+
+  await mkdir(chatDir, { recursive: true });
+  const lines = [
+    {
+      type: "accepted_input",
+      sessionId: sessionKey,
+      turnId: "turn-1",
+      sequence: 1,
+      createdAt: "2026-06-24T00:00:00.000Z",
+      entryId: "entry-old-user",
+      parentEntryId: null,
+      messages: [{ role: "user", content: [{ type: "text", text: "old task" }] }],
+    },
+    {
+      type: "assistant_message",
+      sessionId: sessionKey,
+      turnId: "turn-1",
+      sequence: 2,
+      createdAt: "2026-06-24T00:00:01.000Z",
+      entryId: "entry-old-agent",
+      parentEntryId: "entry-old-user",
+      message: {
+        role: "assistant",
+        content: [{ type: "tool_call", id: "agent-old", name: "agent", input: {} }],
+      },
+    },
+    {
+      type: "subagent_started",
+      sessionId: sessionKey,
+      turnId: "turn-1",
+      sequence: 3,
+      createdAt: "2026-06-24T00:00:02.000Z",
+      entryId: "entry-old-subagent",
+      parentEntryId: "entry-old-agent",
+      subagentId: "sub-old",
+      subagentType: "general-purpose",
+      promptPreview: "old",
+      promptTruncated: false,
+      transcriptRelativePath: `${sessionKey}/subagents/sub-old.jsonl`,
+    },
+    {
+      type: "turn_result",
+      sessionId: sessionKey,
+      turnId: "turn-1",
+      sequence: 4,
+      createdAt: "2026-06-24T00:00:03.000Z",
+      entryId: "entry-old-result",
+      parentEntryId: "entry-old-subagent",
+      result: { stopReason: "completed", usage: {} },
+    },
+    {
+      type: "control_boundary",
+      sessionId: sessionKey,
+      turnId: "compact",
+      sequence: 5,
+      createdAt: "2026-06-24T00:00:04.000Z",
+      entryId: "entry-compact",
+      parentEntryId: "entry-old-result",
+      boundary: {
+        kind: "compact",
+        subtype: "compact_boundary",
+        compactMetadata: { trigger: "manual", preTokens: 100 },
+      },
+    },
+    {
+      type: "accepted_input",
+      sessionId: sessionKey,
+      turnId: "turn-2",
+      sequence: 6,
+      createdAt: "2026-06-24T00:01:00.000Z",
+      entryId: "entry-new-user",
+      parentEntryId: "entry-compact",
+      messages: [{ role: "user", content: [{ type: "text", text: "new task" }] }],
+    },
+    {
+      type: "assistant_message",
+      sessionId: sessionKey,
+      turnId: "turn-2",
+      sequence: 7,
+      createdAt: "2026-06-24T00:01:01.000Z",
+      entryId: "entry-new-agent",
+      parentEntryId: "entry-new-user",
+      message: {
+        role: "assistant",
+        content: [{ type: "tool_call", id: "agent-new", name: "agent", input: {} }],
+      },
+    },
+    {
+      type: "subagent_started",
+      sessionId: sessionKey,
+      turnId: "turn-2",
+      sequence: 8,
+      createdAt: "2026-06-24T00:01:02.000Z",
+      entryId: "entry-new-subagent",
+      parentEntryId: "entry-new-agent",
+      subagentId: "sub-new",
+      subagentType: "general-purpose",
+      promptPreview: "new",
+      promptTruncated: false,
+      transcriptRelativePath: `${sessionKey}/subagents/sub-new.jsonl`,
+    },
+    {
+      type: "turn_result",
+      sessionId: sessionKey,
+      turnId: "turn-2",
+      sequence: 9,
+      createdAt: "2026-06-24T00:01:03.000Z",
+      entryId: "entry-new-result",
+      parentEntryId: "entry-new-subagent",
+      result: { stopReason: "completed", usage: {} },
+    },
+  ];
+  await writeFile(transcriptPath, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`, "utf8");
+
+  const result = await readWebSessionMessages(
+    { sessionKey, projectKey: projectRoot },
+    { projectRoot, pilotHome, now: () => new Date("2026-06-24T01:00:00.000Z") },
+  );
+
+  const toolUse = result.messages.find((message) => message.kind === "tool_use");
+  assert.equal(toolUse?.toolCallId, "agent-new");
+  assert.equal(toolUse?.subagentId, "sub-new");
 
   await rm(pilotHome, { recursive: true, force: true });
 });

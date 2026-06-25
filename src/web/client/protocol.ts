@@ -108,6 +108,7 @@ export type WebGatewayMethod =
   | "permission_decide"
   | "grant_session_permission"
   | "read_session_messages"
+  | "read_subagent_messages"
   | "fork_session"
   | "rename_session"
   | "delete_session"
@@ -160,7 +161,9 @@ export type WebSessionInfo = {
   cwd?: string;
   tag?: string;
   createdAt?: number;
+  sessionKind?: "background_task";
   parentSessionId?: string;
+  relativeTranscriptPath?: string;
   forkedFromTurnId?: string;
 };
 
@@ -231,6 +234,9 @@ export type WebSessionPermissionGrant = {
 export type WebReadSessionMessagesInput = {
   sessionKey: string;
   projectKey?: string;
+  sessionKind?: "background_task";
+  parentSessionId?: string;
+  relativeTranscriptPath?: string;
   limit?: number;
   cursor?: string;
   direction?: "forward" | "backward";
@@ -247,6 +253,9 @@ export type WebReadSubagentMessagesInput = {
   sessionKey: string;
   subagentId: string;
   projectKey?: string;
+  sessionKind?: "background_task";
+  parentSessionId?: string;
+  relativeTranscriptPath?: string;
 };
 
 export type WebReadSubagentMessagesResult = {

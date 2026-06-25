@@ -11,7 +11,7 @@ import type {
   PermissionGrantResult,
 } from '../chat/types/types';
 import type { SessionStore } from '../../stores/useSessionStore';
-import { isBackgroundTaskSession, type Project, type ProjectSession, type SessionProvider } from '../../types/app';
+import { getSessionRequestParams, isReadOnlySession, type Project, type ProjectSession, type SessionProvider } from '../../types/app';
 import { getIntrinsicMessageKey } from '../chat/utils/messageKeys';
 import MessageRowV2 from './MessageRowV2';
 import SubagentDetailModal from './SubagentDetailModal';
@@ -236,19 +236,19 @@ function MeasuredMessageItem({
 }
 
 function countCarriedMessagesBefore(
-  items: KeyedRenderableMessageItem[],
-  renderIndex: number,
+  messages: ChatMessage[],
+  originalIndex: number,
 ): number {
-  return items
-    .slice(0, renderIndex)
-    .filter(({ message }) => message.type === 'user' || message.type === 'assistant' || message.isToolUse)
+  return messages
+    .slice(0, originalIndex)
+    .filter((message) => message.type === 'user' || message.type === 'assistant' || message.isToolUse)
     .length;
 }
 
 function isForkedChatSession(session: ProjectSession | null): boolean {
   return Boolean(
     session?.parentSessionId &&
-    session.sessionKind !== 'background_task',
+    !isReadOnlySession(session),
   );
 }
 
@@ -305,7 +305,7 @@ export default function MessagesPaneV2({
   }, []);
 
   const sessionId = selectedSession?.id ?? null;
-  const projectPath = selectedProject?.fullPath ?? undefined;
+  const projectPath = selectedProject?.fullPath || selectedProject?.path || undefined;
 
   const getMessageKey = useCallback((message: ChatMessage, index: number) => {
     const existingKey = messageKeyMapRef.current.get(message);
@@ -354,7 +354,7 @@ export default function MessagesPaneV2({
   const hasSessionLoadError = Boolean(!isLoadingSessionMessages && sessionLoadError && chatMessages.length === 0);
   const isNewConversationEmpty = isEmpty && !selectedSession;
   const isExistingConversationEmpty = isEmpty && Boolean(selectedSession) && !hasSessionLoadError;
-  const isReadOnlyBackgroundSession = isBackgroundTaskSession(selectedSession);
+  const sessionIsReadOnly = isReadOnlySession(selectedSession);
   const liveActivities = useMemo(
     () => activityMessages.filter((message) => message.isAgentActivity),
     [activityMessages],
@@ -414,12 +414,17 @@ export default function MessagesPaneV2({
     openSubagentActivity &&
       !['completed', 'failed', 'cancelled'].includes(String(openSubagentActivity.state || '')),
   );
+  const sessionRequestParams = useMemo(
+    () => getSessionRequestParams(selectedSession),
+    [selectedSession],
+  );
   const subagentDetail = useSubagentMessages(
     openSubagentId ? sessionId : null,
     openSubagentId,
     projectPath,
     sessionStore,
     openSubagentActivity?.state,
+    sessionRequestParams,
   );
   const renderableMessages = useMemo(
     () => {
@@ -735,7 +740,7 @@ export default function MessagesPaneV2({
       : null;
     const isLast = !isAssistantWorking && item.renderIndex === keyedMessageItems.length - 1;
     const forkCarriedMessageCount = item.message.type === 'user'
-      ? countCarriedMessagesBefore(keyedMessageItems, item.renderIndex)
+      ? countCarriedMessagesBefore(renderableMessages, item.originalIndex)
       : 0;
     const anchoredLiveGroups = liveProcessGroupsByAnchor.get(item.originalIndex) || [];
     const rendersLiveHeaderAfterItem = item.renderIndex === liveProcessHeaderIndex - 1;
@@ -819,6 +824,7 @@ export default function MessagesPaneV2({
     isProcessExpanded,
     isAssistantWorking,
     keyedMessageItems,
+    renderableMessages,
     nonSubagentLiveActivities,
     liveProcessGroupsByAnchor,
     liveProcessHeaderIndex,
@@ -912,19 +918,19 @@ export default function MessagesPaneV2({
       ) : isExistingConversationEmpty ? (
         <div className="mx-auto flex h-full max-w-[720px] flex-col items-center justify-center gap-2 px-6 py-10 text-center">
           <div className="text-[15px] font-medium text-neutral-900 dark:text-neutral-100">
-            {isReadOnlyBackgroundSession
-              ? t('emptyChat.readonlyBackgroundTitle', {
-                  defaultValue: 'No displayable messages in this task transcript',
+            {sessionIsReadOnly
+              ? t('emptyChat.readonlyTranscriptTitle', {
+                  defaultValue: 'No displayable messages in this read-only transcript',
                 })
               : t('emptyChat.emptySessionTitle', {
                   defaultValue: 'No displayable messages in this conversation',
                 })}
           </div>
           <div className="max-w-[520px] text-[13px] leading-5 text-neutral-500 dark:text-neutral-400">
-            {isReadOnlyBackgroundSession
-              ? t('emptyChat.readonlyBackgroundDescription', {
+            {sessionIsReadOnly
+              ? t('emptyChat.readonlyTranscriptDescription', {
                   defaultValue:
-                    'This read-only background task transcript only contains records the chat view cannot display.',
+                    'This read-only transcript only contains records the chat view cannot display.',
                 })
               : t('emptyChat.emptySessionDescription', {
                   defaultValue:
