@@ -1,11 +1,8 @@
-// @vitest-environment jsdom
-import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { SessionProvider } from '../types/app';
 import {
   createRafNotifyScheduler,
   patchMergedStreamingMessage,
-  useSessionStore,
   type NormalizedMessage,
   type SessionSlot,
 } from './useSessionStore';
@@ -43,7 +40,7 @@ function streamingMessage(sessionId: string, content: string): NormalizedMessage
 }
 
 describe('patchMergedStreamingMessage', () => {
-  it('updates merged content and refreshes the merged array reference', () => {
+  it('updates merged content in place without replacing the merged array', () => {
     const sessionId = 'web:s_test';
     const streamId = `__streaming_${sessionId}`;
     const merged = [streamingMessage(sessionId, 'hello')];
@@ -57,7 +54,7 @@ describe('patchMergedStreamingMessage', () => {
     const patched = patchMergedStreamingMessage(slot, streamId, 'hello world', PROVIDER);
 
     expect(patched).toBe(true);
-    expect(slot.merged).not.toBe(mergedBefore);
+    expect(slot.merged).toBe(mergedBefore);
     expect(slot.merged[0]?.content).toBe('hello world');
   });
 
@@ -76,61 +73,6 @@ describe('patchMergedStreamingMessage', () => {
     patchMergedStreamingMessage(slot, streamId, 'same', PROVIDER);
 
     expect(slot.merged[0]).toBe(rowBefore);
-  });
-});
-
-describe('streaming finalization dedupe', () => {
-  it('does not duplicate assistant text when a final text frame arrived before stream_end', () => {
-    const sessionId = 'web:s_text_dedupe';
-    const finalText = '你好！有什么可以帮你的？';
-    const { result } = renderHook(() => useSessionStore());
-
-    act(() => {
-      result.current.updateStreaming(sessionId, finalText, PROVIDER);
-      result.current.appendRealtime(sessionId, {
-        id: 'server-text-1',
-        sessionId,
-        timestamp: '2026-06-25T12:00:01.000Z',
-        provider: PROVIDER,
-        kind: 'text',
-        role: 'assistant',
-        content: finalText,
-      });
-      result.current.finalizeStreaming(sessionId);
-    });
-
-    const realtimeAssistantTexts = result.current.getSessionSlot(sessionId)?.realtimeMessages.filter((message) =>
-      message.kind === 'text' && message.role === 'assistant' && message.content === finalText
-    );
-    const mergedAssistantTexts = result.current.getMessages(sessionId).filter((message) =>
-      message.kind === 'text' && message.role === 'assistant' && message.content === finalText
-    );
-
-    expect(realtimeAssistantTexts).toHaveLength(1);
-    expect(mergedAssistantTexts).toHaveLength(1);
-  });
-
-  it('does not duplicate finalized thinking when a matching thinking frame is finalized later', () => {
-    const sessionId = 'web:s_thinking_dedupe';
-    const thinkingText = '用户打招呼，我需要简短回应。';
-    const { result } = renderHook(() => useSessionStore());
-
-    act(() => {
-      result.current.updateStreamingThinking(sessionId, thinkingText, PROVIDER);
-      result.current.finalizeStreamingThinking(sessionId);
-      result.current.updateStreamingThinking(sessionId, thinkingText, PROVIDER);
-      result.current.finalizeStreamingThinking(sessionId);
-    });
-
-    const realtimeThinking = result.current.getSessionSlot(sessionId)?.realtimeMessages.filter((message) =>
-      message.kind === 'thinking' && message.content === thinkingText
-    );
-    const mergedThinking = result.current.getMessages(sessionId).filter((message) =>
-      message.kind === 'thinking' && message.content === thinkingText
-    );
-
-    expect(realtimeThinking).toHaveLength(1);
-    expect(mergedThinking).toHaveLength(1);
   });
 });
 

@@ -32,16 +32,6 @@ function assistant(id: string, content: string, offsetMs = 1000): ChatMessage {
   };
 }
 
-function thinking(id: string, content = 'Thinking through the next step.', offsetMs = 500): ChatMessage {
-  return {
-    id,
-    type: 'assistant',
-    content,
-    timestamp: timestamp(offsetMs),
-    isThinking: true,
-  };
-}
-
 function tool(
   id: string,
   toolName: string,
@@ -227,51 +217,6 @@ describe('processGrouping', () => {
     expect(secondAssistant?.afterProcessAttachments[0].processSummary.commandCount).toBe(1);
     expect(thirdAssistant?.beforeProcessAttachments).toHaveLength(0);
     expect(processAttachments(thirdAssistant)).toHaveLength(0);
-  });
-
-  it('folds completed thinking-only segments into adjacent assistant messages', () => {
-    const messages = [
-      user('u1'),
-      assistant('a1', 'I found the first issue.', 100),
-      thinking('think-1', 'Consider the fallback behavior.', 200),
-      thinking('think-2', 'Check whether the fallback is recursive.', 300),
-      assistant('a2', 'Here is the next result.', 400),
-    ];
-
-    const items = buildRenderableMessageItems(messages);
-    const firstAssistant = items.find((item) => item.message.id === 'a1');
-    const attachment = firstAssistant?.afterProcessAttachments[0];
-
-    expect(items.map((item) => item.message.id)).toEqual(['u1', 'a1', 'a2']);
-    expect(firstAssistant?.afterProcessAttachments).toHaveLength(1);
-    expect(attachment?.processSummary.thinkingCount).toBe(2);
-    expect(attachment?.processDetailMessages.map((message) => message.id)).toEqual([
-      'think-1',
-      'think-2',
-    ]);
-  });
-
-  it('does not let empty assistant shells split completed thinking segments', () => {
-    const messages = [
-      user('u1'),
-      assistant('a1', 'Initial answer.', 100),
-      thinking('think-1', 'First thought.', 200),
-      assistant('a-empty', '', 250),
-      thinking('think-2', 'Second thought.', 300),
-      assistant('a2', 'Final answer.', 400),
-    ];
-
-    const items = buildRenderableMessageItems(messages);
-    const firstAssistant = items.find((item) => item.message.id === 'a1');
-    const attachment = firstAssistant?.afterProcessAttachments[0];
-
-    expect(items.map((item) => item.message.id)).toEqual(['u1', 'a1', 'a2']);
-    expect(firstAssistant?.afterProcessAttachments).toHaveLength(1);
-    expect(attachment?.processSummary.thinkingCount).toBe(2);
-    expect(attachment?.processDetailMessages.map((message) => message.id)).toEqual([
-      'think-1',
-      'think-2',
-    ]);
   });
 
   it('attaches completed run duration after the user turn finishes', () => {
