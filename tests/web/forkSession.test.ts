@@ -3,11 +3,21 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { DefaultContextRuntime } from "../../src/context/DefaultContextRuntime.js";
+import type { MemoryResolver } from "../../src/context/memory/MemoryResolver.js";
+import type { CanonicalMessage } from "../../src/model/index.js";
 import { ForkSessionError, forkWebSession } from "../../src/web/server/forkSession.js";
 import { readSubagentWebMessages, readWebSessionMessages } from "../../src/web/server/readSessionMessages.js";
 import { readTranscript } from "../../src/session/transcript/TranscriptReader.js";
 import { createProjectId } from "../../src/pilot/paths.js";
 import { sanitizeSessionIdForPath } from "../../src/session/storage/ProjectSessionStorage.js";
+
+function textFromMessage(message: CanonicalMessage): string {
+  return message.content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
+}
 
 test("forkWebSession copies history before target turn and returns prefill text", async () => {
   const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-fork-"));
@@ -84,6 +94,18 @@ test("forkWebSession copies history before target turn and returns prefill text"
   assert.equal(entries[0].sequence, 1);
   assert.equal(entries[2].type, "turn_result");
   assert.equal(entries[3].type, "session_metadata");
+  if (entries[0].type === "accepted_input") {
+    assert.deepEqual(entries[0].messages[0]?.metadata?.forkCarryover, {
+      sourceSessionId: sessionKey,
+      sourceTurnId: "turn-1",
+    });
+  }
+  if (entries[1].type === "assistant_message") {
+    assert.deepEqual(entries[1].message.metadata?.forkCarryover, {
+      sourceSessionId: sessionKey,
+      sourceTurnId: "turn-1",
+    });
+  }
   if (entries[3].type === "session_metadata") {
     assert.equal(entries[3].metadata.parentSessionId, sessionKey);
     assert.equal(entries[3].metadata.forkedFromTurnId, "turn-2");
@@ -92,6 +114,43 @@ test("forkWebSession copies history before target turn and returns prefill text"
   await rm(pilotHome, { recursive: true, force: true });
 });
 
+test("DefaultContextRuntime skips fork carryover messages during memory capture", async () => {
+  const captured: CanonicalMessage[][] = [];
+  const memoryResolver: MemoryResolver = {
+    async retrieve() {
+      return { diagnostics: [] };
+    },
+    async captureTurn(input) {
+      captured.push(input.messages);
+    },
+  };
+  const runtime = new DefaultContextRuntime({ memoryResolver });
+
+  await runtime.captureTurn({
+    sessionId: "web:s_fork",
+    turnId: "turn-2",
+    errored: false,
+    messages: [
+      {
+        role: "user",
+        content: [{ type: "text", text: "parent history" }],
+        metadata: {
+          forkCarryover: {
+            sourceSessionId: "web:s_parent",
+            sourceTurnId: "turn-1",
+          },
+        },
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: "new fork turn" }],
+      },
+    ],
+  });
+
+  assert.equal(captured.length, 1);
+  assert.deepEqual(captured[0]?.map(textFromMessage), ["new fork turn"]);
+});
 
 test("forkWebSession rejects non-text target turns instead of dropping attachments", async () => {
   const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-fork-unsupported-"));
@@ -166,7 +225,6 @@ test("forkWebSession rejects non-text target turns instead of dropping attachmen
   await rm(pilotHome, { recursive: true, force: true });
 });
 
-
 test("forkWebSession preserves plan mode for forked plan turns", async () => {
   const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-fork-plan-"));
   const projectRoot = join(pilotHome, "workspace");
@@ -207,6 +265,214 @@ test("forkWebSession preserves plan mode for forked plan turns", async () => {
   await rm(pilotHome, { recursive: true, force: true });
 });
 
+test("readWebSessionMessages marks hidden media turns as unsupported fork targets", async () => {
+  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-fork-media-marker-"));
+  const projectRoot = join(pilotHome, "workspace");
+  const chatDir = join(pilotHome, "projects", createProjectId(projectRoot), "chats");
+  const sessionKey = "web:s_media_marker";
+  const transcriptPath = join(chatDir, `${sessionKey}.jsonl`);
+
+  await mkdir(chatDir, { recursive: true });
+
+  const lines = [
+    {
+      type: "accepted_input",
+      sessionId: sessionKey,
+      turnId: "turn-1",
+      sequence: 1,
+      createdAt: "2026-06-24T00:00:00.000Z",
+      entryId: "entry-1",
+      parentEntryId: null,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "please inspect this pdf" },
+            {
+              type: "pdf",
+              source: "base64",
+              data: "JVBERi0xLjQK",
+              mimeType: "application/pdf",
+              bytes: 9,
+              pages: 1,
+            },
+          ],
+        },
+      ],
+    },
+  ];
+
+  await writeFile(transcriptPath, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`, "utf8");
+
+  const result = await readWebSessionMessages(
+    { sessionKey, projectKey: projectRoot },
+    { projectRoot, pilotHome },
+  );
+
+  const userMessage = result.messages.find(
+    (message) => message.kind === "text" && message.entryId === "entry-1",
+  );
+  assert.ok(userMessage);
+  assert.equal((userMessage.payload as { forkUnsupportedContent?: boolean }).forkUnsupportedContent, true);
+
+  await rm(pilotHome, { recursive: true, force: true });
+});
+
+test("readWebSessionMessages reads background task transcripts by relative path", async () => {
+  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-background-read-"));
+  const projectRoot = join(pilotHome, "workspace");
+  const chatDir = join(pilotHome, "projects", createProjectId(projectRoot), "chats");
+  const parentSessionId = "web:s_parent_background";
+  const backgroundSessionId = "background-web-s_parent_background-agent-cron";
+  const relativeTranscriptPath = `${parentSessionId}/subagents/agent-cron.jsonl`;
+  const transcriptPath = join(chatDir, relativeTranscriptPath);
+
+  await mkdir(join(chatDir, parentSessionId, "subagents"), { recursive: true });
+  const lines = [
+    {
+      type: "accepted_input",
+      sessionId: backgroundSessionId,
+      turnId: "bg-turn-1",
+      sequence: 1,
+      createdAt: "2026-06-24T00:00:00.000Z",
+      entryId: "bg-entry-1",
+      parentEntryId: null,
+      messages: [{ role: "user", content: [{ type: "text", text: "background prompt" }] }],
+    },
+    {
+      type: "assistant_message",
+      sessionId: backgroundSessionId,
+      turnId: "bg-turn-1",
+      sequence: 2,
+      createdAt: "2026-06-24T00:00:01.000Z",
+      entryId: "bg-entry-2",
+      parentEntryId: "bg-entry-1",
+      message: { role: "assistant", content: [{ type: "text", text: "background result" }] },
+    },
+    {
+      type: "turn_result",
+      sessionId: backgroundSessionId,
+      turnId: "bg-turn-1",
+      sequence: 3,
+      createdAt: "2026-06-24T00:00:02.000Z",
+      entryId: "bg-entry-3",
+      parentEntryId: "bg-entry-2",
+      result: { stopReason: "completed", usage: {} },
+    },
+  ];
+  await writeFile(transcriptPath, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`, "utf8");
+
+  const result = await readWebSessionMessages(
+    {
+      sessionKey: backgroundSessionId,
+      projectKey: projectRoot,
+      sessionKind: "background_task",
+      parentSessionId,
+      relativeTranscriptPath,
+    },
+    { projectRoot, pilotHome },
+  );
+
+  assert.deepEqual(
+    result.messages.filter((message) => message.kind === "text").map((message) => message.text),
+    ["background prompt", "background result"],
+  );
+  assert.equal(result.session.sessionKind, "background_task");
+  assert.equal(result.session.parentSessionId, parentSessionId);
+  assert.equal(result.session.relativeTranscriptPath, relativeTranscriptPath);
+
+  await rm(pilotHome, { recursive: true, force: true });
+});
+
+test("readSubagentWebMessages resolves subagents from background task transcripts", async () => {
+  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-background-subagent-"));
+  const projectRoot = join(pilotHome, "workspace");
+  const chatDir = join(pilotHome, "projects", createProjectId(projectRoot), "chats");
+  const parentSessionId = "web:s_parent_background_subagent";
+  const backgroundSessionId = "background-web-s_parent_background_subagent-agent-cron";
+  const relativeTranscriptPath = `${parentSessionId}/subagents/agent-cron.jsonl`;
+  const backgroundDir = join(chatDir, parentSessionId, "subagents");
+  const subagentRelativePath = "agent-cron/subagents/sub-bg.jsonl";
+
+  await mkdir(join(backgroundDir, "agent-cron", "subagents"), { recursive: true });
+  const parentLines = [
+    {
+      type: "accepted_input",
+      sessionId: backgroundSessionId,
+      turnId: "bg-turn-1",
+      sequence: 1,
+      createdAt: "2026-06-24T00:00:00.000Z",
+      entryId: "bg-entry-1",
+      parentEntryId: null,
+      messages: [{ role: "user", content: [{ type: "text", text: "background prompt" }] }],
+    },
+    {
+      type: "subagent_started",
+      sessionId: backgroundSessionId,
+      turnId: "bg-turn-1",
+      sequence: 2,
+      createdAt: "2026-06-24T00:00:01.000Z",
+      entryId: "bg-entry-2",
+      parentEntryId: "bg-entry-1",
+      subagentId: "sub-bg",
+      subagentType: "general-purpose",
+      promptPreview: "inspect",
+      promptTruncated: false,
+      transcriptRelativePath: subagentRelativePath,
+    },
+  ];
+  const sidechainLines = [
+    {
+      type: "accepted_input",
+      sessionId: `${projectRoot}::sub::sub-bg`,
+      turnId: "sub-turn-1",
+      sequence: 1,
+      createdAt: "2026-06-24T00:00:01.100Z",
+      entryId: "sub-entry-1",
+      parentEntryId: null,
+      messages: [{ role: "user", content: [{ type: "text", text: "inspect" }] }],
+    },
+    {
+      type: "assistant_message",
+      sessionId: `${projectRoot}::sub::sub-bg`,
+      turnId: "sub-turn-1",
+      sequence: 2,
+      createdAt: "2026-06-24T00:00:01.200Z",
+      entryId: "sub-entry-2",
+      parentEntryId: "sub-entry-1",
+      message: { role: "assistant", content: [{ type: "text", text: "subagent result" }] },
+    },
+  ];
+  await writeFile(
+    join(chatDir, relativeTranscriptPath),
+    `${parentLines.map((line) => JSON.stringify(line)).join("\n")}\n`,
+    "utf8",
+  );
+  await writeFile(
+    join(backgroundDir, subagentRelativePath),
+    `${sidechainLines.map((line) => JSON.stringify(line)).join("\n")}\n`,
+    "utf8",
+  );
+
+  const result = await readSubagentWebMessages(
+    {
+      sessionKey: backgroundSessionId,
+      subagentId: "sub-bg",
+      projectKey: projectRoot,
+      sessionKind: "background_task",
+      parentSessionId,
+      relativeTranscriptPath,
+    },
+    { projectRoot, pilotHome },
+  );
+
+  assert.deepEqual(
+    result.messages.filter((message) => message.kind === "text").map((message) => message.text),
+    ["subagent result"],
+  );
+
+  await rm(pilotHome, { recursive: true, force: true });
+});
 
 test("forkWebSession rewrites copied auxiliary references to the new session", async () => {
   const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-fork-aux-"));
@@ -420,219 +686,6 @@ test("forkWebSession rewrites copied auxiliary references to the new session", a
   await rm(pilotHome, { recursive: true, force: true });
 });
 
-
-test("readWebSessionMessages marks hidden media turns as unsupported fork targets", async () => {
-  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-fork-media-marker-"));
-  const projectRoot = join(pilotHome, "workspace");
-  const chatDir = join(pilotHome, "projects", createProjectId(projectRoot), "chats");
-  const sessionKey = "web:s_media_marker";
-  const transcriptPath = join(chatDir, `${sessionKey}.jsonl`);
-
-  await mkdir(chatDir, { recursive: true });
-
-  const lines = [
-    {
-      type: "accepted_input",
-      sessionId: sessionKey,
-      turnId: "turn-1",
-      sequence: 1,
-      createdAt: "2026-06-24T00:00:00.000Z",
-      entryId: "entry-1",
-      parentEntryId: null,
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "please inspect this pdf" },
-            {
-              type: "pdf",
-              source: "base64",
-              data: "JVBERi0xLjQK",
-              mimeType: "application/pdf",
-              bytes: 9,
-              pages: 1,
-            },
-          ],
-        },
-      ],
-    },
-  ];
-
-  await writeFile(transcriptPath, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`, "utf8");
-
-  const result = await readWebSessionMessages(
-    { sessionKey, projectKey: projectRoot },
-    { projectRoot, pilotHome },
-  );
-
-  const userMessage = result.messages.find(
-    (message) => message.kind === "text" && message.entryId === "entry-1",
-  );
-  assert.ok(userMessage);
-  assert.equal((userMessage.payload as { forkUnsupportedContent?: boolean }).forkUnsupportedContent, true);
-
-  await rm(pilotHome, { recursive: true, force: true });
-});
-
-
-test("readWebSessionMessages reads background task transcripts by relative path", async () => {
-  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-background-read-"));
-  const projectRoot = join(pilotHome, "workspace");
-  const chatDir = join(pilotHome, "projects", createProjectId(projectRoot), "chats");
-  const parentSessionId = "web:s_parent_background";
-  const backgroundSessionId = "background-web-s_parent_background-agent-cron";
-  const relativeTranscriptPath = `${parentSessionId}/subagents/agent-cron.jsonl`;
-  const transcriptPath = join(chatDir, relativeTranscriptPath);
-
-  await mkdir(join(chatDir, parentSessionId, "subagents"), { recursive: true });
-  const lines = [
-    {
-      type: "accepted_input",
-      sessionId: backgroundSessionId,
-      turnId: "bg-turn-1",
-      sequence: 1,
-      createdAt: "2026-06-24T00:00:00.000Z",
-      entryId: "bg-entry-1",
-      parentEntryId: null,
-      messages: [{ role: "user", content: [{ type: "text", text: "background prompt" }] }],
-    },
-    {
-      type: "assistant_message",
-      sessionId: backgroundSessionId,
-      turnId: "bg-turn-1",
-      sequence: 2,
-      createdAt: "2026-06-24T00:00:01.000Z",
-      entryId: "bg-entry-2",
-      parentEntryId: "bg-entry-1",
-      message: { role: "assistant", content: [{ type: "text", text: "background result" }] },
-    },
-    {
-      type: "turn_result",
-      sessionId: backgroundSessionId,
-      turnId: "bg-turn-1",
-      sequence: 3,
-      createdAt: "2026-06-24T00:00:02.000Z",
-      entryId: "bg-entry-3",
-      parentEntryId: "bg-entry-2",
-      result: { stopReason: "completed", usage: {} },
-    },
-  ];
-  await writeFile(transcriptPath, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`, "utf8");
-
-  const result = await readWebSessionMessages(
-    {
-      sessionKey: backgroundSessionId,
-      projectKey: projectRoot,
-      sessionKind: "background_task",
-      parentSessionId,
-      relativeTranscriptPath,
-    },
-    { projectRoot, pilotHome },
-  );
-
-  assert.deepEqual(
-    result.messages.filter((message) => message.kind === "text").map((message) => message.text),
-    ["background prompt", "background result"],
-  );
-  assert.equal(result.session.sessionKind, "background_task");
-  assert.equal(result.session.parentSessionId, parentSessionId);
-  assert.equal(result.session.relativeTranscriptPath, relativeTranscriptPath);
-
-  await rm(pilotHome, { recursive: true, force: true });
-});
-
-
-test("readSubagentWebMessages resolves subagents from background task transcripts", async () => {
-  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-background-subagent-"));
-  const projectRoot = join(pilotHome, "workspace");
-  const chatDir = join(pilotHome, "projects", createProjectId(projectRoot), "chats");
-  const parentSessionId = "web:s_parent_background_subagent";
-  const backgroundSessionId = "background-web-s_parent_background_subagent-agent-cron";
-  const relativeTranscriptPath = `${parentSessionId}/subagents/agent-cron.jsonl`;
-  const backgroundDir = join(chatDir, parentSessionId, "subagents");
-  const subagentRelativePath = "agent-cron/subagents/sub-bg.jsonl";
-
-  await mkdir(join(backgroundDir, "agent-cron", "subagents"), { recursive: true });
-  const parentLines = [
-    {
-      type: "accepted_input",
-      sessionId: backgroundSessionId,
-      turnId: "bg-turn-1",
-      sequence: 1,
-      createdAt: "2026-06-24T00:00:00.000Z",
-      entryId: "bg-entry-1",
-      parentEntryId: null,
-      messages: [{ role: "user", content: [{ type: "text", text: "background prompt" }] }],
-    },
-    {
-      type: "subagent_started",
-      sessionId: backgroundSessionId,
-      turnId: "bg-turn-1",
-      sequence: 2,
-      createdAt: "2026-06-24T00:00:01.000Z",
-      entryId: "bg-entry-2",
-      parentEntryId: "bg-entry-1",
-      subagentId: "sub-bg",
-      subagentType: "general-purpose",
-      promptPreview: "inspect",
-      promptTruncated: false,
-      transcriptRelativePath: subagentRelativePath,
-    },
-  ];
-  const sidechainLines = [
-    {
-      type: "accepted_input",
-      sessionId: `${projectRoot}::sub::sub-bg`,
-      turnId: "sub-turn-1",
-      sequence: 1,
-      createdAt: "2026-06-24T00:00:01.100Z",
-      entryId: "sub-entry-1",
-      parentEntryId: null,
-      messages: [{ role: "user", content: [{ type: "text", text: "inspect" }] }],
-    },
-    {
-      type: "assistant_message",
-      sessionId: `${projectRoot}::sub::sub-bg`,
-      turnId: "sub-turn-1",
-      sequence: 2,
-      createdAt: "2026-06-24T00:00:01.200Z",
-      entryId: "sub-entry-2",
-      parentEntryId: "sub-entry-1",
-      message: { role: "assistant", content: [{ type: "text", text: "subagent result" }] },
-    },
-  ];
-  await writeFile(
-    join(chatDir, relativeTranscriptPath),
-    `${parentLines.map((line) => JSON.stringify(line)).join("\n")}\n`,
-    "utf8",
-  );
-  await writeFile(
-    join(backgroundDir, subagentRelativePath),
-    `${sidechainLines.map((line) => JSON.stringify(line)).join("\n")}\n`,
-    "utf8",
-  );
-
-  const result = await readSubagentWebMessages(
-    {
-      sessionKey: backgroundSessionId,
-      subagentId: "sub-bg",
-      projectKey: projectRoot,
-      sessionKind: "background_task",
-      parentSessionId,
-      relativeTranscriptPath,
-    },
-    { projectRoot, pilotHome },
-  );
-
-  assert.deepEqual(
-    result.messages.filter((message) => message.kind === "text").map((message) => message.text),
-    ["subagent result"],
-  );
-
-  await rm(pilotHome, { recursive: true, force: true });
-});
-
-
 test("readWebSessionMessages keeps entry ids aligned after synthetic messages are hidden", async () => {
   const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-fork-entryid-"));
   const projectRoot = join(pilotHome, "workspace");
@@ -701,7 +754,6 @@ test("readWebSessionMessages keeps entry ids aligned after synthetic messages ar
 
   await rm(pilotHome, { recursive: true, force: true });
 });
-
 
 test("readWebSessionMessages ignores pre-compact subagent refs when attaching visible tool rows", async () => {
   const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-fork-subagent-compact-"));

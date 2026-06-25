@@ -11,7 +11,7 @@ import type { Dirent } from "node:fs";
 import { chmod, cp, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { platform } from "node:process";
-import type { CanonicalContentBlock } from "../../model/index.js";
+import type { CanonicalContentBlock, CanonicalMessage } from "../../model/index.js";
 import { getPilotProjectChatDir } from "../../pilot/index.js";
 import { readTranscript } from "../../session/transcript/TranscriptReader.js";
 import {
@@ -173,6 +173,23 @@ function retargetContentBlock(
   return block;
 }
 
+function markMessageAsForkCarryover(
+  message: CanonicalMessage,
+  sourceSessionId: string,
+  sourceTurnId: string,
+): CanonicalMessage {
+  return {
+    ...message,
+    metadata: {
+      ...message.metadata,
+      forkCarryover: {
+        sourceSessionId,
+        sourceTurnId,
+      },
+    },
+  };
+}
+
 function retargetTranscriptEntryAuxiliaryPaths(
   entry: AgentTranscriptEntry,
   sourceSessionDir: string,
@@ -202,6 +219,31 @@ function retargetTranscriptEntryAuxiliaryPaths(
           retargetContentBlock(block, sourceSessionDir, targetSessionDir),
         ),
       },
+    };
+  }
+  return entry;
+}
+
+function markTranscriptEntryAsForkCarryover(
+  entry: AgentTranscriptEntry,
+  sourceSessionId: string,
+): AgentTranscriptEntry {
+  if (entry.type === "accepted_input") {
+    return {
+      ...entry,
+      messages: entry.messages.map((message) =>
+        markMessageAsForkCarryover(message, sourceSessionId, entry.turnId),
+      ),
+    };
+  }
+  if (
+    entry.type === "assistant_message" ||
+    entry.type === "tool_result_message" ||
+    entry.type === "durable_message"
+  ) {
+    return {
+      ...entry,
+      message: markMessageAsForkCarryover(entry.message, sourceSessionId, entry.turnId),
     };
   }
   return entry;
@@ -239,19 +281,20 @@ function retargetEntriesToSession(
 ): AgentTranscriptEntry[] {
   return entries.map((entry) => {
     if (entry.type === "accepted_input") {
-      return retargetAcceptedInputEntry(
+      const retargeted = retargetAcceptedInputEntry(
         entry,
         options.sessionId,
         options.sourceSessionDir,
         options.targetSessionDir,
       );
+      return markTranscriptEntryAsForkCarryover(retargeted, entry.sessionId);
     }
     if (
       entry.type === "assistant_message" ||
       entry.type === "tool_result_message" ||
       entry.type === "durable_message"
     ) {
-      return {
+      const retargeted = {
         ...retargetTranscriptEntryAuxiliaryPaths(
           entry,
           options.sourceSessionDir,
@@ -259,6 +302,7 @@ function retargetEntriesToSession(
         ),
         sessionId: options.sessionId,
       };
+      return markTranscriptEntryAsForkCarryover(retargeted, entry.sessionId);
     }
     if (entry.type === "subagent_started") {
       return {

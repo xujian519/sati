@@ -131,6 +131,10 @@ export type CanonicalMessageMetadata = {
   /** True for messages injected by the system (e.g. JSON self-correct prompts). */
   synthetic?: boolean;
   purpose?: string;
+  forkCarryover?: {
+    sourceSessionId: string;
+    sourceTurnId?: string;
+  };
 };
 
 export type CanonicalMessage = {
