@@ -415,7 +415,7 @@ function MessageRowV2({
     nextMessage,
     isSessionRunning,
   );
-  const canRenderAssistantForkButton = Boolean(onFork && hasAssistantProse && !message.isStreaming);
+  const canRenderAssistantForkButton = Boolean(onFork && showAssistantCopyButton);
   const showAssistantActions = showAssistantCopyButton || canRenderAssistantForkButton;
   const assistantBody = (hasAssistantProse || showStreamingCursor) ? (
     <div className="min-w-0 text-[14px] leading-relaxed text-neutral-900 dark:text-neutral-100">

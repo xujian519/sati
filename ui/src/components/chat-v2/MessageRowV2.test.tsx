@@ -82,6 +82,28 @@ describe('MessageRowV2 fork actions', () => {
     expect(onFork).not.toHaveBeenCalled();
   });
 
+  it('hides assistant fork whenever the assistant copy action is hidden', () => {
+    const onFork = vi.fn();
+    const assistantMessage: ChatMessage = {
+      id: 'assistant-running',
+      entryId: 'assistant-entry-running',
+      type: 'assistant',
+      content: 'I am still part of a running turn.',
+      timestamp: baseTime,
+    };
+
+    renderMessageRow(assistantMessage, {
+      forkCarriedMessageCount: 2,
+      isSessionRunning: true,
+      onFork,
+    });
+
+    expect(screen.queryByRole('button', { name: 'Copy' })).toBeNull();
+    expect(screen.queryByRole('button', {
+      name: 'Fork from here · carries 2 messages',
+    })).toBeNull();
+  });
+
   it('keeps the existing user fork affordance wired through the same callback', () => {
     const onFork = vi.fn();
     const userMessage: ChatMessage = {
