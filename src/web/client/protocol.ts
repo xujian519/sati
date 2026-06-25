@@ -265,6 +265,7 @@ export type WebForkSessionResult = {
   newSessionKey: string;
   prefillText: string;
   carriedMessageCount: number;
+  mode?: WebGatewayMode;
 };
 
 export type WebActiveTurnSnapshotInput = {

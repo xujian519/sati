@@ -7,8 +7,9 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { cp, mkdir, writeFile, chmod } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import type { Dirent } from "node:fs";
+import { chmod, cp, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { platform } from "node:process";
 import type { CanonicalContentBlock } from "../../model/index.js";
 import { getPilotProjectChatDir } from "../../pilot/index.js";
@@ -21,7 +22,7 @@ import type {
   AgentSessionMetadataTranscriptEntry,
   AgentTranscriptEntry,
 } from "../../session/transcript/TranscriptEntry.js";
-import type { WebForkSessionInput, WebForkSessionResult } from "../client/protocol.js";
+import type { WebGatewayMode, WebForkSessionInput, WebForkSessionResult } from "../client/protocol.js";
 
 export type ForkWebSessionOptions = {
   projectRoot: string;
@@ -35,14 +36,25 @@ function newWebSessionKey(): string {
 }
 
 function extractAcceptedInputText(entry: AgentAcceptedInputTranscriptEntry): string {
+  const chunks: string[] = [];
   for (const message of entry.messages) {
     for (const block of message.content as CanonicalContentBlock[]) {
       if (block.type === "text" && block.text.trim()) {
-        return block.text.trim();
+        chunks.push(block.text.trim());
       }
     }
   }
-  return "";
+  return chunks.join("\n\n").trim();
+}
+
+function hasUnsupportedPrefillContent(entry: AgentAcceptedInputTranscriptEntry): boolean {
+  return entry.messages.some((message) =>
+    (message.content as CanonicalContentBlock[]).some((block) => block.type !== "text"),
+  );
+}
+
+function getForkMode(entry: AgentAcceptedInputTranscriptEntry): WebGatewayMode | undefined {
+  return entry.metadata?.permissionMode === "plan" ? "plan" : undefined;
 }
 
 function buildForkTitle(
@@ -118,14 +130,230 @@ function countCarriedUserAssistantMessages(entries: AgentTranscriptEntry[]): num
   return count;
 }
 
+function retargetAuxiliaryPath(
+  path: string,
+  sourceSessionDir: string,
+  targetSessionDir: string,
+): string {
+  const absolutePath = resolve(path);
+  const relativePath = relative(sourceSessionDir, absolutePath);
+  if (
+    relativePath === "" ||
+    relativePath.startsWith("..") ||
+    isAbsolute(relativePath)
+  ) {
+    return path;
+  }
+  return resolve(targetSessionDir, relativePath);
+}
+
+function retargetRelativeSessionPath(
+  path: string,
+  sourceSafeId: string,
+  targetSafeId: string,
+): string {
+  const parts = path.split(/[\\/]/);
+  if (parts[0] !== sourceSafeId) {
+    return path;
+  }
+  return [targetSafeId, ...parts.slice(1)].join("/");
+}
+
+function retargetContentBlock(
+  block: CanonicalContentBlock,
+  sourceSessionDir: string,
+  targetSessionDir: string,
+): CanonicalContentBlock {
+  if (block.type === "tool_result_reference" || block.type === "media_reference") {
+    return {
+      ...block,
+      path: retargetAuxiliaryPath(block.path, sourceSessionDir, targetSessionDir),
+    };
+  }
+  return block;
+}
+
+function retargetTranscriptEntryAuxiliaryPaths(
+  entry: AgentTranscriptEntry,
+  sourceSessionDir: string,
+  targetSessionDir: string,
+): AgentTranscriptEntry {
+  if (entry.type === "accepted_input") {
+    return {
+      ...entry,
+      messages: entry.messages.map((message) => ({
+        ...message,
+        content: message.content.map((block) =>
+          retargetContentBlock(block, sourceSessionDir, targetSessionDir),
+        ),
+      })),
+    };
+  }
+  if (
+    entry.type === "assistant_message" ||
+    entry.type === "tool_result_message" ||
+    entry.type === "durable_message"
+  ) {
+    return {
+      ...entry,
+      message: {
+        ...entry.message,
+        content: entry.message.content.map((block) =>
+          retargetContentBlock(block, sourceSessionDir, targetSessionDir),
+        ),
+      },
+    };
+  }
+  return entry;
+}
+
+function retargetAcceptedInputEntry(
+  entry: AgentAcceptedInputTranscriptEntry,
+  sessionId: string,
+  sourceSessionDir: string,
+  targetSessionDir: string,
+): AgentAcceptedInputTranscriptEntry {
+  const retargeted = retargetTranscriptEntryAuxiliaryPaths(
+    entry,
+    sourceSessionDir,
+    targetSessionDir,
+  );
+  if (retargeted.type !== "accepted_input") {
+    return entry;
+  }
+  return {
+    ...retargeted,
+    sessionId,
+  };
+}
+
+function retargetEntriesToSession(
+  entries: AgentTranscriptEntry[],
+  options: {
+    sessionId: string;
+    sourceSafeId: string;
+    targetSafeId: string;
+    sourceSessionDir: string;
+    targetSessionDir: string;
+  },
+): AgentTranscriptEntry[] {
+  return entries.map((entry) => {
+    if (entry.type === "accepted_input") {
+      return retargetAcceptedInputEntry(
+        entry,
+        options.sessionId,
+        options.sourceSessionDir,
+        options.targetSessionDir,
+      );
+    }
+    if (
+      entry.type === "assistant_message" ||
+      entry.type === "tool_result_message" ||
+      entry.type === "durable_message"
+    ) {
+      return {
+        ...retargetTranscriptEntryAuxiliaryPaths(
+          entry,
+          options.sourceSessionDir,
+          options.targetSessionDir,
+        ),
+        sessionId: options.sessionId,
+      };
+    }
+    if (entry.type === "subagent_started") {
+      return {
+        ...entry,
+        sessionId: options.sessionId,
+        transcriptRelativePath: retargetRelativeSessionPath(
+          entry.transcriptRelativePath,
+          options.sourceSafeId,
+          options.targetSafeId,
+        ),
+      };
+    }
+    return {
+      ...entry,
+      sessionId: options.sessionId,
+    };
+  });
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: unknown }).code === "ENOENT",
+  );
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function retargetCopiedSubagentTranscripts(
+  targetSubagentsDir: string,
+  sourceSessionDir: string,
+  targetSessionDir: string,
+): Promise<void> {
+  let entries: Dirent<string>[];
+  try {
+    entries = await readdir(targetSubagentsDir, { withFileTypes: true });
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return;
+    }
+    throw error;
+  }
+
+  for (const entry of entries) {
+    const path = join(targetSubagentsDir, entry.name);
+    if (entry.isDirectory()) {
+      await retargetCopiedSubagentTranscripts(path, sourceSessionDir, targetSessionDir);
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith(".jsonl")) {
+      continue;
+    }
+    const content = await readFile(path, "utf8");
+    const rewritten = content
+      .split(/\r?\n/)
+      .map((line) => {
+        if (!line.trim()) {
+          return line;
+        }
+        try {
+          const parsed = JSON.parse(line) as AgentTranscriptEntry;
+          return JSON.stringify(
+            retargetTranscriptEntryAuxiliaryPaths(parsed, sourceSessionDir, targetSessionDir),
+          );
+        } catch {
+          return line;
+        }
+      })
+      .join("\n");
+    await writeFile(path, rewritten, "utf8");
+  }
+}
+
 async function copySessionAuxDirs(sourceSessionDir: string, targetSessionDir: string): Promise<void> {
-  for (const subdir of ["tool-results", "file-history"] as const) {
+  for (const subdir of ["tool-results", "file-history", "subagents"] as const) {
     const source = join(sourceSessionDir, subdir);
     const target = join(targetSessionDir, subdir);
-    try {
-      await cp(source, target, { recursive: true, force: true });
-    } catch {
-      // Missing auxiliary dirs are normal for early sessions.
+    if (!(await pathExists(source))) {
+      continue;
+    }
+    await cp(source, target, { recursive: true, force: true });
+    if (subdir === "subagents") {
+      await retargetCopiedSubagentTranscripts(target, sourceSessionDir, targetSessionDir);
     }
   }
 }
@@ -156,18 +384,33 @@ export async function forkWebSession(
   }
 
   const forkAcceptedInput = findForkTurnAcceptedInput(entries, input.fromEntryId);
+  if (hasUnsupportedPrefillContent(forkAcceptedInput)) {
+    throw new ForkSessionError(
+      "fork_unsupported_content",
+      "Forking messages with attachments or non-text input is not supported yet.",
+    );
+  }
+  const forkMode = getForkMode(forkAcceptedInput);
   const cutoffSequence = forkAcceptedInput.sequence;
-  const preserved = entries.filter((entry) => entry.sequence < cutoffSequence);
+  const preservedSourceEntries = entries.filter((entry) => entry.sequence < cutoffSequence);
   const prefillText = extractAcceptedInputText(forkAcceptedInput);
-  const carriedMessageCount = countCarriedUserAssistantMessages(preserved);
+  const carriedMessageCount = countCarriedUserAssistantMessages(preservedSourceEntries);
 
   const newSessionKey = newWebSessionKey();
   const newSafeId = sanitizeSessionIdForPath(newSessionKey);
   const newTranscriptPath = resolve(chatDir, `${newSafeId}.jsonl`);
   const newSessionDir = resolve(chatDir, newSafeId);
+  const preserved = retargetEntriesToSession(preservedSourceEntries, {
+    sessionId: newSessionKey,
+    sourceSafeId,
+    targetSafeId: newSafeId,
+    sourceSessionDir,
+    targetSessionDir: newSessionDir,
+  });
 
   await mkdir(chatDir, { recursive: true, mode: 0o700 });
   await mkdir(newSessionDir, { recursive: true, mode: 0o700 });
+  await copySessionAuxDirs(sourceSessionDir, newSessionDir);
 
   const preservedLines = preserved.map((entry) => `${JSON.stringify(entry)}\n`).join("");
   const lastPreserved = preserved[preserved.length - 1];
@@ -207,11 +450,10 @@ export async function forkWebSession(
   await writeFile(newTranscriptPath, body, { encoding: "utf8", mode: 0o600 });
   await chmod(dirname(newTranscriptPath), 0o700);
 
-  await copySessionAuxDirs(sourceSessionDir, newSessionDir);
-
   return {
     newSessionKey,
     prefillText,
     carriedMessageCount,
+    ...(forkMode ? { mode: forkMode } : {}),
   };
 }
