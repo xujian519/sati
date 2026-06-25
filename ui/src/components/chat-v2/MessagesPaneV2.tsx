@@ -248,6 +248,25 @@ function countCarriedMessagesBefore(
     .length;
 }
 
+function countForkCarriedMessages(
+  messages: ChatMessage[],
+  originalIndex: number,
+  message: ChatMessage,
+): number {
+  if (message.type !== 'assistant') {
+    return message.type === 'user' ? countCarriedMessagesBefore(messages, originalIndex) : 0;
+  }
+
+  let forkTargetIndex = -1;
+  for (let index = originalIndex; index >= 0; index -= 1) {
+    if (messages[index]?.type === 'user') {
+      forkTargetIndex = index;
+      break;
+    }
+  }
+  return countCarriedMessagesBefore(messages, forkTargetIndex >= 0 ? forkTargetIndex : originalIndex);
+}
+
 function isForkedChatSession(session: ProjectSession | null): boolean {
   return Boolean(
     session?.parentSessionId &&
@@ -535,7 +554,13 @@ export default function MessagesPaneV2({
   const hasPendingToolUse = useMemo(() => {
     if (!isAssistantWorking || liveProcessHeaderIndex < 0) return false;
     const liveItems = keyedMessageItems.slice(liveProcessHeaderIndex);
-    const lastToolUseIdx = liveItems.findLastIndex((item) => item.message.isToolUse);
+    let lastToolUseIdx = -1;
+    for (let index = liveItems.length - 1; index >= 0; index -= 1) {
+      if (liveItems[index]?.message.isToolUse) {
+        lastToolUseIdx = index;
+        break;
+      }
+    }
     if (lastToolUseIdx < 0) return false;
     const hasContentAfterTool = liveItems.slice(lastToolUseIdx + 1).some((item) =>
       item.message.type === 'assistant' && !item.message.isThinking && !item.message.isToolUse &&
@@ -753,9 +778,11 @@ export default function MessagesPaneV2({
       ? keyedMessageItems[item.renderIndex + 1].message
       : null;
     const isLast = !isAssistantWorking && item.renderIndex === keyedMessageItems.length - 1;
-    const forkCarriedMessageCount = item.message.type === 'user'
-      ? countCarriedMessagesBefore(renderableMessages, item.originalIndex)
-      : 0;
+    const forkCarriedMessageCount = countForkCarriedMessages(
+      renderableMessages,
+      item.originalIndex,
+      item.message,
+    );
     const anchoredLiveGroups = liveProcessGroupsByAnchor.get(item.originalIndex) || [];
     const rendersLiveHeaderAfterItem = item.renderIndex === liveProcessHeaderIndex - 1;
 

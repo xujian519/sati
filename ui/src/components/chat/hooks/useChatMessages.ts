@@ -61,6 +61,7 @@ function convertSingleMessage(
         if (!text.trim()) return null;
         return {
           id: msg.id,
+          entryId: msg.entryId,
           type: 'assistant',
           content: text,
           timestamp: msg.timestamp,

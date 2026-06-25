@@ -409,6 +409,14 @@ function MessageRowV2({
   // Assistant: plain prose, no avatar and no bubble.
   const hasAssistantProse = formattedContent.trim().length > 0;
   const showStreamingCursor = Boolean(message.isStreaming && !contentDisplayText);
+  const showAssistantCopyButton = shouldShowAssistantCopyButton(
+    formattedContent,
+    message,
+    nextMessage,
+    isSessionRunning,
+  );
+  const canRenderAssistantForkButton = Boolean(onFork && hasAssistantProse && !message.isStreaming);
+  const showAssistantActions = showAssistantCopyButton || canRenderAssistantForkButton;
   const assistantBody = (hasAssistantProse || showStreamingCursor) ? (
     <div className="min-w-0 text-[14px] leading-relaxed text-neutral-900 dark:text-neutral-100">
       {showStreamingCursor ? (
@@ -417,9 +425,20 @@ function MessageRowV2({
         <>
           <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-pre:my-3 prose-ol:my-2 prose-ul:my-2 prose-table:my-0 prose-hr:my-4" projectName={selectedProject?.name}
           onFileOpen={onFileOpen} isStreaming={message.isStreaming}>{contentDisplayText}</Markdown>
-          {shouldShowAssistantCopyButton(formattedContent, message, nextMessage, isSessionRunning) ? (
-            <div className="mt-1.5 flex justify-end">
-              <CopyMarkdownButton content={formattedContent} />
+          {showAssistantActions ? (
+            <div className="mt-1.5 flex justify-end gap-1">
+              {canRenderAssistantForkButton ? (
+                <ForkMessageButton
+                  carriedMessageCount={forkCarriedMessageCount}
+                  disabled={forkDisabled || isSessionRunning || !message.entryId}
+                  onFork={() => {
+                    if (message.entryId) onFork?.(message, forkCarriedMessageCount);
+                  }}
+                  t={t}
+                  variant="action-row"
+                />
+              ) : null}
+              {showAssistantCopyButton ? <CopyMarkdownButton content={formattedContent} /> : null}
             </div>
           ) : null}
         </>
@@ -479,12 +498,14 @@ function ForkMessageButton({
   disabledReason,
   onFork,
   t,
+  variant = 'user-hover',
 }: {
   carriedMessageCount: number;
   disabled?: boolean;
   disabledReason?: string;
   onFork: () => void;
   t: TFunction;
+  variant?: 'user-hover' | 'action-row';
 }) {
   const title = disabledReason ?? t('fork.fromHere', {
     count: carriedMessageCount,
@@ -497,8 +518,10 @@ function ForkMessageButton({
       onClick={onFork}
       disabled={disabled}
       className={cn(
-        'mb-1 rounded-md p-1.5 text-neutral-400 opacity-0 transition-all',
-        'group-hover/user-msg:opacity-100 focus-visible:opacity-100',
+        'rounded-md p-1.5 text-neutral-400 transition-all',
+        variant === 'user-hover'
+          ? 'mb-1 opacity-0 group-hover/user-msg:opacity-100 focus-visible:opacity-100'
+          : 'opacity-100',
         disabled
           ? 'cursor-not-allowed opacity-30'
           : 'hover:bg-neutral-200/80 hover:text-neutral-700 dark:hover:bg-neutral-700 dark:hover:text-neutral-200',
