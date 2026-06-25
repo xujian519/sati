@@ -303,6 +303,17 @@ function finalizeAsk(decision: PermissionDecision, context: PermissionContext): 
     };
   }
 
+  if (context.canPrompt === false) {
+    return {
+      type: "deny",
+      reason: {
+        type: "runtime",
+        message: "Permission prompt denied because prompts are disabled for this session.",
+      },
+      message: "Permission prompt denied because prompts are disabled for this session.",
+    };
+  }
+
   return decision;
 }
 

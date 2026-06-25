@@ -391,6 +391,7 @@ export class InProcessGateway implements Gateway {
             permissionMode,
             basePermissionMode,
             allowPlanModeTools,
+            canPrompt: input.canPrompt,
             permissionRules: {
               ...persistedRules,
               allow: [...sessionAllowRules, ...persistedRules.allow],

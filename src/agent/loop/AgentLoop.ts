@@ -40,6 +40,7 @@ import { collectToolCalls } from "./collectToolCalls.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
 import { LargeFileRepair, type LargeFileRepairDecision } from "./LargeFileRepair.js";
 import { projectToolResults } from "./projectToolResults.js";
+import { requiresPromptCapability } from "../../tool/userInteractionConstraints.js";
 
 const TOOL_EVENT_PUMP_INTERVAL_MS = 500;
 const SUBAGENT_STATUS_HEARTBEAT_MS = 2_000;
@@ -69,6 +70,7 @@ export type AgentLoopInput = {
   basePermissionMode?: PermissionMode;
   /** Allow model-visible plan mode tools for this turn. */
   allowPlanModeTools?: boolean;
+  canPrompt?: boolean;
   permissionRules?: Partial<PermissionRuleSet>;
   abortSignal?: AbortSignal;
   onDurableMessage?: (message: CanonicalMessage) => void | Promise<void>;
@@ -1069,7 +1071,16 @@ export class AgentLoop {
   ): Promise<CanonicalModelRequest> {
     const contextRuntime = this.dependencies.context ?? new NullContextRuntime();
     const planTodo = this.dependencies.planTodoManager?.forSession(input.sessionId);
-    let tools = this.dependencies.tools.registry.toCanonicalSchemas();
+    const canPrompt = input.canPrompt ?? this.config.permissionContext.canPrompt;
+    const promptBlockedToolNames = canPrompt
+      ? new Set<string>()
+      : new Set(
+          this.dependencies.tools.registry.list()
+            .filter((tool) => requiresPromptCapability(tool, {}))
+            .map((tool) => tool.name),
+        );
+    let tools = this.dependencies.tools.registry.toCanonicalSchemas()
+      .filter((tool) => !promptBlockedToolNames.has(tool.name));
     if (input.allowPlanModeTools !== true) {
       tools = tools.filter(
         (tool) => tool.name !== "enter_plan_mode" && tool.name !== "exit_plan_mode",
@@ -1133,9 +1144,11 @@ export class AgentLoop {
   ): PilotDeckToolRuntimeContext {
     const planDirectoryPath = this.dependencies.planFileManager?.getPlanDirectoryPath();
     const planTodo = this.dependencies.planTodoManager?.forSession(input.sessionId);
+    const canPrompt = input.canPrompt ?? this.config.permissionContext.canPrompt;
     const permissionContext = {
       ...this.config.permissionContext,
       cwd: this.config.cwd,
+      canPrompt,
       ...(planDirectoryPath ? { planDirectoryPath } : {}),
     };
     return {

@@ -83,6 +83,12 @@ export type GatewaySubmitTurnInput = {
   basePermissionMode?: GatewayMode;
   /** Allow model-visible plan mode tools for this turn. Defaults to true only for explicit plan-mode turns. */
   allowPlanModeTools?: boolean;
+  /**
+   * Whether the submitting host can answer mid-turn user prompts such as
+   * permission requests or ask_user_question elicitation. Headless CLI runs
+   * set this false so the agent avoids tools that would otherwise hang.
+   */
+  canPrompt?: boolean;
   runId?: string;
   maxTurns?: number;
   /** Hard wall-clock limit for this turn. The gateway aborts and closes the session when exceeded. */

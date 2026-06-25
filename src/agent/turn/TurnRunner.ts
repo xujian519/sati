@@ -21,6 +21,7 @@ export type TurnRunnerOptions = {
   basePermissionMode?: PermissionMode;
   /** Allow model-visible plan mode tools for this turn. */
   allowPlanModeTools?: boolean;
+  canPrompt?: boolean;
   permissionRules?: Partial<PermissionRuleSet>;
   abortSignal?: AbortSignal;
 };
@@ -116,6 +117,7 @@ export class TurnRunner {
         permissionMode: options.permissionMode,
         basePermissionMode: options.basePermissionMode,
         allowPlanModeTools: options.allowPlanModeTools,
+        canPrompt: options.canPrompt,
         permissionRules: options.permissionRules,
         abortSignal: options.abortSignal,
         onDurableMessage: (msg) => this.transcript.recordDurableMessage(options.sessionId, options.turnId, msg),

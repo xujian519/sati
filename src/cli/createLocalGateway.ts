@@ -1148,7 +1148,7 @@ class ProjectRuntimeRegistry {
       permissionContext: createDefaultPermissionContext({
         cwd,
         mode: permissionMode,
-        canPrompt: override?.canPrompt ?? false,
+        canPrompt: override?.canPrompt ?? true,
         bypassAvailable: override?.bypassAvailable ?? true,
         additionalWorkingDirectories: this.options.additionalWorkingDirectories,
         rules: {
