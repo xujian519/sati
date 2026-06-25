@@ -644,12 +644,6 @@ function collectCompletedProcessSegments(messages: ChatMessage[], turn: MessageT
       return;
     }
 
-    if (segmentMessages.every((m) => m.isThinking)) {
-      segmentStartIndex = -1;
-      segmentMessages = [];
-      return;
-    }
-
     const endIndex = beforeOriginalIndex - 1;
     const first = segmentMessages[0];
     const nextHostIndex = previousHostIndex == null
@@ -673,6 +667,10 @@ function collectCompletedProcessSegments(messages: ChatMessage[], turn: MessageT
   for (let index = turn.start; index < turn.end; index += 1) {
     const message = messages[index];
     if (!message || message.isAgentActivity || message.isAgentActivitySummary) {
+      continue;
+    }
+
+    if (isEmptyAssistantShell(message)) {
       continue;
     }
 
