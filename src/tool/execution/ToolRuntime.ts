@@ -21,6 +21,7 @@ import { validateToolInput } from "./validateToolInput.js";
 import { formatValidationError } from "./formatValidationError.js";
 import { normalizeToolError } from "../protocol/errors.js";
 import type { AgentEventEmitter } from "../../agent/protocol/events.js";
+import { requiresPromptCapability } from "../userInteractionConstraints.js";
 
 export class ToolRuntime {
   constructor(
@@ -76,6 +77,17 @@ export class ToolRuntime {
         startedAt,
         context,
         { issues: validation.issues },
+      );
+    }
+
+    if (context.permissionContext.canPrompt === false && requiresPromptCapability(tool, call.input)) {
+      return this.errorResult(
+        call.id,
+        tool.name,
+        "unsupported_tool",
+        `${tool.name} requires user interaction, but this session is running with prompts disabled.`,
+        startedAt,
+        context,
       );
     }
 

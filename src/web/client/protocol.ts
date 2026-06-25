@@ -136,6 +136,7 @@ export type WebSubmitTurnInput = {
   basePermissionMode?: WebGatewayMode;
   /** Allow model-visible plan mode tools. Defaults to true only for explicit plan-mode turns. */
   allowPlanModeTools?: boolean;
+  canPrompt?: boolean;
   runId?: string;
 };
 
