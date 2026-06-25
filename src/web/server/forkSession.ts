@@ -144,6 +144,19 @@ function countCarriedUserAssistantMessages(entries: AgentTranscriptEntry[]): num
   return count;
 }
 
+function shouldPreserveSourceEntry(entry: AgentTranscriptEntry, forkPoint: ForkPoint): boolean {
+  if (!forkPoint.preserveTarget) {
+    return entry.sequence < forkPoint.acceptedInput.sequence;
+  }
+  if (entry.sequence <= forkPoint.target.sequence) {
+    return true;
+  }
+  // Assistant-message forks preserve the selected response as conversation
+  // context. Keep the completion marker so replay does not drop that turn as
+  // incomplete, without pulling in later durable messages from the same turn.
+  return entry.type === "turn_result" && entry.turnId === forkPoint.target.turnId;
+}
+
 function retargetAuxiliaryPath(
   path: string,
   sourceSessionDir: string,
@@ -450,11 +463,7 @@ export async function forkWebSession(
     );
   }
   const forkMode = getForkMode(forkAcceptedInput);
-  const preservedSourceEntries = entries.filter((entry) =>
-    forkPoint.preserveTarget
-      ? entry.sequence <= forkPoint.target.sequence
-      : entry.sequence < forkAcceptedInput.sequence,
-  );
+  const preservedSourceEntries = entries.filter((entry) => shouldPreserveSourceEntry(entry, forkPoint));
   const forkInputText = extractAcceptedInputText(forkAcceptedInput);
   const prefillText = forkPoint.preserveTarget ? "" : forkInputText;
   const carriedMessageCount = countCarriedUserAssistantMessages(preservedSourceEntries);
