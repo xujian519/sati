@@ -1,9 +1,9 @@
 /**
- * Fork a web session transcript at a prior user turn.
+ * Fork a web session transcript at a prior turn entry.
  *
- * Creates a new session file containing all entries strictly before the
- * fork turn, copies auxiliary session dirs, and returns the forked user
- * message text for composer prefill.
+ * User-message forks create a new session before that user turn and return
+ * the forked text for composer prefill. Assistant-message forks preserve
+ * history through the selected assistant entry and continue from there.
  */
 
 import { randomUUID } from "node:crypto";
@@ -75,17 +75,27 @@ function buildForkTitle(
   return carriedMessageCount > 0 ? "⑂ Forked session" : "⑂ New branch";
 }
 
-function findForkTurnAcceptedInput(
+type ForkPoint = {
+  target: AgentTranscriptEntry;
+  acceptedInput: AgentAcceptedInputTranscriptEntry;
+  preserveTarget: boolean;
+};
+
+function findForkPoint(
   entries: AgentTranscriptEntry[],
   fromEntryId: string,
-): AgentAcceptedInputTranscriptEntry {
+): ForkPoint {
   const target = entries.find((entry) => entry.entryId === fromEntryId);
   if (!target) {
     throw new ForkSessionError("fork_entry_not_found", `Transcript entry not found: ${fromEntryId}`);
   }
 
   if (target.type === "accepted_input") {
-    return target;
+    return {
+      target,
+      acceptedInput: target,
+      preserveTarget: false,
+    };
   }
 
   const accepted = entries.find(
@@ -98,7 +108,11 @@ function findForkTurnAcceptedInput(
       `No accepted_input found for turn ${target.turnId}`,
     );
   }
-  return accepted;
+  return {
+    target,
+    acceptedInput: accepted,
+    preserveTarget: true,
+  };
 }
 
 function lastSessionMetadata(entries: AgentTranscriptEntry[]): Record<string, unknown> | undefined {
@@ -427,17 +441,22 @@ export async function forkWebSession(
     throw new ForkSessionError("fork_empty_transcript", "Cannot fork an empty session transcript.");
   }
 
-  const forkAcceptedInput = findForkTurnAcceptedInput(entries, input.fromEntryId);
-  if (hasUnsupportedPrefillContent(forkAcceptedInput)) {
+  const forkPoint = findForkPoint(entries, input.fromEntryId);
+  const forkAcceptedInput = forkPoint.acceptedInput;
+  if (!forkPoint.preserveTarget && hasUnsupportedPrefillContent(forkAcceptedInput)) {
     throw new ForkSessionError(
       "fork_unsupported_content",
       "Forking messages with attachments or non-text input is not supported yet.",
     );
   }
   const forkMode = getForkMode(forkAcceptedInput);
-  const cutoffSequence = forkAcceptedInput.sequence;
-  const preservedSourceEntries = entries.filter((entry) => entry.sequence < cutoffSequence);
-  const prefillText = extractAcceptedInputText(forkAcceptedInput);
+  const preservedSourceEntries = entries.filter((entry) =>
+    forkPoint.preserveTarget
+      ? entry.sequence <= forkPoint.target.sequence
+      : entry.sequence < forkAcceptedInput.sequence,
+  );
+  const forkInputText = extractAcceptedInputText(forkAcceptedInput);
+  const prefillText = forkPoint.preserveTarget ? "" : forkInputText;
   const carriedMessageCount = countCarriedUserAssistantMessages(preservedSourceEntries);
 
   const newSessionKey = newWebSessionKey();
@@ -470,7 +489,7 @@ export async function forkWebSession(
   // Title the fork by the message it branches from so siblings are
   // distinguishable in the lineage tree (the branch icon + "forked from"
   // subtitle already convey that it is a fork).
-  const forkTitle = buildForkTitle(prefillText, carriedMessageCount, inheritedTitle);
+  const forkTitle = buildForkTitle(forkInputText || prefillText, carriedMessageCount, inheritedTitle);
 
   const now = options.now ?? (() => new Date());
   const metadataEntry: AgentSessionMetadataTranscriptEntry = {
@@ -485,7 +504,7 @@ export async function forkWebSession(
       parentSessionId: input.sessionKey,
       forkedFromTurnId: forkAcceptedInput.turnId,
       title: forkTitle,
-      firstPrompt: prefillText || undefined,
+      firstPrompt: forkInputText || prefillText || undefined,
       updatedAt: now().toISOString(),
     },
   };

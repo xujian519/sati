@@ -352,7 +352,11 @@ function ChatInterfaceV2({
         }
       }
 
-      const forkDraft = result.prefillText || message.content || '';
+      const forkDraft = typeof result.prefillText === 'string'
+        ? result.prefillText
+        : message.type === 'user'
+          ? message.content || ''
+          : '';
       if (forkDraft) {
         safeLocalStorage.setItem(`draft_input_${selectedProject.name}`, forkDraft);
       } else {
