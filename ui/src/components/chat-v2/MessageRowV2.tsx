@@ -323,7 +323,8 @@ function MessageRowV2({
                 </div>
               ) : null}
               {formattedContent ? (
-                <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-p:my-1 prose-ol:my-1 prose-ul:my-1 prose-li:my-0 min-w-0 break-words [overflow-wrap:anywhere]" projectName={selectedProject?.name}>{formattedContent}</Markdown>
+                <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-p:my-1 prose-ol:my-1 prose-ul:my-1 prose-li:my-0 min-w-0 break-words [overflow-wrap:anywhere]" projectName={selectedProject?.name}
+          onFileOpen={onFileOpen}>{formattedContent}</Markdown>
               ) : null}
             </>
           )}
@@ -347,7 +348,8 @@ function MessageRowV2({
           <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2} />
         </div>
         <div className="min-w-0 flex-1 pt-0.5 text-[14px] leading-relaxed text-red-500">
-          <Markdown projectName={selectedProject?.name}>{formattedContent}</Markdown>
+          <Markdown projectName={selectedProject?.name}
+          onFileOpen={onFileOpen}>{formattedContent}</Markdown>
         </div>
       </div>,
     );
@@ -377,7 +379,8 @@ function MessageRowV2({
                 ? 'border-blue-400/50 text-neutral-600 dark:border-blue-500/40 dark:text-neutral-300'
                 : 'border-blue-400/30 text-neutral-600 dark:border-blue-500/30 dark:text-neutral-400'
             }`}>
-              <Markdown projectName={selectedProject?.name} isStreaming={isThinkingStreaming}>
+              <Markdown projectName={selectedProject?.name}
+          onFileOpen={onFileOpen} isStreaming={isThinkingStreaming}>
                 {isThinkingStreaming ? thinkingDisplayText : formattedContent}
               </Markdown>
             </div>
@@ -395,7 +398,8 @@ function MessageRowV2({
             <span>{t('thinking.completed', { defaultValue: 'Thought process' })}</span>
           </summary>
           <div className="mt-1.5 max-h-64 overflow-y-auto border-l-2 border-neutral-300 pl-3 text-[13px] text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
-            <Markdown projectName={selectedProject?.name}>{formattedContent}</Markdown>
+            <Markdown projectName={selectedProject?.name}
+          onFileOpen={onFileOpen}>{formattedContent}</Markdown>
           </div>
         </details>
       </div>,
@@ -403,23 +407,45 @@ function MessageRowV2({
   }
 
   // Assistant: plain prose, no avatar and no bubble.
-  return withProcessRows(
+  const hasAssistantProse = formattedContent.trim().length > 0;
+  const showStreamingCursor = Boolean(message.isStreaming && !contentDisplayText);
+  const assistantBody = (hasAssistantProse || showStreamingCursor) ? (
     <div className="min-w-0 text-[14px] leading-relaxed text-neutral-900 dark:text-neutral-100">
-      {message.isStreaming && !contentDisplayText ? (
+      {showStreamingCursor ? (
         <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
       ) : (
         <>
-          <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-pre:my-3 prose-ol:my-2 prose-ul:my-2 prose-table:my-0 prose-hr:my-4" projectName={selectedProject?.name} isStreaming={message.isStreaming}>{contentDisplayText}</Markdown>
-          {formattedContent.trim() &&
-           (!nextMessage || nextMessage.type === 'user' || nextMessage.type === 'error') ? (
+          <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-pre:my-3 prose-ol:my-2 prose-ul:my-2 prose-table:my-0 prose-hr:my-4" projectName={selectedProject?.name}
+          onFileOpen={onFileOpen} isStreaming={message.isStreaming}>{contentDisplayText}</Markdown>
+          {shouldShowAssistantCopyButton(formattedContent, message, nextMessage, isSessionRunning) ? (
             <div className="mt-1.5 flex justify-end">
               <CopyMarkdownButton content={formattedContent} />
             </div>
           ) : null}
         </>
       )}
-    </div>,
-  );
+    </div>
+  ) : null;
+
+  if (!assistantBody && beforeProcessAttachments.length === 0 && afterProcessAttachments.length === 0) {
+    return null;
+  }
+
+  return withProcessRows(assistantBody);
+}
+
+function shouldShowAssistantCopyButton(
+  content: string,
+  message: ChatMessage,
+  nextMessage: ChatMessage | null | undefined,
+  isSessionRunning?: boolean,
+): boolean {
+  if (!content.trim()) return false;
+  if (message.isStreaming) return false;
+  if (isSessionRunning) return false;
+  if (nextMessage?.type === 'error') return false;
+  if (nextMessage && nextMessage.type !== 'user') return false;
+  return true;
 }
 
 function CopyMarkdownButton({ content }: { content: string }) {

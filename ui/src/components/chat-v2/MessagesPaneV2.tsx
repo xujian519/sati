@@ -23,7 +23,9 @@ import {
   getLiveProcessDetailMessages,
   getLiveProcessGroupStep,
   getLiveProcessGroups,
+  getWebFetchWaitingStep,
   shouldRenderLiveProcessGroup,
+  shouldShowWebFetchWaitingHint,
   type LiveProcessGroup,
   type RenderableMessageItem,
 } from './processGrouping';
@@ -65,6 +67,7 @@ type MessagesPaneV2Props = {
   isAssistantWorking?: boolean;
   workingStatus?: ClaudeWorkStatus | PilotDeckWorkStatus | null;
   runMode?: ChatRunMode;
+  planModeActive?: boolean;
   sessionStore?: SessionStore;
   onFork?: (message: ChatMessage, carriedMessageCount: number) => void;
   forkDisabled?: boolean;
@@ -285,11 +288,13 @@ export default function MessagesPaneV2({
   isAssistantWorking = false,
   workingStatus,
   runMode = 'agent',
+  planModeActive = false,
   sessionStore,
   onFork,
   forkDisabled = false,
   forkParentSessionTitle = null,
 }: MessagesPaneV2Props) {
+  const resolvedPlanModeActive = planModeActive || runMode === 'plan';
   const { t } = useTranslation('chat');
   const messageKeyMapRef = useRef<WeakMap<ChatMessage, string>>(new WeakMap());
   const generatedMessageKeyCounterRef = useRef(0);
@@ -711,24 +716,33 @@ export default function MessagesPaneV2({
   const renderLiveProcessGroup = useCallback((group: LiveProcessGroup, index: number) => {
     const isLatestGroup = liveProcessGroups[liveProcessGroups.length - 1]?.id === group.id;
     const step = getLiveProcessGroupStep(group, t, group.isRunning && isLatestGroup ? liveStatusStep : null);
+    const showWebFetchWaiting = shouldShowWebFetchWaitingHint(group, resolvedPlanModeActive);
     return (
-      <ProcessLiveStatus
-        key={group.id || `${group.afterOriginalIndex}-${index}`}
-        step={step}
-        compact
-        expanded={isProcessExpanded(group.id)}
-        onExpandedChange={(expanded) => handleProcessExpandedChange(group.id, expanded)}
-      >
-        {group.detailMessages.length > 0
-          ? renderLiveProcessDetailMessages(group.detailMessages, group.id)
-          : null}
-      </ProcessLiveStatus>
+      <Fragment key={group.id || `${group.afterOriginalIndex}-${index}`}>
+        <ProcessLiveStatus
+          step={step}
+          compact
+          expanded={isProcessExpanded(group.id)}
+          onExpandedChange={(expanded) => handleProcessExpandedChange(group.id, expanded)}
+        >
+          {group.detailMessages.length > 0
+            ? renderLiveProcessDetailMessages(group.detailMessages, group.id)
+            : null}
+        </ProcessLiveStatus>
+        {showWebFetchWaiting ? (
+          <ProcessLiveStatus
+            step={getWebFetchWaitingStep(group.id, t)}
+            compact
+          />
+        ) : null}
+      </Fragment>
     );
   }, [
     handleProcessExpandedChange,
     isProcessExpanded,
     liveProcessGroups,
     liveStatusStep,
+    resolvedPlanModeActive,
     renderLiveProcessDetailMessages,
     t,
   ]);
@@ -947,14 +961,14 @@ export default function MessagesPaneV2({
         >
           {isLoadingMoreMessages && !isLoadingAllMessages && !allMessagesLoaded ? (
             <div className="pb-3 text-center text-[12px] text-neutral-500 dark:text-neutral-400">
-              {t('messages.loadingOlder', { defaultValue: 'Loading older messages...' })}
+              {t('session.loading.olderMessages', { defaultValue: 'Loading older messages...' })}
             </div>
           ) : null}
 
           {hasMoreMessages && !isLoadingMoreMessages && !allMessagesLoaded ? (
             <div className="mb-8 flex items-center justify-between border-b border-neutral-200 pb-3 text-[12px] text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
               <span>
-                {t('messages.showingOf', {
+                {t('session.messages.showingOf', {
                   shown: chatMessages.length,
                   total: totalMessages,
                   defaultValue: `Showing ${chatMessages.length} of ${totalMessages}`,
@@ -965,7 +979,7 @@ export default function MessagesPaneV2({
                 onClick={loadEarlierMessages}
                 className="text-[12px] text-neutral-700 underline-offset-2 hover:underline dark:text-neutral-300"
               >
-                {t('messages.loadEarlier', { defaultValue: 'Load earlier' })}
+                {t('session.messages.loadEarlier', { defaultValue: 'Load earlier messages' })}
               </button>
             </div>
           ) : null}
@@ -973,8 +987,8 @@ export default function MessagesPaneV2({
           {!hasMoreMessages && chatMessages.length > visibleMessageCount ? (
             <div className="mb-8 flex items-center justify-between border-b border-neutral-200 pb-3 text-[12px] text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
               <span>
-                {t('messages.showingLast', {
-                  count: visibleMessageCount,
+                {t('session.messages.showingLast', {
+                  visibleCount: visibleMessageCount,
                   total: chatMessages.length,
                   defaultValue: `Showing last ${visibleMessageCount} of ${chatMessages.length}`,
                 })}
@@ -984,7 +998,7 @@ export default function MessagesPaneV2({
                 onClick={loadAllMessages}
                 className="text-[12px] text-neutral-700 underline-offset-2 hover:underline dark:text-neutral-300"
               >
-                {t('messages.loadAll', { defaultValue: 'Load all' })}
+                {t('session.messages.loadAll', { defaultValue: 'Load all messages' })}
               </button>
             </div>
           ) : null}

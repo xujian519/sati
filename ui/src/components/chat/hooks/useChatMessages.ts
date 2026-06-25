@@ -58,6 +58,7 @@ function convertSingleMessage(
         let text = decodeHtmlEntities(content);
         text = unescapeWithMathProtection(text);
         text = formatUsageLimitText(text);
+        if (!text.trim()) return null;
         return {
           id: msg.id,
           type: 'assistant',

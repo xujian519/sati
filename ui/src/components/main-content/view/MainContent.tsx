@@ -90,6 +90,8 @@ function MainContent({
   onShowSettings,
   onSelectProjectByName,
   externalMessageUpdate,
+  misroutedFileFromUrl,
+  onMisroutedFileUrlHandled,
 }: MainContentProps) {
   const { i18n } = useTranslation();
   const { preferences } = useUiPreferences();
@@ -103,11 +105,15 @@ function MainContent({
 
   const {
     editingFile,
+    canGoBack,
+    parentFile,
     editorWidth,
     editorExpanded,
     hasManualWidth,
     resizeHandleRef,
     handleFileOpen,
+    handlePreviewFileOpen,
+    handleFileGoBack,
     handleCloseEditor,
     handleToggleEditorExpand,
     handleResizeStart,
@@ -115,6 +121,28 @@ function MainContent({
     selectedProject,
     isMobile,
   });
+
+  const handledMisroutedFileRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!misroutedFileFromUrl || !selectedProject) return;
+    if (handledMisroutedFileRef.current === misroutedFileFromUrl) return;
+    handledMisroutedFileRef.current = misroutedFileFromUrl;
+    handleFileOpen(misroutedFileFromUrl);
+    setActiveTab('chat');
+    onMisroutedFileUrlHandled?.();
+  }, [
+    misroutedFileFromUrl,
+    selectedProject,
+    handleFileOpen,
+    setActiveTab,
+    onMisroutedFileUrlHandled,
+  ]);
+
+  useEffect(() => {
+    if (!misroutedFileFromUrl) {
+      handledMisroutedFileRef.current = null;
+    }
+  }, [misroutedFileFromUrl]);
 
   useEffect(() => {
     const selectedProjectName = selectedProject?.name;
@@ -344,6 +372,10 @@ function MainContent({
             onResizeStart={handleResizeStart}
             onCloseEditor={handleCloseEditor}
             onToggleEditorExpand={handleToggleEditorExpand}
+            onPreviewFileOpen={handlePreviewFileOpen}
+            canGoBack={canGoBack}
+            parentFile={parentFile}
+            onGoBack={handleFileGoBack}
             projectPath={selectedProject.path}
             fillSpace={activeTab === 'files'}
           />
