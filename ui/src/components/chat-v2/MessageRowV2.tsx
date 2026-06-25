@@ -105,7 +105,6 @@ const shouldDelegate = (message: ChatMessage): boolean => {
 function MessageRowV2({
   message,
   prevMessage,
-  nextMessage,
   beforeProcessAttachments = [],
   afterProcessAttachments = [],
   provider,
@@ -409,40 +408,36 @@ function MessageRowV2({
   // Assistant: plain prose, no avatar and no bubble.
   const hasAssistantProse = formattedContent.trim().length > 0;
   const showStreamingCursor = Boolean(message.isStreaming && !contentDisplayText);
-  const showAssistantCopyButton = shouldShowAssistantCopyButton(
-    formattedContent,
-    message,
-    nextMessage,
-    isSessionRunning,
-  );
-  const canRenderAssistantForkButton = Boolean(onFork && showAssistantCopyButton);
+  const showAssistantCopyButton = hasAssistantProse;
+  const canRenderAssistantForkButton = Boolean(onFork && hasAssistantProse);
   const showAssistantActions = showAssistantCopyButton || canRenderAssistantForkButton;
+  const assistantForkDisabled = Boolean(
+    forkDisabled || isSessionRunning || message.isStreaming || !message.entryId,
+  );
   const assistantBody = (hasAssistantProse || showStreamingCursor) ? (
     <div className="min-w-0 text-[14px] leading-relaxed text-neutral-900 dark:text-neutral-100">
       {showStreamingCursor ? (
         <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
       ) : (
-        <>
-          <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-pre:my-3 prose-ol:my-2 prose-ul:my-2 prose-table:my-0 prose-hr:my-4" projectName={selectedProject?.name}
-          onFileOpen={onFileOpen} isStreaming={message.isStreaming}>{contentDisplayText}</Markdown>
-          {showAssistantActions ? (
-            <div className="mt-1.5 flex justify-end gap-1">
-              {canRenderAssistantForkButton ? (
-                <ForkMessageButton
-                  carriedMessageCount={forkCarriedMessageCount}
-                  disabled={forkDisabled || isSessionRunning || !message.entryId}
-                  onFork={() => {
-                    if (message.entryId) onFork?.(message, forkCarriedMessageCount);
-                  }}
-                  t={t}
-                  variant="action-row"
-                />
-              ) : null}
-              {showAssistantCopyButton ? <CopyMarkdownButton content={formattedContent} /> : null}
-            </div>
-          ) : null}
-        </>
+        <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-pre:my-3 prose-ol:my-2 prose-ul:my-2 prose-table:my-0 prose-hr:my-4" projectName={selectedProject?.name}
+        onFileOpen={onFileOpen} isStreaming={message.isStreaming}>{contentDisplayText}</Markdown>
       )}
+      {showAssistantActions ? (
+        <div className="mt-1.5 flex justify-end gap-1">
+          {canRenderAssistantForkButton ? (
+            <ForkMessageButton
+              carriedMessageCount={forkCarriedMessageCount}
+              disabled={assistantForkDisabled}
+              onFork={() => {
+                if (!assistantForkDisabled && message.entryId) onFork?.(message, forkCarriedMessageCount);
+              }}
+              t={t}
+              variant="action-row"
+            />
+          ) : null}
+          {showAssistantCopyButton ? <CopyMarkdownButton content={formattedContent} /> : null}
+        </div>
+      ) : null}
     </div>
   ) : null;
 
@@ -451,20 +446,6 @@ function MessageRowV2({
   }
 
   return withProcessRows(assistantBody);
-}
-
-function shouldShowAssistantCopyButton(
-  content: string,
-  message: ChatMessage,
-  nextMessage: ChatMessage | null | undefined,
-  isSessionRunning?: boolean,
-): boolean {
-  if (!content.trim()) return false;
-  if (message.isStreaming) return false;
-  if (isSessionRunning) return false;
-  if (nextMessage?.type === 'error') return false;
-  if (nextMessage && nextMessage.type !== 'user') return false;
-  return true;
 }
 
 function CopyMarkdownButton({ content }: { content: string }) {
@@ -518,13 +499,14 @@ function ForkMessageButton({
       onClick={onFork}
       disabled={disabled}
       className={cn(
-        'rounded-md p-1.5 text-neutral-400 transition-all',
         variant === 'user-hover'
-          ? 'mb-1 opacity-0 group-hover/user-msg:opacity-100 focus-visible:opacity-100'
-          : 'opacity-100',
+          ? 'mb-1 rounded-md p-1.5 text-neutral-400 opacity-0 transition-all group-hover/user-msg:opacity-100 focus-visible:opacity-100'
+          : 'rounded p-1 text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300',
         disabled
           ? 'cursor-not-allowed opacity-30'
-          : 'hover:bg-neutral-200/80 hover:text-neutral-700 dark:hover:bg-neutral-700 dark:hover:text-neutral-200',
+          : variant === 'user-hover'
+            ? 'hover:bg-neutral-200/80 hover:text-neutral-700 dark:hover:bg-neutral-700 dark:hover:text-neutral-200'
+            : undefined,
       )}
       aria-label={title}
       title={title}

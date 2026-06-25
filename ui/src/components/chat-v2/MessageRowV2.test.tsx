@@ -49,6 +49,10 @@ describe('MessageRowV2 fork actions', () => {
     const copyButton = screen.getByRole('button', { name: 'Copy' });
 
     expect(forkButton.parentElement).toBe(copyButton.parentElement);
+    expect(forkButton.className).toContain('rounded p-1 text-neutral-400');
+    expect(forkButton.className).toContain('hover:text-neutral-600');
+    expect(forkButton.className).toContain('dark:hover:text-neutral-300');
+    expect(forkButton.className).not.toContain('hover:bg-neutral');
     expect((forkButton as HTMLButtonElement).disabled).toBe(false);
 
     fireEvent.click(forkButton);
@@ -82,7 +86,7 @@ describe('MessageRowV2 fork actions', () => {
     expect(onFork).not.toHaveBeenCalled();
   });
 
-  it('hides assistant fork whenever the assistant copy action is hidden', () => {
+  it('keeps assistant actions visible while a session is running but disables fork', () => {
     const onFork = vi.fn();
     const assistantMessage: ChatMessage = {
       id: 'assistant-running',
@@ -98,10 +102,44 @@ describe('MessageRowV2 fork actions', () => {
       onFork,
     });
 
-    expect(screen.queryByRole('button', { name: 'Copy' })).toBeNull();
-    expect(screen.queryByRole('button', {
+    expect(screen.getByRole('button', { name: 'Copy' })).not.toBeNull();
+    const forkButton = screen.getByRole('button', {
       name: 'Fork from here · carries 2 messages',
-    })).toBeNull();
+    });
+
+    expect((forkButton as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(forkButton);
+
+    expect(onFork).not.toHaveBeenCalled();
+  });
+
+  it('keeps assistant actions visible for streaming prose but disables fork', () => {
+    const onFork = vi.fn();
+    const assistantMessage: ChatMessage = {
+      id: 'assistant-streaming',
+      entryId: 'assistant-entry-streaming',
+      type: 'assistant',
+      content: 'Streaming answer in progress.',
+      timestamp: baseTime,
+      isStreaming: true,
+    };
+
+    renderMessageRow(assistantMessage, {
+      forkCarriedMessageCount: 3,
+      onFork,
+    });
+
+    expect(screen.getByRole('button', { name: 'Copy' })).not.toBeNull();
+    const forkButton = screen.getByRole('button', {
+      name: 'Fork from here · carries 3 messages',
+    });
+
+    expect((forkButton as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(forkButton);
+
+    expect(onFork).not.toHaveBeenCalled();
   });
 
   it('keeps the existing user fork affordance wired through the same callback', () => {
