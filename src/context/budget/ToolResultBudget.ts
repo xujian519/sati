@@ -6,6 +6,7 @@ import type {
   CanonicalMediaReferenceBlock,
   CanonicalPdfBlock,
   CanonicalToolResultBlock,
+  CanonicalToolResultContentBlock,
   CanonicalToolResultReferenceBlock,
 } from "../../model/index.js";
 import { flattenToolResultBlockText } from "../../model/index.js";
@@ -79,23 +80,25 @@ export class ToolResultBudget {
     if (message.role !== "user") {
       return message;
     }
-    const newContent: CanonicalMessage["content"] = [];
+    const primaryContent: CanonicalMessage["content"] = [];
+    const mediaReferences: CanonicalMediaReferenceBlock[] = [];
     let modified = false;
     for (const block of message.content) {
       if (block.type !== "tool_result") {
-        newContent.push(block);
+        primaryContent.push(block);
         continue;
       }
-      const replaced = await this.maybeReplace(block);
-      if (replaced !== block) {
+      const replaced = await this.maybeReplaceToolResult(block);
+      if (replaced.block !== block || replaced.mediaReferences.length > 0) {
         modified = true;
       }
-      newContent.push(replaced);
+      primaryContent.push(replaced.block);
+      mediaReferences.push(...replaced.mediaReferences);
     }
     if (!modified) {
       return message;
     }
-    return { ...message, content: newContent };
+    return { ...message, content: [...primaryContent, ...mediaReferences] };
   }
 
   async applyToSupplementalMessage(message: CanonicalMessage, toolCallId: string): Promise<CanonicalMessage> {
@@ -115,12 +118,44 @@ export class ToolResultBudget {
     return modified ? { ...message, content: newContent } : message;
   }
 
-  private async maybeReplace(
+  private async maybeReplaceToolResult(
+    block: CanonicalToolResultBlock,
+  ): Promise<{
+    block: CanonicalToolResultBlock | CanonicalToolResultReferenceBlock;
+    mediaReferences: CanonicalMediaReferenceBlock[];
+  }> {
+    if (!block.content.some(isToolResultMediaBlock)) {
+      return { block: await this.maybeReplaceTextToolResult(block), mediaReferences: [] };
+    }
+
+    const content: CanonicalToolResultContentBlock[] = [];
+    const mediaReferences: CanonicalMediaReferenceBlock[] = [];
+
+    for (let index = 0; index < block.content.length; index += 1) {
+      const entry = block.content[index];
+      if (!isToolResultMediaBlock(entry)) {
+        content.push(entry);
+        continue;
+      }
+
+      const replaced = await this.maybeReplaceMedia(entry, index, block.toolCallId);
+      if (replaced.type === "media_reference") {
+        mediaReferences.push(replaced);
+        content.push({ type: "text", text: replaced.preview });
+      } else {
+        content.push(entry);
+      }
+    }
+
+    return {
+      block: mediaReferences.length > 0 ? { ...block, content } : block,
+      mediaReferences,
+    };
+  }
+
+  private async maybeReplaceTextToolResult(
     block: CanonicalToolResultBlock,
   ): Promise<CanonicalToolResultBlock | CanonicalToolResultReferenceBlock> {
-    if (block.content.some((entry) => entry.type !== "text")) {
-      return block;
-    }
     if (this.state.replacements.has(block.toolCallId)) {
       return this.toReferenceBlock(this.state.replacements.get(block.toolCallId)!);
     }
@@ -266,6 +301,12 @@ function headTailPreview(value: string, budgetBytes: number): string {
 /** Helper for tests / inspection. */
 export function flattenToolResultText(block: CanonicalToolResultBlock): string {
   return flattenToolResultBlockText(block);
+}
+
+function isToolResultMediaBlock(
+  block: CanonicalToolResultContentBlock,
+): block is Extract<CanonicalToolResultContentBlock, { type: "image" | "pdf" }> {
+  return block.type === "image" || block.type === "pdf";
 }
 
 function mediaOriginalBytes(block: Extract<CanonicalContentBlock, { type: "image" | "pdf" | "audio" }>): number {
