@@ -115,8 +115,10 @@ function toOpenAIMessages(message: CanonicalMessage, messageIndex: number): Open
 
   const assistantToolCalls = message.content
     .filter((block) => block.type === "tool_call")
-    .map((block, toolCallIndex) => ({
-      id: normalizeToolCallId(block.id, messageIndex, toolCallIndex),
+    .map((block) => ({
+      // Preserve the canonical id until `repairOpenAIToolPairing` can see the
+      // adjacent tool results and rewrite both sides together.
+      id: block.id,
       type: "function",
       function: {
         name: block.name,
@@ -351,11 +353,17 @@ function normalizeToolCallId(id: unknown, messageIndex: number, toolCallIndex: n
     : `call_${messageIndex}_${toolCallIndex}`;
 }
 
+type NormalizedOpenAIToolCall = {
+  originalId?: string;
+  toolCall: { id: string; type: "function"; function: { name: string; arguments: string } };
+};
+
 /**
  * Last-resort safety net for OpenAI's strict tool-pairing rules:
  *  - normalize every assistant `tool_calls[]` item to the required shape;
+ *  - make assistant tool call ids unique, even for historical empty/duplicate ids;
  *  - keep only immediately-following tool messages whose `tool_call_id`
- *    matches that assistant message;
+ *    matches that assistant message, rewriting ids when they were normalized;
  *  - inject placeholders for missing tool results;
  *  - drop orphaned / duplicate / mismatched `role: "tool"` messages.
  */
@@ -371,42 +379,79 @@ function repairOpenAIToolPairing(messages: OpenAIMessage[]): OpenAIMessage[] {
       continue;
     }
 
-    const toolCalls = msg.tool_calls.map((toolCall, toolCallIndex) =>
-      normalizeOpenAIToolCall(toolCall, i, toolCallIndex)
-    );
-    out.push({ ...msg, tool_calls: toolCalls });
+    const expected = normalizeOpenAIToolCalls(msg.tool_calls, i);
+    out.push({ ...msg, tool_calls: expected.map((entry) => entry.toolCall) });
 
-    const expectedIds = new Set(toolCalls.map((tc) => tc.id));
-    const matchedIds = new Set<string>();
+    const matched = new Set<NormalizedOpenAIToolCall>();
     let j = i + 1;
     while (j < messages.length && messages[j].role === "tool") {
-      const tid = messages[j].tool_call_id;
-      if (
-        typeof tid === "string" &&
-        tid.trim().length > 0 &&
-        expectedIds.has(tid) &&
-        !matchedIds.has(tid)
-      ) {
-        out.push(messages[j]);
-        matchedIds.add(tid);
+      const match = takeExpectedToolCall(expected, matched, messages[j].tool_call_id);
+      if (match) {
+        out.push({ ...messages[j], tool_call_id: match.toolCall.id });
+        matched.add(match);
       }
       j++;
     }
 
     // Inject placeholders for any still-missing results.
-    for (const missingId of expectedIds) {
-      if (matchedIds.has(missingId)) {
+    for (const missing of expected) {
+      if (matched.has(missing)) {
         continue;
       }
       out.push({
         role: "tool",
-        tool_call_id: missingId,
+        tool_call_id: missing.toolCall.id,
         content: "[result truncated]",
       });
     }
     i = j - 1;
   }
   return out;
+}
+
+function normalizeOpenAIToolCalls(
+  toolCalls: unknown[],
+  messageIndex: number,
+): NormalizedOpenAIToolCall[] {
+  const used = new Set<string>();
+  return toolCalls.map((toolCall, toolCallIndex) => {
+    const record = isRecord(toolCall) ? toolCall : {};
+    const originalId = typeof record.id === "string" ? record.id.trim() : undefined;
+    const normalized = normalizeOpenAIToolCall(toolCall, messageIndex, toolCallIndex);
+    const id = nextUniqueToolCallId(normalized.id, used);
+    used.add(id);
+    return {
+      originalId,
+      toolCall: id === normalized.id ? normalized : { ...normalized, id },
+    };
+  });
+}
+
+function nextUniqueToolCallId(id: string, used: Set<string>): string {
+  if (!used.has(id)) {
+    return id;
+  }
+  for (let suffix = 2; ; suffix += 1) {
+    const candidate = `${id}_${suffix}`;
+    if (!used.has(candidate)) {
+      return candidate;
+    }
+  }
+}
+
+function takeExpectedToolCall(
+  expected: NormalizedOpenAIToolCall[],
+  matched: Set<NormalizedOpenAIToolCall>,
+  toolCallId: unknown,
+): NormalizedOpenAIToolCall | undefined {
+  if (typeof toolCallId !== "string") {
+    return undefined;
+  }
+  const id = toolCallId.trim();
+  return expected.find((entry) =>
+    !matched.has(entry) &&
+    (entry.originalId === id || entry.toolCall.id === id)
+  );
 }
 
 function normalizeOpenAIToolCall(
