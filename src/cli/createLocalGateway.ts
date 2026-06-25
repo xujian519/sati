@@ -1232,6 +1232,9 @@ function ensureRouterConfig(
   defaultSelection: PilotAgentModelSelection,
 ): RouterConfig {
   const defaultRef = { id: defaultSelection.id, provider: defaultSelection.provider, model: defaultSelection.model };
+  if (router?.enabled === false) {
+    return { enabled: false };
+  }
   if (router) {
     // Scenarios is optional at the parse boundary (see schema.ts) — the UI
     // can persist a partial `router:` block, e.g. user toggled `enabled`
@@ -1239,6 +1242,7 @@ function ensureRouterConfig(
     // Fill `scenarios.default` from `agent.model` so RouterRuntime always
     // sees a valid map.
     return {
+      enabled: true,
       ...router,
       scenarios: router.scenarios ?? { default: defaultRef },
       fallback: router.fallback ?? { default: [defaultRef] },
@@ -1248,6 +1252,7 @@ function ensureRouterConfig(
     };
   }
   return {
+    enabled: true,
     scenarios: { default: defaultRef },
     fallback: { default: [defaultRef] },
     zeroUsageRetry: { enabled: true, maxAttempts: 2 },

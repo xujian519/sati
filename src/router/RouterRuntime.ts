@@ -93,9 +93,10 @@ export function createRouterRuntime(
   config: RouterConfig,
   deps: RouterRuntimeDeps,
 ): RouterRuntime {
+  const enabled = config.enabled !== false;
   const stats = new TokenStatsCollector({
     ...config.stats,
-    enabled: config.stats?.enabled ?? false,
+    enabled: enabled && (config.stats?.enabled ?? false),
     baselineModel: config.scenarios?.default
       ? { provider: config.scenarios.default.provider, model: config.scenarios.default.model }
       : config.stats?.baselineModel,
@@ -236,6 +237,18 @@ export function createRouterRuntime(
   }
 
   async function decide(input: RouterDecisionInput): Promise<RouterDecision> {
+    if (!enabled) {
+      return {
+        provider: input.request.provider,
+        model: input.request.model,
+        scenarioType: "default",
+        isSubagent: !input.isMainAgent,
+        orchestrating: false,
+        resolvedFrom: "scenario",
+        mutations: {},
+      };
+    }
+
     const sticky = sessionStore.get(input.sessionId, !input.isMainAgent);
     const baseUsage = usageCache.get(input.sessionId);
     const inputWithUsage: RouterDecisionInput = {
@@ -444,6 +457,28 @@ export function createRouterRuntime(
     request: CanonicalModelRequest,
     ctx: RouterExecuteContext,
   ): AsyncIterable<CanonicalModelEvent> {
+    if (!enabled) {
+      const passthroughRequest: CanonicalModelRequest = {
+        ...request,
+        provider: decision.provider,
+        model: decision.model,
+      };
+      let sawErrorEvent = false;
+      for await (const item of streamAttempt(passthroughRequest, deps.modelRuntime, ctx.abortSignal)) {
+        if (item.kind === "event") {
+          if (item.event.type === "error") {
+            sawErrorEvent = true;
+          }
+          yield item.event;
+          continue;
+        }
+        if (item.outcome.error && !sawErrorEvent) {
+          yield { type: "error", error: item.outcome.error };
+        }
+      }
+      return;
+    }
+
     const startedAt = (deps.now?.() ?? new Date()).toISOString();
     const fallbackPlan = planFallback(config.fallback, decision.scenarioType);
     const baseRequest = applyDecisionToRequest(decision, request);
@@ -844,6 +879,10 @@ export function createRouterRuntime(
   }
 
   function invalidateSticky(sessionId: string): InvalidateStickyResult {
+    if (!enabled) {
+      return { orchestrating: false };
+    }
+
     const current = sessionStore.get(sessionId, false);
     const previousTier = current?.tokenSaverTier;
     const orchestrating = current?.orchestrating ?? false;
@@ -876,6 +915,7 @@ export function createRouterRuntime(
     stream,
     invalidateSticky,
     observeUsage(sessionId, usage) {
+      if (!enabled) return;
       usageCache.observe(sessionId, usage);
     },
     stats,

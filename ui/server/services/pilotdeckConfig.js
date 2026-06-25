@@ -191,6 +191,7 @@ function validateModelRef(config, ref, label, errors) {
 function validateRouterModelRefs(config, errors) {
   const router = config.router;
   if (!isRecord(router)) return;
+  if (router.enabled === false) return;
 
   if (isRecord(router.scenarios)) {
     for (const [key, ref] of Object.entries(router.scenarios)) {
@@ -466,6 +467,7 @@ export function syncAgentModelWithRouter(config) {
   const modelId = agentRef.slice(slash + 1);
 
   if (!isRecord(config.router)) return config;
+  if (config.router.enabled === false) return config;
   if (!isRecord(config.router.scenarios)) return config;
   const currentDefault = config.router.scenarios.default;
   // Accept both string ("provider/model") and object ref shapes.
