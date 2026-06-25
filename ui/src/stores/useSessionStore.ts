@@ -191,6 +191,39 @@ function normalizeRealtimeText(value?: string): string {
   return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
 }
 
+function getRealtimeTurnStartIndex(messages: NormalizedMessage[], beforeIndex: number): number {
+  for (let index = beforeIndex - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.kind === 'text' && message.role === 'user') {
+      return index + 1;
+    }
+  }
+  return 0;
+}
+
+function hasEquivalentRealtimeInCurrentTurn(
+  messages: NormalizedMessage[],
+  currentIndex: number,
+  kind: MessageKind,
+  role: NormalizedMessage['role'],
+  content?: string,
+): boolean {
+  const normalizedContent = normalizeRealtimeText(content);
+  if (!normalizedContent) return false;
+
+  const startIndex = getRealtimeTurnStartIndex(messages, currentIndex);
+  for (let index = startIndex; index < messages.length; index += 1) {
+    if (index === currentIndex) continue;
+    const message = messages[index];
+    if (!message || message.kind !== kind || message.role !== role) continue;
+    if (String(message.id || '').startsWith('__streaming_')) continue;
+    if (normalizeRealtimeText(message.content) === normalizedContent) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function parseTimestampMs(value?: string): number | null {
   if (!value) return null;
   const parsed = Date.parse(value);
@@ -1062,15 +1095,26 @@ export function useSessionStore() {
     const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
     if (idx >= 0) {
       const stream = slot.realtimeMessages[idx];
-      const newId = `text_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const hasDuplicate = hasEquivalentRealtimeInCurrentTurn(
+        slot.realtimeMessages,
+        idx,
+        'text',
+        'assistant',
+        stream.content,
+      );
       slot.realtimeMessages = [...slot.realtimeMessages];
-      slot.realtimeMessages[idx] = {
-        ...stream,
-        id: newId,
-        kind: 'text',
-        role: 'assistant',
-        isFinal: true,
-      };
+      if (hasDuplicate) {
+        slot.realtimeMessages.splice(idx, 1);
+      } else {
+        const newId = `text_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        slot.realtimeMessages[idx] = {
+          ...stream,
+          id: newId,
+          kind: 'text',
+          role: 'assistant',
+          isFinal: true,
+        };
+      }
       recomputeMergedIfNeeded(slot);
       notify(sessionId);
     }
@@ -1130,13 +1174,24 @@ export function useSessionStore() {
     const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
     if (idx >= 0) {
       const stream = slot.realtimeMessages[idx];
-      const newId = `thinking_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const hasDuplicate = hasEquivalentRealtimeInCurrentTurn(
+        slot.realtimeMessages,
+        idx,
+        'thinking',
+        undefined,
+        stream.content,
+      );
       slot.realtimeMessages = [...slot.realtimeMessages];
-      slot.realtimeMessages[idx] = {
-        ...stream,
-        id: newId,
-        isFinal: true,
-      };
+      if (hasDuplicate) {
+        slot.realtimeMessages.splice(idx, 1);
+      } else {
+        const newId = `thinking_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        slot.realtimeMessages[idx] = {
+          ...stream,
+          id: newId,
+          isFinal: true,
+        };
+      }
       recomputeMergedIfNeeded(slot);
       notify(sessionId);
     }
