@@ -278,6 +278,7 @@ export class DefaultContextRuntime implements ContextRuntime {
 
   async captureTurn(input: ContextCaptureTurnInput): Promise<void> {
     if (!this.memoryResolver) return;
+    if (isAlwaysOnSession(input.sessionId)) return;
     try {
       await this.memoryResolver.captureTurn({
         sessionId: input.sessionId,
@@ -410,6 +411,16 @@ export class DefaultContextRuntime implements ContextRuntime {
       reason: "ptl-first-attempt",
     };
   }
+}
+
+function isAlwaysOnSession(sessionId: string): boolean {
+  return [
+    "always-on/discovery:",
+    "always-on/workspace:",
+    "always-on/execute:",
+    "always-on/report:",
+    "always-on/apply:",
+  ].some((prefix) => sessionId.startsWith(prefix));
 }
 
 function instructionScopeDescription(scope: InstructionScope): string {
