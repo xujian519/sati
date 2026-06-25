@@ -178,10 +178,12 @@ function toolCallEvents(
     const record = asRecord(delta);
     const index = typeof record.index === "number" ? record.index : 0;
     const fn = asRecord(record.function);
+    const hasExistingCall = state.toolCalls.has(index);
     const current = state.toolCalls.get(index) ?? {};
 
-    if (typeof record.id === "string") {
-      current.id = record.id;
+    const incomingId = readNonEmptyString(record.id);
+    if (!hasExistingCall && incomingId !== undefined) {
+      current.id = incomingId;
     }
     // Only adopt a non-empty name. Some providers send the real name in the
     // first chunk, then `function.name: ""` in later argument-only chunks;
@@ -192,7 +194,7 @@ function toolCallEvents(
       current.name = name;
     }
 
-    if (!state.toolCalls.has(index)) {
+    if (!hasExistingCall) {
       current.id = readNonEmptyString(current.id) ?? generateStreamToolCallId(index);
       state.toolCalls.set(index, current);
       events.push({

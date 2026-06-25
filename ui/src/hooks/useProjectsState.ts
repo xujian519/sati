@@ -28,6 +28,34 @@ const SESSION_PAGE_SIZE = 30;
 
 const serialize = (value: unknown) => JSON.stringify(value ?? null);
 
+function preserveSelectedSessionViewState(
+  updatedSession: ProjectSession,
+  selectedSession: ProjectSession,
+): ProjectSession {
+  const viewState: Partial<ProjectSession> = {};
+  const preserveKeys: Array<keyof ProjectSession> = [
+    'sessionKind',
+    'parentSessionId',
+    'relativeTranscriptPath',
+    'transcriptKey',
+    'taskId',
+    'taskStatus',
+    'outputFile',
+    'isReadOnly',
+    '__projectName',
+  ];
+
+  for (const key of preserveKeys) {
+    if (selectedSession[key] !== undefined) {
+      (viewState as Record<string, unknown>)[key] = selectedSession[key];
+    }
+  }
+
+  return Object.keys(viewState).length > 0
+    ? { ...updatedSession, ...viewState }
+    : updatedSession;
+}
+
 export const projectsHaveChanges = (
   prevProjects: Project[],
   nextProjects: Project[],
@@ -449,7 +477,10 @@ export function useProjectsState({
       return;
     }
 
-    const normalizedUpdatedSelectedSession = updatedSelectedSession;
+    const normalizedUpdatedSelectedSession = preserveSelectedSessionViewState(
+      updatedSelectedSession,
+      selectedSession,
+    );
 
     if (serialize(normalizedUpdatedSelectedSession) !== serialize(selectedSession)) {
       setSelectedSession(normalizedUpdatedSelectedSession);

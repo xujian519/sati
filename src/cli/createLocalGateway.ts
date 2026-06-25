@@ -64,6 +64,7 @@ import { DEFAULT_JUDGE_TIMEOUT_MS, DEFAULT_SUBAGENT_MAX_TOKENS, DEFAULT_ALLOWED_
 import { createAgentProjectSessionStorage, listProjectSessions, resumeAgentSession } from "../session/index.js";
 import { sanitizeSessionIdForPath } from "../session/storage/ProjectSessionStorage.js";
 import { readWebSessionMessages, readSubagentWebMessages } from "../web/server/readSessionMessages.js";
+import { forkWebSession } from "../web/server/forkSession.js";
 import { describeWebProject, listWebProjects } from "../web/server/listProjects.js";
 import { BackgroundTaskRuntime } from "../task/runtime/BackgroundTaskRuntime.js";
 import { createBuiltinRegistry, createPlanFileManager } from "../tool/index.js";
@@ -265,6 +266,12 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       }),
     readSubagentMessages: (input) =>
       readSubagentWebMessages(input, {
+        projectRoot: input.projectKey ? input.projectKey : projectRoot,
+        pilotHome,
+        now,
+      }),
+    forkSession: (input) =>
+      forkWebSession(input, {
         projectRoot: input.projectKey ? input.projectKey : projectRoot,
         pilotHome,
         now,
@@ -1225,6 +1232,9 @@ function ensureRouterConfig(
   defaultSelection: PilotAgentModelSelection,
 ): RouterConfig {
   const defaultRef = { id: defaultSelection.id, provider: defaultSelection.provider, model: defaultSelection.model };
+  if (router?.enabled === false) {
+    return { enabled: false };
+  }
   if (router) {
     // Scenarios is optional at the parse boundary (see schema.ts) — the UI
     // can persist a partial `router:` block, e.g. user toggled `enabled`
@@ -1232,6 +1242,7 @@ function ensureRouterConfig(
     // Fill `scenarios.default` from `agent.model` so RouterRuntime always
     // sees a valid map.
     return {
+      enabled: true,
       ...router,
       scenarios: router.scenarios ?? { default: defaultRef },
       fallback: router.fallback ?? { default: [defaultRef] },
@@ -1241,6 +1252,7 @@ function ensureRouterConfig(
     };
   }
   return {
+    enabled: true,
     scenarios: { default: defaultRef },
     fallback: { default: [defaultRef] },
     zeroUsageRetry: { enabled: true, maxAttempts: 2 },

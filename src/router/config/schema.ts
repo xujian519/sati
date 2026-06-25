@@ -69,6 +69,11 @@ export type RouterCustomRouterConfig = {
 
 export type RouterConfig = {
   /**
+   * Master switch for all router behavior. When false, router-specific
+   * model refs are ignored and requests pass through to agent.model.
+   */
+  enabled?: boolean;
+  /**
    * Resolved scenario→model map.
    *
    * Optional at the *parse* boundary so a yaml that lists e.g. only

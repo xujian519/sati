@@ -505,7 +505,7 @@ export default function AppShellV2() {
       }
       const target = (project.sessions ?? []).find((s) => s.id === sessId);
       if (target) {
-        handleSessionSelect(target);
+        handleSessionSelect(fallbackSession ? { ...target, ...fallbackSession } : target);
       } else if (fallbackSession) {
         handleSessionSelect(fallbackSession);
       } else {
