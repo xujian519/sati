@@ -130,6 +130,11 @@ export interface NormalizedMessage {
   // Cursor-specific ordering
   sequence?: number;
   rowid?: number;
+  /** Transcript entry id for history fork targeting. */
+  entryId?: string;
+  /** True when the corresponding transcript entry has non-text prefill content. */
+  forkUnsupportedContent?: boolean;
+  forkUnsupportedReason?: string;
   // Streaming-only: id of slot.serverMessages tail at the moment the
   // streaming row was created. computeMerged uses this for an id-based
   // same-turn-snapshot test instead of a timestamp window.

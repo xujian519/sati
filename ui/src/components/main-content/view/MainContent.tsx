@@ -206,6 +206,7 @@ function MainContent({
 
       const fallbackSession: ProjectSession = {
         ...existingSession,
+        isReadOnly: true,
         __projectName: lookupProjectName,
       };
 

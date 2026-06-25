@@ -43,9 +43,14 @@ function convertSingleMessage(
         if (!content.trim() && userAttachments.length === 0 && (!userImages || userImages.length === 0)) return null;
         return {
           id: msg.id,
+          entryId: msg.entryId,
           type: 'user',
           content: unescapeWithMathProtection(decodeHtmlEntities(content)),
           timestamp: msg.timestamp,
+          ...(msg.forkUnsupportedContent ? {
+            forkUnsupportedContent: true,
+            forkUnsupportedReason: msg.forkUnsupportedReason,
+          } : {}),
           ...(userImages && userImages.length > 0 ? { images: userImages } : {}),
           ...(userAttachments.length > 0 ? { attachments: userAttachments } : {}),
         };

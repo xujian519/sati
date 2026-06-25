@@ -283,7 +283,7 @@ export class DefaultContextRuntime implements ContextRuntime {
       await this.memoryResolver.captureTurn({
         sessionId: input.sessionId,
         projectRoot: this.projectRoot ?? "",
-        messages: input.messages,
+        messages: input.messages.filter((message) => !message.metadata?.forkCarryover),
         errored: input.errored,
       });
     } catch {

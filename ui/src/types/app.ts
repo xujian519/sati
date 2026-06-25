@@ -210,6 +210,12 @@ export function isBackgroundTaskSession(
   );
 }
 
+export function isReadOnlySession(
+  session: ProjectSession | null | undefined,
+): boolean {
+  return session?.isReadOnly === true || isBackgroundTaskSession(session);
+}
+
 export function getSessionRequestParams(
   session: ProjectSession | null | undefined,
 ): SessionRequestParams {
