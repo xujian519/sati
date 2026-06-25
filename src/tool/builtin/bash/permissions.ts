@@ -3,9 +3,13 @@ import type { PermissionResult } from "../../../permission/index.js";
 const COMMAND_POSITION = String.raw`(?:^|[;&|]\s*)`;
 const SHELL_SEGMENT = String.raw`[^;&|\n]*`;
 const RM_RECURSIVE_LOOKAHEAD = String.raw`(?=${SHELL_SEGMENT}(?:-[^\s;&|]*r|--recursive\b))`;
-const ROOT_DELETE_TARGET_LOOKAHEAD = String.raw`(?=${SHELL_SEGMENT}\s(?:/|/\*|/ \*)(?:\s|$))`;
-const SYSTEM_DELETE_TARGET_LOOKAHEAD = String.raw`(?=${SHELL_SEGMENT}\s/(?:bin|boot|etc|home|lib|lib64|root|sbin|usr|var)(?:/|\s|$))`;
-const HOME_DELETE_TARGET_LOOKAHEAD = String.raw`(?=${SHELL_SEGMENT}\s(?:~|\$HOME|\$\{HOME\})(?:/|\s|$))`;
+const OPTIONAL_SHELL_QUOTE = String.raw`["']?`;
+const ROOT_DELETE_TARGET = String.raw`${OPTIONAL_SHELL_QUOTE}(?:/|/\*|/ \*|//+|/\.)${OPTIONAL_SHELL_QUOTE}`;
+const SYSTEM_DELETE_TARGET = String.raw`${OPTIONAL_SHELL_QUOTE}/(?:bin|boot|etc|home|lib|lib64|root|sbin|usr|var)(?:/|${OPTIONAL_SHELL_QUOTE}(?:\s|$))`;
+const HOME_DELETE_TARGET = String.raw`${OPTIONAL_SHELL_QUOTE}(?:~|\$HOME|\$\{HOME\})(?:/|${OPTIONAL_SHELL_QUOTE}(?:\s|$))`;
+const ROOT_DELETE_TARGET_LOOKAHEAD = String.raw`(?=${SHELL_SEGMENT}\s${ROOT_DELETE_TARGET}(?:\s|$))`;
+const SYSTEM_DELETE_TARGET_LOOKAHEAD = String.raw`(?=${SHELL_SEGMENT}\s${SYSTEM_DELETE_TARGET})`;
+const HOME_DELETE_TARGET_LOOKAHEAD = String.raw`(?=${SHELL_SEGMENT}\s${HOME_DELETE_TARGET})`;
 
 const HARD_DENY_PATTERNS: RegExp[] = [
   // Unix — catastrophic filesystem destruction.
