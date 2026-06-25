@@ -47,6 +47,10 @@ function convertSingleMessage(
           type: 'user',
           content: unescapeWithMathProtection(decodeHtmlEntities(content)),
           timestamp: msg.timestamp,
+          ...(msg.forkUnsupportedContent ? {
+            forkUnsupportedContent: true,
+            forkUnsupportedReason: msg.forkUnsupportedReason,
+          } : {}),
           ...(userImages && userImages.length > 0 ? { images: userImages } : {}),
           ...(userAttachments.length > 0 ? { attachments: userAttachments } : {}),
         };

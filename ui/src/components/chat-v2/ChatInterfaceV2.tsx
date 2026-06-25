@@ -3,17 +3,17 @@ import { useTranslation } from 'react-i18next';
 import { useTasksSettings } from '../../contexts/TasksSettingsContext';
 import { useToast } from '../../contexts/ToastContext';
 import { api } from '../../utils/api';
-import type { ChatInterfaceProps, ChatRunMode, Provider } from '../chat/types/types';
-import type { ChatMessage } from '../chat/types/types';
+import type { ChatInterfaceProps, ChatMessage, ChatRunMode, Provider } from '../chat/types/types';
 import {
   getSessionRequestParams,
-  isBackgroundTaskSession,
+  isReadOnlySession,
 } from '../../types/app';
 import { useChatProviderState } from '../chat/hooks/useChatProviderState';
 import { useChatSessionState } from '../chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../chat/hooks/useChatComposerState';
 import { useSessionStore } from '../../stores/useSessionStore';
+import { safeLocalStorage } from '../chat/utils/chatStorage';
 import MessagesPaneV2 from './MessagesPaneV2';
 import ComposerV2 from './ComposerV2';
 
@@ -61,7 +61,7 @@ function ChatInterfaceV2({
   const { t } = useTranslation('chat');
   const { tasksEnabled: _tasksEnabled, isTaskMasterInstalled: _isTaskMasterInstalled } =
     useTasksSettings();
-  const isReadOnlyBackgroundSession = isBackgroundTaskSession(selectedSession);
+  const sessionIsReadOnly = isReadOnlySession(selectedSession);
   const sessionRequestParams = React.useMemo(
     () => getSessionRequestParams(selectedSession),
     [selectedSession],
@@ -317,7 +317,7 @@ function ChatInterfaceV2({
   }, [canAbortSession, handleAbortSession, isAbortPending, isLoading]);
 
   const handleFork = useCallback(async (message: ChatMessage, _carriedPreview: number) => {
-    if (isForkPending || isLoading || isReadOnlyBackgroundSession) return;
+    if (isForkPending || isLoading || sessionIsReadOnly) return;
     const sessionId = currentSessionId || selectedSession?.id;
     const fromEntryId = message.entryId;
     if (!sessionId || !fromEntryId || !selectedProject) {
@@ -329,7 +329,7 @@ function ChatInterfaceV2({
     setIsForkPending(true);
     try {
       const response = await api.forkSession(sessionId, { projectPath, fromEntryId });
-      let result: { newSessionId?: string; prefillText?: string; error?: string } = {};
+      let result: { newSessionId?: string; prefillText?: string; mode?: string; error?: string } = {};
       try {
         result = await response.json();
       } catch {
@@ -342,13 +342,25 @@ function ChatInterfaceV2({
       if (!newSessionId) {
         throw new Error('Fork did not return a new session id');
       }
+      setRunMode(result.mode === 'plan' ? 'plan' : 'agent');
 
       if (typeof window.refreshProjects === 'function') {
-        void window.refreshProjects();
+        try {
+          await window.refreshProjects();
+        } catch {
+          // Keep the fork usable even if the sidebar refresh races/fails.
+        }
+      }
+
+      const forkDraft = result.prefillText || message.content || '';
+      if (forkDraft) {
+        safeLocalStorage.setItem(`draft_input_${selectedProject.name}`, forkDraft);
+      } else {
+        safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
       }
 
       onNavigateToSession?.(newSessionId);
-      setInput(result.prefillText || message.content || '');
+      setInput(forkDraft);
       requestAnimationFrame(() => {
         textareaRef.current?.focus();
         scrollToBottom?.();
@@ -373,7 +385,7 @@ function ChatInterfaceV2({
     currentSessionId,
     isForkPending,
     isLoading,
-    isReadOnlyBackgroundSession,
+    sessionIsReadOnly,
     onNavigateToSession,
     scrollToBottom,
     selectedProject,
@@ -425,11 +437,11 @@ function ChatInterfaceV2({
 
   // The composer is identical in welcome / normal mode — just rendered in a
   // different parent container. Pulled out so we don't drift between the two.
-  const composer = isReadOnlyBackgroundSession ? (
+  const composer = sessionIsReadOnly ? (
     <div className="mx-auto w-full max-w-[720px] px-6 pb-6 pt-3">
       <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-[13px] text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
-        {t('session.readonlyBackground', {
-          defaultValue: 'This background task transcript is read-only.',
+        {t('session.readonlyTranscript', {
+          defaultValue: 'This transcript is read-only.',
         })}
       </div>
     </div>
@@ -553,7 +565,7 @@ function ChatInterfaceV2({
         workingStatus={claudeStatus || pilotDeckStatus}
         runMode={runMode}
         sessionStore={sessionStore}
-        onFork={isReadOnlyBackgroundSession ? undefined : handleFork}
+        onFork={sessionIsReadOnly ? undefined : handleFork}
         forkDisabled={isForkPending}
       />
       {composer}

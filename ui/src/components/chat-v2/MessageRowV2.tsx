@@ -151,6 +151,11 @@ function MessageRowV2({
         : [],
     [message.attachments],
   );
+  const [userImageLightbox, setUserImageLightbox] = useState<number | null>(null);
+  const hasForkUnsupportedContent =
+    Boolean(message.forkUnsupportedContent) ||
+    messageImages.length > 0 ||
+    messageAttachments.length > 0;
 
   if (message.isAgentActivitySummary) {
     return (
@@ -240,7 +245,6 @@ function MessageRowV2({
 
   const isUser = message.type === 'user';
   const isError = message.type === 'error';
-  const [userImageLightbox, setUserImageLightbox] = useState<number | null>(null);
 
   // User: right-aligned grey bubble.
   if (isUser) {
@@ -254,9 +258,14 @@ function MessageRowV2({
         {onFork ? (
           <ForkMessageButton
             carriedMessageCount={forkCarriedMessageCount}
-            disabled={forkDisabled || isSessionRunning || !message.entryId}
+            disabled={forkDisabled || isSessionRunning || !message.entryId || hasForkUnsupportedContent}
+            disabledReason={hasForkUnsupportedContent
+              ? String(message.forkUnsupportedReason || t('fork.unsupportedAttachments', {
+                  defaultValue: 'Forking messages with attachments or media is not supported yet',
+                }))
+              : undefined}
             onFork={() => {
-              if (message.entryId) onFork(message, forkCarriedMessageCount);
+              if (message.entryId && !hasForkUnsupportedContent) onFork(message, forkCarriedMessageCount);
             }}
             t={t}
           />
@@ -441,15 +450,17 @@ function CopyMarkdownButton({ content }: { content: string }) {
 function ForkMessageButton({
   carriedMessageCount,
   disabled,
+  disabledReason,
   onFork,
   t,
 }: {
   carriedMessageCount: number;
   disabled?: boolean;
+  disabledReason?: string;
   onFork: () => void;
   t: TFunction;
 }) {
-  const title = t('fork.fromHere', {
+  const title = disabledReason ?? t('fork.fromHere', {
     count: carriedMessageCount,
     defaultValue: `Fork from here · carries ${carriedMessageCount} messages`,
   });
