@@ -47,12 +47,13 @@ import os from 'os';
 import http from 'http';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
-import { spawn, exec } from 'child_process';
+import { spawn } from 'child_process';
 import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 import JSZip from 'jszip';
 import { readPermissionSettings } from './services/permissionSettings.js';
+import { getOpenUrlSpawnCommand } from './utils/processSpawn.js';
 
 import { getProjects, getProjectCronJobsOverview, getSessions, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
 import {
@@ -96,8 +97,6 @@ import { createNormalizedMessage } from './pilotdeck-message.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames, userDb } from './database/db.js';
 import { configureWebPush } from './services/vapid-keys.js';
-import { sendCronDaemonRequest } from './services/cron-daemon-owner.js';
-import { createAlwaysOnHeartbeatManager } from './always-on-heartbeat.js';
 
 import { runServerStartupBeforeListen, startServerAfterStartup } from './services/server-startup.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
@@ -134,11 +133,6 @@ const WATCHER_DEBOUNCE_MS = 300;
 let projectsWatchers = [];
 let projectsWatcherDebounceTimer = null;
 const connectedClients = new Set();
-const alwaysOnHeartbeat = createAlwaysOnHeartbeatManager({
-    // Legacy four-provider session details have been removed; PilotDeck
-    // gateway sessions are tracked by `pilotdeck-bridge.js` instead.
-    getActivePilotDeckSessions: () => []
-});
 registerAlwaysOnNotificationForwarding(connectedClients);
 let isGetProjectsRunning = false; // Flag to prevent reentrant calls
 
@@ -1841,11 +1835,7 @@ function handleChatConnection(ws, request) {
 
             if (data.type === 'ping') return;
 
-            if (data.type === 'always-on-presence') {
-                await alwaysOnHeartbeat.handlePresence(ws, data);
-            } else if (data.type === 'always-on-presence-clear') {
-                await alwaysOnHeartbeat.clearPresence(ws);
-            } else if (
+            if (
                 data.type === 'pilotdeck-command' ||
                 // Deprecated: legacy per-provider frame types kept for back-compat.
                 data.type === 'claude-command' ||
@@ -1927,7 +1917,6 @@ function handleChatConnection(ws, request) {
         cleanedUp = true;
         // Remove from connected clients
         connectedClients.delete(ws);
-        void alwaysOnHeartbeat.clearPresence(ws);
     };
 
     ws.on('close', (code, reason) => {
@@ -2962,10 +2951,14 @@ async function startServer() {
                         || process.env.PILOTDECK_SKIP_BROWSER_OPEN === '1';
                     if (!skipAutoOpen) {
                         const serverUrl = `http://${DISPLAY_HOST === '0.0.0.0' ? 'localhost' : DISPLAY_HOST}:${boundPort}`;
-                        const openCmd = process.platform === 'darwin' ? 'open'
-                                      : process.platform === 'win32' ? 'start'
-                                      : 'xdg-open';
-                        exec(`${openCmd} "${serverUrl}"`, () => {});
+                        const { command, args } = getOpenUrlSpawnCommand(serverUrl);
+                        const opener = spawn(command, args, {
+                            stdio: 'ignore',
+                            detached: process.platform !== 'win32',
+                            windowsHide: process.platform === 'win32',
+                        });
+                        opener.on('error', () => {});
+                        opener.unref();
                     }
 
                     // Start watching the projects folder for changes

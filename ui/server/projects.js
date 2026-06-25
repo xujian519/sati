@@ -221,7 +221,6 @@ async function getProjects(progressCallback = null) {
                 hasMore: (project.sessionCount ?? sessions.length) > sessions.length,
             },
             taskmaster,
-            alwaysOn: { enabled: false },
         });
     }
 
@@ -281,7 +280,6 @@ async function getProjects(progressCallback = null) {
             hasMore: generalTotal > generalSessions.length,
         },
         taskmaster: { hasTaskmaster: false },
-        alwaysOn: { enabled: false },
     });
 
     return result;

@@ -32,35 +32,37 @@ const DENY_PATTERNS: RegExp[] = [
   /\bStop-Process\b[^|;&]*-Force\b/i,
 ];
 
-const SAFE_READ_PATTERNS: RegExp[] = [
-  // Unix / cross-platform
-  /^\s*pwd\s*$/,
-  /^\s*ls(?:\s|$)/,
-  /^\s*wc\s+-l(?:\s+["'][^"']+["']|\s+[^\s;&|<>`]+)+\s*$/,
-  /^\s*git\s+status(?:\s|$)/,
-  /^\s*git\s+diff(?:\s|$)/,
-  /^\s*git\s+log(?:\s|$)/,
-  /^\s*printf(?:\s|$)/,
-  /^\s*echo(?:\s|$)/,
-  /^\s*node\s+-e\s+/,
-  /^\s*sh\s+-c\s+["']exit\s+\d+["']\s*$/,
+const SIMPLE_READ_COMMANDS = new Set([
+  "cat",
+  "date",
+  "echo",
+  "head",
+  "ls",
+  "printf",
+  "pwd",
+  "wc",
+  "whoami",
+]);
 
-  // Windows — PowerShell read-only cmdlets
-  /^\s*Get-ChildItem(?:\s|$)/i,
-  /^\s*Get-Location\s*$/i,
-  /^\s*Get-Content(?:\s|$)/i,
-  /^\s*Get-Process(?:\s|$)/i,
-  /^\s*Get-Item(?:\s|$)/i,
-  /^\s*Get-ItemProperty(?:\s|$)/i,
-  /^\s*Test-Path(?:\s|$)/i,
-  /^\s*Select-String(?:\s|$)/i,
-  /^\s*Get-Date\s*$/i,
-  /^\s*whoami\s*$/i,
-  // Windows — CMD read-only commands
-  /^\s*dir(?:\s|$)/i,
-  /^\s*type(?:\s|$)/i,
-  /^\s*where(?:\s|$)/i,
-];
+const WINDOWS_READ_COMMANDS = new Set([
+  "dir",
+  "findstr",
+  "get-childitem",
+  "get-command",
+  "get-content",
+  "get-date",
+  "get-item",
+  "get-itemproperty",
+  "get-location",
+  "get-process",
+  "resolve-path",
+  "select-string",
+  "test-path",
+  "type",
+  "where",
+]);
+
+const READ_ONLY_GIT_SUBCOMMANDS = new Set(["diff", "log", "show", "status"]);
 
 export function classifyBashPermission(command: string): PermissionResult {
   if (DENY_PATTERNS.some((pattern) => pattern.test(command))) {
@@ -93,5 +95,213 @@ export function classifyBashPermission(command: string): PermissionResult {
 }
 
 export function isReadOnlyShellCommand(command: string): boolean {
-  return SAFE_READ_PATTERNS.some((pattern) => pattern.test(command));
+  const tokens = tokenizeSimpleShell(command);
+  if (!tokens || tokens.length === 0) {
+    return false;
+  }
+
+  const [commandName, ...args] = tokens;
+  const normalizedCommandName = normalizeExecutableName(commandName);
+  if (SIMPLE_READ_COMMANDS.has(normalizedCommandName) || WINDOWS_READ_COMMANDS.has(normalizedCommandName)) {
+    return true;
+  }
+
+  if (normalizedCommandName === "git") {
+    const subcommand = getGitSubcommand(args);
+    return (
+      subcommand !== undefined
+      && READ_ONLY_GIT_SUBCOMMANDS.has(subcommand)
+      && !args.some((arg) => arg === "--output" || arg.startsWith("--output="))
+    );
+  }
+
+  if (isPowerShellCommand(normalizedCommandName)) {
+    return isReadOnlyPowerShellInvocation(args);
+  }
+
+  if (normalizedCommandName === "find") {
+    return isReadOnlyFindTokens(args);
+  }
+
+  return normalizedCommandName === "sh" && args.length === 2 && args[0] === "-c" && /^exit\s+\d+$/.test(args[1]);
+}
+
+const GIT_GLOBAL_OPTIONS_WITH_VALUE = new Set([
+  "--namespace",
+  "--super-prefix",
+]);
+
+const GIT_GLOBAL_OPTIONS_WITH_VALUE_PREFIXES = [
+  "--namespace=",
+  "--super-prefix=",
+];
+
+const GIT_UNSAFE_GLOBAL_OPTIONS_WITH_VALUE = new Set([
+  "-C",
+  "-c",
+  "--config-env",
+  "--exec-path",
+  "--git-dir",
+  "--work-tree",
+]);
+const GIT_UNSAFE_GLOBAL_OPTIONS_WITH_VALUE_PREFIXES = [
+  "-C",
+  "-c",
+  "--config-env=",
+  "--exec-path=",
+  "--git-dir=",
+  "--work-tree=",
+];
+
+function getGitSubcommand(args: string[]): string | undefined {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]!;
+    if (arg === "--") {
+      return undefined;
+    }
+    if (
+      GIT_UNSAFE_GLOBAL_OPTIONS_WITH_VALUE.has(arg)
+      || GIT_UNSAFE_GLOBAL_OPTIONS_WITH_VALUE_PREFIXES.some((prefix) => arg.startsWith(prefix))
+    ) {
+      return undefined;
+    }
+    if (GIT_GLOBAL_OPTIONS_WITH_VALUE.has(arg)) {
+      index += 1;
+      continue;
+    }
+    if (GIT_GLOBAL_OPTIONS_WITH_VALUE_PREFIXES.some((prefix) => arg.startsWith(prefix))) {
+      continue;
+    }
+    if (arg.startsWith("-")) {
+      continue;
+    }
+    return arg.toLowerCase();
+  }
+  return undefined;
+}
+
+function isPowerShellCommand(commandName: string): boolean {
+  return commandName === "powershell" || commandName === "pwsh";
+}
+
+function isReadOnlyPowerShellInvocation(args: string[]): boolean {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]!;
+    const normalized = arg.toLowerCase();
+    if (normalized === "-noprofile" || normalized === "-noninteractive" || normalized === "-nologo") {
+      continue;
+    }
+    if (normalized === "-command" || normalized === "-c") {
+      return isReadOnlyPowerShellCommand(args.slice(index + 1));
+    }
+    if (normalized.startsWith("-command:")) {
+      return isReadOnlyPowerShellCommand([arg.slice("-command:".length)]);
+    }
+    return false;
+  }
+  return false;
+}
+
+function isReadOnlyPowerShellCommand(commandTokens: string[]): boolean {
+  if (commandTokens.length === 0) {
+    return false;
+  }
+  const commandText = commandTokens.join(" ");
+  if (/[{}|;&<>`]/.test(commandText) || /\$\s*\(/.test(commandText)) {
+    return false;
+  }
+  const tokens = tokenizeSimpleShell(commandText);
+  if (!tokens || tokens.length === 0) {
+    return false;
+  }
+  const commandName = normalizeExecutableName(tokens[0]!);
+  return SIMPLE_READ_COMMANDS.has(commandName) || WINDOWS_READ_COMMANDS.has(commandName);
+}
+
+function normalizeExecutableName(commandName: string): string {
+  return commandName.toLowerCase().replace(/\.(exe|cmd|bat)$/i, "");
+}
+
+const FIND_MUTATING_OR_EXEC_ACTIONS = new Set([
+  "-delete",
+  "-exec",
+  "-execdir",
+  "-ok",
+  "-okdir",
+  "-fls",
+  "-fprint",
+  "-fprint0",
+  "-fprintf",
+]);
+
+function isReadOnlyFindTokens(args: string[]): boolean {
+  return !args.some((token) => FIND_MUTATING_OR_EXEC_ACTIONS.has(token));
+}
+
+function tokenizeSimpleShell(command: string): string[] | undefined {
+  const tokens: string[] = [];
+  let current = "";
+  let quote: "'" | '"' | undefined;
+  let escaped = false;
+
+  const pushCurrent = () => {
+    if (current.length > 0) {
+      tokens.push(current);
+      current = "";
+    }
+  };
+
+  for (let i = 0; i < command.length; i += 1) {
+    const char = command[i]!;
+    const next = command[i + 1];
+
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+
+    if (quote) {
+      if (char === quote) {
+        quote = undefined;
+        continue;
+      }
+      if (quote === '"' && (char === "`" || (char === "$" && next === "("))) {
+        return undefined;
+      }
+      if (char === "\\" && quote === '"') {
+        escaped = true;
+        continue;
+      }
+      current += char;
+      continue;
+    }
+
+    if (char === "'" || char === '"') {
+      quote = char;
+      continue;
+    }
+
+    if (/\s/.test(char)) {
+      pushCurrent();
+      continue;
+    }
+
+    if ("|;&<>`".includes(char) || (char === "$" && next === "(")) {
+      return undefined;
+    }
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (escaped || quote) {
+    return undefined;
+  }
+  pushCurrent();
+  return tokens;
 }

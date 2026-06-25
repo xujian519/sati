@@ -203,6 +203,7 @@ router.post('/apply', async (req, res) => {
       cwd: PROJECT_ROOT,
       env: { ...process.env, FORCE_COLOR: '0' },
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: process.platform === 'win32',
     });
 
     let exitCode = null;
@@ -271,6 +272,7 @@ router.post('/restart', async (req, res) => {
       detached: true,
       stdio: 'ignore',
       env: { ...process.env },
+      windowsHide: process.platform === 'win32',
     });
     child.unref();
 

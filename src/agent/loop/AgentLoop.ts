@@ -5,7 +5,6 @@ import {
   cloneMessages,
   createModelMessageAssemblerState,
   type CanonicalToolCall,
-  type CanonicalToolSchema,
   PROMPT_TOO_LONG_ANTHROPIC_PATTERN,
   PROMPT_TOO_LONG_OPENAI_PATTERN,
   REQUEST_TOO_LARGE_PATTERN,
@@ -13,6 +12,7 @@ import {
   type CanonicalModelError,
   type CanonicalModelRequest,
   type CanonicalUsage,
+  materializeMediaReferences,
 } from "../../model/index.js";
 import type {
   PilotDeckReadFileStateMap,
@@ -25,8 +25,6 @@ import {
   SUBAGENT_DEFINITIONS,
   getSubagentDefinition,
 } from "../sub/builtinSubagentTypes.js";
-import { buildPlanModeAgentToolSchema } from "../../tool/builtin/agent.js";
-import { PLAN_MODE_ALLOWED_TOOLS, PLAN_MODE_DESCRIPTION_SUFFIX } from "../../tool/planModeConstraints.js";
 import { agentError } from "../protocol/errors.js";
 import type { AgentEvent } from "../protocol/events.js";
 import type { AgentPermissionDenial, AgentTurnResult } from "../protocol/result.js";
@@ -36,7 +34,7 @@ import type { LifecycleDispatchResult } from "../../lifecycle/index.js";
 import type { PilotDeckHookEvent } from "../../extension/hooks/protocol/events.js";
 import { NullContextRuntime } from "../../context/NullContextRuntime.js";
 import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
-import type { ContextRecoveryDecision } from "../../context/index.js";
+import type { ContextRecoveryDecision, ContextSupplementalToolResultMessage } from "../../context/index.js";
 import type { PermissionMode, PermissionRule, PermissionRuleSet } from "../../permission/index.js";
 import { collectToolCalls } from "./collectToolCalls.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
@@ -45,6 +43,12 @@ import { projectToolResults } from "./projectToolResults.js";
 
 const TOOL_EVENT_PUMP_INTERVAL_MS = 500;
 const SUBAGENT_STATUS_HEARTBEAT_MS = 2_000;
+const PLAN_MODE_REMINDER_MESSAGE = [
+  "Plan mode is active.",
+  "Read first using read-only tools, then write or refine plan markdown only under `.pilotdeck/plans/`.",
+  "Do not make implementation changes while planning.",
+  "When the plan is ready for user review, call `exit_plan_mode` with the plan file path.",
+].join("\n");
 
 type ActiveSubagentStatus = {
   subagentId: string;
@@ -880,9 +884,9 @@ export class AgentLoop {
       // runtime so large payloads land on disk via `ToolResultBudget`. When
       // the runtime doesn't implement `applyToolResults` (e.g. NullContext),
       // we simply append the raw projection (legacy behaviour).
-      // Only the first message (containing tool_result blocks) goes through
-      // budget processing; supplemental messages (PDF/image data) are appended directly.
       const [toolResultMsg, ...supplementalMsgs] = projected;
+      const supplementalInputs = bindSupplementalMessagesToToolCalls(pairedResults, supplementalMsgs);
+      let appendedMessages: CanonicalMessage[] = projected;
       const ctxApply = this.dependencies.context?.applyToolResults;
       if (ctxApply) {
         try {
@@ -890,22 +894,20 @@ export class AgentLoop {
             sessionId: input.sessionId,
             turnId: input.turnId,
             toolResultMessage: toolResultMsg,
+            supplementalMessages: supplementalInputs,
             messages,
           });
           messages = applied.messages;
+          appendedMessages = applied.appendedMessages ?? projected;
         } catch {
-          messages.push(toolResultMsg);
+          messages.push(...projected);
         }
       } else {
-        messages.push(toolResultMsg);
+        messages.push(...projected);
       }
-      for (const supplemental of supplementalMsgs) {
-        messages.push(supplemental);
-      }
-      yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: toolResultMsg };
-      await input.onDurableMessage?.(toolResultMsg);
-      for (const supplemental of supplementalMsgs) {
-        await input.onDurableMessage?.(supplemental);
+      for (const appended of appendedMessages) {
+        yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: appended };
+        await input.onDurableMessage?.(appended);
       }
 
       if (toolResultRepair) {
@@ -1069,12 +1071,10 @@ export class AgentLoop {
     const planTodo = this.dependencies.planTodoManager?.forSession(input.sessionId);
     let tools = this.dependencies.tools.registry.toCanonicalSchemas();
     if (input.allowPlanModeTools !== true) {
-      tools = tools.filter((tool) => tool.name !== "enter_plan_mode" && tool.name !== "exit_plan_mode");
+      tools = tools.filter(
+        (tool) => tool.name !== "enter_plan_mode" && tool.name !== "exit_plan_mode",
+      );
     }
-    if (this.config.permissionMode === "plan") {
-      tools = filterPlanModeTools(tools);
-    }
-
     const prepared = await contextRuntime.prepareForModel({
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -1101,10 +1101,20 @@ export class AgentLoop {
       hasSystemPrompt: !!prepared.systemPrompt,
     });
 
+    const materialized = await materializeMediaReferences(prepared.messages);
+    for (const diagnostic of materialized.diagnostics) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[pilotdeck] ${diagnostic.code}: ${diagnostic.message} (${diagnostic.mediaType}, ${diagnostic.path})`,
+      );
+    }
+
     return {
       provider: this.config.provider,
       model: this.config.model,
-      messages: prepared.messages,
+      messages: this.config.permissionMode === "plan"
+        ? appendPlanModeReminder(materialized.messages)
+        : materialized.messages,
       systemPrompt: prepared.systemPrompt ?? this.config.systemPrompt,
       tools: prepared.tools,
       toolChoice: this.config.toolChoice,
@@ -1531,22 +1541,6 @@ export class AgentLoop {
   private readonly now = (): Date => this.dependencies.now?.() ?? new Date();
 }
 
-function filterPlanModeTools(tools: CanonicalToolSchema[]): CanonicalToolSchema[] {
-  const agentOverride = buildPlanModeAgentToolSchema();
-  return tools
-    .filter((tool) => PLAN_MODE_ALLOWED_TOOLS.has(tool.name))
-    .map((tool) => {
-      if (tool.name === "agent") {
-        return { ...tool, description: agentOverride.description, inputSchema: agentOverride.inputSchema };
-      }
-      const suffix = PLAN_MODE_DESCRIPTION_SUFFIX[tool.name];
-      if (suffix) {
-        return { ...tool, description: tool.description + suffix };
-      }
-      return tool;
-    });
-}
-
 function mergeUserRules(target: PermissionRule[], userRules: PermissionRule[] | undefined): void {
   const nonUserRules = target.filter((rule) => rule.source !== "user");
   target.splice(0, target.length, ...nonUserRules, ...(userRules ?? []));
@@ -1576,6 +1570,17 @@ function textFromMessage(message: CanonicalMessage): string {
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
+}
+
+function appendPlanModeReminder(messages: CanonicalMessage[]): CanonicalMessage[] {
+  return [
+    ...messages,
+    {
+      role: "user",
+      content: [{ type: "text", text: PLAN_MODE_REMINDER_MESSAGE }],
+      metadata: { synthetic: true, purpose: "plan_mode_reminder" },
+    },
+  ];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1717,6 +1722,22 @@ function readRequestedMode(value: unknown): AgentRuntimeConfig["permissionMode"]
   }
   const requestedMode = (value as Record<string, unknown>).requestedMode;
   return isPermissionMode(requestedMode) ? requestedMode : undefined;
+}
+
+function bindSupplementalMessagesToToolCalls(
+  results: PilotDeckToolResult[],
+  supplementalMessages: CanonicalMessage[],
+): ContextSupplementalToolResultMessage[] {
+  const bound: ContextSupplementalToolResultMessage[] = [];
+  let index = 0;
+  for (const result of results) {
+    const count = result.supplementalMessages?.length ?? 0;
+    for (let offset = 0; offset < count && index < supplementalMessages.length; offset += 1) {
+      bound.push({ toolCallId: result.toolCallId, message: supplementalMessages[index] });
+      index += 1;
+    }
+  }
+  return bound;
 }
 
 function isPermissionMode(value: unknown): value is AgentRuntimeConfig["permissionMode"] {

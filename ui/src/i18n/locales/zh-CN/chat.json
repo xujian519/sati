@@ -23,7 +23,12 @@
   },
   "toolUseError": {
     "title": "工具错误",
-    "description": ""
+    "description": "",
+    "webSearchNotConfigured": {
+      "title": "网页搜索未就绪",
+      "description": "搜索 API Key 缺失或无效。请前往设置 -> 配置 -> 搜索检查搜索服务和 API Key。",
+      "openSettings": "前往设置"
+    }
   },
   "setupRequired": {
     "title": "需要配置",
@@ -160,6 +165,18 @@
     "retry": "在本聊天中重试即可使用该工具。",
     "error": "无法授予本聊天权限。请重试。",
     "openSettings": "打开设置"
+  },
+  "permissionBanner": {
+    "title": "需要授权",
+    "titleCount": "需要授权（{{count}}）",
+    "tool": "工具：",
+    "allowRule": "允许规则：",
+    "viewToolInput": "查看工具输入",
+    "viewToolInputs": "查看 {{count}} 个工具输入",
+    "allowOnce": "仅允许一次",
+    "allowRemember": "允许并记住",
+    "allowSaved": "允许（已保存）",
+    "deny": "拒绝"
   },
   "todo": {
     "updated": "待办列表已成功更新",
