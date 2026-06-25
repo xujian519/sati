@@ -25,6 +25,7 @@ export type AgentTranscriptEntryBase = {
 export type AgentAcceptedInputTranscriptEntry = AgentTranscriptEntryBase & {
   type: "accepted_input";
   messages: CanonicalMessage[];
+  metadata?: Record<string, unknown>;
 };
 
 export type AgentMessageTranscriptEntry = AgentTranscriptEntryBase & {
