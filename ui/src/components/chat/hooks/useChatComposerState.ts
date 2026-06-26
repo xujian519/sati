@@ -788,6 +788,7 @@ export function useChatComposerState({
         sendMessage,
         selectedProject,
         command: messageContent,
+        userVisibleInput,
         sessionId: effectiveSessionId,
         temporarySessionId: sessionToActivate,
         toolsSettings,

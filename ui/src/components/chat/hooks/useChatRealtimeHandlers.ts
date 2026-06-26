@@ -182,14 +182,20 @@ export function useChatRealtimeHandlers({
 
           if (isCurrentSession && Array.isArray(msg.activeTurnMessages) && msg.activeTurnMessages.length > 0) {
             clearAccumulators();
+            const slot = sessionStore.getSessionSlot?.(statusSessionId);
+            const hasLiveStreaming = Boolean(slot?.realtimeMessages?.some((message) => (
+              message.id === `__streaming_${statusSessionId}`
+              || message.id === `__streaming_thinking_${statusSessionId}`
+            )));
             // Only replay messages that have stable IDs and can be deduped
             // against server data (tool_use by toolId, tool_result/status by id).
             // Skip thinking, stream_delta, stream_end — these create messages
-            // with generated IDs that can't be matched to server copies,
-            // causing duplication. fetchFromServer provides authoritative copies.
+            // with generated IDs that can't be matched to server copies.
+            // But if this tab has no active streaming state (e.g. another tab
+            // started the turn), we need to replay them so content renders.
             const skipKinds = new Set(['thinking', 'stream_delta', 'stream_end']);
             for (const activeTurnMessage of msg.activeTurnMessages) {
-              if (skipKinds.has(activeTurnMessage.kind)) continue;
+              if (hasLiveStreaming && skipKinds.has(activeTurnMessage.kind)) continue;
               handleMessage(activeTurnMessage, statusSessionId);
             }
           }
