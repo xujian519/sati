@@ -50,8 +50,6 @@ export type RouterAutoOrchestrateConfig = {
   subagentMaxTokens?: number;
 };
 
-export const DEFAULT_SUBAGENT_MAX_TOKENS = 48000;
-
 export type RouterStatsConfig = {
   enabled: boolean;
   modelPricing?: Record<string, { input?: number; output?: number; cacheRead?: number }>;
