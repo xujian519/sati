@@ -6,7 +6,6 @@ import type {
 import { ModelRequestError } from "../model/index.js";
 import type { InputModality } from "../model/index.js";
 import {
-  DEFAULT_SUBAGENT_MAX_TOKENS,
   DEFAULT_SUBAGENT_POLICY,
   type RouterConfig,
   type RouterModelRef,
