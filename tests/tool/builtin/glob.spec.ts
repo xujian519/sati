@@ -36,6 +36,8 @@ test("extractGlobBaseDirectory splits absolute glob patterns for ripgrep", () =>
 test("normalizeRipgrepGlobPattern converts Windows path separators for ripgrep glob matching", () => {
   assert.equal(normalizeRipgrepGlobPattern("laws\\**\\*"), "laws/**/*");
   assert.equal(normalizeRipgrepGlobPattern("**\\*.ts"), "**/*.ts");
+  assert.equal(normalizeRipgrepGlobPattern("literal\\[1\\].txt"), "literal\\[1\\].txt");
+  assert.equal(normalizeRipgrepGlobPattern("literal\\*.txt"), "literal\\*.txt");
 });
 
 test("glob accepts absolute patterns that resolve inside the workspace", async () => {
@@ -75,6 +77,19 @@ test("glob accepts Windows-style glob separators before calling ripgrep", async 
   assert.deepEqual(result.files, ["laws/nested/law2.pdf"]);
   assert.equal(result.count, 1);
   assert.equal(result.truncated, false);
+});
+
+test("glob preserves ripgrep escapes while normalizing path separators", async () => {
+  const root = await makeWorkspace();
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(path.join(root, "src", "tool.ts"), "export {};");
+  await writeFile(path.join(root, "literal[1].txt"), "literal");
+
+  const windowsPathResult = await runGlob(root, { pattern: "src\\*.ts" });
+  const escapedGlobResult = await runGlob(root, { pattern: "literal\\[1\\].txt" });
+
+  assert.deepEqual(windowsPathResult.files, ["src/tool.ts"]);
+  assert.deepEqual(escapedGlobResult.files, ["literal[1].txt"]);
 });
 
 test("glob does not require system ripgrep on PATH", async () => {
