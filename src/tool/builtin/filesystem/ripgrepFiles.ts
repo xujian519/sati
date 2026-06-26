@@ -21,10 +21,22 @@ export type RipgrepFilesResult = {
   truncated: boolean;
 };
 
+export function normalizeRipgrepGlobPattern(pattern: string): string {
+  return pattern.replace(/\\/g, "/");
+}
+
 export async function ripgrepFiles(input: RipgrepFilesInput): Promise<RipgrepFilesResult> {
   const stdout = await runRipgrep({
     cwd: input.cwd,
-    args: ["--files", "--hidden", "--no-ignore", "--glob", input.pattern, "."],
+    args: [
+      "--files",
+      "--hidden",
+      "--no-ignore",
+      "--glob",
+      normalizeRipgrepGlobPattern(input.pattern),
+      "--sort=modified",
+      ".",
+    ],
     env: input.env,
     signal: input.signal,
     toolName: "glob",
@@ -32,8 +44,7 @@ export async function ripgrepFiles(input: RipgrepFilesInput): Promise<RipgrepFil
   const limit = input.limit ?? DEFAULT_LIMIT;
   const files = splitRipgrepLines(stdout)
     .map(normalizeRelativePath)
-    .filter((line) => !isIgnoredPath(line))
-    .sort();
+    .filter((line) => !isIgnoredPath(line));
   const selected = files.slice(0, limit);
   return {
     files: selected,
