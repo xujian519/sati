@@ -298,9 +298,7 @@ export function preserveMaskedSecrets(nextValue, previousValue) {
 // ─── Runtime env derivation ──────────────────────────────────────────────────
 
 function providerProtocolToMemoryApi(protocol) {
-  // Memory embeddings/chat still route through OpenAI-compatible env vars.
-  // Native Google chat providers are valid for the main agent config, but
-  // memory.apiType currently remains an OpenAI-compatible selector.
+  if (protocol === 'anthropic' || protocol === 'google') return protocol;
   return 'openai-completions';
 }
 
@@ -336,6 +334,10 @@ export function buildRuntimeEnv(config) {
     env.OPENAI_MODEL = main.model;
     env.ANTHROPIC_API_KEY = main.provider.apiKey || '';
     env.ANTHROPIC_MODEL = main.model;
+    env.GEMINI_API_KEY = main.provider.apiKey || '';
+    env.GOOGLE_API_KEY = main.provider.apiKey || '';
+    env.GOOGLE_GENERATIVE_AI_API_KEY = main.provider.apiKey || '';
+    env.GEMINI_MODEL = main.model;
   }
 
   // Reasoning models (DeepSeek-R1, MiniMax-M2.7, etc.) need a generous
