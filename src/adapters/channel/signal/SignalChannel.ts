@@ -145,7 +145,9 @@ export class SignalChannel implements ChannelAdapter {
           const lines = carry.split(/\r?\n/);
           carry = lines.pop() ?? "";
           for (const line of lines) {
-            await this.parseLine(line);
+            void this.parseLine(line).catch((e) => {
+              this.logger?.error?.(`signal: parseLine error: ${e}`);
+            });
           }
         }
       } catch (e) {
