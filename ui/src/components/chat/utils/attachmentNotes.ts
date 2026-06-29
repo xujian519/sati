@@ -3,7 +3,7 @@ import type { ChatAttachment } from '../types/types';
 const ATTACHMENT_NOTE_MARKER = '[Files attached by user and available for reading in the project:]';
 
 function inferAttachmentMimeType(name: string, filePath: string): string | undefined {
-  const source = `${name || filePath}`.toLowerCase();
+  const source = `${name} ${filePath}`.toLowerCase();
   if (source.endsWith('.pdf')) return 'application/pdf';
   if (source.endsWith('.doc')) return 'application/msword';
   if (source.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -21,6 +21,10 @@ function inferAttachmentMimeType(name: string, filePath: string): string | undef
   if (source.endsWith('.gif')) return 'image/gif';
   if (source.endsWith('.webp')) return 'image/webp';
   return undefined;
+}
+
+function isImageAttachmentMime(mimeType: string | undefined): boolean {
+  return Boolean(mimeType?.toLowerCase().startsWith('image/'));
 }
 
 export function parseUserAttachmentNote(content: unknown): {
@@ -46,11 +50,13 @@ export function parseUserAttachmentNote(content: unknown): {
     const name = line.slice(2, separator).trim();
     const filePath = line.slice(separator + 2).trim();
     if (!name || !filePath) continue;
+    const mimeType = inferAttachmentMimeType(name, filePath);
+    if (isImageAttachmentMime(mimeType)) continue;
 
     attachments.push({
       name,
       path: filePath,
-      mimeType: inferAttachmentMimeType(name, filePath),
+      mimeType,
     });
   }
 

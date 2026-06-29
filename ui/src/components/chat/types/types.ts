@@ -12,7 +12,9 @@ export type ChatRunMode = 'agent' | 'plan';
 export interface ChatImage {
   data: string;
   name: string;
+  path?: string;
   mimeType?: string;
+  size?: number;
 }
 
 export interface ChatAttachment {
