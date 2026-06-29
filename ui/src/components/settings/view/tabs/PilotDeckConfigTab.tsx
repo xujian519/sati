@@ -48,6 +48,7 @@ import {
   CATALOG_PROVIDERS,
   findCatalogProviderById,
   type CatalogProvider,
+  type CatalogProviderProtocol,
   type CatalogModel,
 } from '../../../../shared/catalogProviders';
 import type { SettingsProject } from '../../types/types';
@@ -58,7 +59,7 @@ import { isCronConfigEnabled, patch } from './pilotDeckConfigForm';
 // pre-/post-translation in the backend — disk shape === UI shape.
 
 type V2Provider = {
-  protocol?: 'openai' | 'anthropic';
+  protocol?: CatalogProviderProtocol;
   url?: string;
   apiKey?: string;
   timeoutMs?: number;
@@ -801,10 +802,11 @@ function ProviderCard({
           <span className="mb-1 block">{t('pilotDeckConfig.panels.models.protocol')}</span>
           <Select
             value={protocol}
-            onChange={(v) => update({ protocol: v as 'openai' | 'anthropic' })}
+            onChange={(v) => update({ protocol: v as CatalogProviderProtocol })}
             options={[
               { value: 'openai',    label: t('pilotDeckConfig.panels.models.protocolOptions.openai') },
               { value: 'anthropic', label: t('pilotDeckConfig.panels.models.protocolOptions.anthropic') },
+              { value: 'google',    label: t('pilotDeckConfig.panels.models.protocolOptions.google') },
             ]}
           />
         </label>

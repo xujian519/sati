@@ -173,8 +173,8 @@ function validateProvider(id, provider, errors) {
   }
   const protocol = normalizeString(provider.protocol).toLowerCase();
   if (!protocol) errors.push(`model.providers.${id}.protocol is required`);
-  else if (protocol !== 'openai' && protocol !== 'anthropic') {
-    errors.push(`model.providers.${id}.protocol must be "openai" or "anthropic"`);
+  else if (protocol !== 'openai' && protocol !== 'anthropic' && protocol !== 'google') {
+    errors.push(`model.providers.${id}.protocol must be "openai", "anthropic", or "google"`);
   }
   if (!normalizeString(provider.url)) errors.push(`model.providers.${id}.url is required`);
   if (!normalizeString(provider.apiKey)) errors.push(`model.providers.${id}.apiKey is required`);
@@ -298,9 +298,9 @@ export function preserveMaskedSecrets(nextValue, previousValue) {
 // ─── Runtime env derivation ──────────────────────────────────────────────────
 
 function providerProtocolToMemoryApi(protocol) {
-  // V2 catalog only uses 'openai' (Chat Completions) and 'anthropic'.
-  // The /responses style is only relevant when a user manually sets
-  // memory.apiType, which they can do alongside protocol="openai".
+  // Memory embeddings/chat still route through OpenAI-compatible env vars.
+  // Native Google chat providers are valid for the main agent config, but
+  // memory.apiType currently remains an OpenAI-compatible selector.
   return 'openai-completions';
 }
 
