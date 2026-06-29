@@ -7,6 +7,7 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { executeChannelCommand } from "../protocol/ChannelCommandRegistry.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
+import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import {
   ImLiveReplyController,
   type ImLiveReplyControllerOptions,
@@ -56,6 +57,7 @@ export class WeixinChannel implements ChannelAdapter {
   private pollPromise: Promise<void> | null = null;
   private activeChats = new Set<string>();
   private readonly elicitation = new ImElicitationHelper();
+  private readonly permissions = new ImPermissionHelper();
   private contextTokens = new Map<string, string>();
   private consecutivePollErrors = 0;
 
@@ -210,6 +212,16 @@ export class WeixinChannel implements ChannelAdapter {
       return;
     }
 
+    if (this.permissions.hasPending(fromUser) && this.gateway) {
+      try {
+        const confirmation = await this.permissions.answer(fromUser, text, this.gateway);
+        if (confirmation) await this.sendReply(fromUser, confirmation);
+      } catch (e) {
+        this.logger?.error?.(`weixin: permission answer error: ${e}`);
+      }
+      return;
+    }
+
     const mapped = this.mapper.resolve({ chatId: fromUser, text });
     if (mapped.command === "new" && !mapped.message) {
       await this.sendReply(fromUser, "已创建新会话。");
@@ -296,6 +308,12 @@ export class WeixinChannel implements ChannelAdapter {
           await this.sendReply(userId, questionText);
           continue;
         }
+        if (event.type === "permission_request") {
+          const questionText = this.permissions.capture(userId, sessionKey, event);
+          await liveReply.pauseActivity();
+          await this.sendReply(userId, questionText);
+          continue;
+        }
         if (event.type === "error" && event.code === "agent_aborted") {
           await liveReply.markAborted();
           continue;
@@ -319,6 +337,7 @@ export class WeixinChannel implements ChannelAdapter {
     }
 
     this.elicitation.clear(userId);
+    this.permissions.clear(userId);
     await liveReply.flushFinal();
   }
 
