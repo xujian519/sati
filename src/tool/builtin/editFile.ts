@@ -3,6 +3,7 @@ import type { PilotDeckToolDefinition } from "../protocol/types.js";
 import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
 import { isNotebookPath } from "./filesystem/fileTypeSafety.js";
 import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
+import { checkFilesystemWritePermission } from "./filesystem/writePermissions.js";
 import { readTextFile } from "./filesystem/readTextFile.js";
 import { writeTextFile } from "./filesystem/writeTextFile.js";
 import {
@@ -54,6 +55,8 @@ export function createEditFileTool(): PilotDeckToolDefinition<EditFileInput> {
     isReadOnly: () => false,
     isConcurrencySafe: () => false,
     isDestructive: () => false,
+    checkPermissions: async (input, context) =>
+      checkFilesystemWritePermission("edit_file", input.file_path, context),
     validateInput: async (input, context) => {
       const resolved = resolvePilotDeckWorkspacePath(input.file_path, context, {
         forWrite: true,

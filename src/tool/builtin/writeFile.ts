@@ -2,6 +2,7 @@ import { stat } from "node:fs/promises";
 import type { PilotDeckToolDefinition } from "../protocol/types.js";
 import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
 import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
+import { checkFilesystemWritePermission } from "./filesystem/writePermissions.js";
 import { writeTextFile } from "./filesystem/writeTextFile.js";
 import {
   buildStructuredPatch,
@@ -104,6 +105,8 @@ export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput, W
     isReadOnly: () => false,
     isConcurrencySafe: () => false,
     isDestructive: () => true,
+    checkPermissions: async (input, context) =>
+      checkFilesystemWritePermission("write_file", input.file_path, context),
     validateInput: async (input, context) => {
       const resolved = resolvePilotDeckWorkspacePath(input.file_path, context, {
         forWrite: true,

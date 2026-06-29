@@ -118,15 +118,21 @@ export function createGatewayPermissionHook(
       // Mutate the live array shared with PermissionContext.rules.allow
       // so the next tool.checkPermissions() / decide() in this same turn
       // walks the allow branch instead of asking again.
-      const alreadyAllowed = options.permissionRules.some(
-        (rule) => rule.behavior === "allow" && rule.toolName === toolName,
-      );
-      if (!alreadyAllowed) {
-        options.permissionRules.push({
-          source: "session",
-          behavior: "allow",
-          toolName,
-        });
+      const rules = extractSessionAllowRules(hookInput.permissionSuggestions, toolName);
+      const rulesToRemember = rules.length > 0
+        ? rules
+        : [{ source: "session" as const, behavior: "allow" as const, toolName }];
+
+      for (const rule of rulesToRemember) {
+        const alreadyAllowed = options.permissionRules.some(
+          (existing) =>
+            existing.behavior === "allow"
+            && existing.toolName === rule.toolName
+            && existing.pattern === rule.pattern,
+        );
+        if (!alreadyAllowed) {
+          options.permissionRules.push(rule);
+        }
       }
     }
 
@@ -141,4 +147,30 @@ export function createGatewayPermissionHook(
       },
     } satisfies PilotDeckHookSyncOutput;
   };
+}
+
+function extractSessionAllowRules(value: unknown, fallbackToolName: string): PermissionRule[] {
+  if (!Array.isArray(value)) return [];
+  const allowSession = value.find((option) =>
+    isRecord(option) && option.id === "allow_session" && Array.isArray(option.rules)
+  );
+  if (!isRecord(allowSession) || !Array.isArray(allowSession.rules)) return [];
+
+  return allowSession.rules.flatMap((candidate) => {
+    if (!isRecord(candidate)) return [];
+    const toolName = typeof candidate.toolName === "string" && candidate.toolName
+      ? candidate.toolName
+      : fallbackToolName;
+    if (!toolName) return [];
+    return [{
+      source: "session" as const,
+      behavior: "allow" as const,
+      toolName,
+      ...(typeof candidate.pattern === "string" && candidate.pattern ? { pattern: candidate.pattern } : {}),
+    }];
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
