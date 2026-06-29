@@ -83,7 +83,12 @@ export type PilotAgentConfig = {
  */
 export type PilotRouterConfig = RouterConfig;
 
-export type PilotMemoryApiType = "openai-responses" | "responses" | "openai-completions";
+export type PilotMemoryApiType =
+  | "openai-responses"
+  | "responses"
+  | "openai-completions"
+  | "anthropic"
+  | "google";
 export type PilotMemoryReasoningMode = "answer_first" | "accuracy_first";
 
 export type PilotMemoryScheduleConfig = {
