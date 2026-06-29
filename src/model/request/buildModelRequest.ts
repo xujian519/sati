@@ -20,5 +20,5 @@ export function buildModelRequest(
     return buildGoogleRequest(request, model);
   }
 
-  return buildOpenAIRequest(request, model);
+  return buildOpenAIRequest(request, model, provider);
 }
