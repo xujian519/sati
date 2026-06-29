@@ -59,6 +59,7 @@ export class WeixinChannel implements ChannelAdapter {
   private loopAbort = new AbortController();
   private pollPromise: Promise<void> | null = null;
   private activeChats = new Set<string>();
+  private activeLiveReplies = new Map<string, ImLiveReplyController<void>>();
   private readonly elicitation = new ImElicitationHelper();
   private readonly permissions = new ImPermissionHelper();
   private contextTokens = new Map<string, string>();
@@ -217,8 +218,12 @@ export class WeixinChannel implements ChannelAdapter {
 
     if (this.permissions.hasPending(fromUser) && this.gateway) {
       try {
+        const trimmed = text.trim();
         const confirmation = await this.permissions.answer(fromUser, text, this.gateway);
         if (confirmation) await this.sendReply(fromUser, confirmation);
+        if (trimmed === "1" || trimmed === "2") {
+          await this.activeLiveReplies.get(fromUser)?.resumeActivity("tool");
+        }
       } catch (e) {
         this.logger?.error?.(`weixin: permission answer error: ${e}`);
       }
@@ -280,6 +285,7 @@ export class WeixinChannel implements ChannelAdapter {
         this.logger?.warn?.(`weixin: live reply ${phase} failed: ${formatWeixinError(error)}`);
       },
     });
+    this.activeLiveReplies.set(userId, liveReply);
     let activeRunId: string | undefined;
     let watchdogSettled = false;
     const watchdog = turnTimeoutMs > 0
@@ -343,6 +349,7 @@ export class WeixinChannel implements ChannelAdapter {
     } finally {
       watchdogSettled = true;
       if (watchdog) clearTimeout(watchdog);
+      this.activeLiveReplies.delete(userId);
     }
 
     this.elicitation.clear(userId);
