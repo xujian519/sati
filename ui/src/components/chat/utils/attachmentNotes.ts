@@ -20,6 +20,7 @@ function inferAttachmentMimeType(name: string, filePath: string): string | undef
   if (source.endsWith('.jpg') || source.endsWith('.jpeg')) return 'image/jpeg';
   if (source.endsWith('.gif')) return 'image/gif';
   if (source.endsWith('.webp')) return 'image/webp';
+  if (source.endsWith('.svg') || source.endsWith('.svgz')) return 'image/svg+xml';
   return undefined;
 }
 
