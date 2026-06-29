@@ -223,6 +223,7 @@ async function sendGoogleCompleteRequest(
     const client = (options.googleClientFactory ?? createGoogleClient)(provider);
     return await client.models.generateContent(body as unknown as GoogleRequestBody);
   } catch (error) {
+    throwIfGoogleAbort(error, options.signal);
     throw toProviderError(provider, error);
   }
 }
@@ -273,6 +274,7 @@ async function* streamGoogleProviderRequest(params: {
       }
       return;
     } catch (error) {
+      throwIfGoogleAbort(error, params.options.signal);
       const providerError = toProviderError(params.provider, error);
       if (
         attempt < params.maxRetries &&
@@ -293,6 +295,15 @@ async function* streamGoogleProviderRequest(params: {
       yield { type: "error", error: providerError.error };
       return;
     }
+  }
+}
+
+function throwIfGoogleAbort(error: unknown, signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw createAbortError(signal.reason);
+  }
+  if (isAbortError(error)) {
+    throw error;
   }
 }
 

@@ -167,8 +167,15 @@ function flattenTopLevelObjectUnion(schema: Record<string, unknown>): Record<str
         .filter(([, count]) => count === variants.length)
         .map(([key]) => key);
 
+  const {
+    anyOf: _anyOf,
+    oneOf: _oneOf,
+    required: _required,
+    ...baseSchema
+  } = schema;
+
   return {
-    ...schema,
+    ...baseSchema,
     type: "object",
     properties: mergedProperties,
     ...(required.length > 0 ? { required } : {}),
