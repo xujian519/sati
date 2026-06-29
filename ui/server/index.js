@@ -2360,8 +2360,8 @@ async function moveUploadedAttachment(file, attachmentDir, index) {
 }
 
 // Mixed chat attachment upload endpoint. Images are returned as data URLs for
-// multimodal input and previews; other files are staged under the project so
-// the gateway can resolve them by path.
+// multimodal input/previews and are also staged under the project so the agent
+// can operate on the same bytes by path; other files are staged by path only.
 app.post('/api/projects/:projectName/upload-attachments', authenticateToken, async (req, res) => {
     let multerUpload;
     try {
@@ -2420,14 +2420,14 @@ app.post('/api/projects/:projectName/upload-attachments', authenticateToken, asy
 
             for (const [index, file] of req.files.entries()) {
                 if (CHAT_ATTACHMENT_IMAGE_MIMES.has(file.mimetype)) {
-                    const originalName = normalizeUploadedFilename(file.originalname);
                     const buffer = await fsPromises.readFile(file.path);
-                    await fsPromises.unlink(file.path).catch(() => { });
+                    const storedFile = await moveUploadedAttachment(file, attachmentDir, index);
                     images.push({
-                        name: originalName,
+                        name: storedFile.name,
                         data: `data:${file.mimetype};base64,${buffer.toString('base64')}`,
-                        size: file.size,
-                        mimeType: file.mimetype,
+                        path: storedFile.path,
+                        size: storedFile.size,
+                        mimeType: storedFile.mimeType,
                     });
                     continue;
                 }
@@ -2435,7 +2435,7 @@ app.post('/api/projects/:projectName/upload-attachments', authenticateToken, asy
                 files.push(await moveUploadedAttachment(file, attachmentDir, index));
             }
 
-            if (files.length === 0 && attachmentDir) {
+            if (files.length === 0 && images.length === 0 && attachmentDir) {
                 await fsPromises.rm(attachmentDir, { recursive: true, force: true }).catch(() => { });
             }
 
