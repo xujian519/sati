@@ -17,6 +17,9 @@ import { WeixinSessionMapper } from "./WeixinSessionMapper.js";
 
 const CREDENTIALS_PATH = join(homedir(), ".pilotdeck", "weixin-credentials.json");
 const POLL_RETRY_DELAY_MS = 3000;
+const WEIXIN_ACTIVITY_DELAY_MS = 300;
+const WEIXIN_ACTIVITY_UPDATE_THROTTLE_MS = 3000;
+const WEIXIN_ACTIVITY_MAX_UPDATES = 120;
 let ilinkFetchCompatibilityInstalled = false;
 
 export type WeixinChannelOptions = {
@@ -264,14 +267,19 @@ export class WeixinChannel implements ChannelAdapter {
   ): Promise<void> {
     if (!this.gateway) return;
 
+    const turnTimeoutMs = this.liveReplyOptions?.turnTimeoutMs ?? 600_000;
     const liveReply = new ImLiveReplyController<void>({
       ...this.liveReplyOptions,
+      activityDelayMs: this.liveReplyOptions?.activityDelayMs ?? WEIXIN_ACTIVITY_DELAY_MS,
+      activityUpdateThrottleMs:
+        this.liveReplyOptions?.activityUpdateThrottleMs ?? WEIXIN_ACTIVITY_UPDATE_THROTTLE_MS,
+      activityMaxUpdates: this.liveReplyOptions?.activityMaxUpdates ?? WEIXIN_ACTIVITY_MAX_UPDATES,
+      activityTtlMs: this.liveReplyOptions?.activityTtlMs ?? turnTimeoutMs,
       transport: this.createLiveReplyTransport(userId),
       onTransportError: (error, phase) => {
         this.logger?.warn?.(`weixin: live reply ${phase} failed: ${formatWeixinError(error)}`);
       },
     });
-    const turnTimeoutMs = this.liveReplyOptions?.turnTimeoutMs ?? 600_000;
     let activeRunId: string | undefined;
     let watchdogSettled = false;
     const watchdog = turnTimeoutMs > 0
@@ -291,6 +299,7 @@ export class WeixinChannel implements ChannelAdapter {
     watchdog?.unref?.();
 
     try {
+      void this.sendTypingIfPossible(userId);
       for await (const event of this.gateway.submitTurn({
         sessionKey,
         channelKey: "weixin",
