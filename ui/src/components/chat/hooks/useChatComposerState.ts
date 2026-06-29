@@ -29,7 +29,6 @@ import type {
   Project,
   ProjectSession,
 } from '../../../types/app';
-import { escapeRegExp } from '../utils/chatFormatting';
 import { isImeEnterEvent } from '../../../utils/ime';
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
