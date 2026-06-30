@@ -946,6 +946,13 @@ class ProjectRuntimeRegistry {
         provider,
         model,
       }),
+      getModelMaxOutputTokens: (provider, model) => {
+        try {
+          return runtime.model.getCapabilities(provider, model).maxOutputTokens;
+        } catch {
+          return undefined;
+        }
+      },
     };
     const extendDependencies = (storage: ReturnType<typeof createAgentProjectSessionStorage>) => {
       const toolResultBudget = new ToolResultBudget({ toolResultsDir: storage.toolResultsDir });
@@ -1136,6 +1143,9 @@ class ProjectRuntimeRegistry {
     } catch {
       maxContextTokens = agent.maxContextTokens;
     }
+    const maxOutputTokens = readPositiveIntegerEnv(this.options.env.PILOTDECK_MAX_OUTPUT_TOKENS)
+      ?? agent.maxOutputTokens
+      ?? undefined;
     return {
       provider: agent.model.provider,
       model: agent.model.model,
@@ -1145,6 +1155,7 @@ class ProjectRuntimeRegistry {
       jsonSelfCorrect: true,
       subagentTimeoutMs: agent.subagents?.timeoutMs,
       maxContextTokens,
+      maxOutputTokens,
       thinking: agent.thinking,
       permissionContext: createDefaultPermissionContext({
         cwd,
@@ -1285,4 +1296,11 @@ function buildDefaultAutoOrchestrate() {
     slimSystemPrompt: true,
     allowedTools: [...DEFAULT_ALLOWED_TOOLS],
   };
+}
+
+function readPositiveIntegerEnv(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number.parseInt(value.trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+  return Math.floor(parsed);
 }
