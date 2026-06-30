@@ -11,6 +11,7 @@ import {
   type AgentSession,
   type CreateAgentSessionOptions,
 } from "../agent/index.js";
+import { resolveRoutedModelMaxContextTokens } from "../agent/runtime/modelContextWindow.js";
 import {
   AutoCompactionPolicy,
   CachedMicroCompactionEngine,
@@ -938,13 +939,13 @@ class ProjectRuntimeRegistry {
       now: this.options.now,
       eventEmitter: eventBuf.emitter,
       drainEvents: eventBuf.drain,
-      getModelMaxContextTokens: (provider, model) => {
-        try {
-          return runtime.model.getCapabilities(provider, model).maxContextTokens;
-        } catch {
-          return undefined;
-        }
-      },
+      getModelMaxContextTokens: (provider, model) => resolveRoutedModelMaxContextTokens({
+        modelRuntime: runtime.model,
+        agentModel: runtime.snapshot.config.agent.model,
+        agentMaxContextTokens: runtime.snapshot.config.agent.maxContextTokens,
+        provider,
+        model,
+      }),
     };
     const extendDependencies = (storage: ReturnType<typeof createAgentProjectSessionStorage>) => {
       const toolResultBudget = new ToolResultBudget({ toolResultsDir: storage.toolResultsDir });

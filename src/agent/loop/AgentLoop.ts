@@ -34,7 +34,7 @@ import type { LifecycleDispatchResult } from "../../lifecycle/index.js";
 import type { PilotDeckHookEvent } from "../../extension/hooks/protocol/events.js";
 import { NullContextRuntime } from "../../context/NullContextRuntime.js";
 import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
-import type { ContextRecoveryDecision, ContextSupplementalToolResultMessage } from "../../context/index.js";
+import type { ContextRecoveryDecision, ContextSupplementalToolResultMessage, TokenBudgetSnapshot } from "../../context/index.js";
 import type { PermissionMode, PermissionRule, PermissionRuleSet } from "../../permission/index.js";
 import { collectToolCalls } from "./collectToolCalls.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
@@ -241,6 +241,7 @@ export class AgentLoop {
         return { result, messages };
       }
 
+      let pendingContextBudget: TokenBudgetSnapshot | undefined;
       const ctx = this.dependencies.context;
       if (ctx?.tryAutoCompact) {
         try {
@@ -257,12 +258,7 @@ export class AgentLoop {
               reason: "auto_compact",
             };
           }
-          yield {
-            type: "context_budget",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            snapshot: compact.snapshot,
-          };
+          pendingContextBudget = compact.snapshot;
         } catch {
           // Auto-compaction must never block the model call — proceed with
           // the original messages if evaluation or summarization fails.
@@ -298,7 +294,7 @@ export class AgentLoop {
       };
 
       // Split decide + execute so we can insert a post-routing compact pass
-      // when the routed model's context window is smaller than the agent's
+      // when the routed model's context window differs from the agent's
       // default model (the window used by the first tryAutoCompact above).
       const decision = await this.dependencies.router.decide({
         request,
@@ -309,9 +305,11 @@ export class AgentLoop {
 
       const getMaxCtx = this.dependencies.getModelMaxContextTokens;
       const agentMaxCtx = this.config.maxContextTokens;
-      if (ctx?.tryAutoCompact && getMaxCtx && agentMaxCtx) {
+      let emittedContextBudget = false;
+      if (ctx?.tryAutoCompact && getMaxCtx) {
         const routedMaxCtx = getMaxCtx(decision.provider, decision.model);
-        if (routedMaxCtx !== undefined && routedMaxCtx < agentMaxCtx) {
+        const currentBudgetMaxCtx = pendingContextBudget?.maxContextTokens ?? agentMaxCtx;
+        if (routedMaxCtx !== undefined && routedMaxCtx !== currentBudgetMaxCtx) {
           try {
             const recompact = await ctx.tryAutoCompact({
               messages,
@@ -334,10 +332,19 @@ export class AgentLoop {
               turnId: input.turnId,
               snapshot: recompact.snapshot,
             };
+            emittedContextBudget = true;
           } catch {
             // Post-routing compaction must never block the model call.
           }
         }
+      }
+      if (pendingContextBudget && !emittedContextBudget) {
+        yield {
+          type: "context_budget",
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          snapshot: pendingContextBudget,
+        };
       }
 
       const assembler = createModelMessageAssemblerState();
