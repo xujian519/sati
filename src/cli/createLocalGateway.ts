@@ -60,7 +60,7 @@ import { createDefaultPermissionContext, type PermissionRule } from "../permissi
 import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
 import { createPilotConfigStoreSync, type PilotConfigStore } from "../pilot/config/PilotConfigStore.js";
 import type { PilotAgentModelSelection, PilotConfigSnapshot } from "../pilot/config/types.js";
-import { DEFAULT_JUDGE_TIMEOUT_MS, DEFAULT_SUBAGENT_MAX_TOKENS, DEFAULT_ALLOWED_TOOLS, DEFAULT_TRIGGER_TIERS, type RouterConfig } from "../router/config/schema.js";
+import { DEFAULT_JUDGE_TIMEOUT_MS, DEFAULT_ALLOWED_TOOLS, DEFAULT_TRIGGER_TIERS, type RouterConfig } from "../router/config/schema.js";
 import { createAgentProjectSessionStorage, listProjectSessions, resumeAgentSession } from "../session/index.js";
 import { sanitizeSessionIdForPath } from "../session/storage/ProjectSessionStorage.js";
 import { readWebSessionMessages, readSubagentWebMessages } from "../web/server/readSessionMessages.js";
@@ -1283,6 +1283,5 @@ function buildDefaultAutoOrchestrate() {
     triggerTiers: [...DEFAULT_TRIGGER_TIERS],
     slimSystemPrompt: true,
     allowedTools: [...DEFAULT_ALLOWED_TOOLS],
-    subagentMaxTokens: DEFAULT_SUBAGENT_MAX_TOKENS,
   };
 }
