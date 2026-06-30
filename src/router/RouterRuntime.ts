@@ -497,12 +497,15 @@ export function createRouterRuntime(
         candidate.provider === attempt.provider && candidate.model === attempt.model
       ) === index
     );
-    let attempts: RouterModelRef[] = candidateAttempts
+    const nativeAttempts: RouterModelRef[] = candidateAttempts
       .filter((attempt) => supportsMediaRequirements(attempt, requiredModalities));
-    const downgradeUnsupportedMedia = attempts.length === 0 && requiredModalities.length > 0;
-    if (downgradeUnsupportedMedia) {
-      attempts = candidateAttempts;
-    }
+    const downgradedAttempts: RouterModelRef[] = requiredModalities.length > 0
+      ? candidateAttempts.filter((attempt) => !supportsMediaRequirements(attempt, requiredModalities))
+      : [];
+    const attemptPlans: AttemptPlan[] = [
+      ...nativeAttempts.map((attempt) => ({ attempt, downgradeUnsupportedMedia: false })),
+      ...downgradedAttempts.map((attempt) => ({ attempt, downgradeUnsupportedMedia: true })),
+    ];
     const zeroUsageMax = Math.max(1, config.zeroUsageRetry?.maxAttempts ?? 5);
     const zeroUsageEnabled = config.zeroUsageRetry?.enabled ?? true;
     const transientRetryEnabled = config.transientRetry?.enabled ?? true;
@@ -517,7 +520,7 @@ export function createRouterRuntime(
     let lastDecision: RouterDecision = decision;
     let lastHasYieldedContent = false;
 
-    if (attempts.length === 0) {
+    if (attemptPlans.length === 0) {
       const missing = missingForModel(requestedAttempt, requiredModalities);
       const error = createUnsupportedMediaError(
         requestedAttempt,
@@ -538,15 +541,16 @@ export function createRouterRuntime(
       return;
     }
 
-    outer: for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex += 1) {
+    outer: for (let attemptIndex = 0; attemptIndex < attemptPlans.length; attemptIndex += 1) {
       if (ctx.abortSignal?.aborted) {
         return;
       }
-      const attempt = attempts[attemptIndex];
+      const attemptPlan = attemptPlans[attemptIndex];
+      const attempt = attemptPlan.attempt;
       if (
         attemptIndex > 0 &&
         getHealthTracker(ctx.sessionId).shouldSkip(attempt.provider) &&
-        attemptIndex < attempts.length - 1
+        attemptIndex < attemptPlans.length - 1
       ) {
         continue;
       }
@@ -557,7 +561,7 @@ export function createRouterRuntime(
         resolvedFrom: attemptIndex === 0 ? decision.resolvedFrom : "fallback",
       };
       let attemptRequest = applyDecisionToRequest(attemptDecision, request);
-      if (downgradeUnsupportedMedia) {
+      if (attemptPlan.downgradeUnsupportedMedia) {
         attemptRequest = downgradeRequestForAttempt(attemptRequest, attempt, deps.modelRuntime);
       }
       lastAttempt = attempt;
@@ -625,8 +629,8 @@ export function createRouterRuntime(
           lastError = outcome.error;
           getHealthTracker(ctx.sessionId).recordFailure(attempt.provider);
           if (!hasYieldedContent && isFallbackEligible(outcome.error)) {
-            if (attemptIndex < attempts.length - 1) {
-              const next = attempts[attemptIndex + 1];
+            if (attemptIndex < attemptPlans.length - 1) {
+              const next = attemptPlans[attemptIndex + 1].attempt;
               events.emit({
                 type: "pilotdeck_router_fallback",
                 sessionId: ctx.sessionId,
@@ -944,6 +948,11 @@ export function createRouterRuntime(
     },
   };
 }
+
+type AttemptPlan = {
+  attempt: RouterModelRef;
+  downgradeUnsupportedMedia: boolean;
+};
 
 type AttemptOutcome = {
   buffered: CanonicalModelEvent[];
