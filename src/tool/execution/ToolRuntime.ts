@@ -214,7 +214,11 @@ export class ToolRuntime {
     }
 
     executeInput = decision.updatedInput ?? executeInput;
-    const baseContext: PilotDeckToolRuntimeContext = { ...context, currentToolCallId: call.id };
+    const baseContext: PilotDeckToolRuntimeContext = {
+      ...context,
+      currentToolCallId: call.id,
+      currentPermissionDecision: decision,
+    };
     const executeContext: PilotDeckToolRuntimeContext = baseContext.progress
       ? {
           ...baseContext,

@@ -7,8 +7,10 @@ import type {
   CanonicalToolChoice,
   CanonicalToolSchema,
   ModelDefinition,
+  ProviderConfig,
 } from "../../protocol/canonical.js";
 import { flattenToolResultBlockText } from "../../protocol/toolResultContent.js";
+import { cleanSchemaForGoogle, normalizeGoogleToolSchema } from "../google/schema.js";
 
 export type OpenAIRequestBody = {
   model: string;
@@ -54,7 +56,9 @@ type OpenAITool = {
 export function buildOpenAIRequest(
   request: CanonicalModelRequest,
   model: ModelDefinition,
+  provider?: ProviderConfig,
 ): OpenAIRequestBody {
+  const googleOpenAICompatible = isGoogleOpenAICompatibleProvider(provider);
   const messages = repairOpenAIToolPairing(
     request.messages.flatMap((message, messageIndex) => toOpenAIMessages(message, messageIndex)),
   );
@@ -66,7 +70,7 @@ export function buildOpenAIRequest(
     model: request.model,
     messages,
     max_tokens: request.maxOutputTokens ?? model.capabilities.maxOutputTokens,
-    tools: request.tools?.map(toOpenAITool),
+    tools: request.tools?.map((tool) => toOpenAITool(tool, googleOpenAICompatible)),
     tool_choice: toOpenAIToolChoice(request.toolChoice),
     temperature: request.temperature,
     stream: request.stream,
@@ -83,7 +87,9 @@ export function buildOpenAIRequest(
       json_schema: {
         name: request.outputSchema.name,
         description: request.outputSchema.description,
-        schema: request.outputSchema.schema,
+        schema: googleOpenAICompatible
+          ? normalizeGoogleOpenAIResponseSchema(request.outputSchema.schema)
+          : request.outputSchema.schema,
         strict: request.outputSchema.strict ?? true,
       },
     };
@@ -91,8 +97,13 @@ export function buildOpenAIRequest(
 
   if (request.thinking?.enabled) {
     (body as Record<string, unknown>).enable_thinking = true;
-    if (request.thinking.budgetTokens) {
-      (body as Record<string, unknown>).thinking_budget = request.thinking.budgetTokens;
+    const budget = request.thinking.budgetTokens;
+    if (googleOpenAICompatible) {
+      if (typeof budget === "number" && Number.isFinite(budget) && budget >= 0) {
+        (body as Record<string, unknown>).thinking_budget = budget;
+      }
+    } else if (budget) {
+      (body as Record<string, unknown>).thinking_budget = budget;
     }
   }
 
@@ -300,15 +311,43 @@ function toOpenAIContent(blocks: CanonicalContentBlock[]): string | unknown[] {
   }).filter(Boolean);
 }
 
-function toOpenAITool(tool: CanonicalToolSchema): OpenAITool {
+function toOpenAITool(tool: CanonicalToolSchema, googleOpenAICompatible: boolean): OpenAITool {
   return {
     type: "function",
     function: {
       name: tool.name,
       description: tool.description,
-      parameters: normalizeOpenAISchema(tool.inputSchema),
+      parameters: googleOpenAICompatible
+        ? normalizeGoogleToolSchema(tool.inputSchema)
+        : normalizeOpenAISchema(tool.inputSchema),
     },
   };
+}
+
+function normalizeGoogleOpenAIResponseSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const cleaned = cleanSchemaForGoogle(schema);
+  return cleaned && typeof cleaned === "object" && !Array.isArray(cleaned)
+    ? cleaned as Record<string, unknown>
+    : {};
+}
+
+function isGoogleOpenAICompatibleProvider(provider: ProviderConfig | undefined): boolean {
+  if (!provider || provider.protocol !== "openai") {
+    return false;
+  }
+  if (provider.id === "google") {
+    return true;
+  }
+
+  const rawUrl = provider.url.trim().toLowerCase();
+  try {
+    const url = new URL(rawUrl);
+    return url.hostname === "generativelanguage.googleapis.com"
+      && url.pathname.includes("/openai");
+  } catch {
+    return rawUrl.includes("generativelanguage.googleapis.com")
+      && rawUrl.includes("/openai");
+  }
 }
 
 /**

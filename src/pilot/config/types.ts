@@ -70,6 +70,8 @@ export type PilotAgentConfig = {
    * or when you want compaction to kick in earlier.
    */
   maxContextTokens?: number;
+  /** Override the selected model catalog's output-token cap. */
+  maxOutputTokens?: number;
   thinking?: { enabled: boolean; budgetTokens?: number };
   subagents?: {
     timeoutMs?: number;
@@ -83,7 +85,12 @@ export type PilotAgentConfig = {
  */
 export type PilotRouterConfig = RouterConfig;
 
-export type PilotMemoryApiType = "openai-responses" | "responses" | "openai-completions";
+export type PilotMemoryApiType =
+  | "openai-responses"
+  | "responses"
+  | "openai-completions"
+  | "anthropic"
+  | "google";
 export type PilotMemoryReasoningMode = "answer_first" | "accuracy_first";
 
 export type PilotMemoryScheduleConfig = {

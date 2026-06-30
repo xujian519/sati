@@ -29,7 +29,6 @@ import type {
   Project,
   ProjectSession,
 } from '../../../types/app';
-import { escapeRegExp } from '../utils/chatFormatting';
 import { isImeEnterEvent } from '../../../utils/ime';
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
@@ -434,9 +433,10 @@ export function useChatComposerState({
 
       try {
         const effectiveInput = rawInput ?? input;
-        const commandMatch = effectiveInput.match(new RegExp(`${escapeRegExp(command.name)}\\s*(.*)`));
-        const args =
-          commandMatch && commandMatch[1] ? commandMatch[1].trim().split(/\s+/) : [];
+        const rawArgs = effectiveInput.startsWith(command.name)
+          ? effectiveInput.slice(command.name.length).trimStart()
+          : '';
+        const args = rawArgs.trim() ? rawArgs.trim().split(/\s+/) : [];
 
         const context = {
           projectPath: selectedProject.fullPath || selectedProject.path,
@@ -455,6 +455,8 @@ export function useChatComposerState({
             commandName: command.name,
             commandPath: command.path,
             args,
+            rawArgs,
+            rawInput: effectiveInput,
             context,
           }),
         });
@@ -519,9 +521,7 @@ export function useChatComposerState({
     input,
     setInput,
     textareaRef,
-    onExecuteCommand: executeCommand,
     inputValueRef,
-    handleSubmitRef,
   });
 
   const {
@@ -635,8 +635,7 @@ export function useChatComposerState({
       if (skipSlashDetectionOnceRef.current) {
         skipSlashDetectionOnceRef.current = false;
       } else if (trimmedInput.startsWith('/')) {
-        const firstSpace = trimmedInput.indexOf(' ');
-        const commandName = firstSpace > 0 ? trimmedInput.slice(0, firstSpace) : trimmedInput;
+        const commandName = trimmedInput.match(/^(\S+)/)?.[1] ?? trimmedInput;
         const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
         if (matchedCommand) {
           executeCommand(matchedCommand, trimmedInput);
@@ -788,6 +787,7 @@ export function useChatComposerState({
         sendMessage,
         selectedProject,
         command: messageContent,
+        userVisibleInput,
         sessionId: effectiveSessionId,
         temporarySessionId: sessionToActivate,
         toolsSettings,
@@ -1136,6 +1136,7 @@ export function useChatComposerState({
           sendMessage({
             type: 'elicitation-response',
             requestId,
+            sessionId: pending?.sessionId,
             answer,
           });
           return;
@@ -1144,6 +1145,7 @@ export function useChatComposerState({
         sendMessage({
           type: 'permission-response',
           requestId,
+          sessionId: pending?.sessionId,
           allow: Boolean(decision?.allow),
           updatedInput: decision?.updatedInput,
           message: decision?.message,

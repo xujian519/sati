@@ -39,7 +39,7 @@ export type PromptAssemblerResult = {
  * commands / skills) but uses PilotDeck-authored copy.
  *
  * Sections (review decision 2026-05):
- *   1 default_system_prompt   — product identity + tool catalog + runtime permission note
+ *   1 default_system_prompt   — product identity + tool catalog + permission mode
  *                                + additional working directories + mcp instructions
  *   2 user_context            — cwd + env summary + active model
  *   3 system_context          — timestamp + extension commands/skills summary
@@ -121,7 +121,7 @@ export class PromptAssembler {
     lines.push(`cwd: ${input.cwd}`);
     lines.push("IMPORTANT: When the user does not specify an explicit file path, all file paths in tool calls MUST be relative to the cwd above — use \"foo.html\", not an absolute path like \"/home/user/foo.html\". If the user explicitly provides a path, respect their choice.");
     lines.push(`model: ${input.provider}/${input.model}`);
-    lines.push("permission_mode: enforced at tool runtime");
+    lines.push(`permission_mode: ${input.permissionMode}`);
     lines.push(`platform: ${process.platform}`);
     lines.push(`node: ${process.version}`);
     lines.push("</user-context>");
@@ -151,8 +151,17 @@ export class PromptAssembler {
 
 }
 
-function formatPermissionMode(_mode: string): string {
-  return "Permission mode is controlled by PilotDeck and enforced at tool runtime.";
+function formatPermissionMode(mode: string): string {
+  switch (mode) {
+    case "default":
+      return "Permission mode: default — write/shell tools require explicit approval.";
+    case "plan":
+      return "Permission mode: plan — read-only planning mode; implementation changes are blocked at tool runtime.";
+    case "bypassPermissions":
+      return "Permission mode: bypassPermissions — all tools are auto-approved; act conservatively.";
+    default:
+      return `Permission mode: ${mode}`;
+  }
 }
 
 /**

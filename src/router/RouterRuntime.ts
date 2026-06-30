@@ -2,6 +2,7 @@ import type {
   CanonicalModelEvent,
   CanonicalModelRequest,
   ModelRuntime,
+  ModelProtocol,
 } from "../model/index.js";
 import { ModelRequestError } from "../model/index.js";
 import type { InputModality } from "../model/index.js";
@@ -442,13 +443,13 @@ export function createRouterRuntime(
     if (decision.mutations.subagentTagStripped) {
       messages = stripSubagentTagFromMessages(messages);
     }
-    return {
+    return clampMaxOutputTokensToModelCap({
       ...request,
       ...decision.requestPatch,
       provider: decision.provider,
       model: decision.model,
       messages,
-    };
+    }, deps.modelRuntime);
   }
 
   async function* execute(
@@ -462,8 +463,9 @@ export function createRouterRuntime(
         provider: decision.provider,
         model: decision.model,
       };
+      const cappedPassthroughRequest = clampMaxOutputTokensToModelCap(passthroughRequest, deps.modelRuntime);
       let sawErrorEvent = false;
-      for await (const item of streamAttempt(passthroughRequest, deps.modelRuntime, ctx.abortSignal)) {
+      for await (const item of streamAttempt(cappedPassthroughRequest, deps.modelRuntime, ctx.abortSignal)) {
         if (item.kind === "event") {
           if (item.event.type === "error") {
             sawErrorEvent = true;
@@ -511,7 +513,12 @@ export function createRouterRuntime(
 
     if (attempts.length === 0) {
       const missing = missingForModel(requestedAttempt, requiredModalities);
-      const error = createUnsupportedMediaError(requestedAttempt, requiredModalities, missing);
+      const error = createUnsupportedMediaError(
+        requestedAttempt,
+        requiredModalities,
+        missing,
+        protocolForProvider(deps.modelRuntime, requestedAttempt.provider),
+      );
       events.emit({
         type: "pilotdeck_router_execute_failed",
         sessionId: ctx.sessionId,
@@ -952,6 +959,26 @@ function isContentEvent(event: CanonicalModelEvent): boolean {
   );
 }
 
+function clampMaxOutputTokensToModelCap(
+  request: CanonicalModelRequest,
+  modelRuntime: ModelRuntime,
+): CanonicalModelRequest {
+  const requested = request.maxOutputTokens;
+  if (requested === undefined) {
+    return request;
+  }
+
+  try {
+    const cap = modelRuntime.getCapabilities(request.provider, request.model).maxOutputTokens;
+    if (Number.isFinite(cap) && cap > 0 && requested > cap) {
+      return { ...request, maxOutputTokens: cap };
+    }
+  } catch {
+    // Unknown provider/model — let validateModelRequest surface the real error.
+  }
+  return request;
+}
+
 /**
  * Live attempt — yields each model event the moment it arrives, then yields
  * a final `{ outcome }` sentinel with retry/usage metadata. The previous
@@ -993,9 +1020,10 @@ async function* streamAttempt(
       throw error;
     }
     const fromError = (error as { error?: import("../model/index.js").CanonicalModelError })?.error;
-    providerError = fromError ?? canonicalizeModelRequestError(error, request) ?? {
+    const protocol = protocolForProvider(modelRuntime, request.provider);
+    providerError = fromError ?? canonicalizeModelRequestError(error, request, protocol) ?? {
       provider: request.provider,
-      protocol: "anthropic",
+      protocol,
       code: classifyNetworkErrorCode(error),
       message: error instanceof Error ? error.message : String(error),
       retryable: isNetworkTransient(error),
@@ -1016,6 +1044,7 @@ async function* streamAttempt(
 function canonicalizeModelRequestError(
   error: unknown,
   request: CanonicalModelRequest,
+  protocol: ModelProtocol,
 ): import("../model/index.js").CanonicalModelError | undefined {
   if (!(error instanceof ModelRequestError)) {
     return undefined;
@@ -1023,12 +1052,20 @@ function canonicalizeModelRequestError(
 
   return {
     provider: request.provider,
-    protocol: "anthropic",
+    protocol,
     code: error.code,
     message: error.message,
     retryable: false,
     raw: error.details,
   };
+}
+
+function protocolForProvider(modelRuntime: ModelRuntime, providerId: string): ModelProtocol {
+  try {
+    return modelRuntime.getProviderProtocol(providerId) ?? "openai";
+  } catch {
+    return "openai";
+  }
 }
 
 function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
@@ -1103,12 +1140,13 @@ function createUnsupportedMediaError(
   attempt: RouterModelRef,
   required: readonly InputModality[],
   missing: readonly InputModality[],
+  protocol: ModelProtocol,
 ): import("../model/index.js").CanonicalModelError {
   const missingText = (missing.length > 0 ? missing : required).join(", ");
   const requiredText = required.join(", ");
   return {
     provider: attempt.provider,
-    protocol: "openai",
+    protocol,
     code: "unsupported_modality",
     message:
       `Router could not find a configured fallback model for ${attempt.provider}/${attempt.model} ` +
