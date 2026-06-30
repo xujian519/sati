@@ -42,4 +42,3 @@ export function useSessionWatch({ sessionId, ws, sendMessage }: UseSessionWatchA
     }
   }, [sendMessage]);
 }
-

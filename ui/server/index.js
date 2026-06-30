@@ -1966,12 +1966,38 @@ function handleChatConnection(ws, request) {
                             reason: data.message,
                         },
                     );
+                    const resolvedSessionId = normalizeSessionId(data.sessionId);
+                    if (resolvedSessionId) {
+                        broadcastToSessionWatchers(
+                            resolvedSessionId,
+                            createNormalizedMessage({
+                                kind: 'permission_cancelled',
+                                requestId: data.requestId,
+                                sessionId: resolvedSessionId,
+                                provider: data.provider || 'pilotdeck',
+                            }),
+                            userId,
+                        );
+                    }
                 }
             } else if (data.type === 'session-permission-grant') {
                 await grantSessionPermissionViaGateway(data.sessionId, data.entry);
             } else if (data.type === 'elicitation-response') {
                 if (data.requestId) {
                     await elicitationRespondViaGateway(data.requestId, data.answer);
+                    const resolvedSessionId = normalizeSessionId(data.sessionId);
+                    if (resolvedSessionId) {
+                        broadcastToSessionWatchers(
+                            resolvedSessionId,
+                            createNormalizedMessage({
+                                kind: 'permission_cancelled',
+                                requestId: data.requestId,
+                                sessionId: resolvedSessionId,
+                                provider: data.provider || 'pilotdeck',
+                            }),
+                            userId,
+                        );
+                    }
                 }
             } else if (data.type === 'check-session-status') {
                 const sessionId = data.sessionId;
