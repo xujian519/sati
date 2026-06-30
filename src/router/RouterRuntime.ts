@@ -4,7 +4,7 @@ import type {
   ModelRuntime,
   ModelProtocol,
 } from "../model/index.js";
-import { ModelRequestError } from "../model/index.js";
+import { cloneMessages, downgradeUnsupportedContent, ModelRequestError } from "../model/index.js";
 import type { InputModality } from "../model/index.js";
 import {
   DEFAULT_SUBAGENT_POLICY,
@@ -489,14 +489,20 @@ export function createRouterRuntime(
       provider: decision.provider,
       model: decision.model,
     };
-    const attempts: RouterModelRef[] = [
+    const candidateAttempts: RouterModelRef[] = [
       requestedAttempt,
       ...fallbackPlan.attempts,
     ].filter((attempt, index, all) =>
       all.findIndex((candidate) =>
         candidate.provider === attempt.provider && candidate.model === attempt.model
       ) === index
-    ).filter((attempt) => supportsMediaRequirements(attempt, requiredModalities));
+    );
+    let attempts: RouterModelRef[] = candidateAttempts
+      .filter((attempt) => supportsMediaRequirements(attempt, requiredModalities));
+    const downgradeUnsupportedMedia = attempts.length === 0 && requiredModalities.length > 0;
+    if (downgradeUnsupportedMedia) {
+      attempts = candidateAttempts;
+    }
     const zeroUsageMax = Math.max(1, config.zeroUsageRetry?.maxAttempts ?? 5);
     const zeroUsageEnabled = config.zeroUsageRetry?.enabled ?? true;
     const transientRetryEnabled = config.transientRetry?.enabled ?? true;
@@ -551,6 +557,9 @@ export function createRouterRuntime(
         resolvedFrom: attemptIndex === 0 ? decision.resolvedFrom : "fallback",
       };
       let attemptRequest = applyDecisionToRequest(attemptDecision, request);
+      if (downgradeUnsupportedMedia) {
+        attemptRequest = downgradeRequestForAttempt(attemptRequest, attempt, deps.modelRuntime);
+      }
       lastAttempt = attempt;
       lastDecision = attemptDecision;
 
@@ -977,6 +986,23 @@ function clampMaxOutputTokensToModelCap(
     // Unknown provider/model — let validateModelRequest surface the real error.
   }
   return request;
+}
+
+function downgradeRequestForAttempt(
+  request: CanonicalModelRequest,
+  attempt: RouterModelRef,
+  modelRuntime: ModelRuntime,
+): CanonicalModelRequest {
+  let multimodal: ReturnType<ModelRuntime["getMultimodal"]>;
+  try {
+    multimodal = modelRuntime.getMultimodal(attempt.provider, attempt.model);
+  } catch {
+    // Unknown provider/model should still be reported by validateModelRequest.
+    return request;
+  }
+  const messages = cloneMessages(request.messages);
+  downgradeUnsupportedContent(messages, multimodal);
+  return { ...request, messages };
 }
 
 /**
