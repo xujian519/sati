@@ -39,6 +39,7 @@ import type { PermissionMode, PermissionRule, PermissionRuleSet } from "../../pe
 import { collectToolCalls } from "./collectToolCalls.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
 import { LargeFileRepair, type LargeFileRepairDecision } from "./LargeFileRepair.js";
+import { resolveOutputTokenRetryBump } from "./outputTokenRetry.js";
 import { projectToolResults } from "./projectToolResults.js";
 import { requiresPromptCapability } from "../../tool/userInteractionConstraints.js";
 
@@ -137,9 +138,9 @@ export class AgentLoop {
      */
     let hasAttemptedCompact = false;
     /**
-     * Single-shot guard for `max_output_reached` retries. The loop bumps
-     * `config.maxOutputTokens` (capped at `OUTPUT_TOKEN_RETRY_CEILING`) once
-     * and retries; a second hit falls through to the continuation recovery.
+     * Single-shot guard for `max_output_reached` retries. The loop only bumps
+     * an explicitly configured cap; catalog-default requests are already sent
+     * at the selected model's known output cap and go straight to continuation.
      */
     let hasAttemptedOutputRetry = false;
     /**
@@ -302,6 +303,7 @@ export class AgentLoop {
         isMainAgent: !this.config.isSubagent,
         metadata: previousTier ? { previousTier } : undefined,
       });
+      const routedMaxOutputTokens = this.dependencies.getModelMaxOutputTokens?.(decision.provider, decision.model);
 
       const getMaxCtx = this.dependencies.getModelMaxContextTokens;
       const agentMaxCtx = this.config.maxContextTokens;
@@ -507,8 +509,7 @@ export class AgentLoop {
         // `max_output_reached`: output token limit hit (or truncated JSON
         // reclassified from invalid_tool_arguments when finishReason=length).
         //
-        // Phase A — single-shot token doubling: strip the partial response
-        // and retry with 2x maxOutputTokens (capped at CEILING).
+        // Phase A — single-shot token doubling for explicit caps only.
         // Phase B — multi-turn continuation: keep the truncated assistant
         // message in context and inject a "resume" prompt so the model can
         // pick up where it was cut off (up to MAX_OUTPUT_RECOVERY_LIMIT).
@@ -516,17 +517,22 @@ export class AgentLoop {
         if (assembled.error.code === "max_output_reached") {
           // Phase A
           if (!hasAttemptedOutputRetry) {
-            messages = stripTrailingErrorPair(messages);
-            const previous = this.config.maxOutputTokens ?? OUTPUT_TOKEN_RETRY_DEFAULT;
-            this.config.maxOutputTokens = Math.min(previous * 2, OUTPUT_TOKEN_RETRY_CEILING);
             hasAttemptedOutputRetry = true;
-            yield {
-              type: "turn_continued",
-              sessionId: input.sessionId,
-              turnId: input.turnId,
-              reason: "model_error",
-            };
-            continue;
+            const nextMaxOutputTokens = resolveOutputTokenRetryBump({
+              currentMaxOutputTokens: this.config.maxOutputTokens,
+              modelMaxOutputTokens: routedMaxOutputTokens,
+            });
+            if (nextMaxOutputTokens !== undefined) {
+              messages = stripTrailingErrorPair(messages);
+              this.config.maxOutputTokens = nextMaxOutputTokens;
+              yield {
+                type: "turn_continued",
+                sessionId: input.sessionId,
+                turnId: input.turnId,
+                reason: "model_error",
+              };
+              continue;
+            }
           }
 
           // Phase B
@@ -787,17 +793,22 @@ export class AgentLoop {
 
         // Phase A: token doubling (if not yet attempted)
         if (!hasAttemptedOutputRetry) {
-          messages = stripTrailingErrorPair(messages);
-          const previous = this.config.maxOutputTokens ?? OUTPUT_TOKEN_RETRY_DEFAULT;
-          this.config.maxOutputTokens = Math.min(previous * 2, OUTPUT_TOKEN_RETRY_CEILING);
           hasAttemptedOutputRetry = true;
-          yield {
-            type: "turn_continued",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            reason: "model_error",
-          };
-          continue;
+          const nextMaxOutputTokens = resolveOutputTokenRetryBump({
+            currentMaxOutputTokens: this.config.maxOutputTokens,
+            modelMaxOutputTokens: routedMaxOutputTokens,
+          });
+          if (nextMaxOutputTokens !== undefined) {
+            messages = stripTrailingErrorPair(messages);
+            this.config.maxOutputTokens = nextMaxOutputTokens;
+            yield {
+              type: "turn_continued",
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              reason: "model_error",
+            };
+            continue;
+          }
         }
 
         // Phase B: continuation recovery
@@ -1636,9 +1647,6 @@ function subagentIdFromSessionId(sessionId: string): string | undefined {
   const subagentId = sessionId.slice(index + marker.length).trim();
   return subagentId.length > 0 ? subagentId : undefined;
 }
-
-const OUTPUT_TOKEN_RETRY_DEFAULT = 4_096;
-const OUTPUT_TOKEN_RETRY_CEILING = 64_000;
 
 /** Keep only the trailing `keepRatio` portion of the message history. */
 function truncateHeadKeepRatio(messages: CanonicalMessage[], keepRatio: number): CanonicalMessage[] {
