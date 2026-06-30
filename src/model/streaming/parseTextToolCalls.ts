@@ -253,17 +253,18 @@ function tryParseHermesJson(text: string): TextToolCallParseResult | null {
 // [TOOL_CALLS][{"name": "TOOL_NAME", "arguments": {...}}]
 // ---------------------------------------------------------------------------
 
-const MISTRAL_RE = /\[TOOL_CALLS\]\s*(\[[\s\S]*?\])/;
+const MISTRAL_MARKER = "[TOOL_CALLS]";
 
 function tryParseMistral(text: string): TextToolCallParseResult | null {
   if (!hasMistralMarker(text)) return null;
 
-  const match = text.match(MISTRAL_RE);
-  if (!match) {
+  const parsedBlocks = collectMistralJsonArrayBlocks(text);
+  let partialToolCall: PartialTextToolCallInfo | undefined = parsedBlocks.partialToolCall;
+  if (parsedBlocks.blocks.length === 0) {
     return {
       toolCalls: [],
       remainingText: text,
-      partialToolCall: partialInfo(
+      partialToolCall: partialToolCall ?? partialInfo(
         "mistral",
         "tool_calls_marker_without_json_array",
         text,
@@ -271,17 +272,22 @@ function tryParseMistral(text: string): TextToolCallParseResult | null {
     };
   }
 
-  try {
-    const parsed = JSON.parse(match[1]);
-    if (!Array.isArray(parsed)) {
-      return {
-        toolCalls: [],
-        remainingText: text,
-        partialToolCall: partialInfo("mistral", "tool_calls_payload_not_array", match[0]),
-      };
+  const toolCalls: CanonicalToolCall[] = [];
+  for (const block of parsedBlocks.blocks) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(block.json);
+    } catch {
+      partialToolCall ??= partialInfo("mistral", "invalid_tool_calls_json", block.raw);
+      continue;
     }
 
-    const toolCalls: CanonicalToolCall[] = parsed
+    if (!Array.isArray(parsed)) {
+      partialToolCall ??= partialInfo("mistral", "tool_calls_payload_not_array", block.raw);
+      continue;
+    }
+
+    toolCalls.push(...parsed
       .filter((item: unknown) => {
         const obj = item as Record<string, unknown>;
         return obj && typeof obj.name === "string";
@@ -290,28 +296,26 @@ function tryParseMistral(text: string): TextToolCallParseResult | null {
         id: generateId(),
         name: item.name as string,
         input: (item.arguments ?? item.parameters ?? {}) as unknown,
-      }));
+      })));
+  }
 
-    if (toolCalls.length === 0) {
-      return {
-        toolCalls: [],
-        remainingText: text,
-        partialToolCall: partialInfo("mistral", "tool_calls_array_without_names", match[0]),
-      };
-    }
-
-    let remaining = text.replace(MISTRAL_RE, "").trim();
-    const partialToolCall = detectPartialTextToolCall(remaining, {
-      preferredFormat: "mistral",
-    });
-    return { toolCalls, remainingText: remaining, partialToolCall };
-  } catch {
+  if (toolCalls.length === 0) {
     return {
       toolCalls: [],
       remainingText: text,
-      partialToolCall: partialInfo("mistral", "invalid_tool_calls_json", match[0]),
+      partialToolCall: partialToolCall ?? partialInfo(
+        "mistral",
+        "tool_calls_array_without_names",
+        parsedBlocks.blocks[0]?.raw ?? text,
+      ),
     };
   }
+
+  let remaining = removeSpans(text, parsedBlocks.blocks).trim();
+  partialToolCall ??= detectPartialTextToolCall(remaining, {
+    preferredFormat: "mistral",
+  });
+  return { toolCalls, remainingText: remaining, partialToolCall };
 }
 
 // ---------------------------------------------------------------------------
@@ -457,6 +461,43 @@ function collectTaggedJsonObjects(
   return { blocks, partialToolCall };
 }
 
+function collectMistralJsonArrayBlocks(text: string): {
+  blocks: JsonToolBlock[];
+  partialToolCall?: PartialTextToolCallInfo;
+} {
+  const blocks: JsonToolBlock[] = [];
+  let partialToolCall: PartialTextToolCallInfo | undefined;
+  let cursor = 0;
+
+  for (;;) {
+    const start = text.indexOf(MISTRAL_MARKER, cursor);
+    if (start < 0) break;
+
+    const jsonStart = skipWhitespace(text, start + MISTRAL_MARKER.length);
+    if (text[jsonStart] !== "[") {
+      partialToolCall ??= partialInfo("mistral", "tool_calls_marker_without_json_array", text.slice(start));
+      cursor = start + MISTRAL_MARKER.length;
+      continue;
+    }
+
+    const jsonEnd = findBalancedJsonArrayEnd(text, jsonStart);
+    if (jsonEnd === undefined) {
+      partialToolCall ??= partialInfo("mistral", "truncated_tool_calls_json_array", text.slice(start));
+      break;
+    }
+
+    blocks.push({
+      start,
+      end: jsonEnd,
+      raw: text.slice(start, jsonEnd),
+      json: text.slice(jsonStart, jsonEnd),
+    });
+    cursor = jsonEnd;
+  }
+
+  return { blocks, partialToolCall };
+}
+
 function findBalancedJsonObjectEnd(text: string, start: number): number | undefined {
   let depth = 0;
   let inString = false;
@@ -485,6 +526,44 @@ function findBalancedJsonObjectEnd(text: string, start: number): number | undefi
       continue;
     }
     if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        return i + 1;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function findBalancedJsonArrayEnd(text: string, start: number): number | undefined {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === "\"") {
+      inString = true;
+      continue;
+    }
+    if (ch === "[") {
+      depth++;
+      continue;
+    }
+    if (ch === "]") {
       depth--;
       if (depth === 0) {
         return i + 1;

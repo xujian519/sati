@@ -204,7 +204,10 @@ export class AgentLoop {
     const stickyInfo = this.dependencies.router.invalidateSticky?.(input.sessionId);
     let previousTier: string | undefined = stickyInfo?.previousTier;
 
-    const continueWithSyntheticPrompt = async (decision: LargeFileRepairDecision): Promise<{
+    const continueWithSyntheticPrompt = async (
+      decision: LargeFileRepairDecision,
+      options: { stripCurrentAssistant?: boolean } = {},
+    ): Promise<{
       type: "continue";
       event: AgentEvent;
     } | {
@@ -225,12 +228,14 @@ export class AgentLoop {
         });
         return { type: "completed", result };
       }
-      if (decision.strip === "error_pair") {
-        messages = stripTrailingErrorPair(messages);
-      } else if (decision.strip === "assistant") {
-        const last = messages[messages.length - 1];
-        if (last?.role === "assistant") {
-          messages = messages.slice(0, -1);
+      if (options.stripCurrentAssistant !== false) {
+        if (decision.strip === "error_pair") {
+          messages = stripTrailingErrorPair(messages);
+        } else if (decision.strip === "assistant") {
+          const last = messages[messages.length - 1];
+          if (last?.role === "assistant") {
+            messages = messages.slice(0, -1);
+          }
         }
       }
       pushTransientSyntheticPrompt(decision.prompt, decision.purpose);
@@ -457,12 +462,136 @@ export class AgentLoop {
       const assembled = assembleAssistantMessage(assembler);
       usage = mergeUsage(usage, assembled.usage);
       finalMessage = assembled.message;
-      messages.push(assembled.message);
+      const toolCalls = collectToolCalls(assembled.message);
       expireConsumedTransientPrompts();
+
+      if (assembled.hasPartialTextToolCall) {
+        if (maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
+          maxOutputRecoveryCount++;
+          pushTransientSyntheticPrompt(
+            buildPartialTextToolCallRecoveryPrompt(assembled.partialTextToolCall),
+            "max_output_recovery",
+          );
+          yield {
+            type: "turn_continued",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            reason: "model_error",
+          };
+          continue;
+        }
+
+        const detail = assembled.partialTextToolCall
+          ? `${assembled.partialTextToolCall.format}/${assembled.partialTextToolCall.reason}`
+          : "unknown partial text tool-call";
+        const result = this.createTurnResult(input, {
+          type: "error",
+          stopReason: "model_error",
+          usage,
+          permissionDenials,
+          turns: turnCount,
+          startedAt,
+          finalMessage,
+          structuredOutput,
+          errors: [agentError(
+            "agent_model_error",
+            `Partial text tool-call recovery exhausted after ${MAX_OUTPUT_RECOVERY_LIMIT} attempts (${detail}).`,
+          )],
+        });
+        yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
+        await captureTurn(result.type === "error");
+        yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+        return { result, messages };
+      }
+
+      // When jsonrepair silently "fixed" truncated JSON and the response
+      // was cut by max_tokens, the tool call arguments are likely incomplete
+      // (e.g. half-written file content). Apply the same recovery as
+      // max_output_reached: token doubling → continuation prompt → give up.
+      //
+      // This gate intentionally runs before durable assistant emission. The
+      // recovered response should replace the dirty repaired/truncated message,
+      // not leave an unmatched tool_call in the transcript.
+      if (assembled.hasRepairedToolCalls && (assembled.finishReason === "length" || assembled.finishReason === "tool_call" || assembled.finishReason === "stop")) {
+        console.warn(
+          `[AgentLoop] Blocking ${toolCalls.length} repaired-but-truncated tool call(s) — entering max_output recovery`,
+        );
+
+        const largeFileDecision = largeFileRepair.recoverFromRepairedTruncation(toolCalls);
+        if (largeFileDecision) {
+          const continued = await continueWithSyntheticPrompt(largeFileDecision, { stripCurrentAssistant: false });
+          if (continued.type === "completed") {
+            yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: continued.result.errors![0]! };
+            await captureTurn(continued.result.type === "error");
+            yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result: continued.result };
+            return { result: continued.result, messages };
+          }
+          yield continued.event;
+          continue;
+        }
+
+        // Phase A: token doubling (if not yet attempted)
+        if (!hasAttemptedOutputRetry) {
+          hasAttemptedOutputRetry = true;
+          const nextMaxOutputTokens = resolveOutputTokenRetryBump({
+            currentMaxOutputTokens: this.config.maxOutputTokens,
+            modelMaxOutputTokens: routedMaxOutputTokens,
+          });
+          if (nextMaxOutputTokens !== undefined) {
+            this.config.maxOutputTokens = nextMaxOutputTokens;
+            yield {
+              type: "turn_continued",
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              reason: "model_error",
+            };
+            continue;
+          }
+        }
+
+        // Phase B: continuation recovery
+        if (maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
+          maxOutputRecoveryCount++;
+          pushTransientSyntheticPrompt(
+            "Output token limit hit. Resume directly - no apology, no recap of what you were doing. "
+              + "Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.",
+            "max_output_recovery",
+          );
+          yield {
+            type: "turn_continued",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            reason: "model_error",
+          };
+          continue;
+        }
+
+        // Phase C: exhausted. Do not execute repaired/truncated calls; the
+        // arguments may be syntactically repaired while semantically partial.
+        const result = this.createTurnResult(input, {
+          type: "error",
+          stopReason: "model_error",
+          usage,
+          permissionDenials,
+          turns: turnCount,
+          startedAt,
+          finalMessage,
+          structuredOutput,
+          errors: [agentError(
+            "agent_model_error",
+            "Recovered tool call still looked repaired/truncated after max-output recovery was exhausted.",
+          )],
+        });
+        yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
+        await captureTurn(result.type === "error");
+        yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+        return { result, messages };
+      }
+
+      messages.push(assembled.message);
       yield { type: "assistant_message", sessionId: input.sessionId, turnId: input.turnId, message: assembled.message };
       await input.onDurableMessage?.(assembled.message);
 
-      const toolCalls = collectToolCalls(assembled.message);
       if (assembled.error) {
         if (toolCalls.length > 0) {
           const projected = projectToolResults(
@@ -598,49 +727,6 @@ export class AgentLoop {
           startedAt,
           finalMessage,
           errors: [classified.error],
-        });
-        yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
-        await captureTurn(result.type === "error");
-        yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
-        return { result, messages };
-      }
-
-      if (assembled.hasPartialTextToolCall) {
-        if (maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
-          const last = messages[messages.length - 1];
-          if (last?.role === "assistant") {
-            messages = messages.slice(0, -1);
-          }
-          maxOutputRecoveryCount++;
-          pushTransientSyntheticPrompt(
-            buildPartialTextToolCallRecoveryPrompt(assembled.partialTextToolCall),
-            "max_output_recovery",
-          );
-          yield {
-            type: "turn_continued",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            reason: "model_error",
-          };
-          continue;
-        }
-
-        const detail = assembled.partialTextToolCall
-          ? `${assembled.partialTextToolCall.format}/${assembled.partialTextToolCall.reason}`
-          : "unknown partial text tool-call";
-        const result = this.createTurnResult(input, {
-          type: "error",
-          stopReason: "model_error",
-          usage,
-          permissionDenials,
-          turns: turnCount,
-          startedAt,
-          finalMessage,
-          structuredOutput,
-          errors: [agentError(
-            "agent_model_error",
-            `Partial text tool-call recovery exhausted after ${MAX_OUTPUT_RECOVERY_LIMIT} attempts (${detail}).`,
-          )],
         });
         yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
         await captureTurn(result.type === "error");
@@ -805,87 +891,6 @@ export class AgentLoop {
           finalMessage,
           structuredOutput,
         });
-        await captureTurn(result.type === "error");
-        yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
-        return { result, messages };
-      }
-
-      // When jsonrepair silently "fixed" truncated JSON and the response
-      // was cut by max_tokens, the tool call arguments are likely incomplete
-      // (e.g. half-written file content). Apply the same recovery as
-      // max_output_reached: token doubling → continuation prompt → give up.
-      if (assembled.hasRepairedToolCalls && (assembled.finishReason === "length" || assembled.finishReason === "tool_call" || assembled.finishReason === "stop")) {
-        console.warn(
-          `[AgentLoop] Blocking ${toolCalls.length} repaired-but-truncated tool call(s) — entering max_output recovery`,
-        );
-
-        const largeFileDecision = largeFileRepair.recoverFromRepairedTruncation(toolCalls);
-        if (largeFileDecision) {
-          const continued = await continueWithSyntheticPrompt(largeFileDecision);
-          if (continued.type === "completed") {
-            yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: continued.result.errors![0]! };
-            await captureTurn(continued.result.type === "error");
-            yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result: continued.result };
-            return { result: continued.result, messages };
-          }
-          yield continued.event;
-          continue;
-        }
-
-        // Phase A: token doubling (if not yet attempted)
-        if (!hasAttemptedOutputRetry) {
-          hasAttemptedOutputRetry = true;
-          const nextMaxOutputTokens = resolveOutputTokenRetryBump({
-            currentMaxOutputTokens: this.config.maxOutputTokens,
-            modelMaxOutputTokens: routedMaxOutputTokens,
-          });
-          if (nextMaxOutputTokens !== undefined) {
-            messages = stripTrailingErrorPair(messages);
-            this.config.maxOutputTokens = nextMaxOutputTokens;
-            yield {
-              type: "turn_continued",
-              sessionId: input.sessionId,
-              turnId: input.turnId,
-              reason: "model_error",
-            };
-            continue;
-          }
-        }
-
-        // Phase B: continuation recovery
-        if (maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
-          maxOutputRecoveryCount++;
-          pushTransientSyntheticPrompt(
-            "Output token limit hit. Resume directly - no apology, no recap of what you were doing. "
-              + "Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.",
-            "max_output_recovery",
-          );
-          yield {
-            type: "turn_continued",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            reason: "model_error",
-          };
-          continue;
-        }
-
-        // Phase C: exhausted. Do not execute repaired/truncated calls; the
-        // arguments may be syntactically repaired while semantically partial.
-        const result = this.createTurnResult(input, {
-          type: "error",
-          stopReason: "model_error",
-          usage,
-          permissionDenials,
-          turns: turnCount,
-          startedAt,
-          finalMessage,
-          structuredOutput,
-          errors: [agentError(
-            "agent_model_error",
-            "Recovered tool call still looked repaired/truncated after max-output recovery was exhausted.",
-          )],
-        });
-        yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
         await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
