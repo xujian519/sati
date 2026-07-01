@@ -1,7 +1,9 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import type { CronResultDelivery } from "../../../cron/index.js";
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
+import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { WebhookSessionMapper } from "./WebhookSessionMapper.js";
 import { renderWebhookEvent } from "./webhook-render.js";
 
@@ -103,6 +105,10 @@ export class WebhookChannel implements ChannelAdapter {
         }
       },
     };
+  }
+
+  async deliverCronResult(delivery: CronResultDelivery): Promise<boolean> {
+    return deliverChatCronResult(delivery, this.channelKey, (chatId, text) => this.deliverReply(chatId, text));
   }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {

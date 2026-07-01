@@ -2,7 +2,9 @@ import * as http from "node:http";
 import * as crypto from "node:crypto";
 import { URL } from "node:url";
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
+import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
+import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { WeComCallbackSessionMapper } from "./WeComCallbackSessionMapper.js";
 import { renderWeComCallbackEvent } from "./wecom-callback-render.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
@@ -140,6 +142,10 @@ export class WeComCallbackChannel implements ChannelAdapter {
         }
       },
     };
+  }
+
+  async deliverCronResult(delivery: CronResultDelivery): Promise<boolean> {
+    return deliverChatCronResult(delivery, this.channelKey, (chatId, text) => this.sendReply(chatId, text));
   }
 
   private async onHttp(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {

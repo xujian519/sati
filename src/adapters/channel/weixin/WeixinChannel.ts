@@ -7,6 +7,7 @@ import type { CronResultDelivery } from "../../../cron/index.js";
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { executeChannelCommand } from "../protocol/ChannelCommandRegistry.js";
+import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import {
@@ -114,11 +115,9 @@ export class WeixinChannel implements ChannelAdapter {
   }
 
   async deliverCronResult(delivery: CronResultDelivery): Promise<boolean> {
-    const sessionKey = delivery.originSessionKey ?? delivery.sessionKey;
-    if (delivery.originChannelKey && delivery.originChannelKey !== this.channelKey) return false;
-    const userId = parseWeixinUserIdFromSessionKey(sessionKey);
-    if (!userId) return false;
-    return this.sendReply(userId, delivery.text, { queueOnFailure: true });
+    return deliverChatCronResult(delivery, this.channelKey, (userId, text) =>
+      this.sendReply(userId, text, { queueOnFailure: true }),
+    );
   }
 
   private async ensureLoggedIn(): Promise<SavedCredentials | null> {
@@ -648,15 +647,6 @@ function formatElapsed(elapsedMs: number): string {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return rest > 0 ? `${hours} 小时 ${rest} 分钟` : `${hours} 小时`;
-}
-
-function parseWeixinUserIdFromSessionKey(sessionKey: string | undefined): string | undefined {
-  if (!sessionKey?.startsWith("weixin:chat=")) return undefined;
-  const rest = sessionKey.slice("weixin:chat=".length);
-  const marker = rest.lastIndexOf(":s_");
-  if (marker >= 0) return rest.slice(0, marker) || undefined;
-  const general = rest.endsWith(":general") ? rest.slice(0, -":general".length) : rest;
-  return general || undefined;
 }
 
 function installIlinkFetchCompatibility(): void {

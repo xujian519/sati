@@ -1,5 +1,7 @@
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
+import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
+import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { SignalSessionMapper } from "./SignalSessionMapper.js";
 import { renderSignalEvent } from "./signal-render.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
@@ -112,6 +114,10 @@ export class SignalChannel implements ChannelAdapter {
         }
       },
     };
+  }
+
+  async deliverCronResult(delivery: CronResultDelivery): Promise<boolean> {
+    return deliverChatCronResult(delivery, this.channelKey, (chatId, text) => this.sendReply(chatId, text));
   }
 
   private async runReceiveLoop(signal: AbortSignal): Promise<void> {
