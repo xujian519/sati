@@ -355,7 +355,7 @@ function isGoogleOpenAICompatibleProvider(provider: ProviderConfig | undefined):
  * allows `array` (including union types like `type: ["string", "array"]`).
  * Normalize tool input schemas defensively to avoid provider-side 400s.
  */
-function normalizeOpenAISchema(schema: Record<string, unknown>): Record<string, unknown> {
+export function normalizeOpenAISchema(schema: Record<string, unknown>): Record<string, unknown> {
   return normalizeOpenAISchemaNode(schema) as Record<string, unknown>;
 }
 
