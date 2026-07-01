@@ -29,7 +29,27 @@ export type CronTask = {
   nextRunAt?: string;
   lastRunId?: string;
   scheduleComputationVersion?: 2;
+  originSessionKey?: string;
+  originChannelKey?: GatewayChannelKey;
 };
+
+export type CronResultDelivery = {
+  taskId: string;
+  runId: string;
+  sessionKey: string;
+  channelKey: GatewayChannelKey;
+  originSessionKey?: string;
+  originChannelKey?: GatewayChannelKey;
+  projectKey?: string;
+  outcome: CronRunOutcome;
+  text: string;
+  error?: {
+    code: string;
+    message: string;
+  };
+};
+
+export type CronResultDeliveryHandler = (delivery: CronResultDelivery) => Promise<void> | void;
 
 export type CronRunOutcome = "completed" | "failed" | "aborted" | "stopped";
 

@@ -83,6 +83,11 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         sessionOverrides,
         logger: cronLogger,
         telemetry,
+        onResultDelivery: (delivery) => {
+          void serverRef?.deliverCronResult(delivery).catch((error: unknown) => {
+            console.warn(`[cron] result delivery failed ${error instanceof Error ? error.message : String(error)}`);
+          });
+        },
       });
     }
 

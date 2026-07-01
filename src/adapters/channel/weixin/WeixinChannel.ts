@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { ILinkClient, loginWithQR, MessageItemType } from "weixin-ilink";
 import type { ClientOptions, GetUpdatesResp, WeixinMessage, LoginResult } from "weixin-ilink";
+import type { CronResultDelivery } from "../../../cron/index.js";
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { executeChannelCommand } from "../protocol/ChannelCommandRegistry.js";
@@ -110,6 +111,14 @@ export class WeixinChannel implements ChannelAdapter {
         this.pollPromise = null;
       },
     };
+  }
+
+  async deliverCronResult(delivery: CronResultDelivery): Promise<boolean> {
+    const sessionKey = delivery.originSessionKey ?? delivery.sessionKey;
+    if (delivery.originChannelKey && delivery.originChannelKey !== this.channelKey) return false;
+    const userId = parseWeixinUserIdFromSessionKey(sessionKey);
+    if (!userId) return false;
+    return this.sendReply(userId, delivery.text, { queueOnFailure: true });
   }
 
   private async ensureLoggedIn(): Promise<SavedCredentials | null> {
@@ -639,6 +648,15 @@ function formatElapsed(elapsedMs: number): string {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return rest > 0 ? `${hours} 小时 ${rest} 分钟` : `${hours} 小时`;
+}
+
+function parseWeixinUserIdFromSessionKey(sessionKey: string | undefined): string | undefined {
+  if (!sessionKey?.startsWith("weixin:chat=")) return undefined;
+  const rest = sessionKey.slice("weixin:chat=".length);
+  const marker = rest.lastIndexOf(":s_");
+  if (marker >= 0) return rest.slice(0, marker) || undefined;
+  const general = rest.endsWith(":general") ? rest.slice(0, -":general".length) : rest;
+  return general || undefined;
 }
 
 function installIlinkFetchCompatibility(): void {

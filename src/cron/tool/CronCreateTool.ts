@@ -1,5 +1,6 @@
 import type { PilotDeckToolDefinition } from "../../tool/index.js";
 import type { CronCreateInput, CronCreateResult } from "../protocol/types.js";
+import type { GatewayChannelKey } from "../../gateway/index.js";
 import { CRON_SCHEDULE_SCHEMA } from "./CronSchemas.js";
 import type { CronToolRuntime } from "./CronToolRuntime.js";
 
@@ -25,8 +26,11 @@ export function createCronCreateTool(runtime: CronToolRuntime): PilotDeckToolDef
     isReadOnly: () => false,
     isConcurrencySafe: () => false,
     execute: async (input, context) => {
+      const channelKey = input.channelKey ?? inferChannelKey(context.sessionId);
       const result = await runtime.createTask({
         ...input,
+        sessionKey: input.sessionKey ?? context.sessionId,
+        ...(channelKey ? { channelKey } : {}),
         projectKey: context.cwd,
       });
       return {
@@ -35,4 +39,10 @@ export function createCronCreateTool(runtime: CronToolRuntime): PilotDeckToolDef
       };
     },
   };
+}
+
+function inferChannelKey(sessionKey: string): GatewayChannelKey | undefined {
+  const idx = sessionKey.indexOf(":");
+  if (idx <= 0) return undefined;
+  return sessionKey.slice(0, idx) as GatewayChannelKey;
 }

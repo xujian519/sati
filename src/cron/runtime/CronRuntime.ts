@@ -19,6 +19,7 @@ import type {
   CronStopInput,
   CronStopResult,
   CronTask,
+  CronResultDeliveryHandler,
 } from "../protocol/types.js";
 import { resolveCronPaths, type CronPaths } from "../storage/CronPaths.js";
 import { CronTaskStore } from "../storage/CronTaskStore.js";
@@ -49,6 +50,7 @@ export type CreateCronRuntimeOptions = {
   sessionOverrides?: SessionConfigOverrides;
   activeRunCount?: () => number;
   skipToolCreation?: boolean;
+  onResultDelivery?: CronResultDeliveryHandler;
 };
 
 const NOOP_LOGGER: CronRuntimeLogger = {
@@ -66,6 +68,7 @@ export class CronRuntime {
   private readonly uuid: () => string;
   private readonly logger: CronRuntimeLogger;
   private readonly telemetry?: TelemetryClient;
+  private readonly onResultDelivery?: CronResultDeliveryHandler;
   private readonly sessionOverrides: SessionConfigOverrides;
   private readonly tools: PilotDeckToolDefinition[];
   private readonly activeRuns = new Map<string, CronActiveRun>();
@@ -83,6 +86,7 @@ export class CronRuntime {
     this.uuid = options.uuid ?? randomUUID;
     this.logger = options.logger ?? NOOP_LOGGER;
     this.telemetry = options.telemetry;
+    this.onResultDelivery = options.onResultDelivery;
     this.sessionOverrides = options.sessionOverrides ?? new SessionConfigOverrides();
     this.sharedActiveRunCount = options.activeRunCount;
     this.tools = options.skipToolCreation
@@ -116,6 +120,7 @@ export class CronRuntime {
       runTimeoutMs: this.config.runTimeoutMinutes * 60_000,
       defaultTimezone: this.config.timezone,
       releaseTaskSession: (task) => this.releaseTaskSession(task),
+      onResultDelivery: this.onResultDelivery,
       onPhaseEvent: (event) => {
         this.telemetry?.trackFeatureLoopStage({
           module: "cron_job",
@@ -219,6 +224,8 @@ export class CronRuntime {
       status: "scheduled",
       sessionKey,
       channelKey: "cron",
+      originSessionKey: input.sessionKey,
+      originChannelKey: input.channelKey,
       // Session-scoped callers should pass the originating project explicitly.
       // Keep the runtime root only as a compatibility fallback for direct callers.
       projectKey: input.projectKey ?? this.projectKey,
