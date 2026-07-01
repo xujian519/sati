@@ -200,7 +200,7 @@ export class CronRuntime {
     const now = this.now();
     const taskId = this.uuid();
     const sessionKey = buildCronSessionKey(taskId);
-    const schedule = normalizeSchedule(input, this.config.timezone);
+    const schedule = normalizeSchedule(input, this.config.timezone, now);
     const timezone = schedule.type === "cron"
       ? schedule.timezone
       : input.timezone ?? this.config.timezone;
@@ -468,9 +468,16 @@ export function createCronRuntime(options: CreateCronRuntimeOptions): CronRuntim
   return new CronRuntime(options);
 }
 
-function normalizeSchedule(input: CronCreateInput, configTimezone: string): CronTask["schedule"] {
+function normalizeSchedule(input: CronCreateInput, configTimezone: string, now: Date): CronTask["schedule"] {
   if (input.schedule.type === "once") {
     return { type: "once", runAt: input.schedule.runAt };
+  }
+  if (input.schedule.type === "delay") {
+    const runAt = computeNextRunAt(input.schedule, now);
+    if (!runAt) {
+      throw new Error("Cron delay schedule must use a positive finite amount.");
+    }
+    return { type: "once", runAt: runAt.toISOString() };
   }
   const requestedTimezone = input.schedule.timezone ?? input.timezone;
   if (requestedTimezone && !isValidCronTimezone(requestedTimezone)) {
