@@ -664,6 +664,20 @@ export class ImLiveReplyController<Handle = ImLiveReplyHandle> {
     await this.stopNativeActivity();
     const formatted = this.formatForTransport(this.activityOnlyFinalText);
     if (!segment.handle || !this.transport.edit || segment.editDisabled) {
+      if (!this.transport.edit && segment.activityVisible) {
+        try {
+          const handle = await this.transport.send(formatted);
+          if (handle !== false) {
+            segment.handle = handle === undefined ? segment.handle : handle;
+            segment.lastVisibleText = formatted;
+            segment.lastVisibleFinalText = formatted;
+            segment.final = true;
+            this.lastFlushAt = Date.now();
+          }
+        } catch (error) {
+          this.reportTransportError(error, "send");
+        }
+      }
       return;
     }
 
