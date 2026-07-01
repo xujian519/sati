@@ -106,6 +106,11 @@ function readOnlyModeToolDenyCode(text) {
     return undefined;
 }
 
+function isSearchToolName(name) {
+    const normalized = String(name || '').toLowerCase();
+    return normalized === 'grep' || normalized === 'glob';
+}
+
 function normalizeToolErrorCode(errorCode, resultPreview) {
     if (errorCode === 'plan_mode_violation') return 'plan_mode_denied';
     if (errorCode === 'ask_mode_violation') return 'ask_mode_denied';
@@ -441,6 +446,9 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                           }
                         : {}),
                     ...(event.toolName === 'ask_user_question' && event.data
+                        ? { toolUseResult: event.data }
+                        : {}),
+                    ...(isSearchToolName(event.toolName) && event.data
                         ? { toolUseResult: event.data }
                         : {}),
                 }),
