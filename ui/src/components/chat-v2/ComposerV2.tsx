@@ -26,6 +26,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { ChatRunMode, PendingPermissionRequest, PermissionMode } from '../chat/types/types';
+import { MAX_ATTACHMENTS_ERROR_KEY } from '../chat/hooks/useChatComposerState';
 import PermissionRequestsBanner from '../chat/view/subcomponents/PermissionRequestsBanner';
 import ImageAttachment from '../chat/view/subcomponents/ImageAttachment';
 import CommandMenu from '../chat/view/subcomponents/CommandMenu';
@@ -317,6 +318,7 @@ export default function ComposerV2({
 
   const hasDraftContent = input.trim().length > 0 || attachedImages.length > 0;
   const hasUploadingImages = uploadingImages.size > 0;
+  const attachmentLimitError = imageErrors.get(MAX_ATTACHMENTS_ERROR_KEY);
   const disabled = !hasDraftContent || isLoading || isSubmitPending || hasUploadingImages;
   const contextStatus = getContextStatus(tokenBudget);
   const selectedPermissionOption =
@@ -382,6 +384,11 @@ export default function ComposerV2({
                     />
                   ))}
                 </div>
+                {attachmentLimitError ? (
+                  <div className="mt-2 text-xs text-amber-600 dark:text-amber-300">
+                    {attachmentLimitError}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
