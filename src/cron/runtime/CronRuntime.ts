@@ -312,6 +312,8 @@ export class CronRuntime {
       message: task.message,
       schedule: { type: "once", runAt: new Date().toISOString() },
       projectKey: task.projectKey,
+      sessionKey: task.originSessionKey,
+      channelKey: task.originChannelKey,
       mode: task.mode,
     });
     return { started: true, taskId: created.task.taskId };

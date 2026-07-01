@@ -188,7 +188,7 @@ export class CronFire {
     const text = outcome === "completed"
       ? assistantText.trim()
       : error?.message?.trim() || "Cron task failed.";
-    if (!text) return;
+    const deliveryText = text || "定时任务已完成，但没有返回内容。";
     await this.deps.onResultDelivery?.({
       taskId: task.taskId,
       runId,
@@ -198,7 +198,7 @@ export class CronFire {
       originChannelKey: task.originChannelKey,
       projectKey: task.projectKey,
       outcome,
-      text,
+      text: deliveryText,
       error,
     });
   }
