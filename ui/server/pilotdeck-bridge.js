@@ -317,6 +317,12 @@ function normalizePermissionMode(value) {
     return 'default';
 }
 
+function normalizeRunMode(value) {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (value === 'agent' || value === 'plan' || value === 'ask') return value;
+    return 'agent';
+}
+
 function resolvePermissionMode(options) {
     const explicit = normalizePermissionMode(options?.permissionMode || options?.mode);
     // A literal "default" from the chat composer is the implicit
@@ -893,7 +899,8 @@ export async function runChatViaGateway(
     ];
     const resolvedMode = resolvePermissionMode(options);
     const basePermissionMode = normalizePermissionMode(options?.basePermissionMode);
-    console.log(`[pilotdeck-bridge] submitTurn mode=${resolvedMode} (options.permissionMode=${options?.permissionMode}, options.mode=${options?.mode})`);
+    const runMode = normalizeRunMode(options?.runMode) || (resolvedMode === 'plan' ? 'plan' : 'agent');
+    console.log(`[pilotdeck-bridge] submitTurn runMode=${runMode} mode=${resolvedMode} (options.permissionMode=${options?.permissionMode}, options.mode=${options?.mode})`);
 
     try {
         const stream = gw.submitTurn({
@@ -901,6 +908,7 @@ export async function runChatViaGateway(
             channelKey,
             projectKey,
             message: command ?? '',
+            runMode,
             mode: resolvedMode,
             runId,
             ...(basePermissionMode ? { basePermissionMode } : {}),
