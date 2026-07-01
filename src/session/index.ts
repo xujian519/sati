@@ -15,6 +15,19 @@ export {
   type SessionInfo,
 } from "./storage/SessionList.js";
 export {
+  formatChatHistorySearchResults,
+  type FormatChatHistorySearchOptions,
+} from "./search/formatChatHistorySearch.js";
+export {
+  parseChatSearchArgs,
+  searchChatHistory,
+  type ChatHistorySearchMatch,
+  type ChatHistorySearchRole,
+  type ParsedChatSearchArgs,
+  type SearchChatHistoryOptions,
+  type SearchChatHistoryResult,
+} from "./search/searchChatHistory.js";
+export {
   buildConversationChain,
   type TranscriptChainNode,
   type TranscriptChainResult,
