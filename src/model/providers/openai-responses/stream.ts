@@ -118,6 +118,9 @@ export function normalizeOpenAIResponsesStreamEvent(
   }
 
   if (type === "response.failed" || type === "error") {
+    if (type === "response.failed") {
+      ensureStarted(events, state, raw);
+    }
     const responseError = asRecord(response.error);
     const eventError = asRecord(event.error);
     const error = Object.keys(responseError).length > 0 ? responseError : eventError;
@@ -132,6 +135,9 @@ export function normalizeOpenAIResponsesStreamEvent(
         raw,
       },
     });
+    if (type === "response.failed") {
+      events.push({ type: "message_end", finishReason: "error", raw });
+    }
   }
 
   return events;
