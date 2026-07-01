@@ -1222,6 +1222,7 @@ export class AgentLoop {
       provider: this.config.provider,
       model: this.config.model,
       permissionMode: this.config.permissionMode,
+      runMode: this.config.runMode ?? "agent",
       additionalWorkingDirectories: this.config.permissionContext.additionalWorkingDirectories,
       messages: cloneMessages(requestMessages),
       tools,
