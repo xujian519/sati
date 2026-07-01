@@ -8,7 +8,7 @@ import type {
   CanonicalModelRequest,
 } from "../../protocol/canonical.js";
 import { flattenToolResultBlockText } from "../../protocol/toolResultContent.js";
-import { normalizeOpenAISchema } from "../openai/request.js";
+import { normalizeOpenAISchema } from "../openai/schema.js";
 
 export type OpenAIResponsesRequestBody = {
   model: string;
@@ -100,7 +100,7 @@ function toResponsesInputItems(message: CanonicalMessage): OpenAIResponsesInputI
 
   const flushContent = () => {
     if (normalContent.length === 0) return;
-    const content = normalContent.flatMap((block) => toResponsesContentPart(block, message.role));
+    const content = normalContent.flatMap((block) => toResponsesContentPart(block));
     if (content.length > 0) {
       items.push({ role: message.role, content });
     }
@@ -132,7 +132,7 @@ function toResponsesInputItems(message: CanonicalMessage): OpenAIResponsesInputI
           role: "user",
           content: [
             { type: "input_text", text: "[Visual content from tool result]" },
-            ...visualContent.flatMap((part) => toResponsesContentPart(part, "user")),
+            ...visualContent.flatMap((part) => toResponsesContentPart(part)),
           ],
         });
       }
@@ -158,16 +158,12 @@ function toResponsesInputItems(message: CanonicalMessage): OpenAIResponsesInputI
   return items;
 }
 
-function toResponsesContentPart(
-  block: CanonicalContentBlock,
-  role: "user" | "assistant",
-): Record<string, unknown>[] {
-  const textType = role === "assistant" ? "output_text" : "input_text";
+function toResponsesContentPart(block: CanonicalContentBlock): Record<string, unknown>[] {
   switch (block.type) {
     case "text":
-      return [{ type: textType, text: block.text }];
+      return [{ type: "input_text", text: block.text }];
     case "thinking":
-      return [{ type: "output_text", text: block.text }];
+      return [{ type: "input_text", text: block.text }];
     case "image":
       return [{
         type: "input_image",
@@ -182,10 +178,10 @@ function toResponsesContentPart(
       }];
     case "audio":
       return block.source === "url"
-        ? [{ type: textType, text: `[Audio URL: ${block.data}]` }]
-        : [{ type: textType, text: "[Audio content omitted]" }];
+        ? [{ type: "input_text", text: `[Audio URL: ${block.data}]` }]
+        : [{ type: "input_text", text: "[Audio content omitted]" }];
     case "media_reference":
-      return [{ type: textType, text: block.preview }];
+      return [{ type: "input_text", text: block.preview }];
     case "tool_call":
     case "tool_result":
     case "tool_result_reference":
