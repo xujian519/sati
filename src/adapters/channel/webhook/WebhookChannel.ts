@@ -247,16 +247,17 @@ export class WebhookChannel implements ChannelAdapter {
     }
   }
 
-  private async deliverReply(chatId: string, text: string): Promise<void> {
+  private async deliverReply(chatId: string, text: string): Promise<boolean> {
     const delivery = this.deliveryInfo.get(chatId);
     const deliverType = (delivery?.deliver as string | undefined) ?? "log";
 
     if (deliverType === "log") {
       this.logger?.info?.(`webhook: response for ${chatId}: ${text.slice(0, 200)}`);
-      return;
+      return true;
     }
 
     this.logger?.info?.(`webhook: deliver type '${deliverType}' for ${chatId}: ${text.slice(0, 100)}`);
+    return false;
   }
 
   private verifyHmac(body: string, secret: string, signature: string): boolean {

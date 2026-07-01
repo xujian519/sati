@@ -273,8 +273,8 @@ export class WhatsAppChannel implements ChannelAdapter {
     }
   }
 
-  private async sendReply(chatId: string, text: string): Promise<void> {
-    if (!this.running) return;
+  private async sendReply(chatId: string, text: string): Promise<boolean> {
+    if (!this.running) return false;
     try {
       const res = await fetch(`${this.bridgeUrl}/send`, {
         method: "POST",
@@ -286,9 +286,12 @@ export class WhatsAppChannel implements ChannelAdapter {
         const raw: any = await res.json().catch(() => ({}));
         const err = raw?.error ?? res.statusText;
         this.logger?.error?.(`whatsapp: send HTTP ${res.status}: ${err}`);
+        return false;
       }
+      return true;
     } catch (e) {
       this.logger?.error?.(`whatsapp: send failed: ${e}`);
+      return false;
     }
   }
 

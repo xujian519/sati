@@ -281,16 +281,18 @@ export class SmsChannel implements ChannelAdapter {
     }
   }
 
-  private async sendReply(chatId: string, text: string): Promise<void> {
-    if (!this.client) return;
+  private async sendReply(chatId: string, text: string): Promise<boolean> {
+    if (!this.client) return false;
     try {
       await this.client.messages.create({
         body: text,
         from: this.fromNumber,
         to: chatId,
       });
+      return true;
     } catch (e) {
       this.logger?.error?.(`sms: sendMessage failed: ${e}`);
+      return false;
     }
   }
 }

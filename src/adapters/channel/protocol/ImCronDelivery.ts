@@ -9,9 +9,8 @@ export function parseChatIdFromSessionKey(
   if (!sessionKey?.startsWith(prefix)) return undefined;
 
   const suffix = sessionKey.slice(prefix.length);
-  const chatId = suffix.endsWith(":general")
-    ? suffix.slice(0, -":general".length)
-    : suffix.replace(/:s_[0-9a-fA-F-]{36}$/, "");
+  const match = suffix.match(/^(.+):(general|s_[0-9a-fA-F-]{36})$/);
+  const chatId = match?.[1];
   return chatId ? chatId : undefined;
 }
 
@@ -25,6 +24,5 @@ export async function deliverChatCronResult(
   const chatId = parseChatIdFromSessionKey(delivery.originSessionKey ?? delivery.sessionKey, channelKey);
   if (!chatId) return false;
 
-  await sendText(chatId, delivery.text);
-  return true;
+  return (await sendText(chatId, delivery.text)) !== false;
 }

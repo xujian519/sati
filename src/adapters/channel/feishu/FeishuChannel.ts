@@ -396,7 +396,7 @@ export class FeishuChannel implements ChannelAdapter {
 
   async deliverCronResult(delivery: CronResultDelivery): Promise<boolean> {
     return deliverChatCronResult(delivery, this.channelKey, (chatId, text) =>
-      this.send({ chatId, text }),
+      this.sendTextMessage({ chatId, text }),
     );
   }
 

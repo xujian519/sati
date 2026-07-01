@@ -210,9 +210,10 @@ export class MatrixChannel implements ChannelAdapter {
     }
   }
 
-  private async sendReply(roomId: string, text: string): Promise<void> {
-    if (!this.client) return;
+  private async sendReply(roomId: string, text: string): Promise<boolean> {
+    if (!this.client) return false;
     const chunks = chunkText(text, MAX_MESSAGE_LENGTH);
+    let ok = true;
     for (const chunk of chunks) {
       try {
         await this.client.sendMessage(roomId, {
@@ -221,8 +222,10 @@ export class MatrixChannel implements ChannelAdapter {
         });
       } catch (e) {
         this.logger?.error?.(`matrix: sendMessage failed: ${e}`);
+        ok = false;
       }
     }
+    return ok;
   }
 }
 

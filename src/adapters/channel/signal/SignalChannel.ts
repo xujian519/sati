@@ -261,15 +261,16 @@ export class SignalChannel implements ChannelAdapter {
     }
   }
 
-  private async sendReply(chatId: string, text: string): Promise<void> {
-    if (!this.running) return;
+  private async sendReply(chatId: string, text: string): Promise<boolean> {
+    if (!this.running) return false;
     const recipient =
       this.recipientByChat.get(chatId) ?? chatId.replace(/^(dm:|group:)/, "");
     if (!recipient) {
       this.logger?.warn?.(`signal: no recipient for ${chatId}, cannot send`);
-      return;
+      return false;
     }
     const chunks = chunkText(text, MAX_MESSAGE_LENGTH);
+    let ok = true;
     for (const chunk of chunks) {
       const body = {
         message: chunk,
@@ -285,11 +286,14 @@ export class SignalChannel implements ChannelAdapter {
         if (!res.ok) {
           const raw = await res.text().catch(() => "");
           this.logger?.error?.(`signal: send HTTP ${res.status}: ${raw.slice(0, 500)}`);
+          ok = false;
         }
       } catch (e) {
         this.logger?.error?.(`signal: send failed: ${e}`);
+        ok = false;
       }
     }
+    return ok;
   }
 
   private async sleepBackoff(signal: AbortSignal): Promise<void> {

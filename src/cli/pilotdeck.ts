@@ -84,9 +84,15 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         logger: cronLogger,
         telemetry,
         onResultDelivery: (delivery) => {
-          void serverRef?.deliverCronResult(delivery).catch((error: unknown) => {
-            console.warn(`[cron] result delivery failed ${error instanceof Error ? error.message : String(error)}`);
-          });
+          void serverRef?.deliverCronResult(delivery)
+            .then((delivered) => {
+              if (!delivered) {
+                console.warn(`[cron] result delivery was not handled task=${delivery.taskId} run=${delivery.runId}`);
+              }
+            })
+            .catch((error: unknown) => {
+              console.warn(`[cron] result delivery failed ${error instanceof Error ? error.message : String(error)}`);
+            });
         },
       });
     }

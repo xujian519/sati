@@ -293,8 +293,8 @@ export class EmailChannel implements ChannelAdapter {
     }
   }
 
-  private async sendReply(chatId: string, text: string): Promise<void> {
-    if (!this.transporter) return;
+  private async sendReply(chatId: string, text: string): Promise<boolean> {
+    if (!this.transporter) return false;
     try {
       await this.transporter.sendMail({
         from: this.ownAddress,
@@ -302,8 +302,10 @@ export class EmailChannel implements ChannelAdapter {
         subject: this.defaultSubject,
         text,
       });
+      return true;
     } catch (e) {
       this.logger?.error?.(`email: sendMail failed: ${e}`);
+      return false;
     }
   }
 }

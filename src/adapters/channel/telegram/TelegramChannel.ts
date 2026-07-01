@@ -177,16 +177,19 @@ export class TelegramChannel implements ChannelAdapter {
     }
   }
 
-  private async sendReply(chatId: string, text: string): Promise<void> {
-    if (!this.bot) return;
+  private async sendReply(chatId: string, text: string): Promise<boolean> {
+    if (!this.bot) return false;
     const chunks = chunkText(text, MAX_MESSAGE_LENGTH);
+    let ok = true;
     for (const chunk of chunks) {
       try {
         await this.bot.api.sendMessage(chatId, chunk);
       } catch (e) {
         this.logger?.error?.(`telegram: sendMessage failed: ${e}`);
+        ok = false;
       }
     }
+    return ok;
   }
 
   private async sendTyping(chatId: string): Promise<void> {

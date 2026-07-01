@@ -307,10 +307,10 @@ export class HomeAssistantChannel implements ChannelAdapter {
     }
   }
 
-  private async sendReply(chatId: string, text: string): Promise<void> {
+  private async sendReply(chatId: string, text: string): Promise<boolean> {
     if (!this.ws || this.ws.readyState !== 1) {
       this.logger?.warn?.(`homeassistant: not connected, cannot send to ${chatId}`);
-      return;
+      return false;
     }
     const title = this.notificationTitle ?? `Gateway · ${chatId}`;
     this.sendJson({
@@ -324,5 +324,6 @@ export class HomeAssistantChannel implements ChannelAdapter {
         notification_id: `gw_${Date.now()}`,
       },
     });
+    return true;
   }
 }
