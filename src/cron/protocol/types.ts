@@ -1,6 +1,6 @@
 import type { GatewayChannelKey, GatewayMode } from "../../gateway/index.js";
 
-export type CronSchedule =
+export type CronTaskSchedule =
   | {
       type: "once";
       runAt: string;
@@ -11,13 +11,23 @@ export type CronSchedule =
       timezone?: string;
     };
 
+export type CronCreateSchedule =
+  | CronTaskSchedule
+  | {
+      type: "delay";
+      amount: number;
+      unit: "second" | "minute" | "hour" | "day";
+    };
+
+export type CronSchedule = CronCreateSchedule;
+
 export type CronTaskStatus = "scheduled" | "running";
 
 export type CronTask = {
   schemaVersion: 1;
   taskId: string;
   message: string;
-  schedule: CronSchedule;
+  schedule: CronTaskSchedule;
   status: CronTaskStatus;
   sessionKey: string;
   channelKey: GatewayChannelKey;
@@ -50,7 +60,7 @@ export type CronRunRecord = {
 
 export type CronCreateInput = {
   message: string;
-  schedule: CronSchedule;
+  schedule: CronCreateSchedule;
   sessionKey?: string;
   channelKey?: GatewayChannelKey;
   projectKey?: string;
