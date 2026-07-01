@@ -239,7 +239,7 @@ export class WeixinChannel implements ChannelAdapter {
         const confirmation = await this.permissions.answer(fromUser, text, this.gateway);
         if (confirmation) await this.sendReply(fromUser, confirmation);
         if (trimmed === "1" || trimmed === "2") {
-          await this.activeLiveReplies.get(fromUser)?.resumeActivity("tool");
+          await this.activeLiveReplies.get(fromUser)?.resumeActivity("tool", { immediate: false });
         }
       } catch (e) {
         this.logger?.error?.(`weixin: permission answer error: ${e}`);

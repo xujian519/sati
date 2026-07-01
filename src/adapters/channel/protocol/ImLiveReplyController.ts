@@ -215,7 +215,10 @@ export class ImLiveReplyController<Handle = ImLiveReplyHandle> {
     await this.stopNativeActivity();
   }
 
-  async resumeActivity(kind: ImLiveReplyActivityKind = "thinking"): Promise<void> {
+  async resumeActivity(
+    kind: ImLiveReplyActivityKind = "thinking",
+    options: { immediate?: boolean } = {},
+  ): Promise<void> {
     if (this.closed) return;
     this.clearActivityTimers();
     const segment = this.currentSegment;
@@ -223,7 +226,11 @@ export class ImLiveReplyController<Handle = ImLiveReplyHandle> {
     segment.activityStartedAt = Date.now();
     segment.activityArmed = true;
     segment.activityUpdates = 0;
-    await this.flushActivity({ force: true });
+    if (options.immediate === true) {
+      await this.flushActivity({ force: true });
+      return;
+    }
+    this.scheduleActivityDelay();
   }
 
   async clear(): Promise<void> {
