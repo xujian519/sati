@@ -24,7 +24,6 @@ export type OpenAIRequestBody = {
   stream?: boolean;
   metadata?: Record<string, unknown>;
   reasoning?: { effort?: string };
-  extra_body?: Record<string, unknown>;
   thinking?: Record<string, unknown>;
   reasoning_effort?: string;
   reasoning_split?: boolean;
@@ -105,19 +104,8 @@ export function buildOpenAIRequest(
 
   if (thinkingPlan.useOpenAIReasoning && thinkingPlan.effort) {
     body.reasoning = { effort: thinkingPlan.effort };
-  } else if (thinkingPlan.useExtraBody) {
-    const extraBody: Record<string, unknown> = {};
-    if (thinkingPlan.thinkingType) {
-      extraBody.thinking = { type: thinkingPlan.thinkingType };
-    }
-    extraBody.enable_thinking = thinkingPlan.enabled;
-    if (thinkingPlan.enabled && thinkingPlan.budgetTokens !== undefined) {
-      extraBody.thinking_budget = thinkingPlan.budgetTokens;
-    }
-    body.extra_body = extraBody;
-    if (thinkingPlan.effort) {
-      body.reasoning_effort = thinkingPlan.effort;
-    }
+  } else if (thinkingPlan.bodyPatch) {
+    Object.assign(body, thinkingPlan.bodyPatch);
   } else if (thinkingPlan.useOpenAICompatibleThinking) {
     if (thinkingPlan.thinkingType) {
       body.thinking = { type: thinkingPlan.thinkingType };

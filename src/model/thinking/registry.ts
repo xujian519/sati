@@ -15,7 +15,7 @@ export type ThinkingPlan = {
   useGeminiLevel?: boolean;
   useOpenAIReasoning?: boolean;
   useOpenAICompatibleThinking?: boolean;
-  useExtraBody?: boolean;
+  bodyPatch?: Record<string, unknown>;
   useAnthropicOutputEffort?: boolean;
   omitTemperature?: boolean;
 };
@@ -80,7 +80,7 @@ export function resolveThinkingPlan(
     return glmPlan(mode, modelId);
   }
   if (/qwen|dashscope|aliyun|alibaba|tongyi/.test(providerId + providerUrl + modelId)) {
-    return qwenPlan(mode, modelId, budgetTokens);
+    return qwenPlan(mode, modelId, providerUrl, budgetTokens);
   }
   if (/deepseek/.test(providerId + providerUrl + modelId)) {
     return deepSeekPlan(mode, modelId);
@@ -158,22 +158,49 @@ function glmPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
   return plan;
 }
 
-function qwenPlan(mode: ThinkingMode, modelId: string, budgetTokens?: number): ThinkingPlan {
+function qwenPlan(mode: ThinkingMode, modelId: string, providerUrl: string, budgetTokens?: number): ThinkingPlan {
+  const isModelBest = providerUrl.includes("llm-center.ali.modelbest.cn") || /^qwen_/.test(modelId);
+  if (isModelBest) {
+    if (mode === "off") {
+      return { mode, enabled: false, thinkingType: "disabled", useOpenAICompatibleThinking: true, preserve: true };
+    }
+    return {
+      mode,
+      enabled: true,
+      thinkingType: "enabled",
+      effort: clampEffort(mode, ["minimal", "low", "medium", "high", "xhigh"]),
+      useOpenAICompatibleThinking: true,
+      preserve: true,
+    };
+  }
   const thinkingOnly = /thinking|qwq|qvq/.test(modelId) && !/hybrid/.test(modelId);
-  if (mode === "off" && thinkingOnly) return { mode, enabled: true, useExtraBody: true };
-  if (mode === "off") return { mode, enabled: false, useExtraBody: true };
+  if (mode === "off" && thinkingOnly) return { mode, enabled: false };
+  if (mode === "off") return { mode, enabled: false, bodyPatch: { enable_thinking: false } };
   return {
     mode,
     enabled: true,
     budgetTokens: budgetTokens ?? QWEN_BUDGETS[mode] ?? 8192,
     preserve: true,
-    useExtraBody: true,
+    bodyPatch: {
+      enable_thinking: true,
+      thinking_budget: budgetTokens ?? QWEN_BUDGETS[mode] ?? 8192,
+    },
   };
 }
 
-function deepSeekPlan(mode: ThinkingMode, _modelId: string): ThinkingPlan {
+function deepSeekPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
+  const isModelBest = /^deepseek_/.test(modelId);
   if (mode === "off" || mode === "minimal") {
-    return { mode, enabled: false, thinkingType: "disabled", useExtraBody: true, preserve: true };
+    return { mode, enabled: false, thinkingType: "disabled", useOpenAICompatibleThinking: true, preserve: true };
+  }
+  if (isModelBest) {
+    return {
+      mode,
+      enabled: true,
+      thinkingType: "enabled",
+      useOpenAICompatibleThinking: true,
+      preserve: true,
+    };
   }
   return {
     mode,
@@ -181,7 +208,7 @@ function deepSeekPlan(mode: ThinkingMode, _modelId: string): ThinkingPlan {
     thinkingType: "enabled",
     effort: mode === "xhigh" || mode === "max" ? "max" : "high",
     preserve: true,
-    useExtraBody: true,
+    useOpenAICompatibleThinking: true,
   };
 }
 

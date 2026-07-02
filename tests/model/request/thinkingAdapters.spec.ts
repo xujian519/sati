@@ -34,19 +34,33 @@ test("GLM-4.6 High sends thinking enabled without reasoning_effort", () => {
 
 test("Qwen hybrid Off and High map to enable_thinking and budget", () => {
   const off = bodyFor("dashscope", "openai", "qwen3-next-hybrid", { mode: "off", enabled: false });
-  assert.deepEqual(off.extra_body, { enable_thinking: false });
+  assert.equal(off.enable_thinking, false);
 
   const high = bodyFor("dashscope", "openai", "qwen3-next-hybrid", { mode: "high", enabled: true });
-  assert.deepEqual(high.extra_body, { enable_thinking: true, thinking_budget: 24576 });
+  assert.equal(high.enable_thinking, true);
+  assert.equal(high.thinking_budget, 24576);
 });
 
 test("DeepSeek Medium and Max legalize to high/max effort", () => {
   const medium = bodyFor("deepseek", "openai", "deepseek-chat", { mode: "medium", enabled: true });
-  assert.deepEqual(medium.extra_body, { thinking: { type: "enabled" }, enable_thinking: true });
+  assert.deepEqual(medium.thinking, { type: "enabled" });
   assert.equal(medium.reasoning_effort, "high");
 
   const max = bodyFor("deepseek", "openai", "deepseek-chat", { mode: "max", enabled: true });
   assert.equal(max.reasoning_effort, "max");
+});
+
+test("ModelBest Qwen uses thinking/reasoning_effort instead of enable_thinking", () => {
+  const high = bodyFor("qwen", "openai", "QWEN_40e5sh", { mode: "high", enabled: true }, "https://llm-center.ali.modelbest.cn/llm/v1");
+  assert.deepEqual(high.thinking, { type: "enabled" });
+  assert.equal(high.reasoning_effort, "high");
+  assert.equal(high.enable_thinking, undefined);
+});
+
+test("ModelBest DeepSeek avoids combining thinking and reasoning_effort", () => {
+  const high = bodyFor("deepseek", "openai", "DEEPSEEK_rtwgny", { mode: "high", enabled: true }, "https://llm-center.ali.modelbest.cn/llm/v1");
+  assert.deepEqual(high.thinking, { type: "enabled" });
+  assert.equal(high.reasoning_effort, undefined);
 });
 
 test("Kimi K2.6 Off disables thinking without effort or budget", () => {
@@ -74,7 +88,7 @@ test("Gemini 3.1 Pro uses thinkingLevel not thinkingBudget", () => {
   assert.deepEqual(body.config.thinkingConfig, { includeThoughts: true, thinkingLevel: "medium" });
 });
 
-function bodyFor(providerId: string, protocol: ModelProtocol, modelId: string, thinking: CanonicalModelRequest["thinking"]): any {
+function bodyFor(providerId: string, protocol: ModelProtocol, modelId: string, thinking: CanonicalModelRequest["thinking"], url?: string): any {
   const request: CanonicalModelRequest = {
     provider: providerId,
     model: modelId,
@@ -82,10 +96,10 @@ function bodyFor(providerId: string, protocol: ModelProtocol, modelId: string, t
     stream: true,
     thinking,
   };
-  return buildModelRequest(request, configFor(providerId, protocol, modelId)) as any;
+  return buildModelRequest(request, configFor(providerId, protocol, modelId, url)) as any;
 }
 
-function configFor(providerId: string, protocol: ModelProtocol, modelId: string): ModelConfig {
+function configFor(providerId: string, protocol: ModelProtocol, modelId: string, url?: string): ModelConfig {
   const model: ModelDefinition = {
     id: modelId,
     capabilities,
@@ -94,7 +108,7 @@ function configFor(providerId: string, protocol: ModelProtocol, modelId: string)
   const provider: ProviderConfig = {
     id: providerId,
     protocol,
-    url: `https://${providerId}.example.invalid/v1`,
+    url: url ?? `https://${providerId}.example.invalid/v1`,
     apiKey: "test",
     headers: {},
     models: { [modelId]: model },
