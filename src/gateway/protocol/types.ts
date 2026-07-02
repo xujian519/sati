@@ -12,7 +12,7 @@ import type {
   CronStopInput,
   CronStopResult,
 } from "../../cron/protocol/types.js";
-import type { CanonicalThinkingConfig, CanonicalUsage } from "../../model/index.js";
+import type { CanonicalUsage } from "../../model/index.js";
 import type { TelemetryExecutionKind, TelemetryModule } from "../../telemetry/index.js";
 import type { SessionInfo as ProjectSessionInfo } from "../../session/index.js";
 import type {
@@ -79,7 +79,6 @@ export type GatewaySubmitTurnInput = {
   /** Override the agent session's working directory for this session. */
   workspaceCwd?: string;
   attachments?: ChannelAttachment[];
-  thinking?: CanonicalThinkingConfig;
   runMode?: AgentRunMode;
   mode?: GatewayMode;
   /** The user's actual permission preference before plan-mode override. */
@@ -284,6 +283,7 @@ export type GatewayCronController = {
 export type ReloadConfigResult = {
   reloaded: boolean;
   changedPaths?: string[];
+  reason?: "unsupported" | "unchanged";
 };
 
 export type ReloadExtensionsInput = {
@@ -294,6 +294,7 @@ export type ReloadExtensionsInput = {
 export type ReloadExtensionsResult = {
   reloaded: boolean;
   changedPaths?: string[];
+  reason?: "unsupported" | "unchanged";
 };
 
 export type AlwaysOnApplyInput = {

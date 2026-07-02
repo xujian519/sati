@@ -392,7 +392,6 @@ export class InProcessGateway implements Gateway {
             maxTurns: input.maxTurns,
             runMode,
             permissionMode,
-            thinking: input.thinking,
             basePermissionMode,
             allowPlanModeTools,
             canPrompt: input.canPrompt,
@@ -649,14 +648,14 @@ export class InProcessGateway implements Gateway {
 
   async reloadConfig(): Promise<ReloadConfigResult> {
     if (!this.options.reloadConfig) {
-      return { reloaded: false };
+      return { reloaded: false, reason: "unsupported" };
     }
     return this.options.reloadConfig();
   }
 
   async reloadExtensions(input?: import("../protocol/types.js").ReloadExtensionsInput): Promise<import("../protocol/types.js").ReloadExtensionsResult> {
     if (!this.options.reloadExtensions) {
-      return { reloaded: false };
+      return { reloaded: false, reason: "unsupported" };
     }
     return this.options.reloadExtensions(input);
   }

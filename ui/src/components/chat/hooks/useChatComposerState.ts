@@ -24,6 +24,7 @@ import {
 import type {
   ChatMessage,
   PendingPermissionRequest,
+  PermissionGrantResult,
   PermissionMode,
 } from '../types/types';
 import type {
@@ -53,6 +54,7 @@ interface UseChatComposerStateArgs {
   tokenBudget: Record<string, unknown> | null;
   thinkingModeAvailability: ThinkingModeAvailability;
   sendMessage: (message: unknown) => void;
+  subscribe?: (handler: (message: any) => void) => () => void;
   sendByCtrlEnter?: boolean;
   onSessionActive?: (sessionId?: string | null) => void;
   onSessionProcessing?: (sessionId?: string | null) => void;
@@ -171,6 +173,7 @@ export function useChatComposerState({
   tokenBudget,
   thinkingModeAvailability,
   sendMessage,
+  subscribe,
   sendByCtrlEnter,
   onSessionActive,
   onSessionProcessing,
@@ -211,6 +214,35 @@ export function useChatComposerState({
     ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
+  const pendingSessionGrantResolversRef = useRef(new Map<string, (result: PermissionGrantResult) => void>());
+
+  useEffect(() => {
+    if (!subscribe) {
+      return undefined;
+    }
+    return subscribe((message: any) => {
+      if (message?.type !== 'session-permission-grant-result') {
+        return;
+      }
+      const requestId = typeof message.requestId === 'string' ? message.requestId : '';
+      if (!requestId) {
+        return;
+      }
+      const resolve = pendingSessionGrantResolversRef.current.get(requestId);
+      if (!resolve) {
+        return;
+      }
+      pendingSessionGrantResolversRef.current.delete(requestId);
+      resolve({ success: message.granted === true });
+    });
+  }, [subscribe]);
+
+  useEffect(() => {
+    return () => {
+      pendingSessionGrantResolversRef.current.forEach((resolve) => resolve({ success: false }));
+      pendingSessionGrantResolversRef.current.clear();
+    };
+  }, []);
 
   const activeThinkingSessionId = selectedSession?.id || currentSessionId || null;
   const setThinkingMode = useCallback((nextMode: ThinkingModeId | string) => {
@@ -1162,13 +1194,31 @@ export function useChatComposerState({
         return { success: false };
       }
 
+      const requestId = `session-permission-grant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      let settled = false;
+      const completion = new Promise<PermissionGrantResult>((resolve) => {
+        pendingSessionGrantResolversRef.current.set(requestId, (result) => {
+          settled = true;
+          resolve(result);
+        });
+        window.setTimeout(() => {
+          if (settled) {
+            return;
+          }
+          pendingSessionGrantResolversRef.current.delete(requestId);
+          resolve({ success: false });
+        }, 10_000);
+      });
+
       sendMessage({
         type: 'session-permission-grant',
+        requestId,
         sessionId,
         entry: suggestion.entry,
         toolName: suggestion.toolName,
       });
-      return { success: true };
+      completion.catch(() => undefined);
+      return { success: true, pending: true, completion };
     },
     [currentSessionId, pendingViewSessionRef, selectedSession?.id, sendMessage],
   );

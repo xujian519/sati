@@ -361,6 +361,12 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
+  if (command === "chat") {
+    const { runChatSearchCli } = await import("./commands/chatSearch.js");
+    await runChatSearchCli(argv.slice(1));
+    return;
+  }
+
   if (command === "tui") {
     if (!process.stdin.isTTY) {
       console.error("pilotdeck tui requires an interactive terminal.");

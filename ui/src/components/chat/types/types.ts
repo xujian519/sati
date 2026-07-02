@@ -170,7 +170,12 @@ export interface PermissionGrantResult {
   success: boolean;
   alreadyAllowed?: boolean;
   updatedSettings?: PilotDeckSettings;
+  completion?: Promise<PermissionGrantResult>;
 }
+
+export type SessionPermissionGrantResult = PermissionGrantResult & {
+  pending?: boolean;
+};
 
 export interface PendingPermissionRequest {
   requestId: string;
@@ -204,6 +209,7 @@ export interface ChatInterfaceProps {
   selectedSession: ProjectSession | null;
   ws: WebSocket | null;
   sendMessage: (message: unknown) => void;
+  subscribe?: (handler: (message: any) => void) => () => void;
   latestMessage: any;
   onFileOpen?: (filePath: string, diffInfo?: any) => void;
   onInputFocusChange?: (focused: boolean) => void;
