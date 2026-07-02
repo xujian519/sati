@@ -1981,7 +1981,15 @@ function handleChatConnection(ws, request) {
                     }
                 }
             } else if (data.type === 'session-permission-grant') {
-                await grantSessionPermissionViaGateway(data.sessionId, data.entry);
+                const result = await grantSessionPermissionViaGateway(data.sessionId, data.entry);
+                ws.send(JSON.stringify({
+                    type: 'session-permission-grant-result',
+                    requestId: typeof data.requestId === 'string' ? data.requestId : null,
+                    sessionId: data.sessionId,
+                    entry: data.entry,
+                    granted: result.granted === true,
+                    ...(typeof result.entry === 'string' ? { grantedEntry: result.entry } : {}),
+                }));
             } else if (data.type === 'elicitation-response') {
                 if (data.requestId) {
                     await elicitationRespondViaGateway(data.requestId, data.answer);

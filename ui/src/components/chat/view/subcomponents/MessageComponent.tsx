@@ -5,8 +5,8 @@ import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo'
 import type {
   ChatMessage,
   PilotDeckPermissionSuggestion,
-  PermissionGrantResult,
   Provider,
+  SessionPermissionGrantResult,
 } from '../../types/types';
 import { formatUsageLimitText } from '../../utils/chatFormatting';
 import { getPilotDeckPermissionSuggestion } from '../../utils/chatPermissions';
@@ -29,7 +29,7 @@ type MessageComponentProps = {
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
-  onGrantSessionToolPermission?: (suggestion: PilotDeckPermissionSuggestion) => PermissionGrantResult | null | undefined;
+  onGrantSessionToolPermission?: (suggestion: PilotDeckPermissionSuggestion) => SessionPermissionGrantResult | null | undefined;
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
@@ -514,7 +514,14 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                                       onClick={() => {
                                         if (!onGrantSessionToolPermission) return;
                                         const result = onGrantSessionToolPermission(permissionSuggestion);
-                                        if (result?.success) {
+                                        if (result?.pending && result.completion) {
+                                          setPermissionGrantState('idle');
+                                          result.completion.then((completion) => {
+                                            setPermissionGrantState(completion.success ? 'granted' : 'error');
+                                          }).catch(() => {
+                                            setPermissionGrantState('error');
+                                          });
+                                        } else if (result?.success) {
                                           setPermissionGrantState('granted');
                                         } else {
                                           setPermissionGrantState('error');

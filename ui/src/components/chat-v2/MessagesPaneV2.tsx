@@ -8,7 +8,7 @@ import type {
   ClaudeWorkStatus,
   PilotDeckWorkStatus,
   PilotDeckPermissionSuggestion,
-  PermissionGrantResult,
+  SessionPermissionGrantResult,
 } from '../chat/types/types';
 import type { SessionStore } from '../../stores/useSessionStore';
 import { getSessionRequestParams, isReadOnlySession, type Project, type ProjectSession, type SessionProvider } from '../../types/app';
@@ -60,7 +60,7 @@ type MessagesPaneV2Props = {
   onShowSettings?: () => void;
   onGrantSessionToolPermission?: (
     suggestion: PilotDeckPermissionSuggestion,
-  ) => PermissionGrantResult | null | undefined;
+  ) => SessionPermissionGrantResult | null | undefined;
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
