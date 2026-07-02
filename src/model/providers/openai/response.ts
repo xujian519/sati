@@ -23,8 +23,9 @@ export function parseOpenAIResponse(raw: unknown, provider = "openai"): Canonica
   const content: CanonicalContentBlock[] = [];
   const idState = createResponseToolCallIdState(response);
 
-  if (typeof message.reasoning_content === "string" && message.reasoning_content.length > 0) {
-    content.push({ type: "thinking", text: message.reasoning_content });
+  const reasoningText = readReasoningText(message.reasoning_content) ?? readReasoningText(message.reasoning);
+  if (reasoningText) {
+    content.push({ type: "thinking", text: reasoningText });
   }
   if (Array.isArray(message.reasoning_details)) {
     const reasoning = message.reasoning_details
@@ -110,6 +111,14 @@ function readReasoningDetailText(part: Record<string, unknown>): string | undefi
     }
   }
   return undefined;
+}
+
+function readReasoningText(value: unknown): string | undefined {
+  if (typeof value === "string" && value.length > 0) {
+    return value;
+  }
+  const record = asRecord(value);
+  return readReasoningDetailText(record);
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
