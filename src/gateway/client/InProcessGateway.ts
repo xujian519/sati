@@ -392,6 +392,7 @@ export class InProcessGateway implements Gateway {
             maxTurns: input.maxTurns,
             runMode,
             permissionMode,
+            thinking: input.thinking,
             basePermissionMode,
             allowPlanModeTools,
             canPrompt: input.canPrompt,

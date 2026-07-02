@@ -6,7 +6,7 @@ import type { AgentTurnResult } from "../protocol/result.js";
 import type { AgentLoop, AgentLoopSeedState } from "../loop/AgentLoop.js";
 import type { AgentTranscriptWriter } from "../../session/transcript/TranscriptWriter.js";
 import { TurnInputProcessor } from "./TurnInputProcessor.js";
-import type { CanonicalMessage, CanonicalUsage } from "../../model/index.js";
+import type { CanonicalMessage, CanonicalThinkingConfig, CanonicalUsage } from "../../model/index.js";
 import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { PermissionMode, PermissionRuleSet } from "../../permission/index.js";
 import type { AgentTranscriptWriterState } from "../../session/transcript/TranscriptWriter.js";
@@ -19,6 +19,7 @@ export type TurnRunnerOptions = {
   maxTurns?: number;
   runMode?: AgentRunMode;
   permissionMode?: PermissionMode;
+  thinking?: CanonicalThinkingConfig;
   /** The user's actual permission preference before plan-mode override. */
   basePermissionMode?: PermissionMode;
   /** Allow model-visible plan mode tools for this turn. */
@@ -118,6 +119,7 @@ export class TurnRunner {
         maxTurns: options.maxTurns,
         runMode: options.runMode,
         permissionMode: options.permissionMode,
+        thinking: options.thinking,
         basePermissionMode: options.basePermissionMode,
         allowPlanModeTools: options.allowPlanModeTools,
         canPrompt: options.canPrompt,

@@ -173,8 +173,8 @@ function ChatInterfaceV2({
     textareaRef,
     inputHighlightRef,
     isTextareaExpanded: _isTextareaExpanded,
-    thinkingMode: _thinkingMode,
-    setThinkingMode: _setThinkingMode,
+    thinkingMode,
+    setThinkingMode,
     slashCommandsCount: _slashCommandsCount,
     filteredCommands,
     frequentCommands,
@@ -507,6 +507,8 @@ function ChatInterfaceV2({
       canAbortSession={canAbortSession}
       isAbortPending={isAbortPending}
       tokenBudget={tokenBudget}
+      thinkingMode={thinkingMode}
+      onThinkingModeChange={setThinkingMode}
       pendingPermissionRequests={pendingPermissionRequests}
       handlePermissionDecision={handlePermissionDecision}
       handleGrantToolPermission={handleGrantToolPermission}
