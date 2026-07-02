@@ -12,6 +12,7 @@ import {
   Clock,
   Database,
   FileCog,
+  FileText,
   FolderOpen,
   Gauge,
   Image as ImageIcon,
@@ -33,6 +34,11 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { Button } from '../../../../shared/view/ui';
 import { authenticatedFetch } from '../../../../utils/api';
 import { isImeEnterEvent } from '../../../../utils/ime';
+import {
+  readOfficePreviewStatus,
+  type OfficePreviewService,
+  type OfficePreviewStatus,
+} from '../../../../utils/officePreviewStatus';
 import { usePilotDeckConfig, type ConfigReload } from '../../../../hooks/usePilotDeckConfig';
 import {
   getAlwaysOnProjectRoot,
@@ -109,6 +115,9 @@ type PilotDeckConfig = {
       apiTimeoutMs?: number;
       databasePath?: string;
       workspacesRoot?: string;
+    };
+    officePreview?: {
+      service?: 'none' | 'libreoffice' | string;
     };
   };
   alwaysOn?: {
@@ -203,7 +212,7 @@ type PilotDeckConfig = {
   };
 };
 
-type SectionId = 'models' | 'agents' | 'memory' | 'tools' | 'router' | 'gateway' | 'customEnv' | 'alwaysOn' | 'cron' | 'advanced';
+type SectionId = 'models' | 'agents' | 'memory' | 'tools' | 'router' | 'gateway' | 'officePreview' | 'customEnv' | 'alwaysOn' | 'cron' | 'advanced';
 
 const SECTIONS: Array<{ id: SectionId; labelKey: string; descriptionKey: string }> = [
   { id: 'advanced',  labelKey: 'runtime',   descriptionKey: 'runtime' },
@@ -215,12 +224,14 @@ const SECTIONS: Array<{ id: SectionId; labelKey: string; descriptionKey: string 
   { id: 'tools',     labelKey: 'tools',     descriptionKey: 'tools' },
   { id: 'router',    labelKey: 'router',    descriptionKey: 'router' },
   { id: 'gateway',   labelKey: 'gateway',   descriptionKey: 'gateway' },
+  { id: 'officePreview', labelKey: 'officePreview', descriptionKey: 'officePreview' },
   { id: 'customEnv', labelKey: 'customEnv', descriptionKey: 'customEnv' },
 ];
 
-const SECTION_GROUPS: Array<{ id: 'basic' | 'features' | 'advanced'; sections: SectionId[] }> = [
+const SECTION_GROUPS: Array<{ id: 'basic' | 'features' | 'extensions' | 'advanced'; sections: SectionId[] }> = [
   { id: 'basic', sections: ['models', 'agents'] },
   { id: 'features', sections: ['router', 'memory', 'tools', 'alwaysOn', 'cron', 'gateway'] },
+  { id: 'extensions', sections: ['officePreview'] },
   { id: 'advanced', sections: ['advanced', 'customEnv'] },
 ];
 
@@ -233,6 +244,7 @@ const SECTION_ICONS: Record<SectionId, LucideIcon> = {
   alwaysOn: Zap,
   cron: Clock,
   gateway: Wifi,
+  officePreview: FileText,
   advanced: Server,
   customEnv: FileCog,
 };
@@ -584,12 +596,16 @@ function Select({
 }: {
   value: string | undefined;
   onChange: (next: string) => void;
-  options: Array<{ value: string; label: string }>;
+  options: Array<{ value: string; label: string; disabled?: boolean }>;
 }) {
-  const selectedLabel = options.find((opt) => opt.value === value)?.label ?? '';
+  const selectedOption = options.find((opt) => opt.value === value);
+  const selectedLabel = selectedOption?.label ?? '';
   return (
     <div className="relative min-w-0">
-      <div className="pointer-events-none flex w-full min-w-0 items-center rounded-md border border-border bg-background px-2 py-1.5 pr-8 text-[13px] leading-5 text-foreground">
+      <div className={cn(
+        'pointer-events-none flex w-full min-w-0 items-center rounded-md border border-border bg-background px-2 py-1.5 pr-8 text-[13px] leading-5',
+        selectedOption?.disabled ? 'text-muted-foreground' : 'text-foreground',
+      )}>
         <span className="block min-w-0 truncate" title={selectedLabel}>{selectedLabel}</span>
       </div>
       <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
@@ -600,7 +616,7 @@ function Select({
         aria-label={selectedLabel}
       >
         {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
+          <option key={opt.value} value={opt.value} disabled={opt.disabled}>{opt.label}</option>
         ))}
       </select>
     </div>
@@ -643,6 +659,10 @@ function FormRow({ label, description, children }: { label: string; description?
 }
 
 // ── Section components ─────────────────────────────────────────────────
+
+function getOfficePreviewService(config: PilotDeckConfig): OfficePreviewService {
+  return config.webui?.officePreview?.service === 'none' ? 'none' : 'libreoffice';
+}
 
 function ServiceSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
   const { t } = useTranslation('settings');
@@ -697,6 +717,148 @@ function ServiceSection({ config, onChange }: { config: PilotDeckConfig; onChang
             </FormRow>
           </div>
         )}
+      </SettingsCard>
+    </SettingsSection>
+  );
+}
+
+function OfficePreviewSection({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
+  const { t } = useTranslation('settings');
+  const [status, setStatus] = useState<OfficePreviewStatus | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [statusReloadKey, setStatusReloadKey] = useState(0);
+  const service = getOfficePreviewService(config);
+
+  useEffect(() => {
+    let cancelled = false;
+    setStatusLoading(true);
+    setStatusError(null);
+
+    readOfficePreviewStatus()
+      .then((body: OfficePreviewStatus) => {
+        if (cancelled) return;
+        setStatus(body);
+        setStatusError(body.statusError || null);
+      })
+      .catch((error: Error) => {
+        if (cancelled) return;
+        setStatusError(error.message || t('pilotDeckConfig.panels.officePreview.status.error'));
+      })
+      .finally(() => {
+        if (!cancelled) setStatusLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [statusReloadKey, t]);
+
+  const libreOfficeStatusKnown = status?.libreOffice?.available !== undefined;
+  const libreOfficeAvailable = status?.libreOffice?.available === true;
+  const libreOfficeUnavailable = !statusLoading && status?.libreOffice?.available === false;
+  const showLibreOfficeStatus = service === 'libreoffice' || libreOfficeStatusKnown;
+  const libreOfficeUnknown = showLibreOfficeStatus && !statusLoading && !statusError && !libreOfficeStatusKnown;
+  const setService = (next: OfficePreviewService) =>
+    onChange(patch(config, ['webui', 'officePreview', 'service'], next));
+
+  return (
+    <SettingsSection
+      title={t('pilotDeckConfig.panels.officePreview.title')}
+      description={t('pilotDeckConfig.panels.officePreview.description')}
+    >
+      <SettingsCard>
+        <div className="divide-y divide-border">
+          <FormRow
+            label={t('pilotDeckConfig.panels.officePreview.fields.service.label')}
+            description={t('pilotDeckConfig.panels.officePreview.fields.service.description')}
+          >
+            <div className="max-w-xs">
+              <Select
+                value={service}
+                onChange={(value) => setService(value as OfficePreviewService)}
+                options={[
+                  { value: 'none', label: t('pilotDeckConfig.panels.officePreview.options.none') },
+                  {
+                    value: 'libreoffice',
+                    label: libreOfficeUnavailable
+                      ? t('pilotDeckConfig.panels.officePreview.options.libreOfficeUnavailable')
+                      : t('pilotDeckConfig.panels.officePreview.options.libreOffice'),
+                    disabled: libreOfficeUnavailable,
+                  },
+                ]}
+              />
+            </div>
+          </FormRow>
+
+          <div className="space-y-2 px-4 py-3">
+            {showLibreOfficeStatus && (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2 text-[12px] text-muted-foreground">
+                  <span className={cn(
+                    'h-2 w-2 flex-shrink-0 rounded-full',
+                    libreOfficeAvailable ? 'bg-green-500' : libreOfficeUnavailable || statusError ? 'bg-muted-foreground/60' : 'bg-amber-500',
+                  )} />
+                  <span className="min-w-0 truncate">
+                    {statusLoading
+                      ? t('pilotDeckConfig.panels.officePreview.status.checking')
+                      : statusError
+                        ? t('pilotDeckConfig.panels.officePreview.status.error')
+                        : libreOfficeAvailable
+                          ? t('pilotDeckConfig.panels.officePreview.status.available')
+                          : libreOfficeUnavailable
+                            ? t('pilotDeckConfig.panels.officePreview.status.unavailable')
+                            : libreOfficeUnknown
+                              ? t('pilotDeckConfig.panels.officePreview.status.unknown')
+                              : t('pilotDeckConfig.panels.officePreview.status.unavailable')}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStatusReloadKey((value) => value + 1)}
+                  className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <RefreshCw className={cn('h-3.5 w-3.5', statusLoading && 'animate-spin')} />
+                  {t('pilotDeckConfig.panels.officePreview.status.refresh')}
+                </button>
+              </div>
+            )}
+
+            {libreOfficeAvailable && (
+              <div className="space-y-1 rounded-md bg-muted/30 px-3 py-2 text-[11px] leading-4 text-muted-foreground">
+                {status?.libreOffice?.binaryPath && (
+                  <div className="truncate" title={status.libreOffice.binaryPath}>
+                    {t('pilotDeckConfig.panels.officePreview.status.path', { path: status.libreOffice.binaryPath })}
+                  </div>
+                )}
+                {status?.libreOffice?.version && (
+                  <div className="truncate" title={status.libreOffice.version}>
+                    {t('pilotDeckConfig.panels.officePreview.status.version', { version: status.libreOffice.version })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {service === 'none' && (
+              <div className="rounded-md bg-muted/30 px-3 py-2 text-[11px] leading-4 text-muted-foreground">
+                {t('pilotDeckConfig.panels.officePreview.disabledNote')}
+              </div>
+            )}
+
+            {service === 'libreoffice' && libreOfficeUnavailable && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] leading-5 text-amber-700 dark:text-amber-300">
+                <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <div>{t('pilotDeckConfig.panels.officePreview.unavailableWarning')}</div>
+              </div>
+            )}
+
+            {service === 'libreoffice' && statusError && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] leading-5 text-destructive">
+                {statusError}
+              </div>
+            )}
+          </div>
+        </div>
       </SettingsCard>
     </SettingsSection>
   );
@@ -3151,9 +3313,19 @@ function ConfigSectionHome({ onSelect }: { onSelect: (section: SectionId) => voi
   );
 }
 
+function isSectionId(value: string | undefined): value is SectionId {
+  return Boolean(value) && SECTIONS.some((section) => section.id === value);
+}
+
 // ── Main tab ───────────────────────────────────────────────────────────
 
-export default function PilotDeckConfigTab({ projects = [] }: { projects?: SettingsProject[] }) {
+export default function PilotDeckConfigTab({
+  projects = [],
+  initialSection,
+}: {
+  projects?: SettingsProject[];
+  initialSection?: string;
+}) {
   const { t } = useTranslation('settings');
   const {
     path,
@@ -3179,6 +3351,12 @@ export default function PilotDeckConfigTab({ projects = [] }: { projects?: Setti
   // navigation home, matching the outer Settings page interaction model.
   const [activeSection, setActiveSection] = useState<SectionId | null>(null);
   const [showConfigDetails, setShowConfigDetails] = useState(false);
+
+  useEffect(() => {
+    if (isSectionId(initialSection)) {
+      setActiveSection(initialSection);
+    }
+  }, [initialSection]);
 
   // Parse `raw` into a typed config for the form. Memoised so we don't
   // reparse on every keystroke unrelated to YAML, but raw IS the source of
@@ -3378,6 +3556,7 @@ export default function PilotDeckConfigTab({ projects = [] }: { projects?: Setti
               {activeSection === 'tools' && <ToolsSection config={parsedConfig} onChange={onFormChange} />}
               {activeSection === 'router' && <RouterSection config={parsedConfig} onChange={onFormChange} />}
               {activeSection === 'gateway' && <GatewaySection config={parsedConfig} onChange={onFormChange} />}
+              {activeSection === 'officePreview' && <OfficePreviewSection config={parsedConfig} onChange={onFormChange} />}
               {activeSection === 'customEnv' && <CustomEnvSection config={parsedConfig} onChange={onFormChange} />}
               {activeSection === 'alwaysOn' && <AlwaysOnSection config={parsedConfig} projects={projects} onChange={onFormChange} />}
               {activeSection === 'cron' && <CronSection config={parsedConfig} onChange={onFormChange} />}

@@ -84,6 +84,13 @@ import skillsRoutes from './routes/skills.js';
 import settingsRoutes from './routes/settings.js';
 import configRoutes from './routes/config.js';
 import gatewayRoutes from './routes/gateway.js';
+import {
+    OFFICE_PREVIEW_SERVICE_LIBREOFFICE,
+    OFFICE_PREVIEW_SERVICE_NONE,
+    convertOfficeDocumentToPdf,
+    getConfiguredOfficePreviewService,
+    getLibreOfficeStatus,
+} from './services/officePreview.js';
 import { startPilotDeckConfigWatcher, stopPilotDeckConfigWatcher } from './services/pilotdeckConfigWatcher.js';
 import { getAlwaysOnDashboardEvents } from './services/always-on-events.js';
 import agentRoutes from './routes/agent.js';
@@ -908,6 +915,10 @@ function setPreviewContentType(res, filePath) {
     res.setHeader('Content-Type', `${mimeType}${charset}`);
 }
 
+const OFFICE_PDF_PREVIEW_EXTENSIONS = new Set(['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp']);
+
+const getFileExtension = (filePath) => path.extname(filePath).slice(1).toLowerCase();
+
 async function addDirectoryToZip(zip, directoryPath, rootPath) {
     const entries = await fsPromises.readdir(directoryPath, { withFileTypes: true });
 
@@ -1162,6 +1173,97 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
         console.error('Error serving binary file:', error);
         if (!res.headersSent) {
             res.status(500).json({ error: error.message });
+        }
+    }
+});
+
+app.get('/api/office-preview/status', authenticateToken, async (req, res) => {
+    try {
+        const [libreOffice, service] = await Promise.all([
+            getLibreOfficeStatus(),
+            Promise.resolve(getConfiguredOfficePreviewService()),
+        ]);
+        res.json({
+            service,
+            libreOffice,
+            supportedServices: [
+                OFFICE_PREVIEW_SERVICE_NONE,
+                OFFICE_PREVIEW_SERVICE_LIBREOFFICE,
+            ],
+        });
+    } catch (error) {
+        console.error('Error reading Office preview status:', error);
+        res.status(500).json({
+            error: 'Failed to read Office preview status',
+            code: 'OFFICE_PREVIEW_STATUS_FAILED',
+        });
+    }
+});
+
+// Convert Office files to PDF for lightweight read-only preview.
+// This is an optional fallback for legacy Office/PPT formats; it only works
+// when LibreOffice/soffice is available on the host.
+app.get('/api/projects/:projectName/files/preview/pdf', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        const { path: filePath } = req.query;
+
+        if (!filePath) {
+            return res.status(400).json({ error: 'Invalid file path' });
+        }
+
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const resolvedResult = resolvePathInProject(projectRoot, filePath);
+        if (!resolvedResult.valid) {
+            return res.status(403).json({ error: resolvedResult.error });
+        }
+
+        const resolved = resolvedResult.resolved;
+        const extension = getFileExtension(resolved);
+        if (!OFFICE_PDF_PREVIEW_EXTENSIONS.has(extension)) {
+            return res.status(400).json({ error: 'Unsupported Office preview format' });
+        }
+
+        const stats = await fsPromises.stat(resolved).catch(() => null);
+        if (!stats?.isFile()) {
+            return res.status(404).json({ error: 'File not found' });
+        }
+
+        const officePreviewService = getConfiguredOfficePreviewService();
+        if (officePreviewService === OFFICE_PREVIEW_SERVICE_NONE) {
+            return res.status(409).json({
+                error: 'Office preview service is disabled',
+                code: 'OFFICE_PREVIEW_DISABLED',
+            });
+        }
+
+        const pdfPath = await convertOfficeDocumentToPdf(resolved);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Cache-Control', 'private, max-age=60');
+
+        const fileStream = fs.createReadStream(pdfPath);
+        fileStream.pipe(res);
+        fileStream.on('error', (error) => {
+            console.error('Error streaming Office PDF preview:', error);
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Error reading Office PDF preview' });
+            }
+        });
+    } catch (error) {
+        console.error('Error generating Office PDF preview:', error);
+        if (!res.headersSent) {
+            res.status(error.statusCode || 500).json({
+                error: error.code === 'LIBREOFFICE_NOT_FOUND'
+                    ? 'LibreOffice executable not found'
+                    : error.code === 'OFFICE_PREVIEW_DISABLED'
+                        ? 'Office preview service is disabled'
+                        : 'Failed to generate Office PDF preview',
+                code: error.code || 'OFFICE_PREVIEW_FAILED',
+            });
         }
     }
 });

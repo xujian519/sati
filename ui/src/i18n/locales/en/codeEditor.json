@@ -40,5 +40,17 @@
   "binaryFile": {
     "title": "Binary File",
     "message": "The file \"{{fileName}}\" cannot be displayed in the text editor because it is a binary file."
+  },
+  "officePreview": {
+    "checkingService": "Checking Office preview service...",
+    "converting": "Converting Office file to PDF...",
+    "refreshing": "File updated. Refreshing preview...",
+    "refresh": "Refresh preview",
+    "configureService": "Configure Office preview",
+    "disabledTitle": "Cannot preview binary file",
+    "disabledMessage": "No Office file preview service is configured. Configure the Office file preview service in Settings, or download the file and open it locally.",
+    "libreOfficeUnavailableTitle": "LibreOffice is unavailable",
+    "libreOfficeUnavailableMessage": "This format requires LibreOffice for preview. Install LibreOffice, or switch the Office file preview service to None in Settings.",
+    "failedMessage": "Failed to generate Office file preview."
   }
 }

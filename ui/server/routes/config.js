@@ -20,6 +20,12 @@ import {
 import { reloadPilotDeckConfig } from '../services/pilotdeckConfigReloader.js';
 import { suppressNextWatchEvent } from '../services/pilotdeckConfigWatcher.js';
 import { getPilotDeckGateway } from '../pilotdeck-bridge.js';
+import {
+  OFFICE_PREVIEW_SERVICE_LIBREOFFICE,
+  OFFICE_PREVIEW_SERVICE_NONE,
+  getConfiguredOfficePreviewService,
+  getLibreOfficeStatus,
+} from '../services/officePreview.js';
 
 async function notifyGatewayConfigReload() {
   try {
@@ -107,6 +113,28 @@ router.post('/validate', (req, res) => {
     res.status(validation.valid ? 200 : 400).json(validation);
   } catch (error) {
     res.status(400).json({ valid: false, errors: [error instanceof Error ? error.message : String(error)], warnings: [] });
+  }
+});
+
+router.get('/office-preview/status', async (_req, res) => {
+  try {
+    const [libreOffice, service] = await Promise.all([
+      getLibreOfficeStatus(),
+      Promise.resolve(getConfiguredOfficePreviewService()),
+    ]);
+    res.json({
+      service,
+      libreOffice,
+      supportedServices: [
+        OFFICE_PREVIEW_SERVICE_NONE,
+        OFFICE_PREVIEW_SERVICE_LIBREOFFICE,
+      ],
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to read Office preview status',
+      code: 'OFFICE_PREVIEW_STATUS_FAILED',
+    });
   }
 });
 

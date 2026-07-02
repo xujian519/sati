@@ -490,6 +490,13 @@ export function useChatRealtimeHandlers({
           );
           onSessionInactive?.(sid);
           onSessionNotProcessing?.(sid);
+          window.dispatchEvent(new CustomEvent('pilotdeck:agent-turn-complete', {
+            detail: {
+              sessionId: sid,
+              projectName: selectedProject?.name,
+              projectPath: selectedProject?.fullPath || selectedProject?.path || '',
+            },
+          }));
 
           // Auto-refresh from server to align with canonical message order.
           // During streaming, messages may arrive out of order (e.g. content

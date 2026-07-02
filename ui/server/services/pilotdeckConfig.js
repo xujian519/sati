@@ -90,6 +90,9 @@ export function buildDefaultPilotDeckConfig() {
         databasePath: path.join(PILOT_HOME_DIR, 'auth.db'),
         workspacesRoot: os.homedir(),
       },
+      officePreview: {
+        service: 'libreoffice',
+      },
     },
     telemetry: {
       enabled: false,
@@ -268,6 +271,14 @@ export function validatePilotDeckConfig(config) {
       'webui.runtime.contextWindow is deprecated and ignored. ' +
       'Use agent.maxContextTokens to override the model\'s context window for auto-compaction.',
     );
+  }
+
+  const officePreviewService = normalized.webui?.officePreview?.service;
+  if (
+    officePreviewService !== undefined
+    && !['none', 'libreoffice'].includes(normalizeString(officePreviewService).toLowerCase())
+  ) {
+    errors.push('webui.officePreview.service must be "none" or "libreoffice"');
   }
 
   return { valid: errors.length === 0, errors, warnings, config: normalized };

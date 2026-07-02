@@ -1,0 +1,63 @@
+import { api } from './api';
+
+export type OfficePreviewService = 'none' | 'libreoffice';
+
+export type OfficePreviewStatus = {
+  service: OfficePreviewService;
+  libreOffice?: {
+    available?: boolean;
+    binaryPath?: string | null;
+    version?: string;
+  };
+  statusError?: string;
+  statusUnavailable?: boolean;
+};
+
+function normalizeOfficePreviewService(value: unknown): OfficePreviewService {
+  return String(value || '').trim().toLowerCase() === 'none' ? 'none' : 'libreoffice';
+}
+
+async function readJsonBody(response: Response): Promise<any> {
+  const text = await response.text();
+  if (!text.trim()) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(
+      response.ok
+        ? 'Expected JSON response for Office preview status.'
+        : text.slice(0, 160),
+    );
+  }
+}
+
+async function readServiceFromConfig(): Promise<OfficePreviewStatus> {
+  const response = await api.pilotDeckConfig();
+  const body = await readJsonBody(response);
+  if (!response.ok) {
+    throw new Error(body?.error || `HTTP ${response.status}`);
+  }
+  return {
+    service: normalizeOfficePreviewService(body?.config?.webui?.officePreview?.service),
+  };
+}
+
+export async function readOfficePreviewStatus(): Promise<OfficePreviewStatus> {
+  try {
+    const response = await api.officePreviewStatus();
+    const body = await readJsonBody(response);
+    if (!response.ok) {
+      throw new Error(body?.error || `HTTP ${response.status}`);
+    }
+    return {
+      service: normalizeOfficePreviewService(body?.service),
+      libreOffice: body?.libreOffice,
+    };
+  } catch {
+    const fallback = await readServiceFromConfig();
+    return {
+      ...fallback,
+      statusUnavailable: true,
+    };
+  }
+}
