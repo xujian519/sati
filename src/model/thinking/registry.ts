@@ -94,9 +94,6 @@ export function resolveThinkingPlan(
     return minimaxPlan(mode);
   }
 
-  if (model.capabilities.supportsThinking && !isOff) {
-    return { mode, enabled: true, budgetTokens };
-  }
   if (explicitMode) {
     return {
       mode,
@@ -127,7 +124,11 @@ function openAIPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
   if (mode === "off") {
     return modelId.includes("gpt-5.5")
       ? { mode, enabled: true, effort: "none", useOpenAIReasoning: true }
-      : { mode, enabled: false };
+      : {
+        mode,
+        enabled: false,
+        unsupportedReason: `OpenAI model ${modelId} does not support an explicit off thinking mode. Switch thinking strength back to Default.`,
+      };
   }
   if (modelId.includes("gpt-5.5-pro")) {
     return { mode, enabled: true, effort: clampEffort(mode, ["medium", "high", "xhigh"]), useOpenAIReasoning: true };
@@ -137,6 +138,9 @@ function openAIPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
   }
   if (modelId.includes("gpt-5")) {
     return { mode, enabled: true, effort: clampEffort(mode, ["minimal", "low", "medium", "high"]), useOpenAIReasoning: true };
+  }
+  if (/^(?:o1|o3|o4)(?:\b|[-_])/.test(modelId)) {
+    return { mode, enabled: true, effort: clampEffort(mode, ["low", "medium", "high"]), useOpenAIReasoning: true };
   }
   return {
     mode,

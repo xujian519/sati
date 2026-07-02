@@ -87,6 +87,21 @@ test("GPT-5.5 Pro Low legalizes to Medium", () => {
   assert.deepEqual(body.reasoning, { effort: "medium" });
 });
 
+test("OpenAI o-series maps explicit thinking to reasoning effort", () => {
+  const body = bodyFor("openai", "openai-responses", "o3", { mode: "high", enabled: true });
+  assert.deepEqual(body.reasoning, { effort: "high" });
+});
+
+test("OpenAI GPT-5 explicit Off reports unsupported instead of silently no-oping", () => {
+  assert.throws(
+    () => bodyFor("openai", "openai-responses", "gpt-5", { mode: "off", enabled: false }),
+    (error: unknown) => error instanceof ModelRequestError
+      && error.code === "unsupported_thinking"
+      && /does not support an explicit off thinking mode/.test(error.message)
+      && /Switch thinking strength back to Default/.test(error.message),
+  );
+});
+
 test("Gemini 3.1 Pro uses thinkingLevel not thinkingBudget", () => {
   const body = bodyFor("google", "google", "gemini-3.1-pro", { mode: "medium", enabled: true });
   assert.deepEqual(body.config.thinkingConfig, { includeThoughts: true, thinkingLevel: "medium" });
@@ -95,6 +110,15 @@ test("Gemini 3.1 Pro uses thinkingLevel not thinkingBudget", () => {
 test("unknown explicit thinking mode returns an actionable unsupported error", () => {
   assert.throws(
     () => bodyFor("local", "openai", "plain-chat", { mode: "high", enabled: true }, "https://local.example.invalid/v1", false),
+    (error: unknown) => error instanceof ModelRequestError
+      && error.code === "unsupported_thinking"
+      && /Switch thinking strength back to Default/.test(error.message),
+  );
+});
+
+test("unknown supportsThinking model still requires an explicit adapter", () => {
+  assert.throws(
+    () => bodyFor("local", "openai", "plain-thinking-chat", { mode: "high", enabled: true }, "https://local.example.invalid/v1", true),
     (error: unknown) => error instanceof ModelRequestError
       && error.code === "unsupported_thinking"
       && /Switch thinking strength back to Default/.test(error.message),
