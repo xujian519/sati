@@ -163,11 +163,8 @@ export type CanonicalToolChoice =
     };
 
 export type CanonicalThinkingConfig = {
-  mode?: "default" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   enabled: boolean;
   budgetTokens?: number;
-  preserve?: boolean;
-  splitReasoning?: boolean;
 };
 
 /**
