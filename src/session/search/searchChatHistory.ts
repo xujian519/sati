@@ -178,7 +178,10 @@ type SearchableLine = {
   createdAt: string;
 };
 
-type Matcher = (text: string) => boolean;
+type Matcher = {
+  test: (text: string) => boolean;
+  findIndex: (text: string) => number;
+};
 
 function buildMatcher(
   query: string,
@@ -187,13 +190,26 @@ function buildMatcher(
   if (options.regex) {
     const flags = options.caseSensitive ? "" : "i";
     const pattern = new RegExp(query, flags);
-    return (text) => pattern.test(text);
+    return {
+      test: (text) => pattern.test(text),
+      findIndex: (text) => {
+        pattern.lastIndex = 0;
+        const match = pattern.exec(text);
+        return match?.index ?? -1;
+      },
+    };
   }
 
   const needle = options.caseSensitive ? query : query.toLowerCase();
-  return (text) => {
-    const haystack = options.caseSensitive ? text : text.toLowerCase();
-    return haystack.includes(needle);
+  return {
+    test: (text) => {
+      const haystack = options.caseSensitive ? text : text.toLowerCase();
+      return haystack.includes(needle);
+    },
+    findIndex: (text) => {
+      const haystack = options.caseSensitive ? text : text.toLowerCase();
+      return haystack.indexOf(needle);
+    },
   };
 }
 
@@ -307,7 +323,7 @@ async function searchSessionFile(
     const searchable = extractSearchableLines(entry);
     for (const item of searchable) {
       if (roleFilter !== "all" && item.role !== roleFilter) continue;
-      if (!matcher(item.text)) continue;
+      if (!matcher.test(item.text)) continue;
       matches.push({
         sessionId,
         role: item.role,
@@ -363,36 +379,13 @@ function buildSnippet(text: string, matcher: Matcher): string {
   const normalized = text.replace(/\s+/g, " ").trim();
   if (!normalized) return "";
 
-  const lowerText = normalized.toLowerCase();
-  let index = 0;
-  for (let start = 0; start < normalized.length; start += 1) {
-    const candidate = normalized.slice(start);
-    if (matcher(candidate) || matcher(normalized.slice(Math.max(0, start - 1)))) {
-      index = start;
-      break;
-    }
-    if (matcher(normalized.slice(start, start + lowerText.length))) {
-      index = start;
-      break;
-    }
-  }
-
-  const matchIndex = findFirstMatchIndex(normalized, matcher);
-  const center = matchIndex >= 0 ? matchIndex : index;
+  const matchIndex = matcher.findIndex(normalized);
+  const center = matchIndex >= 0 ? matchIndex : 0;
   const start = Math.max(0, center - SNIPPET_RADIUS);
   const end = Math.min(normalized.length, center + SNIPPET_RADIUS);
   const prefix = start > 0 ? "..." : "";
   const suffix = end < normalized.length ? "..." : "";
   return `${prefix}${normalized.slice(start, end)}${suffix}`;
-}
-
-function findFirstMatchIndex(text: string, matcher: Matcher): number {
-  for (let index = 0; index < text.length; index += 1) {
-    if (matcher(text.slice(index))) {
-      return index;
-    }
-  }
-  return -1;
 }
 
 function isInternalSession(sessionId: string): boolean {

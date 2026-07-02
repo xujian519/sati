@@ -1,7 +1,7 @@
 import type { ChatMessage } from '../chat/types/types';
 
 export type ChatHistorySearchMatch = {
-  /** Index in the searchable message list. */
+  /** Index in the rendered message list. */
   messageIndex: number;
   /** Stable key used on `.chat-message[data-message-key]`. */
   messageKey: string;
@@ -14,6 +14,7 @@ export type ChatHistorySearchMatch = {
 export type SearchableChatMessage = {
   message: ChatMessage;
   messageKey: string;
+  messageIndex: number;
   text: string;
 };
 
@@ -45,9 +46,10 @@ export function buildSearchableMessages(
   items: Array<{ message: ChatMessage; messageKey: string }>,
 ): SearchableChatMessage[] {
   return items
-    .map(({ message, messageKey }) => ({
+    .map(({ message, messageKey }, messageIndex) => ({
       message,
       messageKey,
+      messageIndex,
       text: extractSearchableText(message),
     }))
     .filter((entry) => entry.text.trim().length > 0);
@@ -64,7 +66,7 @@ export function findChatHistoryMatches(
   const lowerNeedle = needle.toLowerCase();
   const matches: ChatHistorySearchMatch[] = [];
 
-  items.forEach((entry, messageIndex) => {
+  items.forEach((entry) => {
     const haystack = entry.text;
     const lowerHaystack = haystack.toLowerCase();
     let fromIndex = 0;
@@ -73,7 +75,7 @@ export function findChatHistoryMatches(
       const found = lowerHaystack.indexOf(lowerNeedle, fromIndex);
       if (found < 0) break;
       matches.push({
-        messageIndex,
+        messageIndex: entry.messageIndex,
         messageKey: entry.messageKey,
         offset: found,
         length: needle.length,
