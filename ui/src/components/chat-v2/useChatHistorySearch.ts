@@ -82,7 +82,7 @@ export function useChatHistorySearch({
       });
     });
 
-    const entry = searchableMessages[match.messageIndex];
+    const entry = searchableMessages.find((item) => item.messageKey === match.messageKey);
     if (!entry) return;
 
     highlightActiveMatch(
