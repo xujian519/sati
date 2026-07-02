@@ -469,9 +469,9 @@ export class WeixinChannel implements ChannelAdapter {
         }
         if (item.type === MessageItemType.FILE) {
           const file = item.file_item;
-          const url = file?.cdn_url ?? file?.url;
+          const url = file?.cdn_url ?? file?.url ?? extractWeixinMediaUrl(file);
           if (!url) {
-            diagnostics.push(`微信文件 ${file?.file_name ?? "(unknown)"} 缺少下载 URL，已跳过。`);
+            diagnostics.push(`微信文件 ${file?.file_name ?? "(unknown)"} 缺少下载 URL，已跳过。调试信息：file_item 中未找到 url/cdn_url/media.full_url。`);
             continue;
           }
           attachments.push(await this.attachmentStore.saveFromUrl({
@@ -482,7 +482,11 @@ export class WeixinChannel implements ChannelAdapter {
             name: file?.file_name,
             bytes: file?.file_size,
             mimeType: guessMimeTypeFromName(file?.file_name),
-            metadata: { itemType: "file" },
+            transform: (buffer) => this.decryptWeixinFile(buffer, file),
+            metadata: {
+              itemType: "file",
+              source: file?.cdn_url || file?.url ? "url" : "media.full_url",
+            },
           }));
           continue;
         }
@@ -511,6 +515,16 @@ export class WeixinChannel implements ChannelAdapter {
     this.logger?.info?.(
       `weixin: image decrypt input=${buffer.byteLength} output=${result.byteLength} `
       + `changed=${result !== buffer} image=${isKnownImageBuffer(result)} ${keyDiagnostics} ${candidateDiagnostics}`,
+    );
+    return result;
+  }
+
+  private decryptWeixinFile(buffer: Buffer, file: unknown): Buffer {
+    const result = decryptWeixinMediaIfNeeded(buffer, file, isLikelyKnownFileBuffer);
+    const keyDiagnostics = summarizeWeixinMediaKeyShape(file);
+    this.logger?.info?.(
+      `weixin: file decrypt input=${buffer.byteLength} output=${result.byteLength} `
+      + `changed=${result !== buffer} known=${isLikelyKnownFileBuffer(result)} ${keyDiagnostics}`,
     );
     return result;
   }
@@ -998,11 +1012,15 @@ function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
-function decryptWeixinMediaIfNeeded(buffer: Buffer, mediaOwner: unknown): Buffer {
-  if (isKnownImageBuffer(buffer)) return buffer;
+function decryptWeixinMediaIfNeeded(
+  buffer: Buffer,
+  mediaOwner: unknown,
+  isExpectedBuffer: (candidate: Buffer) => boolean = isKnownImageBuffer,
+): Buffer {
+  if (isExpectedBuffer(buffer)) return buffer;
   for (const key of extractWeixinMediaKeys(mediaOwner)) {
     for (const deciphered of tryDecryptWeixinMedia(buffer, key)) {
-      if (isKnownImageBuffer(deciphered)) return deciphered;
+      if (isExpectedBuffer(deciphered)) return deciphered;
     }
   }
   return buffer;
@@ -1114,6 +1132,29 @@ function isKnownImageBuffer(buffer: Buffer): boolean {
     return true;
   }
   return false;
+}
+
+function isLikelyKnownFileBuffer(buffer: Buffer): boolean {
+  if (buffer.length < 4) return false;
+  if (isKnownImageBuffer(buffer)) return true;
+  if (buffer.subarray(0, 5).toString("ascii") === "%PDF-") return true;
+  if (buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) return true;
+  if (buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x05, 0x06]))) return true;
+  if (buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x07, 0x08]))) return true;
+  if (buffer.subarray(0, 4).toString("ascii") === "{\\rt") return true;
+  return looksLikeMostlyText(buffer.subarray(0, Math.min(buffer.length, 512)));
+}
+
+function looksLikeMostlyText(buffer: Buffer): boolean {
+  if (buffer.length === 0) return false;
+  let printable = 0;
+  for (const byte of buffer) {
+    if (byte === 0) return false;
+    if (byte === 0x09 || byte === 0x0a || byte === 0x0d || (byte >= 0x20 && byte <= 0x7e) || byte >= 0x80) {
+      printable++;
+    }
+  }
+  return printable / buffer.length > 0.9;
 }
 
 function installIlinkFetchCompatibility(): void {
