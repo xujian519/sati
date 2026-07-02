@@ -967,4 +967,25 @@
   .streaming-fade-in blockquote {
     animation: stream-text-in 0.15s ease-out forwards;
   }
+
+  mark.chat-history-search-highlight {
+    border-radius: 2px;
+    background-color: rgb(254 240 138 / 0.85);
+    color: inherit;
+    padding: 0 1px;
+  }
+
+  .dark mark.chat-history-search-highlight {
+    background-color: rgb(113 63 18 / 0.75);
+  }
+
+  mark.chat-history-search-highlight-active {
+    background-color: rgb(250 204 21);
+    outline: 1px solid rgb(202 138 4);
+  }
+
+  .dark mark.chat-history-search-highlight-active {
+    background-color: rgb(202 138 4);
+    outline-color: rgb(250 204 21);
+  }
 }

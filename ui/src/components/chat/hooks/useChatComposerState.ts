@@ -367,6 +367,14 @@ export function useChatComposerState({
           break;
         }
 
+        case 'search':
+          addMessage({
+            type: 'assistant',
+            content: data.content || data.message || 'No search results.',
+            timestamp: Date.now(),
+          });
+          break;
+
         case 'switchProject': {
           // The server validates that an arg was supplied; project lookup
           // happens here because the client already holds the projects list.
