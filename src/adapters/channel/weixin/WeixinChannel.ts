@@ -33,6 +33,8 @@ const WEIXIN_CONNECTION_RECOVERED_AFTER_LOSS_TEXT = "微信连接刚刚中断过
 const WEIXIN_SESSION_EXPIRED_TEXT = "微信登录状态已失效，当前任务无法继续通过微信回复。请重新扫码登录后再试。";
 const WEIXIN_MAX_PENDING_REPLIES_PER_CHAT = 20;
 const WEIXIN_MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+const WEIXIN_LOGIN_RECOVERY_CHECK_INTERVAL_MS = 2000;
+const WEIXIN_LOGIN_RECOVERY_TIMEOUT_MS = 2 * 60 * 1000;
 let ilinkFetchCompatibilityInstalled = false;
 
 export type WeixinChannelOptions = {
@@ -84,6 +86,8 @@ export class WeixinChannel implements ChannelAdapter {
   private connectionLostNoticeDeliveredChats = new Set<string>();
   private pendingReplies = new Map<string, string[]>();
   private attachmentStore: ImAttachmentStore;
+  private loginRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
+  private loginRecoveryPromise: Promise<void> | null = null;
 
   constructor(options: WeixinChannelOptions = {}) {
     this.credentialsPath = options.credentialsPath ?? CREDENTIALS_PATH;
@@ -101,26 +105,25 @@ export class WeixinChannel implements ChannelAdapter {
   async start(deps: ChannelStartDeps): Promise<ChannelHandle> {
     this.gateway = deps.gateway;
     this.logger = deps.logger;
+    this.loopAbort = new AbortController();
 
     const creds = await this.ensureLoggedIn();
-    if (!creds) {
-      return { stop: async () => undefined };
+    if (creds) {
+      this.startPollingWithCredentials(creds);
+    } else {
+      this.startLoginRecoveryWatcher();
     }
-
-    installIlinkFetchCompatibility();
-    this.client = this.createClient(creds);
-
-    this.loopAbort = new AbortController();
-    this.pollPromise = this.pollLoop();
-    this.logger?.info?.("weixin: connected, poll loop started");
 
     return {
       stop: async (reason?: string) => {
         this.logger?.info?.(`weixin: stopping (${reason ?? "no reason"})`);
         this.loopAbort.abort();
+        this.clearLoginRecoveryTimer();
         this.saveCursor();
         try { await this.pollPromise; } catch { /* ignore */ }
+        try { await this.loginRecoveryPromise; } catch { /* ignore */ }
         this.pollPromise = null;
+        this.loginRecoveryPromise = null;
       },
     };
   }
@@ -129,6 +132,78 @@ export class WeixinChannel implements ChannelAdapter {
     return deliverChatCronResult(delivery, this.channelKey, (userId, text) =>
       this.sendReply(userId, text, { queueOnFailure: true }),
     );
+  }
+
+  private startPollingWithCredentials(creds: SavedCredentials): void {
+    if (this.pollPromise) {
+      this.logger?.warn?.("weixin: poll loop already running, skip duplicate start");
+      return;
+    }
+
+    installIlinkFetchCompatibility();
+    this.client = this.createClient(creds);
+
+    this.loopAbort = new AbortController();
+    this.pollPromise = this.pollLoop();
+    this.logger?.info?.("weixin: connected, poll loop started");
+  }
+
+  private startLoginRecoveryWatcher(): void {
+    if (this.loginRecoveryPromise) return;
+
+    this.logger?.warn?.("weixin: QR login failed, watching credentials for recovery");
+    this.loginRecoveryPromise = this.watchCredentialsForLoginRecovery(this.loopAbort.signal);
+  }
+
+  private async watchCredentialsForLoginRecovery(signal: AbortSignal): Promise<void> {
+    const deadline = Date.now() + WEIXIN_LOGIN_RECOVERY_TIMEOUT_MS;
+
+    while (!signal.aborted && !this.pollPromise) {
+      const creds = this.loadCredentials();
+      if (creds) {
+        this.logger?.info?.(`weixin: loaded saved credentials (account: ${creds.accountId})`);
+        this.clearLoginRecoveryTimer();
+        this.startPollingWithCredentials(creds);
+        return;
+      }
+
+      if (Date.now() >= deadline) {
+        this.logger?.warn?.("weixin: QR login recovery timed out");
+        return;
+      }
+
+      await this.sleepLoginRecovery(signal);
+    }
+  }
+
+  private async sleepLoginRecovery(signal: AbortSignal): Promise<void> {
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        this.clearLoginRecoveryTimer();
+        signal.removeEventListener("abort", finish);
+        resolve();
+      };
+
+      this.loginRecoveryTimer = setTimeout(() => {
+        this.loginRecoveryTimer = null;
+        finish();
+      }, WEIXIN_LOGIN_RECOVERY_CHECK_INTERVAL_MS);
+
+      if (signal.aborted) {
+        finish();
+      } else {
+        signal.addEventListener("abort", finish, { once: true });
+      }
+    });
+  }
+
+  private clearLoginRecoveryTimer(): void {
+    if (!this.loginRecoveryTimer) return;
+    clearTimeout(this.loginRecoveryTimer);
+    this.loginRecoveryTimer = null;
   }
 
   private async ensureLoggedIn(): Promise<SavedCredentials | null> {
