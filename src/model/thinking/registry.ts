@@ -220,7 +220,10 @@ function kimiPlan(mode: ThinkingMode, _modelId: string): ThinkingPlan {
 }
 
 function minimaxPlan(mode: ThinkingMode): ThinkingPlan {
-  if (mode === "off" || mode === "default") return { mode, enabled: false };
+  if (mode === "off") {
+    return { mode, enabled: false, thinkingType: "disabled", useOpenAICompatibleThinking: true };
+  }
+  if (mode === "default") return { mode, enabled: false };
   return { mode, enabled: true, splitReasoning: true };
 }
 

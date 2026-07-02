@@ -71,7 +71,10 @@ test("Kimi K2.6 Off disables thinking without effort or budget", () => {
   assert.equal(body.temperature, undefined);
 });
 
-test("MiniMax M2 enables reasoning_split without fake effort", () => {
+test("MiniMax M2 supports Off and reasoning split without fake effort", () => {
+  const off = bodyFor("minimax", "openai", "minimax-m2", { mode: "off", enabled: false });
+  assert.deepEqual(off.thinking, { type: "disabled" });
+
   const body = bodyFor("minimax", "openai", "minimax-m2", { mode: "medium", enabled: true });
   assert.equal(body.reasoning_split, true);
   assert.equal(body.reasoning_effort, undefined);
