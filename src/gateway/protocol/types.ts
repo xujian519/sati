@@ -283,6 +283,7 @@ export type GatewayCronController = {
 export type ReloadConfigResult = {
   reloaded: boolean;
   changedPaths?: string[];
+  reason?: "unsupported" | "unchanged";
 };
 
 export type ReloadExtensionsInput = {
@@ -293,6 +294,7 @@ export type ReloadExtensionsInput = {
 export type ReloadExtensionsResult = {
   reloaded: boolean;
   changedPaths?: string[];
+  reason?: "unsupported" | "unchanged";
 };
 
 export type AlwaysOnApplyInput = {
