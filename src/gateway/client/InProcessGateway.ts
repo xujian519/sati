@@ -1216,7 +1216,7 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
           : [],
       );
       const attachments = event.result.content.flatMap((item): GatewayEvent[] => {
-        if (item.type === "image") {
+        if (item.type === "image" && event.result.toolName !== "read_file") {
           return [{
             type: "assistant_attachment",
             attachment: {
@@ -1303,6 +1303,7 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
             toolCallId: block.toolCallId,
             resultPath: block.path,
           });
+          if (block.reason === "media_result_too_large") continue;
           events.push({
             type: "assistant_attachment",
             attachment: {
