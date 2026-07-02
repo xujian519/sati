@@ -102,13 +102,18 @@ test("OpenAI GPT-5 explicit Off reports unsupported instead of silently no-oping
   );
 });
 
-test("official OpenAI unknown model reports unsupported thinking", () => {
-  assert.throws(
-    () => bodyFor("openai", "openai", "plain-chat", { mode: "high", enabled: true }),
-    (error: unknown) => error instanceof ModelRequestError
-      && error.code === "unsupported_thinking"
-      && /Switch thinking strength back to Default/.test(error.message),
-  );
+test("official OpenAI unknown model uses generic thinking budget", () => {
+  const body = bodyFor("openai", "openai", "plain-chat", { mode: "high", enabled: true });
+  assert.equal(body.enable_thinking, true);
+  assert.equal(body.thinking_budget, 24576);
+  assert.equal(body.reasoning_effort, undefined);
+});
+
+test("OpenAI-compatible responses unknown model serializes generic thinking", () => {
+  const body = bodyFor("custom", "openai-responses", "plain-chat", { mode: "high", enabled: true });
+  assert.equal(body.enable_thinking, true);
+  assert.equal(body.thinking_budget, 24576);
+  assert.equal(body.reasoning, undefined);
 });
 
 test("Gemini 3.1 Pro uses thinkingLevel not thinkingBudget", () => {

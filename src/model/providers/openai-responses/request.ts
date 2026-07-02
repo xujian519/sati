@@ -34,6 +34,8 @@ export type OpenAIResponsesRequestBody = {
   reasoning?: {
     effort?: string;
   };
+  enable_thinking?: boolean;
+  thinking_budget?: number;
 };
 
 type OpenAIResponsesInputItem =
@@ -87,6 +89,8 @@ export function buildOpenAIResponsesRequest(
 
   if (thinkingPlan.useOpenAIReasoning && thinkingPlan.effort) {
     body.reasoning = { effort: thinkingPlan.effort };
+  } else if (thinkingPlan.bodyPatch) {
+    Object.assign(body, thinkingPlan.bodyPatch);
   }
 
   if (request.outputSchema) {

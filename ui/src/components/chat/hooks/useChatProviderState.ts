@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
+import { useWebSocket } from '../../../contexts/WebSocketContext';
 import { CLAUDE_MODELS } from '../../../../shared/modelConstants';
 import type { PendingPermissionRequest, PermissionMode } from '../types/types';
 import type { ProjectSession } from '../../../types/app';
@@ -39,7 +40,43 @@ function readStoredPermissionMode(key: string): PermissionMode | null {
     : null;
 }
 
+function readThinkingModelContext(config: unknown): ThinkingModelContext | null {
+  const configRecord = config && typeof config === 'object' ? config as Record<string, unknown> : null;
+  const agent = configRecord?.agent && typeof configRecord.agent === 'object' ? configRecord.agent as Record<string, unknown> : null;
+  const modelRef = typeof agent?.model === 'string' ? agent.model.trim() : '';
+  const slashIndex = modelRef.indexOf('/');
+  if (slashIndex <= 0 || slashIndex >= modelRef.length - 1) {
+    return null;
+  }
+  const providerId = modelRef.slice(0, slashIndex);
+  const modelId = modelRef.slice(slashIndex + 1);
+  const modelConfig = configRecord?.model && typeof configRecord.model === 'object' ? configRecord.model as Record<string, unknown> : null;
+  const providers = modelConfig?.providers && typeof modelConfig.providers === 'object'
+    ? modelConfig.providers as Record<string, unknown>
+    : null;
+  const provider = providers?.[providerId] && typeof providers[providerId] === 'object'
+    ? providers[providerId] as Record<string, unknown>
+    : null;
+  const models = provider?.models && typeof provider.models === 'object'
+    ? provider.models as Record<string, unknown>
+    : null;
+  const modelDefinition = models?.[modelId] && typeof models[modelId] === 'object'
+    ? models[modelId] as Record<string, unknown>
+    : null;
+  const capabilities = modelDefinition?.capabilities && typeof modelDefinition.capabilities === 'object'
+    ? modelDefinition.capabilities as Record<string, unknown>
+    : null;
+  return {
+    providerId,
+    providerUrl: typeof provider?.url === 'string' ? provider.url : undefined,
+    protocol: typeof provider?.protocol === 'string' ? provider.protocol : undefined,
+    modelId,
+    supportsThinking: typeof capabilities?.supportsThinking === 'boolean' ? capabilities.supportsThinking : undefined,
+  };
+}
+
 export function useChatProviderState({ selectedSession }: UseChatProviderStateArgs) {
+  const { subscribe } = useWebSocket();
   const [permissionMode, setPermissionModeState] = useState<PermissionMode>(() => {
     return readStoredPermissionMode(DEFAULT_PERMISSION_MODE_KEY) || 'default';
   });
@@ -124,39 +161,7 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
         if (cancelled) {
           return;
         }
-        const config = data?.config && typeof data.config === 'object' ? data.config as Record<string, unknown> : null;
-        const agent = config?.agent && typeof config.agent === 'object' ? config.agent as Record<string, unknown> : null;
-        const modelRef = typeof agent?.model === 'string' ? agent.model.trim() : '';
-        const slashIndex = modelRef.indexOf('/');
-        if (slashIndex <= 0 || slashIndex >= modelRef.length - 1) {
-          setThinkingModelContext(null);
-          return;
-        }
-        const providerId = modelRef.slice(0, slashIndex);
-        const modelId = modelRef.slice(slashIndex + 1);
-        const modelConfig = config?.model && typeof config.model === 'object' ? config.model as Record<string, unknown> : null;
-        const providers = modelConfig?.providers && typeof modelConfig.providers === 'object'
-          ? modelConfig.providers as Record<string, unknown>
-          : null;
-        const provider = providers?.[providerId] && typeof providers[providerId] === 'object'
-          ? providers[providerId] as Record<string, unknown>
-          : null;
-        const models = provider?.models && typeof provider.models === 'object'
-          ? provider.models as Record<string, unknown>
-          : null;
-        const modelDefinition = models?.[modelId] && typeof models[modelId] === 'object'
-          ? models[modelId] as Record<string, unknown>
-          : null;
-        const capabilities = modelDefinition?.capabilities && typeof modelDefinition.capabilities === 'object'
-          ? modelDefinition.capabilities as Record<string, unknown>
-          : null;
-        setThinkingModelContext({
-          providerId,
-          providerUrl: typeof provider?.url === 'string' ? provider.url : undefined,
-          protocol: typeof provider?.protocol === 'string' ? provider.protocol : undefined,
-          modelId,
-          supportsThinking: typeof capabilities?.supportsThinking === 'boolean' ? capabilities.supportsThinking : undefined,
-        });
+        setThinkingModelContext(readThinkingModelContext(data?.config));
       })
       .catch((error) => {
         console.error('Error loading PilotDeck config:', error);
@@ -166,6 +171,13 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    return subscribe((message: any) => {
+      if (message?.type !== 'config:reloaded') return;
+      setThinkingModelContext(readThinkingModelContext(message?.config));
+    });
+  }, [subscribe]);
 
   const setPermissionMode = useCallback((nextMode: PermissionMode) => {
     const normalizedMode = COMPOSER_PERMISSION_MODES.includes(nextMode)

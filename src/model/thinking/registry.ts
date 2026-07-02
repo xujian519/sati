@@ -160,7 +160,7 @@ function openAIPlan(mode: ThinkingMode, modelId: string, officialOpenAIProvider:
   if (/^(?:o1|o3|o4)(?:\b|[-_])/.test(modelId)) {
     return { mode, enabled: true, effort: clampEffort(mode, ["low", "medium", "high"]), useOpenAIReasoning: true };
   }
-  if (officialOpenAIProvider) {
+  if (officialOpenAIProvider && modelId.startsWith("gpt")) {
     return {
       mode,
       enabled: false,
