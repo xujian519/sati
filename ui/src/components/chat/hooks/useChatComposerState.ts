@@ -11,7 +11,8 @@ import type {
 } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { authenticatedFetch } from '../../../utils/api';
-import { thinkingModes } from '../constants/thinkingModes';
+import { isThinkingModeId, thinkingModeToConfig, type ThinkingModeId } from '../constants/thinkingModes';
+import { getEffectiveThinkingMode, type ThinkingModeAvailability } from '../constants/thinkingModeAvailability';
 import { grantPilotDeckToolPermission } from '../utils/chatPermissions';
 import { safeLocalStorage } from '../utils/chatStorage';
 import {
@@ -23,9 +24,8 @@ import {
 import type {
   ChatMessage,
   PendingPermissionRequest,
-  PermissionMode,
   PermissionGrantResult,
-  SessionPermissionGrantResult,
+  PermissionMode,
 } from '../types/types';
 import type {
   Project,
@@ -52,6 +52,7 @@ interface UseChatComposerStateArgs {
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
+  thinkingModeAvailability: ThinkingModeAvailability;
   sendMessage: (message: unknown) => void;
   subscribe?: (handler: (message: any) => void) => () => void;
   sendByCtrlEnter?: boolean;
@@ -170,6 +171,7 @@ export function useChatComposerState({
   isLoading,
   canAbortSession,
   tokenBudget,
+  thinkingModeAvailability,
   sendMessage,
   subscribe,
   sendByCtrlEnter,
@@ -203,10 +205,11 @@ export function useChatComposerState({
   const [uploadingImages, setUploadingImages] = useState<Map<string, number>>(new Map());
   const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
-  const [thinkingMode, setThinkingMode] = useState('none');
+  const [thinkingMode, setThinkingModeState] = useState<ThinkingModeId>('default');
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
+  const pendingNewSessionThinkingModeRef = useRef<ThinkingModeId | null>(null);
   const handleSubmitRef = useRef<
     ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
   >(null);
@@ -240,6 +243,35 @@ export function useChatComposerState({
       pendingSessionGrantResolversRef.current.clear();
     };
   }, []);
+
+  const activeThinkingSessionId = selectedSession?.id || currentSessionId || null;
+  const setThinkingMode = useCallback((nextMode: ThinkingModeId | string) => {
+    const normalizedMode = isThinkingModeId(nextMode) ? nextMode : 'default';
+    setThinkingModeState(normalizedMode);
+    if (activeThinkingSessionId && !isTemporarySessionId(activeThinkingSessionId)) {
+      safeLocalStorage.setItem(`thinkingMode-${activeThinkingSessionId}`, normalizedMode);
+    }
+  }, [activeThinkingSessionId]);
+
+  useEffect(() => {
+    if (!activeThinkingSessionId || isTemporarySessionId(activeThinkingSessionId)) {
+      setThinkingModeState('default');
+      return;
+    }
+    const stored = safeLocalStorage.getItem(`thinkingMode-${activeThinkingSessionId}`);
+    if (isThinkingModeId(stored)) {
+      setThinkingModeState(stored);
+      return;
+    }
+    if (pendingNewSessionThinkingModeRef.current) {
+      const pendingMode = pendingNewSessionThinkingModeRef.current;
+      pendingNewSessionThinkingModeRef.current = null;
+      safeLocalStorage.setItem(`thinkingMode-${activeThinkingSessionId}`, pendingMode);
+      setThinkingModeState(pendingMode);
+      return;
+    }
+    setThinkingModeState('default');
+  }, [activeThinkingSessionId]);
 
   // One-shot flag set by `handleCustomCommand` when re-submitting passthrough
   // slash content (e.g. `/projects` for bundled stubs, `/canvas` for skills).
@@ -399,14 +431,6 @@ export function useChatComposerState({
           });
           break;
         }
-
-        case 'search':
-          addMessage({
-            type: 'assistant',
-            content: data.content || data.message || 'No search results.',
-            timestamp: Date.now(),
-          });
-          break;
 
         case 'switchProject': {
           // The server validates that an arg was supplied; project lookup
@@ -734,10 +758,6 @@ export function useChatComposerState({
 
       const userVisibleInput = currentInput.trim() || 'Please review the attached file(s).';
       let messageContent = userVisibleInput;
-      const selectedThinkingMode = thinkingModes.find((mode: { id: string; prefix?: string }) => mode.id === thinkingMode);
-      if (selectedThinkingMode && selectedThinkingMode.prefix) {
-        messageContent = `${selectedThinkingMode.prefix}: ${userVisibleInput}`;
-      }
 
       // Pin the target session before any await so attachment upload cannot
       // race with a sidebar session switch and leak the optimistic bubble.
@@ -749,6 +769,9 @@ export function useChatComposerState({
         selectedSession?.id ||
         (canResumeCurrentSession ? currentSessionId : null);
       const submitSelectedSession = selectedSession;
+      if (!submitTargetSessionId || isTemporarySessionId(submitTargetSessionId)) {
+        pendingNewSessionThinkingModeRef.current = thinkingMode;
+      }
 
       // Optimistic sidebar refresh — fire BEFORE the attachment upload so
       // the sidebar reorders/spawns the row the instant the user clicks
@@ -861,6 +884,7 @@ export function useChatComposerState({
 
       const toolsSettings = getToolsSettings();
       const sessionSummary = getNotificationSessionSummary(submitSelectedSession, userVisibleInput);
+      const effectiveThinkingMode = getEffectiveThinkingMode(thinkingMode, thinkingModeAvailability);
 
       startSessionCommand({
         sendMessage,
@@ -874,6 +898,7 @@ export function useChatComposerState({
         permissionMode,
         basePermissionMode,
         model,
+        thinking: thinkingModeToConfig(effectiveThinkingMode),
         sessionSummary,
         images: uploadedImages,
       });
@@ -885,7 +910,6 @@ export function useChatComposerState({
       setUploadingImages(new Map());
       setImageErrors(new Map());
       setIsTextareaExpanded(false);
-      setThinkingMode('none');
 
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
@@ -919,6 +943,7 @@ export function useChatComposerState({
       setIsUserScrolledUp,
       slashCommands,
       thinkingMode,
+      thinkingModeAvailability,
     ],
   );
 
@@ -1154,7 +1179,7 @@ export function useChatComposerState({
   );
 
   const handleGrantSessionToolPermission = useCallback(
-    (suggestion: { entry: string; toolName: string }): SessionPermissionGrantResult => {
+    (suggestion: { entry: string; toolName: string }) => {
       if (!suggestion?.entry) {
         return { success: false };
       }
