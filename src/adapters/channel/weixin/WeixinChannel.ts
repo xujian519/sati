@@ -1,3 +1,4 @@
+import { createDecipheriv } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -35,6 +36,7 @@ const WEIXIN_MAX_PENDING_REPLIES_PER_CHAT = 20;
 const WEIXIN_MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 const WEIXIN_LOGIN_RECOVERY_CHECK_INTERVAL_MS = 2000;
 const WEIXIN_LOGIN_RECOVERY_TIMEOUT_MS = 2 * 60 * 1000;
+const WEIXIN_CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c";
 let ilinkFetchCompatibilityInstalled = false;
 
 export type WeixinChannelOptions = {
@@ -395,9 +397,9 @@ export class WeixinChannel implements ChannelAdapter {
       try {
         if (item.type === MessageItemType.IMAGE) {
           const image = item.image_item;
-          const url = image?.cdn_url ?? image?.url;
+          const url = image?.cdn_url ?? image?.url ?? extractWeixinMediaUrl(image);
           if (!url) {
-            diagnostics.push("微信图片附件缺少下载 URL，已跳过。");
+            diagnostics.push("微信图片附件缺少下载 URL，已跳过。调试信息：image_item 中未找到 url/cdn_url/media.full_url。");
             continue;
           }
           attachments.push(await this.attachmentStore.saveFromUrl({
@@ -407,7 +409,13 @@ export class WeixinChannel implements ChannelAdapter {
             type: "image",
             name: `image-${messageId}.jpg`,
             mimeType: guessMimeTypeFromUrl(url, "image/jpeg"),
-            metadata: { width: image?.width, height: image?.height, itemType: "image" },
+            transform: (buffer) => this.decryptWeixinImage(buffer, image),
+            metadata: {
+              width: image?.width,
+              height: image?.height,
+              itemType: "image",
+              source: image?.cdn_url || image?.url ? "url" : "media.full_url",
+            },
           }));
           continue;
         }
@@ -446,6 +454,17 @@ export class WeixinChannel implements ChannelAdapter {
       textParts.push(`[Attachment diagnostics]\n${diagnostics.map((line) => `- ${line}`).join("\n")}`);
     }
     return { text: textParts.join("\n").trim(), attachments };
+  }
+
+  private decryptWeixinImage(buffer: Buffer, image: unknown): Buffer {
+    const result = decryptWeixinMediaIfNeeded(buffer, image);
+    const keyDiagnostics = summarizeWeixinMediaKeyShape(image);
+    const candidateDiagnostics = summarizeWeixinDecryptCandidates(buffer, image);
+    this.logger?.info?.(
+      `weixin: image decrypt input=${buffer.byteLength} output=${result.byteLength} `
+      + `changed=${result !== buffer} image=${isKnownImageBuffer(result)} ${keyDiagnostics} ${candidateDiagnostics}`,
+    );
+    return result;
   }
 
   private async processMessage(
@@ -913,6 +932,140 @@ function guessMimeTypeFromName(name: string | undefined): string | undefined {
   if (lower.endsWith(".md")) return "text/markdown";
   if (lower.endsWith(".json")) return "application/json";
   return undefined;
+}
+
+function extractWeixinMediaUrl(mediaOwner: unknown): string | undefined {
+  if (!mediaOwner || typeof mediaOwner !== "object") return undefined;
+  const media = (mediaOwner as Record<string, unknown>).media;
+  if (!media || typeof media !== "object") return undefined;
+  const record = media as Record<string, unknown>;
+  const encryptedQueryParam = readString(record.encrypt_query_param);
+  if (encryptedQueryParam) {
+    return `${WEIXIN_CDN_BASE_URL}/download?encrypted_query_param=${encodeURIComponent(encryptedQueryParam)}`;
+  }
+  return readString(record.full_url) ?? readString(record.download_url) ?? readString(record.url) ?? readString(record.cdn_url);
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function decryptWeixinMediaIfNeeded(buffer: Buffer, mediaOwner: unknown): Buffer {
+  if (isKnownImageBuffer(buffer)) return buffer;
+  for (const key of extractWeixinMediaKeys(mediaOwner)) {
+    for (const deciphered of tryDecryptWeixinMedia(buffer, key)) {
+      if (isKnownImageBuffer(deciphered)) return deciphered;
+    }
+  }
+  return buffer;
+}
+
+function summarizeWeixinMediaKeyShape(mediaOwner: unknown): string {
+  if (!mediaOwner || typeof mediaOwner !== "object") return "keyShape=none";
+  const owner = mediaOwner as Record<string, unknown>;
+  const media = owner.media && typeof owner.media === "object" ? owner.media as Record<string, unknown> : undefined;
+  const ownerAesKey = readString(owner.aeskey);
+  const mediaAesKey = readString(media?.aes_key);
+  const parts = [
+    `ownerAesKeyLen=${ownerAesKey?.length ?? 0}`,
+    `ownerAesKeyHex=${ownerAesKey ? /^[0-9a-fA-F]+$/.test(ownerAesKey.trim()) : false}`,
+    `mediaAesKeyLen=${mediaAesKey?.length ?? 0}`,
+    `mediaAesKeyDecodedLen=${mediaAesKey ? safeBase64DecodedLength(mediaAesKey) ?? "err" : 0}`,
+  ];
+  return `keyShape=${parts.join(",")}`;
+}
+
+function summarizeWeixinDecryptCandidates(buffer: Buffer, mediaOwner: unknown): string {
+  const summaries: string[] = [];
+  let index = 0;
+  for (const key of extractWeixinMediaKeys(mediaOwner)) {
+    const algorithm = key.length === 16 ? "aes-128" : key.length === 24 ? "aes-192" : key.length === 32 ? "aes-256" : `aes-${key.length}`;
+    for (const candidate of tryDecryptWeixinMedia(buffer, key)) {
+      summaries.push(`${index}:${algorithm}:len=${candidate.byteLength}:head=${candidate.subarray(0, 8).toString("hex")}:image=${isKnownImageBuffer(candidate)}`);
+      index++;
+    }
+  }
+  return `candidates=[${summaries.join(";")}]`;
+}
+
+function safeBase64DecodedLength(value: string): number | undefined {
+  try {
+    return Buffer.from(value, "base64").length;
+  } catch {
+    return undefined;
+  }
+}
+
+function extractWeixinMediaKeys(mediaOwner: unknown): Buffer[] {
+  if (!mediaOwner || typeof mediaOwner !== "object") return [];
+  const owner = mediaOwner as Record<string, unknown>;
+  const media = owner.media && typeof owner.media === "object" ? owner.media as Record<string, unknown> : undefined;
+  const keys: Buffer[] = [];
+  const seen = new Set<string>();
+  const push = (key: Buffer | undefined) => {
+    if (!key || (key.length !== 16 && key.length !== 24 && key.length !== 32)) return;
+    const id = key.toString("hex");
+    if (seen.has(id)) return;
+    seen.add(id);
+    keys.push(key);
+  };
+  const ownerAesKey = readString(owner.aeskey);
+  if (ownerAesKey && /^[0-9a-fA-F]{32}$/.test(ownerAesKey.trim())) {
+    push(Buffer.from(ownerAesKey.trim(), "hex"));
+  }
+  const mediaAesKey = readString(media?.aes_key);
+  if (mediaAesKey) {
+    const decoded = Buffer.from(mediaAesKey, "base64");
+    if (decoded.length === 16 || decoded.length === 24 || decoded.length === 32) push(decoded);
+    const text = decoded.toString("ascii");
+    if (/^[0-9a-fA-F]{32}$/.test(text)) push(Buffer.from(text, "hex"));
+  }
+  if (ownerAesKey && !/^[0-9a-fA-F]{32}$/.test(ownerAesKey.trim())) {
+    const decoded = Buffer.from(ownerAesKey, "base64");
+    if (decoded.length === 16 || decoded.length === 24 || decoded.length === 32) push(decoded);
+  }
+  return keys;
+}
+
+function tryDecryptWeixinMedia(buffer: Buffer, key: Buffer): Buffer[] {
+  const algorithm = key.length === 16 ? "aes-128" : key.length === 24 ? "aes-192" : key.length === 32 ? "aes-256" : undefined;
+  if (!algorithm) return [];
+  const outputs: Buffer[] = [];
+  try {
+    const decipher = createDecipheriv(`${algorithm}-ecb`, key, null);
+    decipher.setAutoPadding(false);
+    const padded = Buffer.concat([decipher.update(buffer), decipher.final()]);
+    outputs.push(stripPkcs7Padding(padded) ?? padded);
+  } catch {
+    // Wrong key or malformed ciphertext.
+  }
+  return outputs;
+}
+
+function stripPkcs7Padding(buffer: Buffer): Buffer | undefined {
+  if (buffer.length === 0) return undefined;
+  const pad = buffer[buffer.length - 1];
+  if (!pad || pad > 16 || pad > buffer.length) return undefined;
+  for (const byte of buffer.subarray(buffer.length - pad)) {
+    if (byte !== pad) return undefined;
+  }
+  return buffer.subarray(0, buffer.length - pad);
+}
+
+function isKnownImageBuffer(buffer: Buffer): boolean {
+  if (buffer.length < 12) return false;
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return true;
+  }
+  if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return true;
+  }
+  const gifHeader = buffer.subarray(0, 6).toString("ascii");
+  if (gifHeader === "GIF87a" || gifHeader === "GIF89a") return true;
+  if (buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") {
+    return true;
+  }
+  return false;
 }
 
 function installIlinkFetchCompatibility(): void {

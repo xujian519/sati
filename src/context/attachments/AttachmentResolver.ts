@@ -14,6 +14,7 @@ export type ResolvedAttachment = {
       | "attachment_missing"
       | "attachment_too_large"
       | "attachment_unsupported"
+      | "image_invalid"
       | "image_no_resize"
       | "pdf_size_estimate";
     severity: "info" | "warning" | "error";
@@ -175,6 +176,31 @@ export class AttachmentResolver {
       };
     }
     const buffer = await readFile(absolute);
+    const actualMime = detectImageMime(buffer);
+    if (!actualMime) {
+      return {
+        blocks: [],
+        diagnostics: [
+          {
+            code: "image_invalid",
+            severity: "warning",
+            message: `Image ${absolute} could not be identified from its bytes; skipped and left as a local path diagnostic.`,
+          },
+        ],
+      };
+    }
+    if (!imageMimeCompatible(detectedMime, actualMime)) {
+      return {
+        blocks: [],
+        diagnostics: [
+          {
+            code: "image_invalid",
+            severity: "warning",
+            message: `Image ${absolute} was declared as ${detectedMime} but bytes look like ${actualMime}; skipped and left as a local path diagnostic.`,
+          },
+        ],
+      };
+    }
     return {
       blocks: [
         {
@@ -234,4 +260,18 @@ export class AttachmentResolver {
       ],
     };
   }
+}
+
+function detectImageMime(buffer: Buffer): string | undefined {
+  if (buffer.length < 12) return undefined;
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
+  if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+  const gifHeader = buffer.subarray(0, 6).toString("ascii");
+  if (gifHeader === "GIF87a" || gifHeader === "GIF89a") return "image/gif";
+  if (buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
+  return undefined;
+}
+
+function imageMimeCompatible(declared: string, actual: string): boolean {
+  return declared.toLowerCase() === actual.toLowerCase();
 }

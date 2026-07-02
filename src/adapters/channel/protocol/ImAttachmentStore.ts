@@ -19,6 +19,7 @@ export type SaveAttachmentFromUrlInput = {
   mimeType?: string;
   bytes?: number;
   metadata?: Record<string, unknown>;
+  transform?: (buffer: Buffer) => Uint8Array | Promise<Uint8Array>;
 };
 
 const DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
@@ -62,7 +63,10 @@ export class ImAttachmentStore {
       throw new Error(`Attachment is ${contentLength} bytes (limit ${this.maxBytes}).`);
     }
 
-    const buffer = Buffer.from(await response.arrayBuffer());
+    let buffer = Buffer.from(await response.arrayBuffer());
+    if (input.transform) {
+      buffer = Buffer.from(await input.transform(buffer));
+    }
     if (buffer.byteLength > this.maxBytes) {
       throw new Error(`Attachment is ${buffer.byteLength} bytes (limit ${this.maxBytes}).`);
     }
