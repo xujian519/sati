@@ -1,7 +1,7 @@
 import { createDecipheriv } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, relative, resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { ILinkClient, loginWithQR, MessageItemType } from "weixin-ilink";
 import type { ClientOptions, GetUpdatesResp, WeixinMessage, LoginResult } from "weixin-ilink";
@@ -96,6 +96,7 @@ export class WeixinChannel implements ChannelAdapter {
   private connectionLostNoticeDeliveredChats = new Set<string>();
   private pendingReplies = new Map<string, string[]>();
   private pendingTurns = new Map<string, QueuedWeixinTurn[]>();
+  private sentMentionedAttachmentPaths = new Map<string, Set<string>>();
   private attachmentStore: ImAttachmentStore;
   private loginRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
   private loginRecoveryPromise: Promise<void> | null = null;
@@ -646,6 +647,7 @@ export class WeixinChannel implements ChannelAdapter {
     return {
       send: async (text) => {
         await this.sendReply(userId, text, { queueOnFailure: true });
+        await this.sendAttachmentsMentionedInText(userId, text);
         return undefined;
       },
       pulseActivity: async (activity) => {
@@ -727,6 +729,23 @@ export class WeixinChannel implements ChannelAdapter {
       this.logger?.error?.(`weixin: send attachment failed: ${formatWeixinError(error)}`);
       await this.sendReply(userId, this.formatAttachmentFallback(attachment), { queueOnFailure: true });
       return false;
+    }
+  }
+
+  private async sendAttachmentsMentionedInText(userId: string, text: string): Promise<void> {
+    for (const path of extractLocalPathsFromText(text)) {
+      if (!isPathWithin(process.cwd(), path)) continue;
+      const sent = this.sentMentionedAttachmentPaths.get(userId) ?? new Set<string>();
+      if (sent.has(path)) continue;
+      sent.add(path);
+      this.sentMentionedAttachmentPaths.set(userId, sent);
+      await this.sendAttachment(userId, {
+        type: guessMimeTypeFromName(path)?.startsWith("image/") ? "image" : "file",
+        path,
+        name: path.split(/[\\/]/).pop(),
+        mimeType: guessMimeTypeFromName(path),
+        source: "authorized_path",
+      });
     }
   }
 
@@ -994,6 +1013,22 @@ function guessMimeTypeFromName(name: string | undefined): string | undefined {
   if (lower.endsWith(".md")) return "text/markdown";
   if (lower.endsWith(".json")) return "application/json";
   return undefined;
+}
+
+function extractLocalPathsFromText(text: string): string[] {
+  const matches = text.matchAll(/(?:`([^`]+)`|((?:\/private\/tmp|\/tmp|\/Users)\/[^\s`，。；：、)）\]]+))/g);
+  const paths = new Set<string>();
+  for (const match of matches) {
+    const raw = (match[1] ?? match[2] ?? "").trim();
+    if (!raw || !isAbsolute(raw)) continue;
+    paths.add(resolve(raw.replace(/[.,;:]+$/g, "")));
+  }
+  return [...paths];
+}
+
+function isPathWithin(root: string, candidate: string): boolean {
+  const rel = relative(resolve(root), resolve(candidate));
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
 function extractWeixinMediaUrl(mediaOwner: unknown): string | undefined {
