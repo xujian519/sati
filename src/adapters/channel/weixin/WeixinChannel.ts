@@ -1,5 +1,5 @@
-import { createDecipheriv } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { existsSync, readFileSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve, join } from "node:path";
 import { homedir } from "node:os";
@@ -67,8 +67,29 @@ export type WeixinIlinkClient = {
   poll(): Promise<GetUpdatesResp>;
   sendTextChunked(toUserId: string, text: string, contextToken: string, maxLength?: number): Promise<number>;
   sendMedia(toUserId: string, item: unknown, contextToken: string): Promise<unknown>;
-  getUploadUrl(params: { file_name: string; file_type: "image" | "file"; file_size: number }): Promise<{ upload_url?: string; cdn_url?: string; download_url?: string }>;
+  getUploadUrl(params: WeixinUploadUrlRequest): Promise<WeixinUploadUrlResponse>;
   sendTyping(userId: string, contextToken?: string): Promise<void>;
+};
+
+type WeixinUploadUrlRequest = {
+  filekey: string;
+  media_type: 1 | 3;
+  to_user_id: string;
+  rawsize: number;
+  rawfilemd5: string;
+  filesize: number;
+  no_need_thumb: boolean;
+  aeskey: string;
+};
+
+type WeixinUploadUrlResponse = {
+  ret?: number;
+  errmsg?: string;
+  upload_param?: string;
+  upload_full_url?: string;
+  upload_url?: string;
+  cdn_url?: string;
+  download_url?: string;
 };
 
 export class WeixinChannel implements ChannelAdapter {
@@ -97,6 +118,8 @@ export class WeixinChannel implements ChannelAdapter {
   private pendingReplies = new Map<string, string[]>();
   private pendingTurns = new Map<string, QueuedWeixinTurn[]>();
   private sentMentionedAttachmentPaths = new Map<string, Set<string>>();
+  private chatGenerations = new Map<string, number>();
+  private activeRuns = new Map<string, { sessionKey: string; runId?: string; generation: number }>();
   private attachmentStore: ImAttachmentStore;
   private loginRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
   private loginRecoveryPromise: Promise<void> | null = null;
@@ -105,7 +128,7 @@ export class WeixinChannel implements ChannelAdapter {
     this.credentialsPath = options.credentialsPath ?? CREDENTIALS_PATH;
     this.mapper = options.mapper ?? new WeixinSessionMapper();
     this.liveReplyOptions = options.liveReplyOptions;
-    this.clientFactory = options.clientFactory ?? ((clientOptions) => new ILinkClient(clientOptions));
+    this.clientFactory = options.clientFactory ?? ((clientOptions) => new ILinkClient(clientOptions) as unknown as WeixinIlinkClient);
     this.login = options.loginWithQR ?? loginWithQR;
     this.attachmentStore = new ImAttachmentStore({
       rootDir: join(homedir(), ".pilotdeck", "im-attachments"),
@@ -329,6 +352,24 @@ export class WeixinChannel implements ChannelAdapter {
     if (!text.trim() && extracted.attachments.length === 0) return;
     this.logger?.info?.(`weixin: received message from ${fromUser} attachments=${extracted.attachments.length}`);
 
+    const messageText = text.trim() || (extracted.attachments.length > 0 ? "请查看我发送的附件。" : "");
+    const previousSessionKey = this.mapper.getSession(fromUser);
+    const mapped = this.mapper.resolve({ chatId: fromUser, text: messageText });
+    if (mapped.command === "new") {
+      this.resetChatInteractionState(fromUser);
+      const activeRun = this.activeRuns.get(fromUser);
+      await this.gateway?.abortTurn({
+        sessionKey: activeRun?.sessionKey ?? previousSessionKey,
+        ...(activeRun?.runId ? { runId: activeRun.runId } : {}),
+      }).catch((error: unknown) => {
+        this.logger?.warn?.(`weixin: abort previous session on /new failed: ${formatWeixinError(error)}`);
+      });
+      if (!mapped.message) {
+        await this.sendReply(fromUser, "已创建新会话。");
+        return;
+      }
+    }
+
     if (this.elicitation.hasPending(fromUser) && this.gateway) {
       try {
         const confirmation = await this.elicitation.answer(fromUser, text, this.gateway);
@@ -350,13 +391,6 @@ export class WeixinChannel implements ChannelAdapter {
       } catch (e) {
         this.logger?.error?.(`weixin: permission answer error: ${e}`);
       }
-      return;
-    }
-
-    const messageText = text.trim() || (extracted.attachments.length > 0 ? "请查看我发送的附件。" : "");
-    const mapped = this.mapper.resolve({ chatId: fromUser, text: messageText });
-    if (mapped.command === "new" && !mapped.message) {
-      await this.sendReply(fromUser, "已创建新会话。");
       return;
     }
 
@@ -403,6 +437,16 @@ export class WeixinChannel implements ChannelAdapter {
       pending.splice(0, pending.length - WEIXIN_MAX_PENDING_TURNS_PER_CHAT);
     }
     this.pendingTurns.set(userId, pending);
+  }
+
+  private resetChatInteractionState(userId: string): void {
+    this.chatGenerations.set(userId, (this.chatGenerations.get(userId) ?? 0) + 1);
+    this.elicitation.clear(userId);
+    this.permissions.clear(userId);
+    this.pendingTurns.delete(userId);
+    this.pendingReplies.delete(userId);
+    this.sentMentionedAttachmentPaths.delete(userId);
+    this.activeRuns.delete(userId);
   }
 
   private async runQueuedTurns(userId: string, firstTurn: QueuedWeixinTurn): Promise<void> {
@@ -458,7 +502,7 @@ export class WeixinChannel implements ChannelAdapter {
             type: "image",
             name: `image-${messageId}.jpg`,
             mimeType: guessMimeTypeFromUrl(url, "image/jpeg"),
-            transform: (buffer) => this.decryptWeixinImage(buffer, image),
+            transform: (buffer) => this.decryptWeixinImageOrThrow(buffer, image),
             metadata: {
               width: image?.width,
               height: image?.height,
@@ -509,7 +553,7 @@ export class WeixinChannel implements ChannelAdapter {
     return { text: textParts.join("\n").trim(), attachments };
   }
 
-  private decryptWeixinImage(buffer: Buffer, image: unknown): Buffer {
+  private decryptWeixinImageOrThrow(buffer: Buffer, image: unknown): Buffer {
     const result = decryptWeixinMediaIfNeeded(buffer, image);
     const keyDiagnostics = summarizeWeixinMediaKeyShape(image);
     const candidateDiagnostics = summarizeWeixinDecryptCandidates(buffer, image);
@@ -517,6 +561,9 @@ export class WeixinChannel implements ChannelAdapter {
       `weixin: image decrypt input=${buffer.byteLength} output=${result.byteLength} `
       + `changed=${result !== buffer} image=${isKnownImageBuffer(result)} ${keyDiagnostics} ${candidateDiagnostics}`,
     );
+    if (!isKnownImageBuffer(result)) {
+      throw new Error(`微信图片解密后仍不是可识别图片（${keyDiagnostics} ${candidateDiagnostics}）`);
+    }
     return result;
   }
 
@@ -538,6 +585,8 @@ export class WeixinChannel implements ChannelAdapter {
     attachments: ChannelAttachment[] = [],
   ): Promise<void> {
     if (!this.gateway) return;
+    const generation = this.chatGenerations.get(userId) ?? 0;
+    const isCurrentTurn = () => (this.chatGenerations.get(userId) ?? 0) === generation;
 
     const turnTimeoutMs = this.liveReplyOptions?.turnTimeoutMs ?? WEIXIN_DEFAULT_TURN_TIMEOUT_MS;
     const liveReply = new ImLiveReplyController<void>({
@@ -590,8 +639,10 @@ export class WeixinChannel implements ChannelAdapter {
         ...(turnTimeoutMs > 0 ? { timeoutMs: turnTimeoutMs } : {}),
         ...(projectKey ? { projectKey } : {}),
       })) {
+        if (!isCurrentTurn()) break;
         if (event.type === "turn_started") {
           activeRunId = event.runId;
+          this.activeRuns.set(userId, { sessionKey, runId: activeRunId, generation });
         }
         if (event.type === "elicitation_request") {
           const questionText = this.elicitation.capture(userId, sessionKey, event);
@@ -602,7 +653,7 @@ export class WeixinChannel implements ChannelAdapter {
         if (event.type === "permission_request") {
           const questionText = this.permissions.capture(userId, sessionKey, event);
           await liveReply.pauseActivity();
-          await this.sendReply(userId, questionText);
+          if (questionText) await this.sendReply(userId, questionText);
           continue;
         }
         if (event.type === "error" && event.code === "agent_aborted") {
@@ -635,12 +686,17 @@ export class WeixinChannel implements ChannelAdapter {
       watchdogSettled = true;
       if (watchdog) clearTimeout(watchdog);
       await timeoutNotice;
-      this.activeLiveReplies.delete(userId);
+      if (isCurrentTurn()) {
+        this.activeLiveReplies.delete(userId);
+      }
     }
 
-    this.elicitation.clear(userId);
-    this.permissions.clear(userId);
-    await liveReply.flushFinal();
+    if (isCurrentTurn()) {
+      this.activeRuns.delete(userId);
+      this.elicitation.clear(userId);
+      this.permissions.clear(userId);
+      await liveReply.flushFinal();
+    }
   }
 
   private createLiveReplyTransport(userId: string): ImLiveReplyTransport<void> {
@@ -698,30 +754,43 @@ export class WeixinChannel implements ChannelAdapter {
 
     try {
       const prepared = await this.prepareAttachmentUpload(attachment);
+      this.logger?.info?.(`weixin: preparing attachment ${prepared.name} as ${prepared.fileType} bytes=${prepared.buffer.byteLength}`);
+      const aeskey = randomBytes(16);
+      const filekey = randomBytes(16).toString("hex");
       const upload = await this.client.getUploadUrl({
-        file_name: prepared.name,
-        file_type: prepared.fileType,
-        file_size: prepared.buffer.byteLength,
+        filekey,
+        media_type: prepared.fileType === "image" ? 1 : 3,
+        to_user_id: userId,
+        rawsize: prepared.buffer.byteLength,
+        rawfilemd5: createHash("md5").update(prepared.buffer).digest("hex"),
+        filesize: aesEcbPaddedSize(prepared.buffer.byteLength),
+        no_need_thumb: true,
+        aeskey: aeskey.toString("hex"),
       });
-      if (!upload.upload_url || !upload.cdn_url) {
-        throw new Error("weixin upload url response missing upload_url/cdn_url");
+      this.logger?.info?.(`weixin: upload url response for ${prepared.name}: ${summarizeWeixinUploadResponse(upload)}`);
+      if (typeof upload.ret === "number" && upload.ret !== 0) {
+        throw new Error(`weixin getuploadurl failed ret=${upload.ret}${upload.errmsg ? ` errmsg=${upload.errmsg}` : ""}`);
       }
-      const uploadRes = await fetch(upload.upload_url, {
-        method: "PUT",
-        headers: prepared.mimeType ? { "Content-Type": prepared.mimeType } : undefined,
-        body: new Uint8Array(prepared.buffer),
+      const downloadParam = await uploadEncryptedBufferToWeixinCdn({
+        buffer: prepared.buffer,
+        aeskey,
+        filekey,
+        upload,
       });
-      if (!uploadRes.ok) {
-        throw new Error(`weixin attachment upload HTTP ${uploadRes.status}`);
-      }
+      this.logger?.info?.(`weixin: CDN upload succeeded for ${prepared.name}`);
+      const media = {
+        encrypt_query_param: downloadParam,
+        aes_key: Buffer.from(aeskey.toString("hex")).toString("base64"),
+        encrypt_type: 1,
+      };
       await this.client.sendMedia(userId, prepared.fileType === "image"
         ? {
             type: MessageItemType.IMAGE,
-            image_item: { cdn_url: upload.cdn_url },
+            image_item: { media, mid_size: aesEcbPaddedSize(prepared.buffer.byteLength) },
           }
         : {
             type: MessageItemType.FILE,
-            file_item: { file_name: prepared.name, file_size: prepared.buffer.byteLength, cdn_url: upload.cdn_url },
+            file_item: { file_name: prepared.name, len: String(prepared.buffer.byteLength), media },
           }, contextToken);
       this.logger?.info?.(`weixin: sent attachment to ${userId}: ${prepared.name}`);
       return true;
@@ -733,8 +802,18 @@ export class WeixinChannel implements ChannelAdapter {
   }
 
   private async sendAttachmentsMentionedInText(userId: string, text: string): Promise<void> {
-    for (const path of extractLocalPathsFromText(text)) {
-      if (!isPathWithin(process.cwd(), path)) continue;
+    const paths = extractLocalPathsFromText(text);
+    if (paths.length === 0) return;
+    this.logger?.info?.(`weixin: detected mentioned local paths: ${paths.join(", ")}`);
+    for (const path of paths) {
+      if (!isPathWithin(process.cwd(), path)) {
+        this.logger?.warn?.(`weixin: skip mentioned attachment outside workspace: ${path}`);
+        continue;
+      }
+      if (!isRegularFile(path)) {
+        this.logger?.warn?.(`weixin: skip mentioned attachment because it is not a file: ${path}`);
+        continue;
+      }
       const sent = this.sentMentionedAttachmentPaths.get(userId) ?? new Set<string>();
       if (sent.has(path)) continue;
       sent.add(path);
@@ -1015,20 +1094,106 @@ function guessMimeTypeFromName(name: string | undefined): string | undefined {
   return undefined;
 }
 
+function summarizeWeixinUploadResponse(upload: WeixinUploadUrlResponse | undefined): string {
+  if (!upload) return "(empty)";
+  return JSON.stringify({
+    ret: upload.ret,
+    errmsg: upload.errmsg,
+    hasUploadParam: Boolean(upload.upload_param),
+    hasUploadFullUrl: Boolean(upload.upload_full_url),
+    hasUploadUrl: Boolean(upload.upload_url),
+    hasCdnUrl: Boolean(upload.cdn_url),
+    hasDownloadUrl: Boolean(upload.download_url),
+  });
+}
+
+async function uploadEncryptedBufferToWeixinCdn(params: {
+  buffer: Buffer;
+  aeskey: Buffer;
+  filekey: string;
+  upload: WeixinUploadUrlResponse;
+}): Promise<string> {
+  const uploadUrl = params.upload.upload_full_url?.trim()
+    || (params.upload.upload_param
+      ? `${WEIXIN_CDN_BASE_URL}/upload?encrypted_query_param=${encodeURIComponent(params.upload.upload_param)}&filekey=${encodeURIComponent(params.filekey)}`
+      : undefined);
+  if (!uploadUrl) {
+    throw new Error("weixin upload url response missing upload_full_url/upload_param");
+  }
+  const ciphertext = encryptAesEcb(params.buffer, params.aeskey);
+  const res = await fetch(uploadUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: new Uint8Array(ciphertext),
+  });
+  if (res.status !== 200) {
+    const errMsg = res.headers.get("x-error-message") ?? await res.text();
+    throw new Error(`weixin CDN upload HTTP ${res.status}: ${errMsg}`);
+  }
+  const downloadParam = res.headers.get("x-encrypted-param");
+  if (!downloadParam) {
+    throw new Error("weixin CDN upload response missing x-encrypted-param");
+  }
+  return downloadParam;
+}
+
+function encryptAesEcb(plaintext: Buffer, key: Buffer): Buffer {
+  const cipher = createCipheriv("aes-128-ecb", key, null);
+  return Buffer.concat([cipher.update(plaintext), cipher.final()]);
+}
+
+function aesEcbPaddedSize(plaintextSize: number): number {
+  return Math.ceil((plaintextSize + 1) / 16) * 16;
+}
+
 function extractLocalPathsFromText(text: string): string[] {
-  const matches = text.matchAll(/(?:`([^`]+)`|((?:\/private\/tmp|\/tmp|\/Users)\/[^\s`，。；：、)）\]]+))/g);
   const paths = new Set<string>();
-  for (const match of matches) {
-    const raw = (match[1] ?? match[2] ?? "").trim();
-    if (!raw || !isAbsolute(raw)) continue;
-    paths.add(resolve(raw.replace(/[.,;:]+$/g, "")));
+  for (const match of text.matchAll(/`([^`]+)`/g)) {
+    addExistingAbsolutePath(paths, match[1]);
+  }
+  for (const line of text.split(/\r?\n/)) {
+    for (const match of line.matchAll(/(?:\/private\/tmp|\/tmp|\/Users)\//g)) {
+      const candidate = longestExistingPathPrefix(line.slice(match.index));
+      if (candidate) paths.add(candidate);
+    }
   }
   return [...paths];
+}
+
+function addExistingAbsolutePath(paths: Set<string>, raw: string | undefined): void {
+  const candidate = cleanPathCandidate(raw);
+  if (candidate && isAbsolute(candidate) && isRegularFile(candidate)) {
+    paths.add(resolve(candidate));
+  }
+}
+
+function longestExistingPathPrefix(raw: string): string | undefined {
+  const candidate = cleanPathCandidate(raw);
+  if (!candidate || !isAbsolute(candidate)) return undefined;
+  const segments = candidate.split("/");
+  for (let end = segments.length; end > 1; end -= 1) {
+    const prefix = segments.slice(0, end).join("/") || "/";
+    if (isRegularFile(prefix)) return resolve(prefix);
+  }
+  return undefined;
+}
+
+function cleanPathCandidate(raw: string | undefined): string | undefined {
+  const cleaned = raw?.trim().replace(/^["'“”‘’]+/, "").replace(/["'“”‘’，。；：、)）\]}>]+$/g, "");
+  return cleaned && cleaned.length > 0 ? cleaned : undefined;
 }
 
 function isPathWithin(root: string, candidate: string): boolean {
   const rel = relative(resolve(root), resolve(candidate));
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function isRegularFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
 }
 
 function extractWeixinMediaUrl(mediaOwner: unknown): string | undefined {

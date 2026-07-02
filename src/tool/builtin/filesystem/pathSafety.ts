@@ -1,5 +1,6 @@
 import path from "node:path";
-import { realpathSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import type { PilotDeckToolRuntimeContext } from "../../protocol/types.js";
 import type { PilotDeckToolError } from "../../protocol/errors.js";
 import { toolError } from "../../protocol/errors.js";
@@ -53,7 +54,7 @@ export function resolvePilotDeckWorkspacePath(
         const allowedReal = safeRealpath(allowedPath) ?? path.resolve(allowedPath);
         return real === allowedReal;
       });
-      if (allowed) {
+      if (allowed || isManagedImAttachmentFile(real, context)) {
         const relativePath = path.relative(context.cwd, absolutePath) || ".";
         return { ok: true, absolutePath, relativePath, root: context.cwd };
       }
@@ -124,5 +125,19 @@ function safeRealpath(value: string): string | undefined {
     return realpathSync(value);
   } catch {
     return undefined;
+  }
+}
+
+function isManagedImAttachmentFile(realPath: string, context: PilotDeckToolRuntimeContext): boolean {
+  const pilotHome = path.resolve(context.env?.PILOT_HOME ?? path.join(homedir(), ".pilotdeck"));
+  const root = safeRealpath(path.join(pilotHome, "im-attachments")) ?? path.join(pilotHome, "im-attachments");
+  return isPathWithinRoot(realPath, root) && isRegularFile(realPath);
+}
+
+function isRegularFile(value: string): boolean {
+  try {
+    return statSync(value).isFile();
+  } catch {
+    return false;
   }
 }

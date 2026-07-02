@@ -189,6 +189,19 @@ export class AttachmentResolver {
         ],
       };
     }
+    const repaired = await validateImageForProvider(buffer, actualMime);
+    if (!repaired.ok) {
+      return {
+        blocks: [],
+        diagnostics: [
+          {
+            code: "image_invalid",
+            severity: "warning",
+            message: `Image ${absolute} bytes look like ${actualMime} but could not be decoded locally; skipped. Diagnostic: ${repaired.error}`,
+          },
+        ],
+      };
+    }
     if (!imageMimeCompatible(detectedMime, actualMime)) {
       return {
         blocks: [],
@@ -206,9 +219,9 @@ export class AttachmentResolver {
         {
           type: "image",
           source: "base64",
-          data: buffer.toString("base64"),
-          mimeType: detectedMime,
-          bytes: info.size,
+          data: repaired.buffer.toString("base64"),
+          mimeType: repaired.mimeType,
+          bytes: repaired.buffer.byteLength,
         },
       ],
       diagnostics: [
@@ -269,4 +282,30 @@ function detectImageMime(buffer: Buffer): string | undefined {
 
 function imageMimeCompatible(declared: string, actual: string): boolean {
   return declared.toLowerCase() === actual.toLowerCase();
+}
+
+async function validateImageForProvider(buffer: Buffer, mimeType: string): Promise<
+  | { ok: true; buffer: Buffer; mimeType: string }
+  | { ok: false; error: string }
+> {
+  try {
+    const sharpModule = await import("sharp");
+    const sharp = sharpModule.default;
+    await sharp(buffer).metadata();
+    return { ok: true, buffer, mimeType };
+  } catch (error) {
+    try {
+      const sharpModule = await import("sharp");
+      const sharp = sharpModule.default;
+      const repaired = await sharp(buffer).rotate().jpeg({ quality: 90 }).toBuffer();
+      return { ok: true, buffer: repaired, mimeType: "image/jpeg" };
+    } catch (repairError) {
+      return { ok: false, error: formatImageError(repairError || error) };
+    }
+  }
+}
+
+function formatImageError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/\s+/g, " ").slice(0, 300) || "unknown image decode error";
 }

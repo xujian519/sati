@@ -7,6 +7,7 @@ import { createEditNotebookTool } from "../builtin/editNotebook.js";
 import { createGlobTool } from "../builtin/glob.js";
 import { createGrepTool } from "../builtin/grep.js";
 import { createReadFileTool } from "../builtin/readFile.js";
+import { createSendAttachmentTool } from "../builtin/sendAttachment.js";
 import { createEnterPlanModeTool, createExitPlanModeTool } from "../builtin/planMode.js";
 import { createStructuredOutputTool } from "../builtin/structuredOutput.js";
 import { createTodoWriteTool } from "../builtin/todoWrite.js";
@@ -87,6 +88,7 @@ export type CreateBuiltinRegistryOptions = {
 export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): ToolRegistry {
   const registry = new ToolRegistry();
   registry.register(createReadFileTool());
+  registry.register(createSendAttachmentTool());
   registry.register(createGlobTool());
   registry.register(createGrepTool());
   registry.register(createEditFileTool());
