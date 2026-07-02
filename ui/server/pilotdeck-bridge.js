@@ -56,6 +56,7 @@ import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from './u
 import { createRemoteGateway } from '../../src/gateway/index.js';
 import { createNormalizedMessage } from './pilotdeck-message.js';
 import { readPermissionSettings } from './services/permissionSettings.js';
+import { normalizeGatewayGrantResult } from './utils/gatewayGrantResult.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1041,19 +1042,19 @@ export async function decidePermissionViaGateway(requestId, decision, options = 
 }
 
 export async function grantSessionPermissionViaGateway(sessionId, entry) {
-    const gw = await ensureGateway();
     if (!isPilotDeckSessionKey(sessionId) || typeof entry !== 'string' || !entry.trim()) {
-        return false;
+        return { granted: false };
     }
     try {
+        const gw = await ensureGateway();
         const result = await gw.grantSessionPermission({
             sessionKey: sessionId,
             entry,
         });
-        return Boolean(result?.granted);
+        return normalizeGatewayGrantResult(result);
     } catch (error) {
         console.warn('[pilotdeck-bridge] grantSessionPermission failed:', error);
-        return false;
+        return { granted: false };
     }
 }
 

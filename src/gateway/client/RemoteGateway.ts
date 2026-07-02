@@ -56,6 +56,7 @@ import type {
   CronStopResult,
 } from "../../cron/protocol/types.js";
 import { GatewayWsClient, type GatewayWsNotificationHandler } from "./GatewayWsClient.js";
+import { parseReloadConfigResult } from "../protocol/reloadConfigResult.js";
 
 export class RemoteGateway implements Gateway {
   constructor(private readonly client: GatewayWsClient) {}
@@ -149,7 +150,7 @@ export class RemoteGateway implements Gateway {
   }
 
   async reloadConfig(): Promise<ReloadConfigResult> {
-    return (await this.client.request("reload_config", {})) as ReloadConfigResult;
+    return parseReloadConfigResult(await this.client.request("reload_config", {}));
   }
 
   async reloadExtensions(input: ReloadExtensionsInput = {}): Promise<ReloadExtensionsResult> {
