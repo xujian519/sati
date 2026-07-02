@@ -1,11 +1,12 @@
 import { createInterface } from "node:readline/promises";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
-const PILOTDECK_YAML_PATH = join(homedir(), ".pilotdeck", "pilotdeck.yaml");
-const WEIXIN_CREDS_PATH = join(homedir(), ".pilotdeck", "weixin-credentials.json");
+const PILOT_HOME = process.env.PILOT_HOME || join(homedir(), ".pilotdeck");
+const PILOTDECK_YAML_PATH = process.env.PILOTDECK_CONFIG_PATH || join(PILOT_HOME, "pilotdeck.yaml");
+const WEIXIN_CREDS_PATH = join(PILOT_HOME, "weixin-credentials.json");
 
 const FEISHU_TOKEN_URL = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal";
 const LARK_TOKEN_URL = "https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal";
@@ -372,7 +373,7 @@ function loadYamlConfig(): Record<string, any> | null {
 }
 
 function saveYamlConfig(config: Record<string, any>): void {
-  mkdirSync(join(homedir(), ".pilotdeck"), { recursive: true });
+  mkdirSync(dirname(PILOTDECK_YAML_PATH), { recursive: true });
   const yamlStr = stringifyYaml(config, {
     lineWidth: 0,
     singleQuote: false,

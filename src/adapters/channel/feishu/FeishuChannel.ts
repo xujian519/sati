@@ -13,6 +13,7 @@ import {
   type ImLiveReplyTransport,
 } from "../protocol/ImLiveReplyController.js";
 import { FeishuSessionMapper } from "./FeishuSessionMapper.js";
+import { type FeishuLiveCardActivityKind } from "./feishu-render.js";
 
 let Lark: any = null;
 let larkLoadAttempted = false;
@@ -45,6 +46,7 @@ export type FeishuOutboundMessage = {
 
 export type FeishuLiveMessageHandle = {
   messageId: string;
+  livePost: boolean;
 };
 
 export type FeishuConnectionMode = "stream" | "webhook";
@@ -402,17 +404,24 @@ export class FeishuChannel implements ChannelAdapter {
 
   private createLiveReplyTransport(chatId: string): ImLiveReplyTransport<FeishuLiveMessageHandle> {
     const liveCursor = this.liveReplyOptions?.cursor ?? DEFAULT_LIVE_REPLY_CURSOR;
+    let liveHandle: FeishuLiveMessageHandle | undefined;
     return {
       maxMessageLength: MAX_TEXT_MESSAGE_LENGTH,
       send: async (text) => {
-        const messageId = text.endsWith(liveCursor)
-          ? await this.sendLiveMessage({ chatId, text })
-          : await this.sendTextMessage({ chatId, text });
-        if (messageId === false) return false;
-        return messageId ? { messageId } : undefined;
+        const result = await this.sendLiveMessage({ chatId, text }, {
+          isFinal: !text.endsWith(liveCursor),
+          activityKind: this.liveActivityKindFromText(text),
+        });
+        if (result === false) return false;
+        liveHandle = result ? { messageId: result.messageId, livePost: result.livePost } : undefined;
+        return liveHandle;
       },
       edit: async (handle, text) => {
-        return this.editLiveMessage(handle.messageId, text);
+        liveHandle = handle;
+        return this.editLiveMessage(handle, text, {
+          isFinal: !text.endsWith(liveCursor),
+          activityKind: this.liveActivityKindFromText(text),
+        });
       },
     };
   }
@@ -421,8 +430,15 @@ export class FeishuChannel implements ChannelAdapter {
     await this.sendTextMessage(message);
   }
 
-  private async sendLiveMessage(message: FeishuOutboundMessage): Promise<string | undefined | false> {
-    return this.sendTextMessage(message);
+  private async sendLiveMessage(
+    message: FeishuOutboundMessage,
+    options: { isFinal: boolean; activityKind?: FeishuLiveCardActivityKind },
+  ): Promise<FeishuLiveMessageHandle | undefined | false> {
+    const messageId = await this.sendPostMessage(message.chatId, message.text, options);
+    if (messageId !== false) return { messageId, livePost: true };
+    const fallbackMessageId = await this.sendTextMessage(message);
+    if (fallbackMessageId === false || fallbackMessageId === undefined) return fallbackMessageId;
+    return { messageId: fallbackMessageId, livePost: false };
   }
 
   private async sendTextMessage(message: FeishuOutboundMessage): Promise<string | undefined | false> {
@@ -468,7 +484,21 @@ export class FeishuChannel implements ChannelAdapter {
     return false;
   }
 
-  private async editLiveMessage(messageId: string, text: string): Promise<boolean> {
+  private async editLiveMessage(
+    handle: FeishuLiveMessageHandle,
+    text: string,
+    options: { isFinal: boolean; activityKind?: FeishuLiveCardActivityKind },
+  ): Promise<boolean> {
+    if (!handle.messageId || !this.appId || !this.appSecret) return false;
+    if (!handle.livePost) return this.editTextMessage(handle.messageId, text);
+
+    const ok = await this.editPostMessage(handle.messageId, text, options);
+    if (ok !== false) return true;
+    handle.livePost = false;
+    return this.editTextMessage(handle.messageId, text);
+  }
+
+  private async editTextMessage(messageId: string, text: string): Promise<boolean> {
     if (!messageId || !this.appId || !this.appSecret) return false;
 
     try {
@@ -497,6 +527,101 @@ export class FeishuChannel implements ChannelAdapter {
       this.logger?.warn?.(`feishu: update message threw: ${e}`);
       return false;
     }
+  }
+
+  private async sendPostMessage(
+    chatId: string,
+    text: string,
+    options: { isFinal: boolean; activityKind?: FeishuLiveCardActivityKind },
+  ): Promise<string | false> {
+    if (!this.appId || !this.appSecret) return false;
+
+    try {
+      const token = await this.getTenantAccessToken();
+      const res = await fetch(SEND_MESSAGE_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          receive_id: chatId,
+          msg_type: "post",
+          content: JSON.stringify(renderFeishuLivePost(text, options)),
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        code?: number;
+        msg?: string;
+        data?: { message_id?: string };
+      };
+      if (!res.ok || (json.code !== undefined && json.code !== 0)) {
+        if (json.code === 99991663 || json.code === 99991664) {
+          this.tokenCache = undefined;
+        }
+        this.logger?.warn?.(`feishu: send post failed code=${json.code} msg=${json.msg}`);
+        return false;
+      }
+      return json.data?.message_id ?? false;
+    } catch (e) {
+      this.logger?.warn?.(`feishu: send post threw: ${e}`);
+      return false;
+    }
+  }
+
+  private async editPostMessage(
+    messageId: string,
+    text: string,
+    options: { isFinal: boolean; activityKind?: FeishuLiveCardActivityKind },
+  ): Promise<boolean> {
+    if (!messageId || !this.appId || !this.appSecret) return false;
+
+    try {
+      const token = await this.getTenantAccessToken();
+      const res = await fetch(`${UPDATE_MESSAGE_URL}/${encodeURIComponent(messageId)}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          msg_type: "post",
+          content: JSON.stringify(renderFeishuLivePost(text, options)),
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { code?: number; msg?: string };
+      if (!res.ok || (json.code !== undefined && json.code !== 0)) {
+        if (json.code === 99991663 || json.code === 99991664) {
+          this.tokenCache = undefined;
+        }
+        this.logger?.warn?.(`feishu: update post failed code=${json.code} msg=${json.msg}`);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      this.logger?.warn?.(`feishu: update post threw: ${e}`);
+      return false;
+    }
+  }
+
+  private liveActivityKindFromText(text: string): FeishuLiveCardActivityKind {
+    if (text.includes("正在执行工具")) return "tool";
+    if (text.includes("正在处理子任务")) return "subagent";
+    return "thinking";
+  }
+
+  private formatLiveActivityText(activity: { kind: FeishuLiveCardActivityKind; text: string; detail?: string }): string {
+    const detail = activity.detail?.trim();
+    if (activity.kind === "tool") {
+      return detail ? `🛠️ 正在调用工具：${detail}` : "🛠️ 正在调用工具…";
+    }
+    if (activity.kind === "subagent") {
+      return detail ? `🤖 正在处理子任务：${detail}` : "🤖 正在处理子任务…";
+    }
+    if (detail) {
+      return `💭 正在思考：${detail}`;
+    }
+    return "💭 正在思考…";
   }
 
   private async addReaction(messageId: string): Promise<string | undefined> {
@@ -669,6 +794,40 @@ function extractTextContent(content: string): string {
     return parsed.text ?? "";
   } catch {
     return content;
+  }
+}
+
+function renderFeishuLivePost(
+  text: string,
+  options: { isFinal: boolean; activityKind?: FeishuLiveCardActivityKind },
+): Record<string, unknown> {
+  const content = normalizeLivePostText(text, options);
+  return {
+    zh_cn: {
+      content: [[{ tag: "text", text: content }]],
+    },
+  };
+}
+
+function normalizeLivePostText(
+  text: string,
+  options: { isFinal: boolean; activityKind?: FeishuLiveCardActivityKind },
+): string {
+  const stripped = text.replace(/\s*▉\s*$/u, "").trim();
+  const body = stripped || (options.isFinal ? "处理完成，但没有可见回复。" : livePostActivityLabel(options.activityKind ?? "thinking"));
+  if (body.length <= MAX_TEXT_MESSAGE_LENGTH) return body;
+  return `${body.slice(0, Math.max(0, MAX_TEXT_MESSAGE_LENGTH - 12)).trimEnd()}\n…（已截断）`;
+}
+
+function livePostActivityLabel(kind: FeishuLiveCardActivityKind): string {
+  switch (kind) {
+    case "tool":
+      return "正在执行工具…";
+    case "subagent":
+      return "正在处理子任务…";
+    case "thinking":
+    default:
+      return "正在思考…";
   }
 }
 

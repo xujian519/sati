@@ -9,6 +9,7 @@ export type ImLiveReplyActivity = {
   text: string;
   elapsedMs: number;
   updateCount: number;
+  detail?: string;
 };
 
 export type ImLiveReplyTransportErrorPhase =
@@ -66,6 +67,7 @@ type Segment<Handle> = {
   activityUpdates: number;
   activityVisible: boolean;
   activityDisabled: boolean;
+  activityDetail?: string;
 };
 
 const DEFAULT_THROTTLE_MS = 2_000;
@@ -144,8 +146,10 @@ export class ImLiveReplyController<Handle = ImLiveReplyHandle> {
         this.markActivity("thinking");
         return;
       case "model_request_started":
-      case "assistant_thinking_delta":
         this.markActivity("thinking");
+        return;
+      case "assistant_thinking_delta":
+        this.markActivity("thinking", event.text);
         return;
       case "assistant_text_delta":
         await this.append(event.text);
@@ -156,7 +160,7 @@ export class ImLiveReplyController<Handle = ImLiveReplyHandle> {
         } else {
           this.clearTextTimer();
         }
-        this.markActivity("tool");
+        this.markActivity("tool", event.name);
         return;
       case "tool_call_finished":
         if (!event.ok) {
@@ -264,7 +268,8 @@ export class ImLiveReplyController<Handle = ImLiveReplyHandle> {
       return;
     }
     if (event.event.startsWith("subagent_")) {
-      this.markActivity("subagent");
+      const detail = typeof event.detail?.subagentType === "string" ? event.detail.subagentType : undefined;
+      this.markActivity("subagent", detail);
     }
   }
 
@@ -368,7 +373,7 @@ export class ImLiveReplyController<Handle = ImLiveReplyHandle> {
     this.turnTimer.unref?.();
   }
 
-  private markActivity(kind: ImLiveReplyActivityKind): void {
+  private markActivity(kind: ImLiveReplyActivityKind, detail?: string): void {
     if (!this.canUseActivity()) return;
     const segment = this.currentSegment;
     if (segment.activityDisabled || this.shouldSuppressActivityForText(segment)) return;
@@ -380,6 +385,9 @@ export class ImLiveReplyController<Handle = ImLiveReplyHandle> {
       segment.activityStartedAt = Date.now();
       segment.activityArmed = true;
       segment.activityUpdates = 0;
+    }
+    if (detail?.trim()) {
+      segment.activityDetail = detail.trim().slice(0, 160);
     }
 
     if (segment.activityVisible && !kindChanged) {
@@ -454,6 +462,7 @@ export class ImLiveReplyController<Handle = ImLiveReplyHandle> {
     };
     const activity: ImLiveReplyActivity = {
       ...activityBase,
+      ...(segment.activityDetail ? { detail: segment.activityDetail } : {}),
       text: this.formatActivity(activityBase),
     };
 
