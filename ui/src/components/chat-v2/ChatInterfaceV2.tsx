@@ -35,6 +35,7 @@ function ChatInterfaceV2({
   selectedSession,
   ws,
   sendMessage,
+  subscribe,
   // latestMessage is intentionally not consumed here — useChatRealtimeHandlers
   // now subscribes to the WebSocket directly so React 18 state batching can't
   // drop intermediate stream_delta events.
@@ -223,6 +224,7 @@ function ChatInterfaceV2({
     canAbortSession,
     tokenBudget,
     sendMessage,
+    subscribe,
     sendByCtrlEnter,
     onSessionActive,
     onSessionProcessing,

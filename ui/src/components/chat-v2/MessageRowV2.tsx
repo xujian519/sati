@@ -9,7 +9,7 @@ import type { Project, SessionProvider } from '../../types/app';
 import type {
   ChatMessage,
   PilotDeckPermissionSuggestion,
-  PermissionGrantResult,
+  SessionPermissionGrantResult,
 } from '../chat/types/types';
 import MessageComponent from '../chat/view/subcomponents/MessageComponent';
 import ImageLightbox, { type LightboxImage } from '../chat/view/subcomponents/ImageLightbox';
@@ -72,7 +72,7 @@ type MessageRowV2Props = {
   onShowSettings?: () => void;
   onGrantSessionToolPermission?: (
     suggestion: PilotDeckPermissionSuggestion,
-  ) => PermissionGrantResult | null | undefined;
+  ) => SessionPermissionGrantResult | null | undefined;
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
