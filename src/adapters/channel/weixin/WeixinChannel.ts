@@ -33,6 +33,7 @@ const WEIXIN_CONNECTION_RECOVERED_TEXT = "微信连接已恢复，我会继续�
 const WEIXIN_CONNECTION_RECOVERED_AFTER_LOSS_TEXT = "微信连接刚刚中断过，现在已恢复。我会继续处理当前任务。";
 const WEIXIN_SESSION_EXPIRED_TEXT = "微信登录状态已失效，当前任务无法继续通过微信回复。请重新扫码登录后再试。";
 const WEIXIN_MAX_PENDING_REPLIES_PER_CHAT = 20;
+const WEIXIN_MAX_PENDING_TURNS_PER_CHAT = 20;
 const WEIXIN_MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 const WEIXIN_LOGIN_RECOVERY_CHECK_INTERVAL_MS = 2000;
 const WEIXIN_LOGIN_RECOVERY_TIMEOUT_MS = 2 * 60 * 1000;
@@ -52,6 +53,13 @@ type SavedCredentials = {
   botToken: string;
   accountId: string;
   cursor?: string;
+};
+
+type QueuedWeixinTurn = {
+  sessionKey: string;
+  message: string;
+  projectKey?: string;
+  attachments: ChannelAttachment[];
 };
 
 export type WeixinIlinkClient = {
@@ -87,6 +95,7 @@ export class WeixinChannel implements ChannelAdapter {
   private connectionIssueChats = new Set<string>();
   private connectionLostNoticeDeliveredChats = new Set<string>();
   private pendingReplies = new Map<string, string[]>();
+  private pendingTurns = new Map<string, QueuedWeixinTurn[]>();
   private attachmentStore: ImAttachmentStore;
   private loginRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
   private loginRecoveryPromise: Promise<void> | null = null;
@@ -368,15 +377,54 @@ export class WeixinChannel implements ChannelAdapter {
     if (!mapped.message) return;
 
     if (this.activeChats.has(fromUser)) {
-      this.logger?.info?.(`weixin: chat ${fromUser} already active, skipping`);
+      this.queuePendingTurn(fromUser, {
+        sessionKey: mapped.sessionKey,
+        message: mapped.message,
+        projectKey: mapped.projectKey,
+        attachments: extracted.attachments,
+      });
+      this.logger?.info?.(`weixin: chat ${fromUser} already active, queued message`);
       return;
     }
 
-    this.activeChats.add(fromUser);
+    await this.runQueuedTurns(fromUser, {
+      sessionKey: mapped.sessionKey,
+      message: mapped.message,
+      projectKey: mapped.projectKey,
+      attachments: extracted.attachments,
+    });
+  }
+
+  private queuePendingTurn(userId: string, turn: QueuedWeixinTurn): void {
+    const pending = this.pendingTurns.get(userId) ?? [];
+    pending.push(turn);
+    if (pending.length > WEIXIN_MAX_PENDING_TURNS_PER_CHAT) {
+      pending.splice(0, pending.length - WEIXIN_MAX_PENDING_TURNS_PER_CHAT);
+    }
+    this.pendingTurns.set(userId, pending);
+  }
+
+  private async runQueuedTurns(userId: string, firstTurn: QueuedWeixinTurn): Promise<void> {
+    this.activeChats.add(userId);
     try {
-      await this.processMessage(fromUser, mapped.sessionKey, mapped.message, mapped.projectKey, extracted.attachments);
+      let nextTurn: QueuedWeixinTurn | undefined = firstTurn;
+      while (nextTurn) {
+        await this.processMessage(
+          userId,
+          nextTurn.sessionKey,
+          nextTurn.message,
+          nextTurn.projectKey,
+          nextTurn.attachments,
+        );
+
+        const pending = this.pendingTurns.get(userId);
+        nextTurn = pending?.shift();
+        if (pending && pending.length === 0) {
+          this.pendingTurns.delete(userId);
+        }
+      }
     } finally {
-      this.activeChats.delete(fromUser);
+      this.activeChats.delete(userId);
     }
   }
 
