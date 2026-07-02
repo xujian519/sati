@@ -23,6 +23,19 @@ export function parseOpenAIResponse(raw: unknown, provider = "openai"): Canonica
   const content: CanonicalContentBlock[] = [];
   const idState = createResponseToolCallIdState(response);
 
+  if (typeof message.reasoning_content === "string" && message.reasoning_content.length > 0) {
+    content.push({ type: "thinking", text: message.reasoning_content });
+  }
+  if (Array.isArray(message.reasoning_details)) {
+    const reasoning = message.reasoning_details
+      .map((part) => readReasoningDetailText(asRecord(part)))
+      .filter((text): text is string => Boolean(text))
+      .join("\n");
+    if (reasoning.length > 0) {
+      content.push({ type: "thinking", text: reasoning });
+    }
+  }
+
   if (typeof message.content === "string" && message.content.length > 0) {
     content.push({ type: "text", text: message.content });
   } else if (Array.isArray(message.content)) {
@@ -87,6 +100,16 @@ function toCanonicalToolCall(
     input,
     raw: toolCall,
   };
+}
+
+function readReasoningDetailText(part: Record<string, unknown>): string | undefined {
+  for (const key of ["text", "content", "reasoning", "summary"]) {
+    const value = part[key];
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+  }
+  return undefined;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

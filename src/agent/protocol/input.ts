@@ -1,4 +1,4 @@
-import type { CanonicalContentBlock } from "../../model/index.js";
+import type { CanonicalContentBlock, CanonicalThinkingConfig } from "../../model/index.js";
 import type { PermissionMode, PermissionRuleSet } from "../../permission/index.js";
 
 export type AgentRunMode = "agent" | "plan" | "ask";
@@ -13,6 +13,7 @@ export type AgentSubmitOptions = {
   metadata?: Record<string, unknown>;
   runMode?: AgentRunMode;
   permissionMode?: PermissionMode;
+  thinking?: CanonicalThinkingConfig;
   /** The user's actual permission preference before plan-mode override. */
   basePermissionMode?: PermissionMode;
   /** Allow model-visible plan mode tools for this turn. */

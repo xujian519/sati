@@ -11,6 +11,7 @@ import {
   type CanonicalMessage,
   type CanonicalModelError,
   type CanonicalModelRequest,
+  type CanonicalThinkingConfig,
   type CanonicalToolSchema,
   type CanonicalUsage,
   materializeMediaReferences,
@@ -78,6 +79,7 @@ export type AgentLoopInput = {
   maxTurns?: number;
   runMode?: AgentRunMode;
   permissionMode?: PermissionMode;
+  thinking?: CanonicalThinkingConfig;
   /** The user's actual permission preference before plan-mode override. */
   basePermissionMode?: PermissionMode;
   /** Allow model-visible plan mode tools for this turn. */
@@ -1261,7 +1263,7 @@ export class AgentLoop {
       toolChoice: this.config.toolChoice,
       maxOutputTokens: this.config.maxOutputTokens,
       temperature: this.config.temperature,
-      thinking: this.config.thinking,
+      thinking: input.thinking ?? this.config.thinking,
       stream: true,
       metadata: this.config.metadata,
       cacheBreakpoints: prepared.cacheBreakpoints,

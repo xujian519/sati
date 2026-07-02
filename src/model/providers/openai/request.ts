@@ -12,6 +12,7 @@ import type {
 import { flattenToolResultBlockText } from "../../protocol/toolResultContent.js";
 import { cleanSchemaForGoogle, normalizeGoogleToolSchema } from "../google/schema.js";
 import { normalizeOpenAISchema } from "./schema.js";
+import { resolveThinkingPlan } from "../../thinking/registry.js";
 
 export type OpenAIRequestBody = {
   model: string;
@@ -22,6 +23,11 @@ export type OpenAIRequestBody = {
   temperature?: number;
   stream?: boolean;
   metadata?: Record<string, unknown>;
+  reasoning?: { effort?: string };
+  extra_body?: Record<string, unknown>;
+  thinking?: Record<string, unknown>;
+  reasoning_effort?: string;
+  reasoning_split?: boolean;
   /**
    * Provider-native structured output. Set when `request.outputSchema` is
    * provided. `strict` defaults to true unless the schema opts out.
@@ -60,6 +66,7 @@ export function buildOpenAIRequest(
   provider?: ProviderConfig,
 ): OpenAIRequestBody {
   const googleOpenAICompatible = isGoogleOpenAICompatibleProvider(provider);
+  const thinkingPlan = resolveThinkingPlan(request.thinking, provider ?? { id: "openai", protocol: "openai", url: "", apiKey: "", headers: {}, models: {} }, model);
   const messages = repairOpenAIToolPairing(
     request.messages.flatMap((message, messageIndex) => toOpenAIMessages(message, messageIndex)),
   );
@@ -73,7 +80,7 @@ export function buildOpenAIRequest(
     max_tokens: request.maxOutputTokens ?? model.capabilities.maxOutputTokens,
     tools: request.tools?.map((tool) => toOpenAITool(tool, googleOpenAICompatible)),
     tool_choice: toOpenAIToolChoice(request.toolChoice),
-    temperature: request.temperature,
+    temperature: thinkingPlan.omitTemperature ? undefined : request.temperature,
     stream: request.stream,
     metadata: request.metadata
       ? Object.fromEntries(
@@ -96,7 +103,33 @@ export function buildOpenAIRequest(
     };
   }
 
-  if (request.thinking?.enabled) {
+  if (thinkingPlan.useOpenAIReasoning && thinkingPlan.effort) {
+    body.reasoning = { effort: thinkingPlan.effort };
+  } else if (thinkingPlan.useExtraBody) {
+    const extraBody: Record<string, unknown> = {};
+    if (thinkingPlan.thinkingType) {
+      extraBody.thinking = { type: thinkingPlan.thinkingType };
+    }
+    extraBody.enable_thinking = thinkingPlan.enabled;
+    if (thinkingPlan.enabled && thinkingPlan.budgetTokens !== undefined) {
+      extraBody.thinking_budget = thinkingPlan.budgetTokens;
+    }
+    body.extra_body = extraBody;
+    if (thinkingPlan.effort) {
+      body.reasoning_effort = thinkingPlan.effort;
+    }
+  } else if (thinkingPlan.useOpenAICompatibleThinking) {
+    if (thinkingPlan.thinkingType) {
+      body.thinking = { type: thinkingPlan.thinkingType };
+    } else if (thinkingPlan.enabled) {
+      body.thinking = { type: "enabled" };
+    }
+    if (thinkingPlan.effort) {
+      body.reasoning_effort = thinkingPlan.effort;
+    }
+  } else if (thinkingPlan.splitReasoning) {
+    body.reasoning_split = true;
+  } else if (request.thinking?.enabled) {
     (body as Record<string, unknown>).enable_thinking = true;
     const budget = request.thinking.budgetTokens;
     if (googleOpenAICompatible) {
