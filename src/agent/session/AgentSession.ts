@@ -79,7 +79,6 @@ export class AgentSession {
       maxTurns: submitOptions.maxTurns,
       runMode: submitOptions.runMode,
       permissionMode: submitOptions.permissionMode,
-      thinking: submitOptions.thinking,
       basePermissionMode: submitOptions.basePermissionMode,
       allowPlanModeTools: submitOptions.allowPlanModeTools,
       canPrompt: submitOptions.canPrompt,

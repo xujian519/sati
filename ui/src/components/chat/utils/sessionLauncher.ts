@@ -13,7 +13,6 @@ type StartSessionOptions = {
   basePermissionMode?: PermissionMode | string;
   runMode?: ChatRunMode | string;
   model?: string;
-  thinking?: unknown;
   sessionSummary?: string | null;
   toolsSettings?: PilotDeckSettings;
   images?: unknown[];
@@ -89,7 +88,6 @@ export function startSessionCommand({
   basePermissionMode,
   runMode,
   model,
-  thinking,
   sessionSummary,
   toolsSettings = getPilotDeckSettings(),
   images,
@@ -114,7 +112,6 @@ export function startSessionCommand({
       permissionMode,
       ...(basePermissionMode ? { basePermissionMode } : {}),
       ...(model ? { model } : {}),
-      ...(thinking ? { thinking } : {}),
       sessionSummary,
       ...(typeof userVisibleInput === 'string' && userVisibleInput.trim()
         ? { userVisibleInput: userVisibleInput.trim() }

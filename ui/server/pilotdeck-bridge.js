@@ -926,7 +926,6 @@ export async function runChatViaGateway(
             runMode,
             mode: resolvedMode,
             runId,
-            ...(options?.thinking ? { thinking: options.thinking } : {}),
             ...(basePermissionMode ? { basePermissionMode } : {}),
             ...(attachments.length > 0 ? { attachments } : {}),
             ...(options.workspaceCwd ? { workspaceCwd: options.workspaceCwd } : {}),
