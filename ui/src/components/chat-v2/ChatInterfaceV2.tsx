@@ -12,6 +12,7 @@ import { useChatProviderState } from '../chat/hooks/useChatProviderState';
 import { useChatSessionState } from '../chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../chat/hooks/useChatComposerState';
+import { getThinkingModeAvailability } from '../chat/constants/thinkingModeAvailability';
 import { useSessionStore } from '../../stores/useSessionStore';
 import { safeLocalStorage } from '../chat/utils/chatStorage';
 import { useSessionWatch } from '../../hooks/useSessionWatch';
@@ -91,9 +92,15 @@ function ChatInterfaceV2({
     model,
     permissionMode,
     setPermissionMode: setPermissionModeRaw,
+    thinkingModelContext,
     pendingPermissionRequests,
     setPendingPermissionRequests,
   } = useChatProviderState({ selectedSession });
+
+  const thinkingModeAvailability = React.useMemo(
+    () => getThinkingModeAvailability(thinkingModelContext),
+    [thinkingModelContext],
+  );
 
   const cycleRunMode = useCallback(() => {
     setRunMode((currentMode) => {
@@ -222,6 +229,7 @@ function ChatInterfaceV2({
     isLoading,
     canAbortSession,
     tokenBudget,
+    thinkingModeAvailability,
     sendMessage,
     sendByCtrlEnter,
     onSessionActive,
@@ -506,6 +514,7 @@ function ChatInterfaceV2({
       isAbortPending={isAbortPending}
       tokenBudget={tokenBudget}
       thinkingMode={thinkingMode}
+      thinkingModeAvailability={thinkingModeAvailability}
       onThinkingModeChange={setThinkingMode}
       pendingPermissionRequests={pendingPermissionRequests}
       handlePermissionDecision={handlePermissionDecision}

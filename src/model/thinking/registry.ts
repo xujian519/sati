@@ -68,9 +68,18 @@ export function resolveThinkingPlan(
     ? requestThinking.budgetTokens
     : undefined;
   const isOff = mode === "off";
+  const explicitlyUnsupported = (model.capabilities as { supportsThinkingExplicit?: boolean }).supportsThinkingExplicit === false;
+
+  if (explicitMode && explicitlyUnsupported) {
+    return {
+      mode,
+      enabled: false,
+      unsupportedReason: `Model ${model.id} does not support thinking mode '${mode}'. Switch thinking strength back to Default.`,
+    };
+  }
 
   if (provider.protocol === "openai-responses" || isOpenAIProvider(providerId, providerUrl)) {
-    return openAIPlan(mode, modelId);
+    return openAIPlan(mode, modelId, isOpenAIProvider(providerId, providerUrl));
   }
   if (provider.protocol === "anthropic" || /anthropic|claude/.test(providerId + providerUrl + modelId)) {
     return anthropicPlan(mode, modelId, budgetTokens);
@@ -95,11 +104,7 @@ export function resolveThinkingPlan(
   }
 
   if (explicitMode) {
-    return {
-      mode,
-      enabled: false,
-      unsupportedReason: `Model ${model.id} does not support thinking mode '${mode}'. Switch thinking strength back to Default.`,
-    };
+    return genericThinkingPlan(mode, budgetTokens);
   }
   return { mode, enabled: false };
 }
@@ -120,7 +125,20 @@ function isOpenAIProvider(providerId: string, providerUrl: string): boolean {
   return /(^|[^a-z])openai([^a-z]|$)|api\.openai\.com/.test(providerId + " " + providerUrl);
 }
 
-function openAIPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
+function genericThinkingPlan(mode: ThinkingMode, budgetTokens?: number): ThinkingPlan {
+  if (mode === "off") return { mode, enabled: false, bodyPatch: { enable_thinking: false } };
+  return {
+    mode,
+    enabled: true,
+    budgetTokens: budgetTokens ?? QWEN_BUDGETS[mode] ?? effortBudget(mode),
+    bodyPatch: {
+      enable_thinking: true,
+      thinking_budget: budgetTokens ?? QWEN_BUDGETS[mode] ?? effortBudget(mode),
+    },
+  };
+}
+
+function openAIPlan(mode: ThinkingMode, modelId: string, officialOpenAIProvider: boolean): ThinkingPlan {
   if (mode === "off") {
     return modelId.includes("gpt-5.5")
       ? { mode, enabled: true, effort: "none", useOpenAIReasoning: true }
@@ -142,11 +160,14 @@ function openAIPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
   if (/^(?:o1|o3|o4)(?:\b|[-_])/.test(modelId)) {
     return { mode, enabled: true, effort: clampEffort(mode, ["low", "medium", "high"]), useOpenAIReasoning: true };
   }
-  return {
-    mode,
-    enabled: false,
-    unsupportedReason: `OpenAI-compatible model ${modelId} does not advertise a known thinking mode adapter. Switch thinking strength back to Default.`,
-  };
+  if (officialOpenAIProvider) {
+    return {
+      mode,
+      enabled: false,
+      unsupportedReason: `OpenAI-compatible model ${modelId} does not advertise a known thinking mode adapter. Switch thinking strength back to Default.`,
+    };
+  }
+  return genericThinkingPlan(mode);
 }
 
 function anthropicPlan(mode: ThinkingMode, modelId: string, budgetTokens?: number): ThinkingPlan {

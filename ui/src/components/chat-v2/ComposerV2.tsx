@@ -29,6 +29,7 @@ import {
 import type { ChatRunMode, PendingPermissionRequest, PermissionMode } from '../chat/types/types';
 import { MAX_ATTACHMENTS_ERROR_KEY } from '../chat/hooks/useChatComposerState';
 import { thinkingModes, type ThinkingModeId } from '../chat/constants/thinkingModes';
+import { getEffectiveThinkingMode, type ThinkingModeAvailability } from '../chat/constants/thinkingModeAvailability';
 import PermissionRequestsBanner from '../chat/view/subcomponents/PermissionRequestsBanner';
 import ImageAttachment from '../chat/view/subcomponents/ImageAttachment';
 import CommandMenu from '../chat/view/subcomponents/CommandMenu';
@@ -95,6 +96,7 @@ export type ComposerV2Props = {
   isSubmitPending?: boolean;
   tokenBudget?: Record<string, unknown> | null;
   thinkingMode: ThinkingModeId;
+  thinkingModeAvailability: ThinkingModeAvailability;
   onThinkingModeChange: (mode: ThinkingModeId) => void;
 
   pendingPermissionRequests: PendingPermissionRequest[];
@@ -293,6 +295,7 @@ export default function ComposerV2({
   isSubmitPending = false,
   tokenBudget,
   thinkingMode,
+  thinkingModeAvailability,
   onThinkingModeChange,
   pendingPermissionRequests,
   handlePermissionDecision,
@@ -327,7 +330,8 @@ export default function ComposerV2({
   const attachmentLimitError = imageErrors.get(MAX_ATTACHMENTS_ERROR_KEY);
   const disabled = !hasDraftContent || isLoading || isSubmitPending || hasUploadingImages;
   const contextStatus = getContextStatus(tokenBudget);
-  const selectedThinkingMode = thinkingModes.find((option) => option.id === thinkingMode) || thinkingModes[0];
+  const effectiveThinkingMode = getEffectiveThinkingMode(thinkingMode, thinkingModeAvailability);
+  const selectedThinkingMode = thinkingModes.find((option) => option.id === effectiveThinkingMode) || thinkingModes[0];
   const SelectedThinkingIcon = selectedThinkingMode.icon || Brain;
   const selectedPermissionOption =
     PERMISSION_MODE_OPTIONS.find((option) => option.mode === permissionMode) ||
@@ -833,7 +837,7 @@ export default function ComposerV2({
                         onClick={() => setIsThinkingModeMenuOpen((open) => !open)}
                         className={cn(
                           'inline-flex h-7 max-w-[116px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[140px]',
-                          thinkingMode === 'default'
+                          effectiveThinkingMode === 'default'
                             ? 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
                             : 'text-purple-600 hover:bg-purple-50 dark:text-purple-300 dark:hover:bg-purple-950/30',
                         )}
@@ -859,7 +863,7 @@ export default function ComposerV2({
                           {thinkingModes.map((option) => {
                             const Icon = option.icon || Brain;
                             const isSelected = option.id === thinkingMode;
-                            const unavailableReason = null;
+                            const unavailableReason = thinkingModeAvailability[option.id];
                             return (
                               <button
                                 key={option.id}

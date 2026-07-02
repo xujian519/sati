@@ -13,6 +13,14 @@ type ModelOption = {
   label: string;
 };
 
+type ThinkingModelContext = {
+  providerId?: string;
+  providerUrl?: string;
+  protocol?: string;
+  modelId?: string;
+  supportsThinking?: boolean;
+};
+
 const DEFAULT_MODEL_OPTIONS: ModelOption[] = CLAUDE_MODELS.OPTIONS.map((option) => ({
   ...option,
 }));
@@ -40,6 +48,7 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     return localStorage.getItem('pilotdeck-model') || CLAUDE_MODELS.DEFAULT;
   });
   const [modelOptions, setModelOptions] = useState<ModelOption[]>(DEFAULT_MODEL_OPTIONS);
+  const [thinkingModelContext, setThinkingModelContext] = useState<ThinkingModelContext | null>(null);
 
   useEffect(() => {
     const defaultMode = readStoredPermissionMode(DEFAULT_PERMISSION_MODE_KEY);
@@ -109,6 +118,50 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
         console.error('Error loading runtime config:', error);
       });
 
+    authenticatedFetch('/api/config')
+      .then((response) => response.json())
+      .then((data) => {
+        if (cancelled) {
+          return;
+        }
+        const config = data?.config && typeof data.config === 'object' ? data.config as Record<string, unknown> : null;
+        const agent = config?.agent && typeof config.agent === 'object' ? config.agent as Record<string, unknown> : null;
+        const modelRef = typeof agent?.model === 'string' ? agent.model.trim() : '';
+        const slashIndex = modelRef.indexOf('/');
+        if (slashIndex <= 0 || slashIndex >= modelRef.length - 1) {
+          setThinkingModelContext(null);
+          return;
+        }
+        const providerId = modelRef.slice(0, slashIndex);
+        const modelId = modelRef.slice(slashIndex + 1);
+        const modelConfig = config?.model && typeof config.model === 'object' ? config.model as Record<string, unknown> : null;
+        const providers = modelConfig?.providers && typeof modelConfig.providers === 'object'
+          ? modelConfig.providers as Record<string, unknown>
+          : null;
+        const provider = providers?.[providerId] && typeof providers[providerId] === 'object'
+          ? providers[providerId] as Record<string, unknown>
+          : null;
+        const models = provider?.models && typeof provider.models === 'object'
+          ? provider.models as Record<string, unknown>
+          : null;
+        const modelDefinition = models?.[modelId] && typeof models[modelId] === 'object'
+          ? models[modelId] as Record<string, unknown>
+          : null;
+        const capabilities = modelDefinition?.capabilities && typeof modelDefinition.capabilities === 'object'
+          ? modelDefinition.capabilities as Record<string, unknown>
+          : null;
+        setThinkingModelContext({
+          providerId,
+          providerUrl: typeof provider?.url === 'string' ? provider.url : undefined,
+          protocol: typeof provider?.protocol === 'string' ? provider.protocol : undefined,
+          modelId,
+          supportsThinking: typeof capabilities?.supportsThinking === 'boolean' ? capabilities.supportsThinking : undefined,
+        });
+      })
+      .catch((error) => {
+        console.error('Error loading PilotDeck config:', error);
+      });
+
     return () => {
       cancelled = true;
     };
@@ -138,6 +191,7 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     model,
     setModel,
     modelOptions,
+    thinkingModelContext,
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,

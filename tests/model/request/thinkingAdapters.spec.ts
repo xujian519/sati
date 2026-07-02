@@ -102,23 +102,38 @@ test("OpenAI GPT-5 explicit Off reports unsupported instead of silently no-oping
   );
 });
 
-test("Gemini 3.1 Pro uses thinkingLevel not thinkingBudget", () => {
-  const body = bodyFor("google", "google", "gemini-3.1-pro", { mode: "medium", enabled: true });
-  assert.deepEqual(body.config.thinkingConfig, { includeThoughts: true, thinkingLevel: "medium" });
-});
-
-test("unknown explicit thinking mode returns an actionable unsupported error", () => {
+test("official OpenAI unknown model reports unsupported thinking", () => {
   assert.throws(
-    () => bodyFor("local", "openai", "plain-chat", { mode: "high", enabled: true }, "https://local.example.invalid/v1", false),
+    () => bodyFor("openai", "openai", "plain-chat", { mode: "high", enabled: true }),
     (error: unknown) => error instanceof ModelRequestError
       && error.code === "unsupported_thinking"
       && /Switch thinking strength back to Default/.test(error.message),
   );
 });
 
-test("unknown supportsThinking model still requires an explicit adapter", () => {
+test("Gemini 3.1 Pro uses thinkingLevel not thinkingBudget", () => {
+  const body = bodyFor("google", "google", "gemini-3.1-pro", { mode: "medium", enabled: true });
+  assert.deepEqual(body.config.thinkingConfig, { includeThoughts: true, thinkingLevel: "medium" });
+});
+
+test("unknown model without supportsThinking uses generic thinking budget", () => {
+  const body = bodyFor("local", "openai", "plain-chat", { mode: "high", enabled: true }, "https://local.example.invalid/v1", undefined);
+  assert.equal(body.enable_thinking, true);
+  assert.equal(body.thinking_budget, 24576);
+  assert.equal(body.reasoning_effort, undefined);
+  assert.equal(body.thinking, undefined);
+});
+
+test("unknown supportsThinking model supports generic off", () => {
+  const body = bodyFor("local", "openai", "plain-thinking-chat", { mode: "off", enabled: false }, "https://local.example.invalid/v1", true);
+  assert.equal(body.enable_thinking, false);
+  assert.equal(body.reasoning_effort, undefined);
+  assert.equal(body.thinking, undefined);
+});
+
+test("unknown explicitly unsupported thinking model reports actionable error", () => {
   assert.throws(
-    () => bodyFor("local", "openai", "plain-thinking-chat", { mode: "high", enabled: true }, "https://local.example.invalid/v1", true),
+    () => bodyFor("local", "openai", "plain-no-thinking-chat", { mode: "high", enabled: true }, "https://local.example.invalid/v1", false),
     (error: unknown) => error instanceof ModelRequestError
       && error.code === "unsupported_thinking"
       && /Switch thinking strength back to Default/.test(error.message),
@@ -132,7 +147,7 @@ test("legacy disabled thinking remains a no-op for ordinary models", () => {
   assert.equal(body.enable_thinking, undefined);
 });
 
-function bodyFor(providerId: string, protocol: ModelProtocol, modelId: string, thinking: CanonicalModelRequest["thinking"], url?: string, supportsThinking = true): any {
+function bodyFor(providerId: string, protocol: ModelProtocol, modelId: string, thinking: CanonicalModelRequest["thinking"], url?: string, supportsThinking: boolean | undefined = true): any {
   const request: CanonicalModelRequest = {
     provider: providerId,
     model: modelId,
@@ -143,10 +158,13 @@ function bodyFor(providerId: string, protocol: ModelProtocol, modelId: string, t
   return buildModelRequest(request, configFor(providerId, protocol, modelId, url, supportsThinking)) as any;
 }
 
-function configFor(providerId: string, protocol: ModelProtocol, modelId: string, url?: string, supportsThinking = true): ModelConfig {
+function configFor(providerId: string, protocol: ModelProtocol, modelId: string, url?: string, supportsThinking: boolean | undefined = true): ModelConfig {
   const model: ModelDefinition = {
     id: modelId,
-    capabilities: { ...capabilities, supportsThinking },
+    capabilities: {
+      ...capabilities,
+      ...(supportsThinking === undefined ? {} : { supportsThinking, supportsThinkingExplicit: supportsThinking }),
+    } as ModelCapabilities,
     multimodal: { input: ["text"] },
   };
   const provider: ProviderConfig = {

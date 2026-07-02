@@ -12,6 +12,7 @@ import type {
 import { useDropzone } from 'react-dropzone';
 import { authenticatedFetch } from '../../../utils/api';
 import { isThinkingModeId, thinkingModeToConfig, type ThinkingModeId } from '../constants/thinkingModes';
+import { getEffectiveThinkingMode, type ThinkingModeAvailability } from '../constants/thinkingModeAvailability';
 import { grantPilotDeckToolPermission } from '../utils/chatPermissions';
 import { safeLocalStorage } from '../utils/chatStorage';
 import {
@@ -50,6 +51,7 @@ interface UseChatComposerStateArgs {
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
+  thinkingModeAvailability: ThinkingModeAvailability;
   sendMessage: (message: unknown) => void;
   sendByCtrlEnter?: boolean;
   onSessionActive?: (sessionId?: string | null) => void;
@@ -167,6 +169,7 @@ export function useChatComposerState({
   isLoading,
   canAbortSession,
   tokenBudget,
+  thinkingModeAvailability,
   sendMessage,
   sendByCtrlEnter,
   onSessionActive,
@@ -849,6 +852,7 @@ export function useChatComposerState({
 
       const toolsSettings = getToolsSettings();
       const sessionSummary = getNotificationSessionSummary(submitSelectedSession, userVisibleInput);
+      const effectiveThinkingMode = getEffectiveThinkingMode(thinkingMode, thinkingModeAvailability);
 
       startSessionCommand({
         sendMessage,
@@ -862,7 +866,7 @@ export function useChatComposerState({
         permissionMode,
         basePermissionMode,
         model,
-        thinking: thinkingModeToConfig(thinkingMode),
+        thinking: thinkingModeToConfig(effectiveThinkingMode),
         sessionSummary,
         images: uploadedImages,
       });
@@ -907,6 +911,7 @@ export function useChatComposerState({
       setIsUserScrolledUp,
       slashCommands,
       thinkingMode,
+      thinkingModeAvailability,
     ],
   );
 
