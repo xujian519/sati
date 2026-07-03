@@ -18,10 +18,20 @@ export interface ChatImage {
 }
 
 export interface ChatAttachment {
+  kind?: 'file' | 'document-selection';
   name: string;
   path?: string;
   size?: number;
   mimeType?: string;
+  fileName?: string;
+  filePath?: string;
+  source?: 'pdf' | 'office-pdf';
+  pageNumbers?: number[];
+  selectedText?: string;
+  surroundingText?: string;
+  occurrenceIndex?: number | null;
+  createdAt?: string;
+  truncated?: boolean;
 }
 
 export interface ToolResult {

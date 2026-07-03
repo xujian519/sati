@@ -309,6 +309,7 @@ function uiFilesToAttachments(files) {
     const out = [];
     for (const file of files) {
         if (!file || typeof file !== 'object') continue;
+        if (file.kind === 'document-selection') continue;
         const filePath = typeof file.path === 'string' ? file.path : '';
         if (!filePath) continue;
         out.push({

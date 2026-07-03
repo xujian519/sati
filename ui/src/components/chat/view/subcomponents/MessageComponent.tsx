@@ -3,11 +3,17 @@ import { useTranslation } from 'react-i18next';
 import { FileText, Search, Settings } from 'lucide-react';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import type {
+  ChatAttachment,
   ChatMessage,
   PilotDeckPermissionSuggestion,
   Provider,
   SessionPermissionGrantResult,
 } from '../../types/types';
+import {
+  DOCUMENT_SELECTION_ATTACHMENT_KIND,
+  getDocumentSelectionSummary,
+  type DocumentSelectionReference,
+} from '../../../../types/documentSelection';
 import { formatUsageLimitText } from '../../utils/chatFormatting';
 import { getPilotDeckPermissionSuggestion } from '../../utils/chatPermissions';
 import type { Project } from '../../../../types/app';
@@ -96,6 +102,25 @@ function getAttachmentAccent(name?: string, mimeType?: string): string {
   return 'bg-neutral-500 text-white';
 }
 
+function attachmentToDocumentReference(attachment: ChatAttachment): DocumentSelectionReference | null {
+  if (attachment.kind !== DOCUMENT_SELECTION_ATTACHMENT_KIND || !attachment.selectedText) return null;
+  const filePath = attachment.filePath || attachment.path || '';
+  if (!filePath) return null;
+  return {
+    kind: DOCUMENT_SELECTION_ATTACHMENT_KIND,
+    id: `${filePath}-${attachment.createdAt || ''}-${attachment.occurrenceIndex ?? ''}`,
+    fileName: attachment.fileName || attachment.name,
+    filePath,
+    source: attachment.source === 'pdf' ? 'pdf' : 'office-pdf',
+    pageNumbers: Array.isArray(attachment.pageNumbers) ? attachment.pageNumbers : [],
+    selectedText: attachment.selectedText,
+    surroundingText: attachment.surroundingText,
+    occurrenceIndex: attachment.occurrenceIndex,
+    createdAt: attachment.createdAt || new Date(0).toISOString(),
+    truncated: attachment.truncated,
+  };
+}
+
 const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantSessionToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider, hideHeader = false }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&
@@ -114,6 +139,10 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
   const messageAttachments = Array.isArray(message.attachments)
     ? message.attachments.filter((attachment) => attachment && typeof attachment.name === 'string')
     : [];
+  const documentReferenceAttachments = messageAttachments
+    .map(attachmentToDocumentReference)
+    .filter((reference): reference is DocumentSelectionReference => Boolean(reference));
+  const fileAttachments = messageAttachments.filter((attachment) => attachment.kind !== DOCUMENT_SELECTION_ATTACHMENT_KIND);
   const toolResultImages: LightboxImage[] = useMemo(
     () => {
       const list = (message.toolResult?.images ?? []) as Array<{ data?: unknown; name?: unknown; mimeType?: unknown }>;
@@ -191,9 +220,39 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
         /* User message bubble on the right */
         <div className="flex w-full items-end space-x-0 sm:w-auto sm:max-w-[85%] sm:space-x-3 md:max-w-md lg:max-w-lg xl:max-w-xl">
           <div className="group flex-1 rounded-2xl rounded-br-md bg-blue-600 px-3 py-2 text-white shadow-sm sm:flex-initial sm:px-4">
-            {messageAttachments.length > 0 && (
+            {documentReferenceAttachments.length > 0 && (
               <div className="mb-2 grid grid-cols-1 gap-2">
-                {messageAttachments.map((attachment, idx) => (
+                {documentReferenceAttachments.map((reference) => (
+                  <div
+                    key={reference.id}
+                    className="flex min-w-0 items-center gap-3 rounded-2xl bg-white/90 p-2.5 pr-3 text-neutral-900"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500 text-white">
+                      <FileText className="h-5 w-5" strokeWidth={2} />
+                    </div>
+                    <div className="min-w-0 text-left">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="truncate text-[13px] font-semibold">{reference.fileName}</span>
+                        <span className="shrink-0 text-[11px] font-medium text-neutral-500">
+                          {reference.pageNumbers.length
+                            ? t('documentReferences.pages', {
+                                pages: reference.pageNumbers.join(', '),
+                                defaultValue: 'p. {{pages}}',
+                              })
+                            : t('documentReferences.pageUnknown', { defaultValue: 'page unknown' })}
+                        </span>
+                      </div>
+                      <div className="mt-1 line-clamp-2 text-[12px] leading-4 text-neutral-600">
+                        {getDocumentSelectionSummary(reference, 180)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {fileAttachments.length > 0 && (
+              <div className="mb-2 grid grid-cols-1 gap-2">
+                {fileAttachments.map((attachment, idx) => (
                   <div
                     key={`${attachment.name || 'attachment'}-${idx}`}
                     className="flex min-w-0 items-center gap-3 rounded-2xl bg-white/90 p-2.5 pr-3 text-neutral-900"

@@ -18,12 +18,14 @@ import {
   ChevronDown,
   CircleGauge,
   CircleHelp,
+  FileText,
   Hand,
   ListChecks,
   Loader2,
   Paperclip,
   ShieldAlert,
   Square,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import type { ChatRunMode, PendingPermissionRequest, PermissionMode } from '../chat/types/types';
@@ -34,6 +36,10 @@ import PermissionRequestsBanner from '../chat/view/subcomponents/PermissionReque
 import ImageAttachment from '../chat/view/subcomponents/ImageAttachment';
 import CommandMenu from '../chat/view/subcomponents/CommandMenu';
 import { cn } from '../../lib/utils.js';
+import {
+  getDocumentSelectionSummary,
+  type DocumentSelectionReference,
+} from '../../types/documentSelection';
 
 interface MentionableFile {
   name: string;
@@ -68,6 +74,8 @@ export type ComposerV2Props = {
   openImagePicker: () => void;
   attachedImages: File[];
   onRemoveImage: (index: number) => void;
+  documentReferences: DocumentSelectionReference[];
+  onRemoveDocumentReference: (id: string) => void;
   uploadingImages: Map<string, number>;
   imageErrors: Map<string, string>;
 
@@ -254,6 +262,11 @@ function getContextStatus(tokenBudget?: Record<string, unknown> | null): Context
   };
 }
 
+function formatReferencePages(reference: DocumentSelectionReference, pageLabel: string): string {
+  if (!reference.pageNumbers.length) return pageLabel.replace('{{pages}}', '--');
+  return pageLabel.replace('{{pages}}', reference.pageNumbers.join(', '));
+}
+
 export default function ComposerV2({
   input,
   placeholder,
@@ -272,6 +285,8 @@ export default function ComposerV2({
   openImagePicker,
   attachedImages,
   onRemoveImage,
+  documentReferences,
+  onRemoveDocumentReference,
   uploadingImages,
   imageErrors,
   showFileDropdown,
@@ -325,7 +340,7 @@ export default function ComposerV2({
     (request) => BLOCKING_PERMISSION_TOOLS.has(request.toolName),
   );
 
-  const hasDraftContent = input.trim().length > 0 || attachedImages.length > 0;
+  const hasDraftContent = input.trim().length > 0 || attachedImages.length > 0 || documentReferences.length > 0;
   const hasUploadingImages = uploadingImages.size > 0;
   const attachmentLimitError = imageErrors.get(MAX_ATTACHMENTS_ERROR_KEY);
   const disabled = !hasDraftContent || isLoading || isSubmitPending || hasUploadingImages;
@@ -383,9 +398,44 @@ export default function ComposerV2({
             onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void}
             className="relative"
           >
-            {attachedImages.length > 0 ? (
+            {attachedImages.length > 0 || documentReferences.length > 0 ? (
               <div className="mb-2 rounded-lg border border-neutral-200 bg-neutral-50 p-2 dark:border-neutral-800 dark:bg-neutral-900">
                 <div className="flex flex-wrap gap-2">
+                  {documentReferences.map((reference) => (
+                    <div
+                      key={reference.id}
+                      className="flex max-w-full items-start gap-2 rounded-lg border border-blue-100 bg-white p-2.5 text-left shadow-sm dark:border-blue-900/40 dark:bg-neutral-950"
+                    >
+                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-500 text-white">
+                        <FileText className="h-4 w-4" strokeWidth={2} />
+                      </div>
+                      <div className="min-w-0 max-w-[420px] flex-1">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="truncate text-[12px] font-semibold text-neutral-900 dark:text-neutral-100">
+                            {reference.fileName}
+                          </span>
+                          <span className="shrink-0 text-[11px] text-neutral-500 dark:text-neutral-400">
+                            {formatReferencePages(
+                              reference,
+                              t('documentReferences.pages', { defaultValue: 'p. {{pages}}' }) as string,
+                            )}
+                          </span>
+                        </div>
+                        <div className="mt-1 line-clamp-2 text-[12px] leading-4 text-neutral-600 dark:text-neutral-300">
+                          {getDocumentSelectionSummary(reference, 180)}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onRemoveDocumentReference(reference.id)}
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                        title={t('documentReferences.remove', { defaultValue: 'Remove reference' }) as string}
+                        aria-label={t('documentReferences.remove', { defaultValue: 'Remove reference' }) as string}
+                      >
+                        <X className="h-3.5 w-3.5" strokeWidth={2} />
+                      </button>
+                    </div>
+                  ))}
                   {attachedImages.map((file, index) => (
                     <ImageAttachment
                       key={index}

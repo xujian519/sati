@@ -83,7 +83,7 @@ async function getLibreOfficeBinary() {
   return status.available ? status.binaryPath : null;
 }
 
-export async function convertOfficeDocumentToPdf(sourcePath) {
+export async function convertOfficeDocumentToPdf(sourcePath, options = {}) {
   const binary = await getLibreOfficeBinary();
   if (!binary) {
     const error = new Error('LibreOffice executable not found');
@@ -99,6 +99,11 @@ export async function convertOfficeDocumentToPdf(sourcePath) {
     .digest('hex');
   const cacheDir = path.join(OFFICE_PREVIEW_CACHE_DIR, cacheKey);
   const profileDir = path.join(cacheDir, 'profile');
+
+  if (options.force) {
+    await fsPromises.rm(cacheDir, { recursive: true, force: true }).catch(() => {});
+  }
+
   await fsPromises.mkdir(cacheDir, { recursive: true });
 
   const cachedPdf = (await fsPromises.readdir(cacheDir).catch(() => []))

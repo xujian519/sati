@@ -199,6 +199,8 @@ function ChatInterfaceV2({
     selectFile,
     attachedImages,
     setAttachedImages,
+    documentReferences,
+    removeDocumentReference,
     uploadingImages,
     imageErrors,
     getRootProps,
@@ -253,6 +255,9 @@ function ChatInterfaceV2({
     setIsUserScrolledUp,
     pendingPermissionRequests,
     setPendingPermissionRequests,
+    referenceOnlyPrompt: t('documentReferences.defaultPrompt', {
+      defaultValue: 'Please answer based on the document selection I quoted.',
+    }) as string,
   });
 
   const handlePlanExecutionApproved = useCallback(() => {
@@ -493,6 +498,8 @@ function ChatInterfaceV2({
           previous.filter((_, currentIndex) => currentIndex !== index),
         )
       }
+      documentReferences={documentReferences}
+      onRemoveDocumentReference={removeDocumentReference}
       uploadingImages={uploadingImages}
       imageErrors={imageErrors}
       showFileDropdown={showFileDropdown}

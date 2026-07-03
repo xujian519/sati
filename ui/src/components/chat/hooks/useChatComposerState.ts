@@ -21,7 +21,14 @@ import {
   isTemporarySessionId,
   startSessionCommand,
 } from '../utils/sessionLauncher';
+import {
+  DOCUMENT_SELECTION_ATTACHMENT_KIND,
+  formatDocumentSelectionPromptBlock,
+  isDocumentSelectionReference,
+  type DocumentSelectionReference,
+} from '../../../types/documentSelection';
 import type {
+  ChatAttachment,
   ChatMessage,
   PendingPermissionRequest,
   PermissionGrantResult,
@@ -79,6 +86,7 @@ interface UseChatComposerStateArgs {
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
   pendingPermissionRequests: PendingPermissionRequest[];
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
+  referenceOnlyPrompt?: string;
 }
 
 interface MentionableFile {
@@ -194,6 +202,7 @@ export function useChatComposerState({
   setIsUserScrolledUp,
   pendingPermissionRequests,
   setPendingPermissionRequests,
+  referenceOnlyPrompt = 'Please answer based on the document selection I quoted.',
 }: UseChatComposerStateArgs) {
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
@@ -202,6 +211,7 @@ export function useChatComposerState({
     return '';
   });
   const [attachedImages, setAttachedImages] = useState<File[]>([]);
+  const [documentReferences, setDocumentReferences] = useState<DocumentSelectionReference[]>([]);
   const [uploadingImages, setUploadingImages] = useState<Map<string, number>>(new Map());
   const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
@@ -215,6 +225,25 @@ export function useChatComposerState({
   >(null);
   const inputValueRef = useRef(input);
   const pendingSessionGrantResolversRef = useRef(new Map<string, (result: PermissionGrantResult) => void>());
+
+  useEffect(() => {
+    const handleAddDocumentReference = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!isDocumentSelectionReference(detail)) return;
+      setDocumentReferences((previous) => {
+        if (previous.some((reference) => reference.id === detail.id)) return previous;
+        return [...previous, detail];
+      });
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    };
+
+    window.addEventListener('pilotdeck:add-chat-reference', handleAddDocumentReference);
+    return () => {
+      window.removeEventListener('pilotdeck:add-chat-reference', handleAddDocumentReference);
+    };
+  }, []);
 
   useEffect(() => {
     if (!subscribe) {
@@ -725,7 +754,8 @@ export function useChatComposerState({
     ) => {
       event.preventDefault();
       const currentInput = inputValueRef.current;
-      const hasAttachments = attachedImages.length > 0;
+      const hasDocumentReferences = documentReferences.length > 0;
+      const hasAttachments = attachedImages.length > 0 || hasDocumentReferences;
       if ((!currentInput.trim() && !hasAttachments) || isLoading || !selectedProject) {
         return;
       }
@@ -745,6 +775,7 @@ export function useChatComposerState({
           setInput('');
           inputValueRef.current = '';
           setAttachedImages([]);
+          setDocumentReferences([]);
           setUploadingImages(new Map());
           setImageErrors(new Map());
           resetCommandMenuState();
@@ -756,7 +787,8 @@ export function useChatComposerState({
         }
       }
 
-      const userVisibleInput = currentInput.trim() || 'Please review the attached file(s).';
+      const userVisibleInput = currentInput.trim()
+        || (hasDocumentReferences ? referenceOnlyPrompt : 'Please review the attached file(s).');
       let messageContent = userVisibleInput;
 
       // Pin the target session before any await so attachment upload cannot
@@ -824,7 +856,8 @@ export function useChatComposerState({
         }
       }
 
-      messageContent = `${messageContent}${buildAttachmentPathNote(uploadedFiles)}`;
+      const documentReferenceAttachments = documentReferences.map(documentReferenceToAttachment);
+      messageContent = `${messageContent}${buildAttachmentPathNote(uploadedFiles)}${formatDocumentSelectionPromptBlock(documentReferences)}`;
 
       const effectiveSessionId = submitTargetSessionId;
       const sessionToActivate = effectiveSessionId || optimisticSessionId;
@@ -833,7 +866,7 @@ export function useChatComposerState({
         type: 'user',
         content: userVisibleInput,
         images: uploadedImages as any,
-        attachments: uploadedFiles as any,
+        attachments: [...uploadedFiles, ...documentReferenceAttachments] as any,
         timestamp: new Date(),
       };
 
@@ -901,12 +934,14 @@ export function useChatComposerState({
         thinking: thinkingModeToConfig(effectiveThinkingMode),
         sessionSummary,
         images: uploadedImages,
+        attachments: [...uploadedFiles, ...documentReferenceAttachments],
       });
 
       setInput('');
       inputValueRef.current = '';
       resetCommandMenuState();
       setAttachedImages([]);
+      setDocumentReferences([]);
       setUploadingImages(new Map());
       setImageErrors(new Map());
       setIsTextareaExpanded(false);
@@ -920,6 +955,7 @@ export function useChatComposerState({
     [
       selectedSession,
       attachedImages,
+      documentReferences,
       model,
       currentSessionId,
       executeCommand,
@@ -944,6 +980,7 @@ export function useChatComposerState({
       slashCommands,
       thinkingMode,
       thinkingModeAvailability,
+      referenceOnlyPrompt,
     ],
   );
 
@@ -960,6 +997,7 @@ export function useChatComposerState({
       return;
     }
     const savedInput = safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
+    setDocumentReferences([]);
     setInput((previous) => {
       const next = previous === savedInput ? previous : savedInput;
       inputValueRef.current = next;
@@ -1117,6 +1155,7 @@ export function useChatComposerState({
   const handleClearInput = useCallback(() => {
     setInput('');
     inputValueRef.current = '';
+    setDocumentReferences([]);
     resetCommandMenuState();
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -1324,6 +1363,10 @@ export function useChatComposerState({
     selectFile,
     attachedImages,
     setAttachedImages,
+    documentReferences,
+    removeDocumentReference: (id: string) => {
+      setDocumentReferences((previous) => previous.filter((reference) => reference.id !== id));
+    },
     uploadingImages,
     imageErrors,
     getRootProps,
@@ -1345,5 +1388,23 @@ export function useChatComposerState({
     handleGrantSessionToolPermission,
     handleInputFocusChange,
     isInputFocused,
+  };
+}
+
+function documentReferenceToAttachment(reference: DocumentSelectionReference): ChatAttachment {
+  return {
+    kind: DOCUMENT_SELECTION_ATTACHMENT_KIND,
+    name: reference.fileName,
+    path: reference.filePath,
+    fileName: reference.fileName,
+    filePath: reference.filePath,
+    source: reference.source,
+    pageNumbers: reference.pageNumbers,
+    selectedText: reference.selectedText,
+    surroundingText: reference.surroundingText,
+    occurrenceIndex: reference.occurrenceIndex,
+    createdAt: reference.createdAt,
+    truncated: reference.truncated,
+    mimeType: 'application/vnd.pilotdeck.document-selection',
   };
 }

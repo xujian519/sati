@@ -4,9 +4,14 @@ import type { TFunction } from 'i18next';
 import { AlertTriangle, Check, ChevronRight, Copy, FileText, GitBranch, Loader2 } from 'lucide-react';
 import { copyTextToClipboard } from '../../utils/clipboard';
 import { cn } from '../../lib/utils.js';
-import { useTypewriter } from './useTypewriter';
 import type { Project, SessionProvider } from '../../types/app';
+import {
+  DOCUMENT_SELECTION_ATTACHMENT_KIND,
+  getDocumentSelectionSummary,
+  type DocumentSelectionReference,
+} from '../../types/documentSelection';
 import type {
+  ChatAttachment,
   ChatMessage,
   PilotDeckPermissionSuggestion,
   SessionPermissionGrantResult,
@@ -18,6 +23,7 @@ import { formatUsageLimitText } from '../chat/utils/chatFormatting';
 import { ProcessTrace } from './ProcessTrace';
 import { processSummaryToTrace, type ProcessAttachment } from './processGrouping';
 import SubagentCard from './SubagentCard';
+import { useTypewriter } from './useTypewriter';
 
 type DiffLine = { type: string; content: string; lineNum: number };
 
@@ -58,6 +64,25 @@ const getAttachmentAccent = (name?: string, mimeType?: string): string => {
   if (label === 'ppt' || label === 'pptx') return 'bg-orange-500 text-white';
   return 'bg-neutral-500 text-white';
 };
+
+function attachmentToDocumentReference(attachment: ChatAttachment): DocumentSelectionReference | null {
+  if (attachment.kind !== DOCUMENT_SELECTION_ATTACHMENT_KIND || !attachment.selectedText) return null;
+  const filePath = attachment.filePath || attachment.path || '';
+  if (!filePath) return null;
+  return {
+    kind: DOCUMENT_SELECTION_ATTACHMENT_KIND,
+    id: `${filePath}-${attachment.createdAt || ''}-${attachment.occurrenceIndex ?? ''}`,
+    fileName: attachment.fileName || attachment.name,
+    filePath,
+    source: attachment.source === 'pdf' ? 'pdf' : 'office-pdf',
+    pageNumbers: Array.isArray(attachment.pageNumbers) ? attachment.pageNumbers : [],
+    selectedText: attachment.selectedText,
+    surroundingText: attachment.surroundingText,
+    occurrenceIndex: attachment.occurrenceIndex,
+    createdAt: attachment.createdAt || new Date(0).toISOString(),
+    truncated: attachment.truncated,
+  };
+}
 
 type MessageRowV2Props = {
   message: ChatMessage;
@@ -151,6 +176,16 @@ function MessageRowV2({
         ? message.attachments.filter((attachment) => attachment && typeof attachment.name === 'string')
         : [],
     [message.attachments],
+  );
+  const documentReferenceAttachments = useMemo(
+    () => messageAttachments
+      .map(attachmentToDocumentReference)
+      .filter((reference): reference is DocumentSelectionReference => Boolean(reference)),
+    [messageAttachments],
+  );
+  const fileAttachments = useMemo(
+    () => messageAttachments.filter((attachment) => attachment.kind !== DOCUMENT_SELECTION_ATTACHMENT_KIND),
+    [messageAttachments],
   );
   const [userImageLightbox, setUserImageLightbox] = useState<number | null>(null);
   const hasForkUnsupportedContent =
@@ -276,9 +311,41 @@ function MessageRowV2({
             <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
           ) : (
             <>
-              {messageAttachments.length > 0 ? (
+              {documentReferenceAttachments.length > 0 ? (
+                <div className={formattedContent || fileAttachments.length > 0 ? 'mb-2 grid grid-cols-1 gap-2' : 'grid grid-cols-1 gap-2'}>
+                  {documentReferenceAttachments.map((reference) => (
+                    <div
+                      key={reference.id}
+                      className="flex min-w-0 gap-3 rounded-2xl border border-blue-100 bg-white/85 p-2.5 pr-3 dark:border-blue-900/40 dark:bg-neutral-900/45"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500 text-white">
+                        <FileText className="h-5 w-5" strokeWidth={2} />
+                      </div>
+                      <div className="min-w-0 text-left">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="truncate text-[13px] font-semibold text-neutral-900 dark:text-neutral-100">
+                            {reference.fileName}
+                          </span>
+                          <span className="shrink-0 text-[11px] text-neutral-500 dark:text-neutral-400">
+                            {reference.pageNumbers.length
+                              ? t('documentReferences.pages', {
+                                  pages: reference.pageNumbers.join(', '),
+                                  defaultValue: 'p. {{pages}}',
+                                })
+                              : t('documentReferences.pageUnknown', { defaultValue: 'page unknown' })}
+                          </span>
+                        </div>
+                        <div className="mt-1 line-clamp-2 text-[12px] leading-4 text-neutral-600 dark:text-neutral-300">
+                          {getDocumentSelectionSummary(reference, 180)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {fileAttachments.length > 0 ? (
                 <div className={formattedContent ? 'mb-2 grid grid-cols-1 gap-2' : 'grid grid-cols-1 gap-2'}>
-                  {messageAttachments.map((attachment, index) => (
+                  {fileAttachments.map((attachment, index) => (
                     <div
                       key={`${attachment.name || 'attachment'}-${index}`}
                       className="flex min-w-0 items-center gap-3 rounded-2xl bg-white/85 p-2.5 pr-3 dark:bg-neutral-900/45"
@@ -324,7 +391,7 @@ function MessageRowV2({
                 </div>
               ) : null}
               {formattedContent ? (
-                <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-p:my-1 prose-ol:my-1 prose-ul:my-1 prose-li:my-0 min-w-0 break-words [overflow-wrap:anywhere]" projectName={selectedProject?.name}
+                <Markdown className="prose prose-sm prose-neutral min-w-0 max-w-none break-words [overflow-wrap:anywhere] dark:prose-invert prose-p:my-1 prose-ol:my-1 prose-ul:my-1 prose-li:my-0" projectName={selectedProject?.name}
           onFileOpen={onFileOpen}>{formattedContent}</Markdown>
               ) : null}
             </>

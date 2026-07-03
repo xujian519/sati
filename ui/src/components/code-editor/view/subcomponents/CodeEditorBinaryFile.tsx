@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../../utils/api';
 import { readOfficePreviewStatus, type OfficePreviewStatus } from '../../../../utils/officePreviewStatus';
 import type { CodeEditorFile } from '../../types/types';
 import { isImageFile, isOfficeFile, isPdfFile } from '../../utils/binaryFile';
+import PdfDocumentPreview from './PdfDocumentPreview';
 
 type CodeEditorBinaryFileProps = {
   file: CodeEditorFile;
@@ -17,6 +18,7 @@ type CodeEditorBinaryFileProps = {
 };
 
 type BlobSource = 'raw' | 'office-pdf';
+type ReloadOptions = { force?: boolean };
 
 function useFileBlob(
   projectName: string | undefined,
@@ -28,11 +30,14 @@ function useFileBlob(
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(enabled);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [reloadRequest, setReloadRequest] = useState({ key: 0, force: false });
   const lastRequestKeyRef = useRef('');
 
-  const reload = useCallback(() => {
-    setReloadKey((value) => value + 1);
+  const reload = useCallback((options: ReloadOptions = {}) => {
+    setReloadRequest((value) => ({
+      key: value.key + 1,
+      force: Boolean(options.force),
+    }));
   }, []);
 
   useEffect(() => {
@@ -58,7 +63,7 @@ function useFileBlob(
     setErrorCode(null);
 
     const request = source === 'office-pdf'
-      ? api.readOfficePdfPreviewBlob(projectName, filePath)
+      ? api.readOfficePdfPreviewBlob(projectName, filePath, { force: reloadRequest.force })
       : api.readFileBlob(projectName, filePath);
 
     request
@@ -99,7 +104,7 @@ function useFileBlob(
     return () => {
       cancelled = true;
     };
-  }, [enabled, projectName, filePath, source, reloadKey]);
+  }, [enabled, projectName, filePath, source, reloadRequest.force, reloadRequest.key]);
 
   return { blob, errorMessage, errorCode, loading, reload };
 }
@@ -126,7 +131,7 @@ function useObjectUrl(blob: Blob | null) {
 function useOfficeAutoRefresh(
   projectName: string | undefined,
   filePath: string,
-  reload: () => void,
+  reload: (options?: ReloadOptions) => void,
 ) {
   const lastFocusRefreshRef = useRef(0);
 
@@ -140,8 +145,9 @@ function useOfficeAutoRefresh(
     };
 
     const handleRefreshEvent = (event: Event) => {
-      if (matchesFile((event as CustomEvent).detail)) {
-        reload();
+      const detail = (event as CustomEvent).detail as { force?: boolean } | undefined;
+      if (matchesFile(detail)) {
+        reload({ force: detail?.force === true });
       }
     };
 
@@ -343,29 +349,20 @@ function PdfPreview({ projectName, file, title, message, onClose }: {
   onClose: () => void;
 }) {
   const { blob, errorMessage, loading } = useFileBlob(projectName, file.path, true);
-  const blobUrl = useObjectUrl(blob);
 
-  if (loading && !blobUrl) return <PreviewSpinner />;
-  if (errorMessage || !blobUrl) {
+  if (loading && !blob) return <PreviewSpinner />;
+  if (errorMessage || !blob) {
     return <FallbackContent title={title} message={message} onClose={onClose} />;
   }
 
   return (
-    <div className="h-full w-full bg-white dark:bg-neutral-950">
-      <iframe
-        src={blobUrl}
-        className="h-full w-full border-0"
-        title={`PDF: ${file.name}`}
-      />
-    </div>
-  );
-}
-
-function OfficeStatusBanner({ children }: { children: ReactNode }) {
-  return (
-    <div className="absolute left-3 top-3 z-10 rounded-md border border-neutral-200 bg-white/95 px-3 py-1.5 text-[12px] text-neutral-600 shadow-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95 dark:text-neutral-300">
-      {children}
-    </div>
+    <PdfDocumentPreview
+      blob={blob}
+      projectName={projectName}
+      fileName={file.name}
+      filePath={file.path}
+      source="pdf"
+    />
   );
 }
 
@@ -388,15 +385,10 @@ function OfficePreview({
   const previewDisabledByConfig = previewServiceStatus?.service === 'none';
   const shouldLoadOfficePdf = !previewServiceLoading && !previewDisabledByConfig;
   const { blob, errorMessage, errorCode, loading, reload } = useFileBlob(projectName, file.path, shouldLoadOfficePdf, 'office-pdf');
-  const blobUrl = useObjectUrl(blob);
-  const previewUrl = useMemo(
-    () => blobUrl ? `${blobUrl}#toolbar=0&navpanes=0&view=FitH` : null,
-    [blobUrl],
-  );
 
   useOfficeAutoRefresh(projectName, file.path, reload);
 
-  if (previewServiceLoading && !previewUrl) {
+  if (previewServiceLoading && !blob) {
     return <PreviewSpinner label={t('officePreview.checkingService')} />;
   }
   if (previewDisabledByConfig) {
@@ -415,8 +407,8 @@ function OfficePreview({
     );
   }
 
-  if (loading && !previewUrl) return <PreviewSpinner label={t('officePreview.converting')} />;
-  if (errorMessage || !previewUrl) {
+  if (loading && !blob) return <PreviewSpinner label={t('officePreview.converting')} />;
+  if (errorMessage || !blob) {
     const previewDisabled = errorCode === 'OFFICE_PREVIEW_DISABLED';
     const needsLibreOffice = errorCode === 'LIBREOFFICE_NOT_FOUND'
       || errorMessage?.includes('LibreOffice')
@@ -448,18 +440,14 @@ function OfficePreview({
   }
 
   return (
-    <div className="relative h-full w-full bg-white dark:bg-neutral-950">
-      {(loading || errorMessage) && (
-        <OfficeStatusBanner>
-        {loading ? t('officePreview.refreshing') : errorMessage}
-        </OfficeStatusBanner>
-      )}
-      <iframe
-        src={previewUrl}
-        className="h-full w-full border-0"
-        title={`Office PDF preview: ${file.name}`}
-      />
-    </div>
+    <PdfDocumentPreview
+      blob={blob}
+      projectName={projectName}
+      fileName={file.name}
+      filePath={file.path}
+      source="office-pdf"
+      loadingOverlay={loading ? t('officePreview.refreshing') : null}
+    />
   );
 }
 
@@ -502,7 +490,7 @@ export default function CodeEditorBinaryFile({
           <RefreshButton
             onRefresh={() => {
               window.dispatchEvent(new CustomEvent('pilotdeck:file-updated', {
-                detail: { projectName, filePath: file.path },
+                detail: { projectName, filePath: file.path, force: true },
               }));
             }}
           />

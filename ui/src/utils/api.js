@@ -183,8 +183,16 @@ export const api = {
     authenticatedFetch(`/api/projects/${projectName}/file?filePath=${encodeURIComponent(filePath)}`),
   readFileBlob: (projectName, filePath) =>
     authenticatedFetch(`/api/projects/${projectName}/files/content?path=${encodeURIComponent(filePath)}`),
-  readOfficePdfPreviewBlob: (projectName, filePath) =>
-    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/files/preview/pdf?path=${encodeURIComponent(filePath)}`),
+  readOfficePdfPreviewBlob: (projectName, filePath, options = {}) => {
+    const params = new URLSearchParams({ path: filePath });
+    if (options.force) {
+      params.set('force', '1');
+      params.set('_', String(Date.now()));
+    }
+    return authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/files/preview/pdf?${params.toString()}`, {
+      cache: 'no-store',
+    });
+  },
   officePreviewStatus: () =>
     authenticatedFetch('/api/config/office-preview/status'),
   pilotDeckConfig: () =>

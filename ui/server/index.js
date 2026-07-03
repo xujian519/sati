@@ -1121,7 +1121,6 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
         const { projectName } = req.params;
         const { path: filePath } = req.query;
 
-
         // Security: ensure the requested path is inside the project root
         if (!filePath) {
             return res.status(400).json({ error: 'Invalid file path' });
@@ -1207,6 +1206,7 @@ app.get('/api/projects/:projectName/files/preview/pdf', authenticateToken, async
     try {
         const { projectName } = req.params;
         const { path: filePath } = req.query;
+        const force = req.query.force === '1' || req.query.force === 'true';
 
         if (!filePath) {
             return res.status(400).json({ error: 'Invalid file path' });
@@ -1241,9 +1241,10 @@ app.get('/api/projects/:projectName/files/preview/pdf', authenticateToken, async
             });
         }
 
-        const pdfPath = await convertOfficeDocumentToPdf(resolved);
+        const pdfPath = await convertOfficeDocumentToPdf(resolved, { force });
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Cache-Control', 'private, max-age=60');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
 
         const fileStream = fs.createReadStream(pdfPath);
         fileStream.pipe(res);
@@ -2034,6 +2035,9 @@ function handleChatConnection(ws, request) {
                             kind: 'text',
                             role: 'user',
                             content: userVisibleInput,
+                            ...(Array.isArray(data.options?.attachments) && data.options.attachments.length > 0
+                                ? { attachments: data.options.attachments }
+                                : {}),
                             timestamp: nowIso,
                         });
                         const optimisticStatusFrame = createNormalizedMessage({
