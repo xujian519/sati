@@ -72,7 +72,8 @@ export class ImAttachmentStore {
       throw new Error(`Attachment is ${buffer.byteLength} bytes (limit ${this.maxBytes}).`);
     }
 
-    const mimeType = input.mimeType ?? (response.headers.get("content-type")?.split(";", 1)[0]?.trim() || undefined);
+    const responseMimeType = response.headers.get("content-type")?.split(";", 1)[0]?.trim() || undefined;
+    const mimeType = normalizeAttachmentMimeType(input.mimeType ?? responseMimeType, buffer, input.type);
     const dir = this.safeDir(input.chatId, input.messageId);
     await mkdir(dir, { recursive: true, mode: 0o700 });
     const filename = this.safeFilename(input.name, mimeType, input.type);
@@ -112,9 +113,43 @@ export class ImAttachmentStore {
     const fallback = type === "image" ? `image.${extensionForMime(mimeType)}` : `attachment.${extensionForMime(mimeType)}`;
     const raw = basename(name?.trim() || fallback);
     const cleaned = raw.replace(/[\x00-\x1f\\/:*?"<>|]+/g, "_").slice(0, 180) || fallback;
+    if (type === "image") {
+      return replaceExtension(cleaned, extensionForMime(mimeType));
+    }
     if (extname(cleaned)) return cleaned;
     return `${cleaned}.${extensionForMime(mimeType)}`;
   }
+}
+
+function normalizeAttachmentMimeType(
+  mimeType: string | undefined,
+  buffer: Buffer,
+  type: ChannelAttachment["type"],
+): string | undefined {
+  if (type !== "image") return mimeType;
+  return detectImageMime(buffer) ?? mimeType;
+}
+
+function detectImageMime(buffer: Buffer): string | undefined {
+  if (buffer.length >= 8
+    && buffer[0] === 0x89
+    && buffer[1] === 0x50
+    && buffer[2] === 0x4e
+    && buffer[3] === 0x47
+    && buffer[4] === 0x0d
+    && buffer[5] === 0x0a
+    && buffer[6] === 0x1a
+    && buffer[7] === 0x0a) return "image/png";
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
+  if (buffer.subarray(0, 6).toString("ascii") === "GIF87a" || buffer.subarray(0, 6).toString("ascii") === "GIF89a") return "image/gif";
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
+  return undefined;
+}
+
+function replaceExtension(name: string, extension: string): string {
+  const ext = extname(name);
+  const base = ext ? name.slice(0, -ext.length) : name;
+  return `${base || "image"}.${extension}`;
 }
 
 function safePathPart(value: string): string {

@@ -8,6 +8,7 @@ import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } f
 import { executeChannelCommand, resolveCommand } from "../protocol/ChannelCommandRegistry.js";
 import { guessMimeTypeFromName, ImAttachmentDelivery, type PreparedImAttachment } from "../protocol/ImAttachmentDelivery.js";
 import { ImAttachmentStore } from "../protocol/ImAttachmentStore.js";
+import { ImChatSessionState } from "../protocol/ImChatSessionState.js";
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
@@ -46,6 +47,7 @@ const MAX_TEXT_MESSAGE_LENGTH = 4000;
 const DEFAULT_LIVE_REPLY_CURSOR = " ▉";
 const FEISHU_MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 const FEISHU_ATTACHMENT_FETCH_TIMEOUT_MS = 60_000;
+const FEISHU_MAX_PENDING_TURNS_PER_CHAT = 20;
 
 export type FeishuOutboundMessage = {
   chatId: string;
@@ -106,6 +108,14 @@ type FeishuInboundMessage = {
   content?: string;
 };
 
+type QueuedFeishuTurn = {
+  sessionKey: string;
+  message: string;
+  projectKey?: string;
+  attachments: ChannelAttachment[];
+  messageId?: string;
+};
+
 export class FeishuChannel implements ChannelAdapter {
   readonly channelKey = "feishu";
 
@@ -127,6 +137,7 @@ export class FeishuChannel implements ChannelAdapter {
   private tokenInflight?: Promise<string>;
   private readonly seenEvents = new Set<string>();
   private readonly activeChats = new Set<string>();
+  private readonly chatState = new ImChatSessionState<QueuedFeishuTurn>({ maxPendingTurns: FEISHU_MAX_PENDING_TURNS_PER_CHAT });
   private readonly elicitation = new ImElicitationHelper();
   private readonly permissions = new ImPermissionHelper();
   private readonly attachmentStore = new ImAttachmentStore({
@@ -326,6 +337,7 @@ export class FeishuChannel implements ChannelAdapter {
     const mapped = this.mapper.resolve({ chatId, text: messageText });
 
     if (mapped.command === "new" && !mapped.message) {
+      this.resetChatInteractionState(chatId);
       await this.send({ chatId, text: "已创建新会话。" });
       return;
     }
@@ -348,13 +360,48 @@ export class FeishuChannel implements ChannelAdapter {
     if (!mapped.message) return;
 
     if (this.activeChats.has(chatId)) {
-      this.logger?.info?.(`feishu: chat ${chatId} already active, skipping`);
+      this.chatState.queueTurn(chatId, {
+        sessionKey: mapped.sessionKey,
+        message: mapped.message,
+        projectKey: mapped.projectKey,
+        attachments: attachmentResult.attachments,
+        messageId,
+      });
+      this.logger?.info?.(`feishu: chat ${chatId} already active, queued message`);
       return;
     }
 
-    const reactionId = messageId ? await this.addReaction(messageId) : undefined;
+    await this.runQueuedTurns(chatId, {
+      sessionKey: mapped.sessionKey,
+      message: mapped.message,
+      projectKey: mapped.projectKey,
+      attachments: attachmentResult.attachments,
+      messageId,
+    });
+  }
 
+  private resetChatInteractionState(chatId: string): void {
+    this.chatState.resetForNewSession(chatId);
+    this.elicitation.clear(chatId);
+    this.permissions.clear(chatId);
+  }
+
+  private async runQueuedTurns(chatId: string, firstTurn: QueuedFeishuTurn): Promise<void> {
     this.activeChats.add(chatId);
+    try {
+      let nextTurn: QueuedFeishuTurn | undefined = firstTurn;
+      while (nextTurn) {
+        await this.processTurn(chatId, nextTurn);
+        nextTurn = this.chatState.shiftTurn(chatId);
+      }
+    } finally {
+      this.activeChats.delete(chatId);
+    }
+  }
+
+  private async processTurn(chatId: string, turn: QueuedFeishuTurn): Promise<void> {
+    if (!this.gateway) return;
+    const reactionId = turn.messageId ? await this.addReaction(turn.messageId) : undefined;
     try {
       let activeRunId: string | undefined;
       let watchdogSettled = false;
@@ -374,7 +421,7 @@ export class FeishuChannel implements ChannelAdapter {
             void liveReply.markTimedOut().catch((error: unknown) => {
               this.logger?.warn?.(`feishu: mark timeout failed: ${error}`);
             });
-            void this.gateway?.abortTurn({ sessionKey: mapped.sessionKey, ...(activeRunId ? { runId: activeRunId } : {}) })
+            void this.gateway?.abortTurn({ sessionKey: turn.sessionKey, ...(activeRunId ? { runId: activeRunId } : {}) })
               .catch((error: unknown) => {
                 this.logger?.warn?.(`feishu: abort timeout turn failed: ${error}`);
               });
@@ -383,25 +430,25 @@ export class FeishuChannel implements ChannelAdapter {
       watchdog?.unref?.();
       try {
         for await (const event of this.gateway.submitTurn({
-          sessionKey: mapped.sessionKey,
+          sessionKey: turn.sessionKey,
           channelKey: "feishu",
-          message: mapped.message,
-          ...(attachmentResult.attachments.length > 0 ? { attachments: attachmentResult.attachments } : {}),
+          message: turn.message,
+          ...(turn.attachments.length > 0 ? { attachments: turn.attachments } : {}),
           allowPlanModeTools: false,
           timeoutMs: turnTimeoutMs,
-          ...(mapped.projectKey ? { projectKey: mapped.projectKey } : {}),
+          ...(turn.projectKey ? { projectKey: turn.projectKey } : {}),
         })) {
           if (event.type === "turn_started") {
             activeRunId = event.runId;
           }
           if (event.type === "elicitation_request") {
-            const questionText = this.elicitation.capture(chatId, mapped.sessionKey, event);
+            const questionText = this.elicitation.capture(chatId, turn.sessionKey, event);
             await liveReply.pauseActivity();
             await this.send({ chatId, text: questionText });
             continue;
           }
           if (event.type === "permission_request") {
-            const questionText = this.permissions.capture(chatId, mapped.sessionKey, event);
+            const questionText = this.permissions.capture(chatId, turn.sessionKey, event);
             await liveReply.pauseActivity();
             if (questionText) await this.send({ chatId, text: questionText });
             continue;
@@ -437,10 +484,9 @@ export class FeishuChannel implements ChannelAdapter {
       this.permissions.clear(chatId);
       await liveReply.flushFinal();
     } finally {
-      if (reactionId && messageId) {
-        await this.removeReaction(messageId, reactionId);
+      if (reactionId && turn.messageId) {
+        await this.removeReaction(turn.messageId, reactionId);
       }
-      this.activeChats.delete(chatId);
     }
   }
 
@@ -557,8 +603,7 @@ export class FeishuChannel implements ChannelAdapter {
           chatId: input.chatId,
           messageId: input.messageId,
           type: "image",
-          name: `${imageKey}.jpg`,
-          mimeType: "image/jpeg",
+          name: imageKey,
           metadata: { channelKey: "feishu", chatId: input.chatId, messageId: input.messageId, imageKey },
           headers: { Authorization: `Bearer ${token}` },
         });
