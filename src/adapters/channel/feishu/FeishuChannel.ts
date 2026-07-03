@@ -48,6 +48,7 @@ const DEFAULT_LIVE_REPLY_CURSOR = " ▉";
 const FEISHU_MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 const FEISHU_ATTACHMENT_FETCH_TIMEOUT_MS = 60_000;
 const FEISHU_MAX_PENDING_TURNS_PER_CHAT = 20;
+const FEISHU_MULTI_ATTACHMENT_BATCH_MS = 250;
 
 export type FeishuOutboundMessage = {
   chatId: string;
@@ -114,6 +115,13 @@ type QueuedFeishuTurn = {
   projectKey?: string;
   attachments: ChannelAttachment[];
   messageId?: string;
+  generation: number;
+};
+
+type FeishuInboundBatch = {
+  messages: FeishuInboundMessage[];
+  timer?: ReturnType<typeof setTimeout>;
+  draining: boolean;
 };
 
 export class FeishuChannel implements ChannelAdapter {
@@ -138,6 +146,7 @@ export class FeishuChannel implements ChannelAdapter {
   private readonly seenEvents = new Set<string>();
   private readonly activeChats = new Set<string>();
   private readonly chatState = new ImChatSessionState<QueuedFeishuTurn>({ maxPendingTurns: FEISHU_MAX_PENDING_TURNS_PER_CHAT });
+  private readonly inboundBatches = new Map<string, FeishuInboundBatch>();
   private readonly elicitation = new ImElicitationHelper();
   private readonly permissions = new ImPermissionHelper();
   private readonly attachmentStore = new ImAttachmentStore({
@@ -265,7 +274,7 @@ export class FeishuChannel implements ChannelAdapter {
     if (this.seenEvents.has(eventId)) return;
     this.rememberEvent(eventId);
 
-    await this.processInboundMessage({
+    this.enqueueInboundMessage({
       chatId,
       text,
       eventId,
@@ -300,19 +309,60 @@ export class FeishuChannel implements ChannelAdapter {
     this.rememberEvent(parsed.eventId);
 
     respondJson(response, 200, { ok: true });
-    void this.processInboundMessage(parsed).catch((e) => {
-      this.logger?.error?.(`feishu: processInboundMessage error: ${e}`);
-    });
+    this.enqueueInboundMessage(parsed);
     return true;
   }
 
-  private async processInboundMessage(input: FeishuInboundMessage): Promise<void> {
+  private enqueueInboundMessage(input: FeishuInboundMessage): void {
+    const batch = this.inboundBatches.get(input.chatId) ?? { messages: [], draining: false };
+    batch.messages.push(input);
+    if (batch.timer) clearTimeout(batch.timer);
+    batch.timer = setTimeout(() => {
+      batch.timer = undefined;
+      void this.drainInboundBatch(input.chatId).catch((error: unknown) => {
+        this.logger?.error?.(`feishu: drainInboundBatch error: ${error}`);
+      });
+    }, shouldBatchFeishuMessage(input) ? FEISHU_MULTI_ATTACHMENT_BATCH_MS : 0);
+    batch.timer.unref?.();
+    this.inboundBatches.set(input.chatId, batch);
+  }
+
+  private async drainInboundBatch(chatId: string): Promise<void> {
+    const batch = this.inboundBatches.get(chatId);
+    if (!batch || batch.draining) return;
+    batch.draining = true;
+    try {
+      while (batch.messages.length > 0) {
+        const messages = batch.messages.splice(0);
+        const grouped = groupFeishuInboundMessages(messages);
+        for (const group of grouped) {
+          await this.processInboundMessages(group);
+        }
+      }
+    } finally {
+      batch.draining = false;
+      if (batch.messages.length === 0) {
+        this.inboundBatches.delete(chatId);
+      } else {
+        this.inboundBatches.set(chatId, batch);
+        void this.drainInboundBatch(chatId).catch((error: unknown) => {
+          this.logger?.error?.(`feishu: drainInboundBatch retry error: ${error}`);
+        });
+      }
+    }
+  }
+
+  private async processInboundMessages(inputs: FeishuInboundMessage[]): Promise<void> {
     if (!this.gateway) return;
-    const { chatId, messageId } = input;
-    const attachmentResult = await this.extractIncomingAttachments(input);
-    const text = mergeTextAndDiagnostics(input.text, attachmentResult.diagnostics);
-    const messageText = text.trim() || (attachmentResult.attachments.length > 0 ? "请查看我发送的附件。" : "");
-    if (!messageText.trim() && attachmentResult.attachments.length === 0) return;
+    const first = inputs[0];
+    if (!first) return;
+    const chatId = first.chatId;
+    const attachmentResults = await Promise.all(inputs.map((input) => this.extractIncomingAttachments(input)));
+    const attachments = attachmentResults.flatMap((result) => result.attachments);
+    const diagnostics = attachmentResults.flatMap((result) => result.diagnostics);
+    const text = mergeTextAndDiagnostics(inputs.map((input) => input.text).filter(Boolean).join("\n"), diagnostics);
+    const messageText = text.trim() || (attachments.length > 0 ? "请查看我发送的附件。" : "");
+    if (!messageText.trim() && attachments.length === 0) return;
 
     if (this.elicitation.hasPending(chatId)) {
       try {
@@ -334,12 +384,22 @@ export class FeishuChannel implements ChannelAdapter {
       return;
     }
 
+    const previousSessionKey = this.mapper.getSession(chatId);
     const mapped = this.mapper.resolve({ chatId, text: messageText });
 
-    if (mapped.command === "new" && !mapped.message) {
+    if (mapped.command === "new") {
+      const activeRun = this.chatState.activeRun(chatId);
       this.resetChatInteractionState(chatId);
-      await this.send({ chatId, text: "已创建新会话。" });
-      return;
+      await this.gateway?.abortTurn({
+        sessionKey: activeRun?.sessionKey ?? previousSessionKey,
+        ...(activeRun?.runId ? { runId: activeRun.runId } : {}),
+      }).catch((error: unknown) => {
+        this.logger?.warn?.(`feishu: abort previous session on /new failed: ${formatError(error)}`);
+      });
+      if (!mapped.message) {
+        await this.send({ chatId, text: "已创建新会话。" });
+        return;
+      }
     }
 
     // Delegate system-level commands (e.g. /projects, /update, /status) to
@@ -364,8 +424,9 @@ export class FeishuChannel implements ChannelAdapter {
         sessionKey: mapped.sessionKey,
         message: mapped.message,
         projectKey: mapped.projectKey,
-        attachments: attachmentResult.attachments,
-        messageId,
+        attachments,
+        messageId: first.messageId,
+        generation: this.chatState.generation(chatId),
       });
       this.logger?.info?.(`feishu: chat ${chatId} already active, queued message`);
       return;
@@ -375,8 +436,9 @@ export class FeishuChannel implements ChannelAdapter {
       sessionKey: mapped.sessionKey,
       message: mapped.message,
       projectKey: mapped.projectKey,
-      attachments: attachmentResult.attachments,
-      messageId,
+      attachments,
+      messageId: first.messageId,
+      generation: this.chatState.generation(chatId),
     });
   }
 
@@ -384,6 +446,9 @@ export class FeishuChannel implements ChannelAdapter {
     this.chatState.resetForNewSession(chatId);
     this.elicitation.clear(chatId);
     this.permissions.clear(chatId);
+    const batch = this.inboundBatches.get(chatId);
+    if (batch?.timer) clearTimeout(batch.timer);
+    this.inboundBatches.delete(chatId);
   }
 
   private async runQueuedTurns(chatId: string, firstTurn: QueuedFeishuTurn): Promise<void> {
@@ -401,6 +466,8 @@ export class FeishuChannel implements ChannelAdapter {
 
   private async processTurn(chatId: string, turn: QueuedFeishuTurn): Promise<void> {
     if (!this.gateway) return;
+    const isCurrentTurn = () => this.chatState.isCurrent(chatId, turn.generation);
+    if (!isCurrentTurn()) return;
     const reactionId = turn.messageId ? await this.addReaction(turn.messageId) : undefined;
     try {
       let activeRunId: string | undefined;
@@ -438,8 +505,10 @@ export class FeishuChannel implements ChannelAdapter {
           timeoutMs: turnTimeoutMs,
           ...(turn.projectKey ? { projectKey: turn.projectKey } : {}),
         })) {
+          if (!isCurrentTurn()) break;
           if (event.type === "turn_started") {
             activeRunId = event.runId;
+            this.chatState.setActiveRun(chatId, { sessionKey: turn.sessionKey, runId: activeRunId, generation: turn.generation });
           }
           if (event.type === "elicitation_request") {
             const questionText = this.elicitation.capture(chatId, turn.sessionKey, event);
@@ -486,6 +555,10 @@ export class FeishuChannel implements ChannelAdapter {
     } finally {
       if (reactionId && turn.messageId) {
         await this.removeReaction(turn.messageId, reactionId);
+      }
+      const activeRun = this.chatState.activeRun(chatId);
+      if (activeRun?.generation === turn.generation) {
+        this.chatState.clearActiveRun(chatId);
       }
     }
   }
@@ -890,6 +963,28 @@ function parseV1Event(raw: Record<string, unknown>): ParsedEvent | undefined {
 
 function isSupportedFeishuInboundType(messageType: string | undefined): boolean {
   return messageType === "text" || messageType === "image" || messageType === "file";
+}
+
+function shouldBatchFeishuMessage(input: FeishuInboundMessage): boolean {
+  return input.messageType === "image" || input.messageType === "file";
+}
+
+function groupFeishuInboundMessages(messages: FeishuInboundMessage[]): FeishuInboundMessage[][] {
+  const groups: FeishuInboundMessage[][] = [];
+  let attachmentGroup: FeishuInboundMessage[] = [];
+  for (const message of messages) {
+    if (shouldBatchFeishuMessage(message)) {
+      attachmentGroup.push(message);
+      continue;
+    }
+    if (attachmentGroup.length > 0) {
+      groups.push(attachmentGroup);
+      attachmentGroup = [];
+    }
+    groups.push([message]);
+  }
+  if (attachmentGroup.length > 0) groups.push(attachmentGroup);
+  return groups;
 }
 
 function extractFeishuMessageText(messageType: string | undefined, content: string): string {
