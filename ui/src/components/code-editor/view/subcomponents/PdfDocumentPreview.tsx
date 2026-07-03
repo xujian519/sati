@@ -1,4 +1,4 @@
-import { createElement, useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
+import { createElement, useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Maximize2, RotateCcw, RotateCw, StretchHorizontal, ZoomIn, ZoomOut } from 'lucide-react';
 import * as pdfjs from 'pdfjs-dist';
@@ -11,7 +11,8 @@ import {
 } from '../../../../types/documentSelection';
 
 type PdfDocumentPreviewProps = {
-  blob: Blob;
+  blob?: Blob;
+  url?: string;
   projectName?: string;
   fileName: string;
   filePath: string;
@@ -38,6 +39,14 @@ type ViewerSize = {
 type ZoomMode = 'fitPage' | 'fitWidth' | 'custom';
 type Rotation = 0 | 90 | 180 | 270;
 
+type PdfViewState = {
+  scrollTop: number;
+  currentPage: number;
+  zoomMode: ZoomMode;
+  customScale: number;
+  rotation: Rotation;
+};
+
 type ToolbarIconProps = {
   className?: string;
   strokeWidth?: number;
@@ -49,7 +58,10 @@ type PdfPageProps = {
   scale: number;
   rotation: Rotation;
   basePageSize: PageSize;
+  viewerRootRef: RefObject<HTMLDivElement | null>;
+  forceRender: boolean;
   onPageText: (pageNumber: number, text: string) => void;
+  onPageVisibilityChange: (pageNumber: number, visible: boolean) => void;
 };
 
 const PAGE_HORIZONTAL_PADDING = 32;
@@ -58,8 +70,29 @@ const MIN_SCALE = 0.1;
 const MAX_SCALE = 4;
 const ZOOM_STEP = 0.25;
 const CONTEXT_RADIUS = 500;
+const PDF_RANGE_CHUNK_SIZE = 256 * 1024;
+const PAGE_RENDER_ROOT_MARGIN = '1200px 0px';
+
+const DEFAULT_VIEW_STATE: PdfViewState = {
+  scrollTop: 0,
+  currentPage: 1,
+  zoomMode: 'fitPage',
+  customScale: 1,
+  rotation: 0,
+};
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+
+function ignorePdfCleanupError(callback: () => unknown): void {
+  try {
+    const result = callback();
+    if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+      void Promise.resolve(result).catch(() => {});
+    }
+  } catch {
+    // PDF.js cleanup can throw when a render/load task has already finished or was already cancelled.
+  }
+}
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
@@ -170,11 +203,21 @@ function ToolbarButton({
   );
 }
 
-function PdfPage({ pdfDocument, pageNumber, scale, rotation, basePageSize, onPageText }: PdfPageProps) {
+function PdfPage({
+  pdfDocument,
+  pageNumber,
+  scale,
+  rotation,
+  basePageSize,
+  viewerRootRef,
+  forceRender,
+  onPageText,
+  onPageVisibilityChange,
+}: PdfPageProps) {
   const pageRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerRef = useRef<HTMLDivElement | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
+  const [isIntersectionVisible, setIsIntersectionVisible] = useState(false);
   const estimatedPageSize = useMemo(() => {
     const rotated = getRotatedPageSize(basePageSize, rotation);
     return {
@@ -185,6 +228,9 @@ function PdfPage({ pdfDocument, pageNumber, scale, rotation, basePageSize, onPag
   }, [basePageSize, rotation, scale]);
   const [pageSize, setPageSize] = useState(estimatedPageSize);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [isRendering, setIsRendering] = useState(false);
+  const [hasRendered, setHasRendered] = useState(false);
+  const shouldRender = isIntersectionVisible || forceRender;
 
   useEffect(() => {
     setPageSize(estimatedPageSize);
@@ -195,19 +241,37 @@ function PdfPage({ pdfDocument, pageNumber, scale, rotation, basePageSize, onPag
     if (!node) return undefined;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setIsVisible(true);
-          observer.disconnect();
-        }
+        const nextVisible = entries.some((entry) => entry.isIntersecting);
+        setIsIntersectionVisible(nextVisible);
+        onPageVisibilityChange(pageNumber, nextVisible);
       },
-      { rootMargin: '900px 0px' },
+      {
+        root: viewerRootRef.current,
+        rootMargin: PAGE_RENDER_ROOT_MARGIN,
+      },
     );
     observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+    return () => {
+      observer.disconnect();
+      onPageVisibilityChange(pageNumber, false);
+    };
+  }, [onPageVisibilityChange, pageNumber, viewerRootRef]);
 
   useEffect(() => {
-    if (!isVisible || !canvasRef.current || !textLayerRef.current || scale <= 0) return undefined;
+    if (!shouldRender || !canvasRef.current || !textLayerRef.current || scale <= 0) {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.width = 0;
+        canvas.height = 0;
+        canvas.style.width = '';
+        canvas.style.height = '';
+      }
+      textLayerRef.current?.replaceChildren();
+      setRenderError(null);
+      setIsRendering(false);
+      setHasRendered(false);
+      return undefined;
+    }
 
     let cancelled = false;
     let renderTask: pdfjs.RenderTask | null = null;
@@ -216,6 +280,7 @@ function PdfPage({ pdfDocument, pageNumber, scale, rotation, basePageSize, onPag
     const renderPage = async () => {
       try {
         setRenderError(null);
+        setIsRendering(true);
         const page = await pdfDocument.getPage(pageNumber);
         if (cancelled) return;
 
@@ -257,9 +322,18 @@ function PdfPage({ pdfDocument, pageNumber, scale, rotation, basePageSize, onPag
           viewport,
         });
         await textLayer.render();
+        if (!cancelled) {
+          setHasRendered(true);
+          setIsRendering(false);
+        }
       } catch (error) {
         if (!cancelled) {
-          setRenderError(error instanceof Error ? error.message : String(error));
+          const message = error instanceof Error ? error.message : String(error);
+          const name = error instanceof Error ? error.name : '';
+          if (name !== 'RenderingCancelledException' && !message.toLowerCase().includes('cancelled')) {
+            setRenderError(message);
+          }
+          setIsRendering(false);
         }
       }
     };
@@ -268,10 +342,10 @@ function PdfPage({ pdfDocument, pageNumber, scale, rotation, basePageSize, onPag
 
     return () => {
       cancelled = true;
-      renderTask?.cancel();
-      textLayer?.cancel();
+      ignorePdfCleanupError(() => renderTask?.cancel?.());
+      ignorePdfCleanupError(() => textLayer?.cancel?.());
     };
-  }, [isVisible, onPageText, pageNumber, pdfDocument, rotation, scale]);
+  }, [shouldRender, onPageText, pageNumber, pdfDocument, rotation, scale]);
 
   const pageStyle = {
     width: pageSize.width,
@@ -290,6 +364,11 @@ function PdfPage({ pdfDocument, pageNumber, scale, rotation, basePageSize, onPag
     >
       <canvas ref={canvasRef} className="block" />
       <div ref={textLayerRef} className="textLayer" />
+      {shouldRender && (isRendering || !hasRendered) && !renderError ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-white dark:bg-neutral-950">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-500 dark:border-neutral-800 dark:border-t-neutral-300" />
+        </div>
+      ) : null}
       {renderError ? (
         <div className="absolute inset-0 flex items-center justify-center bg-white/90 px-4 text-center text-[12px] text-red-500 dark:bg-neutral-950/90">
           {renderError}
@@ -301,6 +380,7 @@ function PdfPage({ pdfDocument, pageNumber, scale, rotation, basePageSize, onPag
 
 export default function PdfDocumentPreview({
   blob,
+  url,
   projectName,
   fileName,
   filePath,
@@ -311,11 +391,19 @@ export default function PdfDocumentPreview({
   const inputId = useId();
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const pageTextRef = useRef(new Map<number, string>());
+  const visiblePageNumbersRef = useRef(new Set<number>());
+  const forcedRenderPageNumbersRef = useRef(new Set<number>());
+  const scrollRafRef = useRef<number | null>(null);
+  const renderFallbackRafRef = useRef<number | null>(null);
+  const viewStateRef = useRef<PdfViewState>({ ...DEFAULT_VIEW_STATE });
+  const fileKeyRef = useRef<string | null>(null);
+  const pendingRestoreRef = useRef<PdfViewState | null>(null);
   const [pdfDocument, setPdfDocument] = useState<pdfjs.PDFDocumentProxy | null>(null);
   const [firstPageSize, setFirstPageSize] = useState<PageSize | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [viewerSize, setViewerSize] = useState<ViewerSize>({ width: 0, height: 0 });
   const [selectionAction, setSelectionAction] = useState<PdfSelectionAction | null>(null);
+  const [forcedRenderPageNumbers, setForcedRenderPageNumbers] = useState<Set<number>>(() => new Set());
   const [zoomMode, setZoomMode] = useState<ZoomMode>('fitPage');
   const [customScale, setCustomScale] = useState(1);
   const [zoomInput, setZoomInput] = useState('100%');
@@ -324,6 +412,23 @@ export default function PdfDocumentPreview({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageInput, setPageInput] = useState('1');
   const [pageInputFocused, setPageInputFocused] = useState(false);
+  const fileKey = `${source}:${projectName || ''}:${filePath}`;
+
+  useEffect(() => {
+    viewStateRef.current.currentPage = currentPage;
+  }, [currentPage]);
+
+  useEffect(() => {
+    viewStateRef.current.zoomMode = zoomMode;
+  }, [zoomMode]);
+
+  useEffect(() => {
+    viewStateRef.current.customScale = customScale;
+  }, [customScale]);
+
+  useEffect(() => {
+    viewStateRef.current.rotation = rotation;
+  }, [rotation]);
 
   useEffect(() => {
     const viewer = viewerRef.current;
@@ -343,23 +448,53 @@ export default function PdfDocumentPreview({
   useEffect(() => {
     let cancelled = false;
     let loadingTask: pdfjs.PDFDocumentLoadingTask | null = null;
+    let loadedDocument: pdfjs.PDFDocumentProxy | null = null;
+    const viewer = viewerRef.current;
+    const isSameFile = fileKeyRef.current === fileKey;
+    const nextViewState = isSameFile
+      ? {
+        ...viewStateRef.current,
+        scrollTop: viewer?.scrollTop ?? viewStateRef.current.scrollTop,
+      }
+      : { ...DEFAULT_VIEW_STATE };
+    fileKeyRef.current = fileKey;
+    pendingRestoreRef.current = nextViewState;
+    viewStateRef.current = nextViewState;
     pageTextRef.current = new Map();
+    visiblePageNumbersRef.current = new Set();
+    forcedRenderPageNumbersRef.current = new Set();
+    setForcedRenderPageNumbers(new Set());
     setPdfDocument(null);
     setFirstPageSize(null);
     setErrorMessage(null);
     setSelectionAction(null);
-    setCurrentPage(1);
-    setPageInput('1');
-    setRotation(0);
-    setZoomMode('fitPage');
-    setCustomScale(1);
+    setCurrentPage(nextViewState.currentPage);
+    setPageInput(String(nextViewState.currentPage));
+    setRotation(nextViewState.rotation);
+    setZoomMode(nextViewState.zoomMode);
+    setCustomScale(nextViewState.customScale);
 
     const loadPdf = async () => {
       try {
-        const data = new Uint8Array(await blob.arrayBuffer());
-        if (cancelled) return;
-        loadingTask = pdfjs.getDocument({ data });
+        if (!url && !blob) {
+          throw new Error('PDF source is not available.');
+        }
+
+        if (url) {
+          loadingTask = pdfjs.getDocument({
+            url,
+            rangeChunkSize: PDF_RANGE_CHUNK_SIZE,
+            disableStream: true,
+            disableAutoFetch: true,
+          });
+        } else {
+          const data = new Uint8Array(await blob!.arrayBuffer());
+          if (cancelled) return;
+          loadingTask = pdfjs.getDocument({ data });
+        }
+
         const nextDocument = await loadingTask.promise;
+        loadedDocument = nextDocument;
         if (cancelled) return;
         const firstPage = await nextDocument.getPage(1);
         if (cancelled) return;
@@ -376,9 +511,13 @@ export default function PdfDocumentPreview({
     loadPdf();
     return () => {
       cancelled = true;
-      loadingTask?.destroy();
+      if (loadedDocument) {
+        ignorePdfCleanupError(() => loadedDocument?.destroy?.());
+      } else {
+        ignorePdfCleanupError(() => loadingTask?.destroy?.());
+      }
     };
-  }, [blob]);
+  }, [blob, fileKey, url]);
 
   const fitScales = useMemo(() => {
     if (!firstPageSize || viewerSize.width <= 0 || viewerSize.height <= 0) {
@@ -418,7 +557,16 @@ export default function PdfDocumentPreview({
   const updateCurrentPageFromScroll = useCallback(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
-    const pages = Array.from(viewer.querySelectorAll<HTMLElement>('[data-pdf-page-number]'));
+    const visiblePageNumbers = Array.from(new Set([
+      ...visiblePageNumbersRef.current,
+      ...forcedRenderPageNumbersRef.current,
+    ]))
+      .sort((left, right) => left - right);
+    const pages = visiblePageNumbers.length > 0
+      ? visiblePageNumbers
+        .map((pageNumber) => viewer.querySelector<HTMLElement>(`[data-pdf-page-number="${pageNumber}"]`))
+        .filter((page): page is HTMLElement => Boolean(page))
+      : Array.from(viewer.querySelectorAll<HTMLElement>('[data-pdf-page-number]'));
     if (pages.length === 0) return;
 
     const viewerRect = viewer.getBoundingClientRect();
@@ -443,6 +591,80 @@ export default function PdfDocumentPreview({
       setCurrentPage((previousPage) => (previousPage === bestPage ? previousPage : bestPage));
     }
   }, []);
+
+  const scheduleCurrentPageUpdate = useCallback(() => {
+    if (scrollRafRef.current !== null) return;
+    scrollRafRef.current = window.requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      updateCurrentPageFromScroll();
+    });
+  }, [updateCurrentPageFromScroll]);
+
+  const updateForcedRenderPages = useCallback(() => {
+    const viewer = viewerRef.current;
+    const totalPages = pdfDocument?.numPages || 0;
+    if (!viewer || totalPages <= 0) {
+      forcedRenderPageNumbersRef.current = new Set();
+      setForcedRenderPageNumbers(new Set());
+      return;
+    }
+
+    const viewerRect = viewer.getBoundingClientRect();
+    const viewportTop = viewerRect.top - 1200;
+    const viewportBottom = viewerRect.bottom + 1200;
+    const nextPages = new Set<number>();
+    const pages = Array.from(viewer.querySelectorAll<HTMLElement>('[data-pdf-page-number]'));
+
+    for (const page of pages) {
+      const rect = page.getBoundingClientRect();
+      const pageNumber = Number.parseInt(page.dataset.pdfPageNumber || '', 10);
+      if (!Number.isFinite(pageNumber) || pageNumber <= 0) continue;
+      if (rect.bottom >= viewportTop && rect.top <= viewportBottom) {
+        nextPages.add(pageNumber);
+      }
+    }
+
+    if (nextPages.size === 0) {
+      nextPages.add(clamp(viewStateRef.current.currentPage, 1, totalPages));
+    }
+
+    forcedRenderPageNumbersRef.current = nextPages;
+    setForcedRenderPageNumbers((previous) => {
+      if (previous.size === nextPages.size && Array.from(previous).every((pageNumber) => nextPages.has(pageNumber))) {
+        return previous;
+      }
+      return nextPages;
+    });
+  }, [pdfDocument?.numPages]);
+
+  const scheduleForcedRenderUpdate = useCallback(() => {
+    if (renderFallbackRafRef.current !== null) return;
+    renderFallbackRafRef.current = window.requestAnimationFrame(() => {
+      renderFallbackRafRef.current = null;
+      updateForcedRenderPages();
+    });
+  }, [updateForcedRenderPages]);
+
+  useEffect(() => () => {
+    if (scrollRafRef.current !== null) {
+      window.cancelAnimationFrame(scrollRafRef.current);
+      scrollRafRef.current = null;
+    }
+    if (renderFallbackRafRef.current !== null) {
+      window.cancelAnimationFrame(renderFallbackRafRef.current);
+      renderFallbackRafRef.current = null;
+    }
+  }, []);
+
+  const handlePageVisibilityChange = useCallback((pageNumber: number, visible: boolean) => {
+    if (visible) {
+      visiblePageNumbersRef.current.add(pageNumber);
+    } else {
+      visiblePageNumbersRef.current.delete(pageNumber);
+    }
+    scheduleForcedRenderUpdate();
+    scheduleCurrentPageUpdate();
+  }, [scheduleCurrentPageUpdate, scheduleForcedRenderUpdate]);
 
   const handlePageText = useCallback((pageNumber: number, text: string) => {
     pageTextRef.current.set(pageNumber, text);
@@ -544,8 +766,13 @@ export default function PdfDocumentPreview({
   useEffect(() => {
     const handleSelectionChange = () => updateSelectionAction();
     const handleScroll = () => {
+      const viewer = viewerRef.current;
+      if (viewer) {
+        viewStateRef.current.scrollTop = viewer.scrollTop;
+      }
       setSelectionAction(null);
-      updateCurrentPageFromScroll();
+      scheduleForcedRenderUpdate();
+      scheduleCurrentPageUpdate();
     };
 
     document.addEventListener('selectionchange', handleSelectionChange);
@@ -559,11 +786,44 @@ export default function PdfDocumentPreview({
       document.removeEventListener('keyup', handleSelectionChange);
       viewer?.removeEventListener('scroll', handleScroll);
     };
-  }, [updateCurrentPageFromScroll, updateSelectionAction]);
+  }, [scheduleCurrentPageUpdate, scheduleForcedRenderUpdate, updateSelectionAction]);
 
   useEffect(() => {
-    updateCurrentPageFromScroll();
-  }, [activeScale, rotation, pdfDocument, updateCurrentPageFromScroll]);
+    scheduleForcedRenderUpdate();
+    scheduleCurrentPageUpdate();
+  }, [activeScale, rotation, pdfDocument, scheduleCurrentPageUpdate, scheduleForcedRenderUpdate, viewerSize.height, viewerSize.width]);
+
+  useEffect(() => {
+    if (!pdfDocument || !firstPageSize) return undefined;
+    const restoreState = pendingRestoreRef.current;
+    if (!restoreState) {
+      scheduleForcedRenderUpdate();
+      scheduleCurrentPageUpdate();
+      return undefined;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const viewer = viewerRef.current;
+      if (viewer) {
+        if (restoreState.scrollTop > 0) {
+          viewer.scrollTop = restoreState.scrollTop;
+        } else if (restoreState.currentPage > 1) {
+          const target = viewer.querySelector<HTMLElement>(`[data-pdf-page-number="${restoreState.currentPage}"]`);
+          target?.scrollIntoView({ block: 'start' });
+        } else {
+          viewer.scrollTop = 0;
+        }
+        viewStateRef.current.scrollTop = viewer.scrollTop;
+      }
+      setCurrentPage(restoreState.currentPage);
+      setPageInput(String(restoreState.currentPage));
+      pendingRestoreRef.current = null;
+      scheduleForcedRenderUpdate();
+      scheduleCurrentPageUpdate();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [firstPageSize, pdfDocument, scheduleCurrentPageUpdate, scheduleForcedRenderUpdate]);
 
   const handleAddReference = () => {
     if (!selectionAction) return;
@@ -719,7 +979,10 @@ export default function PdfDocumentPreview({
                 scale={activeScale}
                 rotation={rotation}
                 basePageSize={readyDocument.firstPageSize}
+                viewerRootRef={viewerRef}
+                forceRender={forcedRenderPageNumbers.has(index + 1)}
                 onPageText={handlePageText}
+                onPageVisibilityChange={handlePageVisibilityChange}
               />
             ))}
           </div>

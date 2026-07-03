@@ -92,6 +92,7 @@ export function buildDefaultPilotDeckConfig() {
       },
       officePreview: {
         service: 'libreoffice',
+        binaryPath: '',
       },
     },
     telemetry: {
@@ -279,6 +280,10 @@ export function validatePilotDeckConfig(config) {
     && !['none', 'libreoffice'].includes(normalizeString(officePreviewService).toLowerCase())
   ) {
     errors.push('webui.officePreview.service must be "none" or "libreoffice"');
+  }
+  const libreOfficeBinaryPath = normalized.webui?.officePreview?.binaryPath;
+  if (libreOfficeBinaryPath !== undefined && typeof libreOfficeBinaryPath !== 'string') {
+    errors.push('webui.officePreview.binaryPath must be a string');
   }
 
   return { valid: errors.length === 0, errors, warnings, config: normalized };

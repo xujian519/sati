@@ -86,6 +86,21 @@ function FileTypeBadge({ fileName }: { fileName: string }) {
   );
 }
 
+async function readPreviewErrorResponse(res: Response) {
+  let detail = '';
+  let code = '';
+  try {
+    const body = await res.json();
+    detail = body?.error || body?.code || '';
+    code = body?.code || '';
+  } catch {
+    detail = await res.text().catch(() => '');
+  }
+  const error = new Error(detail || `HTTP ${res.status}`) as Error & { code?: string };
+  error.code = code;
+  return error;
+}
+
 function useFileBlob(
   projectName: string | undefined,
   filePath: string,
@@ -138,18 +153,7 @@ function useFileBlob(
           return res.blob();
         }
 
-        let detail = '';
-        let code = '';
-        try {
-          const body = await res.json();
-          detail = body?.error || body?.code || '';
-          code = body?.code || '';
-        } catch {
-          detail = await res.text().catch(() => '');
-        }
-        const error = new Error(detail || `HTTP ${res.status}`) as Error & { code?: string };
-        error.code = code;
-        throw error;
+        throw await readPreviewErrorResponse(res);
       })
       .then((nextBlob: Blob) => {
         if (cancelled) return;
@@ -173,6 +177,85 @@ function useFileBlob(
   }, [enabled, projectName, filePath, source, reloadRequest.force, reloadRequest.key]);
 
   return { blob, errorMessage, errorCode, loading, reload };
+}
+
+function useOfficePdfPreviewUrl(
+  projectName: string | undefined,
+  filePath: string,
+  enabled: boolean,
+) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [loading, setLoading] = useState(enabled);
+  const [reloadRequest, setReloadRequest] = useState({ key: 0, force: false });
+  const lastRequestKeyRef = useRef('');
+
+  const reload = useCallback((options: ReloadOptions = {}) => {
+    setReloadRequest((value) => ({
+      key: value.key + 1,
+      force: Boolean(options.force),
+    }));
+  }, []);
+
+  useEffect(() => {
+    if (!enabled || !projectName) {
+      setPreviewUrl(null);
+      setLoading(false);
+      setErrorMessage(enabled ? 'Project is not available.' : null);
+      setErrorCode(null);
+      return undefined;
+    }
+
+    const requestKey = `office-pdf:${projectName}:${filePath}`;
+    const isNewFile = lastRequestKeyRef.current !== requestKey;
+    lastRequestKeyRef.current = requestKey;
+    const controller = new AbortController();
+
+    if (isNewFile) {
+      setPreviewUrl(null);
+    }
+    setLoading(true);
+    setErrorMessage(null);
+    setErrorCode(null);
+
+    const cacheKey = `${reloadRequest.key}`;
+    const nextPreviewUrl = api.officePdfPreviewUrl(projectName, filePath, { cacheKey });
+
+    api.preflightOfficePdfPreview(projectName, filePath, {
+      force: reloadRequest.force,
+      cacheKey,
+      signal: controller.signal,
+    })
+      .then(async (res: Response) => {
+        if (!res.ok) {
+          throw await readPreviewErrorResponse(res);
+        }
+        await res.arrayBuffer().catch(() => null);
+        if (!controller.signal.aborted) {
+          setPreviewUrl(nextPreviewUrl);
+        }
+      })
+      .catch((error: Error & { code?: string; name?: string }) => {
+        if (controller.signal.aborted || error.name === 'AbortError') return;
+        if (isNewFile) {
+          setPreviewUrl(null);
+        }
+        setErrorMessage(error.message || 'Failed to load file preview.');
+        setErrorCode(error.code || null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [enabled, projectName, filePath, reloadRequest.force, reloadRequest.key]);
+
+  return { previewUrl, errorMessage, errorCode, loading, reload };
 }
 
 function useObjectUrl(blob: Blob | null) {
@@ -199,8 +282,6 @@ function useOfficeAutoRefresh(
   filePath: string,
   reload: (options?: ReloadOptions) => void,
 ) {
-  const lastFocusRefreshRef = useRef(0);
-
   useEffect(() => {
     const matchesFile = (detail: unknown) => {
       if (!detail || typeof detail !== 'object') return true;
@@ -217,22 +298,13 @@ function useOfficeAutoRefresh(
       }
     };
 
-    const handleFocus = () => {
-      const now = Date.now();
-      if (now - lastFocusRefreshRef.current < 5000) return;
-      lastFocusRefreshRef.current = now;
-      reload();
-    };
-
     window.addEventListener('pilotdeck:file-updated', handleRefreshEvent);
     window.addEventListener('pilotdeck:files-changed', handleRefreshEvent);
     window.addEventListener('pilotdeck:agent-turn-complete', handleRefreshEvent);
-    window.addEventListener('focus', handleFocus);
     return () => {
       window.removeEventListener('pilotdeck:file-updated', handleRefreshEvent);
       window.removeEventListener('pilotdeck:files-changed', handleRefreshEvent);
       window.removeEventListener('pilotdeck:agent-turn-complete', handleRefreshEvent);
-      window.removeEventListener('focus', handleFocus);
     };
   }, [filePath, projectName, reload]);
 }
@@ -414,16 +486,15 @@ function PdfPreview({ projectName, file, title, message, onClose }: {
   message: string;
   onClose: () => void;
 }) {
-  const { blob, errorMessage, loading } = useFileBlob(projectName, file.path, true);
+  const previewUrl = projectName ? api.fileContentUrl(projectName, file.path) : null;
 
-  if (loading && !blob) return <PreviewSpinner />;
-  if (errorMessage || !blob) {
+  if (!previewUrl) {
     return <FallbackContent title={title} message={message} onClose={onClose} />;
   }
 
   return (
     <PdfDocumentPreview
-      blob={blob}
+      url={previewUrl}
       projectName={projectName}
       fileName={file.name}
       filePath={file.path}
@@ -450,11 +521,11 @@ function OfficePreview({
   } = useOfficePreviewService();
   const previewDisabledByConfig = previewServiceStatus?.service === 'none';
   const shouldLoadOfficePdf = !previewServiceLoading && !previewDisabledByConfig;
-  const { blob, errorMessage, errorCode, loading, reload } = useFileBlob(projectName, file.path, shouldLoadOfficePdf, 'office-pdf');
+  const { previewUrl, errorMessage, errorCode, loading, reload } = useOfficePdfPreviewUrl(projectName, file.path, shouldLoadOfficePdf);
 
   useOfficeAutoRefresh(projectName, file.path, reload);
 
-  if (previewServiceLoading && !blob) {
+  if (previewServiceLoading && !previewUrl) {
     return <PreviewSpinner label={t('officePreview.checkingService')} />;
   }
   if (previewDisabledByConfig) {
@@ -473,8 +544,8 @@ function OfficePreview({
     );
   }
 
-  if (loading && !blob) return <PreviewSpinner label={t('officePreview.converting')} />;
-  if (errorMessage || !blob) {
+  if (loading && !previewUrl) return <PreviewSpinner label={t('officePreview.converting')} />;
+  if (errorMessage || !previewUrl) {
     const previewDisabled = errorCode === 'OFFICE_PREVIEW_DISABLED';
     const needsLibreOffice = errorCode === 'LIBREOFFICE_NOT_FOUND'
       || errorMessage?.includes('LibreOffice')
@@ -507,7 +578,7 @@ function OfficePreview({
 
   return (
     <PdfDocumentPreview
-      blob={blob}
+      url={previewUrl}
       projectName={projectName}
       fileName={file.name}
       filePath={file.path}

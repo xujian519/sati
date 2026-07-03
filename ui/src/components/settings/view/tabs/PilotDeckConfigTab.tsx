@@ -118,6 +118,7 @@ type PilotDeckConfig = {
     };
     officePreview?: {
       service?: 'none' | 'libreoffice' | string;
+      binaryPath?: string;
     };
   };
   alwaysOn?: {
@@ -728,6 +729,7 @@ function OfficePreviewSection({ config, onChange }: { config: PilotDeckConfig; o
   const [statusError, setStatusError] = useState<string | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
   const [statusReloadKey, setStatusReloadKey] = useState(0);
+  const [scanListOpen, setScanListOpen] = useState(false);
   const service = getOfficePreviewService(config);
 
   useEffect(() => {
@@ -735,7 +737,7 @@ function OfficePreviewSection({ config, onChange }: { config: PilotDeckConfig; o
     setStatusLoading(true);
     setStatusError(null);
 
-    readOfficePreviewStatus()
+    readOfficePreviewStatus({ refresh: statusReloadKey > 0 })
       .then((body: OfficePreviewStatus) => {
         if (cancelled) return;
         setStatus(body);
@@ -757,10 +759,22 @@ function OfficePreviewSection({ config, onChange }: { config: PilotDeckConfig; o
   const libreOfficeStatusKnown = status?.libreOffice?.available !== undefined;
   const libreOfficeAvailable = status?.libreOffice?.available === true;
   const libreOfficeUnavailable = !statusLoading && status?.libreOffice?.available === false;
-  const showLibreOfficeStatus = service === 'libreoffice' || libreOfficeStatusKnown;
+  const showLibreOfficeStatus = service === 'libreoffice' && libreOfficeStatusKnown;
   const libreOfficeUnknown = showLibreOfficeStatus && !statusLoading && !statusError && !libreOfficeStatusKnown;
+  const configuredBinaryPath = config.webui?.officePreview?.binaryPath ?? '';
+  const detectedBinaryPaths = status?.libreOffice?.candidates ?? [];
   const setService = (next: OfficePreviewService) =>
     onChange(patch(config, ['webui', 'officePreview', 'service'], next));
+  const setBinaryPath = (next: string) =>
+    onChange(patch(config, ['webui', 'officePreview', 'binaryPath'], next));
+  const selectBinaryPath = (next: string) => {
+    setBinaryPath(next);
+    setScanListOpen(false);
+  };
+  const scanLibreOfficePaths = () => {
+    setScanListOpen(true);
+    setStatusReloadKey((value) => value + 1);
+  };
 
   return (
     <SettingsSection
@@ -790,6 +804,90 @@ function OfficePreviewSection({ config, onChange }: { config: PilotDeckConfig; o
               />
             </div>
           </FormRow>
+          {service === 'libreoffice' && (
+            <FormRow
+              label={t('pilotDeckConfig.panels.officePreview.fields.binaryPath.label')}
+              description={t('pilotDeckConfig.panels.officePreview.fields.binaryPath.description')}
+            >
+              <div className="relative space-y-2">
+                <div className="flex gap-2">
+                  <div className="min-w-0 flex-1">
+                    <TextInput
+                      value={configuredBinaryPath}
+                      placeholder={t('pilotDeckConfig.panels.officePreview.fields.binaryPath.placeholder')}
+                      monospace
+                      onChange={setBinaryPath}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={scanLibreOfficePaths}
+                    className="inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-md border border-border px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  >
+                    <RefreshCw className={cn('h-3.5 w-3.5', scanListOpen && statusLoading && 'animate-spin')} />
+                    {t('pilotDeckConfig.panels.officePreview.scan.button')}
+                  </button>
+                </div>
+                {scanListOpen && (
+                  <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
+                    <div className="border-b border-border px-3 py-2 text-[12px] font-medium text-foreground">
+                      {t('pilotDeckConfig.panels.officePreview.scan.title')}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => selectBinaryPath('')}
+                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[12px] transition-colors hover:bg-accent"
+                    >
+                      <span className="min-w-0 truncate text-foreground">
+                        {t('pilotDeckConfig.panels.officePreview.options.autoDetect')}
+                      </span>
+                      {!configuredBinaryPath && <Check className="h-3.5 w-3.5 shrink-0 text-green-500" />}
+                    </button>
+                    {statusLoading ? (
+                      <div className="flex items-center gap-2 px-3 py-3 text-[12px] text-muted-foreground">
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        {t('pilotDeckConfig.panels.officePreview.scan.scanning')}
+                      </div>
+                    ) : detectedBinaryPaths.length > 0 ? (
+                      <div className="max-h-64 overflow-auto border-t border-border">
+                        {detectedBinaryPaths.map((candidate) => (
+                          <button
+                            key={candidate.binaryPath}
+                            type="button"
+                            disabled={!candidate.available}
+                            onClick={() => selectBinaryPath(candidate.binaryPath)}
+                            className="flex w-full items-start justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate font-mono text-[11px] text-foreground" title={candidate.binaryPath}>
+                                {candidate.binaryPath}
+                              </span>
+                              <span className={cn(
+                                'mt-0.5 block truncate text-[11px]',
+                                candidate.available ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground',
+                              )}>
+                                {candidate.available
+                                  ? t('pilotDeckConfig.panels.officePreview.options.candidateAvailableShort')
+                                  : t('pilotDeckConfig.panels.officePreview.options.candidateUnavailableShort')}
+                                {candidate.version ? ` · ${candidate.version}` : ''}
+                              </span>
+                            </span>
+                            {configuredBinaryPath === candidate.binaryPath && (
+                              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-green-500" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="border-t border-border px-3 py-3 text-[12px] leading-5 text-muted-foreground">
+                        {t('pilotDeckConfig.panels.officePreview.status.noDetectedPaths')}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </FormRow>
+          )}
 
           <div className="space-y-2 px-4 py-3">
             {showLibreOfficeStatus && (
@@ -824,7 +922,7 @@ function OfficePreviewSection({ config, onChange }: { config: PilotDeckConfig; o
               </div>
             )}
 
-            {libreOfficeAvailable && (
+            {service === 'libreoffice' && libreOfficeAvailable && (
               <div className="space-y-1 rounded-md bg-muted/30 px-3 py-2 text-[11px] leading-4 text-muted-foreground">
                 {status?.libreOffice?.binaryPath && (
                   <div className="truncate" title={status.libreOffice.binaryPath}>
@@ -2450,76 +2548,6 @@ function ModelPricingEditor({ config, onChange }: { config: PilotDeckConfig; onC
           <Button variant="outline" size="sm" className="shrink-0" onClick={addPricing} disabled={!newKey.trim()}>
             <Plus className="mr-1 h-3.5 w-3.5" />
             {t('pilotDeckConfig.panels.router.pricing.add')}
-          </Button>
-        </div>
-      </div>
-    </SettingsCard>
-  );
-}
-
-function RouterScenarioEditor({ config, onChange }: { config: PilotDeckConfig; onChange: (next: PilotDeckConfig) => void }) {
-  const { t } = useTranslation('settings');
-  const scenarios = config.router?.scenarios ?? {};
-  const entries = Object.entries(scenarios);
-  const modelOpts = buildModelRefOptions(config);
-  const [newKey, setNewKey] = useState('');
-
-  const setScenario = (key: string, value: string) =>
-    onChange(patch(ensureModelRefConfigured(config, value), ['router', 'scenarios', key], value));
-  const removeScenario = (key: string) => {
-    const next = { ...scenarios };
-    delete next[key];
-    onChange(patch(config, ['router', 'scenarios'], next));
-  };
-  const addScenario = () => {
-    const key = newKey.trim();
-    if (!key || scenarios[key]) return;
-    const value = modelOpts[0]?.value ?? '';
-    onChange(patch(ensureModelRefConfigured(config, value), ['router', 'scenarios', key], value));
-    setNewKey('');
-  };
-
-  return (
-    <SettingsCard className="space-y-3 p-4">
-      <div>
-        <div className="text-sm font-semibold text-foreground">{t('pilotDeckConfig.panels.router.scenarios.title')}</div>
-        <div className="mt-0.5 text-xs text-muted-foreground">
-          {t('pilotDeckConfig.panels.router.scenarios.description')}
-        </div>
-      </div>
-      {entries.length === 0 && (
-        <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-          {t('pilotDeckConfig.panels.router.scenarios.empty')}
-        </div>
-      )}
-      {entries.map(([key, model]) => (
-        <div key={key} className="flex items-center gap-2">
-          <code className="w-28 shrink-0 truncate rounded bg-muted px-2 py-1.5 text-xs text-foreground">{key}</code>
-          <div className="min-w-0 flex-1">
-            <ModelRefInput value={model} options={modelOpts} onChange={(v) => setScenario(key, v)} />
-          </div>
-          <button
-            type="button"
-            onClick={() => removeScenario(key)}
-            className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            title={t('pilotDeckConfig.actions.remove')}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      ))}
-      <div className="border-t border-border pt-3">
-        <div className="flex items-center gap-2">
-          <input
-            value={newKey}
-            onChange={(e) => setNewKey(e.target.value)}
-            placeholder="scenario name"
-            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
-            onKeyDown={(e) => { if (e.key === 'Enter' && !isImeEnterEvent(e)) addScenario(); }}
-          />
-          <Button variant="outline" size="sm" className="shrink-0" onClick={addScenario} disabled={!newKey.trim()}>
-            <Plus className="mr-1 h-3.5 w-3.5" />
-            {t('pilotDeckConfig.panels.router.scenarios.add')}
           </Button>
         </div>
       </div>

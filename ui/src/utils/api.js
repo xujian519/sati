@@ -181,20 +181,51 @@ export const api = {
     }),
   readFile: (projectName, filePath) =>
     authenticatedFetch(`/api/projects/${projectName}/file?filePath=${encodeURIComponent(filePath)}`),
+  fileContentUrl: (projectName, filePath, options = {}) => {
+    const params = new URLSearchParams({ path: filePath });
+    if (options.download) params.set('download', '1');
+    if (options.cacheKey !== undefined && options.cacheKey !== null) {
+      params.set('_', String(options.cacheKey));
+    }
+    return appendAuthToken(`/api/projects/${encodeURIComponent(projectName)}/files/content?${params.toString()}`);
+  },
   readFileBlob: (projectName, filePath) =>
-    authenticatedFetch(`/api/projects/${projectName}/files/content?path=${encodeURIComponent(filePath)}`),
-  readOfficePdfPreviewBlob: (projectName, filePath, options = {}) => {
+    authenticatedFetch(api.fileContentUrl(projectName, filePath)),
+  officePdfPreviewUrl: (projectName, filePath, options = {}) => {
     const params = new URLSearchParams({ path: filePath });
     if (options.force) {
       params.set('force', '1');
-      params.set('_', String(Date.now()));
     }
-    return authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/files/preview/pdf?${params.toString()}`, {
+    if (options.cacheKey !== undefined && options.cacheKey !== null) {
+      params.set('_', String(options.cacheKey));
+    }
+    return appendAuthToken(`/api/projects/${encodeURIComponent(projectName)}/files/preview/pdf?${params.toString()}`);
+  },
+  readOfficePdfPreviewBlob: (projectName, filePath, options = {}) => {
+    return authenticatedFetch(api.officePdfPreviewUrl(projectName, filePath, {
+      force: options.force,
+      cacheKey: options.force ? Date.now() : options.cacheKey,
+    }), {
       cache: 'no-store',
     });
   },
-  officePreviewStatus: () =>
-    authenticatedFetch('/api/config/office-preview/status'),
+  preflightOfficePdfPreview: (projectName, filePath, options = {}) =>
+    authenticatedFetch(api.officePdfPreviewUrl(projectName, filePath, {
+      force: options.force,
+      cacheKey: options.cacheKey,
+    }), {
+      cache: 'no-store',
+      headers: {
+        Range: 'bytes=0-0',
+      },
+      signal: options.signal,
+    }),
+  officePreviewStatus: (options = {}) => {
+    const params = new URLSearchParams();
+    if (options.refresh) params.set('refresh', '1');
+    const query = params.toString();
+    return authenticatedFetch(`/api/config/office-preview/status${query ? `?${query}` : ''}`);
+  },
   pilotDeckConfig: () =>
     authenticatedFetch('/api/config'),
   saveFile: (projectName, filePath, content) =>
@@ -243,9 +274,7 @@ export const api = {
     authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/download`),
 
   fileDownloadUrl: (projectName, filePath) =>
-    appendAuthToken(
-      `/api/projects/${encodeURIComponent(projectName)}/files/content?path=${encodeURIComponent(filePath)}&download=1`,
-    ),
+    api.fileContentUrl(projectName, filePath, { download: true }),
 
   // TaskMaster endpoints
   taskmaster: {

@@ -23,6 +23,7 @@ import { getPilotDeckGateway } from '../pilotdeck-bridge.js';
 import {
   OFFICE_PREVIEW_SERVICE_LIBREOFFICE,
   OFFICE_PREVIEW_SERVICE_NONE,
+  getLibreOfficeCandidateStatuses,
   getConfiguredOfficePreviewService,
   getLibreOfficeStatus,
 } from '../services/officePreview.js';
@@ -116,15 +117,20 @@ router.post('/validate', (req, res) => {
   }
 });
 
-router.get('/office-preview/status', async (_req, res) => {
+router.get('/office-preview/status', async (req, res) => {
   try {
-    const [libreOffice, service] = await Promise.all([
-      getLibreOfficeStatus(),
+    const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
+    const [libreOffice, candidates, service] = await Promise.all([
+      getLibreOfficeStatus({ forceRefresh }),
+      getLibreOfficeCandidateStatuses({ forceRefresh }),
       Promise.resolve(getConfiguredOfficePreviewService()),
     ]);
     res.json({
       service,
-      libreOffice,
+      libreOffice: {
+        ...libreOffice,
+        candidates,
+      },
       supportedServices: [
         OFFICE_PREVIEW_SERVICE_NONE,
         OFFICE_PREVIEW_SERVICE_LIBREOFFICE,

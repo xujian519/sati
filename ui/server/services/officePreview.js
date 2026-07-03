@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { execFile } from 'child_process';
+import fs from 'fs';
 import fsPromises from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -27,45 +28,156 @@ export function getConfiguredOfficePreviewService() {
   }
 }
 
-function getLibreOfficeCandidates() {
-  const explicit = [
+function getConfiguredLibreOfficeBinaryPath() {
+  try {
+    const record = readPilotDeckConfigFile();
+    return String(record?.config?.webui?.officePreview?.binaryPath || '').trim();
+  } catch (error) {
+    console.warn('Failed to read LibreOffice binary path config; falling back to auto-detect:', error.message);
+    return '';
+  }
+}
+
+function uniqueCandidates(candidates) {
+  return Array.from(new Set(candidates.map((candidate) => String(candidate || '').trim()).filter(Boolean)));
+}
+
+function getEnvironmentLibreOfficeCandidates() {
+  return uniqueCandidates([
     process.env.LIBREOFFICE_PATH,
     process.env.SOFFICE_PATH,
-  ].filter(Boolean);
+  ]);
+}
 
-  return [
-    ...explicit,
-    'soffice',
-    'libreoffice',
+function readDirectoryNames(directoryPath) {
+  try {
+    return fs.readdirSync(directoryPath, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+}
+
+function getMacLibreOfficeAppCandidates() {
+  const appDirectories = [
+    '/Applications',
+    path.join(os.homedir(), 'Applications'),
+  ];
+  return appDirectories.flatMap((directoryPath) =>
+    readDirectoryNames(directoryPath)
+      .filter((name) => /^LibreOffice.*\.app$/i.test(name))
+      .map((name) => path.join(directoryPath, name, 'Contents/MacOS/soffice')));
+}
+
+function getLinuxOptLibreOfficeCandidates() {
+  return readDirectoryNames('/opt')
+    .filter((name) => /^libreoffice/i.test(name))
+    .map((name) => path.join('/opt', name, 'program/soffice'));
+}
+
+function getPlatformLibreOfficeCandidates() {
+  const macCandidates = [
     '/Applications/LibreOffice.app/Contents/MacOS/soffice',
     '/opt/homebrew/bin/soffice',
     '/usr/local/bin/soffice',
+    ...getMacLibreOfficeAppCandidates(),
+  ];
+  const linuxCandidates = [
     '/usr/bin/soffice',
     '/usr/bin/libreoffice',
+    '/usr/local/bin/soffice',
+    '/usr/local/bin/libreoffice',
+    '/snap/bin/libreoffice',
+    '/opt/libreoffice/program/soffice',
+    ...getLinuxOptLibreOfficeCandidates(),
+  ];
+  const windowsCandidates = [
     'C:\\Program Files\\LibreOffice\\program\\soffice.exe',
     'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe',
   ];
+
+  return process.platform === 'darwin'
+    ? macCandidates
+    : process.platform === 'win32'
+      ? windowsCandidates
+      : linuxCandidates;
+}
+
+function getPathLibreOfficeCandidates() {
+  const pathCandidates = [
+    'soffice',
+    'libreoffice',
+  ];
+  return pathCandidates;
+}
+
+function getAutoLibreOfficeCandidates() {
+  return uniqueCandidates([
+    ...getEnvironmentLibreOfficeCandidates(),
+    ...getPlatformLibreOfficeCandidates(),
+    ...getPathLibreOfficeCandidates(),
+  ]);
+}
+
+function getScannableLibreOfficeCandidates() {
+  return uniqueCandidates([
+    getConfiguredLibreOfficeBinaryPath(),
+    ...getEnvironmentLibreOfficeCandidates(),
+    ...getPlatformLibreOfficeCandidates(),
+  ]);
+}
+
+function getLibreOfficeCandidates() {
+  const configured = getConfiguredLibreOfficeBinaryPath();
+  return configured ? [configured] : getAutoLibreOfficeCandidates();
+}
+
+async function probeLibreOfficeCandidate(candidate) {
+  try {
+    const result = await execFileAsync(candidate, ['--version'], {
+      timeout: 5000,
+      windowsHide: true,
+    });
+    return {
+      binaryPath: candidate,
+      available: true,
+      version: String(result.stdout || result.stderr || '').trim(),
+    };
+  } catch (error) {
+    return {
+      binaryPath: candidate,
+      available: false,
+      version: '',
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 let libreOfficeStatusPromise = null;
+let libreOfficeStatusCacheKey = '';
+let libreOfficeCandidateStatusesPromise = null;
+let libreOfficeCandidateStatusesCacheKey = '';
 
-export async function getLibreOfficeStatus() {
+export async function getLibreOfficeStatus(options = {}) {
+  const candidates = getLibreOfficeCandidates();
+  const cacheKey = JSON.stringify(candidates);
+
+  if (options.forceRefresh || cacheKey !== libreOfficeStatusCacheKey) {
+    libreOfficeStatusPromise = null;
+    libreOfficeStatusCacheKey = cacheKey;
+  }
+
   if (!libreOfficeStatusPromise) {
     libreOfficeStatusPromise = (async () => {
-      for (const candidate of getLibreOfficeCandidates()) {
-        try {
-          const result = await execFileAsync(candidate, ['--version'], {
-            timeout: 5000,
-            windowsHide: true,
-          });
-          const version = String(result.stdout || result.stderr || '').trim();
+      for (const candidate of candidates) {
+        const result = await probeLibreOfficeCandidate(candidate);
+        if (result.available) {
           return {
             available: true,
-            binaryPath: candidate,
-            version,
+            binaryPath: result.binaryPath,
+            version: result.version,
           };
-        } catch {
-          // Try the next candidate.
         }
       }
       return {
@@ -76,6 +188,24 @@ export async function getLibreOfficeStatus() {
     })();
   }
   return libreOfficeStatusPromise;
+}
+
+export async function getLibreOfficeCandidateStatuses(options = {}) {
+  const candidates = getScannableLibreOfficeCandidates();
+  const cacheKey = JSON.stringify(candidates);
+
+  if (options.forceRefresh || cacheKey !== libreOfficeCandidateStatusesCacheKey) {
+    libreOfficeCandidateStatusesPromise = null;
+    libreOfficeCandidateStatusesCacheKey = cacheKey;
+  }
+
+  if (!libreOfficeCandidateStatusesPromise) {
+    libreOfficeCandidateStatusesPromise = Promise.all(
+      candidates.map((candidate) => probeLibreOfficeCandidate(candidate)),
+    );
+  }
+
+  return libreOfficeCandidateStatusesPromise;
 }
 
 async function getLibreOfficeBinary() {

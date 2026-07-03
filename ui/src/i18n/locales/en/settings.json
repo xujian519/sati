@@ -687,12 +687,31 @@
           "service": {
             "label": "Preview service",
             "description": "Local service used when opening Office files for preview."
+          },
+          "binaryPath": {
+            "label": "LibreOffice executable path",
+            "description": "Optional. Enter the full soffice/libreoffice path for custom installations; leave empty to auto-detect.",
+            "placeholder": "/Applications/LibreOffice.app/Contents/MacOS/soffice"
+          },
+          "detectedBinaryPath": {
+            "label": "Auto-scanned paths",
+            "description": "Selecting a detected path writes it to the executable path above; select auto-detect to clear the manual path."
           }
         },
         "options": {
           "none": "None",
           "libreOffice": "LibreOffice",
-          "libreOfficeUnavailable": "LibreOffice (unavailable)"
+          "libreOfficeUnavailable": "LibreOffice (unavailable)",
+          "autoDetect": "Auto-detect (no fixed path)",
+          "candidateAvailable": "{{path}} (available)",
+          "candidateUnavailable": "{{path}} (unavailable)",
+          "candidateAvailableShort": "Available",
+          "candidateUnavailableShort": "Unavailable"
+        },
+        "scan": {
+          "button": "Scan",
+          "title": "Select LibreOffice path",
+          "scanning": "Scanning available paths..."
         },
         "status": {
           "checking": "Checking LibreOffice...",
@@ -701,6 +720,7 @@
           "unknown": "LibreOffice status is temporarily unavailable",
           "error": "Could not check LibreOffice status",
           "refresh": "Check again",
+          "noDetectedPaths": "No candidate paths were found yet. You can still enter a full path manually and check again.",
           "path": "Path: {{path}}",
           "version": "Version: {{version}}"
         },

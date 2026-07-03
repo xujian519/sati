@@ -8,6 +8,12 @@ export type OfficePreviewStatus = {
     available?: boolean;
     binaryPath?: string | null;
     version?: string;
+    candidates?: Array<{
+      binaryPath: string;
+      available: boolean;
+      version?: string;
+      error?: string;
+    }>;
   };
   statusError?: string;
   statusUnavailable?: boolean;
@@ -42,9 +48,9 @@ async function readServiceFromConfig(): Promise<OfficePreviewStatus> {
   };
 }
 
-export async function readOfficePreviewStatus(): Promise<OfficePreviewStatus> {
+export async function readOfficePreviewStatus(options: { refresh?: boolean } = {}): Promise<OfficePreviewStatus> {
   try {
-    const response = await api.officePreviewStatus();
+    const response = await api.officePreviewStatus({ refresh: options.refresh });
     const body = await readJsonBody(response);
     if (!response.ok) {
       throw new Error(body?.error || `HTTP ${response.status}`);
