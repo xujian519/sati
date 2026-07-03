@@ -7,7 +7,6 @@ import { cn } from '../../lib/utils.js';
 import type { Project, SessionProvider } from '../../types/app';
 import {
   DOCUMENT_SELECTION_ATTACHMENT_KIND,
-  getDocumentSelectionSummary,
   type DocumentSelectionReference,
 } from '../../types/documentSelection';
 import type {
@@ -24,6 +23,7 @@ import { ProcessTrace } from './ProcessTrace';
 import { processSummaryToTrace, type ProcessAttachment } from './processGrouping';
 import SubagentCard from './SubagentCard';
 import { useTypewriter } from './useTypewriter';
+import DocumentReferenceChip from './DocumentReferenceChip';
 
 type DiffLine = { type: string; content: string; lineNum: number };
 
@@ -312,34 +312,14 @@ function MessageRowV2({
           ) : (
             <>
               {documentReferenceAttachments.length > 0 ? (
-                <div className={formattedContent || fileAttachments.length > 0 ? 'mb-2 grid grid-cols-1 gap-2' : 'grid grid-cols-1 gap-2'}>
+                <div className={formattedContent || fileAttachments.length > 0 ? 'mb-2 flex flex-wrap gap-2' : 'flex flex-wrap gap-2'}>
                   {documentReferenceAttachments.map((reference) => (
-                    <div
+                    <DocumentReferenceChip
                       key={reference.id}
-                      className="flex min-w-0 gap-3 rounded-2xl border border-blue-100 bg-white/85 p-2.5 pr-3 dark:border-blue-900/40 dark:bg-neutral-900/45"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500 text-white">
-                        <FileText className="h-5 w-5" strokeWidth={2} />
-                      </div>
-                      <div className="min-w-0 text-left">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span className="truncate text-[13px] font-semibold text-neutral-900 dark:text-neutral-100">
-                            {reference.fileName}
-                          </span>
-                          <span className="shrink-0 text-[11px] text-neutral-500 dark:text-neutral-400">
-                            {reference.pageNumbers.length
-                              ? t('documentReferences.pages', {
-                                  pages: reference.pageNumbers.join(', '),
-                                  defaultValue: 'p. {{pages}}',
-                                })
-                              : t('documentReferences.pageUnknown', { defaultValue: 'page unknown' })}
-                          </span>
-                        </div>
-                        <div className="mt-1 line-clamp-2 text-[12px] leading-4 text-neutral-600 dark:text-neutral-300">
-                          {getDocumentSelectionSummary(reference, 180)}
-                        </div>
-                      </div>
-                    </div>
+                      reference={reference}
+                      summaryLength={100}
+                      className="bg-white/80 dark:bg-neutral-900/55"
+                    />
                   ))}
                 </div>
               ) : null}

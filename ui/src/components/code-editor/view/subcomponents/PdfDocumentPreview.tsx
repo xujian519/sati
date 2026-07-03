@@ -132,7 +132,7 @@ function buildSurroundingText(documentText: string, selectedText: string): strin
   if (!normalizedDocument || !normalizedSelected) return '';
 
   const index = normalizedDocument.indexOf(normalizedSelected);
-  if (index < 0) return normalizedDocument.slice(0, CONTEXT_RADIUS * 2).trim();
+  if (index < 0) return normalizedSelected;
 
   const start = Math.max(0, index - CONTEXT_RADIUS);
   const end = Math.min(normalizedDocument.length, index + normalizedSelected.length + CONTEXT_RADIUS);
@@ -158,6 +158,19 @@ function getSelectedPageNumbers(root: HTMLElement, range: Range): number[] {
     })
     .map((page) => Number.parseInt(page.dataset.pdfPageNumber || '', 10))
     .filter((pageNumber) => Number.isFinite(pageNumber) && pageNumber > 0);
+}
+
+function getTextLayerText(root: HTMLElement, pageNumbers: number[]): string {
+  const pages = pageNumbers.length > 0
+    ? pageNumbers
+      .map((pageNumber) => root.querySelector<HTMLElement>(`[data-pdf-page-number="${pageNumber}"]`))
+      .filter((page): page is HTMLElement => Boolean(page))
+    : Array.from(root.querySelectorAll<HTMLElement>('[data-pdf-page-number]'));
+
+  return pages
+    .map((page) => page.querySelector<HTMLElement>('.textLayer')?.textContent || '')
+    .filter(Boolean)
+    .join('\n');
 }
 
 function getClosestElement(node: Node): Element | null {
@@ -742,12 +755,14 @@ export default function PdfDocumentPreview({
     const pageNumbers = getSelectedPageNumbers(viewer, range);
     const sortedPageTexts = Array.from(pageTextRef.current.entries())
       .sort(([left], [right]) => left - right);
-    const documentText = sortedPageTexts.map(([, text]) => text).join('\n');
-    const pageText = pageNumbers.length > 0
+    const cachedDocumentText = sortedPageTexts.map(([, text]) => text).join('\n');
+    const cachedPageText = pageNumbers.length > 0
       ? pageNumbers.map((pageNumber) => pageTextRef.current.get(pageNumber) || '').join('\n')
-      : documentText;
-    const surroundingText = buildSurroundingText(pageText || documentText, selectedText);
-    const occurrenceIndex = getOccurrenceIndex(documentText || pageText, selectedText);
+      : cachedDocumentText;
+    const domPageText = getTextLayerText(viewer, pageNumbers);
+    const contextText = domPageText || cachedPageText || cachedDocumentText || selectedText;
+    const surroundingText = buildSurroundingText(contextText, selectedText);
+    const occurrenceIndex = getOccurrenceIndex(cachedDocumentText || contextText, selectedText);
     const reference = createDocumentSelectionReference({
       projectName,
       fileName,

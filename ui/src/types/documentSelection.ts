@@ -101,6 +101,7 @@ export function formatDocumentSelectionPromptBlock(
   if (validReferences.length === 0) return '';
 
   const lines = [DOCUMENT_SELECTION_PROMPT_MARKER];
+  lines.push('The File field is the exact document the user selected from. If the user asks to modify the selected content, use that File as the default target unless the user explicitly names another target file.');
   validReferences.forEach((reference, index) => {
     lines.push(`${index + 1}. File: ${reference.filePath}`);
     lines.push(`   Pages: ${formatPages(reference.pageNumbers)}`);
