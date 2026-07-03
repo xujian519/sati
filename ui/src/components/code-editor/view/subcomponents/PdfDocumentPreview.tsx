@@ -395,6 +395,7 @@ export default function PdfDocumentPreview({
   const forcedRenderPageNumbersRef = useRef(new Set<number>());
   const scrollRafRef = useRef<number | null>(null);
   const renderFallbackRafRef = useRef<number | null>(null);
+  const selectionActionTimerRef = useRef<number | null>(null);
   const viewStateRef = useRef<PdfViewState>({ ...DEFAULT_VIEW_STATE });
   const fileKeyRef = useRef<string | null>(null);
   const pendingRestoreRef = useRef<PdfViewState | null>(null);
@@ -763,30 +764,49 @@ export default function PdfDocumentPreview({
     setSelectionAction({ top, left, reference });
   }, [fileName, filePath, projectName, source]);
 
+  const cancelScheduledSelectionAction = useCallback(() => {
+    if (selectionActionTimerRef.current !== null) {
+      window.clearTimeout(selectionActionTimerRef.current);
+      selectionActionTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleSelectionAction = useCallback(() => {
+    cancelScheduledSelectionAction();
+    selectionActionTimerRef.current = window.setTimeout(() => {
+      selectionActionTimerRef.current = null;
+      updateSelectionAction();
+    }, 40);
+  }, [cancelScheduledSelectionAction, updateSelectionAction]);
+
   useEffect(() => {
-    const handleSelectionChange = () => updateSelectionAction();
+    const handleSelectionChange = () => setSelectionAction(null);
     const handleScroll = () => {
       const viewer = viewerRef.current;
       if (viewer) {
         viewStateRef.current.scrollTop = viewer.scrollTop;
       }
+      cancelScheduledSelectionAction();
       setSelectionAction(null);
       scheduleForcedRenderUpdate();
       scheduleCurrentPageUpdate();
     };
 
     document.addEventListener('selectionchange', handleSelectionChange);
-    document.addEventListener('mouseup', handleSelectionChange);
-    document.addEventListener('keyup', handleSelectionChange);
+    document.addEventListener('mouseup', scheduleSelectionAction);
+    document.addEventListener('touchend', scheduleSelectionAction);
+    document.addEventListener('keyup', scheduleSelectionAction);
     const viewer = viewerRef.current;
     viewer?.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
+      cancelScheduledSelectionAction();
       document.removeEventListener('selectionchange', handleSelectionChange);
-      document.removeEventListener('mouseup', handleSelectionChange);
-      document.removeEventListener('keyup', handleSelectionChange);
+      document.removeEventListener('mouseup', scheduleSelectionAction);
+      document.removeEventListener('touchend', scheduleSelectionAction);
+      document.removeEventListener('keyup', scheduleSelectionAction);
       viewer?.removeEventListener('scroll', handleScroll);
     };
-  }, [scheduleCurrentPageUpdate, scheduleForcedRenderUpdate, updateSelectionAction]);
+  }, [cancelScheduledSelectionAction, scheduleCurrentPageUpdate, scheduleForcedRenderUpdate, scheduleSelectionAction]);
 
   useEffect(() => {
     scheduleForcedRenderUpdate();
