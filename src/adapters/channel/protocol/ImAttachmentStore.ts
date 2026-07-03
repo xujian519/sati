@@ -12,6 +12,7 @@ export type ImAttachmentStoreOptions = {
 
 export type SaveAttachmentFromUrlInput = {
   url: string;
+  headers?: HeadersInit;
   chatId: string;
   messageId: string;
   type: ChannelAttachment["type"];
@@ -50,7 +51,7 @@ export class ImAttachmentStore {
     timeout.unref?.();
     let response: Response;
     try {
-      response = await this.fetchImpl(input.url, { signal: controller.signal });
+      response = await this.fetchImpl(input.url, { headers: input.headers, signal: controller.signal });
     } finally {
       clearTimeout(timeout);
     }

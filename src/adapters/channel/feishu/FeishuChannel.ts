@@ -1,9 +1,13 @@
 import { createDecipheriv, createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { CronResultDelivery } from "../../../cron/index.js";
-import type { Gateway } from "../../../gateway/index.js";
+import type { ChannelAttachment, Gateway } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { executeChannelCommand, resolveCommand } from "../protocol/ChannelCommandRegistry.js";
+import { guessMimeTypeFromName, ImAttachmentDelivery, type PreparedImAttachment } from "../protocol/ImAttachmentDelivery.js";
+import { ImAttachmentStore } from "../protocol/ImAttachmentStore.js";
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
@@ -30,6 +34,9 @@ async function loadLarkSdk(): Promise<any> {
 
 const TENANT_TOKEN_URL = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal";
 const SEND_MESSAGE_URL = "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id";
+const FEISHU_IMAGE_UPLOAD_URL = "https://open.feishu.cn/open-apis/im/v1/images";
+const FEISHU_FILE_UPLOAD_URL = "https://open.feishu.cn/open-apis/im/v1/files";
+const FEISHU_MESSAGE_RESOURCE_URL = "https://open.feishu.cn/open-apis/im/v1/messages";
 const REACTION_URL = "https://open.feishu.cn/open-apis/im/v1/messages";
 const UPDATE_MESSAGE_URL = "https://open.feishu.cn/open-apis/im/v1/messages";
 const PROCESSING_EMOJI = "OnIt";
@@ -37,6 +44,8 @@ const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 const SEEN_EVENTS_MAX = 2000;
 const MAX_TEXT_MESSAGE_LENGTH = 4000;
 const DEFAULT_LIVE_REPLY_CURSOR = " ▉";
+const FEISHU_MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+const FEISHU_ATTACHMENT_FETCH_TIMEOUT_MS = 60_000;
 
 export type FeishuOutboundMessage = {
   chatId: string;
@@ -77,8 +86,25 @@ export type FeishuChannelOptions = {
 
 type ParsedEvent =
   | { kind: "url_verification"; challenge: string }
-  | { kind: "message"; eventId: string; chatId: string; text: string; messageId?: string }
+  | {
+      kind: "message";
+      eventId: string;
+      chatId: string;
+      text: string;
+      messageId?: string;
+      messageType?: string;
+      content?: string;
+    }
   | { kind: "ignore" };
+
+type FeishuInboundMessage = {
+  chatId: string;
+  text: string;
+  eventId: string;
+  messageId?: string;
+  messageType?: string;
+  content?: string;
+};
 
 export class FeishuChannel implements ChannelAdapter {
   readonly channelKey = "feishu";
@@ -103,6 +129,12 @@ export class FeishuChannel implements ChannelAdapter {
   private readonly activeChats = new Set<string>();
   private readonly elicitation = new ImElicitationHelper();
   private readonly permissions = new ImPermissionHelper();
+  private readonly attachmentStore = new ImAttachmentStore({
+    rootDir: join(homedir(), ".pilotdeck", "im-attachments"),
+    channelKey: "feishu",
+    maxBytes: FEISHU_MAX_ATTACHMENT_BYTES,
+    fetchTimeoutMs: FEISHU_ATTACHMENT_FETCH_TIMEOUT_MS,
+  });
 
   private wsClient: any = null;
 
@@ -210,19 +242,26 @@ export class FeishuChannel implements ChannelAdapter {
       | { chat_id?: string; content?: string; message_type?: string; message_id?: string }
       | undefined;
     if (!message) return;
-    if (message.message_type !== "text") return;
+    if (!isSupportedFeishuInboundType(message.message_type)) return;
 
     const chatId = message.chat_id;
     if (!chatId || message.content === undefined) return;
 
-    const text = extractTextContent(message.content);
+    const text = extractFeishuMessageText(message.message_type, message.content);
     const messageId = message.message_id;
     const eventId = messageId ?? `stream:${chatId}:${Date.now()}`;
 
     if (this.seenEvents.has(eventId)) return;
     this.rememberEvent(eventId);
 
-    await this.processInboundMessage(chatId, text, messageId);
+    await this.processInboundMessage({
+      chatId,
+      text,
+      eventId,
+      messageId,
+      messageType: message.message_type,
+      content: message.content,
+    });
   }
 
   async handleWebhook(request: IncomingMessage, response: ServerResponse, body: string): Promise<boolean> {
@@ -250,18 +289,23 @@ export class FeishuChannel implements ChannelAdapter {
     this.rememberEvent(parsed.eventId);
 
     respondJson(response, 200, { ok: true });
-    void this.processInboundMessage(parsed.chatId, parsed.text, parsed.messageId).catch((e) => {
+    void this.processInboundMessage(parsed).catch((e) => {
       this.logger?.error?.(`feishu: processInboundMessage error: ${e}`);
     });
     return true;
   }
 
-  private async processInboundMessage(chatId: string, text: string, messageId?: string): Promise<void> {
+  private async processInboundMessage(input: FeishuInboundMessage): Promise<void> {
     if (!this.gateway) return;
+    const { chatId, messageId } = input;
+    const attachmentResult = await this.extractIncomingAttachments(input);
+    const text = mergeTextAndDiagnostics(input.text, attachmentResult.diagnostics);
+    const messageText = text.trim() || (attachmentResult.attachments.length > 0 ? "请查看我发送的附件。" : "");
+    if (!messageText.trim() && attachmentResult.attachments.length === 0) return;
 
     if (this.elicitation.hasPending(chatId)) {
       try {
-        const confirmation = await this.elicitation.answer(chatId, text, this.gateway);
+        const confirmation = await this.elicitation.answer(chatId, messageText, this.gateway);
         if (confirmation) await this.send({ chatId, text: confirmation });
       } catch (e) {
         this.logger?.error?.(`feishu: elicitation answer error: ${e}`);
@@ -271,7 +315,7 @@ export class FeishuChannel implements ChannelAdapter {
 
     if (this.permissions.hasPending(chatId)) {
       try {
-        const confirmation = await this.permissions.answer(chatId, text, this.gateway);
+        const confirmation = await this.permissions.answer(chatId, messageText, this.gateway);
         if (confirmation) await this.send({ chatId, text: confirmation });
       } catch (e) {
         this.logger?.error?.(`feishu: permission answer error: ${e}`);
@@ -279,7 +323,7 @@ export class FeishuChannel implements ChannelAdapter {
       return;
     }
 
-    const mapped = this.mapper.resolve({ chatId, text });
+    const mapped = this.mapper.resolve({ chatId, text: messageText });
 
     if (mapped.command === "new" && !mapped.message) {
       await this.send({ chatId, text: "已创建新会话。" });
@@ -288,8 +332,8 @@ export class FeishuChannel implements ChannelAdapter {
 
     // Delegate system-level commands (e.g. /projects, /update, /status) to
     // the centralized registry — no need to handle them individually here.
-    if (text.trim().startsWith("/")) {
-      const handled = await executeChannelCommand(text, {
+    if (messageText.trim().startsWith("/")) {
+      const handled = await executeChannelCommand(messageText, {
         gateway: this.gateway,
         chatId,
         channelKey: "feishu",
@@ -342,6 +386,7 @@ export class FeishuChannel implements ChannelAdapter {
           sessionKey: mapped.sessionKey,
           channelKey: "feishu",
           message: mapped.message,
+          ...(attachmentResult.attachments.length > 0 ? { attachments: attachmentResult.attachments } : {}),
           allowPlanModeTools: false,
           timeoutMs: turnTimeoutMs,
           ...(mapped.projectKey ? { projectKey: mapped.projectKey } : {}),
@@ -358,7 +403,7 @@ export class FeishuChannel implements ChannelAdapter {
           if (event.type === "permission_request") {
             const questionText = this.permissions.capture(chatId, mapped.sessionKey, event);
             await liveReply.pauseActivity();
-            await this.send({ chatId, text: questionText });
+            if (questionText) await this.send({ chatId, text: questionText });
             continue;
           }
           if (event.type === "error" && event.code === "agent_aborted") {
@@ -367,6 +412,11 @@ export class FeishuChannel implements ChannelAdapter {
           }
           if (event.type === "error" && event.code === "turn_timeout") {
             await liveReply.markTimedOut();
+            continue;
+          }
+          if (event.type === "assistant_attachment") {
+            await liveReply.flushFinal();
+            await this.sendAttachment(chatId, event.attachment);
             continue;
           }
           await liveReply.handleEvent(event);
@@ -421,6 +471,123 @@ export class FeishuChannel implements ChannelAdapter {
     await this.sendTextMessage(message);
   }
 
+  private async sendAttachment(chatId: string, attachment: Parameters<ImAttachmentDelivery["send"]>[0]): Promise<boolean> {
+    return new ImAttachmentDelivery({
+      maxBytes: FEISHU_MAX_ATTACHMENT_BYTES,
+      logger: this.logger,
+      sendTextFallback: (text) => this.send({ chatId, text }),
+      sendPrepared: (prepared) => this.uploadAndSendFeishuAttachment(chatId, prepared),
+    }).send(attachment);
+  }
+
+  private async uploadAndSendFeishuAttachment(chatId: string, prepared: PreparedImAttachment): Promise<void> {
+    if (!this.appId || !this.appSecret) throw new Error("feishu app credentials missing");
+    if (prepared.fileType === "image") {
+      const imageKey = await this.uploadFeishuImage(prepared);
+      await this.sendRawMessage(chatId, "image", { image_key: imageKey });
+      return;
+    }
+    const fileKey = await this.uploadFeishuFile(prepared);
+    await this.sendRawMessage(chatId, "file", { file_key: fileKey });
+  }
+
+  private async uploadFeishuImage(prepared: PreparedImAttachment): Promise<string> {
+    const token = await this.getTenantAccessToken();
+    const form = new FormData();
+    form.set("image_type", "message");
+    form.set("image", new Blob([new Uint8Array(prepared.buffer)], { type: prepared.mimeType ?? "application/octet-stream" }), prepared.name);
+    const res = await fetch(FEISHU_IMAGE_UPLOAD_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    const json = (await res.json().catch(() => ({}))) as { code?: number; msg?: string; data?: { image_key?: string } };
+    if (!res.ok || json.code !== 0 || !json.data?.image_key) {
+      if (json.code === 99991663 || json.code === 99991664) this.tokenCache = undefined;
+      throw new Error(`feishu image upload failed code=${json.code} msg=${json.msg}`);
+    }
+    return json.data.image_key;
+  }
+
+  private async uploadFeishuFile(prepared: PreparedImAttachment): Promise<string> {
+    const token = await this.getTenantAccessToken();
+    const form = new FormData();
+    form.set("file_type", inferFeishuFileType(prepared.name, prepared.mimeType));
+    form.set("file_name", prepared.name);
+    form.set("file", new Blob([new Uint8Array(prepared.buffer)], { type: prepared.mimeType ?? "application/octet-stream" }), prepared.name);
+    const res = await fetch(FEISHU_FILE_UPLOAD_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    const json = (await res.json().catch(() => ({}))) as { code?: number; msg?: string; data?: { file_key?: string } };
+    if (!res.ok || json.code !== 0 || !json.data?.file_key) {
+      if (json.code === 99991663 || json.code === 99991664) this.tokenCache = undefined;
+      throw new Error(`feishu file upload failed code=${json.code} msg=${json.msg}`);
+    }
+    return json.data.file_key;
+  }
+
+  private async extractIncomingAttachments(input: FeishuInboundMessage): Promise<{
+    attachments: ChannelAttachment[];
+    diagnostics: string[];
+  }> {
+    const messageType = input.messageType;
+    if (messageType !== "image" && messageType !== "file") {
+      if (messageType && !isSupportedFeishuInboundType(messageType)) {
+        return { attachments: [], diagnostics: [`[Attachment diagnostics] 飞书 ${messageType} 消息暂不支持附件解析。`] };
+      }
+      return { attachments: [], diagnostics: [] };
+    }
+    if (!input.messageId) {
+      return { attachments: [], diagnostics: ["[Attachment diagnostics] 飞书附件缺少 message_id，无法下载。"] };
+    }
+
+    try {
+      const content = parseJsonObject(input.content);
+      const token = await this.getTenantAccessToken().catch((error: unknown) => {
+        throw new Error(`tenant token unavailable: ${formatError(error)}`);
+      });
+      if (messageType === "image") {
+        const imageKey = readString(content.image_key);
+        if (!imageKey) throw new Error("image_key missing");
+        const url = `${FEISHU_MESSAGE_RESOURCE_URL}/${encodeURIComponent(input.messageId)}/resources/${encodeURIComponent(imageKey)}?type=image`;
+        const attachment = await this.attachmentStore.saveFromUrl({
+          url,
+          chatId: input.chatId,
+          messageId: input.messageId,
+          type: "image",
+          name: `${imageKey}.jpg`,
+          mimeType: "image/jpeg",
+          metadata: { channelKey: "feishu", chatId: input.chatId, messageId: input.messageId, imageKey },
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        return { attachments: [attachment], diagnostics: [] };
+      }
+
+      const fileKey = readString(content.file_key);
+      if (!fileKey) throw new Error("file_key missing");
+      const name = readString(content.file_name) ?? readString(content.name) ?? fileKey;
+      const bytes = readNumber(content.size);
+      const url = `${FEISHU_MESSAGE_RESOURCE_URL}/${encodeURIComponent(input.messageId)}/resources/${encodeURIComponent(fileKey)}?type=file`;
+      const attachment = await this.attachmentStore.saveFromUrl({
+        url,
+        chatId: input.chatId,
+        messageId: input.messageId,
+        type: "file",
+        name,
+        bytes,
+        mimeType: guessMimeTypeFromName(name),
+        metadata: { channelKey: "feishu", chatId: input.chatId, messageId: input.messageId, fileKey },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { attachments: [attachment], diagnostics: [] };
+    } catch (error) {
+      this.logger?.warn?.(`feishu: attachment download failed: ${formatError(error)}`);
+      return { attachments: [], diagnostics: [`[Attachment diagnostics] 飞书附件下载失败：${formatError(error)}`] };
+    }
+  }
+
   private async sendLiveMessage(message: FeishuOutboundMessage): Promise<string | undefined | false> {
     return this.sendTextMessage(message);
   }
@@ -430,6 +597,10 @@ export class FeishuChannel implements ChannelAdapter {
       await this.explicitSend(message);
       return undefined;
     }
+    return this.sendRawMessage(message.chatId, "text", { text: message.text });
+  }
+
+  private async sendRawMessage(chatId: string, msgType: "text" | "image" | "file", content: Record<string, unknown>): Promise<string | undefined | false> {
     if (!this.appId || !this.appSecret) {
       this.logger?.warn?.("feishu: cannot send — appId/appSecret missing");
       return false;
@@ -444,9 +615,9 @@ export class FeishuChannel implements ChannelAdapter {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          receive_id: message.chatId,
-          msg_type: "text",
-          content: JSON.stringify({ text: message.text }),
+          receive_id: chatId,
+          msg_type: msgType,
+          content: JSON.stringify(content),
         }),
       });
       const json = (await res.json().catch(() => ({}))) as {
@@ -458,12 +629,12 @@ export class FeishuChannel implements ChannelAdapter {
         if (json.code === 99991663 || json.code === 99991664) {
           this.tokenCache = undefined;
         }
-        this.logger?.error?.(`feishu: send failed code=${json.code} msg=${json.msg}`);
+        this.logger?.error?.(`feishu: send ${msgType} failed code=${json.code} msg=${json.msg}`);
         return false;
       }
       return json.data?.message_id;
     } catch (e) {
-      this.logger?.error?.(`feishu: send threw: ${e}`);
+      this.logger?.error?.(`feishu: send ${msgType} threw: ${e}`);
     }
     return false;
   }
@@ -631,6 +802,7 @@ function parseDirectShape(raw: Record<string, unknown>): ParsedEvent | undefined
       eventId: typeof raw.eventId === "string" ? raw.eventId : `direct:${raw.chatId}:${Date.now()}`,
       chatId: raw.chatId,
       text: raw.text,
+      messageType: "text",
     };
   }
   return undefined;
@@ -644,14 +816,22 @@ function parseV2Event(raw: Record<string, unknown>): ParsedEvent | undefined {
 
   if (!header?.event_id || !event?.message) return undefined;
   if (header.event_type !== "im.message.receive_v1") return { kind: "ignore" };
-  if (event.message.message_type !== "text") return { kind: "ignore" };
+  if (!isSupportedFeishuInboundType(event.message.message_type)) return { kind: "ignore" };
 
   const chatId = event.message.chat_id;
   const content = event.message.content;
   if (!chatId || content === undefined) return undefined;
 
-  const text = extractTextContent(content);
-  return { kind: "message", eventId: header.event_id, chatId, text, messageId: event.message.message_id };
+  const text = extractFeishuMessageText(event.message.message_type, content);
+  return {
+    kind: "message",
+    eventId: header.event_id,
+    chatId,
+    text,
+    messageId: event.message.message_id,
+    messageType: event.message.message_type,
+    content,
+  };
 }
 
 function parseV1Event(raw: Record<string, unknown>): ParsedEvent | undefined {
@@ -660,16 +840,63 @@ function parseV1Event(raw: Record<string, unknown>): ParsedEvent | undefined {
     | undefined;
   if (!event?.chat_id || event.text === undefined) return undefined;
   const eventId = (raw.uuid as string | undefined) ?? event.uuid ?? `v1:${event.chat_id}:${Date.now()}`;
-  return { kind: "message", eventId, chatId: event.chat_id, text: event.text };
+  return { kind: "message", eventId, chatId: event.chat_id, text: event.text, messageType: "text" };
 }
 
-function extractTextContent(content: string): string {
+function isSupportedFeishuInboundType(messageType: string | undefined): boolean {
+  return messageType === "text" || messageType === "image" || messageType === "file";
+}
+
+function extractFeishuMessageText(messageType: string | undefined, content: string): string {
+  if (messageType !== "text") return "";
   try {
     const parsed = JSON.parse(content) as { text?: string };
     return parsed.text ?? "";
   } catch {
     return content;
   }
+}
+
+function mergeTextAndDiagnostics(text: string, diagnostics: string[]): string {
+  if (diagnostics.length === 0) return text;
+  return [text.trim(), ...diagnostics].filter(Boolean).join("\n\n");
+}
+
+function parseJsonObject(content: string | undefined): Record<string, unknown> {
+  if (!content) return {};
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function readNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function inferFeishuFileType(name: string, mimeType: string | undefined): string {
+  const lower = name.toLowerCase();
+  if (mimeType === "application/pdf" || lower.endsWith(".pdf")) return "pdf";
+  if (lower.endsWith(".doc") || lower.endsWith(".docx")) return "doc";
+  if (lower.endsWith(".xls") || lower.endsWith(".xlsx")) return "xls";
+  if (lower.endsWith(".ppt") || lower.endsWith(".pptx")) return "ppt";
+  return "stream";
+}
+
+function formatError(error: unknown): string {
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  return String(error);
 }
 
 function decryptFeishuPayload(encrypted: string, key: string): string {
