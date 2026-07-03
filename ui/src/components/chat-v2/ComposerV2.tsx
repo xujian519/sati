@@ -18,6 +18,8 @@ import {
   ChevronDown,
   CircleGauge,
   CircleHelp,
+  File,
+  FileSpreadsheet,
   FileText,
   Hand,
   ListChecks,
@@ -262,9 +264,53 @@ function getContextStatus(tokenBudget?: Record<string, unknown> | null): Context
   };
 }
 
-function formatReferencePages(reference: DocumentSelectionReference, pageLabel: string): string {
-  if (!reference.pageNumbers.length) return pageLabel.replace('{{pages}}', '--');
-  return pageLabel.replace('{{pages}}', reference.pageNumbers.join(', '));
+type DocumentReferenceFileMeta = {
+  label: string;
+  Icon: LucideIcon;
+  className: string;
+};
+
+function getFileExtension(fileName: string): string {
+  const cleanName = fileName.split(/[?#]/)[0] || fileName;
+  const extension = cleanName.includes('.') ? cleanName.split('.').pop() : '';
+  return (extension || '').toLowerCase();
+}
+
+function getDocumentReferenceFileMeta(fileName: string): DocumentReferenceFileMeta {
+  const extension = getFileExtension(fileName);
+  if (extension === 'pdf') {
+    return {
+      label: 'PDF',
+      Icon: FileText,
+      className: 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300',
+    };
+  }
+  if (['doc', 'docx', 'odt'].includes(extension)) {
+    return {
+      label: 'DOC',
+      Icon: FileText,
+      className: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300',
+    };
+  }
+  if (['xls', 'xlsx', 'ods', 'csv', 'tsv'].includes(extension)) {
+    return {
+      label: 'XLS',
+      Icon: FileSpreadsheet,
+      className: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300',
+    };
+  }
+  if (['ppt', 'pptx', 'odp'].includes(extension)) {
+    return {
+      label: 'PPT',
+      Icon: FileText,
+      className: 'bg-orange-50 text-orange-600 dark:bg-orange-950/40 dark:text-orange-300',
+    };
+  }
+  return {
+    label: extension ? extension.slice(0, 3).toUpperCase() : 'FILE',
+    Icon: File,
+    className: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300',
+  };
 }
 
 export default function ComposerV2({
@@ -377,11 +423,11 @@ export default function ComposerV2({
   return (
     <div
       className={cn(
-        'shrink-0',
+        'min-w-0 shrink-0',
         chromeless ? '' : 'bg-white px-6 pb-6 pt-3 dark:bg-neutral-950',
       )}
     >
-      <div className={cn(chromeless ? '' : 'mx-auto max-w-[720px]')}>
+      <div className={cn('min-w-0', chromeless ? '' : 'mx-auto max-w-[720px]')}>
         {pendingPermissionRequests.length > 0 ? (
           <div className="mb-3">
             <PermissionRequestsBanner
@@ -396,45 +442,51 @@ export default function ComposerV2({
         {!hasBlockingPermissionPanel ? (
           <form
             onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void}
-            className="relative"
+            className="pd-composer-container relative"
           >
             {attachedImages.length > 0 || documentReferences.length > 0 ? (
-              <div className="mb-2 rounded-lg border border-neutral-200 bg-neutral-50 p-2 dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="pd-composer-attachment-panel mb-2 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50 p-2 dark:border-neutral-800 dark:bg-neutral-900">
                 <div className="flex flex-wrap gap-2">
                   {documentReferences.map((reference) => (
-                    <div
-                      key={reference.id}
-                      className="flex max-w-full items-start gap-2 rounded-lg border border-blue-100 bg-white p-2.5 text-left shadow-sm dark:border-blue-900/40 dark:bg-neutral-950"
-                    >
-                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-500 text-white">
-                        <FileText className="h-4 w-4" strokeWidth={2} />
-                      </div>
-                      <div className="min-w-0 max-w-[420px] flex-1">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span className="truncate text-[12px] font-semibold text-neutral-900 dark:text-neutral-100">
-                            {reference.fileName}
-                          </span>
-                          <span className="shrink-0 text-[11px] text-neutral-500 dark:text-neutral-400">
-                            {formatReferencePages(
-                              reference,
-                              t('documentReferences.pages', { defaultValue: 'p. {{pages}}' }) as string,
+                    (() => {
+                      const meta = getDocumentReferenceFileMeta(reference.fileName);
+                      const ReferenceIcon = meta.Icon;
+                      const summary = getDocumentSelectionSummary(reference, 80);
+                      const title = [
+                        reference.fileName,
+                        reference.pageNumbers.length ? `p. ${reference.pageNumbers.join(', ')}` : null,
+                        summary,
+                      ].filter(Boolean).join('\n');
+                      return (
+                        <div
+                          key={reference.id}
+                          className="pd-composer-reference-chip flex h-8 min-w-0 max-w-full items-center gap-2 rounded-lg bg-neutral-100 px-2.5 text-left text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300 sm:max-w-[520px]"
+                          title={title}
+                        >
+                          <span
+                            className={cn(
+                              'flex h-5 shrink-0 items-center gap-1 rounded px-1.5 text-[10px] font-semibold leading-none',
+                              meta.className,
                             )}
+                          >
+                            <ReferenceIcon className="h-3 w-3" strokeWidth={2} />
+                            {meta.label}
                           </span>
+                          <span className="min-w-0 flex-1 truncate whitespace-nowrap text-[13px] leading-5">
+                            &quot;{summary}&quot;
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => onRemoveDocumentReference(reference.id)}
+                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-neutral-400 transition hover:bg-neutral-200 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                            title={t('documentReferences.remove', { defaultValue: 'Remove reference' }) as string}
+                            aria-label={t('documentReferences.remove', { defaultValue: 'Remove reference' }) as string}
+                          >
+                            <X className="h-3.5 w-3.5" strokeWidth={2} />
+                          </button>
                         </div>
-                        <div className="mt-1 line-clamp-2 text-[12px] leading-4 text-neutral-600 dark:text-neutral-300">
-                          {getDocumentSelectionSummary(reference, 180)}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => onRemoveDocumentReference(reference.id)}
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-                        title={t('documentReferences.remove', { defaultValue: 'Remove reference' }) as string}
-                        aria-label={t('documentReferences.remove', { defaultValue: 'Remove reference' }) as string}
-                      >
-                        <X className="h-3.5 w-3.5" strokeWidth={2} />
-                      </button>
-                    </div>
+                      );
+                    })()
                   ))}
                   {attachedImages.map((file, index) => (
                     <ImageAttachment
@@ -539,8 +591,8 @@ export default function ComposerV2({
                 />
               </div>
 
-                <div className="flex items-center justify-between px-1 pt-1">
-                  <div className="flex min-w-0 items-center gap-0.5">
+                <div className="pd-composer-control-row flex flex-wrap items-center gap-x-2 gap-y-1 px-1 pt-1">
+                  <div className="pd-composer-toolbar-left flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
                     <div
                       className="relative mr-1"
                       onBlur={(event) => {
@@ -554,7 +606,7 @@ export default function ComposerV2({
                         type="button"
                         onClick={() => setIsRunModeMenuOpen((open) => !open)}
                         className={cn(
-                          'inline-flex h-7 max-w-[108px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[140px]',
+                          'pd-composer-icon-button inline-flex h-7 max-w-[108px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[140px]',
                           runMode === 'plan'
                             ? 'text-blue-600 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/30'
                             : runMode === 'ask'
@@ -568,10 +620,10 @@ export default function ComposerV2({
                         aria-expanded={isRunModeMenuOpen}
                       >
                         <SelectedRunModeIcon className="h-4 w-4 shrink-0" strokeWidth={1.9} />
-                        <span className="truncate">{selectedRunModeLabel}</span>
+                        <span className="pd-composer-run-label truncate">{selectedRunModeLabel}</span>
                         <ChevronDown
                           className={cn(
-                            'h-3.5 w-3.5 shrink-0 transition-transform',
+                            'pd-composer-control-chevron h-3.5 w-3.5 shrink-0 transition-transform',
                             isRunModeMenuOpen && 'rotate-180',
                           )}
                           strokeWidth={2}
@@ -698,7 +750,7 @@ export default function ComposerV2({
                         setIsPermissionMenuOpen((open) => !open);
                       }}
                       className={cn(
-                        'inline-flex h-7 max-w-[132px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[190px]',
+                        'pd-composer-icon-button inline-flex h-7 max-w-[132px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[190px]',
                         permissionSelectorDisabled
                           ? 'cursor-not-allowed text-neutral-400 opacity-45 dark:text-neutral-500'
                           : permissionMode === 'bypassPermissions'
@@ -712,10 +764,10 @@ export default function ComposerV2({
                       aria-expanded={permissionSelectorDisabled ? false : isPermissionMenuOpen}
                     >
                       <SelectedPermissionIcon className="h-4 w-4 shrink-0" strokeWidth={1.9} />
-                      <span className="truncate">{selectedPermissionLabel}</span>
+                      <span className="pd-composer-permission-label truncate">{selectedPermissionLabel}</span>
                       <ChevronDown
                         className={cn(
-                          'h-3.5 w-3.5 shrink-0 transition-transform',
+                          'pd-composer-control-chevron h-3.5 w-3.5 shrink-0 transition-transform',
                           isPermissionMenuOpen && 'rotate-180',
                         )}
                         strokeWidth={2}
@@ -790,7 +842,7 @@ export default function ComposerV2({
                   </div>
                   </div>
 
-                  <div className="ml-2 flex shrink-0 items-center gap-1">
+                  <div className="pd-composer-toolbar-right ml-auto flex shrink-0 items-center gap-1">
                     <div
                       className="relative"
                       onBlur={(event) => {
@@ -804,7 +856,7 @@ export default function ComposerV2({
                         type="button"
                         onClick={() => setIsContextPopoverOpen((open) => !open)}
                         className={cn(
-                          'inline-flex h-7 min-w-[44px] items-center justify-center gap-1 rounded-md px-1.5 text-[11px] tabular-nums transition',
+                          'pd-composer-icon-button inline-flex h-7 min-w-[44px] items-center justify-center gap-1 rounded-md px-1.5 text-[11px] tabular-nums transition',
                           contextStatus.tone === 'red'
                             ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30'
                             : contextStatus.tone === 'amber'
@@ -818,7 +870,7 @@ export default function ComposerV2({
                         aria-expanded={isContextPopoverOpen}
                       >
                         <CircleGauge className="h-4 w-4" strokeWidth={1.75} />
-                        <span>{contextStatus.known ? `${contextStatus.percent}%` : '--'}</span>
+                        <span className="pd-composer-context-label">{contextStatus.known ? `${contextStatus.percent}%` : '--'}</span>
                       </button>
                       {isContextPopoverOpen ? (
                         <div
@@ -886,7 +938,7 @@ export default function ComposerV2({
                         type="button"
                         onClick={() => setIsThinkingModeMenuOpen((open) => !open)}
                         className={cn(
-                          'inline-flex h-7 max-w-[116px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[140px]',
+                          'pd-composer-icon-button inline-flex h-7 max-w-[116px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[140px]',
                           effectiveThinkingMode === 'default'
                             ? 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
                             : 'text-purple-600 hover:bg-purple-50 dark:text-purple-300 dark:hover:bg-purple-950/30',
@@ -896,10 +948,10 @@ export default function ComposerV2({
                         aria-expanded={isThinkingModeMenuOpen}
                       >
                         <SelectedThinkingIcon className="h-4 w-4 shrink-0" strokeWidth={1.9} />
-                        <span className="hidden truncate sm:inline">{selectedThinkingMode.name}</span>
+                        <span className="pd-composer-thinking-label truncate">{selectedThinkingMode.name}</span>
                         <ChevronDown
                           className={cn(
-                            'h-3.5 w-3.5 shrink-0 transition-transform',
+                            'pd-composer-control-chevron h-3.5 w-3.5 shrink-0 transition-transform',
                             isThinkingModeMenuOpen && 'rotate-180',
                           )}
                           strokeWidth={2}

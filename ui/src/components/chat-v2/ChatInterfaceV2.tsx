@@ -563,7 +563,7 @@ function ChatInterfaceV2({
   }
 
   return (
-    <div className="flex h-full flex-col bg-white dark:bg-neutral-950">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden bg-white dark:bg-neutral-950">
       <MessagesPaneV2
         scrollContainerRef={scrollContainerRef}
         onWheel={handleScroll}
