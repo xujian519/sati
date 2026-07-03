@@ -908,6 +908,39 @@ function resolvePathInProject(projectRoot, targetPath = '') {
     return { valid: true, resolved };
 }
 
+function createRouteRateLimiter({
+    windowMs,
+    maxRequests,
+    keyPrefix,
+    message = 'Too many requests',
+}) {
+    const buckets = new Map();
+
+    return (req, res, next) => {
+        const now = Date.now();
+        const identity = req.user?.id || req.ip || 'anonymous';
+        const key = `${keyPrefix}:${identity}`;
+        const bucket = buckets.get(key);
+
+        if (!bucket || now >= bucket.resetAt) {
+            buckets.set(key, { count: 1, resetAt: now + windowMs });
+            return next();
+        }
+
+        bucket.count += 1;
+        if (bucket.count <= maxRequests) {
+            return next();
+        }
+
+        const retryAfterSeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+        res.setHeader('Retry-After', String(retryAfterSeconds));
+        return res.status(429).json({
+            error: message,
+            code: 'RATE_LIMITED',
+        });
+    };
+}
+
 function setPreviewContentType(res, filePath) {
     const mimeType = mime.lookup(filePath) || 'application/octet-stream';
     const charset = mimeType.startsWith('text/') || mimeType === 'application/javascript' || mimeType === 'application/json'
@@ -1015,6 +1048,20 @@ async function streamFileWithRange(req, res, filePath, options = {}) {
 const OFFICE_PDF_PREVIEW_EXTENSIONS = new Set(['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp']);
 
 const getFileExtension = (filePath) => path.extname(filePath).slice(1).toLowerCase();
+
+const officePreviewStatusRateLimiter = createRouteRateLimiter({
+    windowMs: 60 * 1000,
+    maxRequests: 60,
+    keyPrefix: 'office-preview-status',
+    message: 'Too many Office preview status requests',
+});
+
+const officePreviewPdfRateLimiter = createRouteRateLimiter({
+    windowMs: 60 * 1000,
+    maxRequests: 30,
+    keyPrefix: 'office-preview-pdf',
+    message: 'Too many Office preview conversion requests',
+});
 
 async function addDirectoryToZip(zip, directoryPath, rootPath) {
     const entries = await fsPromises.readdir(directoryPath, { withFileTypes: true });
@@ -1228,20 +1275,14 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
             return res.status(404).json({ error: 'Project not found' });
         }
 
-        // Match the text reader endpoint so callers can pass either project-relative
-        // or absolute paths without changing how the bytes are served.
-        const resolved = path.isAbsolute(filePath)
-            ? path.resolve(filePath)
-            : path.resolve(projectRoot, filePath);
-        const normalizedRoot = path.resolve(projectRoot) + path.sep;
-        if (!resolved.startsWith(normalizedRoot)) {
-            return res.status(403).json({ error: 'Path must be under project root' });
+        const resolvedResult = resolvePathInProject(projectRoot, filePath);
+        if (!resolvedResult.valid) {
+            return res.status(403).json({ error: resolvedResult.error });
         }
 
-        // Check if file exists
-        try {
-            await fsPromises.access(resolved);
-        } catch (error) {
+        const resolved = resolvedResult.resolved;
+        const stats = await fsPromises.stat(resolved).catch(() => null);
+        if (!stats?.isFile()) {
             return res.status(404).json({ error: 'File not found' });
         }
 
@@ -1259,7 +1300,7 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
     }
 });
 
-app.get('/api/office-preview/status', authenticateToken, async (req, res) => {
+app.get('/api/office-preview/status', authenticateToken, officePreviewStatusRateLimiter, async (req, res) => {
     try {
         const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
         const [libreOffice, candidates, service] = await Promise.all([
@@ -1290,7 +1331,7 @@ app.get('/api/office-preview/status', authenticateToken, async (req, res) => {
 // Convert Office files to PDF for lightweight read-only preview.
 // This is an optional fallback for legacy Office/PPT formats; it only works
 // when LibreOffice/soffice is available on the host.
-app.get('/api/projects/:projectName/files/preview/pdf', authenticateToken, async (req, res) => {
+app.get('/api/projects/:projectName/files/preview/pdf', authenticateToken, officePreviewPdfRateLimiter, async (req, res) => {
     try {
         const { projectName } = req.params;
         const { path: filePath } = req.query;
@@ -1329,7 +1370,7 @@ app.get('/api/projects/:projectName/files/preview/pdf', authenticateToken, async
             });
         }
 
-        const pdfPath = await convertOfficeDocumentToPdf(resolved, { force });
+        const pdfPath = await convertOfficeDocumentToPdf(resolved, { force, projectRoot });
         await streamFileWithRange(req, res, pdfPath, {
             mimeType: 'application/pdf',
             cacheControl: 'no-store, no-cache, must-revalidate',

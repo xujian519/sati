@@ -133,6 +133,26 @@ function getLibreOfficeCandidates() {
   return configured ? [configured] : getAutoLibreOfficeCandidates();
 }
 
+function createOfficePreviewError(message, statusCode, code) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.code = code;
+  return error;
+}
+
+function resolvePathInsideRoot(rootPath, targetPath) {
+  const normalizedRoot = path.resolve(rootPath);
+  const resolved = path.isAbsolute(targetPath)
+    ? path.resolve(targetPath)
+    : path.resolve(normalizedRoot, targetPath);
+
+  if (resolved !== normalizedRoot && !resolved.startsWith(normalizedRoot + path.sep)) {
+    throw createOfficePreviewError('Path must be under project root', 403, 'OFFICE_PREVIEW_PATH_FORBIDDEN');
+  }
+
+  return resolved;
+}
+
 async function probeLibreOfficeCandidate(candidate) {
   try {
     const result = await execFileAsync(candidate, ['--version'], {
@@ -214,18 +234,21 @@ async function getLibreOfficeBinary() {
 }
 
 export async function convertOfficeDocumentToPdf(sourcePath, options = {}) {
+  const resolvedSourcePath = options.projectRoot
+    ? resolvePathInsideRoot(options.projectRoot, sourcePath)
+    : path.resolve(sourcePath);
   const binary = await getLibreOfficeBinary();
   if (!binary) {
-    const error = new Error('LibreOffice executable not found');
-    error.statusCode = 501;
-    error.code = 'LIBREOFFICE_NOT_FOUND';
-    throw error;
+    throw createOfficePreviewError('LibreOffice executable not found', 501, 'LIBREOFFICE_NOT_FOUND');
   }
 
-  const stats = await fsPromises.stat(sourcePath);
+  const stats = await fsPromises.stat(resolvedSourcePath);
+  if (!stats.isFile()) {
+    throw createOfficePreviewError('Office preview source is not a file', 404, 'OFFICE_PREVIEW_SOURCE_NOT_FOUND');
+  }
   const cacheKey = crypto
     .createHash('sha256')
-    .update(`${sourcePath}:${stats.size}:${stats.mtimeMs}`)
+    .update(`${resolvedSourcePath}:${stats.size}:${stats.mtimeMs}`)
     .digest('hex');
   const cacheDir = path.join(OFFICE_PREVIEW_CACHE_DIR, cacheKey);
   const profileDir = path.join(cacheDir, 'profile');
@@ -239,7 +262,7 @@ export async function convertOfficeDocumentToPdf(sourcePath, options = {}) {
   const cachedPdf = (await fsPromises.readdir(cacheDir).catch(() => []))
     .find((name) => name.toLowerCase().endsWith('.pdf'));
   if (cachedPdf) {
-    return path.join(cacheDir, cachedPdf);
+    return resolvePathInsideRoot(cacheDir, cachedPdf);
   }
 
   const args = [
@@ -253,7 +276,7 @@ export async function convertOfficeDocumentToPdf(sourcePath, options = {}) {
     'pdf',
     '--outdir',
     cacheDir,
-    sourcePath,
+    resolvedSourcePath,
   ];
 
   try {
@@ -271,11 +294,8 @@ export async function convertOfficeDocumentToPdf(sourcePath, options = {}) {
   const outputPdf = (await fsPromises.readdir(cacheDir))
     .find((name) => name.toLowerCase().endsWith('.pdf'));
   if (!outputPdf) {
-    const error = new Error('LibreOffice did not produce a PDF preview');
-    error.statusCode = 500;
-    error.code = 'LIBREOFFICE_OUTPUT_MISSING';
-    throw error;
+    throw createOfficePreviewError('LibreOffice did not produce a PDF preview', 500, 'LIBREOFFICE_OUTPUT_MISSING');
   }
 
-  return path.join(cacheDir, outputPdf);
+  return resolvePathInsideRoot(cacheDir, outputPdf);
 }

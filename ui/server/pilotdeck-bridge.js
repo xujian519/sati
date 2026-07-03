@@ -1227,6 +1227,19 @@ function _loadRecordsFromJson(jsonPath, legacyPath) {
  * a human-readable title. Cached for the lifetime of the process.
  */
 const _sessionTitleCache = new Map();
+const DOCUMENT_SELECTION_PROMPT_MARKER = '[Document selections quoted by user:]';
+
+function _stripDocumentSelectionPromptBlock(text) {
+    if (typeof text !== 'string') return '';
+    const markerIndex = text.indexOf(DOCUMENT_SELECTION_PROMPT_MARKER);
+    return markerIndex >= 0 ? text.slice(0, markerIndex).trimEnd() : text;
+}
+
+function _formatPromptTitle(text) {
+    const trimmed = _stripDocumentSelectionPromptBlock(text).trim();
+    if (!trimmed) return null;
+    return trimmed.length > 80 ? trimmed.slice(0, 77) + '…' : trimmed;
+}
 
 function lookupSessionTitle(sessionId, projectKey) {
     if (_sessionTitleCache.has(sessionId)) return _sessionTitleCache.get(sessionId);
@@ -1280,8 +1293,8 @@ function _readFirstPrompt(sessionId, projectKey) {
                         ?.flatMap(m => m.content ?? [])
                         .find(b => b.type === 'text')?.text;
                     if (text?.trim()) {
-                        const trimmed = text.trim();
-                        return trimmed.length > 80 ? trimmed.slice(0, 77) + '…' : trimmed;
+                        const title = _formatPromptTitle(text);
+                        if (title) return title;
                     }
                 }
             } finally {

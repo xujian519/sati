@@ -115,6 +115,13 @@ export function formatDocumentSelectionPromptBlock(
   return `\n\n${lines.join('\n')}`;
 }
 
+export function stripDocumentSelectionPromptBlock(content: unknown): string {
+  const text = typeof content === 'string' ? content : '';
+  const markerIndex = text.indexOf(DOCUMENT_SELECTION_PROMPT_MARKER);
+  if (markerIndex < 0) return text;
+  return text.slice(0, markerIndex).trimEnd();
+}
+
 export function parseDocumentSelectionPromptBlock(content: unknown): {
   content: string;
   references: DocumentSelectionReference[];
@@ -125,13 +132,12 @@ export function parseDocumentSelectionPromptBlock(content: unknown): {
     return { content: text, references: [] };
   }
 
-  const visibleContent = text.slice(0, markerIndex).trimEnd();
+  const visibleContent = stripDocumentSelectionPromptBlock(text);
   const block = text.slice(markerIndex + DOCUMENT_SELECTION_PROMPT_MARKER.length).trim();
   const references: DocumentSelectionReference[] = [];
-  const chunks = block
-    .split(/\n(?=\d+\.\s+File:\s+)/)
-    .map((chunk) => chunk.trim())
-    .filter(Boolean);
+  const chunks = Array.from(block.matchAll(/(?:^|\n)(\d+\.\s+File:[\s\S]*?)(?=\n\d+\.\s+File:|$)/g))
+    .map((match) => match[1]?.trim())
+    .filter((chunk): chunk is string => Boolean(chunk));
 
   chunks.forEach((chunk) => {
     const filePath = chunk.match(/^\d+\.\s+File:\s*(.+)$/m)?.[1]?.trim() || '';
