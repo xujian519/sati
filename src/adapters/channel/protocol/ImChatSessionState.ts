@@ -16,7 +16,6 @@ export class ImChatSessionState<Turn extends ImQueuedTurn = ImQueuedTurn> {
   private readonly pendingTurns = new Map<string, Turn[]>();
   private readonly generations = new Map<string, number>();
   private readonly activeRuns = new Map<string, ImActiveRun>();
-  private readonly sentMentionedAttachmentPaths = new Map<string, Set<string>>();
 
   constructor(options: { maxPendingTurns: number }) {
     this.maxPendingTurns = options.maxPendingTurns;
@@ -33,7 +32,6 @@ export class ImChatSessionState<Turn extends ImQueuedTurn = ImQueuedTurn> {
   resetForNewSession(chatId: string): void {
     this.generations.set(chatId, this.generation(chatId) + 1);
     this.pendingTurns.delete(chatId);
-    this.sentMentionedAttachmentPaths.delete(chatId);
     this.activeRuns.delete(chatId);
   }
 
@@ -67,11 +65,4 @@ export class ImChatSessionState<Turn extends ImQueuedTurn = ImQueuedTurn> {
     this.activeRuns.delete(chatId);
   }
 
-  markMentionedAttachmentSent(chatId: string, path: string): boolean {
-    const sent = this.sentMentionedAttachmentPaths.get(chatId) ?? new Set<string>();
-    if (sent.has(path)) return false;
-    sent.add(path);
-    this.sentMentionedAttachmentPaths.set(chatId, sent);
-    return true;
-  }
 }

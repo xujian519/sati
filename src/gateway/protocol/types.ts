@@ -1,4 +1,5 @@
 import type { AgentTurnResult } from "../../agent/index.js";
+import type { AgentRunMode } from "../../agent/protocol/input.js";
 import type {
   CronCreateInput,
   CronCreateResult,
@@ -75,7 +76,7 @@ export type GatewayOutboundAttachment = {
   mimeType?: string;
   content?: string;
   bytes?: number;
-  source: "tool_result" | "media_reference" | "local_path" | "authorized_path";
+  source: "tool_result" | "media_reference" | "local_path";
   metadata?: Record<string, unknown>;
 };
 
@@ -89,6 +90,7 @@ export type GatewaySubmitTurnInput = {
   /** Override the agent session's working directory for this session. */
   workspaceCwd?: string;
   attachments?: ChannelAttachment[];
+  runMode?: AgentRunMode;
   mode?: GatewayMode;
   /** The user's actual permission preference before plan-mode override. */
   basePermissionMode?: GatewayMode;
@@ -293,6 +295,7 @@ export type GatewayCronController = {
 export type ReloadConfigResult = {
   reloaded: boolean;
   changedPaths?: string[];
+  reason?: "unsupported" | "unchanged";
 };
 
 export type ReloadExtensionsInput = {
@@ -303,6 +306,7 @@ export type ReloadExtensionsInput = {
 export type ReloadExtensionsResult = {
   reloaded: boolean;
   changedPaths?: string[];
+  reason?: "unsupported" | "unchanged";
 };
 
 export type AlwaysOnApplyInput = {

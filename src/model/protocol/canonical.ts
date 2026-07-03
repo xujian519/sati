@@ -2,7 +2,7 @@ import type { ModelCapabilities } from "./capabilities.js";
 import type { CanonicalModelError } from "./errors.js";
 import type { MultimodalConstraints } from "./multimodal.js";
 
-export type ModelProtocol = "anthropic" | "openai" | "google";
+export type ModelProtocol = "anthropic" | "openai" | "openai-responses" | "google";
 
 export type CanonicalRole = "user" | "assistant";
 
@@ -163,8 +163,11 @@ export type CanonicalToolChoice =
     };
 
 export type CanonicalThinkingConfig = {
+  mode?: "default" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   enabled: boolean;
   budgetTokens?: number;
+  preserve?: boolean;
+  splitReasoning?: boolean;
 };
 
 /**

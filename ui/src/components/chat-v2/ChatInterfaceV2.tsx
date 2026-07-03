@@ -12,6 +12,7 @@ import { useChatProviderState } from '../chat/hooks/useChatProviderState';
 import { useChatSessionState } from '../chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../chat/hooks/useChatComposerState';
+import { getThinkingModeAvailability } from '../chat/constants/thinkingModeAvailability';
 import { useSessionStore } from '../../stores/useSessionStore';
 import { safeLocalStorage } from '../chat/utils/chatStorage';
 import { useSessionWatch } from '../../hooks/useSessionWatch';
@@ -35,6 +36,7 @@ function ChatInterfaceV2({
   selectedSession,
   ws,
   sendMessage,
+  subscribe,
   // latestMessage is intentionally not consumed here — useChatRealtimeHandlers
   // now subscribes to the WebSocket directly so React 18 state batching can't
   // drop intermediate stream_delta events.
@@ -91,12 +93,22 @@ function ChatInterfaceV2({
     model,
     permissionMode,
     setPermissionMode: setPermissionModeRaw,
+    thinkingModelContext,
     pendingPermissionRequests,
     setPendingPermissionRequests,
   } = useChatProviderState({ selectedSession });
 
+  const thinkingModeAvailability = React.useMemo(
+    () => getThinkingModeAvailability(thinkingModelContext),
+    [thinkingModelContext],
+  );
+
   const cycleRunMode = useCallback(() => {
-    setRunMode((currentMode) => (currentMode === 'plan' ? 'agent' : 'plan'));
+    setRunMode((currentMode) => {
+      if (currentMode === 'agent') return 'plan';
+      if (currentMode === 'plan') return 'ask';
+      return 'agent';
+    });
   }, []);
 
   const selectPermissionMode = useCallback((mode: typeof permissionMode) => {
@@ -168,8 +180,8 @@ function ChatInterfaceV2({
     textareaRef,
     inputHighlightRef,
     isTextareaExpanded: _isTextareaExpanded,
-    thinkingMode: _thinkingMode,
-    setThinkingMode: _setThinkingMode,
+    thinkingMode,
+    setThinkingMode,
     slashCommandsCount: _slashCommandsCount,
     filteredCommands,
     frequentCommands,
@@ -211,13 +223,16 @@ function ChatInterfaceV2({
     selectedSession,
     currentSessionId,
     model,
+    runMode,
     permissionMode: effectivePermissionMode,
     basePermissionMode: permissionMode,
     cycleRunMode,
     isLoading,
     canAbortSession,
     tokenBudget,
+    thinkingModeAvailability,
     sendMessage,
+    subscribe,
     sendByCtrlEnter,
     onSessionActive,
     onSessionProcessing,
@@ -333,7 +348,7 @@ function ChatInterfaceV2({
     setIsForkPending(true);
     try {
       const response = await api.forkSession(sessionId, { projectPath, fromEntryId });
-      let result: { newSessionId?: string; prefillText?: string; mode?: string; error?: string } = {};
+      let result: { newSessionId?: string; prefillText?: string; runMode?: string; mode?: string; error?: string } = {};
       try {
         result = await response.json();
       } catch {
@@ -346,7 +361,7 @@ function ChatInterfaceV2({
       if (!newSessionId) {
         throw new Error('Fork did not return a new session id');
       }
-      setRunMode(result.mode === 'plan' ? 'plan' : 'agent');
+      setRunMode(result.runMode === 'ask' ? 'ask' : result.mode === 'plan' || result.runMode === 'plan' ? 'plan' : 'agent');
 
       if (typeof window.refreshProjects === 'function') {
         try {
@@ -500,6 +515,9 @@ function ChatInterfaceV2({
       canAbortSession={canAbortSession}
       isAbortPending={isAbortPending}
       tokenBudget={tokenBudget}
+      thinkingMode={thinkingMode}
+      thinkingModeAvailability={thinkingModeAvailability}
+      onThinkingModeChange={setThinkingMode}
       pendingPermissionRequests={pendingPermissionRequests}
       handlePermissionDecision={handlePermissionDecision}
       handleGrantToolPermission={handleGrantToolPermission}

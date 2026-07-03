@@ -12,10 +12,12 @@ import type {
 import {
   ArrowUp,
   AtSign,
+  Brain,
   Bot,
   Check,
   ChevronDown,
   CircleGauge,
+  CircleHelp,
   Hand,
   ListChecks,
   Loader2,
@@ -25,6 +27,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { ChatRunMode, PendingPermissionRequest, PermissionMode } from '../chat/types/types';
+import { MAX_ATTACHMENTS_ERROR_KEY } from '../chat/hooks/useChatComposerState';
+import { thinkingModes, type ThinkingModeId } from '../chat/constants/thinkingModes';
+import { getEffectiveThinkingMode, type ThinkingModeAvailability } from '../chat/constants/thinkingModeAvailability';
 import PermissionRequestsBanner from '../chat/view/subcomponents/PermissionRequestsBanner';
 import ImageAttachment from '../chat/view/subcomponents/ImageAttachment';
 import CommandMenu from '../chat/view/subcomponents/CommandMenu';
@@ -90,6 +95,9 @@ export type ComposerV2Props = {
   isAbortPending?: boolean;
   isSubmitPending?: boolean;
   tokenBudget?: Record<string, unknown> | null;
+  thinkingMode: ThinkingModeId;
+  thinkingModeAvailability: ThinkingModeAvailability;
+  onThinkingModeChange: (mode: ThinkingModeId) => void;
 
   pendingPermissionRequests: PendingPermissionRequest[];
   handlePermissionDecision: (
@@ -175,6 +183,12 @@ const RUN_MODE_OPTIONS: RunModeOption[] = [
     labelKey: 'input.runModes.plan',
     defaultLabel: 'Plan',
   },
+  {
+    mode: 'ask',
+    Icon: CircleHelp,
+    labelKey: 'input.runModes.ask',
+    defaultLabel: 'Ask',
+  },
 ];
 
 const BLOCKING_PERMISSION_TOOLS = new Set([
@@ -183,7 +197,6 @@ const BLOCKING_PERMISSION_TOOLS = new Set([
   'ExitPlanModeV2',
   'exit_plan_mode',
 ]);
-
 
 function readNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -281,6 +294,9 @@ export default function ComposerV2({
   isAbortPending = false,
   isSubmitPending = false,
   tokenBudget,
+  thinkingMode,
+  thinkingModeAvailability,
+  onThinkingModeChange,
   pendingPermissionRequests,
   handlePermissionDecision,
   handleGrantToolPermission,
@@ -294,6 +310,7 @@ export default function ComposerV2({
 }: ComposerV2Props) {
   const { t } = useTranslation('chat');
   const [isContextPopoverOpen, setIsContextPopoverOpen] = useState(false);
+  const [isThinkingModeMenuOpen, setIsThinkingModeMenuOpen] = useState(false);
   const [isRunModeMenuOpen, setIsRunModeMenuOpen] = useState(false);
   const [isPermissionMenuOpen, setIsPermissionMenuOpen] = useState(false);
   const permissionSelectorDisabled = runMode === 'plan';
@@ -310,8 +327,12 @@ export default function ComposerV2({
 
   const hasDraftContent = input.trim().length > 0 || attachedImages.length > 0;
   const hasUploadingImages = uploadingImages.size > 0;
+  const attachmentLimitError = imageErrors.get(MAX_ATTACHMENTS_ERROR_KEY);
   const disabled = !hasDraftContent || isLoading || isSubmitPending || hasUploadingImages;
   const contextStatus = getContextStatus(tokenBudget);
+  const effectiveThinkingMode = getEffectiveThinkingMode(thinkingMode, thinkingModeAvailability);
+  const selectedThinkingMode = thinkingModes.find((option) => option.id === effectiveThinkingMode) || thinkingModes[0];
+  const SelectedThinkingIcon = selectedThinkingMode.icon || Brain;
   const selectedPermissionOption =
     PERMISSION_MODE_OPTIONS.find((option) => option.mode === permissionMode) ||
     PERMISSION_MODE_OPTIONS[0];
@@ -375,6 +396,11 @@ export default function ComposerV2({
                     />
                   ))}
                 </div>
+                {attachmentLimitError ? (
+                  <div className="mt-2 text-xs text-amber-600 dark:text-amber-300">
+                    {attachmentLimitError}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
@@ -481,6 +507,8 @@ export default function ComposerV2({
                           'inline-flex h-7 max-w-[108px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[140px]',
                           runMode === 'plan'
                             ? 'text-blue-600 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/30'
+                            : runMode === 'ask'
+                              ? 'text-emerald-600 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/30'
                             : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800',
                         )}
                         title={t('input.runModes.change', {
@@ -508,6 +536,7 @@ export default function ComposerV2({
                             const Icon = option.Icon;
                             const isSelected = runMode === option.mode;
                             const isPlan = option.mode === 'plan';
+                            const isAsk = option.mode === 'ask';
                             const optionDisabled = isPlan && !planModeAvailable;
                             const label = t(option.labelKey, {
                               defaultValue: option.defaultLabel,
@@ -516,6 +545,10 @@ export default function ComposerV2({
                               ? (t('input.runModes.planDescription', {
                                   defaultValue: 'Generate a plan first, then execute after confirmation',
                                 }) as string)
+                              : isAsk
+                                ? (t('input.runModes.askDescription', {
+                                    defaultValue: 'Read-only analysis with optional subagents',
+                                  }) as string)
                               : (t('input.runModes.agentDescription', {
                                   defaultValue: 'Directly process and execute the task',
                                 }) as string);
@@ -546,6 +579,8 @@ export default function ComposerV2({
                                     'h-4 w-4 shrink-0',
                                     isPlan
                                       ? 'text-blue-600 dark:text-blue-300'
+                                      : isAsk
+                                        ? 'text-emerald-600 dark:text-emerald-300'
                                       : 'text-neutral-500 dark:text-neutral-400',
                                   )}
                                   strokeWidth={1.9}
@@ -556,6 +591,8 @@ export default function ComposerV2({
                                       'block truncate text-[13px] font-medium',
                                       isPlan
                                         ? 'text-blue-700 dark:text-blue-300'
+                                        : isAsk
+                                          ? 'text-emerald-700 dark:text-emerald-300'
                                         : 'text-neutral-900 dark:text-neutral-100',
                                     )}
                                   >
@@ -782,6 +819,82 @@ export default function ComposerV2({
                               })}
                             </div>
                           )}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div
+                      className="relative"
+                      onBlur={(event) => {
+                        const nextTarget = event.relatedTarget as Node | null;
+                        if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
+                          setIsThinkingModeMenuOpen(false);
+                        }
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setIsThinkingModeMenuOpen((open) => !open)}
+                        className={cn(
+                          'inline-flex h-7 max-w-[116px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[140px]',
+                          effectiveThinkingMode === 'default'
+                            ? 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
+                            : 'text-purple-600 hover:bg-purple-50 dark:text-purple-300 dark:hover:bg-purple-950/30',
+                        )}
+                        title={t('input.thinking.change', { defaultValue: 'Select thinking strength' }) as string}
+                        aria-haspopup="menu"
+                        aria-expanded={isThinkingModeMenuOpen}
+                      >
+                        <SelectedThinkingIcon className="h-4 w-4 shrink-0" strokeWidth={1.9} />
+                        <span className="hidden truncate sm:inline">{selectedThinkingMode.name}</span>
+                        <ChevronDown
+                          className={cn(
+                            'h-3.5 w-3.5 shrink-0 transition-transform',
+                            isThinkingModeMenuOpen && 'rotate-180',
+                          )}
+                          strokeWidth={2}
+                        />
+                      </button>
+                      {isThinkingModeMenuOpen ? (
+                        <div
+                          role="menu"
+                          className="absolute bottom-full right-0 z-50 mb-2 w-64 rounded-xl border border-neutral-200 bg-white p-1.5 text-left shadow-lg dark:border-neutral-800 dark:bg-neutral-900"
+                        >
+                          {thinkingModes.map((option) => {
+                            const Icon = option.icon || Brain;
+                            const isSelected = option.id === thinkingMode;
+                            const unavailableReason = thinkingModeAvailability[option.id];
+                            return (
+                              <button
+                                key={option.id}
+                                type="button"
+                                role="menuitemradio"
+                                aria-checked={isSelected}
+                                disabled={Boolean(unavailableReason)}
+                                onClick={() => {
+                                  if (unavailableReason) return;
+                                  onThinkingModeChange(option.id);
+                                  setIsThinkingModeMenuOpen(false);
+                                }}
+                                className={cn(
+                                  'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition',
+                                  isSelected
+                                    ? 'bg-neutral-100 text-neutral-950 dark:bg-neutral-800 dark:text-neutral-50'
+                                    : 'text-neutral-700 hover:bg-neutral-50 dark:text-neutral-200 dark:hover:bg-neutral-800/70',
+                                  unavailableReason && 'cursor-not-allowed opacity-45 hover:bg-transparent dark:hover:bg-transparent',
+                                )}
+                                title={option.name}
+                              >
+                                <Icon className={cn('h-4 w-4 shrink-0', option.color)} strokeWidth={1.9} />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block text-[13px] font-medium">{option.name}</span>
+                                </span>
+                                {isSelected ? (
+                                  <Check className="h-4 w-4 shrink-0 text-neutral-500 dark:text-neutral-300" strokeWidth={2} />
+                                ) : null}
+                              </button>
+                            );
+                          })}
                         </div>
                       ) : null}
                     </div>

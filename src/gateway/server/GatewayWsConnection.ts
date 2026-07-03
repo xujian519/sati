@@ -220,12 +220,12 @@ export class GatewayWsConnection {
         if (this.options.gateway.reloadConfig) {
           return this.options.gateway.reloadConfig();
         }
-        return Promise.resolve({ reloaded: false });
+        return Promise.resolve({ reloaded: false, reason: "unsupported" });
       case "reload_extensions":
         if (this.options.gateway.reloadExtensions) {
           return this.options.gateway.reloadExtensions(frame.params as never);
         }
-        return Promise.resolve({ reloaded: false });
+        return Promise.resolve({ reloaded: false, reason: "unsupported" });
       case "skill_list":
         return requireSkillMethod(this.options.gateway.skillsList, this.options.gateway)(frame.params as never);
       case "skill_read":

@@ -1,6 +1,6 @@
 import express from 'express';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { homedir } from 'os';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { suppressNextWatchEvent } from '../services/pilotdeckConfigWatcher.js';
@@ -10,8 +10,9 @@ import { getPilotDeckGateway } from '../pilotdeck-bridge.js';
 
 const router = express.Router();
 
-const PILOTDECK_YAML = join(homedir(), '.pilotdeck', 'pilotdeck.yaml');
-const WEIXIN_CREDS = join(homedir(), '.pilotdeck', 'weixin-credentials.json');
+const PILOT_HOME = process.env.PILOT_HOME || join(homedir(), '.pilotdeck');
+const PILOTDECK_YAML = process.env.PILOTDECK_CONFIG_PATH || join(PILOT_HOME, 'pilotdeck.yaml');
+const WEIXIN_CREDS = join(PILOT_HOME, 'weixin-credentials.json');
 
 const FEISHU_TOKEN_URL = 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal';
 const LARK_TOKEN_URL = 'https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal';
@@ -41,7 +42,7 @@ function loadYaml() {
 }
 
 function saveYaml(config) {
-  mkdirSync(join(homedir(), '.pilotdeck'), { recursive: true });
+  mkdirSync(dirname(PILOTDECK_YAML), { recursive: true });
   suppressNextWatchEvent();
   writeFileSync(PILOTDECK_YAML, stringifyYaml(config, { lineWidth: 0 }), 'utf-8');
 }
@@ -340,7 +341,7 @@ router.get('/weixin/qr', async (_req, res) => {
         _req.app.locals._weixinLoginResolved = true;
 
         // Auto-save credentials
-        mkdirSync(join(homedir(), '.pilotdeck'), { recursive: true });
+        mkdirSync(PILOT_HOME, { recursive: true });
         writeFileSync(WEIXIN_CREDS, JSON.stringify({
           baseUrl: result.baseUrl,
           botToken: result.botToken,

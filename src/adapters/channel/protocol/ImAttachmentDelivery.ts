@@ -1,6 +1,4 @@
-import { statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { isAbsolute, relative, resolve } from "node:path";
 import type { GatewayOutboundAttachment } from "../../../gateway/index.js";
 
 export type PreparedImAttachment = {
@@ -38,34 +36,6 @@ export class ImAttachmentDelivery {
     }
   }
 
-  async sendMentionedLocalAttachments(input: {
-    chatId: string;
-    text: string;
-    markSent(chatId: string, path: string): boolean;
-  }): Promise<void> {
-    const paths = extractLocalPathsFromText(input.text);
-    if (paths.length === 0) return;
-    this.options.logger?.info?.(`IM detected mentioned local paths: ${paths.join(", ")}`);
-    for (const path of paths) {
-      if (!isPathWithin(process.cwd(), path)) {
-        this.options.logger?.warn?.(`IM skip mentioned attachment outside workspace: ${path}`);
-        continue;
-      }
-      if (!isRegularFile(path)) {
-        this.options.logger?.warn?.(`IM skip mentioned attachment because it is not a file: ${path}`);
-        continue;
-      }
-      if (!input.markSent(input.chatId, path)) continue;
-      await this.send({
-        type: guessMimeTypeFromName(path)?.startsWith("image/") ? "image" : "file",
-        path,
-        name: path.split(/[\\/]/).pop(),
-        mimeType: guessMimeTypeFromName(path),
-        source: "authorized_path",
-      });
-    }
-  }
-
   private async prepare(attachment: GatewayOutboundAttachment): Promise<PreparedImAttachment> {
     const name = sanitizeFilename(attachment.name ?? attachment.path?.split(/[\\/]/).pop() ?? "attachment");
     const buffer = attachment.content
@@ -100,56 +70,6 @@ export function formatImAttachmentFallback(attachment: GatewayOutboundAttachment
   const name = attachment.name ?? attachment.path?.split(/[\\/]/).pop() ?? "附件";
   const pathText = attachment.path ? `，可在本机查看：${attachment.path}` : "";
   return `附件发送失败：${name}${pathText}`;
-}
-
-function extractLocalPathsFromText(text: string): string[] {
-  const paths = new Set<string>();
-  for (const match of text.matchAll(/`([^`]+)`/g)) {
-    addExistingAbsolutePath(paths, match[1]);
-  }
-  for (const line of text.split(/\r?\n/)) {
-    for (const match of line.matchAll(/(?:\/private\/tmp|\/tmp|\/Users)\//g)) {
-      const candidate = longestExistingPathPrefix(line.slice(match.index));
-      if (candidate) paths.add(candidate);
-    }
-  }
-  return [...paths];
-}
-
-function addExistingAbsolutePath(paths: Set<string>, raw: string | undefined): void {
-  const candidate = cleanPathCandidate(raw);
-  if (candidate && isAbsolute(candidate) && isRegularFile(candidate)) {
-    paths.add(resolve(candidate));
-  }
-}
-
-function longestExistingPathPrefix(raw: string): string | undefined {
-  const candidate = cleanPathCandidate(raw);
-  if (!candidate || !isAbsolute(candidate)) return undefined;
-  const segments = candidate.split("/");
-  for (let end = segments.length; end > 1; end -= 1) {
-    const prefix = segments.slice(0, end).join("/") || "/";
-    if (isRegularFile(prefix)) return resolve(prefix);
-  }
-  return undefined;
-}
-
-function cleanPathCandidate(raw: string | undefined): string | undefined {
-  const cleaned = raw?.trim().replace(/^["'“”‘’]+/, "").replace(/["'“”‘’，。；：、)）\]}>]+$/g, "");
-  return cleaned && cleaned.length > 0 ? cleaned : undefined;
-}
-
-function isPathWithin(root: string, candidate: string): boolean {
-  const rel = relative(resolve(root), resolve(candidate));
-  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
-}
-
-function isRegularFile(path: string): boolean {
-  try {
-    return statSync(path).isFile();
-  } catch {
-    return false;
-  }
 }
 
 function sanitizeFilename(name: string): string {

@@ -440,6 +440,25 @@ function rewriteProviderRefs(config: PilotDeckConfig, oldProviderId: string, new
   return next;
 }
 
+function replaceFallbackModelRef(config: PilotDeckConfig, oldRef: string, newRef: string): PilotDeckConfig {
+  const fallback = config.router?.fallback;
+  if (!fallback || !oldRef || oldRef === newRef) return config;
+
+  let changed = false;
+  const rewritten = Object.fromEntries(
+    Object.entries(fallback).map(([key, refs]) => {
+      const nextRefs = refs.map((ref) => {
+        if (ref !== oldRef) return ref;
+        changed = true;
+        return newRef;
+      });
+      return [key, nextRefs];
+    }),
+  );
+
+  return changed ? patch(config, ['router', 'fallback'], rewritten) : config;
+}
+
 const MASK = '********';
 
 function isMaskedSecret(value: string | undefined): boolean {
@@ -805,6 +824,7 @@ function ProviderCard({
             onChange={(v) => update({ protocol: v as CatalogProviderProtocol })}
             options={[
               { value: 'openai',    label: t('pilotDeckConfig.panels.models.protocolOptions.openai') },
+              { value: 'openai-responses', label: t('pilotDeckConfig.panels.models.protocolOptions.openaiResponses') },
               { value: 'anthropic', label: t('pilotDeckConfig.panels.models.protocolOptions.anthropic') },
               { value: 'google',    label: t('pilotDeckConfig.panels.models.protocolOptions.google') },
             ]}
@@ -2618,6 +2638,7 @@ function RouterLevelEditor({ config, onChange }: { config: PilotDeckConfig; onCh
 
   const setDefault = (value: string) => {
     let next = patch(ensureModelRefConfigured(config, value), ['router', 'scenarios', 'default'], value);
+    next = replaceFallbackModelRef(next, defaultValue, value);
     const fallbackDefault = config.router?.fallback?.default ?? [];
     if (
       fallbackDefault.length === 0 ||

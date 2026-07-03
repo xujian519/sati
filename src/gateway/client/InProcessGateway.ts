@@ -357,6 +357,8 @@ export class InProcessGateway implements Gateway {
         }
         const permissionSettings = readPermissionSettings();
         const inputMode = normalizeGatewayModeForLegacyInput((input as { mode?: unknown }).mode);
+        const runMode = normalizeGatewayRunMode((input as { runMode?: unknown }).runMode)
+          ?? (inputMode === "plan" ? "plan" : "agent");
         const permissionMode = inputMode ?? (permissionSettings.skipPermissions ? "bypassPermissions" : undefined);
         const basePermissionMode = normalizeGatewayModeForLegacyInput((input as { basePermissionMode?: unknown }).basePermissionMode);
         const allowPlanModeTools = input.allowPlanModeTools ?? inputMode === "plan";
@@ -390,6 +392,7 @@ export class InProcessGateway implements Gateway {
           {
             turnId: runId,
             maxTurns: input.maxTurns,
+            runMode,
             permissionMode,
             basePermissionMode,
             allowPlanModeTools,
@@ -648,14 +651,14 @@ export class InProcessGateway implements Gateway {
 
   async reloadConfig(): Promise<ReloadConfigResult> {
     if (!this.options.reloadConfig) {
-      return { reloaded: false };
+      return { reloaded: false, reason: "unsupported" };
     }
     return this.options.reloadConfig();
   }
 
   async reloadExtensions(input?: import("../protocol/types.js").ReloadExtensionsInput): Promise<import("../protocol/types.js").ReloadExtensionsResult> {
     if (!this.options.reloadExtensions) {
-      return { reloaded: false };
+      return { reloaded: false, reason: "unsupported" };
     }
     return this.options.reloadExtensions(input);
   }
@@ -813,6 +816,16 @@ export function normalizeGatewayModeForLegacyInput(value: unknown): GatewaySubmi
     return value;
   }
   return "default";
+}
+
+export function normalizeGatewayRunMode(value: unknown): GatewaySubmitTurnInput["runMode"] | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  if (value === "agent" || value === "plan" || value === "ask") {
+    return value;
+  }
+  return "agent";
 }
 
 function emitSessionTelemetry(
@@ -1511,6 +1524,7 @@ function normalizePlanCommandInput(input: GatewaySubmitTurnInput): GatewaySubmit
   return {
     ...input,
     message: parsed.message,
+    runMode: "plan",
     mode: "plan",
     basePermissionMode: input.basePermissionMode ?? input.mode ?? "default",
     allowPlanModeTools: true,

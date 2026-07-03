@@ -3,6 +3,7 @@ import fsPromises from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { parseGatewayConfig } from '../../../src/pilot/config/parseGatewayConfig.js';
 
 // Source of truth: ~/.pilotdeck/pilotdeck.yaml. The disk format and the
 // "internal" config object are the same V2 schema — no more adapter layer.
@@ -173,8 +174,8 @@ function validateProvider(id, provider, errors) {
   }
   const protocol = normalizeString(provider.protocol).toLowerCase();
   if (!protocol) errors.push(`model.providers.${id}.protocol is required`);
-  else if (protocol !== 'openai' && protocol !== 'anthropic' && protocol !== 'google') {
-    errors.push(`model.providers.${id}.protocol must be "openai", "anthropic", or "google"`);
+  else if (protocol !== 'openai' && protocol !== 'openai-responses' && protocol !== 'anthropic' && protocol !== 'google') {
+    errors.push(`model.providers.${id}.protocol must be "openai", "openai-responses", "anthropic", or "google"`);
   }
   if (!normalizeString(provider.url)) errors.push(`model.providers.${id}.url is required`);
   if (!normalizeString(provider.apiKey)) errors.push(`model.providers.${id}.apiKey is required`);
@@ -219,6 +220,19 @@ function validateRouterModelRefs(config, errors) {
   }
 }
 
+function validateGatewayConfig(config, errors, warnings) {
+  const diagnostics = [];
+  parseGatewayConfig(config.gateway, diagnostics);
+  for (const diagnostic of diagnostics) {
+    const message = diagnostic.path ? `${diagnostic.path}: ${diagnostic.message}` : diagnostic.message;
+    if (diagnostic.severity === 'warning') {
+      warnings.push(message);
+    } else {
+      errors.push(message);
+    }
+  }
+}
+
 export function validatePilotDeckConfig(config) {
   const normalized = normalizePilotDeckConfig(config);
   const errors = [];
@@ -247,6 +261,7 @@ export function validatePilotDeckConfig(config) {
   }
 
   validateRouterModelRefs(normalized, errors);
+  validateGatewayConfig(normalized, errors, warnings);
 
   if (normalized.webui?.runtime?.contextWindow !== undefined) {
     warnings.push(
@@ -299,6 +314,7 @@ export function preserveMaskedSecrets(nextValue, previousValue) {
 
 function providerProtocolToMemoryApi(protocol) {
   if (protocol === 'anthropic' || protocol === 'google') return protocol;
+  if (protocol === 'openai-responses') return 'openai-responses';
   return 'openai-completions';
 }
 

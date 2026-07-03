@@ -1,5 +1,5 @@
 import type { Project, ProjectSession } from '../../../types/app';
-import type { ChatAttachment, PilotDeckSettings, PermissionMode } from '../types/types';
+import type { ChatAttachment, ChatRunMode, PilotDeckSettings, PermissionMode } from '../types/types';
 import { getPilotDeckSettings, safeLocalStorage } from './chatStorage';
 
 type StartSessionOptions = {
@@ -11,7 +11,9 @@ type StartSessionOptions = {
   temporarySessionId?: string;
   permissionMode?: PermissionMode | string;
   basePermissionMode?: PermissionMode | string;
+  runMode?: ChatRunMode | string;
   model?: string;
+  thinking?: unknown;
   sessionSummary?: string | null;
   toolsSettings?: PilotDeckSettings;
   images?: unknown[];
@@ -85,7 +87,9 @@ export function startSessionCommand({
   temporarySessionId,
   permissionMode = 'default',
   basePermissionMode,
+  runMode,
   model,
+  thinking,
   sessionSummary,
   toolsSettings = getPilotDeckSettings(),
   images,
@@ -106,9 +110,11 @@ export function startSessionCommand({
       projectPath: resolvedProjectPath,
       cwd: resolvedProjectPath,
       toolsSettings,
+      ...(runMode ? { runMode } : {}),
       permissionMode,
       ...(basePermissionMode ? { basePermissionMode } : {}),
       ...(model ? { model } : {}),
+      ...(thinking ? { thinking } : {}),
       sessionSummary,
       ...(typeof userVisibleInput === 'string' && userVisibleInput.trim()
         ? { userVisibleInput: userVisibleInput.trim() }

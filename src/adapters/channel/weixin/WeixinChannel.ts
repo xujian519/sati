@@ -694,7 +694,6 @@ export class WeixinChannel implements ChannelAdapter {
     return {
       send: async (text) => {
         await this.sendReply(userId, text, { queueOnFailure: true });
-        await this.sendAttachmentsMentionedInText(userId, text);
         return undefined;
       },
       pulseActivity: async (activity) => {
@@ -745,23 +744,6 @@ export class WeixinChannel implements ChannelAdapter {
       sendTextFallback: (text) => this.sendReply(userId, text, { queueOnFailure: true }).then(() => undefined),
       sendPrepared: (prepared) => this.uploadAndSendWeixinMedia(userId, contextToken, prepared),
     }).send(attachment);
-  }
-
-  private async sendAttachmentsMentionedInText(userId: string, text: string): Promise<void> {
-    await new ImAttachmentDelivery({
-      maxBytes: WEIXIN_MAX_ATTACHMENT_BYTES,
-      logger: this.logger,
-      sendTextFallback: (fallback) => this.sendReply(userId, fallback, { queueOnFailure: true }).then(() => undefined),
-      sendPrepared: async (prepared) => {
-        const contextToken = this.contextTokens.get(userId);
-        if (!contextToken) throw new Error("weixin context_token missing");
-        await this.uploadAndSendWeixinMedia(userId, contextToken, prepared);
-      },
-    }).sendMentionedLocalAttachments({
-      chatId: userId,
-      text,
-      markSent: (chatId, path) => this.chatState.markMentionedAttachmentSent(chatId, path),
-    });
   }
 
   private async uploadAndSendWeixinMedia(userId: string, contextToken: string, prepared: PreparedImAttachment): Promise<void> {
