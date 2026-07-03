@@ -1,7 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { existsSync, readFileSync, statSync, writeFileSync, mkdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { isAbsolute, relative, resolve, join } from "node:path";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { homedir } from "node:os";
 import { ILinkClient, loginWithQR, MessageItemType } from "weixin-ilink";
 import type { ClientOptions, GetUpdatesResp, WeixinMessage, LoginResult } from "weixin-ilink";
@@ -9,7 +8,14 @@ import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAttachment, Gateway, GatewayChannelKey, GatewayOutboundAttachment } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { executeChannelCommand } from "../protocol/ChannelCommandRegistry.js";
+import {
+  formatImAttachmentFallback,
+  guessMimeTypeFromName,
+  ImAttachmentDelivery,
+  type PreparedImAttachment,
+} from "../protocol/ImAttachmentDelivery.js";
 import { ImAttachmentStore } from "../protocol/ImAttachmentStore.js";
+import { ImChatSessionState } from "../protocol/ImChatSessionState.js";
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
@@ -116,10 +122,7 @@ export class WeixinChannel implements ChannelAdapter {
   private connectionIssueChats = new Set<string>();
   private connectionLostNoticeDeliveredChats = new Set<string>();
   private pendingReplies = new Map<string, string[]>();
-  private pendingTurns = new Map<string, QueuedWeixinTurn[]>();
-  private sentMentionedAttachmentPaths = new Map<string, Set<string>>();
-  private chatGenerations = new Map<string, number>();
-  private activeRuns = new Map<string, { sessionKey: string; runId?: string; generation: number }>();
+  private readonly chatState = new ImChatSessionState<QueuedWeixinTurn>({ maxPendingTurns: WEIXIN_MAX_PENDING_TURNS_PER_CHAT });
   private attachmentStore: ImAttachmentStore;
   private loginRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
   private loginRecoveryPromise: Promise<void> | null = null;
@@ -356,8 +359,8 @@ export class WeixinChannel implements ChannelAdapter {
     const previousSessionKey = this.mapper.getSession(fromUser);
     const mapped = this.mapper.resolve({ chatId: fromUser, text: messageText });
     if (mapped.command === "new") {
+      const activeRun = this.chatState.activeRun(fromUser);
       this.resetChatInteractionState(fromUser);
-      const activeRun = this.activeRuns.get(fromUser);
       await this.gateway?.abortTurn({
         sessionKey: activeRun?.sessionKey ?? previousSessionKey,
         ...(activeRun?.runId ? { runId: activeRun.runId } : {}),
@@ -431,22 +434,14 @@ export class WeixinChannel implements ChannelAdapter {
   }
 
   private queuePendingTurn(userId: string, turn: QueuedWeixinTurn): void {
-    const pending = this.pendingTurns.get(userId) ?? [];
-    pending.push(turn);
-    if (pending.length > WEIXIN_MAX_PENDING_TURNS_PER_CHAT) {
-      pending.splice(0, pending.length - WEIXIN_MAX_PENDING_TURNS_PER_CHAT);
-    }
-    this.pendingTurns.set(userId, pending);
+    this.chatState.queueTurn(userId, turn);
   }
 
   private resetChatInteractionState(userId: string): void {
-    this.chatGenerations.set(userId, (this.chatGenerations.get(userId) ?? 0) + 1);
+    this.chatState.resetForNewSession(userId);
     this.elicitation.clear(userId);
     this.permissions.clear(userId);
-    this.pendingTurns.delete(userId);
     this.pendingReplies.delete(userId);
-    this.sentMentionedAttachmentPaths.delete(userId);
-    this.activeRuns.delete(userId);
   }
 
   private async runQueuedTurns(userId: string, firstTurn: QueuedWeixinTurn): Promise<void> {
@@ -462,11 +457,7 @@ export class WeixinChannel implements ChannelAdapter {
           nextTurn.attachments,
         );
 
-        const pending = this.pendingTurns.get(userId);
-        nextTurn = pending?.shift();
-        if (pending && pending.length === 0) {
-          this.pendingTurns.delete(userId);
-        }
+        nextTurn = this.chatState.shiftTurn(userId);
       }
     } finally {
       this.activeChats.delete(userId);
@@ -585,8 +576,8 @@ export class WeixinChannel implements ChannelAdapter {
     attachments: ChannelAttachment[] = [],
   ): Promise<void> {
     if (!this.gateway) return;
-    const generation = this.chatGenerations.get(userId) ?? 0;
-    const isCurrentTurn = () => (this.chatGenerations.get(userId) ?? 0) === generation;
+    const generation = this.chatState.generation(userId);
+    const isCurrentTurn = () => this.chatState.isCurrent(userId, generation);
 
     const turnTimeoutMs = this.liveReplyOptions?.turnTimeoutMs ?? WEIXIN_DEFAULT_TURN_TIMEOUT_MS;
     const liveReply = new ImLiveReplyController<void>({
@@ -642,7 +633,7 @@ export class WeixinChannel implements ChannelAdapter {
         if (!isCurrentTurn()) break;
         if (event.type === "turn_started") {
           activeRunId = event.runId;
-          this.activeRuns.set(userId, { sessionKey, runId: activeRunId, generation });
+          this.chatState.setActiveRun(userId, { sessionKey, runId: activeRunId, generation });
         }
         if (event.type === "elicitation_request") {
           const questionText = this.elicitation.capture(userId, sessionKey, event);
@@ -692,7 +683,7 @@ export class WeixinChannel implements ChannelAdapter {
     }
 
     if (isCurrentTurn()) {
-      this.activeRuns.delete(userId);
+      this.chatState.clearActiveRun(userId);
       this.elicitation.clear(userId);
       this.permissions.clear(userId);
       await liveReply.flushFinal();
@@ -739,120 +730,76 @@ export class WeixinChannel implements ChannelAdapter {
 
   private async sendAttachment(userId: string, attachment: GatewayOutboundAttachment): Promise<boolean> {
     if (!this.client) {
-      await this.sendReply(userId, this.formatAttachmentFallback(attachment), { queueOnFailure: true });
+      await this.sendReply(userId, formatImAttachmentFallback(attachment), { queueOnFailure: true });
       return false;
     }
     const contextToken = this.contextTokens.get(userId);
     if (!contextToken) {
-      await this.sendReply(userId, this.formatAttachmentFallback(attachment), { queueOnFailure: true });
-      return false;
-    }
-    if (attachment.source === "local_path" && attachment.path) {
-      await this.sendReply(userId, `附件 ${attachment.path} 需要授权后才能通过微信发送。`);
+      await this.sendReply(userId, formatImAttachmentFallback(attachment), { queueOnFailure: true });
       return false;
     }
 
-    try {
-      const prepared = await this.prepareAttachmentUpload(attachment);
-      this.logger?.info?.(`weixin: preparing attachment ${prepared.name} as ${prepared.fileType} bytes=${prepared.buffer.byteLength}`);
-      const aeskey = randomBytes(16);
-      const filekey = randomBytes(16).toString("hex");
-      const upload = await this.client.getUploadUrl({
-        filekey,
-        media_type: prepared.fileType === "image" ? 1 : 3,
-        to_user_id: userId,
-        rawsize: prepared.buffer.byteLength,
-        rawfilemd5: createHash("md5").update(prepared.buffer).digest("hex"),
-        filesize: aesEcbPaddedSize(prepared.buffer.byteLength),
-        no_need_thumb: true,
-        aeskey: aeskey.toString("hex"),
-      });
-      this.logger?.info?.(`weixin: upload url response for ${prepared.name}: ${summarizeWeixinUploadResponse(upload)}`);
-      if (typeof upload.ret === "number" && upload.ret !== 0) {
-        throw new Error(`weixin getuploadurl failed ret=${upload.ret}${upload.errmsg ? ` errmsg=${upload.errmsg}` : ""}`);
-      }
-      const downloadParam = await uploadEncryptedBufferToWeixinCdn({
-        buffer: prepared.buffer,
-        aeskey,
-        filekey,
-        upload,
-      });
-      this.logger?.info?.(`weixin: CDN upload succeeded for ${prepared.name}`);
-      const media = {
-        encrypt_query_param: downloadParam,
-        aes_key: Buffer.from(aeskey.toString("hex")).toString("base64"),
-        encrypt_type: 1,
-      };
-      await this.client.sendMedia(userId, prepared.fileType === "image"
-        ? {
-            type: MessageItemType.IMAGE,
-            image_item: { media, mid_size: aesEcbPaddedSize(prepared.buffer.byteLength) },
-          }
-        : {
-            type: MessageItemType.FILE,
-            file_item: { file_name: prepared.name, len: String(prepared.buffer.byteLength), media },
-          }, contextToken);
-      this.logger?.info?.(`weixin: sent attachment to ${userId}: ${prepared.name}`);
-      return true;
-    } catch (error) {
-      this.logger?.error?.(`weixin: send attachment failed: ${formatWeixinError(error)}`);
-      await this.sendReply(userId, this.formatAttachmentFallback(attachment), { queueOnFailure: true });
-      return false;
-    }
+    return new ImAttachmentDelivery({
+      maxBytes: WEIXIN_MAX_ATTACHMENT_BYTES,
+      logger: this.logger,
+      sendTextFallback: (text) => this.sendReply(userId, text, { queueOnFailure: true }).then(() => undefined),
+      sendPrepared: (prepared) => this.uploadAndSendWeixinMedia(userId, contextToken, prepared),
+    }).send(attachment);
   }
 
   private async sendAttachmentsMentionedInText(userId: string, text: string): Promise<void> {
-    const paths = extractLocalPathsFromText(text);
-    if (paths.length === 0) return;
-    this.logger?.info?.(`weixin: detected mentioned local paths: ${paths.join(", ")}`);
-    for (const path of paths) {
-      if (!isPathWithin(process.cwd(), path)) {
-        this.logger?.warn?.(`weixin: skip mentioned attachment outside workspace: ${path}`);
-        continue;
-      }
-      if (!isRegularFile(path)) {
-        this.logger?.warn?.(`weixin: skip mentioned attachment because it is not a file: ${path}`);
-        continue;
-      }
-      const sent = this.sentMentionedAttachmentPaths.get(userId) ?? new Set<string>();
-      if (sent.has(path)) continue;
-      sent.add(path);
-      this.sentMentionedAttachmentPaths.set(userId, sent);
-      await this.sendAttachment(userId, {
-        type: guessMimeTypeFromName(path)?.startsWith("image/") ? "image" : "file",
-        path,
-        name: path.split(/[\\/]/).pop(),
-        mimeType: guessMimeTypeFromName(path),
-        source: "authorized_path",
-      });
-    }
+    await new ImAttachmentDelivery({
+      maxBytes: WEIXIN_MAX_ATTACHMENT_BYTES,
+      logger: this.logger,
+      sendTextFallback: (fallback) => this.sendReply(userId, fallback, { queueOnFailure: true }).then(() => undefined),
+      sendPrepared: async (prepared) => {
+        const contextToken = this.contextTokens.get(userId);
+        if (!contextToken) throw new Error("weixin context_token missing");
+        await this.uploadAndSendWeixinMedia(userId, contextToken, prepared);
+      },
+    }).sendMentionedLocalAttachments({
+      chatId: userId,
+      text,
+      markSent: (chatId, path) => this.chatState.markMentionedAttachmentSent(chatId, path),
+    });
   }
 
-  private async prepareAttachmentUpload(attachment: GatewayOutboundAttachment): Promise<{
-    name: string;
-    mimeType?: string;
-    buffer: Buffer;
-    fileType: "image" | "file";
-  }> {
-    const name = sanitizeWeixinFilename(attachment.name ?? attachment.path?.split(/[\\/]/).pop() ?? "attachment");
-    const buffer = attachment.content
-      ? Buffer.from(attachment.content, "base64")
-      : attachment.path
-        ? await readFile(attachment.path)
-        : undefined;
-    if (!buffer) throw new Error("attachment has neither content nor path");
-    if (buffer.byteLength > WEIXIN_MAX_ATTACHMENT_BYTES) {
-      throw new Error(`attachment ${name} is ${buffer.byteLength} bytes (limit ${WEIXIN_MAX_ATTACHMENT_BYTES})`);
+  private async uploadAndSendWeixinMedia(userId: string, contextToken: string, prepared: PreparedImAttachment): Promise<void> {
+    if (!this.client) throw new Error("weixin client missing");
+    this.logger?.info?.(`weixin: preparing attachment ${prepared.name} as ${prepared.fileType} bytes=${prepared.buffer.byteLength}`);
+    const aeskey = randomBytes(16);
+    const filekey = randomBytes(16).toString("hex");
+    const upload = await this.client.getUploadUrl({
+      filekey,
+      media_type: prepared.fileType === "image" ? 1 : 3,
+      to_user_id: userId,
+      rawsize: prepared.buffer.byteLength,
+      rawfilemd5: createHash("md5").update(prepared.buffer).digest("hex"),
+      filesize: aesEcbPaddedSize(prepared.buffer.byteLength),
+      no_need_thumb: true,
+      aeskey: aeskey.toString("hex"),
+    });
+    this.logger?.info?.(`weixin: upload url response for ${prepared.name}: ${summarizeWeixinUploadResponse(upload)}`);
+    if (typeof upload.ret === "number" && upload.ret !== 0) {
+      throw new Error(`weixin getuploadurl failed ret=${upload.ret}${upload.errmsg ? ` errmsg=${upload.errmsg}` : ""}`);
     }
-    const mimeType = attachment.mimeType ?? guessMimeTypeFromName(name);
-    const fileType = attachment.type === "image" || mimeType?.startsWith("image/") ? "image" : "file";
-    return { name, mimeType, buffer, fileType };
-  }
-
-  private formatAttachmentFallback(attachment: GatewayOutboundAttachment): string {
-    const name = attachment.name ?? attachment.path?.split(/[\\/]/).pop() ?? "附件";
-    const pathText = attachment.path ? `，可在本机查看：${attachment.path}` : "";
-    return `附件发送失败：${name}${pathText}`;
+    const downloadParam = await uploadEncryptedBufferToWeixinCdn({ buffer: prepared.buffer, aeskey, filekey, upload });
+    this.logger?.info?.(`weixin: CDN upload succeeded for ${prepared.name}`);
+    const media = {
+      encrypt_query_param: downloadParam,
+      aes_key: Buffer.from(aeskey.toString("hex")).toString("base64"),
+      encrypt_type: 1,
+    };
+    await this.client.sendMedia(userId, prepared.fileType === "image"
+      ? {
+          type: MessageItemType.IMAGE,
+          image_item: { media, mid_size: aesEcbPaddedSize(prepared.buffer.byteLength) },
+        }
+      : {
+          type: MessageItemType.FILE,
+          file_item: { file_name: prepared.name, len: String(prepared.buffer.byteLength), media },
+        }, contextToken);
+    this.logger?.info?.(`weixin: sent attachment to ${userId}: ${prepared.name}`);
   }
 
   private async sendTypingIfPossible(userId: string): Promise<void> {
@@ -1069,29 +1016,12 @@ function formatElapsed(elapsedMs: number): string {
   return rest > 0 ? `${hours} 小时 ${rest} 分钟` : `${hours} 小时`;
 }
 
-function sanitizeWeixinFilename(name: string): string {
-  return name.replace(/[\x00-\x1f\\/:*?"<>|]+/g, "_").trim().slice(0, 180) || "attachment.bin";
-}
-
 function guessMimeTypeFromUrl(url: string, fallback?: string): string | undefined {
   try {
     return guessMimeTypeFromName(new URL(url).pathname) ?? fallback;
   } catch {
     return fallback;
   }
-}
-
-function guessMimeTypeFromName(name: string | undefined): string | undefined {
-  const lower = name?.toLowerCase() ?? "";
-  if (lower.endsWith(".png")) return "image/png";
-  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
-  if (lower.endsWith(".gif")) return "image/gif";
-  if (lower.endsWith(".webp")) return "image/webp";
-  if (lower.endsWith(".pdf")) return "application/pdf";
-  if (lower.endsWith(".txt") || lower.endsWith(".log")) return "text/plain";
-  if (lower.endsWith(".md")) return "text/markdown";
-  if (lower.endsWith(".json")) return "application/json";
-  return undefined;
 }
 
 function summarizeWeixinUploadResponse(upload: WeixinUploadUrlResponse | undefined): string {
@@ -1144,56 +1074,6 @@ function encryptAesEcb(plaintext: Buffer, key: Buffer): Buffer {
 
 function aesEcbPaddedSize(plaintextSize: number): number {
   return Math.ceil((plaintextSize + 1) / 16) * 16;
-}
-
-function extractLocalPathsFromText(text: string): string[] {
-  const paths = new Set<string>();
-  for (const match of text.matchAll(/`([^`]+)`/g)) {
-    addExistingAbsolutePath(paths, match[1]);
-  }
-  for (const line of text.split(/\r?\n/)) {
-    for (const match of line.matchAll(/(?:\/private\/tmp|\/tmp|\/Users)\//g)) {
-      const candidate = longestExistingPathPrefix(line.slice(match.index));
-      if (candidate) paths.add(candidate);
-    }
-  }
-  return [...paths];
-}
-
-function addExistingAbsolutePath(paths: Set<string>, raw: string | undefined): void {
-  const candidate = cleanPathCandidate(raw);
-  if (candidate && isAbsolute(candidate) && isRegularFile(candidate)) {
-    paths.add(resolve(candidate));
-  }
-}
-
-function longestExistingPathPrefix(raw: string): string | undefined {
-  const candidate = cleanPathCandidate(raw);
-  if (!candidate || !isAbsolute(candidate)) return undefined;
-  const segments = candidate.split("/");
-  for (let end = segments.length; end > 1; end -= 1) {
-    const prefix = segments.slice(0, end).join("/") || "/";
-    if (isRegularFile(prefix)) return resolve(prefix);
-  }
-  return undefined;
-}
-
-function cleanPathCandidate(raw: string | undefined): string | undefined {
-  const cleaned = raw?.trim().replace(/^["'“”‘’]+/, "").replace(/["'“”‘’，。；：、)）\]}>]+$/g, "");
-  return cleaned && cleaned.length > 0 ? cleaned : undefined;
-}
-
-function isPathWithin(root: string, candidate: string): boolean {
-  const rel = relative(resolve(root), resolve(candidate));
-  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
-}
-
-function isRegularFile(path: string): boolean {
-  try {
-    return statSync(path).isFile();
-  } catch {
-    return false;
-  }
 }
 
 function extractWeixinMediaUrl(mediaOwner: unknown): string | undefined {
