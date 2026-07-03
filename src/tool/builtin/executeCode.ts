@@ -8,6 +8,7 @@ import type { Readable } from "node:stream";
 import type { PilotDeckToolDefinition, PilotDeckToolRuntimeContext } from "../protocol/types.js";
 import { contentToText, type PilotDeckToolResult } from "../protocol/result.js";
 import type { PilotDeckToolValidationIssue } from "../protocol/schema.js";
+import { collectPythonSyntaxDiagnostics } from "./filesystem/syntaxDiagnostics.js";
 
 type ExecuteCodeInput = {
   code: string;
@@ -105,31 +106,13 @@ const EXECUTE_CODE_ALLOWED_TOOLS = new Set([
   "glob",
   "bash",
 ]);
-const SECRET_ENV_SUBSTRINGS = ["KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "PASSWD", "AUTH"];
-const SAFE_ENV_PREFIXES = [
-  "PATH",
-  "HOME",
-  "USER",
-  "LANG",
-  "LC_",
-  "TERM",
-  "TMPDIR",
-  "TMP",
-  "TEMP",
-  "SHELL",
-  "LOGNAME",
-  "XDG_",
-  "PYTHONPATH",
-  "VIRTUAL_ENV",
-  "CONDA",
-  "TZ",
-];
 
 export function createExecuteCodeTool(): PilotDeckToolDefinition<ExecuteCodeInput, ExecuteCodeOutput> {
   return {
     name: "execute_code",
     description:
       "Run a local Python 3 script that can call a small allow-list of PilotDeck tools via `import pilotdeck_tools`. " +
+      "The script runs from the workspace cwd and inherits the same runtime environment as normal tools such as bash, including configured API, proxy, PATH, virtualenv, and conda variables; do not print secrets or dump the full environment. " +
       "Only the script's final stdout/stderr summary is returned to the model; intermediate tool results stay inside the script. " +
       "Available helper functions: web_search, web_fetch, read_file, write_file, edit_file, grep, glob, bash. " +
       "Use normal Python control flow to orchestrate tools: loops for batch work, conditionals for branching, data structures for aggregation, and try/except around individual helper calls when one failure should not abort the whole script. Helper failures raise RuntimeError. You can chain helper results, e.g. grep -> read_file -> edit_file. Print only the concise final result needed by the agent. " +
@@ -179,13 +162,16 @@ export function createExecuteCodeTool(): PilotDeckToolDefinition<ExecuteCodeInpu
           status: result.status,
           tool_calls_made: result.tool_calls_made,
           duration_seconds: result.duration_seconds,
+          cwd: context.cwd,
+          env_inheritance: "full",
+          python_path_augmented: true,
         },
       };
     },
   };
 }
 
-function validateExecuteCodeInput(input: ExecuteCodeInput) {
+async function validateExecuteCodeInput(input: ExecuteCodeInput) {
   const issues: PilotDeckToolValidationIssue[] = [];
   if (!input.code.trim()) {
     issues.push({ path: "$.code", code: "invalid_schema", message: "$.code must not be empty." });
@@ -203,6 +189,16 @@ function validateExecuteCodeInput(input: ExecuteCodeInput) {
       code: "invalid_schema",
       message: `$.max_tool_calls must be between 0 and ${DEFAULT_MAX_TOOL_CALLS}.`,
     });
+  }
+  if (issues.length === 0) {
+    const syntaxDiagnostics = await collectPythonSyntaxDiagnostics("execute_code.py", input.code);
+    for (const diagnostic of syntaxDiagnostics) {
+      issues.push({
+        path: "$.code",
+        code: "invalid_schema",
+        message: `Python syntax error at L${diagnostic.line}:${diagnostic.column}: ${diagnostic.message}`,
+      });
+    }
   }
   return issues.length === 0 ? { ok: true as const, input } : { ok: false as const, issues };
 }
@@ -287,9 +283,9 @@ async function runExecuteCode(
     });
     transport = await listen(server, transport);
 
-    child = spawn(python, ["script.py"], {
-      cwd: tempRoot,
-      env: buildChildEnv(context.env ?? process.env, transport),
+    child = spawn(python, [path.join(tempRoot, "script.py")], {
+      cwd: context.cwd,
+      env: buildChildEnv(context.env ?? process.env, transport, tempRoot, context.cwd),
       stdio: ["ignore", "pipe", "pipe"],
       detached: true,
     });
@@ -608,15 +604,16 @@ async function findPython3(env: NodeJS.ProcessEnv | undefined): Promise<string |
   return undefined;
 }
 
-function buildChildEnv(source: NodeJS.ProcessEnv, transport: RpcTransport): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(source)) {
-    if (value === undefined) continue;
-    if (SECRET_ENV_SUBSTRINGS.some((part) => key.toUpperCase().includes(part))) continue;
-    if (SAFE_ENV_PREFIXES.some((prefix) => key === prefix || key.startsWith(prefix))) {
-      env[key] = value;
-    }
-  }
+function buildChildEnv(
+  source: NodeJS.ProcessEnv,
+  transport: RpcTransport,
+  tempRoot: string,
+  workspaceCwd: string,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...source };
+  env.PYTHONPATH = source.PYTHONPATH ? `${tempRoot}${path.delimiter}${source.PYTHONPATH}` : tempRoot;
+  env.PILOTDECK_WORKSPACE_CWD = workspaceCwd;
+  env.PILOTDECK_EXECUTE_CODE_TEMP_ROOT = tempRoot;
   if (transport.kind === "uds") {
     env.PILOTDECK_RPC_SOCKET = transport.socketPath;
   } else {

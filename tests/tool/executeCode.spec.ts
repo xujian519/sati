@@ -56,6 +56,69 @@ test("execute_code returns stdout from Python", async () => {
   }
 });
 
+test("execute_code runs from workspace cwd and preserves helper imports", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "pilotdeck-execute-code-cwd-"));
+  try {
+    const code = `import os
+import pilotdeck_tools
+print(os.getcwd())
+print(os.environ.get("PILOTDECK_WORKSPACE_CWD"))
+print(os.environ.get("PILOTDECK_EXECUTE_CODE_TEMP_ROOT") in os.environ.get("PYTHONPATH", "").split(os.pathsep))
+print(hasattr(pilotdeck_tools, "read_file"))`;
+    const result = await execute({ id: "call-cwd", name: "execute_code", input: { code } }, createContext(cwd));
+    const output = data(result);
+    assert.equal(output.status, "success");
+    assert.match(output.output, new RegExp(`${cwd.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+${cwd.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+True\\s+True`, "s"));
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("execute_code fully inherits runtime env including API and proxy variables", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "pilotdeck-execute-code-env-"));
+  try {
+    const inheritedEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      OPENROUTER_API_KEY: "test-openrouter-secret",
+      DASHSCOPE_API_KEY: "test-dashscope-secret",
+      TAVILY_API_KEY: "test-tavily-secret",
+      HTTP_PROXY: "http://127.0.0.1:17890",
+      HTTPS_PROXY: "http://127.0.0.1:17890",
+      NO_PROXY: "localhost,127.0.0.1",
+      PYTHONPATH: "/existing/pythonpath",
+    };
+    const code = `import os
+names = ["OPENROUTER_API_KEY", "DASHSCOPE_API_KEY", "TAVILY_API_KEY", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]
+print(" ".join("present" if os.environ.get(name) else "missing" for name in names))
+parts = os.environ.get("PYTHONPATH", "").split(os.pathsep)
+print(parts[0] == os.environ.get("PILOTDECK_EXECUTE_CODE_TEMP_ROOT"))
+print("/existing/pythonpath" in parts)
+print(os.environ.get("OPENROUTER_API_KEY") == "test-openrouter-secret")`;
+    const result = await execute(
+      { id: "call-env", name: "execute_code", input: { code } },
+      createContext(cwd, { env: inheritedEnv }),
+    );
+    const output = data(result);
+    assert.equal(output.status, "success");
+    assert.match(output.output, /present present present present present present\s+True\s+True\s+True/s);
+    assert.doesNotMatch(output.output, /test-(openrouter|dashscope|tavily)-secret/);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("execute_code rejects invalid Python syntax before execution", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "pilotdeck-execute-code-syntax-"));
+  try {
+    const result = await execute({ id: "call-syntax", name: "execute_code", input: { code: "def broken(:\n    pass" } }, createContext(cwd));
+    assert.equal(result.type, "error");
+    assert.equal(result.error.code, "invalid_tool_input");
+    assert.match(result.error.details?.issues ? JSON.stringify(result.error.details.issues) : "", /Python syntax error/);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test("execute_code can call read_file through PilotDeck RPC", async () => {
   const cwd = await mkdtemp(path.join(tmpdir(), "pilotdeck-execute-code-read-"));
   try {
@@ -189,17 +252,21 @@ test("execute_code kills timed out scripts", async () => {
   }
 });
 
-test("execute_code filters secret-like environment variables", async () => {
-  const cwd = await mkdtemp(path.join(tmpdir(), "pilotdeck-execute-code-env-"));
+test("execute_code inherits secret-like environment variables without exposing them in metadata", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "pilotdeck-execute-code-secret-env-"));
   try {
     const result = await execute(
-      { id: "call-6", name: "execute_code", input: { code: 'import os\nprint(os.environ.get("OPENAI_API_KEY"))' } },
+      { id: "call-6", name: "execute_code", input: { code: 'import os\nprint(os.environ.get("OPENAI_API_KEY") == "secret-value")' } },
       createContext(cwd, { env: { ...process.env, OPENAI_API_KEY: "secret-value" } }),
     );
     const output = data(result);
     assert.equal(output.status, "success");
-    assert.match(output.output, /None/);
+    assert.match(output.output, /True/);
     assert.doesNotMatch(output.output, /secret-value/);
+    assert.equal(result.metadata?.env_inheritance, "full");
+    assert.equal(result.metadata?.cwd, cwd);
+    assert.equal(result.metadata?.python_path_augmented, true);
+    assert.doesNotMatch(JSON.stringify(result.metadata), /secret-value/);
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
