@@ -20,6 +20,72 @@ type CodeEditorBinaryFileProps = {
 type BlobSource = 'raw' | 'office-pdf';
 type ReloadOptions = { force?: boolean };
 
+function getExtension(filename: string): string {
+  return filename.split('.').pop()?.toLowerCase() ?? '';
+}
+
+function getFileTypeBadge(filename: string) {
+  const extension = getExtension(filename);
+  if (['doc', 'docx', 'odt'].includes(extension)) {
+    return {
+      label: 'W',
+      className: 'bg-blue-600 text-white',
+      titleKey: 'fileTypes.word',
+    };
+  }
+  if (['xls', 'xlsx', 'ods'].includes(extension)) {
+    return {
+      label: 'X',
+      className: 'bg-emerald-600 text-white',
+      titleKey: 'fileTypes.excel',
+    };
+  }
+  if (['ppt', 'pptx', 'odp'].includes(extension)) {
+    return {
+      label: 'P',
+      className: 'bg-orange-600 text-white',
+      titleKey: 'fileTypes.powerpoint',
+    };
+  }
+  if (extension === 'pdf') {
+    return {
+      label: 'PDF',
+      className: 'bg-red-600 text-white text-[7px]',
+      titleKey: 'fileTypes.pdf',
+    };
+  }
+  if (isImageFile(filename)) {
+    return {
+      label: 'IMG',
+      className: 'bg-violet-600 text-white text-[7px]',
+      titleKey: 'fileTypes.image',
+    };
+  }
+  return {
+    label: 'F',
+    className: 'bg-neutral-500 text-white',
+    titleKey: 'fileTypes.file',
+  };
+}
+
+function FileTypeBadge({ fileName }: { fileName: string }) {
+  const { t } = useTranslation('codeEditor');
+  const badge = getFileTypeBadge(fileName);
+
+  return (
+    <span
+      title={t(badge.titleKey)}
+      aria-label={t(badge.titleKey)}
+      className={[
+        'flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] text-[10px] font-semibold leading-none shadow-sm ring-1 ring-black/5',
+        badge.className,
+      ].join(' ')}
+    >
+      {badge.label}
+    </span>
+  );
+}
+
 function useFileBlob(
   projectName: string | undefined,
   filePath: string,
@@ -481,6 +547,7 @@ export default function CodeEditorBinaryFile({
   const headerTopBar = (
     <div className="flex flex-shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950">
       <div className="flex min-w-0 flex-1 items-center gap-2">
+        <FileTypeBadge fileName={file.name} />
         <h3 className="truncate text-[13px] font-medium text-neutral-900 dark:text-neutral-100">
           {file.name}
         </h3>

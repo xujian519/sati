@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { createElement, useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Maximize2, RotateCcw, RotateCw, StretchHorizontal, ZoomIn, ZoomOut } from 'lucide-react';
 import * as pdfjs from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
@@ -24,22 +25,72 @@ type PdfSelectionAction = {
   reference: DocumentSelectionReference;
 };
 
+type PageSize = {
+  width: number;
+  height: number;
+};
+
+type ViewerSize = {
+  width: number;
+  height: number;
+};
+
+type ZoomMode = 'fitPage' | 'fitWidth' | 'custom';
+type Rotation = 0 | 90 | 180 | 270;
+
+type ToolbarIconProps = {
+  className?: string;
+  strokeWidth?: number;
+};
+
 type PdfPageProps = {
   pdfDocument: pdfjs.PDFDocumentProxy;
   pageNumber: number;
-  targetWidth: number;
+  scale: number;
+  rotation: Rotation;
+  basePageSize: PageSize;
   onPageText: (pageNumber: number, text: string) => void;
 };
 
 const PAGE_HORIZONTAL_PADDING = 32;
-const MAX_PAGE_WIDTH = 980;
-const MIN_PAGE_WIDTH = 320;
+const PAGE_VERTICAL_PADDING = 40;
+const MIN_SCALE = 0.1;
+const MAX_SCALE = 4;
+const ZOOM_STEP = 0.25;
 const CONTEXT_RADIUS = 500;
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function isQuarterTurn(rotation: Rotation): boolean {
+  return rotation === 90 || rotation === 270;
+}
+
+function getRotatedPageSize(size: PageSize, rotation: Rotation): PageSize {
+  return isQuarterTurn(rotation)
+    ? { width: size.height, height: size.width }
+    : size;
+}
+
+function parsePercentInput(value: string): number | null {
+  const normalized = value.replace('%', '').trim();
+  if (!normalized) return null;
+  const parsed = Number.parseFloat(normalized);
+  if (!Number.isFinite(parsed)) return null;
+  return clamp(parsed / 100, MIN_SCALE, MAX_SCALE);
+}
+
+function parsePageInput(value: string, totalPages: number): number | null {
+  const parsed = Number.parseInt(value.trim(), 10);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.round(clamp(parsed, 1, Math.max(1, totalPages)));
 }
 
 function buildSurroundingText(documentText: string, selectedText: string): string {
@@ -80,13 +131,64 @@ function getClosestElement(node: Node): Element | null {
   return node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
 }
 
-function PdfPage({ pdfDocument, pageNumber, targetWidth, onPageText }: PdfPageProps) {
+function renderToolbarIcon(Icon: unknown): ReactNode {
+  return createElement(Icon as ComponentType<ToolbarIconProps>, {
+    className: 'h-4 w-4',
+    strokeWidth: 1.75,
+  });
+}
+
+function ToolbarButton({
+  title,
+  active = false,
+  disabled = false,
+  onClick,
+  children,
+}: {
+  title: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={onClick}
+      className={[
+        'flex h-8 w-8 items-center justify-center rounded-md text-neutral-600 transition-colors',
+        'hover:bg-neutral-100 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-40',
+        'dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-neutral-50',
+        active ? 'bg-neutral-100 text-neutral-950 dark:bg-neutral-800 dark:text-neutral-50' : '',
+      ].join(' ')}
+    >
+      {children}
+    </button>
+  );
+}
+
+function PdfPage({ pdfDocument, pageNumber, scale, rotation, basePageSize, onPageText }: PdfPageProps) {
   const pageRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerRef = useRef<HTMLDivElement | null>(null);
   const [isVisible, setIsVisible] = useState(false);
-  const [pageSize, setPageSize] = useState({ width: targetWidth, height: Math.round(targetWidth * 1.414), scale: 1 });
+  const estimatedPageSize = useMemo(() => {
+    const rotated = getRotatedPageSize(basePageSize, rotation);
+    return {
+      width: Math.max(1, rotated.width * scale),
+      height: Math.max(1, rotated.height * scale),
+      scale,
+    };
+  }, [basePageSize, rotation, scale]);
+  const [pageSize, setPageSize] = useState(estimatedPageSize);
   const [renderError, setRenderError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPageSize(estimatedPageSize);
+  }, [estimatedPageSize]);
 
   useEffect(() => {
     const node = pageRef.current;
@@ -105,7 +207,7 @@ function PdfPage({ pdfDocument, pageNumber, targetWidth, onPageText }: PdfPagePr
   }, []);
 
   useEffect(() => {
-    if (!isVisible || !canvasRef.current || !textLayerRef.current || targetWidth <= 0) return undefined;
+    if (!isVisible || !canvasRef.current || !textLayerRef.current || scale <= 0) return undefined;
 
     let cancelled = false;
     let renderTask: pdfjs.RenderTask | null = null;
@@ -117,9 +219,7 @@ function PdfPage({ pdfDocument, pageNumber, targetWidth, onPageText }: PdfPagePr
         const page = await pdfDocument.getPage(pageNumber);
         if (cancelled) return;
 
-        const baseViewport = page.getViewport({ scale: 1 });
-        const scale = targetWidth / baseViewport.width;
-        const viewport = page.getViewport({ scale });
+        const viewport = page.getViewport({ scale, rotation });
         const canvas = canvasRef.current;
         const textLayerContainer = textLayerRef.current;
         if (!canvas || !textLayerContainer) return;
@@ -171,7 +271,7 @@ function PdfPage({ pdfDocument, pageNumber, targetWidth, onPageText }: PdfPagePr
       renderTask?.cancel();
       textLayer?.cancel();
     };
-  }, [isVisible, onPageText, pageNumber, pdfDocument, targetWidth]);
+  }, [isVisible, onPageText, pageNumber, pdfDocument, rotation, scale]);
 
   const pageStyle = {
     width: pageSize.width,
@@ -208,22 +308,35 @@ export default function PdfDocumentPreview({
   loadingOverlay = null,
 }: PdfDocumentPreviewProps) {
   const { t } = useTranslation('codeEditor');
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  const inputId = useId();
+  const viewerRef = useRef<HTMLDivElement | null>(null);
   const pageTextRef = useRef(new Map<number, string>());
   const [pdfDocument, setPdfDocument] = useState<pdfjs.PDFDocumentProxy | null>(null);
+  const [firstPageSize, setFirstPageSize] = useState<PageSize | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [viewerWidth, setViewerWidth] = useState(0);
+  const [viewerSize, setViewerSize] = useState<ViewerSize>({ width: 0, height: 0 });
   const [selectionAction, setSelectionAction] = useState<PdfSelectionAction | null>(null);
+  const [zoomMode, setZoomMode] = useState<ZoomMode>('fitPage');
+  const [customScale, setCustomScale] = useState(1);
+  const [zoomInput, setZoomInput] = useState('100%');
+  const [zoomInputFocused, setZoomInputFocused] = useState(false);
+  const [rotation, setRotation] = useState<Rotation>(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageInput, setPageInput] = useState('1');
+  const [pageInputFocused, setPageInputFocused] = useState(false);
 
   useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return undefined;
-    const updateWidth = () => {
-      setViewerWidth(Math.max(0, root.clientWidth - PAGE_HORIZONTAL_PADDING * 2));
+    const viewer = viewerRef.current;
+    if (!viewer) return undefined;
+    const updateSize = () => {
+      setViewerSize({
+        width: viewer.clientWidth,
+        height: viewer.clientHeight,
+      });
     };
-    updateWidth();
-    const observer = new ResizeObserver(updateWidth);
-    observer.observe(root);
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(viewer);
     return () => observer.disconnect();
   }, []);
 
@@ -232,8 +345,14 @@ export default function PdfDocumentPreview({
     let loadingTask: pdfjs.PDFDocumentLoadingTask | null = null;
     pageTextRef.current = new Map();
     setPdfDocument(null);
+    setFirstPageSize(null);
     setErrorMessage(null);
     setSelectionAction(null);
+    setCurrentPage(1);
+    setPageInput('1');
+    setRotation(0);
+    setZoomMode('fitPage');
+    setCustomScale(1);
 
     const loadPdf = async () => {
       try {
@@ -241,9 +360,12 @@ export default function PdfDocumentPreview({
         if (cancelled) return;
         loadingTask = pdfjs.getDocument({ data });
         const nextDocument = await loadingTask.promise;
-        if (!cancelled) {
-          setPdfDocument(nextDocument);
-        }
+        if (cancelled) return;
+        const firstPage = await nextDocument.getPage(1);
+        if (cancelled) return;
+        const viewport = firstPage.getViewport({ scale: 1 });
+        setFirstPageSize({ width: viewport.width, height: viewport.height });
+        setPdfDocument(nextDocument);
       } catch (error) {
         if (!cancelled) {
           setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -258,26 +380,122 @@ export default function PdfDocumentPreview({
     };
   }, [blob]);
 
-  const targetWidth = useMemo(
-    () => Math.max(MIN_PAGE_WIDTH, Math.min(MAX_PAGE_WIDTH, viewerWidth || MAX_PAGE_WIDTH)),
-    [viewerWidth],
-  );
+  const fitScales = useMemo(() => {
+    if (!firstPageSize || viewerSize.width <= 0 || viewerSize.height <= 0) {
+      return { fitWidth: 1, fitPage: 1 };
+    }
+    const rotatedSize = getRotatedPageSize(firstPageSize, rotation);
+    const availableWidth = Math.max(1, viewerSize.width - PAGE_HORIZONTAL_PADDING * 2);
+    const availableHeight = Math.max(1, viewerSize.height - PAGE_VERTICAL_PADDING);
+    const fitWidth = availableWidth / rotatedSize.width;
+    const fitPage = Math.min(fitWidth, availableHeight / rotatedSize.height);
+    return {
+      fitWidth: clamp(fitWidth, MIN_SCALE, MAX_SCALE),
+      fitPage: clamp(fitPage, MIN_SCALE, MAX_SCALE),
+    };
+  }, [firstPageSize, rotation, viewerSize.height, viewerSize.width]);
+
+  const activeScale = zoomMode === 'fitWidth'
+    ? fitScales.fitWidth
+    : zoomMode === 'fitPage'
+      ? fitScales.fitPage
+      : customScale;
+
+  const zoomPercent = Math.round(activeScale * 100);
+
+  useEffect(() => {
+    if (!zoomInputFocused) {
+      setZoomInput(`${zoomPercent}%`);
+    }
+  }, [zoomInputFocused, zoomPercent]);
+
+  useEffect(() => {
+    if (!pageInputFocused) {
+      setPageInput(String(currentPage));
+    }
+  }, [currentPage, pageInputFocused]);
+
+  const updateCurrentPageFromScroll = useCallback(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const pages = Array.from(viewer.querySelectorAll<HTMLElement>('[data-pdf-page-number]'));
+    if (pages.length === 0) return;
+
+    const viewerRect = viewer.getBoundingClientRect();
+    const targetY = viewerRect.top + viewerRect.height / 2;
+    let bestPage: number | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const page of pages) {
+      const rect = page.getBoundingClientRect();
+      const pageCenter = rect.top + rect.height / 2;
+      const distance = Math.abs(pageCenter - targetY);
+      if (distance < bestDistance) {
+        const pageNumber = Number.parseInt(page.dataset.pdfPageNumber || '', 10);
+        if (Number.isFinite(pageNumber) && pageNumber > 0) {
+          bestPage = pageNumber;
+          bestDistance = distance;
+        }
+      }
+    }
+
+    if (bestPage !== null) {
+      setCurrentPage((previousPage) => (previousPage === bestPage ? previousPage : bestPage));
+    }
+  }, []);
 
   const handlePageText = useCallback((pageNumber: number, text: string) => {
     pageTextRef.current.set(pageNumber, text);
   }, []);
 
+  const jumpToPage = useCallback((pageNumber: number) => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const target = viewer.querySelector<HTMLElement>(`[data-pdf-page-number="${pageNumber}"]`);
+    target?.scrollIntoView({ block: 'start' });
+    setCurrentPage(pageNumber);
+  }, []);
+
+  const commitPageInput = useCallback(() => {
+    const totalPages = pdfDocument?.numPages || 1;
+    const parsed = parsePageInput(pageInput, totalPages);
+    if (!parsed) {
+      setPageInput(String(currentPage));
+      return;
+    }
+    setPageInput(String(parsed));
+    jumpToPage(parsed);
+  }, [currentPage, jumpToPage, pageInput, pdfDocument?.numPages]);
+
+  const commitZoomInput = useCallback(() => {
+    const parsed = parsePercentInput(zoomInput);
+    if (!parsed) {
+      setZoomInput(`${zoomPercent}%`);
+      return;
+    }
+    setCustomScale(parsed);
+    setZoomMode('custom');
+    setZoomInput(`${Math.round(parsed * 100)}%`);
+  }, [zoomInput, zoomPercent]);
+
+  const setCustomZoomFromScale = useCallback((nextScale: number) => {
+    const next = clamp(nextScale, MIN_SCALE, MAX_SCALE);
+    setCustomScale(next);
+    setZoomMode('custom');
+    setZoomInput(`${Math.round(next * 100)}%`);
+  }, []);
+
   const updateSelectionAction = useCallback(() => {
-    const root = rootRef.current;
+    const viewer = viewerRef.current;
     const selection = window.getSelection();
-    if (!root || !selection || selection.isCollapsed || selection.rangeCount === 0) {
+    if (!viewer || !selection || selection.isCollapsed || selection.rangeCount === 0) {
       setSelectionAction(null);
       return;
     }
 
     const anchorNode = selection.anchorNode;
     const focusNode = selection.focusNode;
-    if (!anchorNode || !focusNode || !root.contains(anchorNode) || !root.contains(focusNode)) {
+    if (!anchorNode || !focusNode || !viewer.contains(anchorNode) || !viewer.contains(focusNode)) {
       setSelectionAction(null);
       return;
     }
@@ -297,8 +515,8 @@ export default function PdfDocumentPreview({
     }
 
     const rect = range.getBoundingClientRect();
-    const rootRect = root.getBoundingClientRect();
-    const pageNumbers = getSelectedPageNumbers(root, range);
+    const viewerRect = viewer.getBoundingClientRect();
+    const pageNumbers = getSelectedPageNumbers(viewer, range);
     const sortedPageTexts = Array.from(pageTextRef.current.entries())
       .sort(([left], [right]) => left - right);
     const documentText = sortedPageTexts.map(([, text]) => text).join('\n');
@@ -318,27 +536,34 @@ export default function PdfDocumentPreview({
       occurrenceIndex,
     });
 
-    const left = Math.max(12, Math.min(root.clientWidth - 190, rect.left - rootRect.left + root.scrollLeft + rect.width / 2 - 80));
-    const top = Math.max(12, rect.top - rootRect.top + root.scrollTop - 42);
+    const left = Math.max(12, Math.min(viewer.clientWidth - 190, rect.left - viewerRect.left + viewer.scrollLeft + rect.width / 2 - 80));
+    const top = Math.max(12, rect.top - viewerRect.top + viewer.scrollTop - 42);
     setSelectionAction({ top, left, reference });
   }, [fileName, filePath, projectName, source]);
 
   useEffect(() => {
     const handleSelectionChange = () => updateSelectionAction();
-    const handleScroll = () => setSelectionAction(null);
+    const handleScroll = () => {
+      setSelectionAction(null);
+      updateCurrentPageFromScroll();
+    };
 
     document.addEventListener('selectionchange', handleSelectionChange);
     document.addEventListener('mouseup', handleSelectionChange);
     document.addEventListener('keyup', handleSelectionChange);
-    const root = rootRef.current;
-    root?.addEventListener('scroll', handleScroll, { passive: true });
+    const viewer = viewerRef.current;
+    viewer?.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
       document.removeEventListener('selectionchange', handleSelectionChange);
       document.removeEventListener('mouseup', handleSelectionChange);
       document.removeEventListener('keyup', handleSelectionChange);
-      root?.removeEventListener('scroll', handleScroll);
+      viewer?.removeEventListener('scroll', handleScroll);
     };
-  }, [updateSelectionAction]);
+  }, [updateCurrentPageFromScroll, updateSelectionAction]);
+
+  useEffect(() => {
+    updateCurrentPageFromScroll();
+  }, [activeScale, rotation, pdfDocument, updateCurrentPageFromScroll]);
 
   const handleAddReference = () => {
     if (!selectionAction) return;
@@ -357,43 +582,167 @@ export default function PdfDocumentPreview({
     );
   }
 
+  const totalPages = pdfDocument?.numPages || 0;
+  const canZoomOut = activeScale > MIN_SCALE;
+  const canZoomIn = activeScale < MAX_SCALE;
+  const readyDocument = pdfDocument && firstPageSize
+    ? { pdfDocument, firstPageSize }
+    : null;
+  const isLoaded = Boolean(readyDocument);
+  const zoomInputId = `${inputId}-pdf-zoom`;
+  const pageInputId = `${inputId}-pdf-page`;
+
   return (
-    <div ref={rootRef} className="relative h-full w-full overflow-auto bg-neutral-100 dark:bg-neutral-900">
-      {!pdfDocument ? (
-        <div className="flex h-full w-full flex-col items-center justify-center gap-3">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600 dark:border-neutral-600 dark:border-t-neutral-300" />
+    <div className="flex h-full w-full flex-col bg-neutral-100 dark:bg-neutral-900">
+      <div className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-neutral-200 bg-white px-3 py-1.5 dark:border-neutral-800 dark:bg-neutral-950">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <ToolbarButton
+            title={t('pdfToolbar.zoomOut')}
+            disabled={!isLoaded || !canZoomOut}
+            onClick={() => setCustomZoomFromScale(activeScale - ZOOM_STEP)}
+          >
+            {renderToolbarIcon(ZoomOut)}
+          </ToolbarButton>
+          <label className="sr-only" htmlFor={zoomInputId}>
+            {t('pdfToolbar.zoomPercent')}
+          </label>
+          <input
+            id={zoomInputId}
+            value={zoomInput}
+            disabled={!isLoaded}
+            inputMode="numeric"
+            aria-label={t('pdfToolbar.zoomPercent')}
+            onFocus={(event) => {
+              setZoomInputFocused(true);
+              event.currentTarget.select();
+            }}
+            onChange={(event) => setZoomInput(event.target.value)}
+            onBlur={() => {
+              commitZoomInput();
+              setZoomInputFocused(false);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.currentTarget.blur();
+              } else if (event.key === 'Escape') {
+                setZoomInput(`${zoomPercent}%`);
+                event.currentTarget.blur();
+              }
+            }}
+            className="h-8 w-16 rounded-md border border-neutral-200 bg-white px-2 text-center text-[12px] text-neutral-800 outline-none transition focus:border-neutral-400 disabled:opacity-50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-neutral-600"
+          />
+          <ToolbarButton
+            title={t('pdfToolbar.zoomIn')}
+            disabled={!isLoaded || !canZoomIn}
+            onClick={() => setCustomZoomFromScale(activeScale + ZOOM_STEP)}
+          >
+            {renderToolbarIcon(ZoomIn)}
+          </ToolbarButton>
+          <div className="mx-1 h-5 w-px bg-neutral-200 dark:bg-neutral-800" />
+          <ToolbarButton
+            title={t('pdfToolbar.fitWidth')}
+            active={zoomMode === 'fitWidth'}
+            disabled={!isLoaded}
+            onClick={() => setZoomMode('fitWidth')}
+          >
+            {renderToolbarIcon(StretchHorizontal)}
+          </ToolbarButton>
+          <ToolbarButton
+            title={t('pdfToolbar.fitPage')}
+            active={zoomMode === 'fitPage'}
+            disabled={!isLoaded}
+            onClick={() => setZoomMode('fitPage')}
+          >
+            {renderToolbarIcon(Maximize2)}
+          </ToolbarButton>
+          <ToolbarButton
+            title={t('pdfToolbar.rotateCounterClockwise')}
+            disabled={!isLoaded}
+            onClick={() => setRotation((value) => ((value + 270) % 360) as Rotation)}
+          >
+            {renderToolbarIcon(RotateCcw)}
+          </ToolbarButton>
+          <ToolbarButton
+            title={t('pdfToolbar.rotateClockwise')}
+            disabled={!isLoaded}
+            onClick={() => setRotation((value) => ((value + 90) % 360) as Rotation)}
+          >
+            {renderToolbarIcon(RotateCw)}
+          </ToolbarButton>
         </div>
-      ) : (
-        <div className="px-4 py-2">
-          {Array.from({ length: pdfDocument.numPages }, (_, index) => (
-            <PdfPage
-              key={`${filePath}-${index + 1}-${targetWidth}`}
-              pdfDocument={pdfDocument}
-              pageNumber={index + 1}
-              targetWidth={targetWidth}
-              onPageText={handlePageText}
-            />
-          ))}
+        <div className="flex shrink-0 items-center gap-1.5 text-[12px] text-neutral-500 dark:text-neutral-400">
+          <label className="sr-only" htmlFor={pageInputId}>
+            {t('pdfToolbar.pageNumber')}
+          </label>
+          <input
+            id={pageInputId}
+            value={pageInput}
+            disabled={!isLoaded}
+            inputMode="numeric"
+            aria-label={t('pdfToolbar.goToPage')}
+            onFocus={(event) => {
+              setPageInputFocused(true);
+              event.currentTarget.select();
+            }}
+            onChange={(event) => setPageInput(event.target.value)}
+            onBlur={() => {
+              commitPageInput();
+              setPageInputFocused(false);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.currentTarget.blur();
+              } else if (event.key === 'Escape') {
+                setPageInput(String(currentPage));
+                event.currentTarget.blur();
+              }
+            }}
+            className="h-8 w-12 rounded-md border border-neutral-200 bg-white px-1.5 text-center text-[12px] text-neutral-800 outline-none transition focus:border-neutral-400 disabled:opacity-50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-neutral-600"
+          />
+          <span className="whitespace-nowrap">
+            {t('pdfToolbar.pageOf', { total: totalPages || '-' })}
+          </span>
         </div>
-      )}
+      </div>
+      <div ref={viewerRef} className="relative min-h-0 flex-1 overflow-auto bg-neutral-100 dark:bg-neutral-900">
+        {!readyDocument ? (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-3">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600 dark:border-neutral-600 dark:border-t-neutral-300" />
+          </div>
+        ) : (
+          <div className="px-4 py-2">
+            {Array.from({ length: readyDocument.pdfDocument.numPages }, (_, index) => (
+              <PdfPage
+                key={`${filePath}-${index + 1}`}
+                pdfDocument={readyDocument.pdfDocument}
+                pageNumber={index + 1}
+                scale={activeScale}
+                rotation={rotation}
+                basePageSize={readyDocument.firstPageSize}
+                onPageText={handlePageText}
+              />
+            ))}
+          </div>
+        )}
 
-      {loadingOverlay ? (
-        <div className="absolute left-3 top-3 z-10 rounded-md border border-neutral-200 bg-white/95 px-3 py-1.5 text-[12px] text-neutral-600 shadow-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95 dark:text-neutral-300">
-          {loadingOverlay}
-        </div>
-      ) : null}
+        {loadingOverlay ? (
+          <div className="absolute left-3 top-3 z-10 rounded-md border border-neutral-200 bg-white/95 px-3 py-1.5 text-[12px] text-neutral-600 shadow-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95 dark:text-neutral-300">
+            {loadingOverlay}
+          </div>
+        ) : null}
 
-      {selectionAction ? (
-        <button
-          type="button"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={handleAddReference}
-          className="absolute z-20 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[12px] font-medium text-neutral-900 shadow-lg transition hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:hover:bg-neutral-900"
-          style={{ top: selectionAction.top, left: selectionAction.left }}
-        >
-          {t('selection.chatInPilotDeck')}
-        </button>
-      ) : null}
+        {selectionAction ? (
+          <button
+            type="button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={handleAddReference}
+            className="absolute z-20 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[12px] font-medium text-neutral-900 shadow-lg transition hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:hover:bg-neutral-900"
+            style={{ top: selectionAction.top, left: selectionAction.left }}
+          >
+            {t('selection.chatInPilotDeck')}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

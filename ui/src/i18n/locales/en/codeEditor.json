@@ -53,6 +53,26 @@
     "libreOfficeUnavailableMessage": "This format requires LibreOffice for preview. Install LibreOffice, or switch the Office file preview service to None in Settings.",
     "failedMessage": "Failed to generate Office file preview."
   },
+  "pdfToolbar": {
+    "zoomOut": "Zoom out",
+    "zoomIn": "Zoom in",
+    "zoomPercent": "Zoom percentage",
+    "fitWidth": "Fit width",
+    "fitPage": "Fit page",
+    "rotateCounterClockwise": "Rotate counterclockwise",
+    "rotateClockwise": "Rotate clockwise",
+    "pageNumber": "Page number",
+    "goToPage": "Go to page",
+    "pageOf": "/ {{total}}"
+  },
+  "fileTypes": {
+    "word": "Word document",
+    "excel": "Excel spreadsheet",
+    "powerpoint": "PowerPoint presentation",
+    "pdf": "PDF file",
+    "image": "Image file",
+    "file": "File"
+  },
   "selection": {
     "chatInPilotDeck": "Chat in PilotDeck",
     "noSelectableText": "This preview does not contain selectable text."
