@@ -126,8 +126,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (IS_PLATFORM || DISABLE_LOCAL_AUTH) {
       setUser({ username: DISABLE_LOCAL_AUTH ? 'local-user' : 'platform-user' });
       setNeedsSetup(false);
-      setHasCompletedOnboarding(true);
-      setIsLoading(false);
+      setIsLoading(true);
+      checkOnboardingStatus().finally(() => setIsLoading(false));
       return;
     }
 
