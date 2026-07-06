@@ -51,6 +51,14 @@ export type TurnRunnerDependencies = {
   autoGenerateSessionTitle?: boolean;
 };
 
+type PendingSessionTitle = {
+  controller: AbortController;
+  cleanup: () => void;
+  completed: boolean;
+  title: string | null;
+  promise: Promise<void>;
+};
+
 export class TurnRunner {
   constructor(
     private readonly loop: AgentLoop,
@@ -110,13 +118,14 @@ export class TurnRunner {
     }
     messages.push(...(userPromptHooks?.messages ?? []));
 
-    this.maybeGenerateSessionTitle(options, accepted.messages);
+    const sessionTitle = this.maybeGenerateSessionTitle(options, accepted.messages);
 
     if (!accepted.shouldCallModel) {
       const result = this.createErrorResult(
         options,
         agentError("agent_unsupported_feature", "Input was accepted but model execution was not requested."),
       );
+      await this.flushReadySessionTitle(options, sessionTitle);
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
       return { result, messages };
     }
@@ -138,11 +147,13 @@ export class TurnRunner {
       });
 
       await this.transcript.recordTurnResult(options.sessionId, options.turnId, runResult.result);
+      await this.flushReadySessionTitle(options, sessionTitle);
       return runResult;
     } catch (error) {
       const normalized = normalizeAgentError(error);
       const result = this.createErrorResult(options, normalized);
       await Promise.resolve(this.transcript.recordTurnResult(options.sessionId, options.turnId, result)).catch(() => {});
+      await this.flushReadySessionTitle(options, sessionTitle);
       yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error: normalized };
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
       return { result, messages };
@@ -179,7 +190,7 @@ export class TurnRunner {
   private maybeGenerateSessionTitle(
     options: TurnRunnerOptions,
     acceptedMessages: CanonicalMessage[],
-  ): Promise<void> | undefined {
+  ): PendingSessionTitle | undefined {
     if (this.turnDependencies.autoGenerateSessionTitle !== true) {
       return undefined;
     }
@@ -199,26 +210,54 @@ export class TurnRunner {
 
     const controller = new AbortController();
     const cleanup = linkAbortSignal(options.abortSignal, controller);
-    return generateTitle({
+    const pending: PendingSessionTitle = {
+      controller,
+      cleanup,
+      completed: false,
+      title: null,
+      promise: Promise.resolve(),
+    };
+    pending.promise = generateTitle({
       text,
       sessionId: options.sessionId,
       turnId: options.turnId,
       signal: controller.signal,
     })
-      .then(async (title) => {
-        if (!title) {
-          return;
-        }
-        const latest = metadataStore.getSnapshot();
-        if (latest.title || latest.aiTitle) {
-          return;
-        }
-        await metadataStore.saveAiTitle(title, options.turnId);
+      .then((title) => {
+        pending.title = title;
       })
       .catch(() => {})
       .finally(() => {
+        pending.completed = true;
         cleanup();
       });
+    return pending;
+  }
+
+  private async flushReadySessionTitle(
+    options: TurnRunnerOptions,
+    pending: PendingSessionTitle | undefined,
+  ): Promise<void> {
+    if (!pending) {
+      return;
+    }
+    if (!pending.completed) {
+      pending.controller.abort("turn_completed");
+      pending.cleanup();
+      return;
+    }
+    if (!pending.title) {
+      return;
+    }
+    const metadataStore = this.turnDependencies.metadataStore;
+    if (!metadataStore) {
+      return;
+    }
+    const latest = metadataStore.getSnapshot();
+    if (latest.title || latest.aiTitle) {
+      return;
+    }
+    await metadataStore.saveAiTitle(pending.title, options.turnId);
   }
 }
 
