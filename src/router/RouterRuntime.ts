@@ -211,6 +211,7 @@ export function createRouterRuntime(
     current: RouterModelRef | undefined,
     next: RouterModelRef,
     messages: CanonicalModelRequest["messages"],
+    lastUsage: import("../model/index.js").CanonicalUsage | undefined,
   ): { selection: RouterModelRef; mutation?: RouterMutationsLog["cacheAwareSwitch"] } {
     const cacheAware = config.tokenSaver?.cacheAwareSwitching;
     if (cacheAware?.enabled === false || !current) {
@@ -221,8 +222,24 @@ export function createRouterRuntime(
     }
 
     const estimatedInputTokens = countMessagesTokens(messages);
+    const observedInputTokens = lastUsage?.inputTokens ?? 0;
+    const observedCacheReadTokens = lastUsage?.cacheReadTokens ?? 0;
+    const observedCacheHitRatio = observedInputTokens > 0
+      ? Math.min(1, Math.max(0, observedCacheReadTokens / observedInputTokens))
+      : 0;
+    if (observedCacheHitRatio <= 0) {
+      return { selection: next };
+    }
+
+    const estimatedCacheReadTokens = Math.floor(estimatedInputTokens * observedCacheHitRatio);
+    const estimatedUncachedTokens = Math.max(0, estimatedInputTokens - estimatedCacheReadTokens);
     const cachedCost = calculateCacheReadCost(
-      estimatedInputTokens,
+      estimatedCacheReadTokens,
+      current.provider,
+      current.model,
+      config.stats?.modelPricing,
+    ) + calculateInputCost(
+      estimatedUncachedTokens,
       current.provider,
       current.model,
       config.stats?.modelPricing,
@@ -423,6 +440,7 @@ export function createRouterRuntime(
               previousStickySelection,
               selection,
               input.request.messages,
+              baseUsage,
             );
             selection = cacheAware.selection;
             cacheAwareSwitch = cacheAware.mutation;
