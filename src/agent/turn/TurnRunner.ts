@@ -85,8 +85,6 @@ export class TurnRunner {
       return { result, messages: options.messages };
     }
 
-    const sessionTitlePromise = this.maybeGenerateSessionTitle(options, accepted.messages);
-
     yield { type: "input_accepted", sessionId: options.sessionId, turnId: options.turnId, messages: accepted.messages };
 
     const prompt = inputToPromptText(options.input);
@@ -107,18 +105,18 @@ export class TurnRunner {
         options,
         agentError("agent_unsupported_feature", "UserPromptSubmit hook blocked model execution."),
       );
-      await sessionTitlePromise;
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
       return { result, messages };
     }
     messages.push(...(userPromptHooks?.messages ?? []));
+
+    this.maybeGenerateSessionTitle(options, accepted.messages);
 
     if (!accepted.shouldCallModel) {
       const result = this.createErrorResult(
         options,
         agentError("agent_unsupported_feature", "Input was accepted but model execution was not requested."),
       );
-      await sessionTitlePromise;
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
       return { result, messages };
     }
@@ -140,13 +138,11 @@ export class TurnRunner {
       });
 
       await this.transcript.recordTurnResult(options.sessionId, options.turnId, runResult.result);
-      await sessionTitlePromise;
       return runResult;
     } catch (error) {
       const normalized = normalizeAgentError(error);
       const result = this.createErrorResult(options, normalized);
       await Promise.resolve(this.transcript.recordTurnResult(options.sessionId, options.turnId, result)).catch(() => {});
-      await sessionTitlePromise;
       yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error: normalized };
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
       return { result, messages };
