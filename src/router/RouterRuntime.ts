@@ -558,10 +558,16 @@ export function createRouterRuntime(
         const estimated = countMessagesTokens(attemptRequest.messages);
         if (estimated > budget) {
           yield {
-            type: "text_delta",
-            text: `[PilotDeck] Sub-agent budget exceeded (${estimated} est. tokens > ${budget} limit). Terminating.`,
+            type: "error",
+            error: {
+              provider: attempt.provider,
+              protocol: protocolForProvider(deps.modelRuntime, attempt.provider),
+              code: "subagent_budget_exceeded",
+              message: `Sub-agent budget exceeded (${estimated} estimated tokens > ${budget} limit).`,
+              retryable: false,
+              userHint: "Reduce the subagent prompt/context, increase the subagent token budget, or split the task into smaller steps.",
+            },
           } as CanonicalModelEvent;
-          yield { type: "message_end", finishReason: "stop" } as CanonicalModelEvent;
           return;
         }
       }

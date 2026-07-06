@@ -22,6 +22,7 @@ import type {
   GatewayElicitationResponseInput,
   GatewayEvent,
   GatewayPermissionDecisionInput,
+  GatewayRecordAgentStatusMessageInput,
   GatewaySessionPermissionGrantInput,
   GatewayServerInfo,
   GatewaySubmitTurnInput,
@@ -95,6 +96,7 @@ export type InProcessGatewayOptions = {
   readSessionMessages?: (input: WebReadSessionMessagesInput) => Promise<WebReadSessionMessagesResult>;
   readSubagentMessages?: (input: WebReadSubagentMessagesInput) => Promise<WebReadSubagentMessagesResult>;
   forkSession?: (input: WebForkSessionInput) => Promise<WebForkSessionResult>;
+  recordAgentStatusMessage?: (input: GatewayRecordAgentStatusMessageInput) => Promise<{ recorded: boolean }>;
   /**
    * Web Phase 3 — pluggable project enumerator + describer.
    */
@@ -486,8 +488,9 @@ export class InProcessGateway implements Gateway {
     }
   }
 
-  async abortTurn(input: { sessionKey: string; runId?: string }): Promise<void> {
-    await this.router.abort(input.sessionKey, input.runId ? `aborted:${input.runId}` : "aborted");
+  async abortTurn(input: { sessionKey: string; runId?: string; reason?: string }): Promise<void> {
+    const reason = input.reason ?? (input.runId ? `aborted:${input.runId}` : "aborted");
+    await this.router.abort(input.sessionKey, reason);
     // Wait for the in-flight `submitTurn` (if any) to fully unwind so
     // `inFlightTurns` has been cleared by the time the RPC response is
     // sent. Otherwise a fast "stop → re-send" from a client races the
@@ -515,6 +518,13 @@ export class InProcessGateway implements Gateway {
   async closeSession(input: { sessionKey: string; reason?: string }): Promise<void> {
     await this.router.close(input.sessionKey);
     this.sessionPermissionGrants.delete(input.sessionKey);
+  }
+
+  async recordAgentStatusMessage(input: GatewayRecordAgentStatusMessageInput): Promise<{ recorded: boolean }> {
+    if (!this.options.recordAgentStatusMessage) {
+      return { recorded: false };
+    }
+    return this.options.recordAgentStatusMessage(input);
   }
 
   async describeServer(): Promise<GatewayServerInfo> {
@@ -1299,6 +1309,12 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
         total: event.snapshot.maxContextTokens,
         ratio: event.snapshot.ratio,
         state: event.snapshot.state,
+      }];
+    case "agent_status":
+      return [{
+        type: "agent_status",
+        event: event.event,
+        detail: event.detail,
       }];
     case "turn_continued":
       return [{

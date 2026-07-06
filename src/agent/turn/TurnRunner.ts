@@ -69,6 +69,7 @@ export class TurnRunner {
     } catch (error) {
       const agentTranscriptError = agentError("agent_transcript_error", "Failed to record accepted input.", error);
       const result = this.createErrorResult(options, agentTranscriptError);
+      await this.recordTurnFailureStatus(options, agentTranscriptError);
       yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error: agentTranscriptError };
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
       return { result, messages: options.messages };
@@ -90,26 +91,34 @@ export class TurnRunner {
     });
     yield { type: "user_prompt_submitted", sessionId: options.sessionId, turnId: options.turnId, prompt };
     if (userPromptHooks?.effects.some((effect) => effect.type === "block")) {
+      const error = agentError("agent_unsupported_feature", "UserPromptSubmit hook blocked model execution.");
       const result = this.createErrorResult(
         options,
-        agentError("agent_unsupported_feature", "UserPromptSubmit hook blocked model execution."),
+        error,
       );
+      await this.recordErrorResult(options, result);
+      await this.recordTurnFailureStatus(options, error);
+      yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error };
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
       return { result, messages };
     }
     messages.push(...(userPromptHooks?.messages ?? []));
 
     if (!accepted.shouldCallModel) {
+      const error = agentError("agent_unsupported_feature", "Input was accepted but model execution was not requested.");
       const result = this.createErrorResult(
         options,
-        agentError("agent_unsupported_feature", "Input was accepted but model execution was not requested."),
+        error,
       );
+      await this.recordErrorResult(options, result);
+      await this.recordTurnFailureStatus(options, error);
+      yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error };
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
       return { result, messages };
     }
 
     try {
-      const runResult = yield* this.loop.run({
+      const generator = this.loop.run({
         sessionId: options.sessionId,
         turnId: options.turnId,
         messages,
@@ -121,7 +130,25 @@ export class TurnRunner {
         permissionRules: options.permissionRules,
         abortSignal: options.abortSignal,
         onDurableMessage: (msg) => this.transcript.recordDurableMessage(options.sessionId, options.turnId, msg),
+        onAgentStatusMessage: (status) => this.transcript.recordAgentStatusMessage?.(
+          options.sessionId,
+          options.turnId,
+          status,
+        ),
       });
+      let runResult: TurnRunnerResult | undefined;
+      while (true) {
+        const next = await generator.next();
+        if (next.done) {
+          runResult = next.value;
+          break;
+        }
+        const event = next.value;
+        if (event.type === "turn_failed") {
+          await this.recordTurnFailureStatus(options, event.error);
+        }
+        yield event;
+      }
 
       await this.transcript.recordTurnResult(options.sessionId, options.turnId, runResult.result);
       return runResult;
@@ -129,6 +156,7 @@ export class TurnRunner {
       const normalized = normalizeAgentError(error);
       const result = this.createErrorResult(options, normalized);
       await Promise.resolve(this.transcript.recordTurnResult(options.sessionId, options.turnId, result)).catch(() => {});
+      await this.recordTurnFailureStatus(options, normalized);
       yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error: normalized };
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
       return { result, messages };
@@ -160,6 +188,25 @@ export class TurnRunner {
       completedAt: timestamp,
       errors: [error],
     };
+  }
+
+  private async recordErrorResult(_options: TurnRunnerOptions, result: AgentTurnResult): Promise<void> {
+    await Promise.resolve(this.transcript.recordTurnResult(result.sessionId, result.turnId, result)).catch(() => {});
+  }
+
+  private async recordTurnFailureStatus(options: TurnRunnerOptions, error: ReturnType<typeof agentError>): Promise<void> {
+    await Promise.resolve(this.transcript.recordAgentStatusMessage?.(options.sessionId, options.turnId, {
+      event: "turn_failed",
+      kind: "error",
+      text: error.message,
+      detail: {
+        message: error.message,
+        code: error.code,
+        ...(error.userHint ? { userHint: error.userHint } : {}),
+        severity: "error",
+        visible: true,
+      },
+    })).catch(() => {});
   }
 }
 

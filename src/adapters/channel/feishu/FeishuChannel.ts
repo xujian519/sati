@@ -328,7 +328,7 @@ export class FeishuChannel implements ChannelAdapter {
             void liveReply.markTimedOut().catch((error: unknown) => {
               this.logger?.warn?.(`feishu: mark timeout failed: ${error}`);
             });
-            void this.gateway?.abortTurn({ sessionKey: mapped.sessionKey, ...(activeRunId ? { runId: activeRunId } : {}) })
+            void this.gateway?.abortTurn({ sessionKey: mapped.sessionKey, ...(activeRunId ? { runId: activeRunId } : {}), reason: "system:timeout" })
               .catch((error: unknown) => {
                 this.logger?.warn?.(`feishu: abort timeout turn failed: ${error}`);
               });
