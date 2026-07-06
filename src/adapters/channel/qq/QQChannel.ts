@@ -233,7 +233,7 @@ export class QQChannel implements ChannelAdapter {
         }
         if (event.type === "permission_request") {
           const questionText = this.permissions.capture(chatKey, sessionKey, event);
-          await this.sendC2CReplyChunked(userOpenId, questionText, msgId);
+          if (questionText) await this.sendC2CReplyChunked(userOpenId, questionText, msgId);
           continue;
         }
         const fragment = renderQQEvent(event);
@@ -305,7 +305,7 @@ export class QQChannel implements ChannelAdapter {
         }
         if (event.type === "permission_request") {
           const questionText = this.permissions.capture(chatKey, sessionKey, event);
-          await this.sendReplyChunked(groupOpenId, questionText, msgId);
+          if (questionText) await this.sendReplyChunked(groupOpenId, questionText, msgId);
           continue;
         }
         const fragment = renderQQEvent(event);

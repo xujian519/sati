@@ -83,6 +83,7 @@ export function renderFeishuEvent(event: GatewayEvent): string | undefined {
     case "tool_call_finished":
       if (!event.ok) {
         const name = event.toolName ?? event.toolCallId;
+        if (name === "send_attachment") return "";
         const detail = typeof event.resultPreview === "string" && event.resultPreview.trim()
           ? `${event.resultPreview.trim()}\n`
           : "";
