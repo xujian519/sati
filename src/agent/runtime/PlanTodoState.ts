@@ -17,6 +17,80 @@ export type PlanTodoStateManager = {
 };
 
 const TODO_WRITE_TOOL_NAME = "todo_write";
+const VALID_TODO_STATUSES = new Set<PilotDeckTodoItem["status"]>([
+  "pending",
+  "in_progress",
+  "completed",
+  "cancelled",
+]);
+
+function normalizeTodoItem(item: PilotDeckTodoItem, index: number): PilotDeckTodoItem {
+  const content = item.content.trim() || "(no description)";
+  const status = VALID_TODO_STATUSES.has(item.status) ? item.status : "pending";
+  return {
+    id: item.id?.trim() || `todo-${index + 1}`,
+    content,
+    status,
+    ...(item.priority?.trim() ? { priority: item.priority.trim() } : {}),
+  };
+}
+
+function dedupeById(todos: PilotDeckTodoItem[]): PilotDeckTodoItem[] {
+  const lastIndex = new Map<string, number>();
+  todos.forEach((todo, index) => {
+    const id = todo.id?.trim() || `todo-${index + 1}`;
+    lastIndex.set(id, index);
+  });
+  return [...lastIndex.values()].sort((a, b) => a - b).map((index) => todos[index]!);
+}
+
+function replaceTodos(todos: PilotDeckTodoItem[]): PilotDeckTodoItem[] {
+  return dedupeById(todos).map((todo, index) => normalizeTodoItem(todo, index));
+}
+
+function mergeTodos(existingTodos: PilotDeckTodoItem[], updates: PilotDeckTodoItem[]): PilotDeckTodoItem[] {
+  const existingById = new Map<string, PilotDeckTodoItem>();
+  for (const [index, todo] of existingTodos.entries()) {
+    const normalized = normalizeTodoItem(todo, index);
+    existingById.set(normalized.id!, normalized);
+  }
+
+  const append: PilotDeckTodoItem[] = [];
+  for (const update of dedupeById(updates)) {
+    const id = update.id?.trim();
+    if (id && existingById.has(id)) {
+      const current = existingById.get(id)!;
+      existingById.set(id, {
+        ...current,
+        ...(update.content.trim() ? { content: update.content.trim() } : {}),
+        ...(VALID_TODO_STATUSES.has(update.status) ? { status: update.status } : {}),
+        ...(update.priority?.trim() ? { priority: update.priority.trim() } : {}),
+      });
+      continue;
+    }
+    append.push(update);
+  }
+
+  const merged: PilotDeckTodoItem[] = [];
+  const seen = new Set<string>();
+  for (const [index, todo] of existingTodos.entries()) {
+    const id = todo.id?.trim() || `todo-${index + 1}`;
+    const current = existingById.get(id) ?? normalizeTodoItem(todo, index);
+    if (!seen.has(current.id!)) {
+      merged.push(current);
+      seen.add(current.id!);
+    }
+  }
+  const firstNewIndex = merged.length;
+  append.forEach((todo, index) => {
+    const normalized = normalizeTodoItem(todo, firstNewIndex + index);
+    if (!seen.has(normalized.id!)) {
+      merged.push(normalized);
+      seen.add(normalized.id!);
+    }
+  });
+  return merged;
+}
 
 export function createPlanTodoStateManager(): PlanTodoStateManager {
   const states = new Map<string, SessionPlanTodoState>();
@@ -94,9 +168,16 @@ export function createPlanTodoStateManager(): PlanTodoStateManager {
         },
         recordTodoWrite(markdown: string, todos: PilotDeckTodoItem[]) {
           state.lastMarkdown = markdown;
-          state.todos = todos;
+          state.todos = replaceTodos(todos);
           state.requiresInitialization = false;
           state.toolCallsSinceLastTodoWrite = 0;
+        },
+        writeTodos(todos: PilotDeckTodoItem[], options?: { markdown?: string; merge?: boolean }) {
+          state.todos = options?.merge ? mergeTodos(state.todos, todos) : replaceTodos(todos);
+          state.lastMarkdown = options?.markdown;
+          state.requiresInitialization = false;
+          state.toolCallsSinceLastTodoWrite = 0;
+          return state.todos;
         },
         markToolProgressChanged(toolName: string) {
           if (!state.approvedPlan || toolName === TODO_WRITE_TOOL_NAME) {

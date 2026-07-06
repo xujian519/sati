@@ -157,7 +157,7 @@ export type PilotDeckToolProgressSink = (event: PilotDeckToolProgressEvent) => v
 export type PilotDeckTodoItem = {
   id?: string;
   content: string;
-  status: "pending" | "in_progress" | "completed";
+  status: "pending" | "in_progress" | "completed" | "cancelled";
   priority?: string;
 };
 
@@ -173,6 +173,7 @@ export type PilotDeckPlanTodoStateHandle = {
   getSnapshot(): PilotDeckPlanTodoStateSnapshot;
   markPlanApproved(plan: string): void;
   recordTodoWrite(markdown: string, todos: PilotDeckTodoItem[]): void;
+  writeTodos(todos: PilotDeckTodoItem[], options?: { markdown?: string; merge?: boolean }): PilotDeckTodoItem[];
   markToolProgressChanged(toolName: string): void;
   buildPromptAddendum(): string | undefined;
   blockingMessageFor(toolName: string, isReadOnly: boolean): string | undefined;
