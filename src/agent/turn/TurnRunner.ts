@@ -56,7 +56,6 @@ type PendingSessionTitle = {
   cleanup: () => void;
   completed: boolean;
   title: string | null;
-  promise: Promise<void>;
 };
 
 export class TurnRunner {
@@ -215,9 +214,8 @@ export class TurnRunner {
       cleanup,
       completed: false,
       title: null,
-      promise: Promise.resolve(),
     };
-    pending.promise = generateTitle({
+    void generateTitle({
       text,
       sessionId: options.sessionId,
       turnId: options.turnId,
