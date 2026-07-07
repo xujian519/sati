@@ -91,7 +91,8 @@ export class TurnRunner {
     } catch (error) {
       const agentTranscriptError = agentError("agent_transcript_error", "Failed to record accepted input.", error);
       const result = this.createErrorResult(options, agentTranscriptError);
-      await this.recordTurnFailureStatus(options, agentTranscriptError);
+      const status = await this.recordTurnFailureStatus(options, agentTranscriptError);
+      yield this.toAgentStatusEvent(options, status);
       yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error: agentTranscriptError };
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
       return { result, messages: options.messages };
@@ -119,7 +120,8 @@ export class TurnRunner {
         error,
       );
       await this.recordErrorResult(options, result);
-      await this.recordTurnFailureStatus(options, error);
+      const status = await this.recordTurnFailureStatus(options, error);
+      yield this.toAgentStatusEvent(options, status);
       yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error };
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
       return { result, messages };
@@ -135,7 +137,8 @@ export class TurnRunner {
         error,
       );
       await this.recordErrorResult(options, result);
-      await this.recordTurnFailureStatus(options, error);
+      const status = await this.recordTurnFailureStatus(options, error);
+      yield this.toAgentStatusEvent(options, status);
       await this.flushReadySessionTitle(options, sessionTitle);
       yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error };
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
@@ -174,7 +177,9 @@ export class TurnRunner {
         }
         const event = next.value;
         if (event.type === "turn_failed" && !hasRecordedVisibleFailureStatus) {
-          await this.recordTurnFailureStatus(options, event.error);
+          const status = await this.recordTurnFailureStatus(options, event.error);
+          hasRecordedVisibleFailureStatus = true;
+          yield this.toAgentStatusEvent(options, status);
         }
         yield event;
       }
@@ -186,7 +191,8 @@ export class TurnRunner {
       const normalized = normalizeAgentError(error);
       const result = this.createErrorResult(options, normalized);
       await Promise.resolve(this.transcript.recordTurnResult(options.sessionId, options.turnId, result)).catch(() => {});
-      await this.recordTurnFailureStatus(options, normalized);
+      const status = await this.recordTurnFailureStatus(options, normalized);
+      yield this.toAgentStatusEvent(options, status);
       await this.flushReadySessionTitle(options, sessionTitle);
       yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error: normalized };
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
@@ -225,8 +231,17 @@ export class TurnRunner {
     await Promise.resolve(this.transcript.recordTurnResult(result.sessionId, result.turnId, result)).catch(() => {});
   }
 
-  private async recordTurnFailureStatus(options: TurnRunnerOptions, error: ReturnType<typeof agentError>): Promise<void> {
-    await Promise.resolve(this.transcript.recordAgentStatusMessage?.(options.sessionId, options.turnId, {
+  private async recordTurnFailureStatus(
+    options: TurnRunnerOptions,
+    error: ReturnType<typeof agentError>,
+  ): Promise<AgentStatusMessageInput> {
+    const status = this.createTurnFailureStatus(error);
+    await Promise.resolve(this.transcript.recordAgentStatusMessage?.(options.sessionId, options.turnId, status)).catch(() => {});
+    return status;
+  }
+
+  private createTurnFailureStatus(error: ReturnType<typeof agentError>): AgentStatusMessageInput {
+    return {
       event: "turn_failed",
       kind: "error",
       text: error.message,
@@ -237,7 +252,17 @@ export class TurnRunner {
         severity: "error",
         visible: true,
       },
-    })).catch(() => {});
+    };
+  }
+
+  private toAgentStatusEvent(options: TurnRunnerOptions, status: AgentStatusMessageInput): AgentEvent {
+    return {
+      type: "agent_status",
+      sessionId: options.sessionId,
+      turnId: options.turnId,
+      event: status.event,
+      detail: status.detail,
+    };
   }
 
   private maybeGenerateSessionTitle(

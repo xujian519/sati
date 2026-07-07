@@ -85,6 +85,7 @@ const visibleFailureAgentStatusEvents = new Set([
     'tool_call_recovery_exhausted',
     'tool_error_loop',
     'lifecycle_blocked',
+    'turn_failed',
     'turn_timeout',
     'gateway_submit_failed',
     'subagent_failed',
