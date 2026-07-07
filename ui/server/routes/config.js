@@ -44,6 +44,23 @@ async function notifyGatewayConfigReload() {
 const router = express.Router();
 
 function serializeConfigResponse(record, reloadResult = null) {
+  if (record.parseError) {
+    return {
+      exists: record.exists,
+      path: record.configPath,
+      raw: record.raw,
+      config: maskSecrets(record.config),
+      configDisabled: true,
+      parseError: record.parseError,
+      validation: {
+        valid: false,
+        errors: [`Invalid YAML: ${record.parseError}`],
+        warnings: [],
+      },
+      ...(reloadResult ? { reload: reloadResult } : {}),
+    };
+  }
+
   const validation = validatePilotDeckConfig(record.config);
   const maskedConfig = maskSecrets(record.config);
   // Prefer the disk's actual YAML for the "raw" view so non-ui-internal
@@ -279,10 +296,24 @@ router.put('/', async (req, res) => {
       // Re-hydrate any field the UI received as "********" with the
       // original disk value so saving the masked view back is a no-op
       // for secrets the user didn't actually touch.
-      const restored = preserveMaskedSecrets(parsed, diskRecord.rawYaml ?? {});
+      const restored = diskRecord.parseError
+        ? parsed
+        : preserveMaskedSecrets(parsed, diskRecord.rawYaml ?? {});
       suppressNextWatchEvent();
       saved = await writeRawPilotDeckYaml(restored);
     } else if (req.body?.config && typeof req.body.config === 'object') {
+      if (diskRecord.parseError) {
+        return res.status(400).json({
+          error: 'Invalid config YAML; repair raw YAML before using structured config updates',
+          configDisabled: true,
+          parseError: diskRecord.parseError,
+          validation: {
+            valid: false,
+            errors: [`Invalid YAML: ${diskRecord.parseError}`],
+            warnings: [],
+          },
+        });
+      }
       const restored = preserveMaskedSecrets(req.body.config, diskRecord.config);
       suppressNextWatchEvent();
       saved = await writePilotDeckConfig(restored);
@@ -310,6 +341,18 @@ router.put('/', async (req, res) => {
 router.post('/reload', async (_req, res) => {
   try {
     const record = readPilotDeckConfigFile();
+    if (record.parseError) {
+      return res.status(400).json({
+        error: 'Invalid config YAML',
+        configDisabled: true,
+        parseError: record.parseError,
+        validation: {
+          valid: false,
+          errors: [`Invalid YAML: ${record.parseError}`],
+          warnings: [],
+        },
+      });
+    }
     const validation = validatePilotDeckConfig(record.config);
     if (!validation.valid) {
       return res.status(400).json({ error: 'Invalid config', validation });
