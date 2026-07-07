@@ -16,6 +16,7 @@ import { parseModelResponse } from "../response/parseModelResponse.js";
 import { createStreamNormalizerState, normalizeStreamEvent } from "./normalizeStreamEvent.js";
 import { createGoogleStreamState, normalizeGoogleStreamEvent } from "../providers/google/stream.js";
 import { normalizeProviderBaseUrl } from "../normalizeProviderBaseUrl.js";
+import { buildProviderChatEndpointCandidates, isExpectedProviderResponseShape } from "../providerEndpoint.js";
 import { StreamingCheckpointManager } from "./StreamingCheckpoint.js";
 import { buildLiteLLMContinuationRequest } from "./continuationRequest.js";
 
@@ -608,7 +609,7 @@ async function sendProviderRequest(
       body: JSON.stringify(finalBody),
       signal: controller.signal,
     };
-    return await transport(buildEndpoint(provider, stream), fetchOptions);
+    return await sendWithEndpointFallback(provider, stream, transport, fetchOptions);
   } catch (error) {
     if (signal?.aborted) {
       throw createAbortError(signal.reason);
@@ -633,16 +634,42 @@ function forwardAbort(source: AbortSignal, target: AbortController): () => void 
   return () => source.removeEventListener("abort", onAbort);
 }
 
-function buildEndpoint(provider: ProviderConfig, _stream: boolean): string {
-  if (provider.protocol === "anthropic") {
-    return joinUrl(provider.url, "v1/messages");
+async function sendWithEndpointFallback(
+  provider: ProviderConfig,
+  stream: boolean,
+  transport: ModelTransport,
+  fetchOptions: RequestInit,
+): Promise<Response> {
+  const endpoints = buildProviderChatEndpointCandidates({ protocol: provider.protocol, baseUrl: provider.url });
+  let lastResponse: Response | undefined;
+  for (const endpoint of endpoints) {
+    const response = await transport(endpoint, fetchOptions);
+    if (await shouldUseEndpointResponse(provider, response, stream, endpoints.length)) {
+      return response;
+    }
+    lastResponse = response;
   }
+  return lastResponse as Response;
+}
 
-  if (provider.protocol === "openai-responses") {
-    return joinUrl(provider.url, "responses");
+function isEndpointFallbackStatus(status: number): boolean {
+  return status === 400 || status === 404 || status === 405;
+}
+
+async function shouldUseEndpointResponse(
+  provider: ProviderConfig,
+  response: Response,
+  stream: boolean,
+  endpointCount: number,
+): Promise<boolean> {
+  if (!response.ok) return endpointCount === 1 || !isEndpointFallbackStatus(response.status);
+  if (stream || endpointCount === 1) return true;
+  try {
+    const body = await response.clone().json();
+    return isExpectedProviderResponseShape(provider.protocol, body);
+  } catch {
+    return false;
   }
-
-  return joinUrl(provider.url, "chat/completions");
 }
 
 function buildHeaders(provider: ProviderConfig): HeadersInit {
@@ -865,8 +892,4 @@ function createAbortError(reason?: unknown): Error {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === "AbortError" || error.message.toLowerCase().includes("aborted"));
-}
-
-function joinUrl(base: string, path: string): string {
-  return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 }
