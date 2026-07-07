@@ -104,11 +104,13 @@ export type CreateLocalGatewayOptions = {
    */
   __testModelFactory?: (snapshot: PilotConfigSnapshot) => ModelRuntime;
   /**
-   * When true, the project list will not auto-include `projectRoot`.
-   * Set by non-interactive launchers (dev mode, install.sh wrapper) where
-   * `process.cwd()` is the PilotDeck source tree, not a user project.
+   * Fallback project root used as the agent cwd when no explicit
+   * `projectKey` is provided (e.g. IM channels without a bound project).
+   * Defaults to `projectRoot` when omitted; server mode should set this
+   * to `pilotHome` so IM sessions land in the general workspace instead
+   * of the gateway process's cwd.
    */
-  skipDefaultProject?: boolean;
+  fallbackProjectRoot?: string;
   /**
    * When true, `ask_user_question` tool calls are answered automatically
    * (first option selected) instead of waiting for a human. Intended for
@@ -169,8 +171,9 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       );
     },
   });
+  const fallbackProjectRoot = options.fallbackProjectRoot ?? projectRoot;
   registry = new ProjectRuntimeRegistry({
-    defaultProjectRoot: projectRoot,
+    fallbackProjectRoot,
     pilotHome,
     env,
     permissionMode: options.permissionMode ?? "default",
@@ -262,25 +265,25 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     setSessionCwd: (sessionKey, cwd) => registry.setSessionCwd(sessionKey, cwd),
     readSessionMessages: (input) =>
       readWebSessionMessages(input, {
-        projectRoot: input.projectKey ? input.projectKey : projectRoot,
+        projectRoot: input.projectKey ? input.projectKey : fallbackProjectRoot,
         pilotHome,
         now,
       }),
     readSubagentMessages: (input) =>
       readSubagentWebMessages(input, {
-        projectRoot: input.projectKey ? input.projectKey : projectRoot,
+        projectRoot: input.projectKey ? input.projectKey : fallbackProjectRoot,
         pilotHome,
         now,
       }),
     forkSession: (input) =>
       forkWebSession(input, {
-        projectRoot: input.projectKey ? input.projectKey : projectRoot,
+        projectRoot: input.projectKey ? input.projectKey : fallbackProjectRoot,
         pilotHome,
         now,
       }),
     async recordAgentStatusMessage(input) {
       const storage = createAgentProjectSessionStorage({
-        projectRoot: input.projectKey ? input.projectKey : projectRoot,
+        projectRoot: input.projectKey ? input.projectKey : fallbackProjectRoot,
         pilotHome,
         sessionId: input.sessionKey,
         now,
@@ -289,9 +292,9 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       return { recorded: true };
     },
     listProjects: () =>
-      listWebProjects({ pilotHome, defaultProjectRoot: options.skipDefaultProject ? undefined : projectRoot }),
+      listWebProjects({ pilotHome }),
     describeProject: (input) =>
-      describeWebProject(input.projectKey, { pilotHome, defaultProjectRoot: options.skipDefaultProject ? undefined : projectRoot }),
+      describeWebProject(input.projectKey, { pilotHome }),
     async reloadConfig() {
       let changedPaths: string[] = [];
       const unsubscribe = configStore.subscribe((event) => {
@@ -384,7 +387,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
 }
 
 type ProjectRuntimeRegistryOptions = {
-  defaultProjectRoot: string;
+  fallbackProjectRoot: string;
   pilotHome: string;
   env: Record<string, string | undefined>;
   permissionMode: AgentRuntimeConfig["permissionMode"];
@@ -603,7 +606,7 @@ class ProjectRuntimeRegistry {
   }
 
   resolve(projectKey?: string): ProjectRuntime {
-    const projectRoot = resolve(projectKey ?? this.options.defaultProjectRoot);
+    const projectRoot = resolve(projectKey ?? this.options.fallbackProjectRoot);
     this.options.onProjectActivated?.(projectRoot);
     const cached = this.runtimes.get(projectRoot);
     if (cached) {
