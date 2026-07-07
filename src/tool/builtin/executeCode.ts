@@ -8,6 +8,7 @@ import type { Readable } from "node:stream";
 import type { PilotDeckToolDefinition, PilotDeckToolRuntimeContext } from "../protocol/types.js";
 import { contentToText, type PilotDeckToolResult } from "../protocol/result.js";
 import type { PilotDeckToolValidationIssue } from "../protocol/schema.js";
+import { isReadOnlyShellCommand } from "./bash/permissions.js";
 import { collectPythonSyntaxDiagnostics } from "./filesystem/syntaxDiagnostics.js";
 
 type ExecuteCodeInput = {
@@ -154,7 +155,7 @@ export function createExecuteCodeTool(): PilotDeckToolDefinition<ExecuteCodeInpu
         tool_call_log: { type: "array" },
       },
     },
-    isReadOnly: () => false,
+    isReadOnly: (input) => isExecuteCodeReadOnly(input),
     isConcurrencySafe: () => false,
     validateInput: async (input) => validateExecuteCodeInput(input as ExecuteCodeInput),
     execute: async (input, context) => {
@@ -206,6 +207,93 @@ async function validateExecuteCodeInput(input: ExecuteCodeInput) {
     }
   }
   return issues.length === 0 ? { ok: true as const, input } : { ok: false as const, issues };
+}
+
+function isExecuteCodeReadOnly(input: ExecuteCodeInput): boolean {
+  return !containsWriteCapableHelper(input.code) && readOnlyBashCallsOnly(input.code);
+}
+
+function containsWriteCapableHelper(code: string): boolean {
+  return /\b(?:write_file|edit_file)\s*\(/u.test(stripPythonCommentsAndStrings(code));
+}
+
+function readOnlyBashCallsOnly(code: string): boolean {
+  const searchable = stripPythonCommentsAndStrings(code);
+  const bashCallPattern = /\bbash\s*\(/gu;
+  let match: RegExpExecArray | null;
+  while ((match = bashCallPattern.exec(searchable)) !== null) {
+    const command = readFirstPythonStringArgument(code, bashCallPattern.lastIndex);
+    if (!command || !isReadOnlyShellCommand(command)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function readFirstPythonStringArgument(code: string, offset: number): string | undefined {
+  let index = offset;
+  while (index < code.length && /\s/u.test(code[index]!)) index += 1;
+  const quote = code[index];
+  if (quote !== '"' && quote !== "'") return undefined;
+  const isTriple = code.slice(index, index + 3) === quote.repeat(3);
+  const delimiterLength = isTriple ? 3 : 1;
+  index += delimiterLength;
+  let value = "";
+  while (index < code.length) {
+    if (code[index] === "\\") {
+      const escaped = code[index + 1];
+      if (escaped === undefined) return undefined;
+      value += escaped === "n" ? "\n" : escaped === "t" ? "\t" : escaped;
+      index += 2;
+      continue;
+    }
+    if (code.slice(index, index + delimiterLength) === quote.repeat(delimiterLength)) {
+      return value;
+    }
+    value += code[index]!;
+    index += 1;
+  }
+  return undefined;
+}
+
+function stripPythonCommentsAndStrings(code: string): string {
+  let output = "";
+  let index = 0;
+  while (index < code.length) {
+    const char = code[index]!;
+    if (char === "#") {
+      while (index < code.length && code[index] !== "\n") {
+        output += " ";
+        index += 1;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      const quote = char;
+      const isTriple = code.slice(index, index + 3) === quote.repeat(3);
+      const length = isTriple ? 3 : 1;
+      output += " ".repeat(length);
+      index += length;
+      while (index < code.length) {
+        if (code[index] === "\\") {
+          output += "  ";
+          index += 2;
+          continue;
+        }
+        if (code.slice(index, index + length) === quote.repeat(length)) {
+          output += " ".repeat(length);
+          index += length;
+          break;
+        }
+        output += code[index] === "\n" ? "\n" : " ";
+        index += 1;
+      }
+      continue;
+    }
+    output += char;
+    index += 1;
+  }
+  return output;
 }
 
 function createRpcTransport(): RpcTransport {
@@ -471,9 +559,13 @@ def web_search(query, country=None):
     return _call("web_search", args)
 
 
-def web_fetch(url, extract="markdown"):
-    mode = "raw" if extract == "markdown" else extract
-    return _call("web_fetch", {"url": url, "mode": mode})
+def web_fetch(url, mode=None, prompt=None):
+    args = {"url": url}
+    if mode is not None:
+        args["mode"] = mode
+    if prompt is not None:
+        args["prompt"] = prompt
+    return _call("web_fetch", args)
 
 
 def read_file(file_path, offset=0, limit=None):

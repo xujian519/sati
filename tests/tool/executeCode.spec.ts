@@ -24,6 +24,15 @@ function createContext(cwd: string, overrides: Partial<PilotDeckToolRuntimeConte
   };
 }
 
+function createAskContext(cwd: string, overrides: Partial<PilotDeckToolRuntimeContext> = {}): PilotDeckToolRuntimeContext {
+  return createContext(cwd, {
+    permissionMode: "default",
+    permissionContext: createDefaultPermissionContext({ cwd, mode: "default", canPrompt: false }),
+    runMode: "ask",
+    ...overrides,
+  });
+}
+
 async function execute(call: PilotDeckToolCall, context: PilotDeckToolRuntimeContext) {
   const runtime = new ToolRuntime(createBuiltinRegistry({ webSearch: false, webFetch: false, agent: false, askUserQuestion: false }), new PermissionRuntime());
   return runtime.execute(call, context);
@@ -195,6 +204,87 @@ test("execute_code maps web_search country helper argument to gl", async () => {
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
+});
+
+test("execute_code allows read-only scripts in ask mode", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "pilotdeck-execute-code-ask-read-"));
+  try {
+    await writeFile(path.join(cwd, "note.txt"), "ask alpha\n", "utf8");
+    const code = `from pilotdeck_tools import read_file, grep, bash
+print(read_file("note.txt")["content"])
+print(grep("alpha", path="note.txt")["content"])
+print(bash("pwd")["content"])`;
+    const result = await execute({ id: "call-ask-read", name: "execute_code", input: { code } }, createAskContext(cwd));
+    const output = data(result);
+    assert.equal(output.status, "success");
+    assert.match(output.output, /ask alpha/);
+    assert.deepEqual(output.tool_call_log.map((entry) => entry.tool), ["read_file", "grep", "bash"]);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("execute_code blocks write-capable scripts in ask mode", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "pilotdeck-execute-code-ask-write-"));
+  try {
+    const result = await execute(
+      { id: "call-ask-write", name: "execute_code", input: { code: 'from pilotdeck_tools import write_file\nwrite_file("note.txt", "no")' } },
+      createAskContext(cwd),
+    );
+    assert.equal(result.type, "error");
+    assert.equal(result.error.code, "ask_mode_violation");
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("execute_code web_fetch helper preserves web_fetch default mode", async () => {
+  const registry = new ToolRegistry();
+  registry.register(createBuiltinRegistry({ webSearch: false, webFetch: false, agent: false, askUserQuestion: false }).get("execute_code")!);
+  registry.register({
+    name: "web_fetch",
+    description: "test web_fetch",
+    kind: "network",
+    inputSchema: { type: "object", required: ["url"], additionalProperties: false, properties: { url: { type: "string" }, mode: { type: "string" }, prompt: { type: "string" } } },
+    isReadOnly: () => true,
+    isConcurrencySafe: () => true,
+    execute: async (input: { url: string; mode?: string; prompt?: string }) => ({
+      content: [{ type: "text", text: JSON.stringify(input) }],
+      data: input,
+    }),
+  } satisfies PilotDeckToolDefinition<{ url: string; mode?: string; prompt?: string }, { url: string; mode?: string; prompt?: string }>);
+  const runtime = new ToolRuntime(registry, new PermissionRuntime());
+  const cwd = await mkdtemp(path.join(tmpdir(), "pilotdeck-execute-code-web-fetch-default-"));
+  try {
+    const result = await runtime.execute(
+      { id: "call-web-fetch-default", name: "execute_code", input: { code: 'from pilotdeck_tools import web_fetch\nprint(web_fetch("https://example.com")["data"])' } },
+      createContext(cwd),
+    );
+    const output = data(result);
+    assert.equal(output.status, "success");
+    assert.match(output.output, /'url': 'https:\/\/example\.com'/);
+    assert.doesNotMatch(output.output, /'mode': 'raw'/);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("execute_code web_fetch helper forwards explicit mode and prompt", async () => {
+  const response = await handleExecuteCodeRpcLineForTests(
+    JSON.stringify({ tool: "web_fetch", args: { url: "https://example.com", mode: "raw", prompt: "summarize" } }),
+    {
+      executeTool: async (call) => ({
+        type: "success",
+        toolCallId: call.id,
+        toolName: call.name,
+        content: [{ type: "text", text: "ok" }],
+        data: call.input,
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      }),
+    },
+  );
+  assert.deepEqual(response.data, { url: "https://example.com", mode: "raw", prompt: "summarize" });
 });
 
 test("execute_code exposes write helpers but keeps unsafe helpers unavailable", async () => {
