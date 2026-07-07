@@ -253,6 +253,18 @@ router.put('/', async (req, res) => {
       suppressNextWatchEvent();
       saved = await writeRawPilotDeckYaml(restored);
     } else if (req.body?.config && typeof req.body.config === 'object') {
+      if (diskRecord.parseError) {
+        return res.status(400).json({
+          error: 'Invalid config YAML; repair raw YAML before using structured config updates',
+          configDisabled: true,
+          parseError: diskRecord.parseError,
+          validation: {
+            valid: false,
+            errors: [`Invalid YAML: ${diskRecord.parseError}`],
+            warnings: [],
+          },
+        });
+      }
       const restored = preserveMaskedSecrets(req.body.config, diskRecord.config);
       suppressNextWatchEvent();
       saved = await writePilotDeckConfig(restored);

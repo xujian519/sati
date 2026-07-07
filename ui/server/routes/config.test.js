@@ -73,6 +73,21 @@ describe('config routes invalid YAML fallback', () => {
     expect(response.body.validation.errors[0]).toMatch(/^Invalid YAML:/);
     expect(reloadPilotDeckConfig).not.toHaveBeenCalled();
   });
+
+  it('rejects structured config saves without overwriting invalid YAML', async () => {
+    const brokenRaw = 'schemaVersion: 1\nmodel:\n  providers: [\n';
+    const { request, configPath } = await createConfigApp(brokenRaw);
+
+    const response = await request('/api/config', {
+      method: 'PUT',
+      body: JSON.stringify({ config: { schemaVersion: 1, model: { providers: {} } } }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.configDisabled).toBe(true);
+    expect(response.body.validation.errors[0]).toMatch(/^Invalid YAML:/);
+    expect(readFileSync(configPath, 'utf8')).toBe(brokenRaw);
+  });
 });
 
 async function createConfigApp(initialRaw, overrides = {}) {
