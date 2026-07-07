@@ -55,6 +55,13 @@ import { buildAskModeAgentToolSchema } from "../../tool/builtin/agent.js";
 
 const TOOL_EVENT_PUMP_INTERVAL_MS = 500;
 const SUBAGENT_STATUS_HEARTBEAT_MS = 2_000;
+const CIRCUIT_BREAKER_GRACE_PROMPT = [
+  "Your last several tool calls all failed input validation with the same error.",
+  "This may indicate a tool-side issue rather than a problem with your approach.",
+  "Options: (1) try a different tool or different parameters,",
+  "(2) explain the situation in text without calling tools,",
+  "(3) if you believe the tool should work, try once more with corrected input.",
+].join(" ");
 const PLAN_MODE_REMINDER_MESSAGE = [
   "Plan mode is active.",
   "Read first using read-only tools, then write or refine plan markdown only under `.pilotdeck/plans/`.",
@@ -185,14 +192,16 @@ export class AgentLoop {
     const largeFileRepair = new LargeFileRepair();
 
     /**
-     * Circuit breaker: consecutive turns where ALL tool calls are
-     * `invalid_tool_input` errors. When the model is stuck in a loop
-     * (e.g. qwen repeatedly emitting empty-param bash calls), terminate
-     * early instead of burning tokens. Resets on any turn with at least
-     * one successful tool call.
+     * Circuit breaker: detects loops by fingerprinting each turn's
+     * invalid_tool_input errors (toolName + errorMessage). Only identical
+     * repeated failures trigger recovery, so changed parameters/tools are not
+     * mistaken for the same stuck loop. A one-time grace prompt gives the
+     * model a final chance to change strategy before termination.
      */
-    const MAX_CONSECUTIVE_ALL_INVALID_TURNS = 3;
-    let consecutiveAllInvalidTurns = 0;
+    const MAX_SAME_INVALID_FINGERPRINT = 3;
+    let lastInvalidFingerprint: string | undefined;
+    let sameInvalidFingerprintCount = 0;
+    let hasUsedInvalidGracePeriod = false;
     let lastToolFailureFingerprint: string | undefined;
     let transientPromptCounter = 0;
     const activeTransientPromptIds = new Set<string>();
@@ -1079,8 +1088,8 @@ export class AgentLoop {
       }
 
       // Circuit breaker: detect turns where ALL tool calls returned
-      // invalid_tool_input. If the model is stuck (e.g. repeatedly emitting
-      // empty-param bash), terminate early after MAX_CONSECUTIVE_ALL_INVALID_TURNS.
+      // invalid_tool_input. Uses fingerprint-based detection (toolName +
+      // errorMessage), and injects one grace prompt before final termination.
       // When LargeFileRepair is actively managing recovery, defer to its own
       // attempt limits instead of terminating here.
       const allInvalid = pairedResults.length > 0 && pairedResults.every(
@@ -1101,8 +1110,23 @@ export class AgentLoop {
         }
       }
       if (allInvalid) {
-        consecutiveAllInvalidTurns++;
-        if (consecutiveAllInvalidTurns >= MAX_CONSECUTIVE_ALL_INVALID_TURNS) {
+        const fingerprint = buildInvalidFingerprint(pairedResults);
+        if (fingerprint === lastInvalidFingerprint) {
+          sameInvalidFingerprintCount++;
+        } else {
+          sameInvalidFingerprintCount = 1;
+          lastInvalidFingerprint = fingerprint;
+          hasUsedInvalidGracePeriod = false;
+        }
+
+        if (sameInvalidFingerprintCount >= MAX_SAME_INVALID_FINGERPRINT) {
+          if (!hasUsedInvalidGracePeriod) {
+            hasUsedInvalidGracePeriod = true;
+            pushTransientSyntheticPrompt(CIRCUIT_BREAKER_GRACE_PROMPT, "circuit_breaker_grace");
+            yield { type: "turn_continued", sessionId: input.sessionId, turnId: input.turnId, reason: "model_error" };
+            continue;
+          }
+
           const result = this.createTurnResult(input, {
             type: "error",
             stopReason: "tool_error",
@@ -1114,7 +1138,7 @@ export class AgentLoop {
             structuredOutput,
             errors: [agentError(
               "agent_tool_error_loop",
-              `Terminated: ${consecutiveAllInvalidTurns} consecutive turns with all tool calls failing input validation. The model appears stuck in a loop.`,
+              `Terminated: ${sameInvalidFingerprintCount} consecutive turns with identical tool input validation failures (same tool + same error). The model appears stuck in a loop.`,
               undefined,
               "The model is repeatedly producing invalid tool calls. Consider switching to a more capable model via settings.",
             )],
@@ -1125,7 +1149,9 @@ export class AgentLoop {
           return { result, messages };
         }
       } else {
-        consecutiveAllInvalidTurns = 0;
+        sameInvalidFingerprintCount = 0;
+        lastInvalidFingerprint = undefined;
+        hasUsedInvalidGracePeriod = false;
         if (!pairedResults.some((r) => r.type === "error")) {
           lastToolFailureFingerprint = undefined;
         }
@@ -1826,6 +1852,17 @@ function truncateHeadKeepRatio(messages: CanonicalMessage[], keepRatio: number):
   const ratio = Math.max(0.05, Math.min(1, keepRatio));
   const keep = Math.max(1, Math.floor(messages.length * ratio));
   return messages.slice(-keep);
+}
+
+function buildInvalidFingerprint(results: PilotDeckToolResult[]): string {
+  return results
+    .filter(
+      (result): result is PilotDeckToolErrorResult =>
+        result.type === "error" && result.error.code === "invalid_tool_input",
+    )
+    .map((result) => `${result.toolName}::${result.error.message}`)
+    .sort()
+    .join("\n");
 }
 
 /**

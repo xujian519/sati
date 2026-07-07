@@ -120,11 +120,7 @@ function tryParseQwenXml(text: string): TextToolCallParseResult | null {
     return {
       toolCalls: [],
       remainingText: text,
-      partialToolCall: partialInfo(
-        "qwen_xml",
-        "qwen_xml_marker_without_complete_function",
-        text,
-      ),
+      partialToolCall: partialInfo("qwen_xml", classifyIncompleteQwenXml(text), text),
     };
   }
 
@@ -138,6 +134,16 @@ function tryParseQwenXml(text: string): TextToolCallParseResult | null {
   });
 
   return { toolCalls, remainingText: remaining, partialToolCall };
+}
+
+function classifyIncompleteQwenXml(text: string): string {
+  if (/<parameter=/u.test(text) && !/<function=/u.test(text)) {
+    return "orphan_qwen_parameter";
+  }
+  if ((/<\/parameter>/u.test(text) || /<\/function>/u.test(text)) && !/<function=/u.test(text)) {
+    return "orphan_qwen_function_close";
+  }
+  return "qwen_xml_marker_without_complete_function";
 }
 
 // ---------------------------------------------------------------------------
@@ -177,11 +183,7 @@ function tryParseDeepSeekDsml(text: string): TextToolCallParseResult | null {
     return {
       toolCalls: [],
       remainingText: text,
-      partialToolCall: partialInfo(
-        "deepseek_dsml",
-        "dsml_marker_without_complete_invoke",
-        text,
-      ),
+      partialToolCall: partialInfo("deepseek_dsml", classifyIncompleteDsml(text), text),
     };
   }
 
@@ -190,6 +192,17 @@ function tryParseDeepSeekDsml(text: string): TextToolCallParseResult | null {
     preferredFormat: "deepseek_dsml",
   });
   return { toolCalls, remainingText: remaining, partialToolCall };
+}
+
+function classifyIncompleteDsml(text: string): string {
+  if (/<\uff5cDSML\uff5cparameter\b/u.test(text) && !/<\uff5cDSML\uff5cinvoke\b/u.test(text)) {
+    return "orphan_dsml_parameter";
+  }
+  if ((/<\/\uff5cDSML\uff5cinvoke>/u.test(text) || /<\/\uff5cDSML\uff5ctool_calls>/u.test(text))
+    && !/<\uff5cDSML\uff5cinvoke\b/u.test(text)) {
+    return "orphan_dsml_tool_call_close";
+  }
+  return "dsml_marker_without_complete_invoke";
 }
 
 // ---------------------------------------------------------------------------
@@ -233,11 +246,7 @@ function tryParseHermesJson(text: string): TextToolCallParseResult | null {
     return {
       toolCalls: [],
       remainingText: text,
-      partialToolCall: partialToolCall ?? partialInfo(
-        "hermes_json",
-        "tool_call_marker_without_valid_json",
-        text,
-      ),
+      partialToolCall: partialToolCall ?? partialInfo("hermes_json", classifyIncompleteHermesJson(text), text),
     };
   }
 
@@ -246,6 +255,13 @@ function tryParseHermesJson(text: string): TextToolCallParseResult | null {
     preferredFormat: "hermes_json",
   });
   return { toolCalls, remainingText: remaining, partialToolCall };
+}
+
+function classifyIncompleteHermesJson(text: string): string {
+  if (/<\/tool_call>/u.test(text) && !/<tool_call>/u.test(text)) {
+    return "orphan_hermes_tool_call_close";
+  }
+  return "tool_call_marker_without_valid_json";
 }
 
 // ---------------------------------------------------------------------------
@@ -614,20 +630,29 @@ function detectPartialTextToolCall(
     );
   }
   if (options.preferredFormat && hasFormatMarker(text, options.preferredFormat)) {
+    if (options.preferredFormat === "qwen_xml") {
+      return partialInfo("qwen_xml", classifyIncompleteQwenXml(text), text);
+    }
+    if (options.preferredFormat === "hermes_json") {
+      return partialInfo("hermes_json", classifyIncompleteHermesJson(text), text);
+    }
+    if (options.preferredFormat === "deepseek_dsml") {
+      return partialInfo("deepseek_dsml", classifyIncompleteDsml(text), text);
+    }
     return partialInfo(
       options.preferredFormat,
       "dangling_tool_call_fragment_after_parse",
       text,
     );
   }
-  if (hasQwenMarker(text)) {
-    return partialInfo("qwen_xml", "dangling_qwen_xml_fragment", text);
-  }
   if (hasDsmlMarker(text)) {
-    return partialInfo("deepseek_dsml", "dangling_dsml_fragment", text);
+    return partialInfo("deepseek_dsml", classifyIncompleteDsml(text), text);
   }
   if (hasHermesMarker(text)) {
-    return partialInfo("hermes_json", "dangling_hermes_tool_call_fragment", text);
+    return partialInfo("hermes_json", classifyIncompleteHermesJson(text), text);
+  }
+  if (hasQwenMarker(text)) {
+    return partialInfo("qwen_xml", classifyIncompleteQwenXml(text), text);
   }
   if (hasMistralMarker(text)) {
     return partialInfo("mistral", "dangling_mistral_tool_call_fragment", text);
@@ -654,15 +679,11 @@ function hasFormatMarker(text: string, format: PartialTextToolCallFormat): boole
 }
 
 function hasQwenMarker(text: string): boolean {
-  return hasQwenSpecificMarker(text) || (hasQwenToolCallWrapper(text) && !looksLikeHermesToolCall(text));
+  return hasQwenSpecificMarker(text);
 }
 
 function hasQwenSpecificMarker(text: string): boolean {
   return /<function=|<\/function>|<parameter=|<\/parameter>/u.test(text);
-}
-
-function hasQwenToolCallWrapper(text: string): boolean {
-  return /<\/?tool_call>/u.test(text);
 }
 
 function hasQwenParameterMarker(text: string): boolean {
@@ -675,10 +696,6 @@ function hasDsmlMarker(text: string): boolean {
 
 function hasHermesMarker(text: string): boolean {
   return /<\/?tool_call>/u.test(text);
-}
-
-function looksLikeHermesToolCall(text: string): boolean {
-  return /<tool_call>\s*\{/u.test(text);
 }
 
 function hasMistralMarker(text: string): boolean {
