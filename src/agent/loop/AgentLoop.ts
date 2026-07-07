@@ -407,7 +407,7 @@ export class AgentLoop {
       let emittedContextBudget = false;
       if (ctx?.tryAutoCompact && getMaxCtx) {
         const routedMaxCtx = getMaxCtx(decision.provider, decision.model);
-        const currentBudgetMaxCtx = pendingContextBudget?.maxContextTokens ?? agentMaxCtx;
+        const currentBudgetMaxCtx = agentMaxCtx;
         if (routedMaxCtx !== undefined && routedMaxCtx !== currentBudgetMaxCtx) {
           try {
             const reservedOutputTokens = this.getReservedOutputTokens();

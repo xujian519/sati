@@ -12,7 +12,7 @@ import {
   type TokenBudgetSnapshot,
 } from "../../src/context/index.js";
 import { DEFAULT_MODEL_CAPABILITIES } from "../../src/model/protocol/capabilities.js";
-import type { CanonicalMessage, CanonicalModelEvent, CanonicalModelRequest, ModelConfig } from "../../src/model/index.js";
+import type { CanonicalMessage, CanonicalModelEvent, CanonicalModelRequest, CanonicalToolSchema, ModelConfig } from "../../src/model/index.js";
 
 function user(text: string): CanonicalMessage {
   return { role: "user", content: [{ type: "text", text }] };
@@ -192,4 +192,91 @@ test("full compaction preserves protected turns outside summary", async () => {
 
   assert.match(JSON.stringify(result.messagesToKeep), /skill output must remain/);
   assert.deepEqual(result.diagnostics, []);
+});
+
+test("agent loop does not run post-routing compaction when only reserved output changes snapshot budget", async () => {
+  const { AgentLoop } = await import("../../src/agent/index.js");
+  const { ToolRegistry } = await import("../../src/tool/index.js");
+  const { createDefaultPermissionContext } = await import("../../src/permission/index.js");
+
+  let compactCalls = 0;
+  const contextRuntime = {
+    async prepareForModel(input: { messages: CanonicalMessage[]; tools: CanonicalToolSchema[] }) {
+      return {
+        messages: input.messages,
+        systemPrompt: undefined,
+        systemPromptParts: [],
+        tools: input.tools,
+        diagnostics: [],
+        boundaries: [],
+        metadata: {},
+      };
+    },
+    async tryAutoCompact() {
+      compactCalls += 1;
+      return {
+        type: "skipped" as const,
+        snapshot: {
+          tokens: 1,
+          maxContextTokens: 100 - 10,
+          warningRatio: 0.8,
+          blockingRatio: 0.95,
+          state: "ok" as const,
+          ratio: 1 / 90,
+          reservedOutputTokens: 10,
+        },
+      };
+    },
+  };
+
+  const loop = new AgentLoop({
+    provider: "p",
+    model: "m",
+    cwd: "/tmp",
+    maxContextTokens: 100,
+    maxOutputTokens: 10,
+    permissionMode: "default",
+    permissionContext: createDefaultPermissionContext({ cwd: "/tmp" }),
+  }, {
+    router: {
+      async decide({ request }) {
+        return {
+          provider: request.provider,
+          model: request.model,
+          scenarioType: "default",
+          isSubagent: false,
+          orchestrating: false,
+          resolvedFrom: "scenario",
+          mutations: {},
+        };
+      },
+      async *execute() {
+        yield { type: "message_start", role: "assistant" };
+        yield { type: "text_delta", text: "done" };
+        yield { type: "message_end", finishReason: "stop" };
+      },
+      async *stream() {},
+      materializeRequest(_decision, request) {
+        return request;
+      },
+    },
+    tools: {
+      registry: new ToolRegistry(),
+      scheduler: { executeAll: async () => [] },
+    },
+    context: contextRuntime,
+    getModelMaxContextTokens: () => 100,
+  });
+
+  const events = [];
+  for await (const event of loop.run({
+    sessionId: "s",
+    turnId: "t",
+    messages: [user("hello")],
+  })) {
+    events.push(event.type);
+  }
+
+  assert.equal(compactCalls, 1);
+  assert.equal(events.filter((event) => event === "context_budget").length, 1);
 });
