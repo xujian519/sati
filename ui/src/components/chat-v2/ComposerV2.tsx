@@ -101,6 +101,7 @@ export type ComposerV2Props = {
   isAbortPending?: boolean;
   isBusySendQueued?: boolean;
   isBusySendConfirmed?: boolean;
+  onCancelBusySendQueue?: () => void;
   isSubmitPending?: boolean;
   tokenBudget?: Record<string, unknown> | null;
   thinkingMode: ThinkingModeId;
@@ -304,6 +305,7 @@ export default function ComposerV2({
   isAbortPending = false,
   isBusySendQueued = false,
   isBusySendConfirmed = false,
+  onCancelBusySendQueue,
   isSubmitPending = false,
   tokenBudget,
   thinkingMode,
@@ -347,7 +349,7 @@ export default function ComposerV2({
     : isBusySendConfirmed
       ? (t('input.queuedSendConfirmed', { defaultValue: 'Queued — will send when the current turn finishes' }) as string)
       : isBusySendQueued
-        ? (t('input.queuedSendConfirm', { defaultValue: 'Queued — click send again to confirm' }) as string)
+        ? (t('input.queuedSendConfirm', { defaultValue: 'Queued — click send again to send now' }) as string)
       : isLoading
         ? (t('input.queueSend', { defaultValue: 'Queue message' }) as string)
         : (t('input.send', { defaultValue: 'Send' }) as string);
@@ -759,12 +761,20 @@ export default function ComposerV2({
                   </div>
 
                   {isBusySendQueued ? (
-                    <div className="hidden min-w-0 flex-1 justify-end px-2 text-[12px] text-amber-700 dark:text-amber-300 sm:flex">
+                    <div className="hidden min-w-0 flex-1 items-center justify-end gap-1 px-2 text-[12px] text-amber-700 dark:text-amber-300 sm:flex">
                       <span className="truncate rounded-full bg-amber-50 px-2 py-1 dark:bg-amber-950/30">
                         {isBusySendConfirmed
                           ? t('input.queuedSendConfirmedInline', { defaultValue: 'Queued; sends after this turn' })
-                          : t('input.queuedSendConfirmInline', { defaultValue: 'Queued; click send again to confirm' })}
+                          : t('input.queuedSendConfirmInline', { defaultValue: 'Queued; click send again to send now' })}
                       </span>
+                      <button
+                        type="button"
+                        onClick={onCancelBusySendQueue}
+                        className="rounded-full px-2 py-1 text-amber-700 transition hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-950/50"
+                        title={t('input.cancelQueuedSend', { defaultValue: 'Cancel queued message' }) as string}
+                      >
+                        {t('input.cancelQueuedSendShort', { defaultValue: 'Cancel' })}
+                      </button>
                     </div>
                   ) : null}
 

@@ -222,6 +222,7 @@ function ChatInterfaceV2({
     handleInputFocusChange,
     isBusySendQueued,
     isBusySendConfirmed,
+    cancelBusySendQueue,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -525,6 +526,7 @@ function ChatInterfaceV2({
       isAbortPending={isAbortPending}
       isBusySendQueued={isBusySendQueued}
       isBusySendConfirmed={isBusySendConfirmed}
+      onCancelBusySendQueue={cancelBusySendQueue}
       tokenBudget={tokenBudget}
       thinkingMode={thinkingMode}
       thinkingModeAvailability={thinkingModeAvailability}

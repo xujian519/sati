@@ -471,15 +471,21 @@ export default function MessagesPaneV2({
   );
   const renderableMessages = useMemo(
     () => {
-      const filtered = visibleMessages.filter((message) =>
+      const lastUserIndex = isAssistantWorking
+        ? visibleMessages.reduce((lastIndex, message, index) => (
+            message.type === 'user' ? index : lastIndex
+          ), -1)
+        : -1;
+      const filtered = visibleMessages.filter((message, index) =>
         !message.isAgentActivity &&
         !isSubagentThinkingPlaceholder(message) &&
+        !(isAssistantWorking && message.isThinking && !message.isStreaming && index < lastUserIndex) &&
         (!inlineThinking && isStreamingThinkingMessage(message) ? false : true) &&
         !(message.isThinking && !showThinking)
       );
       return filtered;
     },
-    [visibleMessages, showThinking, inlineThinking],
+    [visibleMessages, showThinking, inlineThinking, isAssistantWorking],
   );
   const liveProcessDetailMessages = useMemo(
     () => isAssistantWorking ? getLiveProcessDetailMessages(renderableMessages) : [],

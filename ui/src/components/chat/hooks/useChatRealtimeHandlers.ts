@@ -288,6 +288,8 @@ export function useChatRealtimeHandlers({
       warnDroppedFrame(msg);
       return;
     }
+    const msgRunId = typeof msg.runId === 'string' && msg.runId.trim() ? msg.runId.trim() : undefined;
+    const streamKey = msgRunId ? `${sid}_${msgRunId}` : sid;
 
     if (!getExplicitSessionId(msg) && fallbackSessionId) {
       warnResolvedSessionId(msg, sid);
@@ -304,6 +306,13 @@ export function useChatRealtimeHandlers({
     // until some other state change (like clicking stop) triggers a re-render.
     if (isForActiveView) {
       sessionStore.setActiveSession(sid);
+    }
+
+    if (msg.kind === 'text' && msg.role === 'user') {
+      if (thinkingBySessionRef.current.has(sid)) {
+        thinkingBySessionRef.current.delete(sid);
+      }
+      sessionStore.clearAssistantRealtime?.(sid);
     }
 
     if (msg.kind === 'agent_activity') {
@@ -368,13 +377,13 @@ export function useChatRealtimeHandlers({
       // Content starting means thinking is done
       if (thinkingBySessionRef.current.has(sid)) {
         thinkingBySessionRef.current.delete(sid);
-        sessionStore.finalizeStreamingThinking(sid);
+        sessionStore.finalizeStreamingThinking(sid, msgRunId);
       }
       const slot = sessionStore.getSessionSlot?.(sid);
-      const streamId = `__streaming_${sid}`;
+      const streamId = `__streaming_${streamKey}`;
       const existing = slot?.realtimeMessages.find((m: any) => m.id === streamId);
       const currentText = existing?.content || '';
-      sessionStore.updateStreaming(sid, currentText + text, provider);
+      sessionStore.updateStreaming(sid, currentText + text, provider, msgRunId);
       return;
     }
 
@@ -386,10 +395,10 @@ export function useChatRealtimeHandlers({
       thinkingBySessionRef.current.set(sid, true as any);
       // Read current thinking content and append delta
       const slot = sessionStore.getSessionSlot?.(sid);
-      const streamId = `__streaming_thinking_${sid}`;
+      const streamId = `__streaming_thinking_${streamKey}`;
       const existing = slot?.realtimeMessages.find((m: any) => m.id === streamId);
       const currentText = existing?.content || '';
-      sessionStore.updateStreamingThinking(sid, currentText + text, provider);
+      sessionStore.updateStreamingThinking(sid, currentText + text, provider, msgRunId);
       return;
     }
 
@@ -398,9 +407,9 @@ export function useChatRealtimeHandlers({
       // Finalize thinking if still active
       if (thinkingBySessionRef.current.has(sid)) {
         thinkingBySessionRef.current.delete(sid);
-        sessionStore.finalizeStreamingThinking(sid);
+        sessionStore.finalizeStreamingThinking(sid, msgRunId);
       }
-      sessionStore.finalizeStreaming(sid);
+      sessionStore.finalizeStreaming(sid, msgRunId);
       return;
     }
 
@@ -418,10 +427,10 @@ export function useChatRealtimeHandlers({
       // The gateway may not send stream_end, so tool_use is the
       // reliable signal that the text block has ended.
       if (msg.kind === 'tool_use' || msg.kind === 'complete' || msg.kind === 'error') {
-        sessionStore.finalizeStreaming(sid);
+        sessionStore.finalizeStreaming(sid, msgRunId);
       }
       if (msg.kind === 'complete' || msg.kind === 'error') {
-        sessionStore.finalizeStreamingThinking(sid);
+        sessionStore.finalizeStreamingThinking(sid, msgRunId);
       }
     }
 
@@ -473,8 +482,8 @@ export function useChatRealtimeHandlers({
           if (thinkingBySessionRef.current.has(sid)) {
             thinkingBySessionRef.current.delete(sid);
           }
-          sessionStore.finalizeStreamingThinking(sid);
-          sessionStore.finalizeStreaming(sid);
+          sessionStore.finalizeStreamingThinking(sid, msgRunId);
+          sessionStore.finalizeStreaming(sid, msgRunId);
         }
 
         if (isForActiveView) {

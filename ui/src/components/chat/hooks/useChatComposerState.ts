@@ -773,9 +773,10 @@ export function useChatComposerState({
       }
 
       if (isLoading && isBusySendQueued) {
-        queuedBusySendConfirmedRef.current = true;
-        setIsBusySendConfirmed(true);
-        return;
+        queuedBusySendRef.current = false;
+        queuedBusySendConfirmedRef.current = false;
+        setIsBusySendQueued(false);
+        setIsBusySendConfirmed(false);
       }
 
       queuedBusySendRef.current = false;
@@ -1014,15 +1015,11 @@ export function useChatComposerState({
 
   useEffect(() => {
     inputValueRef.current = input;
-    queuedBusySendRef.current = false;
-    queuedBusySendConfirmedRef.current = false;
-    setIsBusySendQueued(false);
-    setIsBusySendConfirmed(false);
   }, [input]);
 
   useEffect(() => {
     if (!isLoading) {
-      if (queuedBusySendRef.current && queuedBusySendConfirmedRef.current && handleSubmitRef.current) {
+      if (queuedBusySendRef.current && handleSubmitRef.current) {
         handleSubmitRef.current(createFakeSubmitEvent());
       } else {
         queuedBusySendRef.current = false;
@@ -1084,6 +1081,10 @@ export function useChatComposerState({
 
       setInput(newValue);
       inputValueRef.current = newValue;
+      queuedBusySendRef.current = false;
+      queuedBusySendConfirmedRef.current = false;
+      setIsBusySendQueued(false);
+      setIsBusySendConfirmed(false);
       setCursorPosition(cursorPos);
 
       if (!newValue.trim()) {
@@ -1097,6 +1098,13 @@ export function useChatComposerState({
     },
     [handleCommandInputChange, resetCommandMenuState, setCursorPosition],
   );
+
+  const cancelBusySendQueue = useCallback(() => {
+    queuedBusySendRef.current = false;
+    queuedBusySendConfirmedRef.current = false;
+    setIsBusySendQueued(false);
+    setIsBusySendConfirmed(false);
+  }, []);
 
   const insertAtCursor = useCallback(
     (char: string) => {
@@ -1431,6 +1439,7 @@ export function useChatComposerState({
     isInputFocused,
     isBusySendQueued,
     isBusySendConfirmed,
+    cancelBusySendQueue,
   };
 }
 

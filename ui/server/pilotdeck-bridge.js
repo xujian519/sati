@@ -359,7 +359,7 @@ function resolvePermissionMode(options) {
  * @returns {object[]} NormalizedMessage frames.
  */
 export function gatewayEventToFrames(event, sessionId, provider) {
-    const base = { sessionId, provider };
+    const base = { sessionId, provider, ...(event.runId ? { runId: event.runId } : {}) };
     switch (event.type) {
         case 'turn_started':
             return [
