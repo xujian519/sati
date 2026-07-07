@@ -19,6 +19,7 @@ export class ChannelStatePersistence {
   private readonly debounceMs: number;
   private readonly pending = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly dirty = new Map<string, unknown>();
+  private readonly inFlight = new Map<string, Promise<void>>();
 
   constructor(options: ChannelStatePersistenceOptions) {
     this.stateDir = options.stateDir;
@@ -43,7 +44,11 @@ export class ChannelStatePersistence {
       channelKey,
       setTimeout(() => {
         this.pending.delete(channelKey);
-        void this.writeToDisk(channelKey);
+        void this.ensureWrite(channelKey).catch((err: unknown) => {
+          console.warn(
+            `[channels] failed to persist ${channelKey} state: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
       }, this.debounceMs),
     );
   }
@@ -53,8 +58,27 @@ export class ChannelStatePersistence {
       clearTimeout(timer);
       this.pending.delete(key);
     }
-    const writes = [...this.dirty.keys()].map((key) => this.writeToDisk(key));
-    await Promise.all(writes);
+    const keys = new Set([...this.dirty.keys(), ...this.inFlight.keys()]);
+    await Promise.all([...keys].map((key) => this.ensureWrite(key)));
+  }
+
+  private ensureWrite(channelKey: string): Promise<void> {
+    const existing = this.inFlight.get(channelKey);
+    if (existing) return existing;
+
+    const write = this.drainWrites(channelKey).finally(() => {
+      if (this.inFlight.get(channelKey) === write) {
+        this.inFlight.delete(channelKey);
+      }
+    });
+    this.inFlight.set(channelKey, write);
+    return write;
+  }
+
+  private async drainWrites(channelKey: string): Promise<void> {
+    while (this.dirty.has(channelKey)) {
+      await this.writeToDisk(channelKey);
+    }
   }
 
   private async writeToDisk(channelKey: string): Promise<void> {
