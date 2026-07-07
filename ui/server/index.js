@@ -84,6 +84,14 @@ import skillsRoutes from './routes/skills.js';
 import settingsRoutes from './routes/settings.js';
 import configRoutes from './routes/config.js';
 import gatewayRoutes from './routes/gateway.js';
+import {
+    OFFICE_PREVIEW_SERVICE_LIBREOFFICE,
+    OFFICE_PREVIEW_SERVICE_NONE,
+    convertOfficeDocumentToPdf,
+    getConfiguredOfficePreviewService,
+    getLibreOfficeCandidateStatuses,
+    getLibreOfficeStatus,
+} from './services/officePreview.js';
 import { startPilotDeckConfigWatcher, stopPilotDeckConfigWatcher } from './services/pilotdeckConfigWatcher.js';
 import { getAlwaysOnDashboardEvents } from './services/always-on-events.js';
 import agentRoutes from './routes/agent.js';
@@ -900,6 +908,39 @@ function resolvePathInProject(projectRoot, targetPath = '') {
     return { valid: true, resolved };
 }
 
+function createRouteRateLimiter({
+    windowMs,
+    maxRequests,
+    keyPrefix,
+    message = 'Too many requests',
+}) {
+    const buckets = new Map();
+
+    return (req, res, next) => {
+        const now = Date.now();
+        const identity = req.user?.id || req.ip || 'anonymous';
+        const key = `${keyPrefix}:${identity}`;
+        const bucket = buckets.get(key);
+
+        if (!bucket || now >= bucket.resetAt) {
+            buckets.set(key, { count: 1, resetAt: now + windowMs });
+            return next();
+        }
+
+        bucket.count += 1;
+        if (bucket.count <= maxRequests) {
+            return next();
+        }
+
+        const retryAfterSeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+        res.setHeader('Retry-After', String(retryAfterSeconds));
+        return res.status(429).json({
+            error: message,
+            code: 'RATE_LIMITED',
+        });
+    };
+}
+
 function setPreviewContentType(res, filePath) {
     const mimeType = mime.lookup(filePath) || 'application/octet-stream';
     const charset = mimeType.startsWith('text/') || mimeType === 'application/javascript' || mimeType === 'application/json'
@@ -907,6 +948,120 @@ function setPreviewContentType(res, filePath) {
         : '';
     res.setHeader('Content-Type', `${mimeType}${charset}`);
 }
+
+function parseRangeHeader(rangeHeader, fileSize) {
+    if (!rangeHeader) return null;
+    const match = /^bytes=(\d*)-(\d*)$/.exec(String(rangeHeader).trim());
+    if (!match) return { invalid: true };
+
+    const [, startPart, endPart] = match;
+    if (!startPart && !endPart) return { invalid: true };
+
+    let start;
+    let end;
+
+    if (!startPart) {
+        const suffixLength = Number.parseInt(endPart, 10);
+        if (!Number.isFinite(suffixLength) || suffixLength <= 0) {
+            return { invalid: true };
+        }
+        start = Math.max(0, fileSize - suffixLength);
+        end = fileSize - 1;
+    } else {
+        start = Number.parseInt(startPart, 10);
+        end = endPart ? Number.parseInt(endPart, 10) : fileSize - 1;
+    }
+
+    if (
+        !Number.isFinite(start)
+        || !Number.isFinite(end)
+        || start < 0
+        || end < start
+        || start >= fileSize
+    ) {
+        return { invalid: true };
+    }
+
+    return {
+        start,
+        end: Math.min(end, fileSize - 1),
+    };
+}
+
+async function streamFileWithRange(req, res, filePath, options = {}) {
+    const stats = await fsPromises.stat(filePath);
+    const fileSize = stats.size;
+    const mimeType = options.mimeType || mime.lookup(filePath) || 'application/octet-stream';
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Accept-Ranges', 'bytes');
+    if (options.cacheControl) {
+        res.setHeader('Cache-Control', options.cacheControl);
+    }
+    if (options.pragma) {
+        res.setHeader('Pragma', options.pragma);
+    }
+    if (options.downloadFilename) {
+        res.setHeader('Content-Disposition', contentDispositionAttachment(options.downloadFilename));
+    }
+
+    if (fileSize === 0) {
+        res.setHeader('Content-Length', '0');
+        res.status(200).end();
+        return;
+    }
+
+    const range = parseRangeHeader(req.headers.range, fileSize);
+    if (range?.invalid) {
+        res.status(416);
+        res.setHeader('Content-Range', `bytes */${fileSize}`);
+        res.end();
+        return;
+    }
+
+    const streamOptions = range ? { start: range.start, end: range.end } : undefined;
+    if (range) {
+        res.status(206);
+        res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${fileSize}`);
+        res.setHeader('Content-Length', String(range.end - range.start + 1));
+    } else {
+        res.setHeader('Content-Length', String(fileSize));
+    }
+
+    if (req.method === 'HEAD') {
+        res.end();
+        return;
+    }
+
+    const fileStream = fs.createReadStream(filePath, streamOptions);
+    fileStream.pipe(res);
+    fileStream.on('error', (error) => {
+        console.error('Error streaming file:', error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Error reading file' });
+        } else {
+            res.destroy(error);
+        }
+    });
+}
+
+const OFFICE_PDF_PREVIEW_EXTENSIONS = new Set(['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp']);
+
+const getFileExtension = (filePath) => path.extname(filePath).slice(1).toLowerCase();
+
+const officePreviewStatusRateLimiter = createRouteRateLimiter({
+    windowMs: 60 * 1000,
+    maxRequests: 60,
+    keyPrefix: 'office-preview-status',
+    message: 'Too many Office preview status requests',
+});
+
+const officePreviewPdfRateLimiter = createRouteRateLimiter({
+    windowMs: 60 * 1000,
+    maxRequests: 30,
+    keyPrefix: 'office-preview-pdf',
+    message: 'Too many Office preview conversion requests',
+});
 
 async function addDirectoryToZip(zip, directoryPath, rootPath) {
     const entries = await fsPromises.readdir(directoryPath, { withFileTypes: true });
@@ -1110,7 +1265,6 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
         const { projectName } = req.params;
         const { path: filePath } = req.query;
 
-
         // Security: ensure the requested path is inside the project root
         if (!filePath) {
             return res.status(400).json({ error: 'Invalid file path' });
@@ -1121,47 +1275,118 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
             return res.status(404).json({ error: 'Project not found' });
         }
 
-        // Match the text reader endpoint so callers can pass either project-relative
-        // or absolute paths without changing how the bytes are served.
-        const resolved = path.isAbsolute(filePath)
-            ? path.resolve(filePath)
-            : path.resolve(projectRoot, filePath);
-        const normalizedRoot = path.resolve(projectRoot) + path.sep;
-        if (!resolved.startsWith(normalizedRoot)) {
-            return res.status(403).json({ error: 'Path must be under project root' });
+        const resolvedResult = resolvePathInProject(projectRoot, filePath);
+        if (!resolvedResult.valid) {
+            return res.status(403).json({ error: resolvedResult.error });
         }
 
-        // Check if file exists
-        try {
-            await fsPromises.access(resolved);
-        } catch (error) {
+        const resolved = resolvedResult.resolved;
+        const stats = await fsPromises.stat(resolved).catch(() => null);
+        if (!stats?.isFile()) {
             return res.status(404).json({ error: 'File not found' });
         }
 
-        // Get file extension and set appropriate content type
         const mimeType = mime.lookup(resolved) || 'application/octet-stream';
-        res.setHeader('Content-Type', mimeType);
-
-        if (req.query.download) {
-            const basename = path.basename(resolved);
-            res.setHeader('Content-Disposition', contentDispositionAttachment(basename));
-        }
-
-        // Stream the file
-        const fileStream = fs.createReadStream(resolved);
-        fileStream.pipe(res);
-
-        fileStream.on('error', (error) => {
-            console.error('Error streaming file:', error);
-            if (!res.headersSent) {
-                res.status(500).json({ error: 'Error reading file' });
-            }
+        await streamFileWithRange(req, res, resolved, {
+            mimeType,
+            downloadFilename: req.query.download ? path.basename(resolved) : null,
         });
 
     } catch (error) {
         console.error('Error serving binary file:', error);
         if (!res.headersSent) {
             res.status(500).json({ error: error.message });
+        }
+    }
+});
+
+app.get('/api/office-preview/status', authenticateToken, officePreviewStatusRateLimiter, async (req, res) => {
+    try {
+        const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
+        const [libreOffice, candidates, service] = await Promise.all([
+            getLibreOfficeStatus({ forceRefresh }),
+            getLibreOfficeCandidateStatuses({ forceRefresh }),
+            Promise.resolve(getConfiguredOfficePreviewService()),
+        ]);
+        res.json({
+            service,
+            libreOffice: {
+                ...libreOffice,
+                candidates,
+            },
+            supportedServices: [
+                OFFICE_PREVIEW_SERVICE_NONE,
+                OFFICE_PREVIEW_SERVICE_LIBREOFFICE,
+            ],
+        });
+    } catch (error) {
+        console.error('Error reading Office preview status:', error);
+        res.status(500).json({
+            error: 'Failed to read Office preview status',
+            code: 'OFFICE_PREVIEW_STATUS_FAILED',
+        });
+    }
+});
+
+// Convert Office files to PDF for lightweight read-only preview.
+// This is an optional fallback for legacy Office/PPT formats; it only works
+// when LibreOffice/soffice is available on the host.
+app.get('/api/projects/:projectName/files/preview/pdf', authenticateToken, officePreviewPdfRateLimiter, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        const { path: filePath } = req.query;
+        const force = req.query.force === '1' || req.query.force === 'true';
+
+        if (!filePath) {
+            return res.status(400).json({ error: 'Invalid file path' });
+        }
+
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const resolvedResult = resolvePathInProject(projectRoot, filePath);
+        if (!resolvedResult.valid) {
+            return res.status(403).json({ error: resolvedResult.error });
+        }
+
+        const resolved = resolvedResult.resolved;
+        const extension = getFileExtension(resolved);
+        if (!OFFICE_PDF_PREVIEW_EXTENSIONS.has(extension)) {
+            return res.status(400).json({ error: 'Unsupported Office preview format' });
+        }
+
+        const stats = await fsPromises.stat(resolved).catch(() => null);
+        if (!stats?.isFile()) {
+            return res.status(404).json({ error: 'File not found' });
+        }
+
+        const officePreviewService = getConfiguredOfficePreviewService();
+        if (officePreviewService === OFFICE_PREVIEW_SERVICE_NONE) {
+            return res.status(409).json({
+                error: 'Office preview service is disabled',
+                code: 'OFFICE_PREVIEW_DISABLED',
+            });
+        }
+
+        const pdfPath = await convertOfficeDocumentToPdf(resolved, { force, projectRoot });
+        await streamFileWithRange(req, res, pdfPath, {
+            mimeType: 'application/pdf',
+            cacheControl: 'no-store, no-cache, must-revalidate',
+            pragma: 'no-cache',
+        });
+    } catch (error) {
+        console.error('Error generating Office PDF preview:', error);
+        if (!res.headersSent) {
+            res.status(error.statusCode || 500).json({
+                error: error.code === 'LIBREOFFICE_NOT_FOUND'
+                    ? 'LibreOffice executable not found'
+                    : error.code === 'OFFICE_PREVIEW_DISABLED'
+                        ? 'Office preview service is disabled'
+                        : 'Failed to generate Office PDF preview',
+                code: error.code || 'OFFICE_PREVIEW_FAILED',
+            });
         }
     }
 });
@@ -1932,6 +2157,9 @@ function handleChatConnection(ws, request) {
                             kind: 'text',
                             role: 'user',
                             content: userVisibleInput,
+                            ...(Array.isArray(data.options?.attachments) && data.options.attachments.length > 0
+                                ? { attachments: data.options.attachments }
+                                : {}),
                             timestamp: nowIso,
                         });
                         const optimisticStatusFrame = createNormalizedMessage({

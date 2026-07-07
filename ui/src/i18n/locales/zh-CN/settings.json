@@ -614,6 +614,7 @@
       "basic": "基础",
       "basicDescription": "运行本服务前需要配置模型服务。",
       "features": "功能",
+      "extensions": "扩展",
       "advanced": "高级"
     },
     "sections": {
@@ -657,6 +658,10 @@
       "gateway": {
         "label": "网关",
         "description": "消息网关主页和频道"
+      },
+      "officePreview": {
+        "label": "Office 文件预览服务",
+        "description": "Word、Excel、PPT 只读预览"
       }
     },
     "panels": {
@@ -674,6 +679,53 @@
           "proxyUrl": { "label": "HTTPS 代理", "description": "出站 HTTPS 代理 URL，同时作用于 Gateway 和 UI Server（对应 pilotdeck.yaml 中的 proxy.url）。" },
           "proxyNoProxy": { "label": "代理排除列表", "description": "逗号分隔的主机名/IP，这些地址不走代理（对应 pilotdeck.yaml 中的 proxy.noProxy）。127.0.0.1 和 localhost 始终排除。" }
         }
+      },
+      "officePreview": {
+        "title": "Office 文件预览服务",
+        "description": "配置 PilotDeck 如何预览 Word、Excel 和 PowerPoint 文件。选择“无”后不会执行 Office 转换。",
+        "fields": {
+          "service": {
+            "label": "预览服务",
+            "description": "Office 文件点击预览时使用的本机服务。"
+          },
+          "binaryPath": {
+            "label": "LibreOffice 可执行文件路径",
+            "description": "可选。自定义安装位置时填写 soffice/libreoffice 的完整路径；留空则自动探测。",
+            "placeholder": "/Applications/LibreOffice.app/Contents/MacOS/soffice"
+          },
+          "detectedBinaryPath": {
+            "label": "自动扫描结果",
+            "description": "选择扫描到的可用路径会写入上面的可执行文件路径；选择自动探测会清空手动路径。"
+          }
+        },
+        "options": {
+          "none": "无",
+          "libreOffice": "LibreOffice",
+          "libreOfficeUnavailable": "LibreOffice（不可用）",
+          "autoDetect": "自动探测（不指定路径）",
+          "candidateAvailable": "{{path}}（可用）",
+          "candidateUnavailable": "{{path}}（不可用）",
+          "candidateAvailableShort": "可用",
+          "candidateUnavailableShort": "不可用"
+        },
+        "scan": {
+          "button": "扫描",
+          "title": "选择 LibreOffice 路径",
+          "scanning": "正在扫描可用路径..."
+        },
+        "status": {
+          "checking": "正在检查 LibreOffice...",
+          "available": "LibreOffice 可用",
+          "unavailable": "LibreOffice 不可用",
+          "unknown": "LibreOffice 状态暂不可用",
+          "error": "无法检查 LibreOffice 状态",
+          "refresh": "重新检查",
+          "noDetectedPaths": "暂未扫描到可用候选路径。你仍然可以手动填写完整路径后重新检查。",
+          "path": "路径：{{path}}",
+          "version": "版本：{{version}}"
+        },
+        "disabledNote": "Office 预览服务已关闭。点击 Office 文件时将显示二进制文件提示，并提供设置入口。",
+        "unavailableWarning": "当前选择了 LibreOffice，但本机没有可用的 LibreOffice/soffice。请安装 LibreOffice，或将预览服务切换为“无”。"
       },
       "models": {
         "title": "模型池",

@@ -34,6 +34,10 @@ import PermissionRequestsBanner from '../chat/view/subcomponents/PermissionReque
 import ImageAttachment from '../chat/view/subcomponents/ImageAttachment';
 import CommandMenu from '../chat/view/subcomponents/CommandMenu';
 import { cn } from '../../lib/utils.js';
+import {
+  type DocumentSelectionReference,
+} from '../../types/documentSelection';
+import DocumentReferenceChip from './DocumentReferenceChip';
 
 interface MentionableFile {
   name: string;
@@ -68,6 +72,8 @@ export type ComposerV2Props = {
   openImagePicker: () => void;
   attachedImages: File[];
   onRemoveImage: (index: number) => void;
+  documentReferences: DocumentSelectionReference[];
+  onRemoveDocumentReference: (id: string) => void;
   uploadingImages: Map<string, number>;
   imageErrors: Map<string, string>;
 
@@ -272,6 +278,8 @@ export default function ComposerV2({
   openImagePicker,
   attachedImages,
   onRemoveImage,
+  documentReferences,
+  onRemoveDocumentReference,
   uploadingImages,
   imageErrors,
   showFileDropdown,
@@ -325,7 +333,7 @@ export default function ComposerV2({
     (request) => BLOCKING_PERMISSION_TOOLS.has(request.toolName),
   );
 
-  const hasDraftContent = input.trim().length > 0 || attachedImages.length > 0;
+  const hasDraftContent = input.trim().length > 0 || attachedImages.length > 0 || documentReferences.length > 0;
   const hasUploadingImages = uploadingImages.size > 0;
   const attachmentLimitError = imageErrors.get(MAX_ATTACHMENTS_ERROR_KEY);
   const disabled = !hasDraftContent || isLoading || isSubmitPending || hasUploadingImages;
@@ -362,11 +370,11 @@ export default function ComposerV2({
   return (
     <div
       className={cn(
-        'shrink-0',
+        'min-w-0 shrink-0',
         chromeless ? '' : 'bg-white px-6 pb-6 pt-3 dark:bg-neutral-950',
       )}
     >
-      <div className={cn(chromeless ? '' : 'mx-auto max-w-[720px]')}>
+      <div className={cn('min-w-0', chromeless ? '' : 'mx-auto max-w-[720px]')}>
         {pendingPermissionRequests.length > 0 ? (
           <div className="mb-3">
             <PermissionRequestsBanner
@@ -381,11 +389,20 @@ export default function ComposerV2({
         {!hasBlockingPermissionPanel ? (
           <form
             onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void}
-            className="relative"
+            className="pd-composer-container relative"
           >
-            {attachedImages.length > 0 ? (
-              <div className="mb-2 rounded-lg border border-neutral-200 bg-neutral-50 p-2 dark:border-neutral-800 dark:bg-neutral-900">
+            {attachedImages.length > 0 || documentReferences.length > 0 ? (
+              <div className="pd-composer-attachment-panel mb-2 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50 p-2 dark:border-neutral-800 dark:bg-neutral-900">
                 <div className="flex flex-wrap gap-2">
+                  {documentReferences.map((reference) => (
+                    <DocumentReferenceChip
+                      key={reference.id}
+                      reference={reference}
+                      className="pd-composer-reference-chip sm:max-w-[520px]"
+                      removeLabel={t('documentReferences.remove', { defaultValue: 'Remove reference' }) as string}
+                      onRemove={() => onRemoveDocumentReference(reference.id)}
+                    />
+                  ))}
                   {attachedImages.map((file, index) => (
                     <ImageAttachment
                       key={index}
@@ -489,8 +506,8 @@ export default function ComposerV2({
                 />
               </div>
 
-                <div className="flex items-center justify-between px-1 pt-1">
-                  <div className="flex min-w-0 items-center gap-0.5">
+                <div className="pd-composer-control-row flex flex-wrap items-center gap-x-2 gap-y-1 px-1 pt-1">
+                  <div className="pd-composer-toolbar-left flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
                     <div
                       className="relative mr-1"
                       onBlur={(event) => {
@@ -503,7 +520,10 @@ export default function ComposerV2({
                       <button
                         type="button"
                         onClick={() => setIsRunModeMenuOpen((open) => !open)}
-                        className="inline-flex h-7 max-w-[108px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[140px] text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                        className={cn(
+                          'pd-composer-icon-button inline-flex h-7 max-w-[108px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[140px]',
+                          'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800',
+                        )}
                         title={t('input.runModes.change', {
                           defaultValue: 'Select run mode',
                         }) as string}
@@ -511,10 +531,10 @@ export default function ComposerV2({
                         aria-expanded={isRunModeMenuOpen}
                       >
                         <SelectedRunModeIcon className="h-4 w-4 shrink-0" strokeWidth={1.9} />
-                        <span className="truncate">{selectedRunModeLabel}</span>
+                        <span className="pd-composer-run-label truncate">{selectedRunModeLabel}</span>
                         <ChevronDown
                           className={cn(
-                            'h-3.5 w-3.5 shrink-0 transition-transform',
+                            'pd-composer-control-chevron h-3.5 w-3.5 shrink-0 transition-transform',
                             isRunModeMenuOpen && 'rotate-180',
                           )}
                           strokeWidth={2}
@@ -632,7 +652,7 @@ export default function ComposerV2({
                         setIsPermissionMenuOpen((open) => !open);
                       }}
                       className={cn(
-                        'inline-flex h-7 max-w-[132px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[190px]',
+                        'pd-composer-icon-button inline-flex h-7 max-w-[132px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[190px]',
                         permissionSelectorDisabled
                           ? 'cursor-not-allowed text-neutral-400 opacity-45 dark:text-neutral-500'
                           : permissionMode === 'bypassPermissions'
@@ -646,10 +666,10 @@ export default function ComposerV2({
                       aria-expanded={permissionSelectorDisabled ? false : isPermissionMenuOpen}
                     >
                       <SelectedPermissionIcon className="h-4 w-4 shrink-0" strokeWidth={1.9} />
-                      <span className="truncate">{selectedPermissionLabel}</span>
+                      <span className="pd-composer-permission-label truncate">{selectedPermissionLabel}</span>
                       <ChevronDown
                         className={cn(
-                          'h-3.5 w-3.5 shrink-0 transition-transform',
+                          'pd-composer-control-chevron h-3.5 w-3.5 shrink-0 transition-transform',
                           isPermissionMenuOpen && 'rotate-180',
                         )}
                         strokeWidth={2}
@@ -724,7 +744,7 @@ export default function ComposerV2({
                   </div>
                   </div>
 
-                  <div className="ml-2 flex shrink-0 items-center gap-1">
+                  <div className="pd-composer-toolbar-right ml-auto flex shrink-0 items-center gap-1">
                     <div
                       className="relative"
                       onBlur={(event) => {
@@ -738,7 +758,7 @@ export default function ComposerV2({
                         type="button"
                         onClick={() => setIsContextPopoverOpen((open) => !open)}
                         className={cn(
-                          'inline-flex h-7 min-w-[44px] items-center justify-center gap-1 rounded-md px-1.5 text-[11px] tabular-nums transition',
+                          'pd-composer-icon-button inline-flex h-7 min-w-[44px] items-center justify-center gap-1 rounded-md px-1.5 text-[11px] tabular-nums transition',
                           contextStatus.tone === 'red'
                             ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30'
                             : contextStatus.tone === 'amber'
@@ -752,7 +772,7 @@ export default function ComposerV2({
                         aria-expanded={isContextPopoverOpen}
                       >
                         <CircleGauge className="h-4 w-4" strokeWidth={1.75} />
-                        <span>{contextStatus.known ? `${contextStatus.percent}%` : '--'}</span>
+                        <span className="pd-composer-context-label">{contextStatus.known ? `${contextStatus.percent}%` : '--'}</span>
                       </button>
                       {isContextPopoverOpen ? (
                         <div
@@ -820,7 +840,7 @@ export default function ComposerV2({
                         type="button"
                         onClick={() => setIsThinkingModeMenuOpen((open) => !open)}
                         className={cn(
-                          'inline-flex h-7 max-w-[116px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[140px]',
+                          'pd-composer-icon-button inline-flex h-7 max-w-[116px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[140px]',
                           effectiveThinkingMode === 'default'
                             ? 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
                             : 'text-purple-600 hover:bg-purple-50 dark:text-purple-300 dark:hover:bg-purple-950/30',
@@ -830,10 +850,10 @@ export default function ComposerV2({
                         aria-expanded={isThinkingModeMenuOpen}
                       >
                         <SelectedThinkingIcon className="h-4 w-4 shrink-0" strokeWidth={1.9} />
-                        <span className="hidden truncate sm:inline">{selectedThinkingMode.name}</span>
+                        <span className="pd-composer-thinking-label truncate">{selectedThinkingMode.name}</span>
                         <ChevronDown
                           className={cn(
-                            'h-3.5 w-3.5 shrink-0 transition-transform',
+                            'pd-composer-control-chevron h-3.5 w-3.5 shrink-0 transition-transform',
                             isThinkingModeMenuOpen && 'rotate-180',
                           )}
                           strokeWidth={2}

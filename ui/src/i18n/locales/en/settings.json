@@ -614,6 +614,7 @@
       "basic": "Basic",
       "basicDescription": "Configure model services before running this service.",
       "features": "Features",
+      "extensions": "Extensions",
       "advanced": "Advanced"
     },
     "sections": {
@@ -657,6 +658,10 @@
       "gateway": {
         "label": "Gateway",
         "description": "Messaging gateway home + channels"
+      },
+      "officePreview": {
+        "label": "Office File Preview Service",
+        "description": "Read-only preview for Word, Excel, and PPT"
       }
     },
     "panels": {
@@ -674,6 +679,53 @@
           "proxyUrl": { "label": "HTTPS proxy", "description": "Outbound HTTPS proxy URL. Applies to both Gateway and UI Server (proxy.url in pilotdeck.yaml)." },
           "proxyNoProxy": { "label": "No-proxy list", "description": "Comma-separated hostnames/IPs that bypass the proxy (proxy.noProxy in pilotdeck.yaml). 127.0.0.1 and localhost are always excluded." }
         }
+      },
+      "officePreview": {
+        "title": "Office File Preview Service",
+        "description": "Configure how PilotDeck previews Word, Excel, and PowerPoint files. Selecting None disables Office conversion.",
+        "fields": {
+          "service": {
+            "label": "Preview service",
+            "description": "Local service used when opening Office files for preview."
+          },
+          "binaryPath": {
+            "label": "LibreOffice executable path",
+            "description": "Optional. Enter the full soffice/libreoffice path for custom installations; leave empty to auto-detect.",
+            "placeholder": "/Applications/LibreOffice.app/Contents/MacOS/soffice"
+          },
+          "detectedBinaryPath": {
+            "label": "Auto-scanned paths",
+            "description": "Selecting a detected path writes it to the executable path above; select auto-detect to clear the manual path."
+          }
+        },
+        "options": {
+          "none": "None",
+          "libreOffice": "LibreOffice",
+          "libreOfficeUnavailable": "LibreOffice (unavailable)",
+          "autoDetect": "Auto-detect (no fixed path)",
+          "candidateAvailable": "{{path}} (available)",
+          "candidateUnavailable": "{{path}} (unavailable)",
+          "candidateAvailableShort": "Available",
+          "candidateUnavailableShort": "Unavailable"
+        },
+        "scan": {
+          "button": "Scan",
+          "title": "Select LibreOffice path",
+          "scanning": "Scanning available paths..."
+        },
+        "status": {
+          "checking": "Checking LibreOffice...",
+          "available": "LibreOffice is available",
+          "unavailable": "LibreOffice is unavailable",
+          "unknown": "LibreOffice status is temporarily unavailable",
+          "error": "Could not check LibreOffice status",
+          "refresh": "Check again",
+          "noDetectedPaths": "No candidate paths were found yet. You can still enter a full path manually and check again.",
+          "path": "Path: {{path}}",
+          "version": "Version: {{version}}"
+        },
+        "disabledNote": "Office preview is disabled. Opening an Office file will show the binary-file prompt with a shortcut back to this setting.",
+        "unavailableWarning": "LibreOffice is selected, but no LibreOffice/soffice executable is available on this machine. Install LibreOffice or switch the preview service to None."
       },
       "models": {
         "title": "Model Pool",

@@ -4,9 +4,13 @@ import type { TFunction } from 'i18next';
 import { AlertTriangle, Check, ChevronRight, Copy, FileText, GitBranch, Loader2 } from 'lucide-react';
 import { copyTextToClipboard } from '../../utils/clipboard';
 import { cn } from '../../lib/utils.js';
-import { useTypewriter } from './useTypewriter';
 import type { Project, SessionProvider } from '../../types/app';
+import {
+  DOCUMENT_SELECTION_ATTACHMENT_KIND,
+  type DocumentSelectionReference,
+} from '../../types/documentSelection';
 import type {
+  ChatAttachment,
   ChatMessage,
   PilotDeckPermissionSuggestion,
   SessionPermissionGrantResult,
@@ -18,6 +22,8 @@ import { formatUsageLimitText } from '../chat/utils/chatFormatting';
 import { ProcessTrace } from './ProcessTrace';
 import { processSummaryToTrace, type ProcessAttachment } from './processGrouping';
 import SubagentCard from './SubagentCard';
+import { useTypewriter } from './useTypewriter';
+import DocumentReferenceChip from './DocumentReferenceChip';
 
 type DiffLine = { type: string; content: string; lineNum: number };
 
@@ -58,6 +64,25 @@ const getAttachmentAccent = (name?: string, mimeType?: string): string => {
   if (label === 'ppt' || label === 'pptx') return 'bg-orange-500 text-white';
   return 'bg-neutral-500 text-white';
 };
+
+function attachmentToDocumentReference(attachment: ChatAttachment): DocumentSelectionReference | null {
+  if (attachment.kind !== DOCUMENT_SELECTION_ATTACHMENT_KIND || !attachment.selectedText) return null;
+  const filePath = attachment.filePath || attachment.path || '';
+  if (!filePath) return null;
+  return {
+    kind: DOCUMENT_SELECTION_ATTACHMENT_KIND,
+    id: `${filePath}-${attachment.createdAt || ''}-${attachment.occurrenceIndex ?? ''}`,
+    fileName: attachment.fileName || attachment.name,
+    filePath,
+    source: attachment.source === 'pdf' ? 'pdf' : 'office-pdf',
+    pageNumbers: Array.isArray(attachment.pageNumbers) ? attachment.pageNumbers : [],
+    selectedText: attachment.selectedText,
+    surroundingText: attachment.surroundingText,
+    occurrenceIndex: attachment.occurrenceIndex,
+    createdAt: attachment.createdAt || new Date(0).toISOString(),
+    truncated: attachment.truncated,
+  };
+}
 
 type MessageRowV2Props = {
   message: ChatMessage;
@@ -151,6 +176,16 @@ function MessageRowV2({
         ? message.attachments.filter((attachment) => attachment && typeof attachment.name === 'string')
         : [],
     [message.attachments],
+  );
+  const documentReferenceAttachments = useMemo(
+    () => messageAttachments
+      .map(attachmentToDocumentReference)
+      .filter((reference): reference is DocumentSelectionReference => Boolean(reference)),
+    [messageAttachments],
+  );
+  const fileAttachments = useMemo(
+    () => messageAttachments.filter((attachment) => attachment.kind !== DOCUMENT_SELECTION_ATTACHMENT_KIND),
+    [messageAttachments],
   );
   const [userImageLightbox, setUserImageLightbox] = useState<number | null>(null);
   const hasForkUnsupportedContent =
@@ -276,9 +311,21 @@ function MessageRowV2({
             <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
           ) : (
             <>
-              {messageAttachments.length > 0 ? (
+              {documentReferenceAttachments.length > 0 ? (
+                <div className={formattedContent || fileAttachments.length > 0 ? 'mb-2 flex flex-wrap gap-2' : 'flex flex-wrap gap-2'}>
+                  {documentReferenceAttachments.map((reference) => (
+                    <DocumentReferenceChip
+                      key={reference.id}
+                      reference={reference}
+                      summaryLength={100}
+                      className="bg-white/80 dark:bg-neutral-900/55"
+                    />
+                  ))}
+                </div>
+              ) : null}
+              {fileAttachments.length > 0 ? (
                 <div className={formattedContent ? 'mb-2 grid grid-cols-1 gap-2' : 'grid grid-cols-1 gap-2'}>
-                  {messageAttachments.map((attachment, index) => (
+                  {fileAttachments.map((attachment, index) => (
                     <div
                       key={`${attachment.name || 'attachment'}-${index}`}
                       className="flex min-w-0 items-center gap-3 rounded-2xl bg-white/85 p-2.5 pr-3 dark:bg-neutral-900/45"
@@ -324,7 +371,7 @@ function MessageRowV2({
                 </div>
               ) : null}
               {formattedContent ? (
-                <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-p:my-1 prose-ol:my-1 prose-ul:my-1 prose-li:my-0 min-w-0 break-words [overflow-wrap:anywhere]" projectName={selectedProject?.name}
+                <Markdown className="prose prose-sm prose-neutral min-w-0 max-w-none break-words [overflow-wrap:anywhere] dark:prose-invert prose-p:my-1 prose-ol:my-1 prose-ul:my-1 prose-li:my-0" projectName={selectedProject?.name}
           onFileOpen={onFileOpen}>{formattedContent}</Markdown>
               ) : null}
             </>

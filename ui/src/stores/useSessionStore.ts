@@ -54,10 +54,20 @@ export interface NormalizedMessage {
   content?: string;
   images?: string[];
   attachments?: Array<{
+    kind?: 'file' | 'document-selection';
     name: string;
     path?: string;
     size?: number;
     mimeType?: string;
+    fileName?: string;
+    filePath?: string;
+    source?: 'pdf' | 'office-pdf';
+    pageNumbers?: number[];
+    selectedText?: string;
+    surroundingText?: string;
+    occurrenceIndex?: number | null;
+    createdAt?: string;
+    truncated?: boolean;
   }>;
   toolName?: string;
   toolInput?: unknown;

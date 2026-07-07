@@ -270,6 +270,12 @@
       "askDescription": "Only answers questions without modifying files"
     }
   },
+  "documentReferences": {
+    "defaultPrompt": "Please answer based on the document selection I quoted.",
+    "pages": "p. {{pages}}",
+    "pageUnknown": "page unknown",
+    "remove": "Remove reference"
+  },
   "commandMenu": {
     "empty": "No commands available",
     "groups": {
