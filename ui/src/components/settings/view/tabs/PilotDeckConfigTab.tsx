@@ -798,7 +798,6 @@ function OfficePreviewSection({ config, onChange }: { config: PilotDeckConfig; o
                     label: libreOfficeUnavailable
                       ? t('pilotDeckConfig.panels.officePreview.options.libreOfficeUnavailable')
                       : t('pilotDeckConfig.panels.officePreview.options.libreOffice'),
-                    disabled: libreOfficeUnavailable,
                   },
                 ]}
               />
