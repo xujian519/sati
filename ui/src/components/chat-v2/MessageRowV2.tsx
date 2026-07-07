@@ -24,6 +24,7 @@ import { processSummaryToTrace, type ProcessAttachment } from './processGrouping
 import SubagentCard from './SubagentCard';
 import { useTypewriter } from './useTypewriter';
 import DocumentReferenceChip from './DocumentReferenceChip';
+import { linkifyFilePathsOutsideCode } from './linkifyFilePathsOutsideCode';
 
 type DiffLine = { type: string; content: string; lineNum: number };
 
@@ -64,31 +65,6 @@ const getAttachmentAccent = (name?: string, mimeType?: string): string => {
   if (label === 'ppt' || label === 'pptx') return 'bg-orange-500 text-white';
   return 'bg-neutral-500 text-white';
 };
-
-const LINKABLE_INLINE_FILE_EXTENSIONS = new Set([
-  'pdf', 'html', 'htm', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
-  'txt', 'md', 'csv', 'json', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'py', 'js', 'ts', 'tsx', 'css',
-]);
-
-const escapeMarkdownLinkText = (value: string): string => value.replace(/([\\\]\[])/g, '\\$1');
-
-const toFileHref = (pathValue: string): string => {
-  if (/^file:\/\//i.test(pathValue)) return pathValue;
-  if (pathValue.startsWith('/')) return `file://${encodeURI(pathValue)}`;
-  return encodeURI(pathValue.replace(/\\/g, '/'));
-};
-
-function linkifyFilePaths(content: string): string {
-  const pattern = /((?:file:\/\/)?\/(?:[^\s`'"<>])+\.[A-Za-z0-9]{1,10}|(?:\.\/)?\b[A-Za-z0-9._-][A-Za-z0-9._/-]*\.[A-Za-z0-9]{1,10}\b)/gu;
-  return content.replace(pattern, (match, pathValue: string, offset: number, fullText: string) => {
-    const before = fullText.slice(Math.max(0, offset - 2), offset);
-    const after = fullText.slice(offset + match.length, offset + match.length + 1);
-    if (before.includes('](') || after === ')') return match;
-    const extension = pathValue.split('.').pop()?.toLowerCase() || '';
-    if (!LINKABLE_INLINE_FILE_EXTENSIONS.has(extension)) return match;
-    return `[${escapeMarkdownLinkText(pathValue)}](${toFileHref(pathValue)})`;
-  });
-}
 
 function attachmentToDocumentReference(attachment: ChatAttachment): DocumentSelectionReference | null {
   if (attachment.kind !== DOCUMENT_SELECTION_ATTACHMENT_KIND || !attachment.selectedText) return null;
@@ -189,7 +165,7 @@ function MessageRowV2({
   const thinkingDisplayText = useTypewriter(formattedContent, !!message.isStreaming && !!message.isThinking, 4);
   const contentDisplayText = useTypewriter(formattedContent, !!message.isStreaming && !message.isThinking, 6);
   const linkedContentDisplayText = useMemo(
-    () => (message.isStreaming ? contentDisplayText : linkifyFilePaths(contentDisplayText)),
+    () => (message.isStreaming ? contentDisplayText : linkifyFilePathsOutsideCode(contentDisplayText)),
     [contentDisplayText, message.isStreaming],
   );
   const messageImages = useMemo(
@@ -514,7 +490,7 @@ function MessageRowV2({
               variant="action-row"
             />
           ) : null}
-          {showAssistantCopyButton ? <CopyMarkdownButton content={linkedContentDisplayText} /> : null}
+          {showAssistantCopyButton ? <CopyMarkdownButton content={formattedContent} /> : null}
         </div>
       ) : null}
     </div>
