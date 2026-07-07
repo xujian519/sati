@@ -41,12 +41,12 @@ const request: CanonicalModelRequest = {
   stream: false,
 };
 
-test("complete falls back when unversioned endpoint returns unexpected JSON", async () => {
+test("complete falls back when protocol-versioned endpoint returns unexpected JSON", async () => {
   const calls: string[] = [];
   const fetchImpl = async (input: RequestInfo | URL): Promise<Response> => {
     const url = String(input);
     calls.push(url);
-    if (url === "https://api.openai.com/chat/completions") {
+    if (url === "https://api.openai.com/v1/chat/completions") {
       return Response.json({ ok: true });
     }
     return Response.json({ choices: [{ message: { content: "ok" }, finish_reason: "stop" }] });
@@ -55,8 +55,8 @@ test("complete falls back when unversioned endpoint returns unexpected JSON", as
   const response = await complete(request, modelConfig, { fetch: fetchImpl });
 
   assert.deepEqual(calls, [
-    "https://api.openai.com/chat/completions",
     "https://api.openai.com/v1/chat/completions",
+    "https://api.openai.com/chat/completions",
   ]);
   assert.deepEqual(response.content, [{ type: "text", text: "ok" }]);
 });

@@ -10,7 +10,7 @@ afterEach(() => {
 });
 
 describe('config test-connection route', () => {
-  it('uses unversioned chat completions when the root base URL works', async () => {
+  it('uses protocol-versioned chat completions when the root base URL works', async () => {
     const calls = [];
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       calls.push(String(url));
@@ -29,14 +29,14 @@ describe('config test-connection route', () => {
     });
 
     expect(data.ok).toBe(true);
-    expect(calls).toEqual(['https://api.openai.com/chat/completions']);
+    expect(calls).toEqual(['https://api.openai.com/v1/chat/completions']);
   });
 
-  it('falls back to /v1/chat/completions when unversioned probing misses', async () => {
+  it('falls back to unversioned chat completions when protocol-versioned probing misses', async () => {
     const calls = [];
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       calls.push(String(url));
-      if (String(url) === 'https://api.openai.com/chat/completions') {
+      if (String(url) === 'https://api.openai.com/v1/chat/completions') {
         return jsonResponse({ error: { message: 'not found' } }, { ok: false, status: 404, statusText: 'Not Found' });
       }
       return jsonResponse({ choices: [{ message: { content: 'ok' } }] });
@@ -55,16 +55,16 @@ describe('config test-connection route', () => {
 
     expect(data.ok).toBe(true);
     expect(calls).toEqual([
-      'https://api.openai.com/chat/completions',
       'https://api.openai.com/v1/chat/completions',
+      'https://api.openai.com/chat/completions',
     ]);
   });
 
-  it('falls back to /v1/chat/completions when unversioned probing returns unexpected JSON', async () => {
+  it('falls back to unversioned chat completions when protocol-versioned probing returns unexpected JSON', async () => {
     const calls = [];
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       calls.push(String(url));
-      if (String(url) === 'https://api.openai.com/chat/completions') {
+      if (String(url) === 'https://api.openai.com/v1/chat/completions') {
         return jsonResponse({ ok: true });
       }
       return jsonResponse({ choices: [{ message: { content: 'ok' } }] });
@@ -83,16 +83,16 @@ describe('config test-connection route', () => {
 
     expect(data.ok).toBe(true);
     expect(calls).toEqual([
-      'https://api.openai.com/chat/completions',
       'https://api.openai.com/v1/chat/completions',
+      'https://api.openai.com/chat/completions',
     ]);
   });
 
-  it('falls back to /v1/messages for Anthropic when unversioned probing returns unexpected JSON', async () => {
+  it('falls back to unversioned messages for Anthropic when protocol-versioned probing returns unexpected JSON', async () => {
     const calls = [];
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       calls.push(String(url));
-      if (String(url) === 'https://api.anthropic.com/messages') {
+      if (String(url) === 'https://api.anthropic.com/v1/messages') {
         return jsonResponse({ ok: true });
       }
       return jsonResponse({ type: 'message', content: [{ type: 'text', text: 'ok' }] });
@@ -111,16 +111,16 @@ describe('config test-connection route', () => {
 
     expect(data.ok).toBe(true);
     expect(calls).toEqual([
-      'https://api.anthropic.com/messages',
       'https://api.anthropic.com/v1/messages',
+      'https://api.anthropic.com/messages',
     ]);
   });
 
-  it('falls back to /v1beta Gemini endpoint when unversioned probing returns unexpected JSON', async () => {
+  it('falls back to unversioned Gemini endpoint when protocol-versioned probing returns unexpected JSON', async () => {
     const calls = [];
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       calls.push(String(url));
-      if (String(url) === 'https://generativelanguage.googleapis.com/models/gemini-pro:generateContent') {
+      if (String(url) === 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent') {
         return jsonResponse({ ok: true });
       }
       return jsonResponse({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] });
@@ -139,8 +139,8 @@ describe('config test-connection route', () => {
 
     expect(data.ok).toBe(true);
     expect(calls).toEqual([
-      'https://generativelanguage.googleapis.com/models/gemini-pro:generateContent',
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
+      'https://generativelanguage.googleapis.com/models/gemini-pro:generateContent',
     ]);
   });
 

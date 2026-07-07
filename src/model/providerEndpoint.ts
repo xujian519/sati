@@ -55,9 +55,10 @@ function buildEndpointCandidates(baseUrl: string, defaultVersion: string, endpoi
   if (baseUrlEndsWithEndpoint(normalizedBase, normalizedEndpointPath)) return [normalizedBase];
   const unversionedEndpoint = joinUrl(normalizedBase, normalizedEndpointPath);
   if (hasVersionSegment(normalizedBase)) return [unversionedEndpoint];
+  const versionedEndpoint = joinUrl(normalizedBase, [defaultVersion, normalizedEndpointPath].filter(Boolean).join("/"));
   return uniqueUrls([
+    versionedEndpoint,
     unversionedEndpoint,
-    joinUrl(normalizedBase, [defaultVersion, normalizedEndpointPath].filter(Boolean).join("/")),
   ]);
 }
 
