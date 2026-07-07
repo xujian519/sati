@@ -278,6 +278,16 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
         pilotHome,
         now,
       }),
+    async recordAgentStatusMessage(input) {
+      const storage = createAgentProjectSessionStorage({
+        projectRoot: input.projectKey ? input.projectKey : projectRoot,
+        pilotHome,
+        sessionId: input.sessionKey,
+        now,
+      });
+      await storage.transcript.recordAgentStatusMessage(input.sessionKey, input.turnId, input.status);
+      return { recorded: true };
+    },
     listProjects: () =>
       listWebProjects({ pilotHome, defaultProjectRoot: options.skipDefaultProject ? undefined : projectRoot }),
     describeProject: (input) =>

@@ -611,7 +611,7 @@ export class WeixinChannel implements ChannelAdapter {
           watchdogSettled = true;
           this.logger?.warn?.(`weixin: live reply timed out for user ${userId}`);
           void notifyTimedOut()
-            .then(() => this.gateway?.abortTurn({ sessionKey, ...(activeRunId ? { runId: activeRunId } : {}) }))
+            .then(() => this.gateway?.abortTurn({ sessionKey, ...(activeRunId ? { runId: activeRunId } : {}), reason: "system:timeout" }))
             .catch((error: unknown) => {
               this.logger?.warn?.(`weixin: abort timeout turn failed: ${formatWeixinError(error)}`);
             });

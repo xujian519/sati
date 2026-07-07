@@ -69,7 +69,7 @@ export class RemoteGateway implements Gateway {
     return this.client.stream("submit_turn", input);
   }
 
-  async abortTurn(input: { sessionKey: string; runId?: string }): Promise<void> {
+  async abortTurn(input: { sessionKey: string; runId?: string; reason?: string }): Promise<void> {
     await this.client.request("abort_turn", input);
   }
 
@@ -87,6 +87,10 @@ export class RemoteGateway implements Gateway {
 
   async closeSession(input: { sessionKey: string; reason?: string }): Promise<void> {
     await this.client.request("close_session", input);
+  }
+
+  async recordAgentStatusMessage(input: import("../protocol/types.js").GatewayRecordAgentStatusMessageInput): Promise<{ recorded: boolean }> {
+    return (await this.client.request("record_agent_status_message", input)) as { recorded: boolean };
   }
 
   async describeServer(): Promise<GatewayServerInfo> {

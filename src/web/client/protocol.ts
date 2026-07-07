@@ -92,6 +92,7 @@ export type WebGatewayEvent =
   | { type: "config_changed"; changedPaths: string[]; changeClasses: string[] }
   | { type: "worktree_created"; runId: string; cwd: string }
   | { type: "worktree_removed"; cwd: string }
+  | { type: "agent_status"; event: string; detail?: Record<string, unknown> }
   | { type: "turn_completed"; usage: Record<string, number>; finishReason: string }
   | { type: "error"; message: string; code?: string; recoverable: boolean };
 
