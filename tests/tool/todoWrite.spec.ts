@@ -90,6 +90,27 @@ describe("todo_write", () => {
     ]);
   });
 
+  it("allows merge updates to include only the fields that changed", async () => {
+    const tool = createTodoWriteTool();
+    const context = createContext();
+
+    await tool.execute({
+      todos: [
+        { id: "inspect", content: "Inspect current implementation", status: "in_progress", priority: "high" },
+      ],
+    }, context);
+
+    const merged = await tool.execute({
+      merge: true,
+      todos: [{ id: "inspect", status: "completed" }],
+    }, context);
+
+    assert.ok(merged.data);
+    assert.deepEqual(merged.data.todos, [
+      { id: "inspect", content: "Inspect current implementation", status: "completed", priority: "high" },
+    ]);
+  });
+
   it("supports cancelled structured todos", async () => {
     const tool = createTodoWriteTool();
     const context = createContext();

@@ -161,6 +161,13 @@ export type PilotDeckTodoItem = {
   priority?: string;
 };
 
+export type PilotDeckTodoUpdate = {
+  id?: string;
+  content?: string;
+  status?: PilotDeckTodoItem["status"];
+  priority?: string;
+};
+
 export type PilotDeckTodoDiagnostics = {
   writeCount: number;
   todoCount: number;
@@ -208,7 +215,7 @@ export type PilotDeckPlanTodoStateHandle = {
   getSnapshot(): PilotDeckPlanTodoStateSnapshot;
   markPlanApproved(plan: string): void;
   recordTodoWrite(markdown: string, todos: PilotDeckTodoItem[], options?: { reason?: string }): PilotDeckTodoItem[];
-  writeTodos(todos: PilotDeckTodoItem[], options?: { markdown?: string; merge?: boolean; reason?: string }): PilotDeckTodoItem[];
+  writeTodos(todos: PilotDeckTodoUpdate[], options?: { markdown?: string; merge?: boolean; reason?: string }): PilotDeckTodoItem[];
   markToolProgressChanged(toolName: string): void;
   buildPromptAddendum(): string | undefined;
   blockingMessageFor(toolName: string, isReadOnly: boolean): string | undefined;

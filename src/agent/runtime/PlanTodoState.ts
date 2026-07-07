@@ -3,6 +3,7 @@ import type {
   PilotDeckPlanTodoStateHandle,
   PilotDeckPlanTodoStateSnapshot,
   PilotDeckTodoItem,
+  PilotDeckTodoUpdate,
   PilotDeckTodoWriteHistoryEntry,
 } from "../../tool/protocol/types.js";
 
@@ -31,9 +32,9 @@ const VALID_TODO_STATUSES = new Set<PilotDeckTodoItem["status"]>([
   "cancelled",
 ]);
 
-function normalizeTodoItem(item: PilotDeckTodoItem, index: number): PilotDeckTodoItem {
-  const content = item.content.trim() || "(no description)";
-  const status = VALID_TODO_STATUSES.has(item.status) ? item.status : "pending";
+function normalizeTodoItem(item: PilotDeckTodoUpdate, index: number): PilotDeckTodoItem {
+  const content = item.content?.trim() || "(no description)";
+  const status = item.status && VALID_TODO_STATUSES.has(item.status) ? item.status : "pending";
   return {
     id: item.id?.trim() || `todo-${index + 1}`,
     content,
@@ -42,7 +43,7 @@ function normalizeTodoItem(item: PilotDeckTodoItem, index: number): PilotDeckTod
   };
 }
 
-function dedupeById(todos: PilotDeckTodoItem[]): PilotDeckTodoItem[] {
+function dedupeById<T extends PilotDeckTodoUpdate>(todos: T[]): T[] {
   const lastIndex = new Map<string, number>();
   todos.forEach((todo, index) => {
     const id = todo.id?.trim() || `todo-${index + 1}`;
@@ -51,7 +52,7 @@ function dedupeById(todos: PilotDeckTodoItem[]): PilotDeckTodoItem[] {
   return [...lastIndex.values()].sort((a, b) => a - b).map((index) => todos[index]!);
 }
 
-function replaceTodos(todos: PilotDeckTodoItem[]): PilotDeckTodoItem[] {
+function replaceTodos(todos: PilotDeckTodoUpdate[]): PilotDeckTodoItem[] {
   return dedupeById(todos).map((todo, index) => normalizeTodoItem(todo, index));
 }
 
@@ -63,22 +64,22 @@ function cloneTodos(todos: PilotDeckTodoItem[]): PilotDeckTodoItem[] {
   return todos.map((todo) => ({ ...todo }));
 }
 
-function mergeTodos(existingTodos: PilotDeckTodoItem[], updates: PilotDeckTodoItem[]): PilotDeckTodoItem[] {
+function mergeTodos(existingTodos: PilotDeckTodoItem[], updates: PilotDeckTodoUpdate[]): PilotDeckTodoItem[] {
   const existingById = new Map<string, PilotDeckTodoItem>();
   for (const [index, todo] of existingTodos.entries()) {
     const normalized = normalizeTodoItem(todo, index);
     existingById.set(normalized.id!, normalized);
   }
 
-  const append: PilotDeckTodoItem[] = [];
+  const append: PilotDeckTodoUpdate[] = [];
   for (const update of dedupeById(updates)) {
     const id = update.id?.trim();
     if (id && existingById.has(id)) {
       const current = existingById.get(id)!;
       existingById.set(id, {
         ...current,
-        ...(update.content.trim() ? { content: update.content.trim() } : {}),
-        ...(VALID_TODO_STATUSES.has(update.status) ? { status: update.status } : {}),
+        ...(update.content?.trim() ? { content: update.content.trim() } : {}),
+        ...(update.status && VALID_TODO_STATUSES.has(update.status) ? { status: update.status } : {}),
         ...(update.priority?.trim() ? { priority: update.priority.trim() } : {}),
       });
       continue;
@@ -271,7 +272,7 @@ export function createPlanTodoStateManager(): PlanTodoStateManager {
         recordTodoWrite(markdown: string, todos: PilotDeckTodoItem[], options?: { reason?: string }) {
           return recordWrite(state, replaceTodos(todos), { mode: "markdown", markdown, reason: options?.reason });
         },
-        writeTodos(todos: PilotDeckTodoItem[], options?: { markdown?: string; merge?: boolean; reason?: string }) {
+        writeTodos(todos: PilotDeckTodoUpdate[], options?: { markdown?: string; merge?: boolean; reason?: string }) {
           const nextTodos = options?.merge ? mergeTodos(state.todos, todos) : replaceTodos(todos);
           return recordWrite(state, nextTodos, {
             mode: "structured",

@@ -1,13 +1,14 @@
 import type {
   PilotDeckTodoDiagnostics,
   PilotDeckTodoItem,
+  PilotDeckTodoUpdate,
   PilotDeckToolDefinition,
   PilotDeckToolExecutionOutput,
 } from "../protocol/types.js";
 
 export type TodoWriteInput = {
   markdown?: string;
-  todos?: PilotDeckTodoItem[];
+  todos?: PilotDeckTodoUpdate[];
   merge?: boolean;
   reason?: string;
 };
@@ -22,6 +23,15 @@ export type TodoWriteOutput = {
 };
 
 const TODO_LINE_PATTERN = /^\s*[-*]\s+\[( |x|X)\]\s+(.*?)\s*$/u;
+
+function normalizeTodoUpdatesForFallback(todos: PilotDeckTodoUpdate[]): PilotDeckTodoItem[] {
+  return todos.map((todo, index) => ({
+    id: todo.id?.trim() || `todo-${index + 1}`,
+    content: todo.content?.trim() || "(no description)",
+    status: todo.status ?? "pending",
+    ...(todo.priority?.trim() ? { priority: todo.priority.trim() } : {}),
+  }));
+}
 
 export function parseTodoMarkdown(markdown: string): PilotDeckTodoItem[] {
   const lines = markdown.split(/\r?\n/u);
@@ -64,7 +74,7 @@ export function createTodoWriteTool(): PilotDeckToolDefinition<TodoWriteInput, T
       [
         "Read or update a lightweight session checklist for complex work.",
         "Call with no arguments to read the current todo list.",
-        "For editable todos, provide `todos` with stable ids and optional `merge=true` to update by id and append new items.",
+        "For editable todos, provide `todos` with stable ids and optional `merge=true` to update existing items by id or append new items.",
         "For legacy checklist updates, provide `markdown` using `- [x]` for completed items and `- [ ]` for remaining items.",
         "Use for complex 3+ step tasks, multi-deliverable work, codebase exploration, batch processing, information gathering, or generation work.",
         "Do a small amount of exploration before writing a detailed list; use todos as checkable checkpoints, not a rigid plan lock.",
@@ -87,15 +97,14 @@ export function createTodoWriteTool(): PilotDeckToolDefinition<TodoWriteInput, T
         },
         todos: {
           type: "array",
-          description: "Editable todo items. Omit to read current list, or provide with merge=true to update by id.",
+          description: "Editable todo items. Omit to read current list. With merge=true, items may include only id plus the fields to update.",
           items: {
             type: "object",
             additionalProperties: false,
-            required: ["content", "status"],
             properties: {
               id: {
                 type: "string",
-                description: "Stable todo identifier. Required for reliable merge updates.",
+                description: "Stable todo identifier. Required for reliable merge updates to existing items.",
               },
               content: {
                 type: "string",
@@ -135,7 +144,7 @@ export function createTodoWriteTool(): PilotDeckToolDefinition<TodoWriteInput, T
 
       if (Array.isArray(input.todos)) {
         mode = "structured";
-        todos = context.planTodo?.writeTodos(input.todos, { merge, reason }) ?? input.todos;
+        todos = context.planTodo?.writeTodos(input.todos, { merge, reason }) ?? normalizeTodoUpdatesForFallback(input.todos);
       } else if (typeof input.markdown === "string") {
         mode = "markdown";
         todos = parseTodoMarkdown(input.markdown);

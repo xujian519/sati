@@ -467,7 +467,7 @@ function generatePilotDeckToolsModule(kind: RpcTransport["kind"]): string {
 def web_search(query, country=None):
     args = {"query": query}
     if country is not None:
-        args["country"] = country
+        args["gl"] = country
     return _call("web_search", args)
 
 

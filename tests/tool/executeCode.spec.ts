@@ -158,6 +158,45 @@ test("execute_code can call read_file through PilotDeck RPC", async () => {
   }
 });
 
+test("execute_code maps web_search country helper argument to gl", async () => {
+  let capturedInput: unknown;
+  const registry = new ToolRegistry();
+  registry.register(createBuiltinRegistry({ webSearch: false, webFetch: false, agent: false, askUserQuestion: false }).get("execute_code")!);
+  registry.register({
+    name: "web_search",
+    description: "test web search",
+    kind: "network",
+    inputSchema: {
+      type: "object",
+      required: ["query"],
+      additionalProperties: false,
+      properties: {
+        query: { type: "string" },
+        gl: { type: "string" },
+      },
+    },
+    isReadOnly: () => true,
+    isConcurrencySafe: () => true,
+    execute: async (input) => {
+      capturedInput = input;
+      return { content: [{ type: "text", text: "search ok" }], data: { organic: [] } };
+    },
+  } satisfies PilotDeckToolDefinition);
+  const runtime = new ToolRuntime(registry, new PermissionRuntime());
+  const cwd = await mkdtemp(path.join(tmpdir(), "pilotdeck-execute-code-web-search-"));
+  try {
+    const code = 'from pilotdeck_tools import web_search\nprint(web_search("docs", country="cn")["content"])';
+    const result = await runtime.execute({ id: "call-web-search", name: "execute_code", input: { code } }, createContext(cwd));
+    const output = data(result);
+    assert.equal(output.status, "success");
+    assert.deepEqual(capturedInput, { query: "docs", gl: "cn" });
+    assert.equal(output.tool_call_log[0]?.tool, "web_search");
+    assert.equal(output.tool_call_log[0]?.ok, true);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test("execute_code exposes write helpers but keeps unsafe helpers unavailable", async () => {
   const cwd = await mkdtemp(path.join(tmpdir(), "pilotdeck-execute-code-blocked-"));
   try {
