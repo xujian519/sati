@@ -21,6 +21,10 @@ import { reloadPilotDeckConfig } from '../services/pilotdeckConfigReloader.js';
 import { suppressNextWatchEvent } from '../services/pilotdeckConfigWatcher.js';
 import { getPilotDeckGateway } from '../pilotdeck-bridge.js';
 import {
+  buildProviderChatEndpoint,
+  buildProviderModelsEndpoint,
+} from '../../../src/model/providerEndpoint.js';
+import {
   OFFICE_PREVIEW_SERVICE_LIBREOFFICE,
   OFFICE_PREVIEW_SERVICE_NONE,
   getLibreOfficeCandidateStatuses,
@@ -65,50 +69,49 @@ function broadcastConfigEvent(payload) {
   process.emit('pilotdeck:config-broadcast', payload);
 }
 
-function normalizeGoogleProbeModel(model) {
-  const text = String(model || '').trim();
-  const withoutProvider = text.startsWith('google/') ? text.slice('google/'.length) : text;
-  if (withoutProvider === 'gemini-3-pro') return 'gemini-3-pro-preview';
-  if (withoutProvider === 'gemini-3.1-pro') return 'gemini-3.1-pro-preview';
-  if (withoutProvider === 'gemini-3-flash') return 'gemini-3-flash-preview';
-  if (withoutProvider === 'gemini-3.1-flash' || withoutProvider === 'gemini-3.1-flash-preview') {
-    return 'gemini-3-flash-preview';
+function extractProbeText(body, providerKind) {
+  if (!body || typeof body !== 'object') return '';
+
+  if (providerKind === 'anthropic') {
+    const content = Array.isArray(body.content) ? body.content : [];
+    return content
+      .map((part) => (typeof part?.text === 'string' ? part.text : ''))
+      .join('')
+      .trim();
   }
-  if (withoutProvider === 'gemini-3.1-flash-lite') return 'gemini-3.1-flash-lite-preview';
-  return withoutProvider;
-}
 
-function buildGoogleGenerateContentUrl(baseUrl, model) {
-  const normalizedBaseUrl = String(baseUrl || 'https://generativelanguage.googleapis.com').trim().replace(/\/+$/, '')
-    || 'https://generativelanguage.googleapis.com';
-  const url = new URL(normalizedBaseUrl);
-  const parts = url.pathname.split('/').filter(Boolean);
-  const last = parts.at(-1);
-  const apiVersion = last === 'v1' || last === 'v1beta' ? last : 'v1beta';
-  const baseParts = last === 'v1' || last === 'v1beta' ? parts.slice(0, -1) : parts;
-  url.pathname = `/${[
-    ...baseParts,
-    apiVersion,
-    'models',
-    `${encodeURIComponent(normalizeGoogleProbeModel(model))}:generateContent`,
-  ].join('/')}`;
-  url.search = '';
-  url.hash = '';
-  return url.toString();
-}
+  if (providerKind === 'google') {
+    const candidates = Array.isArray(body.candidates) ? body.candidates : [];
+    return candidates
+      .flatMap((candidate) => Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [])
+      .map((part) => (typeof part?.text === 'string' ? part.text : ''))
+      .join('')
+      .trim();
+  }
 
-function buildGoogleModelsUrl(baseUrl) {
-  const normalizedBaseUrl = String(baseUrl || 'https://generativelanguage.googleapis.com').trim().replace(/\/+$/, '')
-    || 'https://generativelanguage.googleapis.com';
-  const url = new URL(normalizedBaseUrl);
-  const parts = url.pathname.split('/').filter(Boolean);
-  const last = parts.at(-1);
-  const apiVersion = last === 'v1' || last === 'v1beta' ? last : 'v1beta';
-  const baseParts = last === 'v1' || last === 'v1beta' ? parts.slice(0, -1) : parts;
-  url.pathname = `/${[...baseParts, apiVersion, 'models'].join('/')}`;
-  url.search = '';
-  url.hash = '';
-  return url.toString();
+  if (providerKind === 'responses') {
+    if (typeof body.output_text === 'string' && body.output_text.trim()) return body.output_text.trim();
+    const output = Array.isArray(body.output) ? body.output : [];
+    return output
+      .flatMap((item) => Array.isArray(item?.content) ? item.content : [])
+      .map((part) => (typeof part?.text === 'string' ? part.text : ''))
+      .join('')
+      .trim();
+  }
+
+  const choices = Array.isArray(body.choices) ? body.choices : [];
+  return choices
+    .map((choice) => {
+      const content = choice?.message?.content;
+      if (typeof content === 'string') return content;
+      if (Array.isArray(content)) {
+        return content.map((part) => (typeof part?.text === 'string' ? part.text : '')).join('');
+      }
+      if (typeof choice?.text === 'string') return choice.text;
+      return '';
+    })
+    .join('')
+    .trim();
 }
 
 function normalizeModelListItem(item) {
@@ -340,15 +343,12 @@ router.post('/models', async (req, res) => {
   const isAnthropic = normalizedType === 'anthropic';
   const isGoogle = normalizedType === 'google';
   const normalizedBaseUrl = String(baseUrl).trim().replace(/\/+$/, '');
+  const protocol = isGoogle ? 'google' : isAnthropic ? 'anthropic' : 'openai';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
 
   try {
-    const url = isGoogle
-      ? buildGoogleModelsUrl(normalizedBaseUrl)
-      : isAnthropic
-        ? `${normalizedBaseUrl}/v1/models`
-        : `${normalizedBaseUrl}/models`;
+    const url = buildProviderModelsEndpoint({ protocol, baseUrl: normalizedBaseUrl });
     const headers = isGoogle
       ? { 'x-goog-api-key': effectiveApiKey }
       : isAnthropic
@@ -401,7 +401,7 @@ router.post('/test-connection', async (req, res) => {
     let fetchOptions;
 
     if (isGoogle) {
-      url = buildGoogleGenerateContentUrl(normalizedBaseUrl, model);
+      url = buildProviderChatEndpoint({ protocol: 'google', baseUrl: normalizedBaseUrl, model });
       fetchOptions = {
         method: 'POST',
         headers: {
@@ -410,12 +410,12 @@ router.post('/test-connection', async (req, res) => {
         },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: 'Hi' }] }],
-          generationConfig: { maxOutputTokens: 1 },
+          generationConfig: { maxOutputTokens: 8 },
         }),
         signal: controller.signal,
       };
     } else if (isAnthropic) {
-      url = `${normalizedBaseUrl}/v1/messages`;
+      url = buildProviderChatEndpoint({ protocol: 'anthropic', baseUrl: normalizedBaseUrl });
       fetchOptions = {
         method: 'POST',
         headers: {
@@ -425,13 +425,13 @@ router.post('/test-connection', async (req, res) => {
         },
         body: JSON.stringify({
           model,
-          max_tokens: 1,
+          max_tokens: 8,
           messages: [{ role: 'user', content: 'Hi' }],
         }),
         signal: controller.signal,
       };
     } else if (isOpenAIResponses) {
-      url = `${normalizedBaseUrl}/responses`;
+      url = buildProviderChatEndpoint({ protocol: 'openai-responses', baseUrl: normalizedBaseUrl });
       fetchOptions = {
         method: 'POST',
         headers: {
@@ -447,7 +447,7 @@ router.post('/test-connection', async (req, res) => {
         signal: controller.signal,
       };
     } else {
-      url = `${normalizedBaseUrl}/chat/completions`;
+      url = buildProviderChatEndpoint({ protocol: 'openai', baseUrl: normalizedBaseUrl });
       fetchOptions = {
         method: 'POST',
         headers: {
@@ -456,7 +456,7 @@ router.post('/test-connection', async (req, res) => {
         },
         body: JSON.stringify({
           model,
-          max_tokens: 1,
+          max_tokens: 8,
           messages: [{ role: 'user', content: 'Hi' }],
         }),
         signal: controller.signal,
@@ -499,6 +499,15 @@ router.post('/test-connection', async (req, res) => {
         return res.json({
           ok: false,
           error: `Endpoint returned HTTP ${response.status}, but the response was not a valid ${expectedShape}. Check the base URL path.`,
+        });
+      }
+
+      const providerKind = isAnthropic ? 'anthropic' : isGoogle ? 'google' : isOpenAIResponses ? 'responses' : 'openai';
+      const probeText = extractProbeText(body, providerKind);
+      if (!probeText) {
+        return res.json({
+          ok: false,
+          error: `Endpoint returned a valid ${expectedShape}, but the model did not produce any chat text. Check that ${model} supports chat completions.`,
         });
       }
 

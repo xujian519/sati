@@ -16,6 +16,7 @@ import { parseModelResponse } from "../response/parseModelResponse.js";
 import { createStreamNormalizerState, normalizeStreamEvent } from "./normalizeStreamEvent.js";
 import { createGoogleStreamState, normalizeGoogleStreamEvent } from "../providers/google/stream.js";
 import { normalizeProviderBaseUrl } from "../normalizeProviderBaseUrl.js";
+import { buildProviderChatEndpoint } from "../providerEndpoint.js";
 import { StreamingCheckpointManager } from "./StreamingCheckpoint.js";
 
 export type ModelTransport = typeof fetch;
@@ -501,15 +502,7 @@ function forwardAbort(source: AbortSignal, target: AbortController): () => void 
 }
 
 function buildEndpoint(provider: ProviderConfig, _stream: boolean): string {
-  if (provider.protocol === "anthropic") {
-    return joinUrl(provider.url, "v1/messages");
-  }
-
-  if (provider.protocol === "openai-responses") {
-    return joinUrl(provider.url, "responses");
-  }
-
-  return joinUrl(provider.url, "chat/completions");
+  return buildProviderChatEndpoint({ protocol: provider.protocol, baseUrl: provider.url });
 }
 
 function buildHeaders(provider: ProviderConfig): HeadersInit {
@@ -699,8 +692,4 @@ function createAbortError(reason?: unknown): Error {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === "AbortError" || error.message.toLowerCase().includes("aborted"));
-}
-
-function joinUrl(base: string, path: string): string {
-  return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 }
