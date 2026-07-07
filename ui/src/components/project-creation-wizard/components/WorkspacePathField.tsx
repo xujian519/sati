@@ -26,7 +26,7 @@ export default function WorkspacePathField({
   const [showFolderBrowser, setShowFolderBrowser] = useState(false);
 
   useEffect(() => {
-    if (value.trim().length <= 2) {
+    if (value.trim().length < 2) {
       setPathSuggestions([]);
       setShowPathDropdown(false);
       return;
