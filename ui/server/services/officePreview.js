@@ -10,6 +10,8 @@ import { readPilotDeckConfigFile } from './pilotdeckConfig.js';
 
 const execFileAsync = promisify(execFile);
 
+const officePreviewConversionLocks = new Map();
+
 export const OFFICE_PREVIEW_SERVICE_NONE = 'none';
 export const OFFICE_PREVIEW_SERVICE_LIBREOFFICE = 'libreoffice';
 export const OFFICE_PREVIEW_CACHE_DIR = path.join(os.tmpdir(), 'pilotdeck-office-preview-cache');
@@ -251,9 +253,43 @@ export async function convertOfficeDocumentToPdf(sourcePath, options = {}) {
     .update(`${resolvedSourcePath}:${stats.size}:${stats.mtimeMs}`)
     .digest('hex');
   const cacheDir = path.join(OFFICE_PREVIEW_CACHE_DIR, cacheKey);
+
+  const existingLock = officePreviewConversionLocks.get(cacheKey);
+  const conversionPromise = (async () => {
+    if (existingLock) {
+      if (!options.force) {
+        return existingLock;
+      }
+      await existingLock.catch(() => {});
+    }
+
+    return convertOfficeDocumentToPdfWithCache({
+      binary,
+      cacheDir,
+      force: options.force,
+      resolvedSourcePath,
+    });
+  })();
+  officePreviewConversionLocks.set(cacheKey, conversionPromise);
+
+  try {
+    return await conversionPromise;
+  } finally {
+    if (officePreviewConversionLocks.get(cacheKey) === conversionPromise) {
+      officePreviewConversionLocks.delete(cacheKey);
+    }
+  }
+}
+
+async function convertOfficeDocumentToPdfWithCache({
+  binary,
+  cacheDir,
+  force,
+  resolvedSourcePath,
+}) {
   const profileDir = path.join(cacheDir, 'profile');
 
-  if (options.force) {
+  if (force) {
     await fsPromises.rm(cacheDir, { recursive: true, force: true }).catch(() => {});
   }
 

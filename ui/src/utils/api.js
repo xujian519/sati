@@ -224,7 +224,7 @@ export const api = {
     const params = new URLSearchParams();
     if (options.refresh) params.set('refresh', '1');
     const query = params.toString();
-    return authenticatedFetch(`/api/config/office-preview/status${query ? `?${query}` : ''}`);
+    return authenticatedFetch(`/api/office-preview/status${query ? `?${query}` : ''}`);
   },
   pilotDeckConfig: () =>
     authenticatedFetch('/api/config'),
