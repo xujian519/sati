@@ -17,7 +17,7 @@
     "dev:server": "npm run check:runtime && node --import tsx server/index.js",
     "dev:client": "vite",
     "server": "npm run check:runtime && node --import tsx server/index.js",
-    "gateway": "npm --prefix .. run server",
+    "gateway": "PILOTDECK_SKIP_DEFAULT_PROJECT=1 npm --prefix .. run server",
     "client": "vite",
     "build": "vite build",
     "preview": "vite preview",
