@@ -17,6 +17,7 @@ import { createStreamNormalizerState, normalizeStreamEvent } from "./normalizeSt
 import { createGoogleStreamState, normalizeGoogleStreamEvent } from "../providers/google/stream.js";
 import { normalizeProviderBaseUrl } from "../normalizeProviderBaseUrl.js";
 import { StreamingCheckpointManager } from "./StreamingCheckpoint.js";
+import { buildLiteLLMContinuationRequest } from "./continuationRequest.js";
 
 export type ModelTransport = typeof fetch;
 
@@ -24,9 +25,40 @@ export type ModelRuntimeOptions = {
   fetch?: ModelTransport;
   googleClientFactory?: GoogleClientFactory;
   signal?: AbortSignal;
+  streamTimeoutMs?: number;
+  onRetryProgress?: (progress: ModelStreamRetryProgress) => void;
 };
 
-const DEFAULT_REQUEST_MAX_RETRIES = 2;
+export type ModelStreamRetryProgress = {
+  reason: "network_error" | "server_error" | "continuation";
+  attempt: number;
+  maxAttempts: number;
+  delayMs: number;
+  provider: string;
+  model: string;
+};
+
+export const LITELLM_DEFAULT_MAX_RETRIES = 2;
+export const LITELLM_DEFAULT_REQUEST_TIMEOUT_MS = 6_000_000;
+export const LITELLM_COMPLETION_HTTP_FALLBACK_MS = 600_000;
+export const LITELLM_REPEATED_STREAMING_CHUNK_LIMIT = 100;
+export const LITELLM_INITIAL_RETRY_DELAY_MS = 500;
+export const LITELLM_MAX_RETRY_DELAY_MS = 8_000;
+export const LITELLM_RETRY_JITTER = 0.75;
+export const LITELLM_HTTP_CONNECTOR_LIMIT = 1000;
+export const LITELLM_HTTP_CONNECTOR_LIMIT_PER_HOST = 500;
+export const LITELLM_HTTP_KEEPALIVE_TIMEOUT_MS = 120_000;
+export const LITELLM_HTTP_TTL_DNS_CACHE_MS = 300_000;
+export const LITELLM_HTTP_SO_KEEPALIVE = false;
+export const LITELLM_HTTP_TCP_KEEPIDLE_SECONDS = 60;
+export const LITELLM_HTTP_TCP_KEEPINTVL_SECONDS = 30;
+export const LITELLM_HTTP_TCP_KEEPCNT = 5;
+export const LITELLM_STREAM_MAX_DURATION_MS: number | undefined = readOptionalPositiveEnvMs(
+  "LITELLM_MAX_STREAMING_DURATION_SECONDS",
+  1000,
+);
+
+const DEFAULT_REQUEST_MAX_RETRIES = LITELLM_DEFAULT_MAX_RETRIES;
 
 export async function complete(
   request: CanonicalModelRequest,
@@ -36,7 +68,7 @@ export async function complete(
   const nonStreamingRequest = { ...request, stream: false };
   const { provider } = validateModelRequest(nonStreamingRequest, config);
   const maxRetries = provider.retry?.requestMaxRetries ?? DEFAULT_REQUEST_MAX_RETRIES;
-  const retryBaseDelay = provider.retry?.baseDelayMs ?? DEFAULT_RETRY_BASE_DELAY_MS;
+  const retryBaseDelay = provider.retry?.baseDelayMs ?? LITELLM_INITIAL_RETRY_DELAY_MS;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     throwIfAborted(options.signal);
@@ -93,8 +125,7 @@ export async function complete(
   throw new Error("complete() exhausted all retry attempts without a result.");
 }
 
-const DEFAULT_STREAM_MAX_RETRIES = 2;
-const DEFAULT_RETRY_BASE_DELAY_MS = 1000;
+const DEFAULT_STREAM_MAX_RETRIES = LITELLM_DEFAULT_MAX_RETRIES;
 
 export async function* streamModel(
   request: CanonicalModelRequest,
@@ -104,7 +135,7 @@ export async function* streamModel(
   const streamingRequest = { ...request, stream: true };
   const { provider } = validateModelRequest(streamingRequest, config);
   const maxRetries = provider.retry?.streamMaxRetries ?? DEFAULT_STREAM_MAX_RETRIES;
-  const retryBaseDelay = provider.retry?.baseDelayMs ?? DEFAULT_RETRY_BASE_DELAY_MS;
+  const retryBaseDelay = provider.retry?.baseDelayMs ?? LITELLM_INITIAL_RETRY_DELAY_MS;
 
   yield {
     type: "request_started",
@@ -145,7 +176,9 @@ export async function* streamModel(
       response = await sendProviderRequest(provider, body, true, options.fetch ?? fetch, options.signal);
     } catch (error) {
       if (attempt < maxRetries && isRetryableStreamError(error)) {
-        await delay(retryBaseDelay * (attempt + 1));
+        const delayMs = calculateRetryDelay(provider, attempt);
+        emitModelRetryProgress(options, "network_error", attempt, maxRetries, delayMs, provider, currentRequest.model);
+        await delay(delayMs, options.signal);
         continue;
       }
       throw error;
@@ -176,10 +209,12 @@ export async function* streamModel(
     let streamCompleted = false;
     let sawCompletionSentinel = false;
 
-    const streamIdleTimeoutMs = resolveStreamIdleTimeout(provider);
+    const streamIdleTimeoutMs = resolveStreamIdleTimeout(provider, options);
+    const streamGuard = createStreamGuard(provider);
 
     try {
       for await (const sseEvent of readServerSentEvents(response.body, options.signal, streamIdleTimeoutMs)) {
+        streamGuard.checkDuration();
         if (sseEvent.type === "done") {
           sawCompletionSentinel = true;
           continue;
@@ -188,10 +223,15 @@ export async function* streamModel(
           if (event.type === "message_end") {
             sawCompletionSentinel = true;
           }
+          if (event.type === "error") {
+            throw new ModelProviderError(event.error);
+          }
+          streamGuard.observe(event);
           checkpoint.onEvent(event);
           yield event;
         }
       }
+      streamGuard.checkDuration();
       if (!sawCompletionSentinel) {
         throw new IncompleteStreamError();
       }
@@ -202,14 +242,18 @@ export async function* streamModel(
         isRetryableStreamError(error) &&
         checkpoint.hasSubstantialContent()
       ) {
-        currentRequest = buildContinuationRequest(currentRequest, checkpoint.get().partialText);
+        currentRequest = buildLiteLLMContinuationRequest(currentRequest, checkpoint.get().partialText);
         checkpoint.reset();
-        await delay(retryBaseDelay * (attempt + 1), options.signal);
+        const delayMs = calculateRetryDelay(provider, attempt);
+        emitModelRetryProgress(options, "continuation", attempt, maxRetries, delayMs, provider, currentRequest.model);
+        await delay(delayMs, options.signal);
         continue;
       }
 
       if (isRetryableStreamError(error) && attempt < maxRetries) {
-        await delay(retryBaseDelay * (attempt + 1), options.signal);
+        const delayMs = calculateRetryDelay(provider, attempt);
+        emitModelRetryProgress(options, "network_error", attempt, maxRetries, delayMs, provider, currentRequest.model);
+        await delay(delayMs, options.signal);
         continue;
       }
 
@@ -268,17 +312,24 @@ async function* streamGoogleProviderRequest(params: {
       const stream = await client.models.generateContentStream(body as unknown as GoogleRequestBody);
       const state = createGoogleStreamState();
       let sawTerminalEvent = false;
+      const streamGuard = createStreamGuard(params.provider);
 
       for await (const chunk of stream) {
         throwIfAborted(params.options.signal);
+        streamGuard.checkDuration();
         for (const event of normalizeGoogleStreamEvent(chunk, state)) {
           if (event.type === "message_end" || event.type === "error") {
             sawTerminalEvent = true;
           }
+          if (event.type === "error") {
+            throw new ModelProviderError(event.error);
+          }
+          streamGuard.observe(event);
           params.checkpoint.onEvent(event);
           yield event;
         }
       }
+      streamGuard.checkDuration();
 
       if (!sawTerminalEvent && !state.ended) {
         yield { type: "message_end", finishReason: "unknown", raw: undefined };
@@ -292,14 +343,18 @@ async function* streamGoogleProviderRequest(params: {
         isRetryableGoogleStreamError(providerError, error) &&
         params.checkpoint.hasSubstantialContent()
       ) {
-        currentRequest = buildContinuationRequest(currentRequest, params.checkpoint.get().partialText);
+        currentRequest = buildLiteLLMContinuationRequest(currentRequest, params.checkpoint.get().partialText);
         params.checkpoint.reset();
-        await delay(params.retryBaseDelay * (attempt + 1), params.options.signal);
+        const delayMs = calculateRetryDelay(params.provider, attempt);
+        emitModelRetryProgress(params.options, "continuation", attempt, params.maxRetries, delayMs, params.provider, currentRequest.model);
+        await delay(delayMs, params.options.signal);
         continue;
       }
 
       if (isRetryableGoogleStreamError(providerError, error) && attempt < params.maxRetries) {
-        await delay(params.retryBaseDelay * (attempt + 1), params.options.signal);
+        const delayMs = calculateRetryDelay(params.provider, attempt);
+        emitModelRetryProgress(params.options, "network_error", attempt, params.maxRetries, delayMs, params.provider, currentRequest.model);
+        await delay(delayMs, params.options.signal);
         continue;
       }
 
@@ -386,12 +441,18 @@ function isRetryableStreamError(error: unknown): boolean {
     return false;
   }
   if (error instanceof ModelProviderError) {
-    return false;
+    return error.error.retryable;
   }
   if (error instanceof StreamIdleTimeoutError) {
     return true;
   }
   if (error instanceof IncompleteStreamError) {
+    return true;
+  }
+  if (error instanceof MaxStreamingDurationError) {
+    return true;
+  }
+  if (error instanceof RepeatedStreamingChunkError) {
     return true;
   }
   if (error instanceof Error) {
@@ -410,23 +471,69 @@ function isRetryableStreamError(error: unknown): boolean {
   return false;
 }
 
-function buildContinuationRequest(
-  original: CanonicalModelRequest & { stream: boolean },
-  partialText: string,
-): CanonicalModelRequest & { stream: boolean } {
+function calculateRetryDelay(provider: ProviderConfig, attempt: number): number {
+  const baseDelayMs = provider.retry?.baseDelayMs ?? LITELLM_INITIAL_RETRY_DELAY_MS;
+  const maxDelayMs = provider.retry?.maxDelayMs ?? LITELLM_MAX_RETRY_DELAY_MS;
+  const jitter = provider.retry?.jitter ?? LITELLM_RETRY_JITTER;
+  const deterministicDelay = baseDelayMs * (attempt + 1);
+  const jitterDelay = deterministicDelay * jitter * Math.random();
+  return Math.min(deterministicDelay + jitterDelay, maxDelayMs);
+}
+
+function emitModelRetryProgress(
+  options: ModelRuntimeOptions,
+  reason: ModelStreamRetryProgress["reason"],
+  attempt: number,
+  maxAttempts: number,
+  delayMs: number,
+  provider: ProviderConfig,
+  model: string,
+): void {
+  options.onRetryProgress?.({
+    reason,
+    attempt: attempt + 1,
+    maxAttempts,
+    delayMs: Math.round(delayMs),
+    provider: provider.id,
+    model,
+  });
+}
+
+type StreamGuard = {
+  checkDuration: () => void;
+  observe: (event: CanonicalModelEvent) => void;
+};
+
+function createStreamGuard(provider: ProviderConfig): StreamGuard {
+  const startedAt = Date.now();
+  const maxDurationMs = provider.retry?.maxStreamingDurationMs ?? LITELLM_STREAM_MAX_DURATION_MS;
+  const repeatedChunkLimit = provider.retry?.repeatedChunkLimit ?? LITELLM_REPEATED_STREAMING_CHUNK_LIMIT;
+  let lastText: string | undefined;
+  let repeatedCount = 1;
+
   return {
-    ...original,
-    messages: [
-      ...original.messages,
-      {
-        role: "assistant" as const,
-        content: [{ type: "text" as const, text: partialText }],
-      },
-      {
-        role: "user" as const,
-        content: [{ type: "text" as const, text: "Continue from where you left off." }],
-      },
-    ],
+    checkDuration() {
+      if (maxDurationMs !== undefined && Date.now() - startedAt > maxDurationMs) {
+        throw new MaxStreamingDurationError(maxDurationMs);
+      }
+    },
+    observe(event) {
+      this.checkDuration();
+      if (event.type !== "text_delta" || typeof event.text !== "string" || event.text.length <= 2) {
+        repeatedCount = 1;
+        lastText = undefined;
+        return;
+      }
+      if (event.text === lastText) {
+        repeatedCount += 1;
+      } else {
+        lastText = event.text;
+        repeatedCount = 1;
+      }
+      if (repeatedCount >= repeatedChunkLimit) {
+        throw new RepeatedStreamingChunkError(event.text);
+      }
+    },
   };
 }
 
@@ -448,7 +555,7 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-const DEFAULT_REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
+const DEFAULT_REQUEST_TIMEOUT_MS = LITELLM_COMPLETION_HTTP_FALLBACK_MS;
 
 async function sendProviderRequest(
   provider: ProviderConfig,
@@ -459,7 +566,7 @@ async function sendProviderRequest(
 ): Promise<Response> {
   const controller = new AbortController();
   const detachAbort = signal ? forwardAbort(signal, controller) : undefined;
-  const effectiveTimeoutMs = stream ? provider.timeoutMs : (provider.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
+  const effectiveTimeoutMs = provider.timeoutMs ?? (stream ? undefined : DEFAULT_REQUEST_TIMEOUT_MS);
   const timeout = effectiveTimeoutMs
     ? setTimeout(() => controller.abort("request_timeout"), effectiveTimeoutMs)
     : undefined;
@@ -543,7 +650,7 @@ async function safeReadJson(response: Response): Promise<unknown> {
   }
 }
 
-const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 300_000; // 5 minutes
+const DEFAULT_STREAM_IDLE_TIMEOUT_MS = LITELLM_DEFAULT_REQUEST_TIMEOUT_MS;
 
 class StreamIdleTimeoutError extends Error {
   constructor(idleMs: number) {
@@ -556,6 +663,20 @@ class IncompleteStreamError extends Error {
   constructor() {
     super("Network stream ended before provider completion sentinel.");
     this.name = "IncompleteStreamError";
+  }
+}
+
+class MaxStreamingDurationError extends Error {
+  constructor(durationMs: number) {
+    super(`Stream exceeded max streaming duration of ${durationMs}ms`);
+    this.name = "MaxStreamingDurationError";
+  }
+}
+
+class RepeatedStreamingChunkError extends Error {
+  constructor(chunk: string) {
+    super(`The model is repeating the same chunk = ${chunk}.`);
+    this.name = "RepeatedStreamingChunkError";
   }
 }
 
@@ -609,6 +730,7 @@ async function* readServerSentEvents(
     }
   } finally {
     signal?.removeEventListener("abort", cancelReader);
+    await reader.cancel().catch(() => undefined);
   }
 }
 
@@ -677,12 +799,30 @@ function readWithIdleTimeout(
   });
 }
 
-function resolveStreamIdleTimeout(provider: ProviderConfig): number {
+function resolveStreamIdleTimeout(provider: ProviderConfig, options?: ModelRuntimeOptions): number {
+  if (typeof options?.streamTimeoutMs === "number" && options.streamTimeoutMs > 0) {
+    return options.streamTimeoutMs;
+  }
   const retry = provider.retry;
   if (retry && typeof retry.streamIdleTimeoutMs === "number" && retry.streamIdleTimeoutMs > 0) {
     return retry.streamIdleTimeoutMs;
   }
+  if (typeof provider.timeoutMs === "number" && provider.timeoutMs > 0) {
+    return provider.timeoutMs;
+  }
   return DEFAULT_STREAM_IDLE_TIMEOUT_MS;
+}
+
+function readOptionalPositiveEnvMs(name: string, multiplier: number): number | undefined {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") {
+    return undefined;
+  }
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    return undefined;
+  }
+  return value * multiplier;
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
