@@ -88,6 +88,7 @@ export type RouterRuntime = {
     request: CanonicalModelRequest,
     ctx: RouterExecuteContext & { sessionId: string; isMainAgent: boolean; previousTier?: string },
   ): AsyncIterable<CanonicalModelEvent>;
+  materializeRequest(decision: RouterDecision, request: CanonicalModelRequest): CanonicalModelRequest;
   /**
    * Clear routing sticky (provider/model/tier) for a session while preserving
    * orchestration state.  Call at the start of each new user turn so the
@@ -1049,6 +1050,7 @@ export function createRouterRuntime(
     decide,
     execute,
     stream,
+    materializeRequest: applyDecisionToRequest,
     invalidateSticky,
     observeUsage(sessionId, usage) {
       if (!enabled) return;
