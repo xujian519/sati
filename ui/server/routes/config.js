@@ -94,7 +94,11 @@ function extractProbeText(body, providerKind) {
     const output = Array.isArray(body.output) ? body.output : [];
     return output
       .flatMap((item) => Array.isArray(item?.content) ? item.content : [])
-      .map((part) => (typeof part?.text === 'string' ? part.text : ''))
+      .map((part) => {
+        if (typeof part?.text === 'string') return part.text;
+        if (typeof part?.output_text === 'string') return part.output_text;
+        return '';
+      })
       .join('')
       .trim();
   }

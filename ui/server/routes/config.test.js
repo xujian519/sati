@@ -71,6 +71,29 @@ describe('config test-connection route', () => {
     expect(data.ok).toBe(false);
     expect(data.error).toContain('did not produce any chat text');
   });
+
+  it('accepts Responses API output_text content parts', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
+      object: 'response',
+      output: [{
+        type: 'message',
+        content: [{ type: 'output_text', output_text: 'ok' }],
+      }],
+    })));
+
+    const { request } = await createConfigApp();
+    const data = await request('/api/config/test-connection', {
+      method: 'POST',
+      body: JSON.stringify({
+        providerType: 'openai-responses',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-test',
+        model: 'gpt-test',
+      }),
+    });
+
+    expect(data.ok).toBe(true);
+  });
 });
 
 async function createConfigApp() {
