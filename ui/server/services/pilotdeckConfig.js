@@ -118,10 +118,13 @@ export function sanitizeProviderCredentials(config) {
   if (!isRecord(config)) return config;
   const providers = config?.model?.providers;
   if (!isRecord(providers)) return config;
-  for (const provider of Object.values(providers)) {
+  for (const [providerId, provider] of Object.entries(providers)) {
     if (!isRecord(provider)) continue;
     if (typeof provider.apiKey === 'string') {
       provider.apiKey = provider.apiKey.trim();
+      if (allowsMissingApiKey(providerId) && provider.apiKey.length === 0) {
+        delete provider.apiKey;
+      }
     }
     if (typeof provider.url === 'string') {
       provider.url = provider.url.trim();
@@ -171,6 +174,10 @@ export function resolveModel(config, ref, options = {}) {
 
 // ─── Validation ──────────────────────────────────────────────────────────────
 
+function allowsMissingApiKey(providerId) {
+  return providerId === 'ollama';
+}
+
 function validateProvider(id, provider, errors) {
   if (!isRecord(provider)) {
     errors.push(`model.providers.${id} must be an object`);
@@ -182,7 +189,9 @@ function validateProvider(id, provider, errors) {
     errors.push(`model.providers.${id}.protocol must be "openai", "openai-responses", "anthropic", or "google"`);
   }
   if (!normalizeString(provider.url)) errors.push(`model.providers.${id}.url is required`);
-  if (!normalizeString(provider.apiKey)) errors.push(`model.providers.${id}.apiKey is required`);
+  if (!allowsMissingApiKey(id) && !normalizeString(provider.apiKey)) {
+    errors.push(`model.providers.${id}.apiKey is required`);
+  }
 }
 
 function validateModelRef(config, ref, label, errors) {
