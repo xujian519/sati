@@ -13,6 +13,7 @@ import {
   type CanonicalModelRequest,
   type CanonicalToolSchema,
   type CanonicalUsage,
+  type CanonicalToolCallBlock,
   materializeMediaReferences,
   type PartialTextToolCallInfo,
   getSelfCorrectPrompt,
@@ -537,8 +538,14 @@ export class AgentLoop {
 
       const assembled = assembleAssistantMessage(assembler);
       usage = mergeUsage(usage, assembled.usage);
-      finalMessage = assembled.message;
-      let toolCalls = collectToolCalls(assembled.message);
+      let assistantMessage = assembled.message;
+      let toolCalls = collectToolCalls(assistantMessage);
+      if (assembled.hasTextFallbackToolCalls) {
+        const repaired = this.repairTextExtractedToolNames(assistantMessage, toolCalls);
+        assistantMessage = repaired.message;
+        toolCalls = repaired.toolCalls;
+      }
+      finalMessage = assistantMessage;
       expireConsumedTransientPrompts();
 
       if (assembled.hasPartialTextToolCall) {
@@ -669,9 +676,9 @@ export class AgentLoop {
         return { result, messages };
       }
 
-      messages.push(assembled.message);
-      yield { type: "assistant_message", sessionId: input.sessionId, turnId: input.turnId, message: assembled.message };
-      await input.onDurableMessage?.(assembled.message);
+      messages.push(assistantMessage);
+      yield { type: "assistant_message", sessionId: input.sessionId, turnId: input.turnId, message: assistantMessage };
+      await input.onDurableMessage?.(assistantMessage);
 
       if (assembled.error) {
         if (toolCalls.length > 0) {
@@ -816,7 +823,7 @@ export class AgentLoop {
       }
 
       if (toolCalls.length === 0) {
-        const assistantText = textFromMessage(assembled.message);
+        const assistantText = textFromMessage(assistantMessage);
 
         // Global guard: empty assistant response (no text, no tool calls).
         // The model produced nothing visible — typically because extended
@@ -967,7 +974,7 @@ export class AgentLoop {
 
         const stopHooks = await this.dispatchLifecycle(input, "Stop", {
           stopHookActive: false,
-          lastAssistantMessage: textFromMessage(assembled.message),
+          lastAssistantMessage: textFromMessage(assistantMessage),
         });
         yield { type: "stop_requested", sessionId: input.sessionId, turnId: input.turnId };
         messages.push(...stopHooks.messages);
@@ -1008,10 +1015,6 @@ export class AgentLoop {
         await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
-      }
-
-      if (assembled.hasTextFallbackToolCalls) {
-        toolCalls = this.repairTextExtractedToolNames(toolCalls);
       }
 
       yield { type: "tool_calls_detected", sessionId: input.sessionId, turnId: input.turnId, calls: toolCalls };
@@ -1401,13 +1404,32 @@ export class AgentLoop {
     };
   }
 
-  private repairTextExtractedToolNames(toolCalls: CanonicalToolCall[]): CanonicalToolCall[] {
-    if (toolCalls.length === 0) return toolCalls;
+  private repairTextExtractedToolNames(
+    message: CanonicalMessage,
+    toolCalls: CanonicalToolCall[],
+  ): { message: CanonicalMessage; toolCalls: CanonicalToolCall[] } {
+    if (toolCalls.length === 0) return { message, toolCalls };
     const validNames = new Set(this.dependencies.tools.registry.list().map((tool) => tool.name));
-    return toolCalls.map((call) => {
+    const repairedById = new Map<string, string>();
+    const repairedToolCalls = toolCalls.map((call) => {
       const repaired = repairToolName(call.name, validNames, this.config.toolAliases);
-      return repaired ? { ...call, name: repaired.name } : call;
+      if (!repaired) return call;
+      repairedById.set(call.id, repaired.name);
+      return { ...call, name: repaired.name };
     });
+    if (repairedById.size === 0) return { message, toolCalls };
+
+    return {
+      message: {
+        ...message,
+        content: message.content.map((block) => {
+          if (block.type !== "tool_call") return block;
+          const repairedName = repairedById.get(block.id);
+          return repairedName ? ({ ...block, name: repairedName } satisfies CanonicalToolCallBlock) : block;
+        }),
+      },
+      toolCalls: repairedToolCalls,
+    };
   }
 
   private createToolContext(
