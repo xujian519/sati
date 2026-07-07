@@ -18,10 +18,12 @@ import {
   CompactionEngine,
   ContextOverflowRecovery,
   DefaultContextRuntime,
+  DEFAULT_PROTECTED_TOOL_RESULT_NAMES,
   InstructionDiscovery,
   MicroCompactionEngine,
   PluginRuntimeExtensionResolver,
   SnipEngine,
+  TokenAccountingRuntime,
   TokenBudgetManager,
   ToolResultBudget,
   createEdgeClawMemoryProviderFromConfig,
@@ -403,6 +405,7 @@ type ProjectRuntime = {
   projectRoot: string;
   snapshot: ReturnType<typeof loadPilotConfig>;
   model: ModelRuntime;
+  tokenAccounting: TokenAccountingRuntime;
   router: RouterRuntime;
   pluginRuntime: PluginRuntime;
   tools: ToolRegistry;
@@ -614,6 +617,9 @@ class ProjectRuntimeRegistry {
     const model = this.options.modelFactory
       ? this.options.modelFactory(snapshot)
       : createModelRuntime(snapshot.config.model);
+    const tokenAccounting = new TokenAccountingRuntime({
+      modelConfig: snapshot.config.model,
+    });
     const pluginRuntime = new PluginRuntime({
       projectRoot,
       pilotHome: this.options.pilotHome,
@@ -668,6 +674,7 @@ class ProjectRuntimeRegistry {
       projectRoot,
       snapshot,
       model,
+      tokenAccounting,
       router,
       pluginRuntime,
       tools,
@@ -952,6 +959,7 @@ class ProjectRuntimeRegistry {
       now: this.options.now,
       eventEmitter: eventBuf.emitter,
       drainEvents: eventBuf.drain,
+      tokenAccounting: runtime.tokenAccounting,
       getModelMaxContextTokens: (provider, model) => resolveRoutedModelMaxContextTokens({
         modelRuntime: runtime.model,
         agentModel: runtime.snapshot.config.agent.model,
@@ -986,6 +994,7 @@ class ProjectRuntimeRegistry {
             }),
         },
         tokenBudget,
+        tokenAccounting: runtime.tokenAccounting,
         lifecycle: {
           async dispatch(input) {
             await lifecycle.dispatch({
@@ -1003,13 +1012,18 @@ class ProjectRuntimeRegistry {
         },
         provider: runtime.snapshot.config.agent.model.provider,
         model_: runtime.snapshot.config.agent.model.model,
+        protectedToolNames: DEFAULT_PROTECTED_TOOL_RESULT_NAMES,
         now,
         eventEmitter: eventBuf.emitter,
       });
       const autoCompactionPolicy = new AutoCompactionPolicy({ tokenBudget });
       const microcompactEngine = new CachedMicroCompactionEngine({ enabled: true });
-      const microCompaction = new MicroCompactionEngine();
-      const snipEngine = new SnipEngine();
+      const microCompaction = new MicroCompactionEngine({
+        protectedToolNames: DEFAULT_PROTECTED_TOOL_RESULT_NAMES,
+      });
+      const snipEngine = new SnipEngine({
+        protectedToolNames: DEFAULT_PROTECTED_TOOL_RESULT_NAMES,
+      });
       const overflowRecovery = new ContextOverflowRecovery();
       const caps = runtime.model.getCapabilities(
         runtime.snapshot.config.agent.model.provider,
