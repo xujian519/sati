@@ -213,7 +213,11 @@ export function getPilotDeckRepoRoot() {
 const sessionState = new Map();
 
 function isPilotDeckSessionKey(value) {
-    return typeof value === 'string' && /^web[:_-]s_/.test(value);
+    if (typeof value !== 'string' || !value.trim()) return false;
+    if (value.startsWith('new-session-')) return false;
+    if (/^web[:_-]s_/.test(value)) return true;
+    if (/^[a-z]+:/.test(value)) return true;
+    return false;
 }
 
 function newSessionKey() {
