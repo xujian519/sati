@@ -393,6 +393,7 @@ export function applyWebGatewayEvent(
     case "agent_status": {
       const errorEvents = new Set([
         "model_empty_response_exhausted",
+        "max_turns_reached",
         "max_output_recovery_exhausted",
         "subagent_failed",
         "content_filter_stop",

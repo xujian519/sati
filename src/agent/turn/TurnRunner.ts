@@ -8,7 +8,7 @@ import { TurnInputProcessor } from "./TurnInputProcessor.js";
 import type { CanonicalMessage, CanonicalUsage } from "../../model/index.js";
 import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { PermissionMode, PermissionRuleSet } from "../../permission/index.js";
-import type { AgentTranscriptWriterState } from "../../session/transcript/TranscriptWriter.js";
+import type { AgentStatusMessageInput, AgentTranscriptWriterState } from "../../session/transcript/TranscriptWriter.js";
 
 export type TurnRunnerOptions = {
   sessionId: string;
@@ -118,6 +118,7 @@ export class TurnRunner {
     }
 
     try {
+      let hasRecordedVisibleFailureStatus = false;
       const generator = this.loop.run({
         sessionId: options.sessionId,
         turnId: options.turnId,
@@ -130,11 +131,12 @@ export class TurnRunner {
         permissionRules: options.permissionRules,
         abortSignal: options.abortSignal,
         onDurableMessage: (msg) => this.transcript.recordDurableMessage(options.sessionId, options.turnId, msg),
-        onAgentStatusMessage: (status) => this.transcript.recordAgentStatusMessage?.(
-          options.sessionId,
-          options.turnId,
-          status,
-        ),
+        onAgentStatusMessage: async (status) => {
+          if (isVisibleFailureStatus(status)) {
+            hasRecordedVisibleFailureStatus = true;
+          }
+          await this.transcript.recordAgentStatusMessage?.(options.sessionId, options.turnId, status);
+        },
       });
       let runResult: TurnRunnerResult | undefined;
       while (true) {
@@ -145,7 +147,9 @@ export class TurnRunner {
         }
         const event = next.value;
         if (event.type === "turn_failed") {
-          await this.recordTurnFailureStatus(options, event.error);
+          if (!hasRecordedVisibleFailureStatus) {
+            await this.recordTurnFailureStatus(options, event.error);
+          }
         }
         yield event;
       }
@@ -208,6 +212,10 @@ export class TurnRunner {
       },
     })).catch(() => {});
   }
+}
+
+function isVisibleFailureStatus(status: AgentStatusMessageInput): boolean {
+  return status.kind === "error" && status.event !== "turn_failed";
 }
 
 function acceptedInputMetadata(options: TurnRunnerOptions): Record<string, unknown> | undefined {
