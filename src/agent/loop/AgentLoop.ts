@@ -55,6 +55,13 @@ import { buildAskModeAgentToolSchema } from "../../tool/builtin/agent.js";
 
 const TOOL_EVENT_PUMP_INTERVAL_MS = 500;
 const SUBAGENT_STATUS_HEARTBEAT_MS = 2_000;
+const CIRCUIT_BREAKER_GRACE_PROMPT = [
+  "Your last several tool calls all failed input validation with the same error.",
+  "This may indicate a tool-side issue rather than a problem with your approach.",
+  "Options: (1) try a different tool or different parameters,",
+  "(2) explain the situation in text without calling tools,",
+  "(3) if you believe the tool should work, try once more with corrected input.",
+].join(" ");
 const PLAN_MODE_REMINDER_MESSAGE = [
   "Plan mode is active.",
   "Read first using read-only tools, then write or refine plan markdown only under `.pilotdeck/plans/`.",
@@ -71,6 +78,13 @@ type ActiveSubagentStatus = {
   currentToolName?: string;
 };
 
+type AgentStatusMessage = {
+  event: string;
+  kind: "status" | "error";
+  text: string;
+  detail?: Record<string, unknown>;
+};
+
 export type AgentLoopInput = {
   sessionId: string;
   turnId: string;
@@ -78,6 +92,7 @@ export type AgentLoopInput = {
   maxTurns?: number;
   runMode?: AgentRunMode;
   permissionMode?: PermissionMode;
+  allowedReadFiles?: string[];
   /** The user's actual permission preference before plan-mode override. */
   basePermissionMode?: PermissionMode;
   /** Allow model-visible plan mode tools for this turn. */
@@ -86,6 +101,7 @@ export type AgentLoopInput = {
   permissionRules?: Partial<PermissionRuleSet>;
   abortSignal?: AbortSignal;
   onDurableMessage?: (message: CanonicalMessage) => void | Promise<void>;
+  onAgentStatusMessage?: (status: AgentStatusMessage) => void | Promise<void>;
 };
 
 export type AgentLoopRunResult = {
@@ -96,11 +112,13 @@ export type AgentLoopRunResult = {
 export type AgentLoopSeedState = {
   readFileState?: PilotDeckReadFileStateMap;
   writeSnapshots?: PilotDeckWriteSnapshotMap;
+  allowedReadFiles?: string[];
 };
 
 export class AgentLoop {
   private readonly readFileState: PilotDeckReadFileStateMap;
   private readonly writeSnapshots: PilotDeckWriteSnapshotMap;
+  private readonly allowedReadFiles: Set<string>;
 
   constructor(
     private readonly config: AgentRuntimeConfig,
@@ -109,18 +127,23 @@ export class AgentLoop {
   ) {
     this.readFileState = cloneReadFileStateMap(seedState?.readFileState);
     this.writeSnapshots = cloneWriteSnapshotMap(seedState?.writeSnapshots);
+    this.allowedReadFiles = new Set(seedState?.allowedReadFiles ?? []);
   }
 
   snapshotFileState(): AgentLoopSeedState {
     return {
       readFileState: cloneReadFileStateMap(this.readFileState),
       writeSnapshots: cloneWriteSnapshotMap(this.writeSnapshots),
+      allowedReadFiles: [...this.allowedReadFiles],
     };
   }
 
   async *run(input: AgentLoopInput): AsyncGenerator<AgentEvent, AgentLoopRunResult, unknown> {
     this.applyRunModeOverride(input.runMode);
     this.applyPermissionOverrides(input.permissionMode, input.permissionRules, input.basePermissionMode);
+    for (const filePath of input.allowedReadFiles ?? []) {
+      this.allowedReadFiles.add(filePath);
+    }
     const startedAt = this.now().toISOString();
     let messages = [...input.messages];
     let turnCount = 1;
@@ -128,6 +151,17 @@ export class AgentLoop {
     let permissionDenials: AgentPermissionDenial[] = [];
     let structuredOutput: unknown;
     let finalMessage: CanonicalMessage | undefined;
+    const toAgentStatusEvent = (status: AgentStatusMessage): AgentEvent => ({
+      type: "agent_status",
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      event: status.event,
+      detail: status.detail,
+    });
+    const createAbortStatus = (): AgentStatusMessage | undefined => {
+      if (!shouldSurfaceAbortStatus(input.abortSignal?.reason)) return undefined;
+      return createTurnAbortedStatus({ reason: stringifyAbortReason(input.abortSignal?.reason) });
+    };
     const captureTurn = async (errored: boolean): Promise<void> => {
       const hook = this.dependencies.context?.captureTurn;
       if (!hook) return;
@@ -177,14 +211,16 @@ export class AgentLoop {
     const largeFileRepair = new LargeFileRepair();
 
     /**
-     * Circuit breaker: consecutive turns where ALL tool calls are
-     * `invalid_tool_input` errors. When the model is stuck in a loop
-     * (e.g. qwen repeatedly emitting empty-param bash calls), terminate
-     * early instead of burning tokens. Resets on any turn with at least
-     * one successful tool call.
+     * Circuit breaker: detects loops by fingerprinting each turn's
+     * invalid_tool_input errors (toolName + errorMessage). Only identical
+     * repeated failures trigger recovery, so changed parameters/tools are not
+     * mistaken for the same stuck loop. A one-time grace prompt gives the
+     * model a final chance to change strategy before termination.
      */
-    const MAX_CONSECUTIVE_ALL_INVALID_TURNS = 3;
-    let consecutiveAllInvalidTurns = 0;
+    const MAX_SAME_INVALID_FINGERPRINT = 3;
+    let lastInvalidFingerprint: string | undefined;
+    let sameInvalidFingerprintCount = 0;
+    let hasUsedInvalidGracePeriod = false;
     let lastToolFailureFingerprint: string | undefined;
     let transientPromptCounter = 0;
     const activeTransientPromptIds = new Set<string>();
@@ -275,6 +311,11 @@ export class AgentLoop {
           startedAt,
           finalMessage,
         });
+        const status = createAbortStatus();
+        if (status) {
+          yield toAgentStatusEvent(status);
+          await input.onAgentStatusMessage?.(status);
+        }
         await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
@@ -316,6 +357,11 @@ export class AgentLoop {
           startedAt,
           finalMessage,
         });
+        const status = createAbortStatus();
+        if (status) {
+          yield toAgentStatusEvent(status);
+          await input.onAgentStatusMessage?.(status);
+        }
         await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
@@ -339,7 +385,13 @@ export class AgentLoop {
         request,
         sessionId: input.sessionId,
         isMainAgent: !this.config.isSubagent,
-        metadata: previousTier ? { previousTier } : undefined,
+        metadata: stickyInfo
+          ? {
+            previousTier,
+            previousProvider: stickyInfo.previousProvider,
+            previousModel: stickyInfo.previousModel,
+          }
+          : previousTier ? { previousTier } : undefined,
       });
       const routedMaxOutputTokens = this.dependencies.getModelMaxOutputTokens?.(decision.provider, decision.model);
 
@@ -440,6 +492,11 @@ export class AgentLoop {
           errors: [agentError("agent_model_error", stopFailureMsg)],
         });
         yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
+        const status = createAbortStatus();
+        if (status) {
+          yield toAgentStatusEvent(status);
+          await input.onAgentStatusMessage?.(status);
+        }
         await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
@@ -464,6 +521,11 @@ export class AgentLoop {
           startedAt,
           finalMessage,
         });
+        const status = createAbortStatus();
+        if (status) {
+          yield toAgentStatusEvent(status);
+          await input.onAgentStatusMessage?.(status);
+        }
         await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
@@ -509,6 +571,11 @@ export class AgentLoop {
           )],
         });
         yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
+        const status = createAbortStatus();
+        if (status) {
+          yield toAgentStatusEvent(status);
+          await input.onAgentStatusMessage?.(status);
+        }
         await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
@@ -771,25 +838,27 @@ export class AgentLoop {
               };
               continue;
             }
-            // Exhausted consecutive empty retries — surface error via frontend banner.
+            // Exhausted consecutive empty retries — surface a UI-only status
+            // message instead of injecting diagnostic assistant text into the
+            // model transcript.
             finalMessage = messages.filter((m) => m.role === "assistant").at(-1);
+            const status = createEmptyResponseStatus({
+              provider: request.provider,
+              model: request.model,
+              attempts: consecutiveEmptyCount,
+            });
+            yield toAgentStatusEvent(status);
+            await input.onAgentStatusMessage?.(status);
             const result = this.createTurnResult(input, {
-              type: "error",
-              stopReason: "model_error",
+              type: "success",
+              stopReason: "completed",
               usage,
               permissionDenials,
               turns: turnCount,
               startedAt,
               finalMessage,
-              errors: [agentError(
-                "agent_model_error",
-                "The model returned multiple consecutive empty responses. "
-                  + "The max output token limit is likely too low — "
-                  + "try increasing it so the model has room for visible output after reasoning.",
-              )],
             });
-            yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
-            await captureTurn(result.type === "error");
+            await captureTurn(true);
             yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
             return { result, messages };
           } else if (!hasAttemptedEmptyRetry) {
@@ -808,19 +877,13 @@ export class AgentLoop {
             };
             continue;
           } else {
-            // Retry also returned empty — give user a diagnostic hint.
-            finalMessage = {
-              role: "assistant",
-              content: [{
-                type: "text",
-                text: "[The model returned an empty response. "
-                  + "This usually means the max output token limit is too low — "
-                  + "the model's reasoning/thinking consumed all available output "
-                  + "tokens before producing visible text. "
-                  + "Try increasing the max output tokens setting.]",
-              }],
-            };
-            messages.push(finalMessage);
+            const status = createEmptyResponseStatus({
+              provider: request.provider,
+              model: request.model,
+              attempts: 2,
+            });
+            yield toAgentStatusEvent(status);
+            await input.onAgentStatusMessage?.(status);
           }
           // fall through to normal stop
         }
@@ -852,6 +915,9 @@ export class AgentLoop {
           }
           // Exhausted — fall through to normal completion with whatever
           // text was produced so far.
+          const status = createMaxOutputRecoveryExhaustedStatus({ attempts: maxOutputRecoveryCount });
+          yield toAgentStatusEvent(status);
+          await input.onAgentStatusMessage?.(status);
         }
 
         const largeFileDecision = largeFileRepair.onNoToolCalls();
@@ -891,6 +957,12 @@ export class AgentLoop {
           yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
           return { result, messages };
         }
+        const finishStatus = createFinishReasonStatus(assembled.finishReason, assistantText);
+        if (finishStatus) {
+          yield toAgentStatusEvent(finishStatus);
+          await input.onAgentStatusMessage?.(finishStatus);
+        }
+
         const result = this.createTurnResult(input, {
           type: "success",
           stopReason: "completed",
@@ -1065,8 +1137,8 @@ export class AgentLoop {
       }
 
       // Circuit breaker: detect turns where ALL tool calls returned
-      // invalid_tool_input. If the model is stuck (e.g. repeatedly emitting
-      // empty-param bash), terminate early after MAX_CONSECUTIVE_ALL_INVALID_TURNS.
+      // invalid_tool_input. Uses fingerprint-based detection (toolName +
+      // errorMessage), and injects one grace prompt before final termination.
       // When LargeFileRepair is actively managing recovery, defer to its own
       // attempt limits instead of terminating here.
       const allInvalid = pairedResults.length > 0 && pairedResults.every(
@@ -1087,8 +1159,23 @@ export class AgentLoop {
         }
       }
       if (allInvalid) {
-        consecutiveAllInvalidTurns++;
-        if (consecutiveAllInvalidTurns >= MAX_CONSECUTIVE_ALL_INVALID_TURNS) {
+        const fingerprint = buildInvalidFingerprint(pairedResults);
+        if (fingerprint === lastInvalidFingerprint) {
+          sameInvalidFingerprintCount++;
+        } else {
+          sameInvalidFingerprintCount = 1;
+          lastInvalidFingerprint = fingerprint;
+          hasUsedInvalidGracePeriod = false;
+        }
+
+        if (sameInvalidFingerprintCount >= MAX_SAME_INVALID_FINGERPRINT) {
+          if (!hasUsedInvalidGracePeriod) {
+            hasUsedInvalidGracePeriod = true;
+            pushTransientSyntheticPrompt(CIRCUIT_BREAKER_GRACE_PROMPT, "circuit_breaker_grace");
+            yield { type: "turn_continued", sessionId: input.sessionId, turnId: input.turnId, reason: "model_error" };
+            continue;
+          }
+
           const result = this.createTurnResult(input, {
             type: "error",
             stopReason: "tool_error",
@@ -1100,7 +1187,7 @@ export class AgentLoop {
             structuredOutput,
             errors: [agentError(
               "agent_tool_error_loop",
-              `Terminated: ${consecutiveAllInvalidTurns} consecutive turns with all tool calls failing input validation. The model appears stuck in a loop.`,
+              `Terminated: ${sameInvalidFingerprintCount} consecutive turns with identical tool input validation failures (same tool + same error). The model appears stuck in a loop.`,
               undefined,
               "The model is repeatedly producing invalid tool calls. Consider switching to a more capable model via settings.",
             )],
@@ -1111,7 +1198,9 @@ export class AgentLoop {
           return { result, messages };
         }
       } else {
-        consecutiveAllInvalidTurns = 0;
+        sameInvalidFingerprintCount = 0;
+        lastInvalidFingerprint = undefined;
+        hasUsedInvalidGracePeriod = false;
         if (!pairedResults.some((r) => r.type === "error")) {
           lastToolFailureFingerprint = undefined;
         }
@@ -1132,6 +1221,9 @@ export class AgentLoop {
           finalMessage,
           structuredOutput,
         });
+        const status = createStructuredOutputCompletedStatus();
+        yield toAgentStatusEvent(status);
+        await input.onAgentStatusMessage?.(status);
         await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
@@ -1139,6 +1231,12 @@ export class AgentLoop {
 
       const nextTurnCount = turnCount + 1;
       if (input.maxTurns && nextTurnCount > input.maxTurns) {
+        const maxTurnsError = agentError(
+          "agent_max_turns_reached",
+          `Reached maximum number of turns (${input.maxTurns}).`,
+          undefined,
+          "Max turn limit reached. Increase maxTurns in config or break the task into smaller steps.",
+        );
         const result = this.createTurnResult(input, {
           type: "max_turns",
           stopReason: "max_turns",
@@ -1148,13 +1246,11 @@ export class AgentLoop {
           startedAt,
           finalMessage,
           structuredOutput,
-          errors: [agentError(
-            "agent_max_turns_reached",
-            `Reached maximum number of turns (${input.maxTurns}).`,
-            undefined,
-            "Max turn limit reached. Increase maxTurns in config or break the task into smaller steps.",
-          )],
+          errors: [maxTurnsError],
         });
+        const status = createMaxTurnsStatus({ maxTurns: input.maxTurns, error: maxTurnsError });
+        yield toAgentStatusEvent(status);
+        await input.onAgentStatusMessage?.(status);
         await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
@@ -1321,6 +1417,7 @@ export class AgentLoop {
       modelMultimodal: this.config.modelMultimodal,
       maxOutputTokens: this.config.maxOutputTokens,
       readFileState: this.readFileState,
+      allowedReadFiles: [...this.allowedReadFiles],
       writeSnapshots: this.writeSnapshots,
       fileUpdateNotifier: this.dependencies.fileUpdateNotifier,
       ...(planTodo ? { planTodo } : {}),
@@ -1813,6 +1910,17 @@ function truncateHeadKeepRatio(messages: CanonicalMessage[], keepRatio: number):
   return messages.slice(-keep);
 }
 
+function buildInvalidFingerprint(results: PilotDeckToolResult[]): string {
+  return results
+    .filter(
+      (result): result is PilotDeckToolErrorResult =>
+        result.type === "error" && result.error.code === "invalid_tool_input",
+    )
+    .map((result) => `${result.toolName}::${result.error.message}`)
+    .sort()
+    .join("\n");
+}
+
 /**
  * Drop the trailing `[assistant_message_with_partial_tool_call,
  * synthetic_tool_result]` pair the loop just appended on a model error so a
@@ -2125,6 +2233,145 @@ function classifyModelError(error: CanonicalModelError): {
     stopReason: "model_error",
     error: agentError("agent_model_error", error.message, error, error.userHint),
   };
+}
+
+function createEmptyResponseStatus(args: {
+  provider?: string;
+  model?: string;
+  attempts: number;
+}): AgentStatusMessage {
+  const text = "The model returned empty content repeatedly, so this turn has stopped. Try again later or increase max output tokens.";
+  return {
+    event: "model_empty_response_exhausted",
+    kind: "error",
+    text,
+    detail: {
+      message: text,
+      provider: args.provider,
+      model: args.model,
+      attempts: args.attempts,
+      severity: "error",
+      visible: true,
+      userHint: "Increase max output tokens or retry with a shorter prompt.",
+    },
+  };
+}
+
+function createMaxTurnsStatus(args: {
+  maxTurns: number;
+  error: ReturnType<typeof agentError>;
+}): AgentStatusMessage {
+  const text = `Reached the maximum number of turns (${args.maxTurns}), so this turn has stopped. Increase maxTurns or split the task into smaller steps and try again.`;
+  return {
+    event: "max_turns_reached",
+    kind: "error",
+    text,
+    detail: {
+      message: text,
+      code: args.error.code,
+      maxTurns: args.maxTurns,
+      severity: "error",
+      visible: true,
+      userHint: args.error.userHint,
+    },
+  };
+}
+
+function createMaxOutputRecoveryExhaustedStatus(args: {
+  attempts: number;
+}): AgentStatusMessage {
+  const text = "Output token recovery was exhausted, so the visible response may be incomplete. Increase max output tokens or split the task into smaller steps and try again.";
+  return {
+    event: "max_output_recovery_exhausted",
+    kind: "error",
+    text,
+    detail: {
+      message: text,
+      attempts: args.attempts,
+      severity: "warning",
+      visible: true,
+      userHint: "Increase max output tokens or split the task into smaller steps.",
+    },
+  };
+}
+
+function createStructuredOutputCompletedStatus(): AgentStatusMessage {
+  const text = "Structured output was returned, so this turn has completed.";
+  return {
+    event: "structured_output_completed",
+    kind: "status",
+    text,
+    detail: {
+      message: text,
+      visible: true,
+    },
+  };
+}
+
+function createContentFilterStopStatus(): AgentStatusMessage {
+  const text = "The response may be incomplete because the model stopped due to content filtering.";
+  return {
+    event: "content_filter_stop",
+    kind: "error",
+    text,
+    detail: {
+      message: text,
+      severity: "warning",
+      visible: true,
+    },
+  };
+}
+
+function createUnknownFinishReasonStatus(): AgentStatusMessage {
+  const text = "The model stream ended without a normal finish reason, so the response may be incomplete.";
+  return {
+    event: "unknown_finish_reason",
+    kind: "error",
+    text,
+    detail: {
+      message: text,
+      severity: "warning",
+      visible: true,
+    },
+  };
+}
+
+function createTurnAbortedStatus(args: { reason?: string }): AgentStatusMessage {
+  const text = "This turn was aborted before completion.";
+  return {
+    event: "turn_aborted",
+    kind: "status",
+    text,
+    detail: {
+      message: text,
+      reason: args.reason,
+      visible: true,
+    },
+  };
+}
+
+function createFinishReasonStatus(finishReason: string | undefined, assistantText: string): AgentStatusMessage | undefined {
+  if (assistantText.trim().length === 0) return undefined;
+  if (finishReason === "content_filter") return createContentFilterStopStatus();
+  if (finishReason === "unknown") return createUnknownFinishReasonStatus();
+  return undefined;
+}
+
+function shouldSurfaceAbortStatus(reason: unknown): boolean {
+  if (reason === undefined || reason === null) return false;
+  const text = (stringifyAbortReason(reason) ?? "").toLowerCase();
+  return text.includes("timeout") || text.includes("cancel") || text.includes("abort");
+}
+
+function stringifyAbortReason(reason: unknown): string | undefined {
+  if (reason === undefined || reason === null) return undefined;
+  if (typeof reason === "string") return reason;
+  if (reason instanceof Error) return reason.message;
+  try {
+    return JSON.stringify(reason);
+  } catch {
+    return String(reason);
+  }
 }
 
 function isPromptTooLong(error: CanonicalModelError): boolean {

@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { writeFile, mkdir } from "node:fs/promises";
+import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 import type { AgentEvent, AgentInput, AgentTurnResult } from "../../agent/index.js";
 import {
   flattenToolResultBlockText,
   type CanonicalContentBlock,
+  type CanonicalMessage,
   type CanonicalModelEvent,
 } from "../../model/index.js";
 import { contentToText } from "../../tool/index.js";
@@ -22,6 +23,7 @@ import type {
   GatewayElicitationResponseInput,
   GatewayEvent,
   GatewayPermissionDecisionInput,
+  GatewayRecordAgentStatusMessageInput,
   GatewaySessionPermissionGrantInput,
   GatewayServerInfo,
   GatewaySubmitTurnInput,
@@ -95,6 +97,7 @@ export type InProcessGatewayOptions = {
   readSessionMessages?: (input: WebReadSessionMessagesInput) => Promise<WebReadSessionMessagesResult>;
   readSubagentMessages?: (input: WebReadSubagentMessagesInput) => Promise<WebReadSubagentMessagesResult>;
   forkSession?: (input: WebForkSessionInput) => Promise<WebForkSessionResult>;
+  recordAgentStatusMessage?: (input: GatewayRecordAgentStatusMessageInput) => Promise<{ recorded: boolean }>;
   /**
    * Web Phase 3 — pluggable project enumerator + describer.
    */
@@ -381,10 +384,17 @@ export class InProcessGateway implements Gateway {
         // Promote a text-only turn to blocks when the host channel attached
         // files/images. UI uploads come through this path; resolving them here
         // keeps attachment semantics in the gateway for every client.
+        const allowedReadFiles = await collectRegisteredAttachmentReadFiles(input.attachments);
         const agentInput = await buildAgentInputWithAttachments(
           input.message,
           input.attachments,
+          allowedReadFiles,
         );
+        const syntheticMessages: CanonicalMessage[] = (input.syntheticMessages ?? []).map((s) => ({
+          role: "user" as const,
+          content: [{ type: "text" as const, text: s.text }],
+          metadata: { synthetic: true, purpose: s.purpose ?? "channel_hint" },
+        }));
         for await (const event of session.submit(
           agentInput,
           {
@@ -395,10 +405,12 @@ export class InProcessGateway implements Gateway {
             basePermissionMode,
             allowPlanModeTools,
             canPrompt: input.canPrompt,
+            allowedReadFiles,
             permissionRules: {
               ...persistedRules,
               allow: [...sessionAllowRules, ...persistedRules.allow],
             },
+            ...(syntheticMessages.length > 0 ? { syntheticMessages } : {}),
           },
         )) {
           if (this.turnCompletions.get(input.sessionKey) !== turnDone) {
@@ -489,8 +501,9 @@ export class InProcessGateway implements Gateway {
     }
   }
 
-  async abortTurn(input: { sessionKey: string; runId?: string }): Promise<void> {
-    await this.router.abort(input.sessionKey, input.runId ? `aborted:${input.runId}` : "aborted");
+  async abortTurn(input: { sessionKey: string; runId?: string; reason?: string }): Promise<void> {
+    const reason = input.reason ?? (input.runId ? `aborted:${input.runId}` : "aborted");
+    await this.router.abort(input.sessionKey, reason);
     // Wait for the in-flight `submitTurn` (if any) to fully unwind so
     // `inFlightTurns` has been cleared by the time the RPC response is
     // sent. Otherwise a fast "stop → re-send" from a client races the
@@ -518,6 +531,13 @@ export class InProcessGateway implements Gateway {
   async closeSession(input: { sessionKey: string; reason?: string }): Promise<void> {
     await this.router.close(input.sessionKey);
     this.sessionPermissionGrants.delete(input.sessionKey);
+  }
+
+  async recordAgentStatusMessage(input: GatewayRecordAgentStatusMessageInput): Promise<{ recorded: boolean }> {
+    if (!this.options.recordAgentStatusMessage) {
+      return { recorded: false };
+    }
+    return this.options.recordAgentStatusMessage(input);
   }
 
   async describeServer(): Promise<GatewayServerInfo> {
@@ -1225,6 +1245,36 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
             }]
           : [],
       );
+      const attachments = event.result.content.flatMap((item): GatewayEvent[] => {
+        if (item.type === "image" && event.result.toolName !== "read_file") {
+          return [{
+            type: "assistant_attachment",
+            attachment: {
+              type: "image",
+              mimeType: item.mimeType,
+              content: item.data,
+              bytes: item.bytes,
+              name: `${safeGatewayPathPart(event.result.toolName)}-${safeGatewayPathPart(event.result.toolCallId)}.${extensionForMime(item.mimeType)}`,
+              source: "tool_result",
+              metadata: { toolCallId: event.result.toolCallId, toolName: event.result.toolName },
+            },
+          }];
+        }
+        if (item.type === "file") {
+          return [{
+            type: "assistant_attachment",
+            attachment: {
+              type: "file",
+              path: item.path,
+              mimeType: item.mimeType,
+              name: item.path.split(/[\\/]/).pop(),
+              source: "tool_result",
+              metadata: { toolCallId: event.result.toolCallId, toolName: event.result.toolName, description: item.description },
+            },
+          }];
+        }
+        return [];
+      });
 
       return [
         {
@@ -1242,6 +1292,7 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
             ? { data: event.result.data as Record<string, unknown> }
             : {}),
         },
+        ...attachments,
       ];
     }
     case "mode_change_requested":
@@ -1282,6 +1333,19 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
             toolCallId: block.toolCallId,
             resultPath: block.path,
           });
+          if (block.reason === "media_result_too_large") continue;
+          events.push({
+            type: "assistant_attachment",
+            attachment: {
+              type: block.mediaType === "image" ? "image" : "file",
+              path: block.path,
+              mimeType: block.mimeType,
+              bytes: block.originalBytes,
+              name: block.path.split(/[\\/]/).pop(),
+              source: "media_reference",
+              metadata: { toolCallId: block.toolCallId, reason: block.reason },
+            },
+          });
         } else if (block.type === "tool_result") {
           const projFullText = flattenToolResultBlockText(block);
           events.push({
@@ -1312,6 +1376,12 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
         total: event.snapshot.maxContextTokens,
         ratio: event.snapshot.ratio,
         state: event.snapshot.state,
+      }];
+    case "agent_status":
+      return [{
+        type: "agent_status",
+        event: event.event,
+        detail: event.detail,
       }];
     case "turn_continued":
       return [{
@@ -1520,14 +1590,21 @@ function safeGatewayPathPart(value: string): string {
   return value.trim().replace(/[^A-Za-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "") || "value";
 }
 
-const ATTACHMENT_PATH_NOTE_MARKER = "[Files attached by user and available for reading in the project:]";
+const ATTACHMENT_PATH_NOTE_MARKER = "[Registered attachment files in this session:]";
 
 async function buildAgentInputWithAttachments(
   message: string,
   attachments: ChannelAttachment[] | undefined,
+  allowedReadFiles: string[],
 ): Promise<AgentInput> {
-  const attachmentBlocks = await attachmentsToContentBlocks(attachments);
-  const pathNote = buildImageAttachmentPathNote(attachments);
+  const resolvedAttachments = await attachmentsToContentBlocks(attachments);
+  const attachmentBlocks = resolvedAttachments.blocks;
+  const pathNote = buildAttachmentPathNote(
+    attachments,
+    new Set(allowedReadFiles),
+    resolvedAttachments.directContentPaths,
+    resolvedAttachments.hasDiagnostics,
+  );
   if (attachmentBlocks.length === 0 && !pathNote) {
     return { type: "text", text: message };
   }
@@ -1544,8 +1621,11 @@ async function buildAgentInputWithAttachments(
   return { type: "blocks", content: blocks };
 }
 
-function buildImageAttachmentPathNote(
+function buildAttachmentPathNote(
   attachments: ChannelAttachment[] | undefined,
+  allowedReadFiles: Set<string>,
+  directContentPaths: Set<string>,
+  hasDiagnostics: boolean,
 ): CanonicalContentBlock | undefined {
   if (!attachments || attachments.length === 0) return undefined;
   const seen = new Set<string>();
@@ -1553,28 +1633,63 @@ function buildImageAttachmentPathNote(
 
   for (const attachment of attachments) {
     if (!attachment.path) continue;
-    const isImage = attachment.type === "image" || attachment.mimeType?.startsWith("image/");
-    if (!isImage || seen.has(attachment.path)) continue;
-    seen.add(attachment.path);
+    const normalized = safeAllowedAttachmentPath(attachment.path, allowedReadFiles);
+    if (!normalized) continue;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
 
-    const fallbackName = attachment.path.split(/[\\/]/).pop() || "image";
+    const fallbackName = normalized.split(/[\\/]/).pop() || "attachment";
     const name = String(attachment.name || fallbackName).replace(/[\r\n]+/g, " ").trim() || fallbackName;
-    lines.push(`- ${name}: ${attachment.path}`);
+    lines.push(`- ${name}: ${normalized}`);
   }
 
   if (lines.length === 0) return undefined;
+  const guidance = hasDiagnostics
+    ? "Some attachments may not be directly visible; use read_file with the exact path only when needed."
+    : "These are path references for reuse. If an image/PDF is already visible in this turn, do not call read_file just to view it.";
   return {
     type: "text",
-    text: `\n\n${ATTACHMENT_PATH_NOTE_MARKER}\n${lines.join("\n")}`,
+    text: `\n\n${ATTACHMENT_PATH_NOTE_MARKER}\n${lines.join("\n")}\n${guidance}`,
   };
+}
+
+function safeAllowedAttachmentPath(path: string, allowedReadFiles: Set<string>): string | undefined {
+  const normalized = resolve(path);
+  if (allowedReadFiles.has(normalized)) return normalized;
+  return undefined;
+}
+
+async function collectRegisteredAttachmentReadFiles(
+  attachments: ChannelAttachment[] | undefined,
+): Promise<string[]> {
+  if (!attachments || attachments.length === 0) return [];
+  const allowed = new Set<string>();
+
+  for (const attachment of attachments) {
+    if (!attachment.path || !attachment.metadata?.channelKey) continue;
+    try {
+      const info = await stat(attachment.path);
+      if (!info.isFile()) continue;
+      allowed.add(resolve(attachment.path));
+      allowed.add(resolve(await realpath(attachment.path)));
+    } catch {
+      // Missing or inaccessible attachments are handled by attachment resolution diagnostics.
+    }
+  }
+
+  return [...allowed];
 }
 
 async function attachmentsToContentBlocks(
   attachments: ChannelAttachment[] | undefined,
-): Promise<CanonicalContentBlock[]> {
-  if (!attachments || attachments.length === 0) return [];
+): Promise<{ blocks: CanonicalContentBlock[]; directContentPaths: Set<string>; hasDiagnostics: boolean }> {
+  if (!attachments || attachments.length === 0) {
+    return { blocks: [], directContentPaths: new Set<string>(), hasDiagnostics: false };
+  }
   const blocks: CanonicalContentBlock[] = [];
   const resolverRequests: AttachmentRequest[] = [];
+  const resolverRequestPaths: Array<string | undefined> = [];
+  const directContentPaths = new Set<string>();
   const diagnostics: string[] = [];
 
   for (const att of attachments) {
@@ -1586,6 +1701,7 @@ async function attachmentsToContentBlocks(
         mimeType: att.mimeType,
         ...(typeof att.bytes === "number" ? { bytes: att.bytes } : {}),
       });
+      if (att.path) directContentPaths.add(resolve(att.path));
       continue;
     }
 
@@ -1597,10 +1713,13 @@ async function attachmentsToContentBlocks(
     if (!att.path) continue;
     if (att.type === "image" || att.mimeType?.startsWith("image/")) {
       resolverRequests.push({ type: "image", path: att.path, mimeType: att.mimeType });
+      resolverRequestPaths.push(resolve(att.path));
     } else if (att.mimeType === "application/pdf" || att.path.toLowerCase().endsWith(".pdf")) {
       resolverRequests.push({ type: "pdf", path: att.path });
+      resolverRequestPaths.push(resolve(att.path));
     } else {
       resolverRequests.push({ type: "file", path: att.path });
+      resolverRequestPaths.push(resolve(att.path));
     }
   }
 
@@ -1612,6 +1731,11 @@ async function attachmentsToContentBlocks(
         diagnostics.push(diagnostic.message);
       }
     }
+    if (resolved.blocks.length > 0 && diagnostics.length === 0) {
+      for (const requestPath of resolverRequestPaths) {
+        if (requestPath) directContentPaths.add(requestPath);
+      }
+    }
   }
 
   if (diagnostics.length > 0) {
@@ -1621,5 +1745,24 @@ async function attachmentsToContentBlocks(
     });
   }
 
-  return blocks;
+  return { blocks, directContentPaths, hasDiagnostics: diagnostics.length > 0 };
+}
+
+function sanitizeAttachmentName(name: string): string {
+  return name.replace(/[\r\n]+/g, " ").trim() || "attachment";
+}
+
+function extensionForMime(mimeType: string): string {
+  switch (mimeType.toLowerCase()) {
+    case "image/jpeg":
+      return "jpg";
+    case "image/png":
+      return "png";
+    case "image/gif":
+      return "gif";
+    case "image/webp":
+      return "webp";
+    default:
+      return "bin";
+  }
 }

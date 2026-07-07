@@ -263,6 +263,28 @@ export class ImLiveReplyController<Handle = ImLiveReplyHandle> {
   }
 
   private handleAgentStatus(event: GatewayEvent & { type: "agent_status" }): void {
+    if (event.event === "model_empty_response_exhausted") {
+      const detailMessage = typeof event.detail?.message === "string" ? event.detail.message : undefined;
+      void this.append(`\n⚠️ ${detailMessage ?? "The model returned empty content repeatedly, so this turn has stopped. Try again later or increase max output tokens."}\n`);
+      return;
+    }
+    if (event.event === "max_turns_reached") {
+      const detailMessage = typeof event.detail?.message === "string" ? event.detail.message : undefined;
+      void this.append(`\n⚠️ ${detailMessage ?? "Reached the maximum number of turns, so this turn has stopped. Increase maxTurns or split the task into smaller steps and try again."}\n`);
+      return;
+    }
+    if (event.event === "max_output_recovery_exhausted"
+      || event.event === "subagent_failed"
+      || event.event === "content_filter_stop"
+      || event.event === "unknown_finish_reason"
+      || event.event === "structured_output_completed"
+      || event.event === "turn_aborted") {
+      const detailMessage = typeof event.detail?.message === "string" ? event.detail.message : undefined;
+      if (detailMessage) {
+        void this.append(`\n⚠️ ${detailMessage}\n`);
+      }
+      return;
+    }
     if (event.event === "subagent_completed") {
       this.markActivity("thinking");
       return;

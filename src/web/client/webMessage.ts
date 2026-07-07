@@ -396,6 +396,50 @@ export function applyWebGatewayEvent(
       };
     }
 
+    case "agent_status": {
+      const errorEvents = new Set([
+        "model_empty_response_exhausted",
+        "max_turns_reached",
+        "max_output_recovery_exhausted",
+        "subagent_failed",
+        "content_filter_stop",
+        "unknown_finish_reason",
+      ]);
+      const statusEvents = new Set([
+        "structured_output_completed",
+        "turn_aborted",
+      ]);
+      if (!errorEvents.has(event.event) && !statusEvents.has(event.event)) {
+        return state;
+      }
+      const detail = event.detail ?? {};
+      const kind = errorEvents.has(event.event) ? "error" : "status";
+      const text = typeof detail.message === "string" && detail.message.length > 0
+        ? detail.message
+        : kind === "error"
+          ? "The model stream ended unexpectedly, so the response may be incomplete."
+          : "This turn ended before producing a standard assistant response.";
+      const id = newId();
+      const message: WebMessage = {
+        id,
+        sessionKey: options.sessionKey,
+        projectKey: options.projectKey,
+        createdAt: stamp,
+        provider: "pilotdeck",
+        role: kind === "error" ? "error" : "system",
+        kind,
+        text,
+        payload: { event: event.event, detail },
+        source: "live",
+      };
+      return {
+        ...state,
+        messages: [...state.messages, message],
+        currentAssistantId: undefined,
+        currentThinkingId: undefined,
+      };
+    }
+
     case "error": {
       const id = newId();
       const message: WebMessage = {

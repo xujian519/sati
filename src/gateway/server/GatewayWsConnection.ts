@@ -179,6 +179,11 @@ export class GatewayWsConnection {
         return this.options.gateway.newSession(frame.params as never);
       case "close_session":
         return this.options.gateway.closeSession(frame.params as never).then(() => ({ ok: true }));
+      case "record_agent_status_message":
+        if (this.options.gateway.recordAgentStatusMessage) {
+          return this.options.gateway.recordAgentStatusMessage(frame.params as never);
+        }
+        return Promise.resolve({ recorded: false });
       case "describe_server":
         return this.options.gateway.describeServer();
       case "active_turn_snapshot":

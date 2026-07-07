@@ -1,4 +1,5 @@
 import type { AgentTurnResult } from "../../agent/index.js";
+import type { AgentStatusMessageInput } from "../../session/transcript/TranscriptWriter.js";
 import type { AgentRunMode } from "../../agent/protocol/input.js";
 import type {
   CronCreateInput,
@@ -69,6 +70,17 @@ export type ChannelAttachment = {
   metadata?: Record<string, unknown>;
 };
 
+export type GatewayOutboundAttachment = {
+  type: "file" | "image" | "text" | "unknown";
+  name?: string;
+  path?: string;
+  mimeType?: string;
+  content?: string;
+  bytes?: number;
+  source: "tool_result" | "media_reference" | "local_path";
+  metadata?: Record<string, unknown>;
+};
+
 export type TurnUsage = CanonicalUsage;
 
 export type GatewaySubmitTurnInput = {
@@ -100,12 +112,26 @@ export type GatewaySubmitTurnInput = {
     executionKind?: TelemetryExecutionKind;
     phase?: string;
   };
+  /**
+   * Channel-specific synthetic messages appended to the turn input.
+   * These are stored in the transcript with `metadata.synthetic: true`
+   * so they are visible to the model but hidden from the Web UI.
+   */
+  syntheticMessages?: Array<{ text: string; purpose?: string }>;
+};
+
+export type GatewayRecordAgentStatusMessageInput = {
+  sessionKey: string;
+  turnId: string;
+  projectKey?: string;
+  status: AgentStatusMessageInput;
 };
 
 export type GatewayEvent =
   | { type: "turn_started"; runId: string }
   | { type: "model_request_started"; model?: string; provider?: string }
   | { type: "assistant_text_delta"; text: string }
+  | { type: "assistant_attachment"; attachment: GatewayOutboundAttachment }
   | { type: "assistant_thinking_delta"; text: string }
   | { type: "tool_call_started"; toolCallId: string; name: string; argsPreview?: string }
   | {
@@ -321,11 +347,12 @@ export type AlwaysOnRerunPlanResult = {
 
 export interface Gateway {
   submitTurn(input: GatewaySubmitTurnInput): AsyncIterable<GatewayEvent>;
-  abortTurn(input: { sessionKey: string; runId?: string }): Promise<void>;
+  abortTurn(input: { sessionKey: string; runId?: string; reason?: string }): Promise<void>;
   listSessions(input: ListSessionsInput): Promise<ListSessionsResult>;
   resumeSession(input: { sessionKey: string }): Promise<{ sessionKey: string }>;
   newSession(input: NewSessionInput): Promise<{ sessionKey: string }>;
   closeSession(input: { sessionKey: string; reason?: string }): Promise<void>;
+  recordAgentStatusMessage?(input: GatewayRecordAgentStatusMessageInput): Promise<{ recorded: boolean }>;
   describeServer(): Promise<GatewayServerInfo>;
   getActiveTurnSnapshot?(input: GatewayActiveTurnSnapshotInput): Promise<GatewayActiveTurnSnapshot>;
   cronCreate(input: CronCreateInput): Promise<CronCreateResult>;

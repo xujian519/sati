@@ -64,6 +64,7 @@ import type { PilotAgentModelSelection, PilotConfigSnapshot } from "../pilot/con
 import { DEFAULT_JUDGE_TIMEOUT_MS, DEFAULT_ALLOWED_TOOLS, DEFAULT_TRIGGER_TIERS, type RouterConfig } from "../router/config/schema.js";
 import { createAgentProjectSessionStorage, listProjectSessions, resumeAgentSession } from "../session/index.js";
 import { sanitizeSessionIdForPath } from "../session/storage/ProjectSessionStorage.js";
+import { createSessionTitleGenerator } from "../session/title/SessionTitleGenerator.js";
 import { readWebSessionMessages, readSubagentWebMessages } from "../web/server/readSessionMessages.js";
 import { forkWebSession } from "../web/server/forkSession.js";
 import { describeWebProject, listWebProjects } from "../web/server/listProjects.js";
@@ -277,6 +278,16 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
         pilotHome,
         now,
       }),
+    async recordAgentStatusMessage(input) {
+      const storage = createAgentProjectSessionStorage({
+        projectRoot: input.projectKey ? input.projectKey : projectRoot,
+        pilotHome,
+        sessionId: input.sessionKey,
+        now,
+      });
+      await storage.transcript.recordAgentStatusMessage(input.sessionKey, input.turnId, input.status);
+      return { recorded: true };
+    },
     listProjects: () =>
       listWebProjects({ pilotHome, defaultProjectRoot: options.skipDefaultProject ? undefined : projectRoot }),
     describeProject: (input) =>
@@ -773,6 +784,7 @@ class ProjectRuntimeRegistry {
       dependencies: prepared.baseDependencies,
       projectStorage: prepared.runtime.projectStorage,
       extendDependencies: prepared.extendDependencies,
+      sessionTitleGenerator: prepared.sessionTitleGenerator,
     });
     return resumed.session;
   }
@@ -800,6 +812,7 @@ class ProjectRuntimeRegistry {
       transcript: storage.transcript,
       initialState: previous.state,
       seedState: previous.fileState,
+      sessionTitleGenerator: prepared.sessionTitleGenerator,
     });
     return session;
   }
@@ -954,6 +967,10 @@ class ProjectRuntimeRegistry {
         }
       },
     };
+    const sessionTitleGenerator = createSessionTitleGenerator({
+      modelRuntime: runtime.model,
+      agentModel: runtime.snapshot.config.agent.model,
+    });
     const extendDependencies = (storage: ReturnType<typeof createAgentProjectSessionStorage>) => {
       const toolResultBudget = new ToolResultBudget({ toolResultsDir: storage.toolResultsDir });
       const tokenBudget = new TokenBudgetManager();
@@ -1095,6 +1112,7 @@ class ProjectRuntimeRegistry {
     return {
       runtime,
       baseDependencies,
+      sessionTitleGenerator,
       extendDependencies,
     };
   }

@@ -629,6 +629,66 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                     }),
                 ];
             }
+            if (event.event === 'model_empty_response_exhausted') {
+                return [
+                    createNormalizedMessage({
+                        ...base,
+                        kind: 'error',
+                        content: detail.message || 'The model returned empty content repeatedly, so this turn has stopped. Try again later or increase max output tokens.',
+                        code: event.event,
+                        recoverable: false,
+                        userHint: detail.hint,
+                    }),
+                ];
+            }
+            if (event.event === 'max_turns_reached') {
+                return [
+                    createNormalizedMessage({
+                        ...base,
+                        kind: 'error',
+                        content: detail.message || 'Reached the maximum number of turns, so this turn has stopped. Increase maxTurns or split the task into smaller steps and try again.',
+                        code: event.event,
+                        recoverable: false,
+                        userHint: detail.userHint,
+                    }),
+                ];
+            }
+            if (event.event === 'max_output_recovery_exhausted' || event.event === 'subagent_failed') {
+                return [
+                    createNormalizedMessage({
+                        ...base,
+                        kind: 'error',
+                        content: detail.message || 'Agent execution stopped with a recoverable status. Please retry or adjust the task.',
+                        code: event.event,
+                        recoverable: false,
+                        userHint: detail.userHint,
+                    }),
+                ];
+            }
+            if (event.event === 'content_filter_stop' || event.event === 'unknown_finish_reason') {
+                return [
+                    createNormalizedMessage({
+                        ...base,
+                        kind: 'error',
+                        content: detail.message || 'The model stream ended unexpectedly, so the response may be incomplete.',
+                        code: event.event,
+                        recoverable: false,
+                        userHint: detail.userHint,
+                    }),
+                ];
+            }
+            if (event.event === 'structured_output_completed' || event.event === 'turn_aborted') {
+                return [
+                    createNormalizedMessage({
+                        ...base,
+                        kind: 'status',
+                        content: detail.message || 'This turn ended before producing a standard assistant response.',
+                        code: event.event,
+                        recoverable: false,
+                        userHint: detail.userHint,
+                    }),
+                ];
+            }
             return [];
         }
         default:
@@ -884,7 +944,7 @@ export async function runChatViaGateway(
             `[pilotdeck-bridge] aborting stale turn ${state.runId} for ${sessionKey} before resubmit`,
         );
         try {
-            await gw.abortTurn({ sessionKey, runId: state.runId });
+            await gw.abortTurn({ sessionKey, runId: state.runId, reason: 'system:stale_turn' });
         } catch (err) {
             console.warn('[pilotdeck-bridge] stale abort failed (continuing):', err?.message || err);
         }
@@ -977,6 +1037,19 @@ export async function runChatViaGateway(
         if (!sawTurnCompleted && !sawGatewayError) {
             const message = 'Gateway stream ended before turn_completed; no final assistant response was received.';
             console.warn(`[pilotdeck-bridge] ${message}`, { sessionKey, projectKey, runId });
+            await recordGatewayStatusMessage(gw, {
+                sessionKey,
+                turnId: runId,
+                projectKey,
+                event: 'gateway_stream_ended_without_completion',
+                text: message,
+                detail: {
+                    message,
+                    userHint: 'The model stream ended before PilotDeck received a final turn result. Please retry this message; if it repeats, check the gateway/model provider logs.',
+                    visible: true,
+                    severity: 'error',
+                },
+            });
             writer.send(
                 createNormalizedMessage({
                     provider,
@@ -989,21 +1062,53 @@ export async function runChatViaGateway(
             );
         }
     } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
 
         console.error(
             '[pilotdeck-bridge] runChatViaGateway threw:',
             error instanceof Error ? (error.stack || error.message) : error,
         );
+        await recordGatewayStatusMessage(gw, {
+            sessionKey,
+            turnId: runId,
+            projectKey,
+            event: 'gateway_bridge_error',
+            text: message,
+            detail: {
+                message,
+                visible: true,
+                severity: 'error',
+            },
+        });
         writer.send(
             createNormalizedMessage({
                 provider,
                 sessionId: sessionKey,
                 kind: 'error',
-                content: error instanceof Error ? error.message : String(error),
+                content: message,
             }),
         );
     } finally {
         clearActiveRunIfCurrent(state, runId);
+    }
+}
+
+async function recordGatewayStatusMessage(gateway, { sessionKey, turnId, projectKey, event, text, detail }) {
+    if (!gateway?.recordAgentStatusMessage) return;
+    try {
+        await gateway.recordAgentStatusMessage({
+            sessionKey,
+            turnId,
+            projectKey,
+            status: {
+                event,
+                kind: 'error',
+                text,
+                detail,
+            },
+        });
+    } catch (error) {
+        console.warn('[pilotdeck-bridge] failed to record gateway status message:', error?.message || error);
     }
 }
 

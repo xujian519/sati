@@ -97,6 +97,54 @@ function buildGoogleGenerateContentUrl(baseUrl, model) {
   return url.toString();
 }
 
+function buildGoogleModelsUrl(baseUrl) {
+  const normalizedBaseUrl = String(baseUrl || 'https://generativelanguage.googleapis.com').trim().replace(/\/+$/, '')
+    || 'https://generativelanguage.googleapis.com';
+  const url = new URL(normalizedBaseUrl);
+  const parts = url.pathname.split('/').filter(Boolean);
+  const last = parts.at(-1);
+  const apiVersion = last === 'v1' || last === 'v1beta' ? last : 'v1beta';
+  const baseParts = last === 'v1' || last === 'v1beta' ? parts.slice(0, -1) : parts;
+  url.pathname = `/${[...baseParts, apiVersion, 'models'].join('/')}`;
+  url.search = '';
+  url.hash = '';
+  return url.toString();
+}
+
+function normalizeModelListItem(item) {
+  if (!item || typeof item !== 'object') return null;
+  const rawId = typeof item.id === 'string'
+    ? item.id
+    : typeof item.name === 'string'
+      ? item.name
+      : '';
+  const id = rawId.replace(/^models\//, '').trim();
+  if (!id) return null;
+  const displayName = typeof item.display_name === 'string'
+    ? item.display_name
+    : typeof item.displayName === 'string'
+      ? item.displayName
+      : id;
+  return { id, displayName };
+}
+
+function parseModelListResponse(body) {
+  const rawModels = Array.isArray(body?.data)
+    ? body.data
+    : Array.isArray(body?.models)
+      ? body.models
+      : [];
+  const seen = new Set();
+  const models = [];
+  for (const item of rawModels) {
+    const model = normalizeModelListItem(item);
+    if (!model || seen.has(model.id)) continue;
+    seen.add(model.id);
+    models.push(model);
+  }
+  return models;
+}
+
 router.get('/', (_req, res) => {
   try {
     const record = readPilotDeckConfigFile();
@@ -271,6 +319,63 @@ router.get('/provider', (_req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/models', async (req, res) => {
+  const { providerId, providerType, baseUrl, apiKey } = req.body || {};
+  let effectiveApiKey = typeof apiKey === 'string' ? apiKey : '';
+  if ((!effectiveApiKey || effectiveApiKey === '********') && typeof providerId === 'string' && providerId.trim()) {
+    try {
+      const record = readPilotDeckConfigFile();
+      const provider = record.config?.model?.providers?.[providerId.trim()];
+      if (typeof provider?.apiKey === 'string') effectiveApiKey = provider.apiKey;
+    } catch { /* fall through to validation below */ }
+  }
+  if (!baseUrl || !effectiveApiKey || effectiveApiKey === '********') {
+    return res.status(400).json({ ok: false, error: 'baseUrl and apiKey are required' });
+  }
+
+  const normalizedType = String(providerType || '').toLowerCase();
+  const isAnthropic = normalizedType === 'anthropic';
+  const isGoogle = normalizedType === 'google';
+  const normalizedBaseUrl = String(baseUrl).trim().replace(/\/+$/, '');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+
+  try {
+    const url = isGoogle
+      ? buildGoogleModelsUrl(normalizedBaseUrl)
+      : isAnthropic
+        ? `${normalizedBaseUrl}/v1/models`
+        : `${normalizedBaseUrl}/models`;
+    const headers = isGoogle
+      ? { 'x-goog-api-key': effectiveApiKey }
+      : isAnthropic
+        ? { 'x-api-key': effectiveApiKey, 'anthropic-version': '2023-06-01' }
+        : { Authorization: `Bearer ${effectiveApiKey}` };
+    const response = await fetch(url, { method: 'GET', headers, signal: controller.signal });
+    clearTimeout(timer);
+    const responseText = await response.text();
+    let body;
+    try {
+      body = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      return res.status(502).json({ ok: false, error: `Expected JSON from ${url}, but received non-JSON content.` });
+    }
+
+    if (!response.ok) {
+      const message = body?.error?.message || body?.message || responseText || `HTTP ${response.status}`;
+      return res.status(response.status).json({ ok: false, error: message });
+    }
+
+    res.json({ ok: true, models: parseModelListResponse(body) });
+  } catch (error) {
+    clearTimeout(timer);
+    const message = error?.name === 'AbortError'
+      ? 'Model list request timed out after 10s.'
+      : error instanceof Error ? error.message : String(error);
+    res.status(500).json({ ok: false, error: message });
   }
 });
 
