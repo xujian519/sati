@@ -65,6 +65,31 @@ const getAttachmentAccent = (name?: string, mimeType?: string): string => {
   return 'bg-neutral-500 text-white';
 };
 
+const LINKABLE_INLINE_FILE_EXTENSIONS = new Set([
+  'pdf', 'html', 'htm', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
+  'txt', 'md', 'csv', 'json', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'py', 'js', 'ts', 'tsx', 'css',
+]);
+
+const escapeMarkdownLinkText = (value: string): string => value.replace(/([\\\]\[])/g, '\\$1');
+
+const toFileHref = (pathValue: string): string => {
+  if (/^file:\/\//i.test(pathValue)) return pathValue;
+  if (pathValue.startsWith('/')) return `file://${encodeURI(pathValue)}`;
+  return encodeURI(pathValue.replace(/\\/g, '/'));
+};
+
+function linkifyFilePaths(content: string): string {
+  const pattern = /((?:file:\/\/)?\/(?:[^\s`'"<>])+\.[A-Za-z0-9]{1,10}|(?:\.\/)?\b[A-Za-z0-9._-][A-Za-z0-9._/-]*\.[A-Za-z0-9]{1,10}\b)/gu;
+  return content.replace(pattern, (match, pathValue: string, offset: number, fullText: string) => {
+    const before = fullText.slice(Math.max(0, offset - 2), offset);
+    const after = fullText.slice(offset + match.length, offset + match.length + 1);
+    if (before.includes('](') || after === ')') return match;
+    const extension = pathValue.split('.').pop()?.toLowerCase() || '';
+    if (!LINKABLE_INLINE_FILE_EXTENSIONS.has(extension)) return match;
+    return `[${escapeMarkdownLinkText(pathValue)}](${toFileHref(pathValue)})`;
+  });
+}
+
 function attachmentToDocumentReference(attachment: ChatAttachment): DocumentSelectionReference | null {
   if (attachment.kind !== DOCUMENT_SELECTION_ATTACHMENT_KIND || !attachment.selectedText) return null;
   const filePath = attachment.filePath || attachment.path || '';
@@ -163,6 +188,10 @@ function MessageRowV2({
   );
   const thinkingDisplayText = useTypewriter(formattedContent, !!message.isStreaming && !!message.isThinking, 4);
   const contentDisplayText = useTypewriter(formattedContent, !!message.isStreaming && !message.isThinking, 6);
+  const linkedContentDisplayText = useMemo(
+    () => (message.isStreaming ? contentDisplayText : linkifyFilePaths(contentDisplayText)),
+    [contentDisplayText, message.isStreaming],
+  );
   const messageImages = useMemo(
     () =>
       Array.isArray(message.images)
@@ -455,7 +484,7 @@ function MessageRowV2({
   }
 
   // Assistant: plain prose, no avatar and no bubble.
-  const hasAssistantProse = formattedContent.trim().length > 0;
+  const hasAssistantProse = linkedContentDisplayText.trim().length > 0;
   const showStreamingCursor = Boolean(message.isStreaming && !contentDisplayText);
   const resolvedShowAssistantActions = showAssistantActions ?? true;
   const showAssistantCopyButton = resolvedShowAssistantActions && hasAssistantProse;
@@ -470,7 +499,7 @@ function MessageRowV2({
         <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
       ) : (
         <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-pre:my-3 prose-ol:my-2 prose-ul:my-2 prose-table:my-0 prose-hr:my-4" projectName={selectedProject?.name}
-        onFileOpen={onFileOpen} isStreaming={message.isStreaming}>{contentDisplayText}</Markdown>
+        onFileOpen={onFileOpen} isStreaming={message.isStreaming}>{linkedContentDisplayText}</Markdown>
       )}
       {shouldRenderAssistantActions ? (
         <div className="mt-1.5 flex justify-end gap-1">
@@ -485,7 +514,7 @@ function MessageRowV2({
               variant="action-row"
             />
           ) : null}
-          {showAssistantCopyButton ? <CopyMarkdownButton content={formattedContent} /> : null}
+          {showAssistantCopyButton ? <CopyMarkdownButton content={linkedContentDisplayText} /> : null}
         </div>
       ) : null}
     </div>
