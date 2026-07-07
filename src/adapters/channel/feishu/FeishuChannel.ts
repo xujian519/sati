@@ -17,7 +17,7 @@ import {
   type ImLiveReplyControllerOptions,
   type ImLiveReplyTransport,
 } from "../protocol/ImLiveReplyController.js";
-import { FeishuSessionMapper } from "./FeishuSessionMapper.js";
+import { FeishuSessionMapper, type FeishuSessionMapperState } from "./FeishuSessionMapper.js";
 import { type FeishuLiveCardActivityKind } from "./feishu-render.js";
 
 let Lark: any = null;
@@ -87,6 +87,7 @@ export type FeishuChannelOptions = {
     ImLiveReplyControllerOptions<FeishuLiveMessageHandle>,
     "transport" | "onTransportError"
   >;
+  onStateChange?: (state: FeishuSessionMapperState) => void;
 };
 
 type ParsedEvent =
@@ -132,6 +133,7 @@ export class FeishuChannel implements ChannelAdapter {
   private readonly mapper: FeishuSessionMapper;
   private readonly explicitSend?: (message: FeishuOutboundMessage) => Promise<void>;
   private readonly liveReplyOptions?: FeishuChannelOptions["liveReplyOptions"];
+  private readonly onStateChange?: (state: FeishuSessionMapperState) => void;
 
   private appId: string;
   private appSecret: string;
@@ -170,6 +172,7 @@ export class FeishuChannel implements ChannelAdapter {
     this.verifyToken = options.verifyToken;
     this.connectionMode = options.connectionMode ?? "stream";
     this.domainName = options.domainName ?? "feishu";
+    this.onStateChange = options.onStateChange;
   }
 
   async start(deps: ChannelStartDeps): Promise<ChannelHandle> {
@@ -390,6 +393,7 @@ export class FeishuChannel implements ChannelAdapter {
     const mapped = this.mapper.resolve({ chatId, text: messageText });
 
     if (mapped.command === "new") {
+      this.onStateChange?.(this.mapper.snapshot());
       const activeRun = this.chatState.activeRun(chatId);
       this.resetChatInteractionState(chatId);
       await this.gateway?.abortTurn({
@@ -412,8 +416,9 @@ export class FeishuChannel implements ChannelAdapter {
         chatId,
         channelKey: "feishu",
         reply: (msg) => this.send({ chatId, text: msg }),
-        bindProject: (projectKey) => this.mapper.bindProject(chatId, projectKey),
+        bindProject: (projectKey) => { this.mapper.bindProject(chatId, projectKey); this.onStateChange?.(this.mapper.snapshot()); },
         getProject: () => this.mapper.getProject(chatId),
+        resetSession: () => { this.mapper.resolve({ chatId, text: "/new" }); this.onStateChange?.(this.mapper.snapshot()); },
         logger: this.logger as any,
       });
       if (handled) return;
