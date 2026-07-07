@@ -16,7 +16,7 @@ import { parseModelResponse } from "../response/parseModelResponse.js";
 import { createStreamNormalizerState, normalizeStreamEvent } from "./normalizeStreamEvent.js";
 import { createGoogleStreamState, normalizeGoogleStreamEvent } from "../providers/google/stream.js";
 import { normalizeProviderBaseUrl } from "../normalizeProviderBaseUrl.js";
-import { buildProviderChatEndpoint } from "../providerEndpoint.js";
+import { buildProviderChatEndpointCandidates } from "../providerEndpoint.js";
 import { StreamingCheckpointManager } from "./StreamingCheckpoint.js";
 
 export type ModelTransport = typeof fetch;
@@ -476,7 +476,7 @@ async function sendProviderRequest(
       body: JSON.stringify(finalBody),
       signal: controller.signal,
     };
-    return await transport(buildEndpoint(provider, stream), fetchOptions);
+    return await sendWithEndpointFallback(provider, stream, transport, fetchOptions);
   } catch (error) {
     if (signal?.aborted) {
       throw createAbortError(signal.reason);
@@ -501,8 +501,26 @@ function forwardAbort(source: AbortSignal, target: AbortController): () => void 
   return () => source.removeEventListener("abort", onAbort);
 }
 
-function buildEndpoint(provider: ProviderConfig, _stream: boolean): string {
-  return buildProviderChatEndpoint({ protocol: provider.protocol, baseUrl: provider.url });
+async function sendWithEndpointFallback(
+  provider: ProviderConfig,
+  stream: boolean,
+  transport: ModelTransport,
+  fetchOptions: RequestInit,
+): Promise<Response> {
+  const endpoints = buildProviderChatEndpointCandidates({ protocol: provider.protocol, baseUrl: provider.url });
+  let lastResponse: Response | undefined;
+  for (const endpoint of endpoints) {
+    const response = await transport(endpoint, fetchOptions);
+    if (response.ok || endpoints.length === 1 || !isEndpointFallbackStatus(response.status)) {
+      return response;
+    }
+    lastResponse = response;
+  }
+  return lastResponse as Response;
+}
+
+function isEndpointFallbackStatus(status: number): boolean {
+  return status === 400 || status === 404 || status === 405;
 }
 
 function buildHeaders(provider: ProviderConfig): HeadersInit {

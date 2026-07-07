@@ -21,8 +21,8 @@ import { reloadPilotDeckConfig } from '../services/pilotdeckConfigReloader.js';
 import { suppressNextWatchEvent } from '../services/pilotdeckConfigWatcher.js';
 import { getPilotDeckGateway } from '../pilotdeck-bridge.js';
 import {
-  buildProviderChatEndpoint,
-  buildProviderModelsEndpoint,
+  buildProviderChatEndpointCandidates,
+  buildProviderModelsEndpointCandidates,
 } from '../../../src/model/providerEndpoint.js';
 import {
   OFFICE_PREVIEW_SERVICE_LIBREOFFICE,
@@ -150,6 +150,23 @@ function parseModelListResponse(body) {
     models.push(model);
   }
   return models;
+}
+
+function isEndpointFallbackStatus(status) {
+  return status === 400 || status === 404 || status === 405;
+}
+
+async function fetchWithEndpointFallback(urls, options) {
+  let lastResult = null;
+  for (const url of urls) {
+    const response = await fetch(url, options);
+    const responseText = await response.text();
+    if (response.ok || urls.length === 1 || !isEndpointFallbackStatus(response.status)) {
+      return { url, response, responseText };
+    }
+    lastResult = { url, response, responseText };
+  }
+  return lastResult;
 }
 
 router.get('/', (_req, res) => {
@@ -352,15 +369,14 @@ router.post('/models', async (req, res) => {
   const timer = setTimeout(() => controller.abort(), 10_000);
 
   try {
-    const url = buildProviderModelsEndpoint({ protocol, baseUrl: normalizedBaseUrl });
+    const urls = buildProviderModelsEndpointCandidates({ protocol, baseUrl: normalizedBaseUrl });
     const headers = isGoogle
       ? { 'x-goog-api-key': effectiveApiKey }
       : isAnthropic
         ? { 'x-api-key': effectiveApiKey, 'anthropic-version': '2023-06-01' }
         : { Authorization: `Bearer ${effectiveApiKey}` };
-    const response = await fetch(url, { method: 'GET', headers, signal: controller.signal });
+    const { url, response, responseText } = await fetchWithEndpointFallback(urls, { method: 'GET', headers, signal: controller.signal });
     clearTimeout(timer);
-    const responseText = await response.text();
     let body;
     try {
       body = responseText ? JSON.parse(responseText) : {};
@@ -405,7 +421,7 @@ router.post('/test-connection', async (req, res) => {
     let fetchOptions;
 
     if (isGoogle) {
-      url = buildProviderChatEndpoint({ protocol: 'google', baseUrl: normalizedBaseUrl, model });
+      url = buildProviderChatEndpointCandidates({ protocol: 'google', baseUrl: normalizedBaseUrl, model });
       fetchOptions = {
         method: 'POST',
         headers: {
@@ -419,7 +435,7 @@ router.post('/test-connection', async (req, res) => {
         signal: controller.signal,
       };
     } else if (isAnthropic) {
-      url = buildProviderChatEndpoint({ protocol: 'anthropic', baseUrl: normalizedBaseUrl });
+      url = buildProviderChatEndpointCandidates({ protocol: 'anthropic', baseUrl: normalizedBaseUrl });
       fetchOptions = {
         method: 'POST',
         headers: {
@@ -435,7 +451,7 @@ router.post('/test-connection', async (req, res) => {
         signal: controller.signal,
       };
     } else if (isOpenAIResponses) {
-      url = buildProviderChatEndpoint({ protocol: 'openai-responses', baseUrl: normalizedBaseUrl });
+      url = buildProviderChatEndpointCandidates({ protocol: 'openai-responses', baseUrl: normalizedBaseUrl });
       fetchOptions = {
         method: 'POST',
         headers: {
@@ -451,7 +467,7 @@ router.post('/test-connection', async (req, res) => {
         signal: controller.signal,
       };
     } else {
-      url = buildProviderChatEndpoint({ protocol: 'openai', baseUrl: normalizedBaseUrl });
+      url = buildProviderChatEndpointCandidates({ protocol: 'openai', baseUrl: normalizedBaseUrl });
       fetchOptions = {
         method: 'POST',
         headers: {
@@ -467,9 +483,10 @@ router.post('/test-connection', async (req, res) => {
       };
     }
 
-    const response = await fetch(url, fetchOptions);
+    const result = await fetchWithEndpointFallback(url, fetchOptions);
+    const { response, responseText } = result;
+    url = result.url;
     clearTimeout(timer);
-    const responseText = await response.text();
     const expectedShape = isAnthropic
       ? 'Anthropic message'
       : isGoogle

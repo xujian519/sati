@@ -10,6 +10,10 @@ function joinUrl(base: string, path: string): string {
   return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 }
 
+function uniqueUrls(urls: string[]): string[] {
+  return [...new Set(urls.filter(Boolean))];
+}
+
 function getPathSegments(baseUrl: string): string[] {
   try {
     return new URL(baseUrl).pathname.split("/").filter(Boolean);
@@ -29,13 +33,36 @@ function pathEndsWith(baseUrl: string, suffix: string[]): boolean {
   return normalizedSuffix.every((segment, index) => segments[segments.length - normalizedSuffix.length + index] === segment);
 }
 
-function buildVersionedEndpoint(baseUrl: string, defaultVersion: string, endpointPath: string): string {
-  const normalizedBase = baseUrl.trim().replace(/\/+$/, "");
+function baseUrlEndsWithEndpoint(baseUrl: string, endpointPath: string): boolean {
   const normalizedEndpointPath = trimSlashes(endpointPath);
   const endpointSegments = normalizedEndpointPath.split("/").filter(Boolean);
-  if (pathEndsWith(normalizedBase, endpointSegments)) return normalizedBase;
-  const prefix = hasVersionSegment(normalizedBase) ? "" : defaultVersion;
-  return joinUrl(normalizedBase, [prefix, normalizedEndpointPath].filter(Boolean).join("/"));
+  if (pathEndsWith(baseUrl, endpointSegments)) return true;
+
+  if (endpointSegments.length === 2 && endpointSegments[0].toLowerCase() === "models") {
+    const segments = getPathSegments(baseUrl).map((segment) => segment.toLowerCase());
+    const last = segments.at(-1) || "";
+    const methodSeparator = endpointSegments[1].indexOf(":");
+    const methodSuffix = methodSeparator >= 0 ? endpointSegments[1].slice(methodSeparator).toLowerCase() : "";
+    return Boolean(methodSuffix) && segments.at(-2) === "models" && last.endsWith(methodSuffix);
+  }
+
+  return false;
+}
+
+function buildEndpointCandidates(baseUrl: string, defaultVersion: string, endpointPath: string): string[] {
+  const normalizedBase = baseUrl.trim().replace(/\/+$/, "");
+  const normalizedEndpointPath = trimSlashes(endpointPath);
+  if (baseUrlEndsWithEndpoint(normalizedBase, normalizedEndpointPath)) return [normalizedBase];
+  const unversionedEndpoint = joinUrl(normalizedBase, normalizedEndpointPath);
+  if (hasVersionSegment(normalizedBase)) return [unversionedEndpoint];
+  return uniqueUrls([
+    unversionedEndpoint,
+    joinUrl(normalizedBase, [defaultVersion, normalizedEndpointPath].filter(Boolean).join("/")),
+  ]);
+}
+
+function buildVersionedEndpoint(baseUrl: string, defaultVersion: string, endpointPath: string): string {
+  return buildEndpointCandidates(baseUrl, defaultVersion, endpointPath)[0] || "";
 }
 
 export function normalizeGoogleProbeModel(model: string): string {
@@ -57,28 +84,44 @@ export function buildProviderChatEndpoint(input: {
   model?: string;
   googleMethod?: string;
 }): string {
+  return buildProviderChatEndpointCandidates(input)[0] || "";
+}
+
+export function buildProviderChatEndpointCandidates(input: {
+  protocol: ProviderEndpointProtocol;
+  baseUrl: string;
+  model?: string;
+  googleMethod?: string;
+}): string[] {
   const normalizedProtocol = input.protocol;
   if (normalizedProtocol === "anthropic") {
-    return buildVersionedEndpoint(input.baseUrl, "v1", "messages");
+    return buildEndpointCandidates(input.baseUrl, "v1", "messages");
   }
   if (normalizedProtocol === "openai-responses") {
-    return buildVersionedEndpoint(input.baseUrl, "v1", "responses");
+    return buildEndpointCandidates(input.baseUrl, "v1", "responses");
   }
   if (normalizedProtocol === "google") {
     const method = input.googleMethod || "generateContent";
     const model = encodeURIComponent(normalizeGoogleProbeModel(input.model || ""));
     const normalizedBase = input.baseUrl.trim().replace(/\/+$/, "") || "https://generativelanguage.googleapis.com";
-    return buildVersionedEndpoint(normalizedBase, "v1beta", `models/${model}:${method}`);
+    return buildEndpointCandidates(normalizedBase, "v1beta", `models/${model}:${method}`);
   }
-  return buildVersionedEndpoint(input.baseUrl, "v1", "chat/completions");
+  return buildEndpointCandidates(input.baseUrl, "v1", "chat/completions");
 }
 
 export function buildProviderModelsEndpoint(input: {
   protocol: ProviderEndpointProtocol;
   baseUrl: string;
 }): string {
+  return buildProviderModelsEndpointCandidates(input)[0] || "";
+}
+
+export function buildProviderModelsEndpointCandidates(input: {
+  protocol: ProviderEndpointProtocol;
+  baseUrl: string;
+}): string[] {
   if (input.protocol === "google") {
-    return buildVersionedEndpoint(input.baseUrl, "v1beta", "models");
+    return buildEndpointCandidates(input.baseUrl, "v1beta", "models");
   }
-  return buildVersionedEndpoint(input.baseUrl, "v1", "models");
+  return buildEndpointCandidates(input.baseUrl, "v1", "models");
 }

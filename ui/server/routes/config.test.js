@@ -10,7 +10,7 @@ afterEach(() => {
 });
 
 describe('config test-connection route', () => {
-  it('uses /v1/chat/completions for root OpenAI base URLs and requires text', async () => {
+  it('uses unversioned chat completions when the root base URL works', async () => {
     const calls = [];
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       calls.push(String(url));
@@ -29,7 +29,35 @@ describe('config test-connection route', () => {
     });
 
     expect(data.ok).toBe(true);
-    expect(calls).toEqual(['https://api.openai.com/v1/chat/completions']);
+    expect(calls).toEqual(['https://api.openai.com/chat/completions']);
+  });
+
+  it('falls back to /v1/chat/completions when unversioned probing misses', async () => {
+    const calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      calls.push(String(url));
+      if (String(url) === 'https://api.openai.com/chat/completions') {
+        return jsonResponse({ error: { message: 'not found' } }, { ok: false, status: 404, statusText: 'Not Found' });
+      }
+      return jsonResponse({ choices: [{ message: { content: 'ok' } }] });
+    }));
+
+    const { request } = await createConfigApp();
+    const data = await request('/api/config/test-connection', {
+      method: 'POST',
+      body: JSON.stringify({
+        providerType: 'openai',
+        baseUrl: 'https://api.openai.com',
+        apiKey: 'sk-test',
+        model: 'gpt-test',
+      }),
+    });
+
+    expect(data.ok).toBe(true);
+    expect(calls).toEqual([
+      'https://api.openai.com/chat/completions',
+      'https://api.openai.com/v1/chat/completions',
+    ]);
   });
 
   it('does not duplicate existing version paths', async () => {
@@ -45,6 +73,28 @@ describe('config test-connection route', () => {
       body: JSON.stringify({
         providerType: 'openai',
         baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-test',
+        model: 'gpt-test',
+      }),
+    });
+
+    expect(data.ok).toBe(true);
+    expect(calls).toEqual(['https://api.openai.com/v1/chat/completions']);
+  });
+
+  it('accepts full OpenAI-compatible endpoint URLs', async () => {
+    const calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      calls.push(String(url));
+      return jsonResponse({ choices: [{ message: { content: 'ok' } }] });
+    }));
+
+    const { request } = await createConfigApp();
+    const data = await request('/api/config/test-connection', {
+      method: 'POST',
+      body: JSON.stringify({
+        providerType: 'openai',
+        baseUrl: 'https://api.openai.com/v1/chat/completions',
         apiKey: 'sk-test',
         model: 'gpt-test',
       }),
@@ -140,11 +190,12 @@ async function requestJson(app, path, init = {}) {
   }
 }
 
-function jsonResponse(payload) {
+function jsonResponse(payload, overrides = {}) {
   return {
     ok: true,
     status: 200,
     statusText: 'OK',
+    ...overrides,
     text: async () => JSON.stringify(payload),
   };
 }

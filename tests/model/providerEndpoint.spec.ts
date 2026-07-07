@@ -1,19 +1,42 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildProviderChatEndpoint, buildProviderModelsEndpoint } from "../../src/model/providerEndpoint.js";
+import {
+  buildProviderChatEndpoint,
+  buildProviderChatEndpointCandidates,
+  buildProviderModelsEndpoint,
+  buildProviderModelsEndpointCandidates,
+} from "../../src/model/providerEndpoint.js";
 
-test("buildProviderChatEndpoint adds default protocol versions", () => {
+test("buildProviderChatEndpoint prefers unversioned endpoints for root base URLs", () => {
   assert.equal(
     buildProviderChatEndpoint({ protocol: "openai", baseUrl: "https://api.openai.com" }),
-    "https://api.openai.com/v1/chat/completions",
+    "https://api.openai.com/chat/completions",
   );
   assert.equal(
     buildProviderChatEndpoint({ protocol: "anthropic", baseUrl: "https://api.anthropic.com" }),
-    "https://api.anthropic.com/v1/messages",
+    "https://api.anthropic.com/messages",
   );
   assert.equal(
     buildProviderChatEndpoint({ protocol: "google", baseUrl: "https://generativelanguage.googleapis.com", model: "gemini-pro" }),
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
+    "https://generativelanguage.googleapis.com/models/gemini-pro:generateContent",
+  );
+});
+
+test("buildProviderChatEndpointCandidates falls back to default protocol versions", () => {
+  assert.deepEqual(
+    buildProviderChatEndpointCandidates({ protocol: "openai", baseUrl: "https://api.openai.com" }),
+    ["https://api.openai.com/chat/completions", "https://api.openai.com/v1/chat/completions"],
+  );
+  assert.deepEqual(
+    buildProviderChatEndpointCandidates({ protocol: "anthropic", baseUrl: "https://api.anthropic.com" }),
+    ["https://api.anthropic.com/messages", "https://api.anthropic.com/v1/messages"],
+  );
+  assert.deepEqual(
+    buildProviderChatEndpointCandidates({ protocol: "google", baseUrl: "https://generativelanguage.googleapis.com", model: "gemini-pro" }),
+    [
+      "https://generativelanguage.googleapis.com/models/gemini-pro:generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
+    ],
   );
 });
 
@@ -29,6 +52,25 @@ test("buildProviderChatEndpoint does not duplicate existing version segments", (
   assert.equal(
     buildProviderChatEndpoint({ protocol: "google", baseUrl: "https://generativelanguage.googleapis.com/v1", model: "gemini-pro" }),
     "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent",
+  );
+});
+
+test("buildProviderChatEndpoint accepts full endpoint URLs", () => {
+  assert.equal(
+    buildProviderChatEndpoint({ protocol: "openai", baseUrl: "https://api.openai.com/v1/chat/completions" }),
+    "https://api.openai.com/v1/chat/completions",
+  );
+  assert.equal(
+    buildProviderChatEndpoint({ protocol: "openai-responses", baseUrl: "https://api.openai.com/v1/responses" }),
+    "https://api.openai.com/v1/responses",
+  );
+  assert.equal(
+    buildProviderChatEndpoint({ protocol: "anthropic", baseUrl: "https://api.anthropic.com/v1/messages" }),
+    "https://api.anthropic.com/v1/messages",
+  );
+  assert.equal(
+    buildProviderChatEndpoint({ protocol: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent", model: "gemini-pro" }),
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent",
   );
 });
 
@@ -50,7 +92,7 @@ test("buildProviderChatEndpoint preserves provider-specific API version paths", 
 test("buildProviderModelsEndpoint matches protocol version rules", () => {
   assert.equal(
     buildProviderModelsEndpoint({ protocol: "openai", baseUrl: "https://api.openai.com" }),
-    "https://api.openai.com/v1/models",
+    "https://api.openai.com/models",
   );
   assert.equal(
     buildProviderModelsEndpoint({ protocol: "openai", baseUrl: "https://api.openai.com/v1" }),
@@ -58,14 +100,29 @@ test("buildProviderModelsEndpoint matches protocol version rules", () => {
   );
   assert.equal(
     buildProviderModelsEndpoint({ protocol: "anthropic", baseUrl: "https://api.anthropic.com" }),
-    "https://api.anthropic.com/v1/models",
+    "https://api.anthropic.com/models",
   );
   assert.equal(
     buildProviderModelsEndpoint({ protocol: "google", baseUrl: "https://generativelanguage.googleapis.com" }),
-    "https://generativelanguage.googleapis.com/v1beta/models",
+    "https://generativelanguage.googleapis.com/models",
   );
   assert.equal(
     buildProviderModelsEndpoint({ protocol: "openai", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1" }),
     "https://dashscope.aliyuncs.com/compatible-mode/v1/models",
+  );
+  assert.equal(
+    buildProviderModelsEndpoint({ protocol: "openai", baseUrl: "https://api.openai.com/v1/models" }),
+    "https://api.openai.com/v1/models",
+  );
+});
+
+test("buildProviderModelsEndpointCandidates falls back to default protocol versions", () => {
+  assert.deepEqual(
+    buildProviderModelsEndpointCandidates({ protocol: "openai", baseUrl: "https://api.openai.com" }),
+    ["https://api.openai.com/models", "https://api.openai.com/v1/models"],
+  );
+  assert.deepEqual(
+    buildProviderModelsEndpointCandidates({ protocol: "google", baseUrl: "https://generativelanguage.googleapis.com" }),
+    ["https://generativelanguage.googleapis.com/models", "https://generativelanguage.googleapis.com/v1beta/models"],
   );
 });
