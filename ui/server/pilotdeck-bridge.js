@@ -95,15 +95,26 @@ function normalizeToolDisplayName(name) {
     return name;
 }
 
-function isPlanModeToolDenyText(text) {
-    if (typeof text !== 'string') return false;
-    return /\[PLAN_MODE_VIOLATION\]/i.test(text) || /plan mode denies side-effecting tool\b/i.test(text);
+function readOnlyModeToolDenyCode(text) {
+    if (typeof text !== 'string') return undefined;
+    if (/\[PLAN_MODE_VIOLATION\]/i.test(text) || /plan mode denies side-effecting tool\b/i.test(text)) {
+        return 'plan_mode_denied';
+    }
+    if (/\[ASK_MODE_VIOLATION\]/i.test(text) || /ask mode denies side-effecting tool\b/i.test(text)) {
+        return 'ask_mode_denied';
+    }
+    return undefined;
+}
+
+function isSearchToolName(name) {
+    const normalized = String(name || '').toLowerCase();
+    return normalized === 'grep' || normalized === 'glob';
 }
 
 function normalizeToolErrorCode(errorCode, resultPreview) {
     if (errorCode === 'plan_mode_violation') return 'plan_mode_denied';
-    if (isPlanModeToolDenyText(resultPreview)) return 'plan_mode_denied';
-    return errorCode;
+    if (errorCode === 'ask_mode_violation') return 'ask_mode_denied';
+    return readOnlyModeToolDenyCode(resultPreview) || errorCode;
 }
 
 /**
@@ -253,10 +264,10 @@ export function getSessionTokenBudget(sessionKey) {
  * Convert UI-shape image attachments into Gateway-shape ChannelAttachment[].
  *
  * UI sends:
- *   { name, data: 'data:image/png;base64,XXX', size, mimeType }
+ *   { name, data: 'data:image/png;base64,XXX', path, size, mimeType }
  *
  * Gateway expects ChannelAttachment:
- *   { type: 'image', name, mimeType, content: <raw base64, no data: prefix>, bytes }
+ *   { type: 'image', name, path, mimeType, content: <raw base64, no data: prefix>, bytes }
  *
  * The bare-base64 form matches how `CanonicalImageBlock` and the
  * AttachmentResolver store the payload elsewhere in the codebase.
@@ -265,7 +276,7 @@ export function getSessionTokenBudget(sessionKey) {
  * spread it conditionally without injecting an empty array.
  *
  * @param {unknown} images
- * @returns {Array<{type:'image',name?:string,mimeType:string,content:string,bytes?:number}>|undefined}
+ * @returns {Array<{type:'image',name?:string,path?:string,mimeType:string,content:string,bytes?:number}>|undefined}
  */
 function uiImagesToAttachments(images) {
     if (!Array.isArray(images) || images.length === 0) return undefined;
@@ -284,6 +295,7 @@ function uiImagesToAttachments(images) {
         out.push({
             type: 'image',
             name: typeof img.name === 'string' ? img.name : undefined,
+            ...(typeof img.path === 'string' && img.path ? { path: img.path } : {}),
             mimeType,
             content: base64,
             ...(typeof img.size === 'number' ? { bytes: img.size } : {}),
@@ -314,6 +326,12 @@ function normalizePermissionMode(value) {
     if (value === undefined || value === null || value === '') return undefined;
     if (value === 'default' || value === 'plan' || value === 'bypassPermissions') return value;
     return 'default';
+}
+
+function normalizeRunMode(value) {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (value === 'agent' || value === 'plan' || value === 'ask') return value;
+    return 'agent';
 }
 
 function resolvePermissionMode(options) {
@@ -428,6 +446,9 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                           }
                         : {}),
                     ...(event.toolName === 'ask_user_question' && event.data
+                        ? { toolUseResult: event.data }
+                        : {}),
+                    ...(isSearchToolName(event.toolName) && event.data
                         ? { toolUseResult: event.data }
                         : {}),
                 }),
@@ -952,7 +973,8 @@ export async function runChatViaGateway(
     ];
     const resolvedMode = resolvePermissionMode(options);
     const basePermissionMode = normalizePermissionMode(options?.basePermissionMode);
-    console.log(`[pilotdeck-bridge] submitTurn mode=${resolvedMode} (options.permissionMode=${options?.permissionMode}, options.mode=${options?.mode})`);
+    const runMode = normalizeRunMode(options?.runMode) || (resolvedMode === 'plan' ? 'plan' : 'agent');
+    console.log(`[pilotdeck-bridge] submitTurn runMode=${runMode} mode=${resolvedMode} (options.permissionMode=${options?.permissionMode}, options.mode=${options?.mode})`);
 
     try {
         const stream = gw.submitTurn({
@@ -960,8 +982,10 @@ export async function runChatViaGateway(
             channelKey,
             projectKey,
             message: command ?? '',
+            runMode,
             mode: resolvedMode,
             runId,
+            ...(options?.thinking ? { thinking: options.thinking } : {}),
             ...(basePermissionMode ? { basePermissionMode } : {}),
             ...(attachments.length > 0 ? { attachments } : {}),
             ...(options.workspaceCwd ? { workspaceCwd: options.workspaceCwd } : {}),

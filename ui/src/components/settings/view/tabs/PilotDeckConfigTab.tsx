@@ -51,6 +51,7 @@ import {
   type CatalogProviderProtocol,
   type CatalogModel,
 } from '../../../../shared/catalogProviders';
+import { fetchProviderModels, type ApiModelListItem } from '../../../../shared/modelListApi';
 import type { SettingsProject } from '../../types/types';
 import { isCronConfigEnabled, patch } from './pilotDeckConfigForm';
 
@@ -440,6 +441,25 @@ function rewriteProviderRefs(config: PilotDeckConfig, oldProviderId: string, new
   return next;
 }
 
+function replaceFallbackModelRef(config: PilotDeckConfig, oldRef: string, newRef: string): PilotDeckConfig {
+  const fallback = config.router?.fallback;
+  if (!fallback || !oldRef || oldRef === newRef) return config;
+
+  let changed = false;
+  const rewritten = Object.fromEntries(
+    Object.entries(fallback).map(([key, refs]) => {
+      const nextRefs = refs.map((ref) => {
+        if (ref !== oldRef) return ref;
+        changed = true;
+        return newRef;
+      });
+      return [key, nextRefs];
+    }),
+  );
+
+  return changed ? patch(config, ['router', 'fallback'], rewritten) : config;
+}
+
 const MASK = '********';
 
 function isMaskedSecret(value: string | undefined): boolean {
@@ -707,6 +727,9 @@ function ProviderCard({
   const [showProviderAdvanced, setShowProviderAdvanced] = useState(false);
   const [providerIdDraft, setProviderIdDraft] = useState(providerId);
   const [providerIdError, setProviderIdError] = useState('');
+  const [apiModels, setApiModels] = useState<ApiModelListItem[] | null>(null);
+  const [apiModelsStatus, setApiModelsStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [apiModelsError, setApiModelsError] = useState('');
   const displayName = providerDisplayName(
     providerIdDraft || providerId,
     catalogEntry,
@@ -751,6 +774,21 @@ function ProviderCard({
       removeModel(mid);
     } else {
       addModel(mid);
+    }
+  };
+  const visibleModels: Array<ApiModelListItem | CatalogModel> = apiModels ?? catalogEntry?.models ?? [];
+  const canFetchModels = Boolean(effectiveUrl && provider.apiKey);
+  const refreshModels = async () => {
+    if (!canFetchModels) return;
+    setApiModelsStatus('loading');
+    setApiModelsError('');
+    try {
+      const models = await fetchProviderModels({ protocol, baseUrl: effectiveUrl, apiKey: provider.apiKey ?? '', providerId });
+      setApiModels(models);
+      setApiModelsStatus('idle');
+    } catch (error) {
+      setApiModelsStatus('error');
+      setApiModelsError(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -805,6 +843,7 @@ function ProviderCard({
             onChange={(v) => update({ protocol: v as CatalogProviderProtocol })}
             options={[
               { value: 'openai',    label: t('pilotDeckConfig.panels.models.protocolOptions.openai') },
+              { value: 'openai-responses', label: t('pilotDeckConfig.panels.models.protocolOptions.openaiResponses') },
               { value: 'anthropic', label: t('pilotDeckConfig.panels.models.protocolOptions.anthropic') },
               { value: 'google',    label: t('pilotDeckConfig.panels.models.protocolOptions.google') },
             ]}
@@ -861,10 +900,24 @@ function ProviderCard({
           <span className="text-[10px] text-muted-foreground/60">
             · <ImageIcon className="inline h-2.5 w-2.5" /> {t('pilotDeckConfig.panels.models.supportsImageInput')}
           </span>
+          <button
+            type="button"
+            onClick={refreshModels}
+            disabled={!canFetchModels || apiModelsStatus === 'loading'}
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw className={cn('h-2.5 w-2.5', apiModelsStatus === 'loading' && 'animate-spin')} />
+            Fetch API models
+          </button>
         </div>
-        {catalogEntry && catalogEntry.models.length > 0 && (
+        {apiModelsStatus === 'error' && apiModelsError && (
+          <div className="mb-2 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive">
+            {apiModelsError}
+          </div>
+        )}
+        {visibleModels.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1.5">
-            {catalogEntry.models.map((m) => {
+            {visibleModels.map((m) => {
               const on = provider.models && m.id in provider.models;
               return (
                 <div
@@ -884,7 +937,7 @@ function ProviderCard({
                   >
                     {on && <Check className="h-3 w-3 text-foreground" strokeWidth={2.5} />}
                     {m.displayName}
-                    {m.supportsImage && (
+                    {'supportsImage' in m && m.supportsImage && (
                       <ImageIcon
                         className="h-3 w-3 text-muted-foreground/70"
                         strokeWidth={2}
@@ -897,7 +950,7 @@ function ProviderCard({
           </div>
         )}
         {/* Custom (off-catalog) models currently enabled */}
-        {enabledModels.filter((mid) => !catalogEntry || !catalogEntry.models.some((m) => m.id === mid)).map((mid) => {
+        {enabledModels.filter((mid) => !visibleModels.some((m) => m.id === mid)).map((mid) => {
           return (
             <div key={mid} className="mb-1 flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px]">
               <code className="flex-1 truncate font-mono">{mid}</code>
@@ -1343,7 +1396,7 @@ function AgentsSection({ config, onChange }: { config: PilotDeckConfig; onChange
                     type="number"
                     min={1}
                     value={caps.maxOutputTokensOverride ?? ''}
-                    placeholder="16384"
+                    placeholder={String(caps.catalogModel?.maxOutputTokens ?? 16384)}
                     onChange={(e) => {
                       const v = e.target.value;
                       if (v === '') return setMaxOutputTokens(undefined);
@@ -2618,6 +2671,7 @@ function RouterLevelEditor({ config, onChange }: { config: PilotDeckConfig; onCh
 
   const setDefault = (value: string) => {
     let next = patch(ensureModelRefConfigured(config, value), ['router', 'scenarios', 'default'], value);
+    next = replaceFallbackModelRef(next, defaultValue, value);
     const fallbackDefault = config.router?.fallback?.default ?? [];
     if (
       fallbackDefault.length === 0 ||

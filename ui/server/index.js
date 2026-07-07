@@ -103,6 +103,7 @@ import { validateApiKey, authenticateToken, authenticateWebSocket } from './midd
 import { DISABLE_LOCAL_AUTH, IS_PLATFORM } from './constants/config.js';
 import { getConnectableHost } from '../shared/networkHosts.js';
 import { contentDispositionAttachment } from './utils/downloadHeaders.js';
+import { createSessionWatchRegistry } from './session-watch-registry.js';
 
 // PilotDeck-only mode: chat execution always goes through src/gateway via
 // cursor-cli, openai-codex, gemini-cli) has been removed.
@@ -133,8 +134,59 @@ const WATCHER_DEBOUNCE_MS = 300;
 let projectsWatchers = [];
 let projectsWatcherDebounceTimer = null;
 const connectedClients = new Set();
+const sessionWatchRegistry = createSessionWatchRegistry();
 registerAlwaysOnNotificationForwarding(connectedClients);
 let isGetProjectsRunning = false; // Flag to prevent reentrant calls
+
+function normalizeSessionId(value) {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+}
+
+function broadcastChatFrame(frame, originWs, userId) {
+    const payload = JSON.stringify(frame);
+    const delivered = new Set();
+    const frameSessionId = normalizeSessionId(frame?.sessionId);
+
+    if (frameSessionId) {
+        const watchers = sessionWatchRegistry.getWatchers(frameSessionId);
+        watchers.forEach((client) => {
+            if (client.readyState !== WebSocket.OPEN) return;
+            if ((client.__pilotdeckUserId ?? null) !== userId) return;
+            client.send(payload);
+            delivered.add(client);
+        });
+    }
+
+    if (originWs.readyState === WebSocket.OPEN && !delivered.has(originWs)) {
+        originWs.send(payload);
+        delivered.add(originWs);
+    }
+
+    // Reconnect fail-safe: if the origin websocket closed and no watcher
+    // received the frame yet, fan out to same-user sockets.
+    if (delivered.size === 0) {
+        connectedClients.forEach((client) => {
+            if (client.readyState !== WebSocket.OPEN) return;
+            if ((client.__pilotdeckUserId ?? null) !== userId) return;
+            client.send(payload);
+        });
+    }
+}
+
+function broadcastToSessionWatchers(sessionId, frame, userId, excludeWs = null) {
+    const normalizedSessionId = normalizeSessionId(sessionId);
+    if (!normalizedSessionId) return;
+    const payload = JSON.stringify(frame);
+    const watchers = sessionWatchRegistry.getWatchers(normalizedSessionId);
+    watchers.forEach((client) => {
+        if (client === excludeWs) return;
+        if (client.readyState !== WebSocket.OPEN) return;
+        if ((client.__pilotdeckUserId ?? null) !== userId) return;
+        client.send(payload);
+    });
+}
 
 // Broadcast progress to all connected WebSocket clients
 function broadcastProgress(progress) {
@@ -1828,12 +1880,30 @@ function handleChatConnection(ws, request) {
 
     // Wrap WebSocket with writer for consistent interface with SSEStreamWriter
     const writer = new WebSocketWriter(ws, userId);
+    const streamWriter = {
+        send: (data) => broadcastChatFrame(data, ws, userId),
+    };
 
     ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
 
             if (data.type === 'ping') return;
+            const requestSessionId = normalizeSessionId(data.sessionId);
+
+            if (data.type === 'watch-session') {
+                if (requestSessionId) {
+                    sessionWatchRegistry.watch(requestSessionId, ws);
+                }
+                return;
+            }
+
+            if (data.type === 'unwatch-session') {
+                if (requestSessionId) {
+                    sessionWatchRegistry.unwatch(requestSessionId, ws);
+                }
+                return;
+            }
 
             if (
                 data.type === 'pilotdeck-command' ||
@@ -1846,8 +1916,41 @@ function handleChatConnection(ws, request) {
                 console.log('[DEBUG] User message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.projectPath || data.options?.cwd || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
+                const commandSessionId = normalizeSessionId(data.options?.sessionId || data.options?.sessionKey);
+                if (commandSessionId) {
+                    sessionWatchRegistry.watch(commandSessionId, ws);
+                    const userVisibleInput = typeof data.options?.userVisibleInput === 'string'
+                        ? data.options.userVisibleInput.trim()
+                        : '';
+                    if (userVisibleInput) {
+                        const nowIso = new Date().toISOString();
+                        const provider = data.options?.providerHint || 'pilotdeck';
+                        const optimisticUserFrame = createNormalizedMessage({
+                            id: `local_ws_user_${crypto.randomUUID()}`,
+                            sessionId: commandSessionId,
+                            provider,
+                            kind: 'text',
+                            role: 'user',
+                            content: userVisibleInput,
+                            timestamp: nowIso,
+                        });
+                        const optimisticStatusFrame = createNormalizedMessage({
+                            id: `local_ws_status_${crypto.randomUUID()}`,
+                            sessionId: commandSessionId,
+                            provider,
+                            kind: 'status',
+                            text: 'Processing',
+                            canInterrupt: true,
+                            timestamp: nowIso,
+                        });
+                        // The submitting tab already rendered its optimistic user row.
+                        // Push only to sibling watchers so they mirror instantly.
+                        broadcastToSessionWatchers(commandSessionId, optimisticUserFrame, userId, ws);
+                        broadcastToSessionWatchers(commandSessionId, optimisticStatusFrame, userId, ws);
+                    }
+                }
                 const providerHint = data.options?.providerHint || data.type.replace('-command', '');
-                await runChatViaGateway(data.command, data.options, writer, providerHint);
+                await runChatViaGateway(data.command, data.options, streamWriter, providerHint);
             } else if (data.type === 'abort-session') {
                 console.log('[DEBUG] Abort session request:', data.sessionId);
                 const provider = data.provider || 'pilotdeck';
@@ -1863,17 +1966,55 @@ function handleChatConnection(ws, request) {
                             reason: data.message,
                         },
                     );
+                    const resolvedSessionId = normalizeSessionId(data.sessionId);
+                    if (resolvedSessionId) {
+                        broadcastToSessionWatchers(
+                            resolvedSessionId,
+                            createNormalizedMessage({
+                                kind: 'permission_cancelled',
+                                requestId: data.requestId,
+                                sessionId: resolvedSessionId,
+                                provider: data.provider || 'pilotdeck',
+                            }),
+                            userId,
+                        );
+                    }
                 }
             } else if (data.type === 'session-permission-grant') {
-                await grantSessionPermissionViaGateway(data.sessionId, data.entry);
+                const result = await grantSessionPermissionViaGateway(data.sessionId, data.entry);
+                ws.send(JSON.stringify({
+                    type: 'session-permission-grant-result',
+                    requestId: typeof data.requestId === 'string' ? data.requestId : null,
+                    sessionId: data.sessionId,
+                    entry: data.entry,
+                    granted: result.granted === true,
+                    ...(typeof result.entry === 'string' ? { grantedEntry: result.entry } : {}),
+                }));
             } else if (data.type === 'elicitation-response') {
                 if (data.requestId) {
                     await elicitationRespondViaGateway(data.requestId, data.answer);
+                    const resolvedSessionId = normalizeSessionId(data.sessionId);
+                    if (resolvedSessionId) {
+                        broadcastToSessionWatchers(
+                            resolvedSessionId,
+                            createNormalizedMessage({
+                                kind: 'permission_cancelled',
+                                requestId: data.requestId,
+                                sessionId: resolvedSessionId,
+                                provider: data.provider || 'pilotdeck',
+                            }),
+                            userId,
+                        );
+                    }
                 }
             } else if (data.type === 'check-session-status') {
                 const sessionId = data.sessionId;
+                if (normalizeSessionId(sessionId)) {
+                    sessionWatchRegistry.watch(sessionId, ws);
+                }
                 const isProcessing = isSessionActiveViaGateway(sessionId);
-                const activeTurnMessages = isProcessing
+                const includeActiveTurnMessages = data.includeActiveTurnMessages !== false;
+                const activeTurnMessages = (isProcessing && includeActiveTurnMessages)
                     ? await getActiveTurnSnapshotFramesViaGateway(sessionId, data.provider || 'pilotdeck')
                     : [];
                 writer.send({
@@ -1917,6 +2058,7 @@ function handleChatConnection(ws, request) {
         cleanedUp = true;
         // Remove from connected clients
         connectedClients.delete(ws);
+        sessionWatchRegistry.removeClient(ws);
     };
 
     ws.on('close', (code, reason) => {
@@ -2360,8 +2502,8 @@ async function moveUploadedAttachment(file, attachmentDir, index) {
 }
 
 // Mixed chat attachment upload endpoint. Images are returned as data URLs for
-// multimodal input and previews; other files are staged under the project so
-// the gateway can resolve them by path.
+// multimodal input/previews and are also staged under the project so the agent
+// can operate on the same bytes by path; other files are staged by path only.
 app.post('/api/projects/:projectName/upload-attachments', authenticateToken, async (req, res) => {
     let multerUpload;
     try {
@@ -2420,14 +2562,14 @@ app.post('/api/projects/:projectName/upload-attachments', authenticateToken, asy
 
             for (const [index, file] of req.files.entries()) {
                 if (CHAT_ATTACHMENT_IMAGE_MIMES.has(file.mimetype)) {
-                    const originalName = normalizeUploadedFilename(file.originalname);
                     const buffer = await fsPromises.readFile(file.path);
-                    await fsPromises.unlink(file.path).catch(() => { });
+                    const storedFile = await moveUploadedAttachment(file, attachmentDir, index);
                     images.push({
-                        name: originalName,
+                        name: storedFile.name,
                         data: `data:${file.mimetype};base64,${buffer.toString('base64')}`,
-                        size: file.size,
-                        mimeType: file.mimetype,
+                        path: storedFile.path,
+                        size: storedFile.size,
+                        mimeType: storedFile.mimeType,
                     });
                     continue;
                 }
@@ -2435,7 +2577,7 @@ app.post('/api/projects/:projectName/upload-attachments', authenticateToken, asy
                 files.push(await moveUploadedAttachment(file, attachmentDir, index));
             }
 
-            if (files.length === 0 && attachmentDir) {
+            if (files.length === 0 && images.length === 0 && attachmentDir) {
                 await fsPromises.rm(attachmentDir, { recursive: true, force: true }).catch(() => { });
             }
 

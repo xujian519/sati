@@ -7,12 +7,14 @@ import type {
 export type Provider = SessionProvider;
 
 export type PermissionMode = 'default' | 'bypassPermissions' | 'plan';
-export type ChatRunMode = 'agent' | 'plan';
+export type ChatRunMode = 'agent' | 'plan' | 'ask';
 
 export interface ChatImage {
   data: string;
   name: string;
+  path?: string;
   mimeType?: string;
+  size?: number;
 }
 
 export interface ChatAttachment {
@@ -168,7 +170,12 @@ export interface PermissionGrantResult {
   success: boolean;
   alreadyAllowed?: boolean;
   updatedSettings?: PilotDeckSettings;
+  completion?: Promise<PermissionGrantResult>;
 }
+
+export type SessionPermissionGrantResult = PermissionGrantResult & {
+  pending?: boolean;
+};
 
 export interface PendingPermissionRequest {
   requestId: string;
@@ -202,6 +209,7 @@ export interface ChatInterfaceProps {
   selectedSession: ProjectSession | null;
   ws: WebSocket | null;
   sendMessage: (message: unknown) => void;
+  subscribe?: (handler: (message: any) => void) => () => void;
   latestMessage: any;
   onFileOpen?: (filePath: string, diffInfo?: any) => void;
   onInputFocusChange?: (focused: boolean) => void;

@@ -11,12 +11,16 @@ import {
   type CanonicalMessage,
   type CanonicalModelError,
   type CanonicalModelRequest,
+  type CanonicalToolSchema,
   type CanonicalUsage,
   materializeMediaReferences,
+  type PartialTextToolCallInfo,
 } from "../../model/index.js";
 import type {
+  PilotDeckToolDefinition,
   PilotDeckReadFileStateMap,
   PilotDeckSubagentForkApi,
+  PilotDeckToolErrorResult,
   PilotDeckToolResult,
   PilotDeckToolRuntimeContext,
   PilotDeckWriteSnapshotMap,
@@ -34,16 +38,30 @@ import type { LifecycleDispatchResult } from "../../lifecycle/index.js";
 import type { PilotDeckHookEvent } from "../../extension/hooks/protocol/events.js";
 import { NullContextRuntime } from "../../context/NullContextRuntime.js";
 import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
-import type { ContextRecoveryDecision, ContextSupplementalToolResultMessage } from "../../context/index.js";
+import type { ContextRecoveryDecision, ContextSupplementalToolResultMessage, TokenBudgetSnapshot } from "../../context/index.js";
 import type { PermissionMode, PermissionRule, PermissionRuleSet } from "../../permission/index.js";
 import { collectToolCalls } from "./collectToolCalls.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
 import { LargeFileRepair, type LargeFileRepairDecision } from "./LargeFileRepair.js";
+import { resolveOutputTokenRetryBump } from "./outputTokenRetry.js";
 import { projectToolResults } from "./projectToolResults.js";
 import { requiresPromptCapability } from "../../tool/userInteractionConstraints.js";
+import type { AgentRunMode } from "../protocol/input.js";
+import {
+  ASK_MODE_DESCRIPTION_SUFFIX,
+  isAskModeAllowedTool,
+} from "../../tool/askModeConstraints.js";
+import { buildAskModeAgentToolSchema } from "../../tool/builtin/agent.js";
 
 const TOOL_EVENT_PUMP_INTERVAL_MS = 500;
 const SUBAGENT_STATUS_HEARTBEAT_MS = 2_000;
+const CIRCUIT_BREAKER_GRACE_PROMPT = [
+  "Your last several tool calls all failed input validation with the same error.",
+  "This may indicate a tool-side issue rather than a problem with your approach.",
+  "Options: (1) try a different tool or different parameters,",
+  "(2) explain the situation in text without calling tools,",
+  "(3) if you believe the tool should work, try once more with corrected input.",
+].join(" ");
 const PLAN_MODE_REMINDER_MESSAGE = [
   "Plan mode is active.",
   "Read first using read-only tools, then write or refine plan markdown only under `.pilotdeck/plans/`.",
@@ -72,7 +90,9 @@ export type AgentLoopInput = {
   turnId: string;
   messages: CanonicalMessage[];
   maxTurns?: number;
+  runMode?: AgentRunMode;
   permissionMode?: PermissionMode;
+  allowedReadFiles?: string[];
   /** The user's actual permission preference before plan-mode override. */
   basePermissionMode?: PermissionMode;
   /** Allow model-visible plan mode tools for this turn. */
@@ -92,11 +112,13 @@ export type AgentLoopRunResult = {
 export type AgentLoopSeedState = {
   readFileState?: PilotDeckReadFileStateMap;
   writeSnapshots?: PilotDeckWriteSnapshotMap;
+  allowedReadFiles?: string[];
 };
 
 export class AgentLoop {
   private readonly readFileState: PilotDeckReadFileStateMap;
   private readonly writeSnapshots: PilotDeckWriteSnapshotMap;
+  private readonly allowedReadFiles: Set<string>;
 
   constructor(
     private readonly config: AgentRuntimeConfig,
@@ -105,17 +127,23 @@ export class AgentLoop {
   ) {
     this.readFileState = cloneReadFileStateMap(seedState?.readFileState);
     this.writeSnapshots = cloneWriteSnapshotMap(seedState?.writeSnapshots);
+    this.allowedReadFiles = new Set(seedState?.allowedReadFiles ?? []);
   }
 
   snapshotFileState(): AgentLoopSeedState {
     return {
       readFileState: cloneReadFileStateMap(this.readFileState),
       writeSnapshots: cloneWriteSnapshotMap(this.writeSnapshots),
+      allowedReadFiles: [...this.allowedReadFiles],
     };
   }
 
   async *run(input: AgentLoopInput): AsyncGenerator<AgentEvent, AgentLoopRunResult, unknown> {
+    this.applyRunModeOverride(input.runMode);
     this.applyPermissionOverrides(input.permissionMode, input.permissionRules, input.basePermissionMode);
+    for (const filePath of input.allowedReadFiles ?? []) {
+      this.allowedReadFiles.add(filePath);
+    }
     const startedAt = this.now().toISOString();
     let messages = [...input.messages];
     let turnCount = 1;
@@ -156,9 +184,9 @@ export class AgentLoop {
      */
     let hasAttemptedCompact = false;
     /**
-     * Single-shot guard for `max_output_reached` retries. The loop bumps
-     * `config.maxOutputTokens` (capped at `OUTPUT_TOKEN_RETRY_CEILING`) once
-     * and retries; a second hit falls through to the continuation recovery.
+     * Single-shot guard for `max_output_reached` retries. The loop only bumps
+     * an explicitly configured cap; catalog-default requests are already sent
+     * at the selected model's known output cap and go straight to continuation.
      */
     let hasAttemptedOutputRetry = false;
     /**
@@ -183,19 +211,49 @@ export class AgentLoop {
     const largeFileRepair = new LargeFileRepair();
 
     /**
-     * Circuit breaker: consecutive turns where ALL tool calls are
-     * `invalid_tool_input` errors. When the model is stuck in a loop
-     * (e.g. qwen repeatedly emitting empty-param bash calls), terminate
-     * early instead of burning tokens. Resets on any turn with at least
-     * one successful tool call.
+     * Circuit breaker: detects loops by fingerprinting each turn's
+     * invalid_tool_input errors (toolName + errorMessage). Only identical
+     * repeated failures trigger recovery, so changed parameters/tools are not
+     * mistaken for the same stuck loop. A one-time grace prompt gives the
+     * model a final chance to change strategy before termination.
      */
-    const MAX_CONSECUTIVE_ALL_INVALID_TURNS = 3;
-    let consecutiveAllInvalidTurns = 0;
+    const MAX_SAME_INVALID_FINGERPRINT = 3;
+    let lastInvalidFingerprint: string | undefined;
+    let sameInvalidFingerprintCount = 0;
+    let hasUsedInvalidGracePeriod = false;
+    let lastToolFailureFingerprint: string | undefined;
+    let transientPromptCounter = 0;
+    const activeTransientPromptIds = new Set<string>();
+
+    const pushTransientSyntheticPrompt = (prompt: string, purpose: string): void => {
+      const transientId = this.dependencies.uuid?.() ?? `transient-${++transientPromptCounter}`;
+      messages.push({
+        role: "user",
+        content: [{ type: "text", text: prompt }],
+        metadata: { synthetic: true, transient: true, transientId, purpose },
+      });
+      activeTransientPromptIds.add(transientId);
+    };
+
+    const expireConsumedTransientPrompts = (): void => {
+      if (activeTransientPromptIds.size === 0) {
+        return;
+      }
+      messages = removeTransientPromptsById(messages, activeTransientPromptIds);
+      activeTransientPromptIds.clear();
+    };
+    const missingToolResultRecoveryContext = () => ({
+      cwd: this.config.cwd,
+      permissionMode: this.config.permissionMode,
+    });
 
     const stickyInfo = this.dependencies.router.invalidateSticky?.(input.sessionId);
     let previousTier: string | undefined = stickyInfo?.previousTier;
 
-    const continueWithSyntheticPrompt = async (decision: LargeFileRepairDecision): Promise<{
+    const continueWithSyntheticPrompt = async (
+      decision: LargeFileRepairDecision,
+      options: { stripCurrentAssistant?: boolean } = {},
+    ): Promise<{
       type: "continue";
       event: AgentEvent;
     } | {
@@ -216,19 +274,17 @@ export class AgentLoop {
         });
         return { type: "completed", result };
       }
-      if (decision.strip === "error_pair") {
-        messages = stripTrailingErrorPair(messages);
-      } else if (decision.strip === "assistant") {
-        const last = messages[messages.length - 1];
-        if (last?.role === "assistant") {
-          messages = messages.slice(0, -1);
+      if (options.stripCurrentAssistant !== false) {
+        if (decision.strip === "error_pair") {
+          messages = stripTrailingErrorPair(messages);
+        } else if (decision.strip === "assistant") {
+          const last = messages[messages.length - 1];
+          if (last?.role === "assistant") {
+            messages = messages.slice(0, -1);
+          }
         }
       }
-      messages.push({
-        role: "user",
-        content: [{ type: "text", text: decision.prompt }],
-        metadata: { synthetic: true, purpose: decision.purpose },
-      });
+      pushTransientSyntheticPrompt(decision.prompt, decision.purpose);
       if (this.config.maxOutputTokens !== undefined
         && this.config.maxOutputTokens < largeFileRepair.recommendedMaxOutputTokens) {
         this.config.maxOutputTokens = largeFileRepair.recommendedMaxOutputTokens;
@@ -265,6 +321,7 @@ export class AgentLoop {
         return { result, messages };
       }
 
+      let pendingContextBudget: TokenBudgetSnapshot | undefined;
       const ctx = this.dependencies.context;
       if (ctx?.tryAutoCompact) {
         try {
@@ -281,12 +338,7 @@ export class AgentLoop {
               reason: "auto_compact",
             };
           }
-          yield {
-            type: "context_budget",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            snapshot: compact.snapshot,
-          };
+          pendingContextBudget = compact.snapshot;
         } catch {
           // Auto-compaction must never block the model call — proceed with
           // the original messages if evaluation or summarization fails.
@@ -327,20 +379,29 @@ export class AgentLoop {
       };
 
       // Split decide + execute so we can insert a post-routing compact pass
-      // when the routed model's context window is smaller than the agent's
+      // when the routed model's context window differs from the agent's
       // default model (the window used by the first tryAutoCompact above).
       const decision = await this.dependencies.router.decide({
         request,
         sessionId: input.sessionId,
         isMainAgent: !this.config.isSubagent,
-        metadata: previousTier ? { previousTier } : undefined,
+        metadata: stickyInfo
+          ? {
+            previousTier,
+            previousProvider: stickyInfo.previousProvider,
+            previousModel: stickyInfo.previousModel,
+          }
+          : previousTier ? { previousTier } : undefined,
       });
+      const routedMaxOutputTokens = this.dependencies.getModelMaxOutputTokens?.(decision.provider, decision.model);
 
       const getMaxCtx = this.dependencies.getModelMaxContextTokens;
       const agentMaxCtx = this.config.maxContextTokens;
-      if (ctx?.tryAutoCompact && getMaxCtx && agentMaxCtx) {
+      let emittedContextBudget = false;
+      if (ctx?.tryAutoCompact && getMaxCtx) {
         const routedMaxCtx = getMaxCtx(decision.provider, decision.model);
-        if (routedMaxCtx !== undefined && routedMaxCtx < agentMaxCtx) {
+        const currentBudgetMaxCtx = pendingContextBudget?.maxContextTokens ?? agentMaxCtx;
+        if (routedMaxCtx !== undefined && routedMaxCtx !== currentBudgetMaxCtx) {
           try {
             const recompact = await ctx.tryAutoCompact({
               messages,
@@ -363,10 +424,19 @@ export class AgentLoop {
               turnId: input.turnId,
               snapshot: recompact.snapshot,
             };
+            emittedContextBudget = true;
           } catch {
             // Post-routing compaction must never block the model call.
           }
         }
+      }
+      if (pendingContextBudget && !emittedContextBudget) {
+        yield {
+          type: "context_budget",
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          snapshot: pendingContextBudget,
+        };
       }
 
       const assembler = createModelMessageAssemblerState();
@@ -390,6 +460,7 @@ export class AgentLoop {
           if (partialAssembled.message.content.length > 0) {
             finalMessage = partialAssembled.message;
             messages.push(partialAssembled.message);
+            expireConsumedTransientPrompts();
             usage = mergeUsage(usage, partialAssembled.usage);
             yield { type: "assistant_message", sessionId: input.sessionId, turnId: input.turnId, message: partialAssembled.message };
             await input.onDurableMessage?.(partialAssembled.message);
@@ -403,11 +474,6 @@ export class AgentLoop {
             startedAt,
             finalMessage,
           });
-          const status = createAbortStatus();
-          if (status) {
-            yield toAgentStatusEvent(status);
-            await input.onAgentStatusMessage?.(status);
-          }
           await captureTurn(result.type === "error");
           yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
           return { result, messages };
@@ -426,6 +492,11 @@ export class AgentLoop {
           errors: [agentError("agent_model_error", stopFailureMsg)],
         });
         yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
+        const status = createAbortStatus();
+        if (status) {
+          yield toAgentStatusEvent(status);
+          await input.onAgentStatusMessage?.(status);
+        }
         await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
@@ -436,6 +507,7 @@ export class AgentLoop {
         if (partialAssembled.message.content.length > 0) {
           finalMessage = partialAssembled.message;
           messages.push(partialAssembled.message);
+          expireConsumedTransientPrompts();
           usage = mergeUsage(usage, partialAssembled.usage);
           yield { type: "assistant_message", sessionId: input.sessionId, turnId: input.turnId, message: partialAssembled.message };
           await input.onDurableMessage?.(partialAssembled.message);
@@ -462,19 +534,152 @@ export class AgentLoop {
       const assembled = assembleAssistantMessage(assembler);
       usage = mergeUsage(usage, assembled.usage);
       finalMessage = assembled.message;
-      let appendedAssembledMessage = false;
-      if (assembled.message.content.length > 0) {
-        messages.push(assembled.message);
-        appendedAssembledMessage = true;
-        yield { type: "assistant_message", sessionId: input.sessionId, turnId: input.turnId, message: assembled.message };
-        await input.onDurableMessage?.(assembled.message);
+      const toolCalls = collectToolCalls(assembled.message);
+      expireConsumedTransientPrompts();
+
+      if (assembled.hasPartialTextToolCall) {
+        if (maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
+          maxOutputRecoveryCount++;
+          pushTransientSyntheticPrompt(
+            buildPartialTextToolCallRecoveryPrompt(assembled.partialTextToolCall),
+            "max_output_recovery",
+          );
+          yield {
+            type: "turn_continued",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            reason: "model_error",
+          };
+          continue;
+        }
+
+        const detail = assembled.partialTextToolCall
+          ? `${assembled.partialTextToolCall.format}/${assembled.partialTextToolCall.reason}`
+          : "unknown partial text tool-call";
+        const result = this.createTurnResult(input, {
+          type: "error",
+          stopReason: "model_error",
+          usage,
+          permissionDenials,
+          turns: turnCount,
+          startedAt,
+          finalMessage,
+          structuredOutput,
+          errors: [agentError(
+            "agent_model_error",
+            `Partial text tool-call recovery exhausted after ${MAX_OUTPUT_RECOVERY_LIMIT} attempts (${detail}).`,
+          )],
+        });
+        yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
+        const status = createAbortStatus();
+        if (status) {
+          yield toAgentStatusEvent(status);
+          await input.onAgentStatusMessage?.(status);
+        }
+        await captureTurn(result.type === "error");
+        yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+        return { result, messages };
       }
 
-      const toolCalls = collectToolCalls(assembled.message);
+      // When jsonrepair silently "fixed" truncated JSON and the response
+      // was cut by max_tokens, the tool call arguments are likely incomplete
+      // (e.g. half-written file content). Apply the same recovery as
+      // max_output_reached: token doubling → continuation prompt → give up.
+      //
+      // This gate intentionally runs before durable assistant emission. The
+      // recovered response should replace the dirty repaired/truncated message,
+      // not leave an unmatched tool_call in the transcript.
+      if (assembled.hasRepairedToolCalls && (assembled.finishReason === "length" || assembled.finishReason === "tool_call" || assembled.finishReason === "stop")) {
+        console.warn(
+          `[AgentLoop] Blocking ${toolCalls.length} repaired-but-truncated tool call(s) — entering max_output recovery`,
+        );
+
+        const largeFileDecision = largeFileRepair.recoverFromRepairedTruncation(toolCalls);
+        if (largeFileDecision) {
+          const continued = await continueWithSyntheticPrompt(largeFileDecision, { stripCurrentAssistant: false });
+          if (continued.type === "completed") {
+            yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: continued.result.errors![0]! };
+            await captureTurn(continued.result.type === "error");
+            yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result: continued.result };
+            return { result: continued.result, messages };
+          }
+          yield continued.event;
+          continue;
+        }
+
+        // Phase A: token doubling (if not yet attempted)
+        if (!hasAttemptedOutputRetry) {
+          hasAttemptedOutputRetry = true;
+          const nextMaxOutputTokens = resolveOutputTokenRetryBump({
+            currentMaxOutputTokens: this.config.maxOutputTokens,
+            modelMaxOutputTokens: routedMaxOutputTokens,
+          });
+          if (nextMaxOutputTokens !== undefined) {
+            this.config.maxOutputTokens = nextMaxOutputTokens;
+            yield {
+              type: "turn_continued",
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              reason: "model_error",
+            };
+            continue;
+          }
+        }
+
+        // Phase B: continuation recovery
+        if (maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
+          maxOutputRecoveryCount++;
+          pushTransientSyntheticPrompt(
+            "Output token limit hit. Resume directly - no apology, no recap of what you were doing. "
+              + "Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.",
+            "max_output_recovery",
+          );
+          yield {
+            type: "turn_continued",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            reason: "model_error",
+          };
+          continue;
+        }
+
+        // Phase C: exhausted. Do not execute repaired/truncated calls; the
+        // arguments may be syntactically repaired while semantically partial.
+        const result = this.createTurnResult(input, {
+          type: "error",
+          stopReason: "model_error",
+          usage,
+          permissionDenials,
+          turns: turnCount,
+          startedAt,
+          finalMessage,
+          structuredOutput,
+          errors: [agentError(
+            "agent_model_error",
+            "Recovered tool call still looked repaired/truncated after max-output recovery was exhausted.",
+          )],
+        });
+        yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
+        await captureTurn(result.type === "error");
+        yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+        return { result, messages };
+      }
+
+      messages.push(assembled.message);
+      yield { type: "assistant_message", sessionId: input.sessionId, turnId: input.turnId, message: assembled.message };
+      await input.onDurableMessage?.(assembled.message);
+
       if (assembled.error) {
         if (toolCalls.length > 0) {
           const projected = projectToolResults(
-            toolCalls.map((call) => createMissingToolResult(call, this.now, "Model error interrupted tool execution.")),
+            toolCalls.map((call) =>
+              createMissingToolResult(
+                call,
+                this.now,
+                "Model error interrupted tool execution.",
+                missingToolResultRecoveryContext(),
+              )
+            ),
           );
           messages.push(...projected);
           yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: projected[0]! };
@@ -489,16 +694,12 @@ export class AgentLoop {
           jsonSelfCorrectCount < MAX_JSON_SELF_CORRECT_RETRIES
         ) {
           jsonSelfCorrectCount++;
-          messages.push({
-            role: "user",
-            content: [{
-              type: "text",
-              text: "Your previous tool call contained invalid JSON in the arguments and could not be parsed. "
-                + "Please retry with valid JSON. Common issues: missing quotes around keys/values, "
-                + "trailing commas, unescaped special characters in strings.",
-            }],
-            metadata: { synthetic: true, purpose: "json_self_correct" },
-          });
+          pushTransientSyntheticPrompt(
+            "Your previous tool call contained invalid JSON in the arguments and could not be parsed. "
+              + "Please retry with valid JSON. Common issues: missing quotes around keys/values, "
+              + "trailing commas, unescaped special characters in strings.",
+            "json_self_correct",
+          );
           yield {
             type: "turn_continued",
             sessionId: input.sessionId,
@@ -543,8 +744,7 @@ export class AgentLoop {
         // `max_output_reached`: output token limit hit (or truncated JSON
         // reclassified from invalid_tool_arguments when finishReason=length).
         //
-        // Phase A — single-shot token doubling: strip the partial response
-        // and retry with 2x maxOutputTokens (capped at CEILING).
+        // Phase A — single-shot token doubling for explicit caps only.
         // Phase B — multi-turn continuation: keep the truncated assistant
         // message in context and inject a "resume" prompt so the model can
         // pick up where it was cut off (up to MAX_OUTPUT_RECOVERY_LIMIT).
@@ -552,31 +752,32 @@ export class AgentLoop {
         if (assembled.error.code === "max_output_reached") {
           // Phase A
           if (!hasAttemptedOutputRetry) {
-            messages = stripTrailingErrorPair(messages);
-            const previous = this.config.maxOutputTokens ?? OUTPUT_TOKEN_RETRY_DEFAULT;
-            this.config.maxOutputTokens = Math.min(previous * 2, OUTPUT_TOKEN_RETRY_CEILING);
             hasAttemptedOutputRetry = true;
-            yield {
-              type: "turn_continued",
-              sessionId: input.sessionId,
-              turnId: input.turnId,
-              reason: "model_error",
-            };
-            continue;
+            const nextMaxOutputTokens = resolveOutputTokenRetryBump({
+              currentMaxOutputTokens: this.config.maxOutputTokens,
+              modelMaxOutputTokens: routedMaxOutputTokens,
+            });
+            if (nextMaxOutputTokens !== undefined) {
+              messages = stripTrailingErrorPair(messages);
+              this.config.maxOutputTokens = nextMaxOutputTokens;
+              yield {
+                type: "turn_continued",
+                sessionId: input.sessionId,
+                turnId: input.turnId,
+                reason: "model_error",
+              };
+              continue;
+            }
           }
 
           // Phase B
           if (maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
             maxOutputRecoveryCount++;
-            messages.push({
-              role: "user",
-              content: [{
-                type: "text",
-                text: "Output token limit hit. Resume directly — no apology, no recap of what you were doing. "
-                  + "Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.",
-              }],
-              metadata: { synthetic: true, purpose: "max_output_recovery" },
-            });
+            pushTransientSyntheticPrompt(
+              "Output token limit hit. Resume directly - no apology, no recap of what you were doing. "
+                + "Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.",
+              "max_output_recovery",
+            );
             yield {
               type: "turn_continued",
               sessionId: input.sessionId,
@@ -617,24 +818,18 @@ export class AgentLoop {
         // The model produced nothing visible — typically because extended
         // thinking consumed the entire output budget.
         if (assistantText.length === 0) {
-          if (appendedAssembledMessage) {
-            messages.pop();
-          }
+          messages.pop();
 
           if (maxOutputRecoveryCount > 0) {
             consecutiveEmptyCount++;
             if (consecutiveEmptyCount < MAX_CONSECUTIVE_EMPTY
               && maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
               maxOutputRecoveryCount++;
-              messages.push({
-                role: "user",
-                content: [{
-                  type: "text",
-                  text: "Output token limit hit. Resume directly — no apology, no recap of what you were doing. "
-                    + "Pick up mid-sentence if that is where the cut happened.",
-                }],
-                metadata: { synthetic: true, purpose: "max_output_recovery" },
-              });
+              pushTransientSyntheticPrompt(
+                "Output token limit hit. Resume directly - no apology, no recap of what you were doing. "
+                  + "Pick up mid-sentence if that is where the cut happened.",
+                "max_output_recovery",
+              );
               yield {
                 type: "turn_continued",
                 sessionId: input.sessionId,
@@ -652,13 +847,7 @@ export class AgentLoop {
               model: request.model,
               attempts: consecutiveEmptyCount,
             });
-            yield {
-              type: "agent_status",
-              sessionId: input.sessionId,
-              turnId: input.turnId,
-              event: status.event,
-              detail: status.detail,
-            };
+            yield toAgentStatusEvent(status);
             await input.onAgentStatusMessage?.(status);
             const result = this.createTurnResult(input, {
               type: "success",
@@ -675,15 +864,11 @@ export class AgentLoop {
           } else if (!hasAttemptedEmptyRetry) {
             // First occurrence: prompt the model to produce visible output.
             hasAttemptedEmptyRetry = true;
-            messages.push({
-              role: "user",
-              content: [{
-                type: "text",
-                text: "Your previous response was empty (thinking only, no visible text). "
-                  + "Please provide your answer as visible text output.",
-              }],
-              metadata: { synthetic: true, purpose: "empty_response_retry" },
-            });
+            pushTransientSyntheticPrompt(
+              "Your previous response was empty (thinking only, no visible text). "
+                + "Please provide your answer as visible text output.",
+              "empty_response_retry",
+            );
             yield {
               type: "turn_continued",
               sessionId: input.sessionId,
@@ -697,13 +882,7 @@ export class AgentLoop {
               model: request.model,
               attempts: 2,
             });
-            yield {
-              type: "agent_status",
-              sessionId: input.sessionId,
-              turnId: input.turnId,
-              event: status.event,
-              detail: status.detail,
-            };
+            yield toAgentStatusEvent(status);
             await input.onAgentStatusMessage?.(status);
           }
           // fall through to normal stop
@@ -721,15 +900,11 @@ export class AgentLoop {
           consecutiveEmptyCount = 0;
           if (maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
             maxOutputRecoveryCount++;
-            messages.push({
-              role: "user",
-              content: [{
-                type: "text",
-                text: "Output token limit hit. Resume directly — no apology, no recap of what you were doing. "
-                  + "Pick up mid-sentence if that is where the cut happened.",
-              }],
-              metadata: { synthetic: true, purpose: "max_output_recovery" },
-            });
+            pushTransientSyntheticPrompt(
+              "Output token limit hit. Resume directly - no apology, no recap of what you were doing. "
+                + "Pick up mid-sentence if that is where the cut happened.",
+              "max_output_recovery",
+            );
             yield {
               type: "turn_continued",
               sessionId: input.sessionId,
@@ -741,13 +916,7 @@ export class AgentLoop {
           // Exhausted — fall through to normal completion with whatever
           // text was produced so far.
           const status = createMaxOutputRecoveryExhaustedStatus({ attempts: maxOutputRecoveryCount });
-          yield {
-            type: "agent_status",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            event: status.event,
-            detail: status.detail,
-          };
+          yield toAgentStatusEvent(status);
           await input.onAgentStatusMessage?.(status);
         }
 
@@ -762,12 +931,6 @@ export class AgentLoop {
           }
           yield continued.event;
           continue;
-        }
-
-        const finishStatus = createFinishReasonStatus(assembled.finishReason, assistantText);
-        if (finishStatus) {
-          yield toAgentStatusEvent(finishStatus);
-          await input.onAgentStatusMessage?.(finishStatus);
         }
 
         const stopHooks = await this.dispatchLifecycle(input, "Stop", {
@@ -794,6 +957,12 @@ export class AgentLoop {
           yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
           return { result, messages };
         }
+        const finishStatus = createFinishReasonStatus(assembled.finishReason, assistantText);
+        if (finishStatus) {
+          yield toAgentStatusEvent(finishStatus);
+          await input.onAgentStatusMessage?.(finishStatus);
+        }
+
         const result = this.createTurnResult(input, {
           type: "success",
           stopReason: "completed",
@@ -820,75 +989,9 @@ export class AgentLoop {
           startedAt,
           finalMessage,
         });
-        const status = createAbortStatus();
-        if (status) {
-          yield toAgentStatusEvent(status);
-          await input.onAgentStatusMessage?.(status);
-        }
         await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
-      }
-      // When jsonrepair silently "fixed" truncated JSON and the response
-      // was cut by max_tokens, the tool call arguments are likely incomplete
-      // (e.g. half-written file content). Apply the same recovery as
-      // max_output_reached: token doubling → continuation prompt → give up.
-      if (assembled.hasRepairedToolCalls && (assembled.finishReason === "length" || assembled.finishReason === "tool_call" || assembled.finishReason === "stop")) {
-        console.warn(
-          `[AgentLoop] Blocking ${toolCalls.length} repaired-but-truncated tool call(s) — entering max_output recovery`,
-        );
-
-        const largeFileDecision = largeFileRepair.recoverFromRepairedTruncation(toolCalls);
-        if (largeFileDecision) {
-          const continued = await continueWithSyntheticPrompt(largeFileDecision);
-          if (continued.type === "completed") {
-            yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: continued.result.errors![0]! };
-            await captureTurn(continued.result.type === "error");
-            yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result: continued.result };
-            return { result: continued.result, messages };
-          }
-          yield continued.event;
-          continue;
-        }
-
-        // Phase A: token doubling (if not yet attempted)
-        if (!hasAttemptedOutputRetry) {
-          messages = stripTrailingErrorPair(messages);
-          const previous = this.config.maxOutputTokens ?? OUTPUT_TOKEN_RETRY_DEFAULT;
-          this.config.maxOutputTokens = Math.min(previous * 2, OUTPUT_TOKEN_RETRY_CEILING);
-          hasAttemptedOutputRetry = true;
-          yield {
-            type: "turn_continued",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            reason: "model_error",
-          };
-          continue;
-        }
-
-        // Phase B: continuation recovery
-        if (maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
-          maxOutputRecoveryCount++;
-          messages.push({
-            role: "user",
-            content: [{
-              type: "text",
-              text: "Output token limit hit. Resume directly — no apology, no recap of what you were doing. "
-                + "Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.",
-            }],
-            metadata: { synthetic: true, purpose: "max_output_recovery" },
-          });
-          yield {
-            type: "turn_continued",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            reason: "model_error",
-          };
-          continue;
-        }
-
-        // Phase C: exhausted — let tool execution proceed with
-        // outputTruncated=true so formatValidationError can provide hints.
       }
 
       let results: PilotDeckToolResult[];
@@ -904,7 +1007,12 @@ export class AgentLoop {
         );
       } catch (error) {
         results = toolCalls.map((call) =>
-          createMissingToolResult(call, this.now, error instanceof Error ? error.message : String(error)),
+          createMissingToolResult(
+            call,
+            this.now,
+            error instanceof Error ? error.message : String(error),
+            missingToolResultRecoveryContext(),
+          ),
         );
       }
       if (input.abortSignal?.aborted) {
@@ -917,18 +1025,25 @@ export class AgentLoop {
           startedAt,
           finalMessage,
         });
-        const status = createAbortStatus();
-        if (status) {
-          yield toAgentStatusEvent(status);
-          await input.onAgentStatusMessage?.(status);
-        }
         await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
       }
       yield* this.drainEventBuffer();
 
-      const pairedResults = ensureToolResultPairing(toolCalls, results, this.now);
+      let pairedResults = ensureToolResultPairing(
+        toolCalls,
+        results,
+        this.now,
+        "Tool execution did not produce a result.",
+        missingToolResultRecoveryContext(),
+      );
+      const repeatedFailure = detectRepeatedToolFailure(
+        pairedResults,
+        lastToolFailureFingerprint,
+      );
+      pairedResults = annotateRepeatedToolFailures(pairedResults, repeatedFailure.repeatedKeys);
+      lastToolFailureFingerprint = repeatedFailure.currentFingerprint;
       const toolResultRepair = largeFileRepair.analyzeToolResults(pairedResults, {
         outputTruncated: assembled.finishReason === "length" || assembled.hasRepairedToolCalls === true,
         repairedToolCalls: assembled.hasRepairedToolCalls === true,
@@ -1022,8 +1137,8 @@ export class AgentLoop {
       }
 
       // Circuit breaker: detect turns where ALL tool calls returned
-      // invalid_tool_input. If the model is stuck (e.g. repeatedly emitting
-      // empty-param bash), terminate early after MAX_CONSECUTIVE_ALL_INVALID_TURNS.
+      // invalid_tool_input. Uses fingerprint-based detection (toolName +
+      // errorMessage), and injects one grace prompt before final termination.
       // When LargeFileRepair is actively managing recovery, defer to its own
       // attempt limits instead of terminating here.
       const allInvalid = pairedResults.length > 0 && pairedResults.every(
@@ -1044,8 +1159,23 @@ export class AgentLoop {
         }
       }
       if (allInvalid) {
-        consecutiveAllInvalidTurns++;
-        if (consecutiveAllInvalidTurns >= MAX_CONSECUTIVE_ALL_INVALID_TURNS) {
+        const fingerprint = buildInvalidFingerprint(pairedResults);
+        if (fingerprint === lastInvalidFingerprint) {
+          sameInvalidFingerprintCount++;
+        } else {
+          sameInvalidFingerprintCount = 1;
+          lastInvalidFingerprint = fingerprint;
+          hasUsedInvalidGracePeriod = false;
+        }
+
+        if (sameInvalidFingerprintCount >= MAX_SAME_INVALID_FINGERPRINT) {
+          if (!hasUsedInvalidGracePeriod) {
+            hasUsedInvalidGracePeriod = true;
+            pushTransientSyntheticPrompt(CIRCUIT_BREAKER_GRACE_PROMPT, "circuit_breaker_grace");
+            yield { type: "turn_continued", sessionId: input.sessionId, turnId: input.turnId, reason: "model_error" };
+            continue;
+          }
+
           const result = this.createTurnResult(input, {
             type: "error",
             stopReason: "tool_error",
@@ -1057,7 +1187,7 @@ export class AgentLoop {
             structuredOutput,
             errors: [agentError(
               "agent_tool_error_loop",
-              `Terminated: ${consecutiveAllInvalidTurns} consecutive turns with all tool calls failing input validation. The model appears stuck in a loop.`,
+              `Terminated: ${sameInvalidFingerprintCount} consecutive turns with identical tool input validation failures (same tool + same error). The model appears stuck in a loop.`,
               undefined,
               "The model is repeatedly producing invalid tool calls. Consider switching to a more capable model via settings.",
             )],
@@ -1068,7 +1198,12 @@ export class AgentLoop {
           return { result, messages };
         }
       } else {
-        consecutiveAllInvalidTurns = 0;
+        sameInvalidFingerprintCount = 0;
+        lastInvalidFingerprint = undefined;
+        hasUsedInvalidGracePeriod = false;
+        if (!pairedResults.some((r) => r.type === "error")) {
+          lastToolFailureFingerprint = undefined;
+        }
         maxOutputRecoveryCount = 0;
         consecutiveEmptyCount = 0;
         hasAttemptedOutputRetry = false;
@@ -1114,13 +1249,7 @@ export class AgentLoop {
           errors: [maxTurnsError],
         });
         const status = createMaxTurnsStatus({ maxTurns: input.maxTurns, error: maxTurnsError });
-        yield {
-          type: "agent_status",
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          event: status.event,
-          detail: status.detail,
-        };
+        yield toAgentStatusEvent(status);
         await input.onAgentStatusMessage?.(status);
         await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
@@ -1170,12 +1299,17 @@ export class AgentLoop {
             .filter((tool) => requiresPromptCapability(tool, {}))
             .map((tool) => tool.name),
         );
-    let tools = this.dependencies.tools.registry.toCanonicalSchemas()
+    let toolDefinitions = this.dependencies.tools.registry.list()
       .filter((tool) => !promptBlockedToolNames.has(tool.name));
     if (input.allowPlanModeTools !== true) {
-      tools = tools.filter(
+      toolDefinitions = toolDefinitions.filter(
         (tool) => tool.name !== "enter_plan_mode" && tool.name !== "exit_plan_mode",
       );
+    }
+    const requestMessages = normalizeMessagesForModelRequest(messages);
+    let tools = toolDefinitions.map(toolToCanonicalSchema);
+    if (this.config.runMode === "ask") {
+      tools = filterAskModeTools(toolDefinitions);
     }
     const prepared = await contextRuntime.prepareForModel({
       sessionId: input.sessionId,
@@ -1184,8 +1318,9 @@ export class AgentLoop {
       provider: this.config.provider,
       model: this.config.model,
       permissionMode: this.config.permissionMode,
+      runMode: this.config.runMode ?? "agent",
       additionalWorkingDirectories: this.config.permissionContext.additionalWorkingDirectories,
-      messages: cloneMessages(messages),
+      messages: cloneMessages(requestMessages),
       tools,
       maxMessages: this.config.maxContextMessages,
       customSystemPrompt: this.config.systemPrompt,
@@ -1253,6 +1388,8 @@ export class AgentLoop {
       cwd: this.config.cwd,
       abortSignal: input.abortSignal,
       subagentTimeoutMs: this.config.subagentTimeoutMs,
+      toolAliases: this.config.toolAliases,
+      runMode: this.config.runMode ?? "agent",
       permissionMode: this.config.permissionMode,
       permissionContext,
       auditRecorder: this.dependencies.auditRecorder,
@@ -1280,6 +1417,7 @@ export class AgentLoop {
       modelMultimodal: this.config.modelMultimodal,
       maxOutputTokens: this.config.maxOutputTokens,
       readFileState: this.readFileState,
+      allowedReadFiles: [...this.allowedReadFiles],
       writeSnapshots: this.writeSnapshots,
       fileUpdateNotifier: this.dependencies.fileUpdateNotifier,
       ...(planTodo ? { planTodo } : {}),
@@ -1383,26 +1521,12 @@ export class AgentLoop {
         } catch (err) {
           composedAbort.cleanup();
           errored = true;
-          const message = err instanceof Error ? err.message : String(err);
-          const status = createSubagentFailedStatus({
-            subagentId,
-            subagentType: def.id,
-            message,
-          });
-          this.dependencies.eventEmitter?.({
-            type: "agent_status",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            event: status.event,
-            detail: status.detail,
-          });
-          await input.onAgentStatusMessage?.(status);
           await transcriptHooks?.recordSubagentCompleted?.({
             sessionId: input.sessionId,
             turnId: input.turnId,
             subagentId,
             subagentType: def.id,
-            summary: message,
+            summary: err instanceof Error ? err.message : String(err),
             turns: 0,
             durationMs: 0,
             errored: true,
@@ -1656,12 +1780,42 @@ export class AgentLoop {
     mergeUserRules(this.config.permissionContext.rules.ask, permissionRules.ask);
   }
 
+  private applyRunModeOverride(runMode?: AgentRunMode): void {
+    if (runMode) {
+      this.config.runMode = runMode;
+    } else {
+      this.config.runMode ??= "agent";
+    }
+  }
+
   private readonly now = (): Date => this.dependencies.now?.() ?? new Date();
 }
 
 function mergeUserRules(target: PermissionRule[], userRules: PermissionRule[] | undefined): void {
   const nonUserRules = target.filter((rule) => rule.source !== "user");
   target.splice(0, target.length, ...nonUserRules, ...(userRules ?? []));
+}
+
+function filterAskModeTools(tools: PilotDeckToolDefinition[]): CanonicalToolSchema[] {
+  const agentOverride = buildAskModeAgentToolSchema();
+  return tools
+    .filter(isAskModeAllowedTool)
+    .map((tool) => {
+      if (tool.name === "agent") {
+        return { ...toolToCanonicalSchema(tool), description: agentOverride.description, inputSchema: agentOverride.inputSchema };
+      }
+      const suffix = ASK_MODE_DESCRIPTION_SUFFIX[tool.name];
+      const schema = toolToCanonicalSchema(tool);
+      return suffix ? { ...schema, description: schema.description + suffix } : schema;
+    });
+}
+
+function toolToCanonicalSchema(tool: PilotDeckToolDefinition): CanonicalToolSchema {
+  return {
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+  };
 }
 
 function findLifecycleBlock(result: LifecycleDispatchResult): { reason: string; stopReason?: string } | undefined {
@@ -1735,14 +1889,36 @@ function subagentIdFromSessionId(sessionId: string): string | undefined {
   return subagentId.length > 0 ? subagentId : undefined;
 }
 
-const OUTPUT_TOKEN_RETRY_DEFAULT = 4_096;
-const OUTPUT_TOKEN_RETRY_CEILING = 64_000;
+function buildPartialTextToolCallRecoveryPrompt(
+  partial: PartialTextToolCallInfo | undefined,
+): string {
+  const evidence = partial
+    ? `Detected partial text tool-call syntax (${partial.format}/${partial.reason}). Preview: ${partial.preview}`
+    : "Detected partial text tool-call syntax.";
+  return [
+    "The previous response contained partial tool-call XML/text and could not be safely executed.",
+    evidence,
+    "Resend the complete intended tool call with all required parameters, or continue in visible text if no tool is needed.",
+    "Do not repeat dangling XML/tool-call fragments.",
+  ].join("\n");
+}
 
 /** Keep only the trailing `keepRatio` portion of the message history. */
 function truncateHeadKeepRatio(messages: CanonicalMessage[], keepRatio: number): CanonicalMessage[] {
   const ratio = Math.max(0.05, Math.min(1, keepRatio));
   const keep = Math.max(1, Math.floor(messages.length * ratio));
   return messages.slice(-keep);
+}
+
+function buildInvalidFingerprint(results: PilotDeckToolResult[]): string {
+  return results
+    .filter(
+      (result): result is PilotDeckToolErrorResult =>
+        result.type === "error" && result.error.code === "invalid_tool_input",
+    )
+    .map((result) => `${result.toolName}::${result.error.message}`)
+    .sort()
+    .join("\n");
 }
 
 /**
@@ -1792,6 +1968,178 @@ function stripImagesFromMessages(messages: CanonicalMessage[]): CanonicalMessage
     });
     return { ...msg, content: newContent };
   });
+}
+
+function removeTransientPromptsById(
+  messages: CanonicalMessage[],
+  transientIds: Set<string>,
+): CanonicalMessage[] {
+  return messages.filter((message) => {
+    const transientId = message.metadata?.transientId;
+    return !(
+      message.role === "user" &&
+      message.metadata?.transient === true &&
+      typeof transientId === "string" &&
+      transientIds.has(transientId)
+    );
+  });
+}
+
+function normalizeMessagesForModelRequest(messages: CanonicalMessage[]): CanonicalMessage[] {
+  const out: CanonicalMessage[] = [];
+  for (const message of messages) {
+    const last = out[out.length - 1];
+    if (
+      last?.role === "assistant" &&
+      message.role === "assistant" &&
+      canMergeAssistantMessages(last, message)
+    ) {
+      out[out.length - 1] = {
+        role: "assistant",
+        content: [...last.content, ...message.content],
+        metadata: mergeMessageMetadata(last.metadata, message.metadata),
+      };
+      continue;
+    }
+    out.push(message);
+  }
+  return out;
+}
+
+function canMergeAssistantMessages(first: CanonicalMessage, second: CanonicalMessage): boolean {
+  return !hasToolCallBlock(first) && !hasToolCallBlock(second);
+}
+
+function hasToolCallBlock(message: CanonicalMessage): boolean {
+  return message.content.some((block) => block.type === "tool_call");
+}
+
+function mergeMessageMetadata(
+  first: CanonicalMessage["metadata"],
+  second: CanonicalMessage["metadata"],
+): CanonicalMessage["metadata"] {
+  if (!first && !second) {
+    return undefined;
+  }
+  return {
+    ...(first ?? {}),
+    ...(second ?? {}),
+  };
+}
+
+function detectRepeatedToolFailure(
+  results: PilotDeckToolResult[],
+  lastFingerprint: string | undefined,
+): {
+  currentFingerprint?: string;
+  repeatedKeys: Set<string>;
+} {
+  const keys = buildToolFailureKeys(results);
+  const fingerprint = keys.length > 0 ? keys.join("\n") : undefined;
+  const repeatedKeys = findRepeatedValues(keys);
+  if (fingerprint && fingerprint === lastFingerprint) {
+    for (const key of keys) {
+      repeatedKeys.add(key);
+    }
+  }
+  if (!fingerprint) {
+    return { repeatedKeys };
+  }
+  return {
+    currentFingerprint: fingerprint,
+    repeatedKeys,
+  };
+}
+
+function buildToolFailureKeys(results: PilotDeckToolResult[]): string[] {
+  return results
+    .filter((result): result is PilotDeckToolErrorResult => result.type === "error")
+    .map((result) => {
+      const recovery = readRecoveryMetadata(result);
+      return toolFailureKey(result, recovery);
+    })
+    .sort();
+}
+
+function annotateRepeatedToolFailures(
+  results: PilotDeckToolResult[],
+  repeatedKeys: Set<string>,
+): PilotDeckToolResult[] {
+  if (repeatedKeys.size === 0) {
+    return results;
+  }
+
+  return results.map((result) => {
+    if (result.type !== "error") {
+      return result;
+    }
+    const recovery = readRecoveryMetadata(result);
+    if (!repeatedKeys.has(toolFailureKey(result, recovery))) {
+      return result;
+    }
+    const avoidRetryReason = typeof recovery?.avoidRetryReason === "string"
+      ? recovery.avoidRetryReason
+      : "The same tool, error code, and recovery class repeated. Retrying unchanged is likely to fail again.";
+    const repeatedText =
+      `\n\nRepeated failure: ${avoidRetryReason}\n` +
+      "Change at least one of the tool, parameters, path, scope, permission path, or explain the blocker in text.";
+    return {
+      ...result,
+      content: appendTextToFirstContent(result.content, repeatedText),
+      metadata: {
+        ...(result.metadata ?? {}),
+        recovery: recovery
+          ? {
+              ...recovery,
+              avoidRetryReason,
+              repeatedFailure: true,
+            }
+          : {
+              avoidRetryReason,
+              repeatedFailure: true,
+            },
+      },
+    };
+  });
+}
+
+function toolFailureKey(
+  result: PilotDeckToolErrorResult,
+  recovery: Record<string, unknown> | undefined,
+): string {
+  return `${result.toolName}::${result.error.code}::${recovery?.failureClass ?? "unknown"}`;
+}
+
+function findRepeatedValues(values: string[]): Set<string> {
+  const seen = new Set<string>();
+  const repeated = new Set<string>();
+  for (const value of values) {
+    if (seen.has(value)) {
+      repeated.add(value);
+    } else {
+      seen.add(value);
+    }
+  }
+  return repeated;
+}
+
+function appendTextToFirstContent(
+  content: PilotDeckToolErrorResult["content"],
+  suffix: string,
+): PilotDeckToolErrorResult["content"] {
+  const [first, ...rest] = content;
+  if (!first) {
+    return [{ type: "text", text: suffix.trimStart() }];
+  }
+  if (first.type !== "text") {
+    return [{ type: "text", text: suffix.trimStart() }, first, ...rest];
+  }
+  return [{ ...first, text: `${first.text}${suffix}` }, ...rest];
+}
+
+function readRecoveryMetadata(result: PilotDeckToolErrorResult): Record<string, unknown> | undefined {
+  const recovery = result.metadata?.recovery;
+  return isRecord(recovery) ? recovery : undefined;
 }
 
 function collectPermissionDenials(results: PilotDeckToolResult[]): AgentPermissionDenial[] {
@@ -1891,7 +2239,7 @@ function createEmptyResponseStatus(args: {
   provider?: string;
   model?: string;
   attempts: number;
-}): { event: string; kind: "error"; text: string; detail: Record<string, unknown> } {
+}): AgentStatusMessage {
   const text = "The model returned empty content repeatedly, so this turn has stopped. Try again later or increase max output tokens.";
   return {
     event: "model_empty_response_exhausted",
@@ -1899,12 +2247,12 @@ function createEmptyResponseStatus(args: {
     text,
     detail: {
       message: text,
-      hint: "Try increasing max output tokens so the model has room for visible output after reasoning.",
+      provider: args.provider,
+      model: args.model,
       attempts: args.attempts,
-      ...(args.provider ? { provider: args.provider } : {}),
-      ...(args.model ? { model: args.model } : {}),
-      severity: "warning",
+      severity: "error",
       visible: true,
+      userHint: "Increase max output tokens or retry with a shorter prompt.",
     },
   };
 }
@@ -1912,7 +2260,7 @@ function createEmptyResponseStatus(args: {
 function createMaxTurnsStatus(args: {
   maxTurns: number;
   error: ReturnType<typeof agentError>;
-}): { event: string; kind: "error"; text: string; detail: Record<string, unknown> } {
+}): AgentStatusMessage {
   const text = `Reached the maximum number of turns (${args.maxTurns}), so this turn has stopped. Increase maxTurns or split the task into smaller steps and try again.`;
   return {
     event: "max_turns_reached",
@@ -1921,17 +2269,17 @@ function createMaxTurnsStatus(args: {
     detail: {
       message: text,
       code: args.error.code,
-      userHint: args.error.userHint,
       maxTurns: args.maxTurns,
-      severity: "warning",
+      severity: "error",
       visible: true,
+      userHint: args.error.userHint,
     },
   };
 }
 
 function createMaxOutputRecoveryExhaustedStatus(args: {
   attempts: number;
-}): { event: string; kind: "error"; text: string; detail: Record<string, unknown> } {
+}): AgentStatusMessage {
   const text = "Output token recovery was exhausted, so the visible response may be incomplete. Increase max output tokens or split the task into smaller steps and try again.";
   return {
     event: "max_output_recovery_exhausted",
@@ -1942,26 +2290,7 @@ function createMaxOutputRecoveryExhaustedStatus(args: {
       attempts: args.attempts,
       severity: "warning",
       visible: true,
-    },
-  };
-}
-
-function createSubagentFailedStatus(args: {
-  subagentId: string;
-  subagentType: string;
-  message: string;
-}): { event: string; kind: "error"; text: string; detail: Record<string, unknown> } {
-  const text = `Subagent ${args.subagentType} failed: ${args.message}`;
-  return {
-    event: "subagent_failed",
-    kind: "error",
-    text,
-    detail: {
-      message: text,
-      subagentId: args.subagentId,
-      subagentType: args.subagentType,
-      severity: "error",
-      visible: true,
+      userHint: "Increase max output tokens or split the task into smaller steps.",
     },
   };
 }
@@ -1974,7 +2303,6 @@ function createStructuredOutputCompletedStatus(): AgentStatusMessage {
     text,
     detail: {
       message: text,
-      severity: "info",
       visible: true,
     },
   };
@@ -1988,7 +2316,6 @@ function createContentFilterStopStatus(): AgentStatusMessage {
     text,
     detail: {
       message: text,
-      finishReason: "content_filter",
       severity: "warning",
       visible: true,
     },
@@ -2003,7 +2330,6 @@ function createUnknownFinishReasonStatus(): AgentStatusMessage {
     text,
     detail: {
       message: text,
-      finishReason: "unknown",
       severity: "warning",
       visible: true,
     },
@@ -2018,8 +2344,7 @@ function createTurnAbortedStatus(args: { reason?: string }): AgentStatusMessage 
     text,
     detail: {
       message: text,
-      ...(args.reason ? { reason: args.reason } : {}),
-      severity: "info",
+      reason: args.reason,
       visible: true,
     },
   };
@@ -2033,16 +2358,20 @@ function createFinishReasonStatus(finishReason: string | undefined, assistantTex
 }
 
 function shouldSurfaceAbortStatus(reason: unknown): boolean {
-  const text = stringifyAbortReason(reason);
-  if (!text) return true;
-  return text !== "aborted" && !text.startsWith("aborted:") && text !== "user" && text !== "user_stop" && text !== "user_abort";
+  if (reason === undefined || reason === null) return false;
+  const text = (stringifyAbortReason(reason) ?? "").toLowerCase();
+  return text.includes("timeout") || text.includes("cancel") || text.includes("abort");
 }
 
 function stringifyAbortReason(reason: unknown): string | undefined {
+  if (reason === undefined || reason === null) return undefined;
   if (typeof reason === "string") return reason;
   if (reason instanceof Error) return reason.message;
-  if (reason === undefined || reason === null) return undefined;
-  return String(reason);
+  try {
+    return JSON.stringify(reason);
+  } catch {
+    return String(reason);
+  }
 }
 
 function isPromptTooLong(error: CanonicalModelError): boolean {

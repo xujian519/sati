@@ -7,6 +7,7 @@ import {
   type CatalogProvider,
   type CatalogProviderProtocol,
 } from '../../../../shared/catalogProviders';
+import { fetchProviderModels, type ApiModelListItem } from '../../../../shared/modelListApi';
 
 type LlmConfigurationStepProps = {
   onSaved: () => void | Promise<void>;
@@ -56,13 +57,16 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
   const [testMessage, setTestMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [apiModels, setApiModels] = useState<ApiModelListItem[] | null>(null);
+  const [modelListStatus, setModelListStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [modelListMessage, setModelListMessage] = useState('');
 
   // Inputs that are only relevant when the user picks the "+" (custom) tile.
   const [customProviderId, setCustomProviderId] = useState('');
   const [customProtocol, setCustomProtocol] = useState<CatalogProviderProtocol>('openai');
 
   const isCustomMode = selectedProvider?.id === CUSTOM_PROVIDER_ID;
-  const selectedModels = selectedProvider?.models ?? [];
+  const selectedModels = apiModels ?? selectedProvider?.models ?? [];
   const selectedDefaultUrl = selectedProvider?.defaultUrl ?? '';
 
   useEffect(() => {
@@ -102,6 +106,35 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
     (!isCustomMode || effectiveUrl.trim()),
   );
 
+  useEffect(() => {
+    setApiModels(null);
+    setModelListStatus('idle');
+    setModelListMessage('');
+  }, [effectiveProviderId, effectiveUrl, effectiveProtocol]);
+
+  useEffect(() => {
+    const key = apiKey.trim();
+    if (!selectedProvider || !effectiveProviderId || !effectiveUrl || !key || hasUsableApiKey(key) === false) return;
+    const controller = new AbortController();
+    setModelListStatus('loading');
+    setModelListMessage('');
+    fetchProviderModels({ protocol: effectiveProtocol, baseUrl: effectiveUrl, apiKey: key })
+      .then((models) => {
+        if (controller.signal.aborted) return;
+        setApiModels(models);
+        setModelListStatus('idle');
+        if (models.length > 0 && !models.some((model) => model.id === selectedModelId)) {
+          setSelectedModelId(models[0].id);
+        }
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setModelListStatus('error');
+        setModelListMessage(error instanceof Error ? error.message : String(error));
+      });
+    return () => controller.abort();
+  }, [apiKey, effectiveProviderId, effectiveProtocol, effectiveUrl, selectedModelId, selectedProvider]);
+
   const handleProviderSelect = useCallback((provider: CatalogProvider) => {
     setSelectedProvider((prev) => {
       // Switching to a different provider should not carry over the API key
@@ -113,6 +146,9 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
       return provider;
     });
     setSelectedModelId(defaultModelForProvider(provider));
+    setApiModels(null);
+    setModelListStatus('idle');
+    setModelListMessage('');
     setCustomModelId('');
     setCustomUrl('');
     setCustomProviderId('');
@@ -318,6 +354,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
                       className="w-full appearance-none rounded-lg border border-border bg-background px-3 py-2.5 pr-8 text-sm text-foreground focus:border-foreground/40 focus:outline-none"
                     >
                       <option value="openai">openai</option>
+                      <option value="openai-responses">openai-responses</option>
                       <option value="anthropic">anthropic</option>
                       <option value="google">google</option>
                     </select>
@@ -341,6 +378,11 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
                 {customProtocol === 'openai' && (
                   <p className="mt-1 text-[11px] text-muted-foreground">
                     OpenAI-compatible base URLs should include the API version path, for example ending in <span className="font-mono">/v1</span>.
+                  </p>
+                )}
+                {customProtocol === 'openai-responses' && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    OpenAI Responses API base URLs should include the API version path, for example ending in <span className="font-mono">/v1</span>.
                   </p>
                 )}
                 {customProtocol === 'google' && (
@@ -401,6 +443,14 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
                 spellCheck={false}
               />
             )}
+            {modelListStatus === 'loading' && (
+              <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" /> Fetching models from API...
+              </p>
+            )}
+            {modelListStatus === 'error' && modelListMessage && (
+              <p className="mt-1 text-[11px] text-destructive">{modelListMessage}</p>
+            )}
             {selectedModels.length > 0 && (
               <div className="mt-2">
                 <input
@@ -445,6 +495,11 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
                   {(selectedProvider?.protocol ?? customProtocol) === 'openai' && (
                     <p className="mt-1 text-[11px] text-muted-foreground">
                       OpenAI-compatible base URLs should include the API version path, for example ending in <span className="font-mono">/v1</span>.
+                    </p>
+                  )}
+                  {(selectedProvider?.protocol ?? customProtocol) === 'openai-responses' && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      OpenAI Responses API base URLs should include the API version path, for example ending in <span className="font-mono">/v1</span>.
                     </p>
                   )}
                   {(selectedProvider?.protocol ?? customProtocol) === 'google' && (

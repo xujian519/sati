@@ -11,6 +11,7 @@ import type {
   PermissionMode,
   PermissionResult,
 } from "../../permission/index.js";
+import type { AgentRunMode } from "../../agent/protocol/input.js";
 import type { PilotDeckToolAuditRecorder } from "../audit/ToolAuditRecorder.js";
 import type { PilotDeckElicitationChannel } from "../elicitation/PilotDeckElicitationChannel.js";
 import type { PilotDeckToolInputSchema, PilotDeckToolValidationResult } from "./schema.js";
@@ -156,8 +157,47 @@ export type PilotDeckToolProgressSink = (event: PilotDeckToolProgressEvent) => v
 export type PilotDeckTodoItem = {
   id?: string;
   content: string;
-  status: "pending" | "in_progress" | "completed";
+  status: "pending" | "in_progress" | "completed" | "cancelled";
   priority?: string;
+};
+
+export type PilotDeckTodoUpdate = {
+  id?: string;
+  content?: string;
+  status?: PilotDeckTodoItem["status"];
+  priority?: string;
+};
+
+export type PilotDeckTodoDiagnostics = {
+  writeCount: number;
+  todoCount: number;
+  activeCount: number;
+  completedCount: number;
+  cancelledCount: number;
+  largeRewriteCount: number;
+  deletedOpenItemCount: number;
+  completedWithoutActiveCount: number;
+  lastWrite?: {
+    mode: "markdown" | "structured";
+    merge: boolean;
+    reason?: string;
+    addedCount: number;
+    removedCount: number;
+    changedCount: number;
+    deletedOpenItemCount: number;
+    largeRewrite: boolean;
+    allCompleted: boolean;
+  };
+};
+
+export type PilotDeckTodoWriteHistoryEntry = {
+  createdAt: string;
+  mode: "markdown" | "structured";
+  merge: boolean;
+  reason?: string;
+  markdown?: string;
+  todos: PilotDeckTodoItem[];
+  diagnostics: PilotDeckTodoDiagnostics;
 };
 
 export type PilotDeckPlanTodoStateSnapshot = {
@@ -166,12 +206,16 @@ export type PilotDeckPlanTodoStateSnapshot = {
   toolCallsSinceLastTodoWrite: number;
   lastMarkdown?: string;
   todos: PilotDeckTodoItem[];
+  activeTodos: PilotDeckTodoItem[];
+  todoHistory: PilotDeckTodoWriteHistoryEntry[];
+  todoDiagnostics: PilotDeckTodoDiagnostics;
 };
 
 export type PilotDeckPlanTodoStateHandle = {
   getSnapshot(): PilotDeckPlanTodoStateSnapshot;
   markPlanApproved(plan: string): void;
-  recordTodoWrite(markdown: string, todos: PilotDeckTodoItem[]): void;
+  recordTodoWrite(markdown: string, todos: PilotDeckTodoItem[], options?: { reason?: string }): PilotDeckTodoItem[];
+  writeTodos(todos: PilotDeckTodoUpdate[], options?: { markdown?: string; merge?: boolean; reason?: string }): PilotDeckTodoItem[];
   markToolProgressChanged(toolName: string): void;
   buildPromptAddendum(): string | undefined;
   blockingMessageFor(toolName: string, isReadOnly: boolean): string | undefined;
@@ -185,6 +229,11 @@ export type PilotDeckToolRuntimeContext = {
   subagentTimeoutMs?: number;
   /** The tool call ID assigned by the model for the current invocation. */
   currentToolCallId?: string;
+  /**
+   * Optional model/provider-specific aliases for emitted tool names. These are
+   * used only when the emitted name is not already registered.
+   */
+  toolAliases?: Record<string, string>;
   permissionMode: PermissionMode;
   permissionContext: PermissionContext;
   auditRecorder?: PilotDeckToolAuditRecorder;
@@ -197,6 +246,7 @@ export type PilotDeckToolRuntimeContext = {
   now?: () => Date;
   env?: NodeJS.ProcessEnv;
   maxResultBytes?: number;
+  runMode?: AgentRunMode;
   /**
    * Optional streaming progress sink. Tools that produce incremental output
    * (e.g. `bash` stdout/stderr chunks) can call this to emit progress events
@@ -288,11 +338,27 @@ export type PilotDeckToolRuntimeContext = {
    */
   outputTruncated?: boolean;
   /**
+   * Optional recursive tool executor used by higher-level tools such as
+   * `execute_code` to dispatch nested tool calls through the same ToolRuntime
+   * permission, lifecycle, audit, and result-limiting path as normal model
+   * tool calls. Hosts that execute tools directly may omit this; dependent
+   * tools report `unsupported_tool` instead of bypassing safety checks.
+   */
+  executeTool?: (
+    call: PilotDeckToolCall,
+    contextPatch?: Partial<PilotDeckToolRuntimeContext>,
+  ) => Promise<import("./result.js").PilotDeckToolResult>;
+  /**
    * Optional session-scoped cache for read_file de-duplication. The agent loop
    * keeps the map stable across turns so repeated reads of an unchanged file
    * can return a lightweight stub instead of re-injecting the full payload.
    */
   readFileState?: PilotDeckReadFileStateMap;
+  /**
+   * Session-scoped exact file paths that read_file may read even when they are
+   * outside the workspace. Used for registered IM attachments only.
+   */
+  allowedReadFiles?: string[];
   /**
    * Optional session-scoped map of full-text reads that may authorize
    * subsequent write_file overwrites. Only complete text reads populate this.

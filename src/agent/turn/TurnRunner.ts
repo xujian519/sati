@@ -1,6 +1,7 @@
 import { agentError, normalizeAgentError } from "../protocol/errors.js";
 import type { AgentEvent } from "../protocol/events.js";
 import type { AgentInput } from "../protocol/input.js";
+import type { AgentRunMode } from "../protocol/input.js";
 import type { AgentTurnResult } from "../protocol/result.js";
 import type { AgentLoop, AgentLoopSeedState } from "../loop/AgentLoop.js";
 import type { AgentTranscriptWriter } from "../../session/transcript/TranscriptWriter.js";
@@ -9,6 +10,8 @@ import type { CanonicalMessage, CanonicalUsage } from "../../model/index.js";
 import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { PermissionMode, PermissionRuleSet } from "../../permission/index.js";
 import type { AgentStatusMessageInput, AgentTranscriptWriterState } from "../../session/transcript/TranscriptWriter.js";
+import type { SessionMetadataStore } from "../../session/metadata/SessionMetadataStore.js";
+import type { SessionTitleGenerator } from "../../session/title/SessionTitleGenerator.js";
 
 export type TurnRunnerOptions = {
   sessionId: string;
@@ -16,7 +19,9 @@ export type TurnRunnerOptions = {
   messages: CanonicalMessage[];
   input: AgentInput;
   maxTurns?: number;
+  runMode?: AgentRunMode;
   permissionMode?: PermissionMode;
+  allowedReadFiles?: string[];
   /** The user's actual permission preference before plan-mode override. */
   basePermissionMode?: PermissionMode;
   /** Allow model-visible plan mode tools for this turn. */
@@ -41,6 +46,19 @@ export type TurnRunnerRuntimeReloadSnapshot = {
   transcriptWriterState?: AgentTranscriptWriterState;
 };
 
+export type TurnRunnerDependencies = {
+  metadataStore?: SessionMetadataStore;
+  sessionTitleGenerator?: SessionTitleGenerator;
+  autoGenerateSessionTitle?: boolean;
+};
+
+type PendingSessionTitle = {
+  controller: AbortController;
+  cleanup: () => void;
+  completed: boolean;
+  title: string | null;
+};
+
 export class TurnRunner {
   constructor(
     private readonly loop: AgentLoop,
@@ -52,6 +70,7 @@ export class TurnRunner {
       cwd: process.cwd(),
       transcriptPath: "",
     },
+    private readonly turnDependencies: TurnRunnerDependencies = {},
   ) {}
 
   async *run(options: TurnRunnerOptions): AsyncGenerator<AgentEvent, TurnRunnerResult, unknown> {
@@ -104,6 +123,8 @@ export class TurnRunner {
     }
     messages.push(...(userPromptHooks?.messages ?? []));
 
+    const sessionTitle = this.maybeGenerateSessionTitle(options, accepted.messages);
+
     if (!accepted.shouldCallModel) {
       const error = agentError("agent_unsupported_feature", "Input was accepted but model execution was not requested.");
       const result = this.createErrorResult(
@@ -112,6 +133,7 @@ export class TurnRunner {
       );
       await this.recordErrorResult(options, result);
       await this.recordTurnFailureStatus(options, error);
+      await this.flushReadySessionTitle(options, sessionTitle);
       yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error };
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
       return { result, messages };
@@ -124,7 +146,9 @@ export class TurnRunner {
         turnId: options.turnId,
         messages,
         maxTurns: options.maxTurns,
+        runMode: options.runMode,
         permissionMode: options.permissionMode,
+        allowedReadFiles: options.allowedReadFiles,
         basePermissionMode: options.basePermissionMode,
         allowPlanModeTools: options.allowPlanModeTools,
         canPrompt: options.canPrompt,
@@ -146,21 +170,21 @@ export class TurnRunner {
           break;
         }
         const event = next.value;
-        if (event.type === "turn_failed") {
-          if (!hasRecordedVisibleFailureStatus) {
-            await this.recordTurnFailureStatus(options, event.error);
-          }
+        if (event.type === "turn_failed" && !hasRecordedVisibleFailureStatus) {
+          await this.recordTurnFailureStatus(options, event.error);
         }
         yield event;
       }
 
       await this.transcript.recordTurnResult(options.sessionId, options.turnId, runResult.result);
+      await this.flushReadySessionTitle(options, sessionTitle);
       return runResult;
     } catch (error) {
       const normalized = normalizeAgentError(error);
       const result = this.createErrorResult(options, normalized);
       await Promise.resolve(this.transcript.recordTurnResult(options.sessionId, options.turnId, result)).catch(() => {});
       await this.recordTurnFailureStatus(options, normalized);
+      await this.flushReadySessionTitle(options, sessionTitle);
       yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error: normalized };
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
       return { result, messages };
@@ -212,6 +236,78 @@ export class TurnRunner {
       },
     })).catch(() => {});
   }
+
+  private maybeGenerateSessionTitle(
+    options: TurnRunnerOptions,
+    acceptedMessages: CanonicalMessage[],
+  ): PendingSessionTitle | undefined {
+    if (this.turnDependencies.autoGenerateSessionTitle !== true) {
+      return undefined;
+    }
+    const metadataStore = this.turnDependencies.metadataStore;
+    const generateTitle = this.turnDependencies.sessionTitleGenerator;
+    if (!metadataStore || !generateTitle || options.messages.length > 0) {
+      return undefined;
+    }
+    const snapshot = metadataStore.getSnapshot();
+    if (snapshot.title || snapshot.aiTitle) {
+      return undefined;
+    }
+    const text = firstHumanText(acceptedMessages);
+    if (!text) {
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const cleanup = linkAbortSignal(options.abortSignal, controller);
+    const pending: PendingSessionTitle = {
+      controller,
+      cleanup,
+      completed: false,
+      title: null,
+    };
+    void generateTitle({
+      text,
+      sessionId: options.sessionId,
+      turnId: options.turnId,
+      signal: controller.signal,
+    })
+      .then((title) => {
+        pending.title = title;
+      })
+      .catch(() => {})
+      .finally(() => {
+        pending.completed = true;
+        cleanup();
+      });
+    return pending;
+  }
+
+  private async flushReadySessionTitle(
+    options: TurnRunnerOptions,
+    pending: PendingSessionTitle | undefined,
+  ): Promise<void> {
+    if (!pending) {
+      return;
+    }
+    if (!pending.completed) {
+      pending.controller.abort("turn_completed");
+      pending.cleanup();
+      return;
+    }
+    if (!pending.title) {
+      return;
+    }
+    const metadataStore = this.turnDependencies.metadataStore;
+    if (!metadataStore) {
+      return;
+    }
+    const latest = metadataStore.getSnapshot();
+    if (latest.title || latest.aiTitle) {
+      return;
+    }
+    await metadataStore.saveAiTitle(pending.title, options.turnId);
+  }
 }
 
 function isVisibleFailureStatus(status: AgentStatusMessageInput): boolean {
@@ -222,6 +318,9 @@ function acceptedInputMetadata(options: TurnRunnerOptions): Record<string, unkno
   const metadata: Record<string, unknown> = {};
   if (options.permissionMode) {
     metadata.permissionMode = options.permissionMode;
+  }
+  if (options.runMode) {
+    metadata.runMode = options.runMode;
   }
   if (options.basePermissionMode) {
     metadata.basePermissionMode = options.basePermissionMode;
@@ -244,4 +343,37 @@ function inputToPromptText(input: AgentInput): string {
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
+}
+
+function firstHumanText(messages: CanonicalMessage[]): string | null {
+  for (const message of messages) {
+    if (message.role !== "user" || message.metadata?.synthetic) {
+      continue;
+    }
+    const text = message.content
+      .filter((block) => block.type === "text")
+      .map((block) => (block.type === "text" ? block.text : ""))
+      .join("\n")
+      .trim();
+    if (text) {
+      return text;
+    }
+  }
+  return null;
+}
+
+function linkAbortSignal(
+  source: AbortSignal | undefined,
+  controller: AbortController,
+): () => void {
+  if (!source) {
+    return () => {};
+  }
+  if (source.aborted) {
+    controller.abort(source.reason);
+    return () => {};
+  }
+  const onAbort = () => controller.abort(source.reason);
+  source.addEventListener("abort", onAbort, { once: true });
+  return () => source.removeEventListener("abort", onAbort);
 }

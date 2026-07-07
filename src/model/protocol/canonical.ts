@@ -2,7 +2,7 @@ import type { ModelCapabilities } from "./capabilities.js";
 import type { CanonicalModelError } from "./errors.js";
 import type { MultimodalConstraints } from "./multimodal.js";
 
-export type ModelProtocol = "anthropic" | "openai" | "google";
+export type ModelProtocol = "anthropic" | "openai" | "openai-responses" | "google";
 
 export type CanonicalRole = "user" | "assistant";
 
@@ -130,6 +130,10 @@ export type CanonicalContentBlock =
 export type CanonicalMessageMetadata = {
   /** True for messages injected by the system (e.g. JSON self-correct prompts). */
   synthetic?: boolean;
+  /** Synthetic prompt that should be consumed by the next assistant response only. */
+  transient?: boolean;
+  /** Stable id used by the agent loop to expire transient synthetic prompts. */
+  transientId?: string;
   purpose?: string;
   forkCarryover?: {
     sourceSessionId: string;
@@ -159,8 +163,11 @@ export type CanonicalToolChoice =
     };
 
 export type CanonicalThinkingConfig = {
+  mode?: "default" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   enabled: boolean;
   budgetTokens?: number;
+  preserve?: boolean;
+  splitReasoning?: boolean;
 };
 
 /**

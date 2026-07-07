@@ -4,7 +4,7 @@ import type {
   ModelRuntime,
   ModelProtocol,
 } from "../model/index.js";
-import { ModelRequestError } from "../model/index.js";
+import { cloneMessages, downgradeUnsupportedContent, ModelRequestError } from "../model/index.js";
 import type { InputModality } from "../model/index.js";
 import {
   DEFAULT_SUBAGENT_POLICY,
@@ -39,6 +39,7 @@ import {
 import { TokenStatsCollector } from "./stats/TokenStatsCollector.js";
 import { classifyAndRoute } from "./tokenSaver/classifyAndRoute.js";
 import { countMessagesTokens, countResponseTokens, dispose as disposeTokenizer } from "./utils/countTokens.js";
+import { calculateCacheReadCost, calculateInputCost } from "./utils/modelPricing.js";
 import {
   collectRequiredInputModalities,
   missingInputModalities,
@@ -63,6 +64,8 @@ export type RouterRuntimeDeps = {
 
 export type InvalidateStickyResult = {
   previousTier?: string;
+  previousProvider?: string;
+  previousModel?: string;
   orchestrating: boolean;
 };
 
@@ -204,6 +207,92 @@ export function createRouterRuntime(
     };
   }
 
+  function maybePreserveStickyForCache(
+    current: RouterModelRef | undefined,
+    next: RouterModelRef,
+    messages: CanonicalModelRequest["messages"],
+    lastUsage: import("../model/index.js").CanonicalUsage | undefined,
+  ): { selection: RouterModelRef; mutation?: RouterMutationsLog["cacheAwareSwitch"] } {
+    const cacheAware = config.tokenSaver?.cacheAwareSwitching;
+    if (cacheAware?.enabled === false || !current) {
+      return { selection: next };
+    }
+    if (current.provider === next.provider && current.model === next.model) {
+      return { selection: next };
+    }
+
+    const estimatedInputTokens = countMessagesTokens(messages);
+    const observedInputTokens = lastUsage?.inputTokens ?? 0;
+    const observedCacheReadTokens = lastUsage?.cacheReadTokens ?? 0;
+    const observedCacheHitRatio = observedInputTokens > 0
+      ? Math.min(1, Math.max(0, observedCacheReadTokens / observedInputTokens))
+      : 0;
+    if (observedCacheHitRatio <= 0) {
+      return { selection: next };
+    }
+
+    const estimatedCacheReadTokens = Math.floor(estimatedInputTokens * observedCacheHitRatio);
+    const estimatedUncachedTokens = Math.max(0, estimatedInputTokens - estimatedCacheReadTokens);
+    const cachedCost = calculateCacheReadCost(
+      estimatedCacheReadTokens,
+      current.provider,
+      current.model,
+      config.stats?.modelPricing,
+    ) + calculateInputCost(
+      estimatedUncachedTokens,
+      current.provider,
+      current.model,
+      config.stats?.modelPricing,
+    );
+    const currentPrefillCost = calculateInputCost(
+      estimatedInputTokens,
+      current.provider,
+      current.model,
+      config.stats?.modelPricing,
+    );
+    const prefillCost = calculateInputCost(
+      estimatedInputTokens,
+      next.provider,
+      next.model,
+      config.stats?.modelPricing,
+    );
+    if (prefillCost >= currentPrefillCost) {
+      return { selection: next };
+    }
+
+    const minSavingsRatio = cacheAware?.minSavingsRatio ?? 0;
+    const requiredSavings = cachedCost * minSavingsRatio;
+    const shouldSwitch = prefillCost + Number.EPSILON < cachedCost - requiredSavings;
+    const from = `${current.provider}/${current.model}`;
+    const to = `${next.provider}/${next.model}`;
+
+    if (shouldSwitch) {
+      return {
+        selection: next,
+        mutation: {
+          action: "switched",
+          from,
+          to,
+          cachedCost,
+          prefillCost,
+          estimatedInputTokens,
+        },
+      };
+    }
+
+    return {
+      selection: current,
+      mutation: {
+        action: "kept_sticky",
+        from,
+        to,
+        cachedCost,
+        prefillCost,
+        estimatedInputTokens,
+      },
+    };
+  }
+
   async function resolveCustom(
     input: RouterDecisionInput,
   ): Promise<Partial<RouterDecision> | undefined> {
@@ -267,6 +356,15 @@ export function createRouterRuntime(
     const scenarioOutcome = decideScenario(inputWithUsage, config.scenarios ?? {} as any);
 
     let scenarioType: RouterScenarioType = scenarioOutcome.scenarioType;
+    const previousStickySelection = (input.metadata?.previousProvider && input.metadata.previousModel)
+      ? {
+        id: `${input.metadata.previousProvider}/${input.metadata.previousModel}`,
+        provider: input.metadata.previousProvider,
+        model: input.metadata.previousModel,
+      }
+      : sticky?.stickyProvider && sticky.stickyModel
+      ? { id: `${sticky.stickyProvider}/${sticky.stickyModel}`, provider: sticky.stickyProvider, model: sticky.stickyModel }
+      : undefined;
     let selection: RouterModelRef | undefined =
       custom?.provider && custom.model
         ? { id: `${custom.provider}/${custom.model}`, provider: custom.provider, model: custom.model }
@@ -279,6 +377,7 @@ export function createRouterRuntime(
         : "scenario";
 
     let tokenSaverTier: string | undefined;
+    let cacheAwareSwitch: RouterMutationsLog["cacheAwareSwitch"];
     const subagentPolicy = config.tokenSaver?.subagent?.policy ?? DEFAULT_SUBAGENT_POLICY;
     if (
       !custom?.provider &&
@@ -337,8 +436,18 @@ export function createRouterRuntime(
           if (tokenSaver.selection) {
             selection = tokenSaver.selection;
             resolvedFrom = "tokenSaver";
+            const cacheAware = maybePreserveStickyForCache(
+              previousStickySelection,
+              selection,
+              input.request.messages,
+              baseUsage,
+            );
+            selection = cacheAware.selection;
+            cacheAwareSwitch = cacheAware.mutation;
           }
-          tokenSaverTier = tokenSaver.tier;
+          tokenSaverTier = cacheAwareSwitch?.action === "kept_sticky"
+            ? (sticky?.tokenSaverTier ?? input.metadata?.previousTier ?? tokenSaver.tier)
+            : tokenSaver.tier;
         }
       }
     }
@@ -383,6 +492,9 @@ export function createRouterRuntime(
     );
 
     let mutations: RouterMutationsLog = {};
+    if (cacheAwareSwitch) {
+      mutations = { ...mutations, cacheAwareSwitch };
+    }
     if (config.autoOrchestrate?.enabled && orchGate) {
       const orchestrated = applyOrchestration({
         config: config.autoOrchestrate,
@@ -443,13 +555,13 @@ export function createRouterRuntime(
     if (decision.mutations.subagentTagStripped) {
       messages = stripSubagentTagFromMessages(messages);
     }
-    return {
+    return clampMaxOutputTokensToModelCap({
       ...request,
       ...decision.requestPatch,
       provider: decision.provider,
       model: decision.model,
       messages,
-    };
+    }, deps.modelRuntime);
   }
 
   async function* execute(
@@ -463,8 +575,9 @@ export function createRouterRuntime(
         provider: decision.provider,
         model: decision.model,
       };
+      const cappedPassthroughRequest = clampMaxOutputTokensToModelCap(passthroughRequest, deps.modelRuntime);
       let sawErrorEvent = false;
-      for await (const item of streamAttempt(passthroughRequest, deps.modelRuntime, ctx.abortSignal)) {
+      for await (const item of streamAttempt(cappedPassthroughRequest, deps.modelRuntime, ctx.abortSignal)) {
         if (item.kind === "event") {
           if (item.event.type === "error") {
             sawErrorEvent = true;
@@ -488,14 +601,23 @@ export function createRouterRuntime(
       provider: decision.provider,
       model: decision.model,
     };
-    const attempts: RouterModelRef[] = [
+    const candidateAttempts: RouterModelRef[] = [
       requestedAttempt,
       ...fallbackPlan.attempts,
     ].filter((attempt, index, all) =>
       all.findIndex((candidate) =>
         candidate.provider === attempt.provider && candidate.model === attempt.model
       ) === index
-    ).filter((attempt) => supportsMediaRequirements(attempt, requiredModalities));
+    );
+    const nativeAttempts: RouterModelRef[] = candidateAttempts
+      .filter((attempt) => supportsMediaRequirements(attempt, requiredModalities));
+    const downgradedAttempts: RouterModelRef[] = requiredModalities.length > 0
+      ? candidateAttempts.filter((attempt) => !supportsMediaRequirements(attempt, requiredModalities))
+      : [];
+    const attemptPlans: AttemptPlan[] = [
+      ...nativeAttempts.map((attempt) => ({ attempt, downgradeUnsupportedMedia: false })),
+      ...downgradedAttempts.map((attempt) => ({ attempt, downgradeUnsupportedMedia: true })),
+    ];
     const zeroUsageMax = Math.max(1, config.zeroUsageRetry?.maxAttempts ?? 5);
     const zeroUsageEnabled = config.zeroUsageRetry?.enabled ?? true;
     const transientRetryEnabled = config.transientRetry?.enabled ?? true;
@@ -510,7 +632,7 @@ export function createRouterRuntime(
     let lastDecision: RouterDecision = decision;
     let lastHasYieldedContent = false;
 
-    if (attempts.length === 0) {
+    if (attemptPlans.length === 0) {
       const missing = missingForModel(requestedAttempt, requiredModalities);
       const error = createUnsupportedMediaError(
         requestedAttempt,
@@ -531,15 +653,16 @@ export function createRouterRuntime(
       return;
     }
 
-    outer: for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex += 1) {
+    outer: for (let attemptIndex = 0; attemptIndex < attemptPlans.length; attemptIndex += 1) {
       if (ctx.abortSignal?.aborted) {
         return;
       }
-      const attempt = attempts[attemptIndex];
+      const attemptPlan = attemptPlans[attemptIndex];
+      const attempt = attemptPlan.attempt;
       if (
         attemptIndex > 0 &&
         getHealthTracker(ctx.sessionId).shouldSkip(attempt.provider) &&
-        attemptIndex < attempts.length - 1
+        attemptIndex < attemptPlans.length - 1
       ) {
         continue;
       }
@@ -550,6 +673,9 @@ export function createRouterRuntime(
         resolvedFrom: attemptIndex === 0 ? decision.resolvedFrom : "fallback",
       };
       let attemptRequest = applyDecisionToRequest(attemptDecision, request);
+      if (attemptPlan.downgradeUnsupportedMedia) {
+        attemptRequest = downgradeRequestForAttempt(attemptRequest, attempt, deps.modelRuntime);
+      }
       lastAttempt = attempt;
       lastDecision = attemptDecision;
 
@@ -621,8 +747,8 @@ export function createRouterRuntime(
           lastError = outcome.error;
           getHealthTracker(ctx.sessionId).recordFailure(attempt.provider);
           if (!hasYieldedContent && isFallbackEligible(outcome.error)) {
-            if (attemptIndex < attempts.length - 1) {
-              const next = attempts[attemptIndex + 1];
+            if (attemptIndex < attemptPlans.length - 1) {
+              const next = attemptPlans[attemptIndex + 1].attempt;
               events.emit({
                 type: "pilotdeck_router_fallback",
                 sessionId: ctx.sessionId,
@@ -896,6 +1022,8 @@ export function createRouterRuntime(
 
     const current = sessionStore.get(sessionId, false);
     const previousTier = current?.tokenSaverTier;
+    const previousProvider = current?.stickyProvider;
+    const previousModel = current?.stickyModel;
     const orchestrating = current?.orchestrating ?? false;
     if (orchestrating && previousTier) {
       // While orchestrating, preserve the tier sticky so continuation turns
@@ -917,7 +1045,7 @@ export function createRouterRuntime(
         updatedAt: (deps.now?.() ?? new Date()).getTime(),
       });
     }
-    return { previousTier, orchestrating };
+    return { previousTier, previousProvider, previousModel, orchestrating };
   }
 
   return {
@@ -941,6 +1069,11 @@ export function createRouterRuntime(
   };
 }
 
+type AttemptPlan = {
+  attempt: RouterModelRef;
+  downgradeUnsupportedMedia: boolean;
+};
+
 type AttemptOutcome = {
   buffered: CanonicalModelEvent[];
   error?: import("../model/index.js").CanonicalModelError;
@@ -962,6 +1095,43 @@ function isContentEvent(event: CanonicalModelEvent): boolean {
     event.type === "tool_call_delta" ||
     event.type === "tool_call_end"
   );
+}
+
+function clampMaxOutputTokensToModelCap(
+  request: CanonicalModelRequest,
+  modelRuntime: ModelRuntime,
+): CanonicalModelRequest {
+  const requested = request.maxOutputTokens;
+  if (requested === undefined) {
+    return request;
+  }
+
+  try {
+    const cap = modelRuntime.getCapabilities(request.provider, request.model).maxOutputTokens;
+    if (Number.isFinite(cap) && cap > 0 && requested > cap) {
+      return { ...request, maxOutputTokens: cap };
+    }
+  } catch {
+    // Unknown provider/model — let validateModelRequest surface the real error.
+  }
+  return request;
+}
+
+function downgradeRequestForAttempt(
+  request: CanonicalModelRequest,
+  attempt: RouterModelRef,
+  modelRuntime: ModelRuntime,
+): CanonicalModelRequest {
+  let multimodal: ReturnType<ModelRuntime["getMultimodal"]>;
+  try {
+    multimodal = modelRuntime.getMultimodal(attempt.provider, attempt.model);
+  } catch {
+    // Unknown provider/model should still be reported by validateModelRequest.
+    return request;
+  }
+  const messages = cloneMessages(request.messages);
+  downgradeUnsupportedContent(messages, multimodal);
+  return { ...request, messages };
 }
 
 /**

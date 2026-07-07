@@ -90,6 +90,54 @@ function buildGoogleGenerateContentUrl(baseUrl, model) {
   return url.toString();
 }
 
+function buildGoogleModelsUrl(baseUrl) {
+  const normalizedBaseUrl = String(baseUrl || 'https://generativelanguage.googleapis.com').trim().replace(/\/+$/, '')
+    || 'https://generativelanguage.googleapis.com';
+  const url = new URL(normalizedBaseUrl);
+  const parts = url.pathname.split('/').filter(Boolean);
+  const last = parts.at(-1);
+  const apiVersion = last === 'v1' || last === 'v1beta' ? last : 'v1beta';
+  const baseParts = last === 'v1' || last === 'v1beta' ? parts.slice(0, -1) : parts;
+  url.pathname = `/${[...baseParts, apiVersion, 'models'].join('/')}`;
+  url.search = '';
+  url.hash = '';
+  return url.toString();
+}
+
+function normalizeModelListItem(item) {
+  if (!item || typeof item !== 'object') return null;
+  const rawId = typeof item.id === 'string'
+    ? item.id
+    : typeof item.name === 'string'
+      ? item.name
+      : '';
+  const id = rawId.replace(/^models\//, '').trim();
+  if (!id) return null;
+  const displayName = typeof item.display_name === 'string'
+    ? item.display_name
+    : typeof item.displayName === 'string'
+      ? item.displayName
+      : id;
+  return { id, displayName };
+}
+
+function parseModelListResponse(body) {
+  const rawModels = Array.isArray(body?.data)
+    ? body.data
+    : Array.isArray(body?.models)
+      ? body.models
+      : [];
+  const seen = new Set();
+  const models = [];
+  for (const item of rawModels) {
+    const model = normalizeModelListItem(item);
+    if (!model || seen.has(model.id)) continue;
+    seen.add(model.id);
+    models.push(model);
+  }
+  return models;
+}
+
 router.get('/', (_req, res) => {
   try {
     const record = readPilotDeckConfigFile();
@@ -240,17 +288,75 @@ router.get('/provider', (_req, res) => {
   }
 });
 
+router.post('/models', async (req, res) => {
+  const { providerId, providerType, baseUrl, apiKey } = req.body || {};
+  let effectiveApiKey = typeof apiKey === 'string' ? apiKey : '';
+  if ((!effectiveApiKey || effectiveApiKey === '********') && typeof providerId === 'string' && providerId.trim()) {
+    try {
+      const record = readPilotDeckConfigFile();
+      const provider = record.config?.model?.providers?.[providerId.trim()];
+      if (typeof provider?.apiKey === 'string') effectiveApiKey = provider.apiKey;
+    } catch { /* fall through to validation below */ }
+  }
+  if (!baseUrl || !effectiveApiKey || effectiveApiKey === '********') {
+    return res.status(400).json({ ok: false, error: 'baseUrl and apiKey are required' });
+  }
+
+  const normalizedType = String(providerType || '').toLowerCase();
+  const isAnthropic = normalizedType === 'anthropic';
+  const isGoogle = normalizedType === 'google';
+  const normalizedBaseUrl = String(baseUrl).trim().replace(/\/+$/, '');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+
+  try {
+    const url = isGoogle
+      ? buildGoogleModelsUrl(normalizedBaseUrl)
+      : isAnthropic
+        ? `${normalizedBaseUrl}/v1/models`
+        : `${normalizedBaseUrl}/models`;
+    const headers = isGoogle
+      ? { 'x-goog-api-key': effectiveApiKey }
+      : isAnthropic
+        ? { 'x-api-key': effectiveApiKey, 'anthropic-version': '2023-06-01' }
+        : { Authorization: `Bearer ${effectiveApiKey}` };
+    const response = await fetch(url, { method: 'GET', headers, signal: controller.signal });
+    clearTimeout(timer);
+    const responseText = await response.text();
+    let body;
+    try {
+      body = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      return res.status(502).json({ ok: false, error: `Expected JSON from ${url}, but received non-JSON content.` });
+    }
+
+    if (!response.ok) {
+      const message = body?.error?.message || body?.message || responseText || `HTTP ${response.status}`;
+      return res.status(response.status).json({ ok: false, error: message });
+    }
+
+    res.json({ ok: true, models: parseModelListResponse(body) });
+  } catch (error) {
+    clearTimeout(timer);
+    const message = error?.name === 'AbortError'
+      ? 'Model list request timed out after 10s.'
+      : error instanceof Error ? error.message : String(error);
+    res.status(500).json({ ok: false, error: message });
+  }
+});
+
 router.post('/test-connection', async (req, res) => {
   const { providerType, baseUrl, apiKey, model } = req.body || {};
   if (!baseUrl || !apiKey || !model) {
     return res.status(400).json({ ok: false, error: 'baseUrl, apiKey, and model are required' });
   }
 
-  // Accept V2 protocols ('openai' | 'anthropic' | 'google') as well as the legacy
-  // onboarding values ('openai-chat' | 'anthropic') for compatibility.
+  // Accept V2 protocols ('openai' | 'openai-responses' | 'anthropic' | 'google')
+  // as well as legacy onboarding values for compatibility.
   const normalizedType = String(providerType || '').toLowerCase();
   const isAnthropic = normalizedType === 'anthropic';
   const isGoogle = normalizedType === 'google';
+  const isOpenAIResponses = normalizedType === 'openai-responses' || normalizedType === 'responses';
   const normalizedBaseUrl = String(baseUrl).trim().replace(/\/+$/, '');
   const timeout = 10_000;
   const controller = new AbortController();
@@ -290,6 +396,22 @@ router.post('/test-connection', async (req, res) => {
         }),
         signal: controller.signal,
       };
+    } else if (isOpenAIResponses) {
+      url = `${normalizedBaseUrl}/responses`;
+      fetchOptions = {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          max_output_tokens: 16,
+          input: 'Hi',
+          store: false,
+        }),
+        signal: controller.signal,
+      };
     } else {
       url = `${normalizedBaseUrl}/chat/completions`;
       fetchOptions = {
@@ -314,10 +436,12 @@ router.post('/test-connection', async (req, res) => {
       ? 'Anthropic message'
       : isGoogle
         ? 'Google Gemini generateContent response'
-        : 'OpenAI chat completion';
+        : isOpenAIResponses
+          ? 'OpenAI Responses response'
+          : 'OpenAI chat completion';
     const baseUrlHint = isGoogle
       ? 'For native Google Gemini, the base URL is usually https://generativelanguage.googleapis.com.'
-      : 'For OpenAI-compatible endpoints, the base URL usually ends with /v1.';
+      : 'For OpenAI-compatible and Responses API endpoints, the base URL usually ends with /v1.';
 
     if (response.ok) {
       let body;
@@ -334,7 +458,9 @@ router.post('/test-connection', async (req, res) => {
         ? Array.isArray(body?.content) || body?.type === 'message'
         : isGoogle
           ? Array.isArray(body?.candidates)
-        : Array.isArray(body?.choices);
+          : isOpenAIResponses
+            ? body?.object === 'response' || Array.isArray(body?.output) || typeof body?.output_text === 'string'
+            : Array.isArray(body?.choices);
       if (!hasCompletionShape) {
         return res.json({
           ok: false,

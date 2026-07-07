@@ -1,5 +1,7 @@
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
+import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
+import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { EmailSessionMapper } from "./EmailSessionMapper.js";
 import { renderEmailEvent } from "./email-render.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
@@ -138,6 +140,10 @@ export class EmailChannel implements ChannelAdapter {
     };
   }
 
+  async deliverCronResult(delivery: CronResultDelivery): Promise<boolean> {
+    return deliverChatCronResult(delivery, this.channelKey, (chatId, text) => this.sendReply(chatId, text));
+  }
+
   private async cleanupImap(): Promise<void> {
     if (this.imapClient) {
       try { await this.imapClient.logout(); } catch { /* best effort */ }
@@ -267,7 +273,7 @@ export class EmailChannel implements ChannelAdapter {
         }
         if (event.type === "permission_request") {
           const questionText = this.permissions.capture(chatId, sessionKey, event);
-          await this.sendReply(chatId, questionText);
+          if (questionText) await this.sendReply(chatId, questionText);
           continue;
         }
         const fragment = renderEmailEvent(event);
@@ -287,8 +293,8 @@ export class EmailChannel implements ChannelAdapter {
     }
   }
 
-  private async sendReply(chatId: string, text: string): Promise<void> {
-    if (!this.transporter) return;
+  private async sendReply(chatId: string, text: string): Promise<boolean> {
+    if (!this.transporter) return false;
     try {
       await this.transporter.sendMail({
         from: this.ownAddress,
@@ -296,8 +302,10 @@ export class EmailChannel implements ChannelAdapter {
         subject: this.defaultSubject,
         text,
       });
+      return true;
     } catch (e) {
       this.logger?.error?.(`email: sendMail failed: ${e}`);
+      return false;
     }
   }
 }

@@ -227,7 +227,12 @@ function parseCapabilities(
     }
   }
 
-  return mergeCapabilities(defaults, overrides);
+  return {
+    ...mergeCapabilities(defaults, overrides),
+    ...(capabilities.supportsThinking !== undefined
+      ? { supportsThinkingExplicit: capabilities.supportsThinking }
+      : {}),
+  } as ModelCapabilities;
 }
 
 function parseMultimodal(
