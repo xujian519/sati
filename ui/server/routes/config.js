@@ -280,6 +280,18 @@ router.put('/', async (req, res) => {
 router.post('/reload', async (_req, res) => {
   try {
     const record = readPilotDeckConfigFile();
+    if (record.parseError) {
+      return res.status(400).json({
+        error: 'Invalid config YAML',
+        configDisabled: true,
+        parseError: record.parseError,
+        validation: {
+          valid: false,
+          errors: [`Invalid YAML: ${record.parseError}`],
+          warnings: [],
+        },
+      });
+    }
     const validation = validatePilotDeckConfig(record.config);
     if (!validation.valid) {
       return res.status(400).json({ error: 'Invalid config', validation });

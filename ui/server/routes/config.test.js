@@ -60,9 +60,22 @@ describe('config routes invalid YAML fallback', () => {
     expect(response.body.validation.valid).toBe(true);
     expect(parseYaml(readFileSync(configPath, 'utf8')).model.providers.openai.apiKey).toBe('sk-test');
   });
+
+  it('rejects reload without applying defaults when YAML is invalid', async () => {
+    const reloadPilotDeckConfig = vi.fn(async () => ({ processEnv: { reloaded: true } }));
+    const { request } = await createConfigApp('schemaVersion: 1\nmodel:\n  providers: [\n', { reloadPilotDeckConfig });
+
+    const response = await request('/api/config/reload', { method: 'POST' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.configDisabled).toBe(true);
+    expect(response.body.validation.valid).toBe(false);
+    expect(response.body.validation.errors[0]).toMatch(/^Invalid YAML:/);
+    expect(reloadPilotDeckConfig).not.toHaveBeenCalled();
+  });
 });
 
-async function createConfigApp(initialRaw) {
+async function createConfigApp(initialRaw, overrides = {}) {
   const pilotHome = mkdtempSync(join(tmpdir(), 'pilotdeck-config-route-'));
   tempDirs.push(pilotHome);
   const configPath = join(pilotHome, 'pilotdeck.yaml');
@@ -76,7 +89,7 @@ async function createConfigApp(initialRaw) {
     suppressNextWatchEvent: vi.fn(),
   }));
   vi.doMock('../services/pilotdeckConfigReloader.js', () => ({
-    reloadPilotDeckConfig: vi.fn(async () => ({ processEnv: { reloaded: true } })),
+    reloadPilotDeckConfig: overrides.reloadPilotDeckConfig ?? vi.fn(async () => ({ processEnv: { reloaded: true } })),
   }));
   vi.doMock('../pilotdeck-bridge.js', () => ({
     getPilotDeckGateway: vi.fn(async () => ({ reloadConfig: vi.fn(async () => undefined) })),

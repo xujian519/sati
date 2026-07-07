@@ -3631,8 +3631,23 @@ export default function PilotDeckConfigTab({
           <ConfigSectionHome onSelect={setActiveSection} />
         )
       ) : (
-        <SettingsCard className="p-5 text-xs text-muted-foreground">
-          {t('pilotDeckConfig.rawYaml.cannotParse')}
+        <SettingsCard className="space-y-3 p-5">
+          <div>
+            <div className="text-sm font-semibold text-foreground">{t('pilotDeckConfig.rawYaml.rawYaml')}</div>
+            <div className="mt-1 text-xs text-muted-foreground">{t('pilotDeckConfig.rawYaml.cannotParse')}</div>
+          </div>
+          <textarea
+            value={raw}
+            onChange={(event) => setRaw(event.target.value)}
+            spellCheck={false}
+            className="min-h-[360px] w-full resize-y rounded-md border border-border bg-background px-3 py-2 font-mono text-xs leading-5 text-foreground outline-none focus:ring-1 focus:ring-ring"
+          />
+          <div className="flex justify-end">
+            <Button type="button" size="sm" onClick={save} disabled={saving || !isDirty} className="h-8 gap-1.5 px-2.5 text-xs">
+              <Save className="mr-1.5 h-3.5 w-3.5" />
+              {saving ? t('pilotDeckConfig.actions.saving') : t('pilotDeckConfig.actions.saveAndReloadShort')}
+            </Button>
+          </div>
         </SettingsCard>
       )}
 
