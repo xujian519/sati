@@ -161,7 +161,7 @@ test("router stream recovers from post-content dropped stream with LiteLLM conti
   assert.equal(events.some((event) => event.type === "text_delta" && event.text === "continued"), true);
 });
 
-test("router falls back on pre-content 429 and respects Retry-After in progress", async () => {
+test("router falls back on pre-content 429 without reporting an unslept Retry-After delay", async () => {
   const bodies: unknown[] = [];
   const routerEvents: RouterEvent[] = [];
   let calls = 0;
@@ -189,7 +189,7 @@ test("router falls back on pre-content 429 and respects Retry-After in progress"
   assert.equal(calls, 2);
   assert.equal(JSON.stringify(bodies[1]).includes(LITELLM_CONTINUATION_INSTRUCTION), false);
   assert.equal(routerEvents.some((event) => event.type === "pilotdeck_router_fallback"), true);
-  assert.equal(routerEvents.some((event) => event.type === "pilotdeck_router_retry_progress" && event.delayMs === 2_000), true);
+  assert.equal(routerEvents.some((event) => event.type === "pilotdeck_router_retry_progress" && event.delayMs === 2_000), false);
   assert.equal(events.some((event) => event.type === "text_delta" && event.text === "fallback ok"), true);
 });
 

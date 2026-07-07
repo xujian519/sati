@@ -173,7 +173,7 @@ export async function* streamModel(
     }
     let response: Response;
     try {
-      response = await sendProviderRequest(provider, body, true, options.fetch ?? fetch, options.signal);
+      response = await sendProviderRequest(provider, body, true, options.fetch ?? fetch, options.signal, options);
     } catch (error) {
       if (attempt < maxRetries && isRetryableStreamError(error)) {
         const delayMs = calculateRetryDelay(provider, attempt);
@@ -192,6 +192,12 @@ export async function* streamModel(
         if (headerMs !== undefined) {
           error.retryAfterMs = headerMs;
         }
+      }
+      if (error.retryable && attempt < maxRetries) {
+        const delayMs = calculateRetryDelay(provider, attempt, error.retryAfterMs);
+        emitModelRetryProgress(options, retryReasonForError(error.code), attempt, maxRetries, delayMs, provider, currentRequest.model);
+        await delay(delayMs, options.signal);
+        continue;
       }
       yield { type: "error", error };
       return;
@@ -244,15 +250,15 @@ export async function* streamModel(
       ) {
         currentRequest = buildLiteLLMContinuationRequest(currentRequest, checkpoint.get().partialText);
         checkpoint.reset();
-        const delayMs = calculateRetryDelay(provider, attempt);
+        const delayMs = calculateRetryDelay(provider, attempt, retryAfterMsForError(error));
         emitModelRetryProgress(options, "continuation", attempt, maxRetries, delayMs, provider, currentRequest.model);
         await delay(delayMs, options.signal);
         continue;
       }
 
       if (isRetryableStreamError(error) && attempt < maxRetries) {
-        const delayMs = calculateRetryDelay(provider, attempt);
-        emitModelRetryProgress(options, "network_error", attempt, maxRetries, delayMs, provider, currentRequest.model);
+        const delayMs = calculateRetryDelay(provider, attempt, retryAfterMsForError(error));
+        emitModelRetryProgress(options, retryReasonForThrownError(error), attempt, maxRetries, delayMs, provider, currentRequest.model);
         await delay(delayMs, options.signal);
         continue;
       }
@@ -471,13 +477,32 @@ function isRetryableStreamError(error: unknown): boolean {
   return false;
 }
 
-function calculateRetryDelay(provider: ProviderConfig, attempt: number): number {
+function calculateRetryDelay(provider: ProviderConfig, attempt: number, retryAfterMs?: number): number {
+  if (retryAfterMs !== undefined) {
+    const maxDelayMs = provider.retry?.maxDelayMs ?? LITELLM_MAX_RETRY_DELAY_MS;
+    return Math.min(retryAfterMs, maxDelayMs);
+  }
   const baseDelayMs = provider.retry?.baseDelayMs ?? LITELLM_INITIAL_RETRY_DELAY_MS;
   const maxDelayMs = provider.retry?.maxDelayMs ?? LITELLM_MAX_RETRY_DELAY_MS;
   const jitter = provider.retry?.jitter ?? LITELLM_RETRY_JITTER;
   const deterministicDelay = baseDelayMs * (attempt + 1);
   const jitterDelay = deterministicDelay * jitter * Math.random();
   return Math.min(deterministicDelay + jitterDelay, maxDelayMs);
+}
+
+function retryAfterMsForError(error: unknown): number | undefined {
+  return error instanceof ModelProviderError ? error.error.retryAfterMs : undefined;
+}
+
+function retryReasonForThrownError(error: unknown): ModelStreamRetryProgress["reason"] {
+  if (error instanceof ModelProviderError) {
+    return retryReasonForError(error.error.code);
+  }
+  return "network_error";
+}
+
+function retryReasonForError(code: string): ModelStreamRetryProgress["reason"] {
+  return code === "server_error" ? "server_error" : "network_error";
 }
 
 function emitModelRetryProgress(
@@ -563,10 +588,11 @@ async function sendProviderRequest(
   stream: boolean,
   transport: ModelTransport,
   signal?: AbortSignal,
+  options?: ModelRuntimeOptions,
 ): Promise<Response> {
   const controller = new AbortController();
   const detachAbort = signal ? forwardAbort(signal, controller) : undefined;
-  const effectiveTimeoutMs = provider.timeoutMs ?? (stream ? undefined : DEFAULT_REQUEST_TIMEOUT_MS);
+  const effectiveTimeoutMs = stream ? resolveStreamIdleTimeout(provider, options) : provider.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   const timeout = effectiveTimeoutMs
     ? setTimeout(() => controller.abort("request_timeout"), effectiveTimeoutMs)
     : undefined;

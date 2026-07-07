@@ -338,7 +338,7 @@ test("model stream retry progress reports continuation", async () => {
   assert.deepEqual(progressReasons, ["continuation"]);
 });
 
-test("non-retryable 4xx surfaces without retry while 429 captures Retry-After", async () => {
+test("non-retryable 4xx surfaces without retry while 429 retries with Retry-After", async () => {
   let badRequestCalls = 0;
   const badRequestFetch = async () => {
     badRequestCalls += 1;
@@ -354,17 +354,56 @@ test("non-retryable 4xx surfaces without retry while 429 captures Retry-After", 
   const badRequestError = badRequestEvents.find((event) => event.type === "error")?.error;
   assert.equal(badRequestError?.retryable, false);
 
-  const rateLimitFetch = async () => Response.json(
-    { error: { message: "rate limit" } },
-    { status: 429, headers: { "retry-after": "3" } },
-  );
+  let rateLimitCalls = 0;
+  const progressDelays: number[] = [];
+  const rateLimitFetch = async () => {
+    rateLimitCalls += 1;
+    if (rateLimitCalls === 1) {
+      return Response.json(
+        { error: { message: "rate limit" } },
+        { status: 429, headers: { "retry-after": "3" } },
+      );
+    }
+    return new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(sseFrame(openAITextChunk("ok after 429")));
+        controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+        controller.close();
+      },
+    }), { status: 200 });
+  };
   const rateLimitEvents = [];
-  for await (const event of streamModel(request, modelConfig({ streamMaxRetries: 1 }), { fetch: rateLimitFetch })) {
+  for await (const event of streamModel(
+    request,
+    modelConfig({ streamMaxRetries: 1, baseDelayMs: 1, maxDelayMs: 5_000, jitter: 0 }),
+    { fetch: rateLimitFetch, onRetryProgress: (progress) => progressDelays.push(progress.delayMs) },
+  )) {
     rateLimitEvents.push(event);
   }
-  const rateLimitError = rateLimitEvents.find((event) => event.type === "error")?.error;
-  assert.equal(rateLimitError?.retryable, true);
-  assert.equal(rateLimitError?.retryAfterMs, 3_000);
+  assert.equal(rateLimitCalls, 2);
+  assert.deepEqual(progressDelays, [3_000]);
+  assert.equal(rateLimitEvents.some((event) => event.type === "text_delta" && event.text === "ok after 429"), true);
+});
+
+test("streamTimeoutMs bounds the pre-response fetch phase", async () => {
+  let abortObserved = false;
+  const hangingFetch = async (_url: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () => {
+      abortObserved = true;
+      reject(new Error("request timeout"));
+    }, { once: true });
+  });
+
+  await assert.rejects(async () => {
+    for await (const _event of streamModel(
+      request,
+      modelConfig({ streamMaxRetries: 0 }),
+      { fetch: hangingFetch, streamTimeoutMs: 1 },
+    )) {
+      // consume
+    }
+  }, /request timeout|timeout/i);
+  assert.equal(abortObserved, true);
 });
 
 test("OpenAI Responses and Anthropic stream drops recover with LiteLLM continuation", async () => {

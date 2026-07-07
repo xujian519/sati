@@ -762,19 +762,6 @@ export function createRouterRuntime(
                 toModel: next.model,
                 error: outcome.error,
               });
-              if (outcome.error.retryAfterMs != null) {
-                events.emit({
-                  type: "pilotdeck_router_retry_progress",
-                  sessionId: ctx.sessionId,
-                  turnId: ctx.turnId,
-                  attempt: attemptIndex + 1,
-                  maxAttempts: attemptPlans.length - 1,
-                  delayMs: outcome.error.retryAfterMs,
-                  reason: classifyRetryReason(outcome.error.code),
-                  provider: attempt.provider,
-                  model: attempt.model,
-                });
-              }
               telemetry?.trackFeatureLoopStage({
                 module: "router",
                 ownerModule: "router",
