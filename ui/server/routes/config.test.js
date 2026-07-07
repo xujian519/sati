@@ -88,6 +88,62 @@ describe('config test-connection route', () => {
     ]);
   });
 
+  it('falls back to /v1/messages for Anthropic when unversioned probing returns unexpected JSON', async () => {
+    const calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      calls.push(String(url));
+      if (String(url) === 'https://api.anthropic.com/messages') {
+        return jsonResponse({ ok: true });
+      }
+      return jsonResponse({ type: 'message', content: [{ type: 'text', text: 'ok' }] });
+    }));
+
+    const { request } = await createConfigApp();
+    const data = await request('/api/config/test-connection', {
+      method: 'POST',
+      body: JSON.stringify({
+        providerType: 'anthropic',
+        baseUrl: 'https://api.anthropic.com',
+        apiKey: 'sk-test',
+        model: 'claude-test',
+      }),
+    });
+
+    expect(data.ok).toBe(true);
+    expect(calls).toEqual([
+      'https://api.anthropic.com/messages',
+      'https://api.anthropic.com/v1/messages',
+    ]);
+  });
+
+  it('falls back to /v1beta Gemini endpoint when unversioned probing returns unexpected JSON', async () => {
+    const calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      calls.push(String(url));
+      if (String(url) === 'https://generativelanguage.googleapis.com/models/gemini-pro:generateContent') {
+        return jsonResponse({ ok: true });
+      }
+      return jsonResponse({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] });
+    }));
+
+    const { request } = await createConfigApp();
+    const data = await request('/api/config/test-connection', {
+      method: 'POST',
+      body: JSON.stringify({
+        providerType: 'google',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        apiKey: 'sk-test',
+        model: 'gemini-pro',
+      }),
+    });
+
+    expect(data.ok).toBe(true);
+    expect(calls).toEqual([
+      'https://generativelanguage.googleapis.com/models/gemini-pro:generateContent',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
+    ]);
+  });
+
   it('does not duplicate existing version paths', async () => {
     const calls = [];
     vi.stubGlobal('fetch', vi.fn(async (url) => {
