@@ -79,6 +79,7 @@ import type {
   SkillsListInput,
   SkillsListResult,
 } from "../../extension/skills/types.js";
+import { createVisibleErrorStatusDetail } from "../../status/agentStatus.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
 import type { TelemetryExecutionKind, TelemetryModule } from "../../telemetry/index.js";
 
@@ -295,11 +296,25 @@ export class InProcessGateway implements Gateway {
     }
     const runId = input.runId ?? this.uuid();
     if (!this.router.beginTurn(input.sessionKey, runId)) {
+      const message = `Session ${input.sessionKey} already has an active turn.`;
+      const userHint = "Wait for the current turn to finish or stop it before sending another message.";
+      yield {
+        type: "agent_status",
+        event: "session_busy",
+        detail: createVisibleErrorStatusDetail({
+          message,
+          code: "session_busy",
+          userHint,
+          scope: "session",
+          source: "gateway",
+        }),
+      };
       yield {
         type: "error",
         code: "session_busy",
-        message: `Session ${input.sessionKey} already has an active turn.`,
+        message,
         recoverable: true,
+        userHint,
       };
       return;
     }
@@ -880,14 +895,14 @@ function createGatewayFailureStatus(args: {
     event: args.event,
     kind: "error",
     text: args.message,
-    detail: {
+    detail: createVisibleErrorStatusDetail({
       message: args.message,
       code: args.code,
-      severity: "error",
-      visible: true,
       userHint: args.userHint,
-      ...(args.detail ?? {}),
-    },
+      scope: "turn",
+      source: "gateway",
+      detail: args.detail,
+    }),
   };
 }
 

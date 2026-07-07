@@ -42,4 +42,28 @@ describe('gatewayEventToFrames agent status errors', () => {
             userHint: 'Check provider settings.',
         });
     });
+
+    it('renders bridge visible failure status events as error frames', () => {
+        const frames = gatewayEventToFrames({
+            type: 'agent_status',
+            event: 'gateway_bridge_error',
+            detail: {
+                message: 'Bridge crashed while streaming.',
+                code: 'gateway_bridge_error',
+                severity: 'error',
+                visible: true,
+                userHint: 'Check UI server logs.',
+                scope: 'turn',
+                source: 'web_bridge',
+            },
+        }, 'web:s_test', 'pilotdeck');
+
+        expect(frames).toHaveLength(1);
+        expect(frames[0]).toMatchObject({
+            kind: 'error',
+            content: 'Bridge crashed while streaming.',
+            code: 'gateway_bridge_error',
+            userHint: 'Check UI server logs.',
+        });
+    });
 });

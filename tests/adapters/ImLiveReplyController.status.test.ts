@@ -64,3 +64,25 @@ test("IM live reply keeps tool call errors on the tool result path", async () =>
 
   assert.deepEqual(sent, ["\nTOOL:file_not_found:missing\n"]);
 });
+
+test("IM live reply emits warning text for channel submit status", async () => {
+  const { sent, transport } = createSentTextTransport();
+  const controller = new ImLiveReplyController<string>({ transport, turnTimeoutMs: 0 });
+
+  await controller.handleEvent({
+    type: "agent_status",
+    event: "channel_submit_failed",
+    detail: {
+      message: "处理消息时发生错误，请重试。",
+      code: "channel_submit_failed",
+      severity: "error",
+      visible: true,
+      userHint: "Retry later.",
+      scope: "channel",
+      source: "im_channel",
+    },
+  });
+  await controller.flushFinal();
+
+  assert.deepEqual(sent, ["\n⚠️ 处理消息时发生错误，请重试。\n"]);
+});

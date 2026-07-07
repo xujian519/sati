@@ -54,6 +54,10 @@ import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from './u
 // rewriting the offending @type annotation below to `ReturnType<typeof
 // createRemoteGateway>`, which is why this import can live on `src/` again.)
 import { createRemoteGateway } from '../../src/gateway/index.js';
+import {
+    createVisibleErrorStatusDetail,
+    isVisibleFailureStatusDetail,
+} from '../../src/status/agentStatus.js';
 import { createNormalizedMessage } from './pilotdeck-message.js';
 import { readPermissionSettings } from './services/permissionSettings.js';
 
@@ -88,6 +92,14 @@ const visibleFailureAgentStatusEvents = new Set([
     'turn_failed',
     'turn_timeout',
     'gateway_submit_failed',
+    'session_busy',
+    'gateway_bridge_error',
+    'gateway_stream_ended_without_completion',
+    'web_http_request_failed',
+    'project_unavailable',
+    'config_invalid',
+    'gateway_unavailable',
+    'channel_submit_failed',
     'subagent_failed',
     'content_filter_stop',
     'unknown_finish_reason',
@@ -134,7 +146,7 @@ function normalizeToolErrorCode(errorCode, resultPreview) {
 
 function isVisibleFailureAgentStatus(event) {
     return event?.type === 'agent_status'
-        && visibleFailureAgentStatusEvents.has(event.event)
+        && (visibleFailureAgentStatusEvents.has(event.event) || isVisibleFailureStatusDetail(event.detail))
         && event.detail?.visible !== false;
 }
 
@@ -675,7 +687,7 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                     }),
                 ];
             }
-            if (visibleFailureAgentStatusEvents.has(event.event)) {
+            if (visibleFailureAgentStatusEvents.has(event.event) || isVisibleFailureStatusDetail(detail)) {
                 return [
                     createNormalizedMessage({
                         ...base,
@@ -904,6 +916,27 @@ function tryParseJson(value) {
     }
 }
 
+function createBridgeFailureStatusEvent({ event, message, userHint, scope = 'turn', detail = {} }) {
+    return {
+        type: 'agent_status',
+        event,
+        detail: createVisibleErrorStatusDetail({
+            message,
+            code: event,
+            userHint,
+            scope,
+            source: 'web_bridge',
+            detail,
+        }),
+    };
+}
+
+function sendBridgeStatusEvent(writer, statusEvent, sessionKey, provider) {
+    for (const frame of gatewayEventToFrames(statusEvent, sessionKey, provider)) {
+        writer.send(frame);
+    }
+}
+
 /**
  * Run a chat command through the PilotDeck gateway.
  *
@@ -1053,33 +1086,31 @@ export async function runChatViaGateway(
 
         if (!sawTurnCompleted && !sawGatewayError) {
             const message = 'Gateway stream ended before turn_completed; no final assistant response was received.';
+            const userHint = 'The model stream ended before PilotDeck received a final turn result. Please retry this message; if it repeats, check the gateway/model provider logs.';
+            const statusEvent = createBridgeFailureStatusEvent({
+                event: 'gateway_stream_ended_without_completion',
+                message,
+                userHint,
+            });
             console.warn(`[pilotdeck-bridge] ${message}`, { sessionKey, projectKey, runId });
             await recordGatewayStatusMessage(gw, {
                 sessionKey,
                 turnId: runId,
                 projectKey,
-                event: 'gateway_stream_ended_without_completion',
+                event: statusEvent.event,
                 text: message,
-                detail: {
-                    message,
-                    userHint: 'The model stream ended before PilotDeck received a final turn result. Please retry this message; if it repeats, check the gateway/model provider logs.',
-                    visible: true,
-                    severity: 'error',
-                },
+                detail: statusEvent.detail,
             });
-            writer.send(
-                createNormalizedMessage({
-                    provider,
-                    sessionId: sessionKey,
-                    kind: 'error',
-                    code: 'gateway_stream_ended_without_completion',
-                    content: message,
-                    userHint: 'The model stream ended before PilotDeck received a final turn result. Please retry this message; if it repeats, check the gateway/model provider logs.',
-                }),
-            );
+            state.hasVisibleFailureStatus = true;
+            sendBridgeStatusEvent(writer, statusEvent, sessionKey, provider);
         }
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        const statusEvent = createBridgeFailureStatusEvent({
+            event: 'gateway_bridge_error',
+            message,
+            userHint: 'The Web bridge failed while streaming this turn. Retry this message; if it repeats, check the UI server and gateway logs.',
+        });
 
         console.error(
             '[pilotdeck-bridge] runChatViaGateway threw:',
@@ -1089,22 +1120,12 @@ export async function runChatViaGateway(
             sessionKey,
             turnId: runId,
             projectKey,
-            event: 'gateway_bridge_error',
+            event: statusEvent.event,
             text: message,
-            detail: {
-                message,
-                visible: true,
-                severity: 'error',
-            },
+            detail: statusEvent.detail,
         });
-        writer.send(
-            createNormalizedMessage({
-                provider,
-                sessionId: sessionKey,
-                kind: 'error',
-                content: message,
-            }),
-        );
+        state.hasVisibleFailureStatus = true;
+        sendBridgeStatusEvent(writer, statusEvent, sessionKey, provider);
     } finally {
         clearActiveRunIfCurrent(state, runId);
     }

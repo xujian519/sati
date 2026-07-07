@@ -93,6 +93,8 @@ test("AgentLoop emits semantic model_request_failed status before turn_failed", 
   assert.equal(recordedStatuses[0]?.detail?.status, 401);
   assert.equal(recordedStatuses[0]?.detail?.modelErrorCode, "auth_error");
   assert.equal(recordedStatuses[0]?.detail?.retryable, false);
+  assert.equal(recordedStatuses[0]?.detail?.scope, "turn");
+  assert.equal(recordedStatuses[0]?.detail?.source, "agent");
   assert.equal(recordedStatuses[0]?.detail?.raw, undefined);
 });
 
@@ -157,6 +159,8 @@ test("AgentLoop emits lifecycle_blocked status when a stop hook blocks", async (
   assert.equal(recordedStatuses[0]?.event, "lifecycle_blocked");
   assert.equal(recordedStatuses[0]?.detail?.message, "blocked by hook");
   assert.equal(recordedStatuses[0]?.detail?.stage, "stop");
+  assert.equal(recordedStatuses[0]?.detail?.scope, "turn");
+  assert.equal(recordedStatuses[0]?.detail?.source, "agent");
 });
 
 test("AgentLoop emits tool_error_loop status for repeated invalid tool calls", async () => {
@@ -217,4 +221,6 @@ test("AgentLoop emits tool_error_loop status for repeated invalid tool calls", a
   assert.equal(recordedStatuses.at(-1)?.event, "tool_error_loop");
   assert.equal(recordedStatuses.at(-1)?.detail?.code, "agent_tool_error_loop");
   assert.equal(recordedStatuses.at(-1)?.detail?.repeatedFailures, 4);
+  assert.equal(recordedStatuses.at(-1)?.detail?.scope, "turn");
+  assert.equal(recordedStatuses.at(-1)?.detail?.source, "agent");
 });

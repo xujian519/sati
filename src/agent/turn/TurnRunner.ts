@@ -12,6 +12,7 @@ import type { PermissionMode, PermissionRuleSet } from "../../permission/index.j
 import type { AgentStatusMessageInput, AgentTranscriptWriterState } from "../../session/transcript/TranscriptWriter.js";
 import type { SessionMetadataStore } from "../../session/metadata/SessionMetadataStore.js";
 import type { SessionTitleGenerator } from "../../session/title/SessionTitleGenerator.js";
+import { createVisibleErrorStatusDetail } from "../../status/agentStatus.js";
 
 export type TurnRunnerOptions = {
   sessionId: string;
@@ -245,13 +246,13 @@ export class TurnRunner {
       event: "turn_failed",
       kind: "error",
       text: error.message,
-      detail: {
+      detail: createVisibleErrorStatusDetail({
         message: error.message,
         code: error.code,
-        ...(error.userHint ? { userHint: error.userHint } : {}),
-        severity: "error",
-        visible: true,
-      },
+        userHint: error.userHint ?? "Retry the turn; if it repeats, check the gateway logs or adjust the request.",
+        scope: "turn",
+        source: "agent",
+      }),
     };
   }
 

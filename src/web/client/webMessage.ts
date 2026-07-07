@@ -7,6 +7,7 @@
  */
 
 import type { WebGatewayEvent } from "./protocol.js";
+import { isVisibleFailureStatusDetail } from "../../status/agentStatus.js";
 
 function normalizeToolDisplayName(name: string): string {
   const aliases: Record<string, string> = {
@@ -53,6 +54,14 @@ const ERROR_AGENT_STATUS_EVENTS = new Set([
   "turn_failed",
   "turn_timeout",
   "gateway_submit_failed",
+  "session_busy",
+  "gateway_bridge_error",
+  "gateway_stream_ended_without_completion",
+  "web_http_request_failed",
+  "project_unavailable",
+  "config_invalid",
+  "gateway_unavailable",
+  "channel_submit_failed",
   "subagent_failed",
   "content_filter_stop",
   "unknown_finish_reason",
@@ -422,11 +431,12 @@ export function applyWebGatewayEvent(
     }
 
     case "agent_status": {
-      if (!ERROR_AGENT_STATUS_EVENTS.has(event.event) && !STATUS_AGENT_STATUS_EVENTS.has(event.event)) {
+      const isErrorStatus = isErrorAgentStatusEvent(event);
+      if (!isErrorStatus && !STATUS_AGENT_STATUS_EVENTS.has(event.event)) {
         return state;
       }
       const detail = event.detail ?? {};
-      const kind = ERROR_AGENT_STATUS_EVENTS.has(event.event) ? "error" : "status";
+      const kind = isErrorStatus ? "error" : "status";
       const text = typeof detail.message === "string" && detail.message.length > 0
         ? detail.message
         : kind === "error"
@@ -504,4 +514,8 @@ function defaultNewId(): string {
     return c.randomUUID();
   }
   return `web-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+}
+
+function isErrorAgentStatusEvent(event: WebGatewayEvent & { type: "agent_status" }): boolean {
+  return ERROR_AGENT_STATUS_EVENTS.has(event.event) || isVisibleFailureStatusDetail(event.detail);
 }

@@ -52,6 +52,10 @@ import {
   isAskModeAllowedTool,
 } from "../../tool/askModeConstraints.js";
 import { buildAskModeAgentToolSchema } from "../../tool/builtin/agent.js";
+import {
+  createAgentStatusDetail,
+  createVisibleErrorStatusDetail,
+} from "../../status/agentStatus.js";
 
 const TOOL_EVENT_PUMP_INTERVAL_MS = 500;
 const SUBAGENT_STATUS_HEARTBEAT_MS = 2_000;
@@ -2277,17 +2281,17 @@ function createModelRequestFailedStatus(args: {
     event: "model_request_failed",
     kind: "error",
     text,
-    detail: {
+    detail: createAgentTurnErrorDetail({
       message: text,
       code: args.error.code,
-      severity: "error",
-      visible: true,
       userHint: args.error.userHint ?? args.modelError?.userHint ?? defaultModelFailureHint(args.modelError),
-      provider: args.modelError?.provider,
-      status: args.modelError?.status,
-      modelErrorCode: args.modelError?.code,
-      retryable: args.modelError?.retryable,
-    },
+      detail: {
+        provider: args.modelError?.provider,
+        status: args.modelError?.status,
+        modelErrorCode: args.modelError?.code,
+        retryable: args.modelError?.retryable,
+      },
+    }),
   };
 }
 
@@ -2301,15 +2305,15 @@ function createToolCallRecoveryExhaustedStatus(args: {
     event: "tool_call_recovery_exhausted",
     kind: "error",
     text,
-    detail: {
+    detail: createAgentTurnErrorDetail({
       message: text,
       code: args.error.code,
-      severity: "error",
-      visible: true,
       userHint: args.error.userHint ?? "Retry with a shorter prompt or ask the agent to split large tool inputs into smaller steps.",
-      attempts: args.attempts,
-      reason: args.reason,
-    },
+      detail: {
+        attempts: args.attempts,
+        reason: args.reason,
+      },
+    }),
   };
 }
 
@@ -2322,14 +2326,14 @@ function createToolErrorLoopStatus(args: {
     event: "tool_error_loop",
     kind: "error",
     text,
-    detail: {
+    detail: createAgentTurnErrorDetail({
       message: text,
       code: args.error.code,
-      severity: "error",
-      visible: true,
       userHint: args.error.userHint ?? "Try changing the request, granting the required permission, or switching to a more capable model.",
-      repeatedFailures: args.repeatedFailures,
-    },
+      detail: {
+        repeatedFailures: args.repeatedFailures,
+      },
+    }),
   };
 }
 
@@ -2342,14 +2346,14 @@ function createLifecycleBlockedStatus(args: {
     event: "lifecycle_blocked",
     kind: "error",
     text,
-    detail: {
+    detail: createAgentTurnErrorDetail({
       message: text,
       code: args.error.code,
-      severity: "error",
-      visible: true,
       userHint: args.error.userHint ?? "Review the blocking lifecycle hook output or disable the hook, then retry.",
-      stage: args.stage,
-    },
+      detail: {
+        stage: args.stage,
+      },
+    }),
   };
 }
 
@@ -2382,15 +2386,16 @@ function createEmptyResponseStatus(args: {
     event: "model_empty_response_exhausted",
     kind: "error",
     text,
-    detail: {
+    detail: createAgentTurnErrorDetail({
       message: text,
-      provider: args.provider,
-      model: args.model,
-      attempts: args.attempts,
-      severity: "error",
-      visible: true,
+      code: "model_empty_response_exhausted",
       userHint: "Increase max output tokens or retry with a shorter prompt.",
-    },
+      detail: {
+        provider: args.provider,
+        model: args.model,
+        attempts: args.attempts,
+      },
+    }),
   };
 }
 
@@ -2403,14 +2408,14 @@ function createMaxTurnsStatus(args: {
     event: "max_turns_reached",
     kind: "error",
     text,
-    detail: {
+    detail: createAgentTurnErrorDetail({
       message: text,
       code: args.error.code,
-      maxTurns: args.maxTurns,
-      severity: "error",
-      visible: true,
-      userHint: args.error.userHint,
-    },
+      userHint: args.error.userHint ?? "Increase maxTurns or split the task into smaller steps and try again.",
+      detail: {
+        maxTurns: args.maxTurns,
+      },
+    }),
   };
 }
 
@@ -2422,13 +2427,15 @@ function createMaxOutputRecoveryExhaustedStatus(args: {
     event: "max_output_recovery_exhausted",
     kind: "error",
     text,
-    detail: {
+    detail: createAgentTurnErrorDetail({
       message: text,
-      attempts: args.attempts,
       severity: "warning",
-      visible: true,
+      code: "max_output_recovery_exhausted",
       userHint: "Increase max output tokens or split the task into smaller steps.",
-    },
+      detail: {
+        attempts: args.attempts,
+      },
+    }),
   };
 }
 
@@ -2438,10 +2445,10 @@ function createStructuredOutputCompletedStatus(): AgentStatusMessage {
     event: "structured_output_completed",
     kind: "status",
     text,
-    detail: {
+    detail: createAgentTurnStatusDetail({
       message: text,
-      visible: true,
-    },
+      code: "structured_output_completed",
+    }),
   };
 }
 
@@ -2451,11 +2458,12 @@ function createContentFilterStopStatus(): AgentStatusMessage {
     event: "content_filter_stop",
     kind: "error",
     text,
-    detail: {
+    detail: createAgentTurnErrorDetail({
       message: text,
       severity: "warning",
-      visible: true,
-    },
+      code: "content_filter_stop",
+      userHint: "Retry with a narrower request or adjust the prompt to avoid filtered content.",
+    }),
   };
 }
 
@@ -2465,11 +2473,12 @@ function createUnknownFinishReasonStatus(): AgentStatusMessage {
     event: "unknown_finish_reason",
     kind: "error",
     text,
-    detail: {
+    detail: createAgentTurnErrorDetail({
       message: text,
       severity: "warning",
-      visible: true,
-    },
+      code: "unknown_finish_reason",
+      userHint: "Retry the turn; if it repeats, check the provider stream and gateway logs.",
+    }),
   };
 }
 
@@ -2479,11 +2488,14 @@ function createTurnAbortedStatus(args: { reason?: string }): AgentStatusMessage 
     event: "turn_aborted",
     kind: "status",
     text,
-    detail: {
+    detail: createAgentTurnStatusDetail({
       message: text,
-      reason: args.reason,
-      visible: true,
-    },
+      code: "turn_aborted",
+      userHint: "Retry when you are ready to continue.",
+      detail: {
+        reason: args.reason,
+      },
+    }),
   };
 }
 
@@ -2492,6 +2504,34 @@ function createFinishReasonStatus(finishReason: string | undefined, assistantTex
   if (finishReason === "content_filter") return createContentFilterStopStatus();
   if (finishReason === "unknown") return createUnknownFinishReasonStatus();
   return undefined;
+}
+
+function createAgentTurnErrorDetail(input: {
+  message: string;
+  code: string;
+  userHint: string;
+  severity?: "error" | "warning";
+  detail?: Record<string, unknown>;
+}): Record<string, unknown> {
+  return createVisibleErrorStatusDetail({
+    ...input,
+    scope: "turn",
+    source: "agent",
+  });
+}
+
+function createAgentTurnStatusDetail(input: {
+  message: string;
+  code: string;
+  userHint?: string;
+  detail?: Record<string, unknown>;
+}): Record<string, unknown> {
+  return createAgentStatusDetail({
+    ...input,
+    visible: true,
+    scope: "turn",
+    source: "agent",
+  });
 }
 
 function shouldSurfaceAbortStatus(reason: unknown): boolean {

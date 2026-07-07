@@ -56,4 +56,6 @@ test("TurnRunner emits generic turn_failed status for loop-level fallback errors
   assert.equal(recordedStatuses[0]?.event, "turn_failed");
   assert.equal(recordedStatuses[0]?.detail?.message, "loop exploded");
   assert.equal(recordedStatuses[0]?.detail?.code, "agent_invalid_state");
+  assert.equal(recordedStatuses[0]?.detail?.scope, "turn");
+  assert.equal(recordedStatuses[0]?.detail?.source, "agent");
 });

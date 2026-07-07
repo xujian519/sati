@@ -89,3 +89,43 @@ test("web reducer carries model_empty_response_exhausted userHint", () => {
     userHint: "Increase max output tokens.",
   });
 });
+
+test("web reducer renders visible preflight status by detail shape and dedupes error", () => {
+  let state = createWebMessageReducerState();
+  state = applyWebGatewayEvent(state, {
+    type: "agent_status",
+    event: "custom_preflight_failed",
+    detail: {
+      message: "Gateway is unavailable.",
+      code: "gateway_unavailable",
+      severity: "error",
+      visible: true,
+      userHint: "Start the gateway and retry.",
+      scope: "preflight",
+      source: "web_http",
+    },
+  }, reducerOptions);
+  state = applyWebGatewayEvent(state, {
+    type: "error",
+    code: "gateway_unavailable",
+    message: "Legacy duplicate.",
+    recoverable: true,
+  }, reducerOptions);
+
+  assert.equal(state.messages.length, 1);
+  assert.equal(state.messages[0]?.kind, "error");
+  assert.equal(state.messages[0]?.text, "Gateway is unavailable.");
+  assert.deepEqual(state.messages[0]?.payload, {
+    event: "custom_preflight_failed",
+    detail: {
+      message: "Gateway is unavailable.",
+      code: "gateway_unavailable",
+      severity: "error",
+      visible: true,
+      userHint: "Start the gateway and retry.",
+      scope: "preflight",
+      source: "web_http",
+    },
+    userHint: "Start the gateway and retry.",
+  });
+});
