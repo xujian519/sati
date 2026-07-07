@@ -15,6 +15,8 @@ import {
   type CanonicalUsage,
   materializeMediaReferences,
   type PartialTextToolCallInfo,
+  getSelfCorrectPrompt,
+  detectFormatByText,
 } from "../../model/index.js";
 import type {
   PilotDeckToolDefinition,
@@ -52,6 +54,7 @@ import {
   isAskModeAllowedTool,
 } from "../../tool/askModeConstraints.js";
 import { buildAskModeAgentToolSchema } from "../../tool/builtin/agent.js";
+import { repairToolName } from "../../model/streaming/repairToolName.js";
 
 const TOOL_EVENT_PUMP_INTERVAL_MS = 500;
 const SUBAGENT_STATUS_HEARTBEAT_MS = 2_000;
@@ -208,6 +211,7 @@ export class AgentLoop {
     let consecutiveEmptyCount = 0;
     const MAX_JSON_SELF_CORRECT_RETRIES = 3;
     let jsonSelfCorrectCount = 0;
+    let hasAttemptedToolCallRetry = false;
     const largeFileRepair = new LargeFileRepair();
 
     /**
@@ -534,7 +538,7 @@ export class AgentLoop {
       const assembled = assembleAssistantMessage(assembler);
       usage = mergeUsage(usage, assembled.usage);
       finalMessage = assembled.message;
-      const toolCalls = collectToolCalls(assembled.message);
+      let toolCalls = collectToolCalls(assembled.message);
       expireConsumedTransientPrompts();
 
       if (assembled.hasPartialTextToolCall) {
@@ -933,6 +937,34 @@ export class AgentLoop {
           continue;
         }
 
+        if (!assembled.hasPartialTextToolCall && assembled.hasUnparsedTextToolCall) {
+          if (!hasAttemptedToolCallRetry) {
+            hasAttemptedToolCallRetry = true;
+            pushTransientSyntheticPrompt(
+              getSelfCorrectPrompt(this.config.toolCallFormat ?? assembled.textToolCallFormat, assistantText),
+              "unparsed_tool_call_retry",
+            );
+            yield {
+              type: "turn_continued",
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              reason: "model_error",
+            };
+            continue;
+          }
+
+          yield {
+            type: "warning",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            code: "unparsed_tool_call",
+            message: "Model attempted to call a tool but the output could not be parsed. The response may be incomplete.",
+            metadata: {
+              detectedFormat: assembled.textToolCallFormat ?? detectFormatByText(assistantText)?.id,
+            },
+          };
+        }
+
         const stopHooks = await this.dispatchLifecycle(input, "Stop", {
           stopHookActive: false,
           lastAssistantMessage: textFromMessage(assembled.message),
@@ -976,6 +1008,10 @@ export class AgentLoop {
         await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
+      }
+
+      if (assembled.hasTextFallbackToolCalls) {
+        toolCalls = this.repairTextExtractedToolNames(toolCalls);
       }
 
       yield { type: "tool_calls_detected", sessionId: input.sessionId, turnId: input.turnId, calls: toolCalls };
@@ -1208,6 +1244,7 @@ export class AgentLoop {
         consecutiveEmptyCount = 0;
         hasAttemptedOutputRetry = false;
         hasAttemptedEmptyRetry = false;
+        hasAttemptedToolCallRetry = false;
       }
 
       if (this.config.stopOnStructuredOutput && structuredOutput !== undefined) {
@@ -1362,6 +1399,15 @@ export class AgentLoop {
       metadata: this.config.metadata,
       cacheBreakpoints: prepared.cacheBreakpoints,
     };
+  }
+
+  private repairTextExtractedToolNames(toolCalls: CanonicalToolCall[]): CanonicalToolCall[] {
+    if (toolCalls.length === 0) return toolCalls;
+    const validNames = new Set(this.dependencies.tools.registry.list().map((tool) => tool.name));
+    return toolCalls.map((call) => {
+      const repaired = repairToolName(call.name, validNames, this.config.toolAliases);
+      return repaired ? { ...call, name: repaired.name } : call;
+    });
   }
 
   private createToolContext(
