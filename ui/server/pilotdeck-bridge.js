@@ -77,6 +77,20 @@ const GATEWAY_CONNECT_RETRY_INTERVAL_MS = 500;
 const subagentActivityStarts = new Map();
 /** @type {Map<string, string[]>} sessionId → [toolCallId, ...] for pending agent/Task tool calls */
 const pendingAgentToolCalls = new Map();
+const visibleFailureAgentStatusEvents = new Set([
+    'model_empty_response_exhausted',
+    'max_turns_reached',
+    'max_output_recovery_exhausted',
+    'model_request_failed',
+    'tool_call_recovery_exhausted',
+    'tool_error_loop',
+    'lifecycle_blocked',
+    'turn_timeout',
+    'gateway_submit_failed',
+    'subagent_failed',
+    'content_filter_stop',
+    'unknown_finish_reason',
+]);
 
 function normalizeToolDisplayName(name) {
     const aliases = {
@@ -115,6 +129,12 @@ function normalizeToolErrorCode(errorCode, resultPreview) {
     if (errorCode === 'plan_mode_violation') return 'plan_mode_denied';
     if (errorCode === 'ask_mode_violation') return 'ask_mode_denied';
     return readOnlyModeToolDenyCode(resultPreview) || errorCode;
+}
+
+function isVisibleFailureAgentStatus(event) {
+    return event?.type === 'agent_status'
+        && visibleFailureAgentStatusEvents.has(event.event)
+        && event.detail?.visible !== false;
 }
 
 /**
@@ -236,6 +256,7 @@ function ensureSessionState(sessionKey, projectKey, channelKey) {
             runId: undefined,
             active: false,
             tokenBudget: null,
+            hasVisibleFailureStatus: false,
         };
         sessionState.set(sessionKey, state);
     } else {
@@ -637,7 +658,7 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                         content: detail.message || 'The model returned empty content repeatedly, so this turn has stopped. Try again later or increase max output tokens.',
                         code: event.event,
                         recoverable: false,
-                        userHint: detail.hint,
+                        userHint: detail.userHint,
                     }),
                 ];
             }
@@ -653,24 +674,12 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                     }),
                 ];
             }
-            if (event.event === 'max_output_recovery_exhausted' || event.event === 'subagent_failed') {
+            if (visibleFailureAgentStatusEvents.has(event.event)) {
                 return [
                     createNormalizedMessage({
                         ...base,
                         kind: 'error',
-                        content: detail.message || 'Agent execution stopped with a recoverable status. Please retry or adjust the task.',
-                        code: event.event,
-                        recoverable: false,
-                        userHint: detail.userHint,
-                    }),
-                ];
-            }
-            if (event.event === 'content_filter_stop' || event.event === 'unknown_finish_reason') {
-                return [
-                    createNormalizedMessage({
-                        ...base,
-                        kind: 'error',
-                        content: detail.message || 'The model stream ended unexpectedly, so the response may be incomplete.',
+                        content: detail.message || 'Agent execution stopped before producing a complete response. Please retry or adjust the task.',
                         code: event.event,
                         recoverable: false,
                         userHint: detail.userHint,
@@ -967,6 +976,7 @@ export async function runChatViaGateway(
     const runId = randomUUID();
     state.runId = runId;
     state.active = true;
+    state.hasVisibleFailureStatus = false;
 
     const attachments = [
         ...(uiImagesToAttachments(options?.images) || []),
@@ -995,6 +1005,9 @@ export async function runChatViaGateway(
         let sawTurnCompleted = false;
         let sawGatewayError = false;
         for await (const event of stream) {
+            if (isVisibleFailureAgentStatus(event)) {
+                state.hasVisibleFailureStatus = true;
+            }
             if (event && event.type === 'error') {
                 sawGatewayError = true;
                 console.error(
@@ -1029,8 +1042,11 @@ export async function runChatViaGateway(
                 sawTurnCompleted = true;
                 clearActiveRunIfCurrent(state, runId);
             }
-            for (const frame of gatewayEventToFrames(event, sessionKey, provider)) {
-                writer.send(frame);
+            const suppressDuplicateError = event?.type === 'error' && state.hasVisibleFailureStatus;
+            if (!suppressDuplicateError) {
+                for (const frame of gatewayEventToFrames(event, sessionKey, provider)) {
+                    writer.send(frame);
+                }
             }
         }
 
