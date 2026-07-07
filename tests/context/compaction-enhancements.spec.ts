@@ -98,6 +98,65 @@ test("blocking auto compact escalates from micro to snip when still blocking", a
   assert.equal(result.type === "compacted" ? result.tier : undefined, "snip");
 });
 
+test("blocking auto compact skips full compaction when summary fails", async () => {
+  const runtime = new DefaultContextRuntime({
+    tokenBudget: new TokenBudgetManager(),
+    autoCompactionPolicy: new AutoCompactionPolicy({ tokenBudget: new TokenBudgetManager() }),
+    compactionEngine: {
+      async run() {
+        return {
+          trigger: "auto",
+          preTokens: 100,
+          boundaryMarker: user("boundary"),
+          messagesToKeep: [user("tail")],
+          attachments: [],
+          hookResults: [],
+          diagnostics: [{ code: "compact_summary_failed", severity: "error", message: "summarizer down" }],
+          error: "summarizer down",
+        };
+      },
+    } as unknown as CompactionEngine,
+    maxContextTokens: 100,
+  });
+  const messages = [user("important old context"), user("tail")];
+  const result = await runtime.tryAutoCompact({
+    messages,
+    budgetEvaluator: async () => snapshot("blocking"),
+  });
+
+  assert.equal(result.type, "skipped");
+});
+
+test("blocking auto compact skips full compaction when compacted prompt remains blocking", async () => {
+  const runtime = new DefaultContextRuntime({
+    tokenBudget: new TokenBudgetManager(),
+    autoCompactionPolicy: new AutoCompactionPolicy({ tokenBudget: new TokenBudgetManager() }),
+    compactionEngine: {
+      async run() {
+        return {
+          trigger: "auto",
+          preTokens: 100,
+          summaryMessage: assistant("summary"),
+          boundaryMarker: user("boundary"),
+          messagesToKeep: [user("large protected output")],
+          attachments: [],
+          hookResults: [],
+          diagnostics: [],
+        };
+      },
+    } as unknown as CompactionEngine,
+    maxContextTokens: 100,
+  });
+  const messages = [user("old context"), user("large protected output")];
+  const result = await runtime.tryAutoCompact({
+    messages,
+    budgetEvaluator: async () => snapshot("blocking"),
+  });
+
+  assert.equal(result.type, "skipped");
+  assert.equal(result.snapshot.state, "blocking");
+});
+
 test("protected tool results survive micro and snip compaction", () => {
   const protectedMessages = [
     user("start"),

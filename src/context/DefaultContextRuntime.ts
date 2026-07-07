@@ -378,8 +378,14 @@ export class DefaultContextRuntime implements ContextRuntime {
         messages,
         signal: input.abortSignal,
       });
+      if (result.error || !result.summaryMessage) {
+        return { type: "skipped", snapshot: decision.snapshot };
+      }
       const postCompactMessages = ensureTrailingUserMessage(buildPostCompactMessages(result));
       const snapshot = await evaluateBudget(postCompactMessages);
+      if (snapshot.state === "blocking") {
+        return { type: "skipped", snapshot };
+      }
       return {
         type: "compacted",
         messages: postCompactMessages,
