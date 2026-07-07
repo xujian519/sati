@@ -99,6 +99,8 @@ export type ComposerV2Props = {
   isLoading: boolean;
   canAbortSession: boolean;
   isAbortPending?: boolean;
+  isBusySendQueued?: boolean;
+  isBusySendConfirmed?: boolean;
   isSubmitPending?: boolean;
   tokenBudget?: Record<string, unknown> | null;
   thinkingMode: ThinkingModeId;
@@ -300,6 +302,8 @@ export default function ComposerV2({
   isLoading,
   canAbortSession,
   isAbortPending = false,
+  isBusySendQueued = false,
+  isBusySendConfirmed = false,
   isSubmitPending = false,
   tokenBudget,
   thinkingMode,
@@ -336,7 +340,17 @@ export default function ComposerV2({
   const hasDraftContent = input.trim().length > 0 || attachedImages.length > 0 || documentReferences.length > 0;
   const hasUploadingImages = uploadingImages.size > 0;
   const attachmentLimitError = imageErrors.get(MAX_ATTACHMENTS_ERROR_KEY);
-  const disabled = !hasDraftContent || isLoading || isSubmitPending || hasUploadingImages;
+  const disabled = !hasDraftContent || isSubmitPending || hasUploadingImages;
+  const showAbortButton = isLoading && canAbortSession && !hasDraftContent;
+  const sendTitle = isSubmitPending || hasUploadingImages
+    ? (t('input.sending', { defaultValue: 'Sending...' }) as string)
+    : isBusySendConfirmed
+      ? (t('input.queuedSendConfirmed', { defaultValue: 'Queued — will send when the current turn finishes' }) as string)
+      : isBusySendQueued
+        ? (t('input.queuedSendConfirm', { defaultValue: 'Queued — click send again to confirm' }) as string)
+      : isLoading
+        ? (t('input.queueSend', { defaultValue: 'Queue message' }) as string)
+        : (t('input.send', { defaultValue: 'Send' }) as string);
   const contextStatus = getContextStatus(tokenBudget);
   const effectiveThinkingMode = getEffectiveThinkingMode(thinkingMode, thinkingModeAvailability);
   const selectedThinkingMode = thinkingModes.find((option) => option.id === effectiveThinkingMode) || thinkingModes[0];
@@ -744,6 +758,16 @@ export default function ComposerV2({
                   </div>
                   </div>
 
+                  {isBusySendQueued ? (
+                    <div className="hidden min-w-0 flex-1 justify-end px-2 text-[12px] text-amber-700 dark:text-amber-300 sm:flex">
+                      <span className="truncate rounded-full bg-amber-50 px-2 py-1 dark:bg-amber-950/30">
+                        {isBusySendConfirmed
+                          ? t('input.queuedSendConfirmedInline', { defaultValue: 'Queued; sends after this turn' })
+                          : t('input.queuedSendConfirmInline', { defaultValue: 'Queued; click send again to confirm' })}
+                      </span>
+                    </div>
+                  ) : null}
+
                   <div className="pd-composer-toolbar-right ml-auto flex shrink-0 items-center gap-1">
                     <div
                       className="relative"
@@ -903,7 +927,7 @@ export default function ComposerV2({
                       ) : null}
                     </div>
 
-                    {isLoading && canAbortSession ? (
+                    {showAbortButton ? (
                       <button
                         type="button"
                         onClick={onAbortSession}
@@ -924,28 +948,29 @@ export default function ComposerV2({
                           <Square className="h-3.5 w-3.5" strokeWidth={2.5} fill="currentColor" />
                         )}
                       </button>
-                    ) : (
-                      <button
-                        type="submit"
-                        disabled={disabled}
-                        aria-busy={isSubmitPending || hasUploadingImages}
-                        className={cn(
-                          'inline-flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-900 text-white transition hover:opacity-90 disabled:opacity-40 dark:bg-neutral-50 dark:text-neutral-900',
-                          (isSubmitPending || hasUploadingImages) && 'cursor-wait',
-                        )}
-                        title={
-                          isSubmitPending || hasUploadingImages
-                            ? (t('input.sending', { defaultValue: 'Sending...' }) as string)
-                            : (t('input.send', { defaultValue: 'Send' }) as string)
-                        }
-                      >
-                        {isSubmitPending || hasUploadingImages ? (
-                          <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.25} />
-                        ) : (
-                          <ArrowUp className="h-4 w-4" strokeWidth={2} />
-                        )}
-                      </button>
-                    )}
+                    ) : null}
+                    <button
+                      type="submit"
+                      disabled={disabled}
+                      aria-busy={isSubmitPending || hasUploadingImages || isBusySendConfirmed}
+                      className={cn(
+                        'inline-flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-900 text-white transition hover:opacity-90 disabled:opacity-40 dark:bg-neutral-50 dark:text-neutral-900',
+                        isBusySendQueued && 'bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-400 dark:text-neutral-950 dark:hover:bg-amber-300',
+                        isBusySendConfirmed && 'cursor-wait',
+                        (isSubmitPending || hasUploadingImages) && 'cursor-wait',
+                      )}
+                      title={sendTitle}
+                    >
+                      {isSubmitPending || hasUploadingImages ? (
+                        <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.25} />
+                      ) : isBusySendConfirmed ? (
+                        <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.25} />
+                      ) : isBusySendQueued ? (
+                        <Check className="h-4 w-4" strokeWidth={2.25} />
+                      ) : (
+                        <ArrowUp className="h-4 w-4" strokeWidth={2} />
+                      )}
+                    </button>
                   </div>
                 </div>
             </div>

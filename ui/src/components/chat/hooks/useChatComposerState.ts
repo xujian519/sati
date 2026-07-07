@@ -215,6 +215,8 @@ export function useChatComposerState({
   const [uploadingImages, setUploadingImages] = useState<Map<string, number>>(new Map());
   const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
+  const [isBusySendQueued, setIsBusySendQueued] = useState(false);
+  const [isBusySendConfirmed, setIsBusySendConfirmed] = useState(false);
   const [thinkingMode, setThinkingModeState] = useState<ThinkingModeId>('default');
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -224,6 +226,8 @@ export function useChatComposerState({
     ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
+  const queuedBusySendRef = useRef(false);
+  const queuedBusySendConfirmedRef = useRef(false);
   const pendingSessionGrantResolversRef = useRef(new Map<string, (result: PermissionGrantResult) => void>());
 
   useEffect(() => {
@@ -756,9 +760,28 @@ export function useChatComposerState({
       const currentInput = inputValueRef.current;
       const hasDocumentReferences = documentReferences.length > 0;
       const hasAttachments = attachedImages.length > 0 || hasDocumentReferences;
-      if ((!currentInput.trim() && !hasAttachments) || isLoading || !selectedProject) {
+      if ((!currentInput.trim() && !hasAttachments) || !selectedProject) {
         return;
       }
+
+      if (isLoading && !isBusySendQueued) {
+        queuedBusySendRef.current = true;
+        queuedBusySendConfirmedRef.current = false;
+        setIsBusySendQueued(true);
+        setIsBusySendConfirmed(false);
+        return;
+      }
+
+      if (isLoading && isBusySendQueued) {
+        queuedBusySendConfirmedRef.current = true;
+        setIsBusySendConfirmed(true);
+        return;
+      }
+
+      queuedBusySendRef.current = false;
+      queuedBusySendConfirmedRef.current = false;
+      setIsBusySendQueued(false);
+      setIsBusySendConfirmed(false);
 
       // Intercept slash commands: if input starts with /commandName, execute as command with args.
       // Skip when handleCustomCommand just pushed a passthrough back into the
@@ -960,6 +983,7 @@ export function useChatComposerState({
       currentSessionId,
       executeCommand,
       isLoading,
+      isBusySendQueued,
       onSessionActive,
       onSessionActivityBump,
       onSessionProcessing,
@@ -990,7 +1014,24 @@ export function useChatComposerState({
 
   useEffect(() => {
     inputValueRef.current = input;
+    queuedBusySendRef.current = false;
+    queuedBusySendConfirmedRef.current = false;
+    setIsBusySendQueued(false);
+    setIsBusySendConfirmed(false);
   }, [input]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      if (queuedBusySendRef.current && queuedBusySendConfirmedRef.current && handleSubmitRef.current) {
+        handleSubmitRef.current(createFakeSubmitEvent());
+      } else {
+        queuedBusySendRef.current = false;
+        queuedBusySendConfirmedRef.current = false;
+        setIsBusySendQueued(false);
+        setIsBusySendConfirmed(false);
+      }
+    }
+  }, [isLoading]);
 
   useEffect(() => {
     if (!selectedProject) {
@@ -1388,6 +1429,8 @@ export function useChatComposerState({
     handleGrantSessionToolPermission,
     handleInputFocusChange,
     isInputFocused,
+    isBusySendQueued,
+    isBusySendConfirmed,
   };
 }
 

@@ -220,6 +220,8 @@ function ChatInterfaceV2({
     handleGrantToolPermission,
     handleGrantSessionToolPermission,
     handleInputFocusChange,
+    isBusySendQueued,
+    isBusySendConfirmed,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -521,6 +523,8 @@ function ChatInterfaceV2({
       isLoading={isLoading}
       canAbortSession={canAbortSession}
       isAbortPending={isAbortPending}
+      isBusySendQueued={isBusySendQueued}
+      isBusySendConfirmed={isBusySendConfirmed}
       tokenBudget={tokenBudget}
       thinkingMode={thinkingMode}
       thinkingModeAvailability={thinkingModeAvailability}
