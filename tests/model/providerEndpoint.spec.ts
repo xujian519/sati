@@ -5,6 +5,8 @@ import {
   buildProviderChatEndpointCandidates,
   buildProviderModelsEndpoint,
   buildProviderModelsEndpointCandidates,
+  isExpectedProviderModelsResponseShape,
+  isExpectedProviderResponseShape,
 } from "../../src/model/providerEndpoint.js";
 
 test("buildProviderChatEndpoint prefers unversioned endpoints for root base URLs", () => {
@@ -125,4 +127,18 @@ test("buildProviderModelsEndpointCandidates falls back to default protocol versi
     buildProviderModelsEndpointCandidates({ protocol: "google", baseUrl: "https://generativelanguage.googleapis.com" }),
     ["https://generativelanguage.googleapis.com/models", "https://generativelanguage.googleapis.com/v1beta/models"],
   );
+});
+
+test("provider response shape checks reject unrelated successful JSON", () => {
+  assert.equal(isExpectedProviderResponseShape("openai", { ok: true }), false);
+  assert.equal(isExpectedProviderResponseShape("openai", { choices: [] }), true);
+  assert.equal(isExpectedProviderResponseShape("openai-responses", { output_text: "ok" }), true);
+  assert.equal(isExpectedProviderResponseShape("anthropic", { type: "message" }), true);
+  assert.equal(isExpectedProviderResponseShape("google", { candidates: [] }), true);
+});
+
+test("provider models response shape checks reject unrelated successful JSON", () => {
+  assert.equal(isExpectedProviderModelsResponseShape("openai", { ok: true }), false);
+  assert.equal(isExpectedProviderModelsResponseShape("openai", { data: [] }), true);
+  assert.equal(isExpectedProviderModelsResponseShape("google", { models: [] }), true);
 });

@@ -60,6 +60,34 @@ describe('config test-connection route', () => {
     ]);
   });
 
+  it('falls back to /v1/chat/completions when unversioned probing returns unexpected JSON', async () => {
+    const calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      calls.push(String(url));
+      if (String(url) === 'https://api.openai.com/chat/completions') {
+        return jsonResponse({ ok: true });
+      }
+      return jsonResponse({ choices: [{ message: { content: 'ok' } }] });
+    }));
+
+    const { request } = await createConfigApp();
+    const data = await request('/api/config/test-connection', {
+      method: 'POST',
+      body: JSON.stringify({
+        providerType: 'openai',
+        baseUrl: 'https://api.openai.com',
+        apiKey: 'sk-test',
+        model: 'gpt-test',
+      }),
+    });
+
+    expect(data.ok).toBe(true);
+    expect(calls).toEqual([
+      'https://api.openai.com/chat/completions',
+      'https://api.openai.com/v1/chat/completions',
+    ]);
+  });
+
   it('does not duplicate existing version paths', async () => {
     const calls = [];
     vi.stubGlobal('fetch', vi.fn(async (url) => {

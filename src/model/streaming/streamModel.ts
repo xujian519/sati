@@ -16,7 +16,7 @@ import { parseModelResponse } from "../response/parseModelResponse.js";
 import { createStreamNormalizerState, normalizeStreamEvent } from "./normalizeStreamEvent.js";
 import { createGoogleStreamState, normalizeGoogleStreamEvent } from "../providers/google/stream.js";
 import { normalizeProviderBaseUrl } from "../normalizeProviderBaseUrl.js";
-import { buildProviderChatEndpointCandidates } from "../providerEndpoint.js";
+import { buildProviderChatEndpointCandidates, isExpectedProviderResponseShape } from "../providerEndpoint.js";
 import { StreamingCheckpointManager } from "./StreamingCheckpoint.js";
 
 export type ModelTransport = typeof fetch;
@@ -511,7 +511,7 @@ async function sendWithEndpointFallback(
   let lastResponse: Response | undefined;
   for (const endpoint of endpoints) {
     const response = await transport(endpoint, fetchOptions);
-    if (response.ok || endpoints.length === 1 || !isEndpointFallbackStatus(response.status)) {
+    if (await shouldUseEndpointResponse(provider, response, stream, endpoints.length)) {
       return response;
     }
     lastResponse = response;
@@ -521,6 +521,22 @@ async function sendWithEndpointFallback(
 
 function isEndpointFallbackStatus(status: number): boolean {
   return status === 400 || status === 404 || status === 405;
+}
+
+async function shouldUseEndpointResponse(
+  provider: ProviderConfig,
+  response: Response,
+  stream: boolean,
+  endpointCount: number,
+): Promise<boolean> {
+  if (!response.ok) return endpointCount === 1 || !isEndpointFallbackStatus(response.status);
+  if (stream || endpointCount === 1) return true;
+  try {
+    const body = await response.clone().json();
+    return isExpectedProviderResponseShape(provider.protocol, body);
+  } catch {
+    return false;
+  }
 }
 
 function buildHeaders(provider: ProviderConfig): HeadersInit {

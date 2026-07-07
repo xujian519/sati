@@ -23,6 +23,8 @@ import { getPilotDeckGateway } from '../pilotdeck-bridge.js';
 import {
   buildProviderChatEndpointCandidates,
   buildProviderModelsEndpointCandidates,
+  isExpectedProviderModelsResponseShape,
+  isExpectedProviderResponseShape,
 } from '../../../src/model/providerEndpoint.js';
 import {
   OFFICE_PREVIEW_SERVICE_LIBREOFFICE,
@@ -156,17 +158,40 @@ function isEndpointFallbackStatus(status) {
   return status === 400 || status === 404 || status === 405;
 }
 
-async function fetchWithEndpointFallback(urls, options) {
+async function fetchWithEndpointFallback(urls, options, isExpectedOkBody = null) {
   let lastResult = null;
   for (const url of urls) {
     const response = await fetch(url, options);
     const responseText = await response.text();
-    if (response.ok || urls.length === 1 || !isEndpointFallbackStatus(response.status)) {
+    if (response.ok) {
+      if (!isExpectedOkBody || urls.length === 1 || isExpectedOkBody(responseText)) {
+        return { url, response, responseText };
+      }
+      lastResult = { url, response, responseText };
+      continue;
+    }
+    if (urls.length === 1 || !isEndpointFallbackStatus(response.status)) {
       return { url, response, responseText };
     }
     lastResult = { url, response, responseText };
   }
   return lastResult;
+}
+
+function isExpectedJsonBody(protocol, responseText) {
+  try {
+    return isExpectedProviderResponseShape(protocol, responseText ? JSON.parse(responseText) : {});
+  } catch {
+    return false;
+  }
+}
+
+function isExpectedModelsJsonBody(protocol, responseText) {
+  try {
+    return isExpectedProviderModelsResponseShape(protocol, responseText ? JSON.parse(responseText) : {});
+  } catch {
+    return false;
+  }
 }
 
 router.get('/', (_req, res) => {
@@ -375,7 +400,11 @@ router.post('/models', async (req, res) => {
       : isAnthropic
         ? { 'x-api-key': effectiveApiKey, 'anthropic-version': '2023-06-01' }
         : { Authorization: `Bearer ${effectiveApiKey}` };
-    const { url, response, responseText } = await fetchWithEndpointFallback(urls, { method: 'GET', headers, signal: controller.signal });
+    const { url, response, responseText } = await fetchWithEndpointFallback(
+      urls,
+      { method: 'GET', headers, signal: controller.signal },
+      (text) => isExpectedModelsJsonBody(protocol, text),
+    );
     clearTimeout(timer);
     let body;
     try {
@@ -483,7 +512,14 @@ router.post('/test-connection', async (req, res) => {
       };
     }
 
-    const result = await fetchWithEndpointFallback(url, fetchOptions);
+    const responseProtocol = isGoogle
+      ? 'google'
+      : isAnthropic
+        ? 'anthropic'
+        : isOpenAIResponses
+          ? 'openai-responses'
+          : 'openai';
+    const result = await fetchWithEndpointFallback(url, fetchOptions, (responseText) => isExpectedJsonBody(responseProtocol, responseText));
     const { response, responseText } = result;
     url = result.url;
     clearTimeout(timer);

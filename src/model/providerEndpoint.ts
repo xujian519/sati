@@ -125,3 +125,25 @@ export function buildProviderModelsEndpointCandidates(input: {
   }
   return buildEndpointCandidates(input.baseUrl, "v1", "models");
 }
+
+export function isExpectedProviderResponseShape(protocol: ProviderEndpointProtocol, body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const record = body as Record<string, unknown>;
+  if (protocol === "anthropic") {
+    return Array.isArray(record.content) || record.type === "message";
+  }
+  if (protocol === "google") {
+    return Array.isArray(record.candidates);
+  }
+  if (protocol === "openai-responses") {
+    return record.object === "response" || Array.isArray(record.output) || typeof record.output_text === "string";
+  }
+  return Array.isArray(record.choices);
+}
+
+export function isExpectedProviderModelsResponseShape(protocol: ProviderEndpointProtocol, body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const record = body as Record<string, unknown>;
+  if (protocol === "google") return Array.isArray(record.models);
+  return Array.isArray(record.data) || Array.isArray(record.models);
+}
