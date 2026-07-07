@@ -611,11 +611,16 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                 ];
             }
             if (event.event === 'retry_progress') {
+                const retryText = detail.reason === 'continuation'
+                    ? 'Continuing response'
+                    : detail.reason === 'rate_limit' || detail.reason === 'overloaded'
+                        ? 'Switching model'
+                        : 'Reconnecting';
                 return [
                     createNormalizedMessage({
                         ...base,
                         kind: 'status',
-                        text: `Reconnecting... ${detail.attempt}/${detail.maxAttempts}`,
+                        text: `${retryText}... ${detail.attempt}/${detail.maxAttempts}`,
                         tokens: 0,
                         canInterrupt: true,
                         retryProgress: {
