@@ -244,21 +244,12 @@ export function createRouterRuntime(
       current.model,
       config.stats?.modelPricing,
     );
-    const currentPrefillCost = calculateInputCost(
-      estimatedInputTokens,
-      current.provider,
-      current.model,
-      config.stats?.modelPricing,
-    );
     const prefillCost = calculateInputCost(
       estimatedInputTokens,
       next.provider,
       next.model,
       config.stats?.modelPricing,
     );
-    if (prefillCost >= currentPrefillCost) {
-      return { selection: next };
-    }
 
     const minSavingsRatio = cacheAware?.minSavingsRatio ?? 0;
     const requiredSavings = cachedCost * minSavingsRatio;
