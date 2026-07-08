@@ -16,7 +16,7 @@ PilotDeck requires:
 
 ### macOS
 
-Xcode Command Line Tools are recommended for source installs. Install them if you do not already have native build tools, or if `npm install` fails while building native packages:
+Xcode Command Line Tools are required if native npm packages fall back to source builds. Install them if you do not already have a complete CLT/Xcode setup, or if `npm install` fails while building native packages:
 
 ```bash
 xcode-select --install
@@ -35,6 +35,14 @@ node --version
 ```
 
 If your Homebrew Node.js is older than v22.13.0, install a newer Node.js with your preferred Node version manager.
+
+Some Python distributions, especially Python 3.12 installed through package managers, may not include `distutils`, which older `node-gyp` versions still need when native packages compile from source. If you see `ModuleNotFoundError: No module named 'distutils'`, use a Python that provides it, for example:
+
+```bash
+PYTHON=/usr/bin/python3 npm install
+```
+
+If `xcodebuild` or Command Line Tools receipts are broken, reinstall Xcode Command Line Tools or run `sudo xcode-select --reset` before retrying.
 
 If cloning from GitHub or downloading Git LFS files is slow or fails with network errors such as `fetch-pack: unexpected disconnect`, retry or use a stable network proxy. The source install flow below skips large Git LFS demo media by default.
 
@@ -235,5 +243,7 @@ Open <http://localhost:3001>.
 
 - `Node.js >=22.13.0 is required`: switch to a newer Node.js and reinstall dependencies.
 - Native npm package build errors: make sure Python 3, `make`, and a C/C++ compiler are installed, then rerun `npm install`.
+- `ModuleNotFoundError: No module named 'distutils'` on macOS: retry with `PYTHON=/usr/bin/python3 npm install`, or use another Python that includes `distutils`.
+- `xcodebuild` or Command Line Tools receipt errors on macOS: reinstall Xcode Command Line Tools with `xcode-select --install`, or run `sudo xcode-select --reset` if CLT is already installed.
 - Missing demo images/videos: install Git LFS and run `git lfs pull` from the repo root.
 - `rg` not found: install ripgrep for full file/search tool support.

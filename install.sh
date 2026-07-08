@@ -482,8 +482,35 @@ has_cxx_compiler() {
   command -v g++ >/dev/null 2>&1 || command -v c++ >/dev/null 2>&1 || command -v clang++ >/dev/null 2>&1
 }
 
+python_has_distutils() {
+  local python_bin="${PYTHON:-python3}"
+  command -v "$python_bin" >/dev/null 2>&1 || return 1
+  "$python_bin" - <<'PY' >/dev/null 2>&1
+import distutils.version
+PY
+}
+
+macos_has_usable_xcode_tools() {
+  # node-gyp's bundled gyp still queries xcodebuild/pkgutil on macOS when
+  # native packages fall back to source builds. A bare clang/make pair is not
+  # enough if the Command Line Tools installation is missing receipts.
+  xcode-select -p >/dev/null 2>&1 || return 1
+  xcodebuild -version >/dev/null 2>&1 && return 0
+  pkgutil --pkg-info=com.apple.pkg.CLTools_Executables >/dev/null 2>&1 && return 0
+  pkgutil --pkg-info=com.apple.pkg.DeveloperToolsCLI >/dev/null 2>&1 && return 0
+  return 1
+}
+
 ensure_native_build_tools() {
   if command -v python3 >/dev/null 2>&1 && command -v make >/dev/null 2>&1 && has_cxx_compiler; then
+    if [[ "$PLATFORM" == "macos" ]]; then
+      if ! python_has_distutils; then
+        fail "$(L "Python distutils is required when native npm packages build from source. Install/use a Python that provides distutils, e.g. set PYTHON=/usr/bin/python3 before running the installer, or install setuptools for your Python." "原生 npm 依赖从源码编译时需要 Python distutils。请安装/使用带 distutils 的 Python,例如运行安装器前设置 PYTHON=/usr/bin/python3,或为当前 Python 安装 setuptools。")"
+      fi
+      if ! macos_has_usable_xcode_tools; then
+        fail "$(L "macOS native npm builds require a complete Xcode Command Line Tools installation. Run: xcode-select --install. If it is already installed but broken, reinstall it or run: sudo xcode-select --reset" "macOS 原生 npm 编译需要完整的 Xcode Command Line Tools。请运行:xcode-select --install。如果已安装但状态异常,请重新安装或运行:sudo xcode-select --reset")"
+      fi
+    fi
     ok "$(L "native build tools found" "已找到原生编译工具")"
     return
   fi
