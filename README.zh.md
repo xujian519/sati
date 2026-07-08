@@ -290,7 +290,7 @@ https://github.com/user-attachments/assets/a7245467-ee3c-4939-a055-c56576ac56d1
 
 ## 📦 安装与快速开始
 
-我们提供了 macOS/Linux 下的一键安装脚本，以及适合开发者的源码启动方式。
+我们提供了 macOS/Linux 与 Windows PowerShell 下的一键安装脚本，以及适合开发者的源码启动方式。
 
 ### 方式一：一键安装 (推荐, macOS/Linux)
 
@@ -301,6 +301,23 @@ curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh |
 该脚本将自动配置 Node.js 22 环境、克隆代码、安装依赖并编译前端。安装完成后，直接运行：
 
 ```bash
+pilotdeck            # 在 http://localhost:3001 启动服务
+pilotdeck status     # 查看运行状态
+```
+
+### 方式一补充：一键安装 (Windows PowerShell)
+
+在普通用户 PowerShell 中执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.ps1 | iex"
+```
+
+PowerShell 安装脚本会使用 `%USERPROFILE%\.pilotdeck` 下的 Windows 原生路径，检查 Node.js 22.13+ 与 `node:sqlite`，在可用时通过 `winget` 安装缺失依赖，构建 PilotDeck，并在 `%USERPROFILE%\.pilotdeck\bin` 生成 `pilotdeck.cmd` 启动器。
+
+如果脚本刚刚更新了用户 `PATH`，请新开一个 PowerShell 窗口后运行：
+
+```powershell
 pilotdeck            # 在 http://localhost:3001 启动服务
 pilotdeck status     # 查看运行状态
 ```

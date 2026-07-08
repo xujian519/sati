@@ -290,7 +290,7 @@ https://github.com/user-attachments/assets/a7245467-ee3c-4939-a055-c56576ac56d1
 
 ## 📦 Installation & Quick Start
 
-We provide a one-line installer for macOS / Linux, plus a source-based workflow for developers.
+We provide one-line installers for macOS / Linux and Windows PowerShell, plus a source-based workflow for developers.
 
 ### Option A: One-line install (recommended, macOS / Linux)
 
@@ -301,6 +301,23 @@ curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh |
 The script auto-installs Node.js 22.13+ (required for the built-in SQLite runtime), clones the repo, installs dependencies, and builds the frontend. Once it finishes:
 
 ```bash
+pilotdeck            # starts the server at http://localhost:3001
+pilotdeck status     # check runtime status
+```
+
+### Option A2: One-line install (Windows PowerShell)
+
+Run PowerShell as a normal user, then execute:
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.ps1 | iex"
+```
+
+The PowerShell installer uses Windows-native paths under `%USERPROFILE%\.pilotdeck`, checks Node.js 22.13+ with `node:sqlite`, installs missing prerequisites with `winget` when available, builds PilotDeck, and creates a `pilotdeck.cmd` launcher in `%USERPROFILE%\.pilotdeck\bin`.
+
+If this is your first install, open a new PowerShell window after the script updates your user `PATH`, then run:
+
+```powershell
 pilotdeck            # starts the server at http://localhost:3001
 pilotdeck status     # check runtime status
 ```
