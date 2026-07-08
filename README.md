@@ -298,7 +298,21 @@ We provide a one-line installer for macOS / Linux, plus a source-based workflow 
 curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | bash
 ```
 
-The script checks Node.js 22.13+ (required for the built-in SQLite runtime), clones the repo, installs dependencies, and builds the frontend. On Linux it can install missing system packages when `sudo` and a supported package manager are available. On macOS, make sure Xcode Command Line Tools and a Python with `distutils` are usable before running the installer. Once it finishes:
+The script checks/uses the supported Node.js 22 runtime (22.13+ and <23, required for the built-in SQLite runtime), clones the repo, installs dependencies, and builds the frontend. On Linux it can install missing system packages when `sudo` and a supported package manager are available. On macOS, make sure Xcode Command Line Tools and a Python with `distutils` are usable before running the installer. Once it finishes:
+
+If the Node.js/fnm download is slow or blocked in your network, set a reachable fnm install script URL before running the installer, for example:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | \
+  PILOTDECK_FNM_INSTALL_URL=https://raw.githubusercontent.com/Schniz/fnm/master/.ci/install.sh bash
+```
+
+If the Node.js binary download itself is blocked, also set a Node.js mirror:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | \
+  PILOTDECK_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node bash
+```
 
 ```bash
 pilotdeck            # starts the server at http://localhost:3001
@@ -317,10 +331,8 @@ pilotdeck status     # check runtime status
 GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenBMB/PilotDeck.git
 cd PilotDeck
 
-node --version          # must be v22.13.0 or newer
-npm install              # root deps (Gateway runtime)
-cd ui && npm install     # UI deps
-cd ..
+node --version          # must be v22.13.0 or newer, and below v23
+corepack pnpm install --frozen-lockfile
 ```
 
 **2. Configure a model provider**

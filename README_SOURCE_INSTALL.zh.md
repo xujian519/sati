@@ -6,10 +6,10 @@
 
 PilotDeck 需要：
 
-- Node.js v22.13.0 或更新版本，并且支持内置 `node:sqlite` 运行时。
+- Node.js v22.13.0 或更新的 Node.js 22 版本，并且支持内置 `node:sqlite` 运行时。
 - Git。
 - Git LFS 对源码安装是可选项。只有需要下载大型演示媒体文件时，才需要通过 `git lfs pull` 获取。
-- npm 原生依赖（如 `node-pty`、`better-sqlite3`、`bcrypt`、`sharp`）所需的编译工具：Python 3、`make` 和 C/C++ 编译器。
+- Node 原生依赖（如 `node-pty`、`better-sqlite3`、`bcrypt`、`sharp`）所需的编译工具：Python 3、`make` 和 C/C++ 编译器。
 - `ripgrep` (`rg`)，内置文件/搜索工具会用到。
 
 ## 安装系统依赖
@@ -38,7 +38,7 @@ Linux 系统包安装较慢时，建议先按发行版文档切换 apt/dnf/pacma
 
 ### macOS
 
-当原生 npm 依赖回退到源码编译时，需要完整可用的 Xcode Command Line Tools。如果本机还没有完整的 CLT/Xcode 环境，或 `npm install` 在编译原生依赖时报错，请安装：
+当原生依赖回退到源码编译时，需要可用的 Xcode Command Line Tools。如果 `xcrun --find clang` 失败，或依赖安装在编译原生包时报缺少编译工具，请安装：
 
 ```bash
 xcode-select --install
@@ -61,10 +61,10 @@ node --version
 某些 Python 发行版（尤其是通过包管理器安装的 Python 3.12）可能不包含 `distutils`，而旧版 `node-gyp` 在源码编译原生包时仍会用到它。一键安装脚本会尝试自动选择带 `distutils` 的 Python。如果你手动运行 npm 命令并看到 `ModuleNotFoundError: No module named 'distutils'`，请使用带 `distutils` 的 Python，例如：
 
 ```bash
-PYTHON=/usr/bin/python3 npm install
+PYTHON=/usr/bin/python3 corepack pnpm install --frozen-lockfile
 ```
 
-如果遇到 `xcodebuild` 或 Command Line Tools receipt 相关错误，请重新安装 Xcode Command Line Tools，或在已安装但状态异常时运行 `sudo xcode-select --reset` 后重试。
+只安装 CLT 即可，不需要完整 Xcode。如果已安装但 `xcrun --find clang` 仍失败，请运行 `sudo xcode-select --reset`，或重新安装 Xcode Command Line Tools 后重试。
 
 ### Debian / Ubuntu
 
@@ -73,7 +73,7 @@ sudo apt-get update
 sudo apt-get install -y git git-lfs ripgrep build-essential python3
 ```
 
-安装 Node.js v22.13.0 或更新版本。常见方式之一是使用 `fnm`：
+安装 Node.js v22.13.0 或更新的 Node.js 22 版本。常见方式之一是使用 `fnm`：
 
 ```bash
 curl -fsSL https://fnm.vercel.app/install | bash
@@ -89,7 +89,7 @@ node --version
 sudo dnf install -y git git-lfs ripgrep gcc gcc-c++ make python3
 ```
 
-然后通过你偏好的软件源或 Node 版本管理器安装 Node.js v22.13.0 或更新版本。
+然后通过你偏好的软件源或 Node 版本管理器安装 Node.js v22.13.0 或更新的 Node.js 22 版本。
 
 ### Arch Linux
 
@@ -97,7 +97,7 @@ sudo dnf install -y git git-lfs ripgrep gcc gcc-c++ make python3
 sudo pacman -Sy --needed git git-lfs ripgrep base-devel python nodejs npm
 ```
 
-确认 `node --version` 显示 v22.13.0 或更新版本。
+确认 `node --version` 显示 v22.13.0 或更新版本，且低于 v23。
 
 ### Windows
 
@@ -172,7 +172,7 @@ winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --add M
 
 ```powershell
 git lfs install
-node --version   # 必须为 v22.13.0 或更新版本
+node --version   # 必须为 v22.13.0 或更新版本，且低于 v23
 npm --version
 python --version
 rg --version
@@ -223,10 +223,8 @@ git lfs pull
 ## 安装 Node 依赖
 
 ```bash
-node --version          # 必须为 v22.13.0 或更新版本
-npm install              # 安装根目录依赖 (Gateway 运行时)
-cd ui && npm install     # 安装 UI 依赖
-cd ..
+node --version          # 必须为 v22.13.0 或更新版本，且低于 v23
+corepack pnpm install --frozen-lockfile
 ```
 
 ## 首次 Onboarding
@@ -261,9 +259,9 @@ npm run start
 
 ## 常见问题
 
-- 出现 `Node.js >=22.13.0 is required`：切换到更新版本 Node.js，并重新安装依赖。
-- 原生 npm 包编译失败：确认已安装 Python 3、`make` 和 C/C++ 编译器，然后重新运行 `npm install`。
-- macOS 出现 `ModuleNotFoundError: No module named 'distutils'`：一键安装脚本会尝试自动选择兼容 Python；手动运行 npm 命令时，可用 `PYTHON=/usr/bin/python3 npm install` 重试，或切换到其他带 `distutils` 的 Python。
-- macOS 出现 `xcodebuild` 或 Command Line Tools receipt 相关错误：运行 `xcode-select --install` 重新安装 Xcode Command Line Tools；如果已安装但状态异常，可运行 `sudo xcode-select --reset` 后重试。
+- 出现 `Node.js >=22.13.0 and <23 is required`：切换到 Node.js 22.13.0 或更新的 Node.js 22 版本，并重新安装依赖。
+- 原生包编译失败：确认已安装 Python 3、`make` 和 C/C++ 编译器，然后重新运行 `corepack pnpm install --frozen-lockfile`。
+- macOS 出现 `ModuleNotFoundError: No module named 'distutils'`：一键安装脚本会尝试自动选择兼容 Python；手动运行 npm 命令时，可用 `PYTHON=/usr/bin/python3 corepack pnpm install --frozen-lockfile` 重试，或切换到其他带 `distutils` 的 Python。
+- macOS 缺少编译工具：不需要完整 Xcode，但 `xcrun --find clang` 必须可用。可运行 `xcode-select --install` 重新安装 Xcode Command Line Tools；如果已安装但状态异常，可运行 `sudo xcode-select --reset` 后重试。
 - 缺少演示图片/视频：安装 Git LFS 后，在仓库根目录运行 `git lfs pull`。
 - 提示找不到 `rg`：安装 ripgrep 以启用完整的文件/搜索工具能力。

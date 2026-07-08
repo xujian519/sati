@@ -6,7 +6,7 @@ This guide is for developers who want to run PilotDeck directly from source inst
 
 PilotDeck requires:
 
-- Node.js v22.13.0 or newer, with the built-in `node:sqlite` runtime.
+- Node.js v22.13.0 or newer within the Node.js 22 line, with the built-in `node:sqlite` runtime.
 - Git.
 - Git LFS is optional for source installs. It is only needed if you want to download large demo media assets with `git lfs pull`.
 - Native build tools for npm packages such as `node-pty`, `better-sqlite3`, `bcrypt`, and `sharp`: Python 3, `make`, and a C/C++ compiler.
@@ -16,7 +16,7 @@ PilotDeck requires:
 
 ### macOS
 
-Xcode Command Line Tools are required if native npm packages fall back to source builds. Install them if you do not already have a complete CLT/Xcode setup, or if `npm install` fails while building native packages:
+Xcode Command Line Tools are required if native packages fall back to source builds. Install them if `xcrun --find clang` fails, or if dependency installation reports missing compiler tools while building native packages:
 
 ```bash
 xcode-select --install
@@ -39,10 +39,10 @@ If your Homebrew Node.js is older than v22.13.0, install a newer Node.js with yo
 Some Python distributions, especially Python 3.12 installed through package managers, may not include `distutils`, which older `node-gyp` versions still need when native packages compile from source. The one-line installer tries to auto-select a Python that provides `distutils`. If you run npm commands manually and see `ModuleNotFoundError: No module named 'distutils'`, use a Python that provides it, for example:
 
 ```bash
-PYTHON=/usr/bin/python3 npm install
+PYTHON=/usr/bin/python3 corepack pnpm install --frozen-lockfile
 ```
 
-If `xcodebuild` or Command Line Tools receipts are broken, reinstall Xcode Command Line Tools or run `sudo xcode-select --reset` before retrying.
+A CLT-only installation is enough; full Xcode is not required. If the tools are installed but `xcrun --find clang` fails, run `sudo xcode-select --reset` or reinstall Xcode Command Line Tools before retrying.
 
 If cloning from GitHub or downloading Git LFS files is slow or fails with network errors such as `fetch-pack: unexpected disconnect`, retry or use a stable network proxy. The source install flow below skips large Git LFS demo media by default.
 
@@ -53,7 +53,7 @@ sudo apt-get update
 sudo apt-get install -y git git-lfs ripgrep build-essential python3
 ```
 
-Install Node.js v22.13.0 or newer. One common option is `fnm`:
+Install Node.js v22.13.0 or newer within the Node.js 22 line. One common option is `fnm`:
 
 ```bash
 curl -fsSL https://fnm.vercel.app/install | bash
@@ -69,7 +69,7 @@ node --version
 sudo dnf install -y git git-lfs ripgrep gcc gcc-c++ make python3
 ```
 
-Then install Node.js v22.13.0 or newer using your preferred package source or Node version manager.
+Then install Node.js v22.13.0 or newer within the Node.js 22 line using your preferred package source or Node version manager.
 
 ### Arch Linux
 
@@ -77,7 +77,7 @@ Then install Node.js v22.13.0 or newer using your preferred package source or No
 sudo pacman -Sy --needed git git-lfs ripgrep base-devel python nodejs npm
 ```
 
-Make sure `node --version` reports v22.13.0 or newer.
+Make sure `node --version` reports v22.13.0 or newer, and below v23.
 
 ### Windows
 
@@ -152,7 +152,7 @@ Then open a new PowerShell window and run:
 
 ```powershell
 git lfs install
-node --version   # must be v22.13.0 or newer
+node --version   # must be v22.13.0 or newer, and below v23
 npm --version
 python --version
 rg --version
@@ -203,10 +203,8 @@ git lfs pull
 ## Install Node Dependencies
 
 ```bash
-node --version          # must be v22.13.0 or newer
-npm install              # root deps (Gateway runtime)
-cd ui && npm install     # UI deps
-cd ..
+node --version          # must be v22.13.0 or newer, and below v23
+corepack pnpm install --frozen-lockfile
 ```
 
 ## First-Run Onboarding
@@ -241,9 +239,9 @@ Open <http://localhost:3001>.
 
 ## Troubleshooting
 
-- `Node.js >=22.13.0 is required`: switch to a newer Node.js and reinstall dependencies.
-- Native npm package build errors: make sure Python 3, `make`, and a C/C++ compiler are installed, then rerun `npm install`.
-- `ModuleNotFoundError: No module named 'distutils'` on macOS: the one-line installer tries to auto-select a compatible Python; for manual npm commands, retry with `PYTHON=/usr/bin/python3 npm install`, or use another Python that includes `distutils`.
-- `xcodebuild` or Command Line Tools receipt errors on macOS: reinstall Xcode Command Line Tools with `xcode-select --install`, or run `sudo xcode-select --reset` if CLT is already installed.
+- `Node.js >=22.13.0 and <23 is required`: switch to Node.js 22.13.0 or newer within the Node.js 22 line, then reinstall dependencies.
+- Native package build errors: make sure Python 3, `make`, and a C/C++ compiler are installed, then rerun `corepack pnpm install --frozen-lockfile`.
+- `ModuleNotFoundError: No module named 'distutils'` on macOS: the one-line installer tries to auto-select a compatible Python; for manual npm commands, retry with `PYTHON=/usr/bin/python3 corepack pnpm install --frozen-lockfile`, or use another Python that includes `distutils`.
+- Missing compiler tools on macOS: full Xcode is not required, but `xcrun --find clang` must work. Reinstall Xcode Command Line Tools with `xcode-select --install`, or run `sudo xcode-select --reset` if CLT is already installed.
 - Missing demo images/videos: install Git LFS and run `git lfs pull` from the repo root.
 - `rg` not found: install ripgrep for full file/search tool support.
