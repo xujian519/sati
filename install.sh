@@ -462,7 +462,7 @@ check_bootstrap_requirements() {
     if ! can_install_system_packages; then
       fail "$(L "Installing missing system packages requires root or sudo. Please install sudo, run as root, or preinstall git, ripgrep, lsof, python3, make, and a C++ compiler." "安装缺失的系统软件包需要 root 或 sudo 权限。请安装 sudo、以 root 身份运行,或预先安装 git、ripgrep、lsof、python3、make 和 C++ 编译器。")"
     fi
-    ok "$(L "root/sudo available for system packages" "可使用 root/sudo 安装系统软件包")"
+    ok "$(L "root user or sudo command found for system package installs" "已找到 root 用户或 sudo 命令用于安装系统软件包")"
   else
     if ! command -v xcode-select >/dev/null 2>&1 || ! xcode-select -p >/dev/null 2>&1; then
       fail "$(L "macOS requires Xcode Command Line Tools for git, lsof, and native module builds. Install them with: xcode-select --install" "macOS 需要 Xcode 命令行工具来提供 git、lsof 和原生模块构建能力。请运行:xcode-select --install")"
