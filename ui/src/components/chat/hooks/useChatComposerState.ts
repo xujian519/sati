@@ -789,6 +789,18 @@ export function useChatComposerState({
       }
 
       if (isLoading && isBusySendQueued) {
+        const pendingSessionId = typeof window !== 'undefined' ? sessionStorage.getItem('pendingSessionId') : null;
+        const targetSessionId = [
+          currentSessionId,
+          pendingViewSessionRef.current?.sessionId || null,
+          pendingSessionId,
+          selectedSession?.id || null,
+        ].find((sessionId) => Boolean(sessionId) && !isTemporarySessionId(sessionId));
+
+        if (!canAbortSession || !targetSessionId) {
+          return;
+        }
+
         queuedBusySendSnapshotRef.current = {
           input: currentInput,
           attachedImages: submitAttachedImages,
@@ -797,25 +809,13 @@ export function useChatComposerState({
         };
         queuedBusySendConfirmedRef.current = true;
         setIsBusySendConfirmed(true);
-        if (canAbortSession) {
-          const pendingSessionId = typeof window !== 'undefined' ? sessionStorage.getItem('pendingSessionId') : null;
-          const targetSessionId = [
-            currentSessionId,
-            pendingViewSessionRef.current?.sessionId || null,
-            pendingSessionId,
-            selectedSession?.id || null,
-          ].find((sessionId) => Boolean(sessionId) && !isTemporarySessionId(sessionId));
-
-          if (targetSessionId) {
-            sendMessage({
-              type: 'abort-session',
-              sessionId: targetSessionId,
-              provider: 'pilotdeck',
-            });
-            setCanAbortSession(false);
-            setIsAborting(true);
-          }
-        }
+        sendMessage({
+          type: 'abort-session',
+          sessionId: targetSessionId,
+          provider: 'pilotdeck',
+        });
+        setCanAbortSession(false);
+        setIsAborting(true);
         return;
       }
 
