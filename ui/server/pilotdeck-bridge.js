@@ -934,22 +934,36 @@ export async function runChatViaGateway(
 
     const state = ensureSessionState(sessionKey, projectKey, channelKey);
 
-    // If a previous turn for this session is still in-flight (e.g. the
-    // browser reloaded while a permission prompt was pending), abort it
-    // before starting the new one. Without this the gateway rejects
-    // with session_busy because the old turn's inFlightTurns slot is
-    // still occupied.
+    // Normal chat submits should not abort active work. A forced submit is an
+    // explicit user action from the composer: stop the current turn, then start
+    // the new queued message immediately.
     if (state.active && state.runId) {
-        console.log(
-            `[pilotdeck-bridge] aborting stale turn ${state.runId} for ${sessionKey} before resubmit`,
-        );
-        try {
-            await gw.abortTurn({ sessionKey, runId: state.runId, reason: 'system:stale_turn' });
-        } catch (err) {
-            console.warn('[pilotdeck-bridge] stale abort failed (continuing):', err?.message || err);
+        if (options?.forceStart === true) {
+            console.log(
+                `[pilotdeck-bridge] force-start aborting active turn ${state.runId} for ${sessionKey}`,
+            );
+            try {
+                await gw.abortTurn({ sessionKey, runId: state.runId, reason: 'user:force_start_next_turn' });
+            } catch (err) {
+                console.warn('[pilotdeck-bridge] force-start abort failed (continuing):', err?.message || err);
+            }
+            state.active = false;
+            state.runId = undefined;
+        } else {
+            const message = 'This session is still processing a previous turn. Please wait for it to finish before sending another message.';
+            console.warn(`[pilotdeck-bridge] rejected busy submit for ${sessionKey}; active run ${state.runId}`);
+            writer.send(
+                createNormalizedMessage({
+                    provider,
+                    sessionId: sessionKey,
+                    kind: 'error',
+                    code: 'session_busy',
+                    content: message,
+                    userHint: message,
+                }),
+            );
+            return;
         }
-        state.active = false;
-        state.runId = undefined;
     }
 
     if (isNewSession) {

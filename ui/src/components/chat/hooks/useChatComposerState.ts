@@ -127,6 +127,13 @@ type UploadedAttachmentFile = {
   mimeType?: string;
 };
 
+type QueuedBusySendSnapshot = {
+  input: string;
+  attachedImages: File[];
+  documentReferences: DocumentSelectionReference[];
+  forceStart?: boolean;
+};
+
 export function shouldCycleRunModeOnKeyDown(
   event: Pick<KeyboardEvent<HTMLTextAreaElement>, 'key' | 'shiftKey'>,
   {
@@ -228,6 +235,7 @@ export function useChatComposerState({
   const inputValueRef = useRef(input);
   const queuedBusySendRef = useRef(false);
   const queuedBusySendConfirmedRef = useRef(false);
+  const queuedBusySendSnapshotRef = useRef<QueuedBusySendSnapshot | null>(null);
   const pendingSessionGrantResolversRef = useRef(new Map<string, (result: PermissionGrantResult) => void>());
 
   useEffect(() => {
@@ -757,9 +765,12 @@ export function useChatComposerState({
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
     ) => {
       event.preventDefault();
-      const currentInput = inputValueRef.current;
-      const hasDocumentReferences = documentReferences.length > 0;
-      const hasAttachments = attachedImages.length > 0 || hasDocumentReferences;
+      const queuedSnapshot = queuedBusySendSnapshotRef.current;
+      const currentInput = queuedSnapshot?.input ?? inputValueRef.current;
+      const submitAttachedImages = queuedSnapshot?.attachedImages ?? attachedImages;
+      const submitDocumentReferences = queuedSnapshot?.documentReferences ?? documentReferences;
+      const hasDocumentReferences = submitDocumentReferences.length > 0;
+      const hasAttachments = submitAttachedImages.length > 0 || hasDocumentReferences;
       if ((!currentInput.trim() && !hasAttachments) || !selectedProject) {
         return;
       }
@@ -767,20 +778,50 @@ export function useChatComposerState({
       if (isLoading && !isBusySendQueued) {
         queuedBusySendRef.current = true;
         queuedBusySendConfirmedRef.current = false;
+        queuedBusySendSnapshotRef.current = {
+          input: currentInput,
+          attachedImages: [...attachedImages],
+          documentReferences: [...documentReferences],
+        };
         setIsBusySendQueued(true);
         setIsBusySendConfirmed(false);
         return;
       }
 
       if (isLoading && isBusySendQueued) {
-        queuedBusySendRef.current = false;
-        queuedBusySendConfirmedRef.current = false;
-        setIsBusySendQueued(false);
-        setIsBusySendConfirmed(false);
+        queuedBusySendSnapshotRef.current = {
+          input: currentInput,
+          attachedImages: submitAttachedImages,
+          documentReferences: submitDocumentReferences,
+          forceStart: true,
+        };
+        queuedBusySendConfirmedRef.current = true;
+        setIsBusySendConfirmed(true);
+        if (canAbortSession) {
+          const pendingSessionId = typeof window !== 'undefined' ? sessionStorage.getItem('pendingSessionId') : null;
+          const targetSessionId = [
+            currentSessionId,
+            pendingViewSessionRef.current?.sessionId || null,
+            pendingSessionId,
+            selectedSession?.id || null,
+          ].find((sessionId) => Boolean(sessionId) && !isTemporarySessionId(sessionId));
+
+          if (targetSessionId) {
+            sendMessage({
+              type: 'abort-session',
+              sessionId: targetSessionId,
+              provider: 'pilotdeck',
+            });
+            setCanAbortSession(false);
+            setIsAborting(true);
+          }
+        }
+        return;
       }
 
       queuedBusySendRef.current = false;
       queuedBusySendConfirmedRef.current = false;
+      queuedBusySendSnapshotRef.current = null;
       setIsBusySendQueued(false);
       setIsBusySendConfirmed(false);
 
@@ -848,9 +889,9 @@ export function useChatComposerState({
 
       let uploadedImages: unknown[] = [];
       let uploadedFiles: UploadedAttachmentFile[] = [];
-      if (attachedImages.length > 0) {
+      if (submitAttachedImages.length > 0) {
         const formData = new FormData();
-        attachedImages.forEach((file) => {
+        submitAttachedImages.forEach((file) => {
           formData.append('attachments', file);
         });
 
@@ -880,8 +921,8 @@ export function useChatComposerState({
         }
       }
 
-      const documentReferenceAttachments = documentReferences.map(documentReferenceToAttachment);
-      messageContent = `${messageContent}${buildAttachmentPathNote(uploadedFiles)}${formatDocumentSelectionPromptBlock(documentReferences)}`;
+      const documentReferenceAttachments = submitDocumentReferences.map(documentReferenceToAttachment);
+      messageContent = `${messageContent}${buildAttachmentPathNote(uploadedFiles)}${formatDocumentSelectionPromptBlock(submitDocumentReferences)}`;
 
       const effectiveSessionId = submitTargetSessionId;
       const sessionToActivate = effectiveSessionId || optimisticSessionId;
@@ -959,6 +1000,7 @@ export function useChatComposerState({
         sessionSummary,
         images: uploadedImages,
         attachments: [...uploadedFiles, ...documentReferenceAttachments],
+        forceStart: queuedSnapshot?.forceStart === true,
       });
 
       setInput('');
@@ -985,6 +1027,7 @@ export function useChatComposerState({
       executeCommand,
       isLoading,
       isBusySendQueued,
+      canAbortSession,
       onSessionActive,
       onSessionActivityBump,
       onSessionProcessing,
@@ -997,6 +1040,7 @@ export function useChatComposerState({
       selectedProject,
       sendMessage,
       setCanAbortSession,
+      setIsAborting,
       addMessage,
       setClaudeStatus,
       setPilotDeckStatus,
@@ -1024,6 +1068,7 @@ export function useChatComposerState({
       } else {
         queuedBusySendRef.current = false;
         queuedBusySendConfirmedRef.current = false;
+        queuedBusySendSnapshotRef.current = null;
         setIsBusySendQueued(false);
         setIsBusySendConfirmed(false);
       }
@@ -1083,6 +1128,7 @@ export function useChatComposerState({
       inputValueRef.current = newValue;
       queuedBusySendRef.current = false;
       queuedBusySendConfirmedRef.current = false;
+      queuedBusySendSnapshotRef.current = null;
       setIsBusySendQueued(false);
       setIsBusySendConfirmed(false);
       setCursorPosition(cursorPos);
@@ -1102,6 +1148,7 @@ export function useChatComposerState({
   const cancelBusySendQueue = useCallback(() => {
     queuedBusySendRef.current = false;
     queuedBusySendConfirmedRef.current = false;
+    queuedBusySendSnapshotRef.current = null;
     setIsBusySendQueued(false);
     setIsBusySendConfirmed(false);
   }, []);
