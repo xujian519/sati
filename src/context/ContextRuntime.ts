@@ -64,6 +64,6 @@ export type AgentContextRuntime = {
     maxContextTokens?: number;
     reservedOutputTokens?: number;
     lastUsage?: CanonicalUsage;
-    budgetEvaluator?: (messages: CanonicalMessage[]) => Promise<TokenBudgetSnapshot>;
+    budgetEvaluator?: (messages: CanonicalMessage[], lastUsage?: CanonicalUsage) => Promise<TokenBudgetSnapshot>;
   }): Promise<AutoCompactResult>;
 };

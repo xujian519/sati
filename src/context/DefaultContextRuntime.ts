@@ -303,7 +303,7 @@ export class DefaultContextRuntime implements ContextRuntime {
     maxContextTokens?: number;
     reservedOutputTokens?: number;
     lastUsage?: CanonicalUsage;
-    budgetEvaluator?: (messages: CanonicalMessage[]) => Promise<TokenBudgetSnapshot>;
+    budgetEvaluator?: (messages: CanonicalMessage[], lastUsage?: CanonicalUsage) => Promise<TokenBudgetSnapshot>;
   }): Promise<AutoCompactResult> {
     const effectiveMaxContextTokens = input.maxContextTokens ?? this.maxContextTokens;
     if (!this.autoCompactionPolicy || !this.tokenBudget) {
@@ -323,7 +323,7 @@ export class DefaultContextRuntime implements ContextRuntime {
     const budgetOptions = { reservedOutputTokens: input.reservedOutputTokens };
     const evaluateBudget = (candidate: CanonicalMessage[], lastUsage?: CanonicalUsage) =>
       input.budgetEvaluator
-        ? input.budgetEvaluator(candidate)
+        ? input.budgetEvaluator(candidate, lastUsage)
         : Promise.resolve(this.tokenBudget!.evaluate(candidate, effectiveMaxContextTokens, {
             usePadding: true,
             ...budgetOptions,

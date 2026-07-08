@@ -74,3 +74,33 @@ test("post-compaction snapshots use compacted messages instead of stale usage", 
   assert.equal(result.snapshot.estimateSource, "estimator");
   assert.equal(result.snapshot.state, "ok");
 });
+
+test("budget evaluator receives usage for initial pressure", async () => {
+  const budget = new TokenBudgetManager({ warningRatio: 0.5, blockingRatio: 0.9 });
+  const compactedMessages: CanonicalMessage[] = [
+    { role: "user", content: [{ type: "text", text: "ok" }] },
+  ];
+  const runtime = new DefaultContextRuntime({
+    tokenBudget: budget,
+    autoCompactionPolicy: new AutoCompactionPolicy({ tokenBudget: budget }),
+    maxContextTokens: 1_000,
+    microCompaction: {
+      apply: () => ({
+        messages: compactedMessages,
+        rewritten: 1,
+        rewrittenBytes: 1,
+        toolCallIds: ["call-1"],
+        appliedTrigger: "time_based" as const,
+      }),
+    } as any,
+  });
+  const result = await runtime.tryAutoCompact({
+    messages: [{ role: "user", content: [{ type: "text", text: "tiny" }] }],
+    lastUsage: { inputTokens: 950, outputTokens: 1, totalTokens: 951 },
+    budgetEvaluator: async (candidate, lastUsage) => budget.evaluate(candidate, 1_000, {
+      lastUsage,
+    }),
+  });
+  assert.equal(result.type, "compacted");
+  assert.equal(result.snapshot.state, "ok");
+});

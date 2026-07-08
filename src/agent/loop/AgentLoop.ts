@@ -1753,13 +1753,13 @@ export class AgentLoop {
       maxContextTokens?: number;
       reservedOutputTokens: number;
     },
-  ): ((candidateMessages: CanonicalMessage[]) => Promise<TokenBudgetSnapshot>) | undefined {
+  ): ((candidateMessages: CanonicalMessage[], lastUsage?: CanonicalUsage) => Promise<TokenBudgetSnapshot>) | undefined {
     const tokenAccounting = this.dependencies.tokenAccounting;
     const maxContextTokens = options.maxContextTokens;
     if (!tokenAccounting || !maxContextTokens) {
       return undefined;
     }
-    return async (candidateMessages) => {
+    return async (candidateMessages, lastUsage) => {
       let candidateRequest = await this.createModelRequest(candidateMessages, input, {
         emitInstructionEvents: false,
       });
@@ -1772,10 +1772,21 @@ export class AgentLoop {
           cacheBreakpoints: candidateRequest.cacheBreakpoints,
         });
       }
-      return tokenAccounting.evaluateRequestBudget(candidateRequest, {
+      const snapshot = await tokenAccounting.evaluateRequestBudget(candidateRequest, {
         maxContextTokens,
         reservedOutputTokens: options.reservedOutputTokens,
         signal: input.abortSignal,
+      });
+      const usageTokens = tokensFromUsage(lastUsage);
+      if (usageTokens === undefined || usageTokens <= snapshot.tokens) {
+        return snapshot;
+      }
+      return tokenAccounting.snapshotFromTokens(usageTokens, maxContextTokens, {
+        reservedOutputTokens: options.reservedOutputTokens,
+        usageTokens,
+        source: snapshot.source,
+        exact: snapshot.exact,
+        estimatorError: snapshot.estimatorError,
       });
     };
   }
@@ -3058,6 +3069,18 @@ function clampOutputToModelCap(requested: number, modelMaxOutputTokens: number |
     return Math.min(next, Math.floor(modelMaxOutputTokens));
   }
   return next;
+}
+
+function tokensFromUsage(usage: CanonicalUsage | undefined): number | undefined {
+  if (!usage) return undefined;
+  const inputTokens = usage.inputTokens;
+  if (typeof inputTokens !== "number" || !Number.isFinite(inputTokens) || inputTokens <= 0) {
+    return undefined;
+  }
+  const outputTokens = typeof usage.outputTokens === "number" && Number.isFinite(usage.outputTokens) && usage.outputTokens > 0
+    ? usage.outputTokens
+    : 0;
+  return Math.ceil(inputTokens + outputTokens);
 }
 
 function composeAbortSignal(args: {
