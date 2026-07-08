@@ -438,6 +438,10 @@ function forceRecomputeMerged(slot: SessionSlot): void {
   slot.merged = computeMerged(slot.serverMessages, slot.realtimeMessages);
 }
 
+function streamingKey(sessionId: string, runId?: string): string {
+  return runId ? `${sessionId}_${runId}` : sessionId;
+}
+
 /**
  * Patch a single streaming row in `slot.merged` without recomputing the full list.
  * Returns true when the merged row was updated in place.
@@ -1037,9 +1041,9 @@ export function useSessionStore() {
    * Update or create a streaming message (accumulated text so far).
    * Uses a well-known ID so subsequent calls replace the same message.
    */
-  const updateStreaming = useCallback((sessionId: string, accumulatedText: string, msgProvider: SessionProvider) => {
+  const updateStreaming = useCallback((sessionId: string, accumulatedText: string, msgProvider: SessionProvider, runId?: string) => {
     const slot = getSlot(sessionId);
-    const streamId = `__streaming_${sessionId}`;
+    const streamId = `__streaming_${streamingKey(sessionId, runId)}`;
     const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
     if (idx >= 0) {
       // Subsequent delta — preserve the original turn-start timestamp so
@@ -1075,6 +1079,7 @@ export function useSessionStore() {
         provider: msgProvider,
         kind: 'stream_delta',
         content: accumulatedText,
+        runId,
         serverTailIdAtStart: serverTailId ?? undefined,
       };
       slot.realtimeMessages = [...slot.realtimeMessages, msg];
@@ -1087,10 +1092,10 @@ export function useSessionStore() {
    * Finalize streaming: convert the streaming message to a regular text message.
    * The well-known streaming ID is replaced with a unique text message ID.
    */
-  const finalizeStreaming = useCallback((sessionId: string) => {
+  const finalizeStreaming = useCallback((sessionId: string, runId?: string) => {
     const slot = storeRef.current.get(sessionId);
     if (!slot) return;
-    const streamId = `__streaming_${sessionId}`;
+    const streamId = `__streaming_${streamingKey(sessionId, runId)}`;
     const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
     if (idx >= 0) {
       const stream = slot.realtimeMessages[idx];
@@ -1112,9 +1117,9 @@ export function useSessionStore() {
    * Update or create a streaming thinking message (accumulated thinking so far).
    * Mirrors updateStreaming but uses kind='thinking' and a separate well-known ID.
    */
-  const updateStreamingThinking = useCallback((sessionId: string, accumulatedText: string, msgProvider: SessionProvider) => {
+  const updateStreamingThinking = useCallback((sessionId: string, accumulatedText: string, msgProvider: SessionProvider, runId?: string) => {
     const slot = getSlot(sessionId);
-    const streamId = `__streaming_thinking_${sessionId}`;
+    const streamId = `__streaming_thinking_${streamingKey(sessionId, runId)}`;
     const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
     if (idx >= 0) {
       const existing = slot.realtimeMessages[idx];
@@ -1143,6 +1148,7 @@ export function useSessionStore() {
         provider: msgProvider,
         kind: 'thinking',
         content: accumulatedText,
+        runId,
         serverTailIdAtStart: serverTailId ?? undefined,
       };
       slot.realtimeMessages = [...slot.realtimeMessages, msg];
@@ -1155,10 +1161,10 @@ export function useSessionStore() {
    * Finalize streaming thinking: replace the well-known streaming thinking ID
    * with a unique ID so subsequent thinking blocks don't overwrite it.
    */
-  const finalizeStreamingThinking = useCallback((sessionId: string) => {
+  const finalizeStreamingThinking = useCallback((sessionId: string, runId?: string) => {
     const slot = storeRef.current.get(sessionId);
     if (!slot) return;
-    const streamId = `__streaming_thinking_${sessionId}`;
+    const streamId = `__streaming_thinking_${streamingKey(sessionId, runId)}`;
     const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
     if (idx >= 0) {
       const stream = slot.realtimeMessages[idx];
@@ -1184,6 +1190,21 @@ export function useSessionStore() {
       recomputeMergedIfNeeded(slot);
       notify(sessionId);
     }
+  }, [notify]);
+
+  const clearAssistantRealtime = useCallback((sessionId: string) => {
+    const slot = storeRef.current.get(sessionId);
+    if (!slot) return;
+    const nextRealtime = slot.realtimeMessages.filter((message) => {
+      if (message.kind === 'thinking' || message.kind === 'stream_delta' || message.kind === 'stream_end') {
+        return false;
+      }
+      return !(message.kind === 'text' && message.role === 'assistant');
+    });
+    if (nextRealtime.length === slot.realtimeMessages.length) return;
+    slot.realtimeMessages = nextRealtime;
+    recomputeMergedIfNeeded(slot);
+    notify(sessionId);
   }, [notify]);
 
   /**
@@ -1222,6 +1243,7 @@ export function useSessionStore() {
     updateStreamingThinking,
     finalizeStreamingThinking,
     clearRealtime,
+    clearAssistantRealtime,
     getMessages,
     getActivityMessages,
     getSubagentDetailMessages,
@@ -1237,7 +1259,7 @@ export function useSessionStore() {
     appendRealtime, upsertActivity, setActivities, appendRealtimeBatch, refreshFromServer,
     setActiveSession, setStatus, isStale, updateStreaming, finalizeStreaming,
     updateStreamingThinking, finalizeStreamingThinking,
-    clearRealtime, getMessages, getActivityMessages, getSubagentDetailMessages, getSessionSlot,
+    clearRealtime, clearAssistantRealtime, getMessages, getActivityMessages, getSubagentDetailMessages, getSessionSlot,
     recordSubagentLink, appendSubagentDetailMessage, updateSubagentDetailStreaming,
     finalizeSubagentDetailStreaming, updateSubagentDetailThinking, finalizeSubagentDetailThinking,
   ]);

@@ -406,7 +406,7 @@ function resolvePermissionMode(options) {
  * @returns {object[]} NormalizedMessage frames.
  */
 export function gatewayEventToFrames(event, sessionId, provider) {
-    const base = { sessionId, provider };
+    const base = { sessionId, provider, ...(event.runId ? { runId: event.runId } : {}) };
     switch (event.type) {
         case 'turn_started':
             return [
@@ -995,6 +995,7 @@ export async function runChatViaGateway(
     const state = ensureSessionState(sessionKey, projectKey, channelKey);
     const staleRunId = state.active ? state.runId : undefined;
 
+
     if (isNewSession) {
         writer.send(
             createNormalizedMessage({
@@ -1025,18 +1026,33 @@ export async function runChatViaGateway(
     try {
         gw = await ensureGateway();
 
-        // If a previous turn for this session is still in-flight (e.g. the
-        // browser reloaded while a permission prompt was pending), abort it
-        // before starting the new one. Without this the gateway rejects
-        // with session_busy because the old turn's inFlightTurns slot is
-        // still occupied.
         if (staleRunId) {
+            const abortReason = options?.forceStart === true
+                ? 'user:force_start_next_turn'
+                : 'system:stale_turn';
+            const abortAction = options?.forceStart === true ? 'force-start aborting' : 'aborting stale';
             console.log(
-                `[pilotdeck-bridge] aborting stale turn ${staleRunId} for ${sessionKey} before resubmit`,
+                `[pilotdeck-bridge] ${abortAction} turn ${staleRunId} for ${sessionKey} before submit`,
             );
             try {
-                await gw.abortTurn({ sessionKey, runId: staleRunId, reason: 'system:stale_turn' });
+                await gw.abortTurn({ sessionKey, runId: staleRunId, reason: abortReason });
             } catch (err) {
+                if (options?.forceStart === true) {
+                    const message = 'Could not stop the current turn before sending the queued message. Please wait for the current turn to finish or try stopping it again.';
+                    console.warn('[pilotdeck-bridge] force-start abort failed:', err?.message || err);
+                    writer.send(
+                        createNormalizedMessage({
+                            provider,
+                            sessionId: sessionKey,
+                            kind: 'error',
+                            code: 'force_start_abort_failed',
+                            content: message,
+                            userHint: message,
+                        }),
+                    );
+                    clearActiveRunIfCurrent(state, staleRunId);
+                    return;
+                }
                 console.warn('[pilotdeck-bridge] stale abort failed (continuing):', err?.message || err);
             }
         }
@@ -1192,7 +1208,12 @@ export async function abortViaGateway(sessionId, _provider = 'pilotdeck') {
     if (!sessionKey) return false;
     const state = sessionState.get(sessionKey);
     try {
-        await gw.abortTurn({ sessionKey, runId: state?.runId });
+        const runId = state?.runId;
+        await gw.abortTurn({ sessionKey, runId });
+        if (state && (!runId || state.runId === runId)) {
+            state.active = false;
+            state.runId = undefined;
+        }
         return true;
     } catch (error) {
         console.warn('[pilotdeck-bridge] abortTurn failed:', error);
