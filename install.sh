@@ -410,9 +410,23 @@ can_install_system_packages() {
   [[ "${EUID:-$(id -u)}" -eq 0 ]] || command -v sudo >/dev/null 2>&1
 }
 
+missing_linux_system_packages() {
+  local missing=()
+  command -v git >/dev/null 2>&1 || missing+=(git)
+  command -v rg >/dev/null 2>&1 || missing+=(ripgrep)
+  command -v lsof >/dev/null 2>&1 || missing+=(lsof)
+  command -v python3 >/dev/null 2>&1 || missing+=(python3)
+  command -v make >/dev/null 2>&1 || missing+=(make)
+  has_cxx_compiler || missing+=(c++-compiler)
+
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    printf "%s" "${missing[*]}"
+  fi
+}
+
 print_minimum_requirements() {
   if [[ "$PLATFORM" == "linux" ]]; then
-    warn "$(L "Minimum requirements: bash, curl, network access, and either root or sudo with apt/dnf/yum/pacman/zypper." "最低要求:bash、curl、网络访问,以及 root 或 sudo 权限,并安装 apt/dnf/yum/pacman/zypper 之一。")"
+    warn "$(L "Minimum requirements: bash, curl, network access, plus root/sudo and apt/dnf/yum/pacman/zypper only when system packages are missing." "最低要求:bash、curl、网络访问;仅当缺少系统软件包时才需要 root/sudo 权限和 apt/dnf/yum/pacman/zypper 之一。")"
   else
     warn "$(L "Minimum requirements: bash, curl, network access, Xcode Command Line Tools, and Homebrew for optional package installs." "最低要求:bash、curl、网络访问、Xcode 命令行工具,以及用于安装可选包的 Homebrew。")"
   fi
@@ -431,6 +445,15 @@ check_bootstrap_requirements() {
   ok "$(L "curl found" "已找到 curl")"
 
   if [[ "$PLATFORM" == "linux" ]]; then
+    local missing_packages
+    missing_packages="$(missing_linux_system_packages)"
+    if [[ -z "$missing_packages" ]]; then
+      ok "$(L "Linux system dependencies already present" "Linux 系统依赖已齐备")"
+      return
+    fi
+
+    warn "$(L "Missing Linux system dependencies: ${missing_packages}" "缺少 Linux 系统依赖:${missing_packages}")"
+
     if ! has_linux_package_manager; then
       fail "$(L "Unsupported Linux package manager. Please install apt, dnf, yum, pacman, or zypper, or install dependencies manually before re-running." "不支持当前 Linux 包管理器。请安装 apt、dnf、yum、pacman 或 zypper,或先手动安装依赖后再重新运行。")"
     fi
