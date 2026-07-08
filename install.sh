@@ -490,6 +490,35 @@ import distutils.version
 PY
 }
 
+select_python_with_distutils() {
+  local candidates=()
+  if [[ -n "${PYTHON:-}" ]]; then
+    candidates+=("$PYTHON")
+  fi
+  candidates+=(python3 /usr/bin/python3 /opt/homebrew/bin/python3 /usr/local/bin/python3 python)
+
+  local candidate resolved
+  local seen=""
+  for candidate in "${candidates[@]}"; do
+    if ! command -v "$candidate" >/dev/null 2>&1; then
+      continue
+    fi
+    resolved="$(command -v "$candidate")"
+    case " $seen " in
+      *" $resolved "*) continue ;;
+    esac
+    seen="${seen} ${resolved}"
+    if "$resolved" - <<'PY' >/dev/null 2>&1
+import distutils.version
+PY
+    then
+      export PYTHON="$resolved"
+      return 0
+    fi
+  done
+  return 1
+}
+
 macos_has_usable_xcode_tools() {
   # node-gyp's bundled gyp still queries xcodebuild/pkgutil on macOS when
   # native packages fall back to source builds. A bare clang/make pair is not
@@ -504,10 +533,15 @@ macos_has_usable_xcode_tools() {
 ensure_native_build_tools() {
   if command -v python3 >/dev/null 2>&1 && command -v make >/dev/null 2>&1 && has_cxx_compiler; then
     if [[ "$PLATFORM" == "macos" ]]; then
-      if ! python_has_distutils; then
+      if ! python_has_distutils && ! select_python_with_distutils; then
         fail "$(L "Python distutils is required when native npm packages build from source. Install/use a Python that provides distutils, e.g. set PYTHON=/usr/bin/python3 before running the installer, or install setuptools for your Python." "原生 npm 依赖从源码编译时需要 Python distutils。请安装/使用带 distutils 的 Python,例如运行安装器前设置 PYTHON=/usr/bin/python3,或为当前 Python 安装 setuptools。")"
       fi
+      ok "$(L "Python with distutils found: ${PYTHON}" "已找到带 distutils 的 Python:${PYTHON}")"
       if ! macos_has_usable_xcode_tools; then
+        if command -v xcode-select >/dev/null 2>&1; then
+          warn "$(L "Opening Xcode Command Line Tools installer prompt..." "正在打开 Xcode Command Line Tools 安装提示...")"
+          xcode-select --install >/dev/null 2>&1 || true
+        fi
         fail "$(L "macOS native npm builds require a complete Xcode Command Line Tools installation. Run: xcode-select --install. If it is already installed but broken, reinstall it or run: sudo xcode-select --reset" "macOS 原生 npm 编译需要完整的 Xcode Command Line Tools。请运行:xcode-select --install。如果已安装但状态异常,请重新安装或运行:sudo xcode-select --reset")"
       fi
     fi

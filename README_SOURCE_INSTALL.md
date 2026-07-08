@@ -36,7 +36,7 @@ node --version
 
 If your Homebrew Node.js is older than v22.13.0, install a newer Node.js with your preferred Node version manager.
 
-Some Python distributions, especially Python 3.12 installed through package managers, may not include `distutils`, which older `node-gyp` versions still need when native packages compile from source. If you see `ModuleNotFoundError: No module named 'distutils'`, use a Python that provides it, for example:
+Some Python distributions, especially Python 3.12 installed through package managers, may not include `distutils`, which older `node-gyp` versions still need when native packages compile from source. The one-line installer tries to auto-select a Python that provides `distutils`. If you run npm commands manually and see `ModuleNotFoundError: No module named 'distutils'`, use a Python that provides it, for example:
 
 ```bash
 PYTHON=/usr/bin/python3 npm install
@@ -243,7 +243,7 @@ Open <http://localhost:3001>.
 
 - `Node.js >=22.13.0 is required`: switch to a newer Node.js and reinstall dependencies.
 - Native npm package build errors: make sure Python 3, `make`, and a C/C++ compiler are installed, then rerun `npm install`.
-- `ModuleNotFoundError: No module named 'distutils'` on macOS: retry with `PYTHON=/usr/bin/python3 npm install`, or use another Python that includes `distutils`.
+- `ModuleNotFoundError: No module named 'distutils'` on macOS: the one-line installer tries to auto-select a compatible Python; for manual npm commands, retry with `PYTHON=/usr/bin/python3 npm install`, or use another Python that includes `distutils`.
 - `xcodebuild` or Command Line Tools receipt errors on macOS: reinstall Xcode Command Line Tools with `xcode-select --install`, or run `sudo xcode-select --reset` if CLT is already installed.
 - Missing demo images/videos: install Git LFS and run `git lfs pull` from the repo root.
 - `rg` not found: install ripgrep for full file/search tool support.

@@ -58,7 +58,7 @@ node --version
 
 如果 Homebrew 安装的 Node.js 低于 v22.13.0，请使用你偏好的 Node 版本管理器安装更新版本。
 
-某些 Python 发行版（尤其是通过包管理器安装的 Python 3.12）可能不包含 `distutils`，而旧版 `node-gyp` 在源码编译原生包时仍会用到它。如果看到 `ModuleNotFoundError: No module named 'distutils'`，请使用带 `distutils` 的 Python，例如：
+某些 Python 发行版（尤其是通过包管理器安装的 Python 3.12）可能不包含 `distutils`，而旧版 `node-gyp` 在源码编译原生包时仍会用到它。一键安装脚本会尝试自动选择带 `distutils` 的 Python。如果你手动运行 npm 命令并看到 `ModuleNotFoundError: No module named 'distutils'`，请使用带 `distutils` 的 Python，例如：
 
 ```bash
 PYTHON=/usr/bin/python3 npm install
@@ -263,7 +263,7 @@ npm run start
 
 - 出现 `Node.js >=22.13.0 is required`：切换到更新版本 Node.js，并重新安装依赖。
 - 原生 npm 包编译失败：确认已安装 Python 3、`make` 和 C/C++ 编译器，然后重新运行 `npm install`。
-- macOS 出现 `ModuleNotFoundError: No module named 'distutils'`：用 `PYTHON=/usr/bin/python3 npm install` 重试，或切换到其他带 `distutils` 的 Python。
+- macOS 出现 `ModuleNotFoundError: No module named 'distutils'`：一键安装脚本会尝试自动选择兼容 Python；手动运行 npm 命令时，可用 `PYTHON=/usr/bin/python3 npm install` 重试，或切换到其他带 `distutils` 的 Python。
 - macOS 出现 `xcodebuild` 或 Command Line Tools receipt 相关错误：运行 `xcode-select --install` 重新安装 Xcode Command Line Tools；如果已安装但状态异常，可运行 `sudo xcode-select --reset` 后重试。
 - 缺少演示图片/视频：安装 Git LFS 后，在仓库根目录运行 `git lfs pull`。
 - 提示找不到 `rg`：安装 ripgrep 以启用完整的文件/搜索工具能力。
