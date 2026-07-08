@@ -1046,7 +1046,7 @@ function ProviderCard({
       const models = !hasProviderApiKey && catalogEntry
         ? await fetchRemoteDefaultModels(providerId)
         : await fetchProviderModels({ protocol, baseUrl: effectiveUrl, apiKey: hasProviderApiKey ? provider.apiKey : '', providerId });
-      setApiModels(models);
+      setApiModels(!hasProviderApiKey && catalogEntry && models.length === 0 ? catalogEntry.models : models);
       setApiModelsStatus('idle');
     } catch (error) {
       setApiModelsStatus('error');
