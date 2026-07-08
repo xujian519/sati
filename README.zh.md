@@ -328,6 +328,12 @@ pilotdeck            # 在 http://localhost:3001 启动服务
 pilotdeck status     # 查看运行状态
 ```
 
+之后如果想再次打开 PilotDeck，请在新的 PowerShell 窗口运行 `pilotdeck`，然后在浏览器中打开终端打印的地址。如果当前窗口还识别不到 `pilotdeck`，可以直接运行启动器：
+
+```powershell
+& "$HOME\.pilotdeck\bin\pilotdeck.cmd"
+```
+
 #### Windows PowerShell FAQ
 
 **首次运行 `npm run dev` 报错：`npm.ps1` 因系统禁止运行脚本而无法加载**

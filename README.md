@@ -328,6 +328,12 @@ pilotdeck            # starts the server at http://localhost:3001
 pilotdeck status     # check runtime status
 ```
 
+To open PilotDeck again later, run `pilotdeck` from a new PowerShell window, then open the printed URL in your browser. If `pilotdeck` is not yet on `PATH`, run the launcher directly:
+
+```powershell
+& "$HOME\.pilotdeck\bin\pilotdeck.cmd"
+```
+
 #### Windows PowerShell FAQ
 
 **`npm.ps1` cannot be loaded because running scripts is disabled**
