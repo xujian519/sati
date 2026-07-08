@@ -155,6 +155,7 @@ export class AgentLoop {
   }
 
   async *run(input: AgentLoopInput): AsyncGenerator<AgentEvent, AgentLoopRunResult, unknown> {
+    this.clearTurnScopedTokenCaps();
     this.applyRunModeOverride(input.runMode);
     this.applyPermissionOverrides(input.permissionMode, input.permissionRules, input.basePermissionMode);
     for (const filePath of input.allowedReadFiles ?? []) {
@@ -1830,6 +1831,21 @@ export class AgentLoop {
     if (!previous || previous.attemptMaxOutputTokens === undefined) return;
     const { attemptMaxOutputTokens: _attemptMaxOutputTokens, ...rest } = previous;
     this.transientTokenCaps.set(key, rest);
+  }
+
+  private clearTurnScopedTokenCaps(): void {
+    for (const [key, cap] of this.transientTokenCaps) {
+      const {
+        requestedMaxOutputTokens: _requestedMaxOutputTokens,
+        attemptMaxOutputTokens: _attemptMaxOutputTokens,
+        ...sessionCaps
+      } = cap;
+      if (sessionCaps.maxContextTokens === undefined && sessionCaps.hardMaxOutputTokens === undefined) {
+        this.transientTokenCaps.delete(key);
+      } else {
+        this.transientTokenCaps.set(key, sessionCaps);
+      }
+    }
   }
 
   private applyTokenCapsToRequest(request: CanonicalModelRequest, provider: string, model: string): CanonicalModelRequest {

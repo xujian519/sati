@@ -453,6 +453,128 @@ test("pre-routing compaction reserves the current model output cap by default", 
   assert.equal(reservedOutputTokens, 65_536);
 });
 
+test("empty length output bumps are cleared before the next user turn", async () => {
+  const requests: CanonicalModelRequest[] = [];
+  let executeCount = 0;
+  const dependencies: AgentRuntimeDependencies = {
+    router: {
+      async decide(): Promise<RouterDecision> {
+        return {
+          provider: "google",
+          model: "gemini-test",
+          scenarioType: "default",
+          isSubagent: false,
+          orchestrating: false,
+          resolvedFrom: "scenario",
+          mutations: {},
+        };
+      },
+      async *execute(_decision: RouterDecision, request: CanonicalModelRequest): AsyncIterable<CanonicalModelEvent> {
+        requests.push(request);
+        executeCount += 1;
+        yield { type: "message_start", role: "assistant" };
+        if (executeCount === 1) {
+          yield { type: "message_end", finishReason: "length" };
+          return;
+        }
+        yield { type: "text_delta", text: "ok" };
+        yield { type: "message_end", finishReason: "stop" };
+      },
+      stream(): AsyncIterable<CanonicalModelEvent> {
+        throw new Error("not used");
+      },
+    },
+    tools: {
+      scheduler: { executeAll: async () => [] },
+      registry: { list: () => [], toCanonicalSchemas: () => [] },
+    },
+  } as unknown as AgentRuntimeDependencies;
+
+  const loop = new AgentLoop({ ...baseConfig(), maxOutputTokens: 16 }, dependencies);
+  const first = await collectLoop(loop, []);
+  const second = await collectLoop(loop, []);
+
+  assert.equal(first.result.type, "success");
+  assert.equal(second.result.type, "success");
+  assert.equal(requests[0]?.maxOutputTokens, 16);
+  assert.equal(requests[1]?.maxOutputTokens, 4096);
+  assert.equal(requests[2]?.maxOutputTokens, 16);
+});
+
+test("hard provider output caps persist across user turns", async () => {
+  const requests: CanonicalModelRequest[] = [];
+  let executeCount = 0;
+  const dependencies: AgentRuntimeDependencies = {
+    router: {
+      async decide(): Promise<RouterDecision> {
+        return {
+          provider: "provider-a",
+          model: "model-a",
+          scenarioType: "default",
+          isSubagent: false,
+          orchestrating: false,
+          resolvedFrom: "scenario",
+          mutations: {},
+        };
+      },
+      async *execute(_decision: RouterDecision, request: CanonicalModelRequest): AsyncIterable<CanonicalModelEvent> {
+        requests.push(request);
+        executeCount += 1;
+        yield { type: "message_start", role: "assistant" };
+        if (executeCount === 1) {
+          yield {
+            type: "error",
+            error: {
+              provider: "provider-a",
+              protocol: "openai",
+              code: "invalid_request",
+              message: "max_tokens must be at most 32768",
+              retryable: false,
+              maxOutputTokens: 32_768,
+            },
+          };
+          return;
+        }
+        yield { type: "text_delta", text: "ok" };
+        yield { type: "message_end", finishReason: "stop" };
+      },
+      stream(): AsyncIterable<CanonicalModelEvent> {
+        throw new Error("not used");
+      },
+    },
+    tools: {
+      scheduler: { executeAll: async () => [] },
+      registry: { list: () => [], toCanonicalSchemas: () => [] },
+    },
+    context: {
+      prepareForModel: async (input: AgentContextPrepareInput) => ({
+        messages: input.messages,
+        systemPromptParts: [],
+        tools: input.tools,
+        diagnostics: [],
+        boundaries: [],
+      }),
+      recoverFromModelError: async () => ({
+        type: "adjust_output_and_retry",
+        maxOutputTokens: 32_768,
+        reason: "provider-output-cap",
+        scope: "hard_cap",
+      }),
+    },
+    getModelTokenLimits: () => ({ maxContextTokens: 1_000_000, maxOutputTokens: 65_536 }),
+  } as unknown as AgentRuntimeDependencies;
+
+  const loop = new AgentLoop(baseConfig(), dependencies);
+  const first = await collectLoop(loop, []);
+  const second = await collectLoop(loop, []);
+
+  assert.equal(first.result.type, "success");
+  assert.equal(second.result.type, "success");
+  assert.equal(requests[0]?.maxOutputTokens, 65_536);
+  assert.equal(requests[1]?.maxOutputTokens, 32_768);
+  assert.equal(requests[2]?.maxOutputTokens, 32_768);
+});
+
 function baseConfig(): AgentRuntimeConfig {
   return {
     provider: "google",
