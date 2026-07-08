@@ -332,8 +332,11 @@ GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenBMB/PilotDeck.git
 cd PilotDeck
 
 node --version          # 必须为 v22.13.0 或更新版本，且低于 v23
+corepack enable         # 启用 package.json 中固定的 pnpm 版本
 corepack pnpm install --frozen-lockfile
 ```
+
+PilotDeck 使用仓库提交的 `pnpm-lock.yaml` 保证源码安装可复现。请优先使用上面的 `corepack pnpm ...`，不要改用 `npm install`；在 macOS 上，这也能减少原生依赖不必要地回退到源码编译的概率。
 
 **2. 配置模型 Provider**
 PilotDeck 依赖 `~/.pilotdeck/pilotdeck.yaml` 进行配置。您可以手动创建、运行启动脚本自动生成，**或者在启动 Web UI 后直接在设置界面中进行可视化配置**。

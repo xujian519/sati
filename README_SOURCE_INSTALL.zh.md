@@ -224,8 +224,11 @@ git lfs pull
 
 ```bash
 node --version          # 必须为 v22.13.0 或更新版本，且低于 v23
+corepack enable         # 启用 package.json 中固定的 pnpm 版本
 corepack pnpm install --frozen-lockfile
 ```
+
+源码安装请使用仓库提交的 `pnpm-lock.yaml`。不要把这一步替换成 `npm install`；当前 lockfile 和 workspace 构建配置按 pnpm 维护，一键安装脚本验证的也是这条路径。
 
 ## 首次 Onboarding
 

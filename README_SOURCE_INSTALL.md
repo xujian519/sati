@@ -204,8 +204,11 @@ git lfs pull
 
 ```bash
 node --version          # must be v22.13.0 or newer, and below v23
+corepack enable         # enables the pinned pnpm version from package.json
 corepack pnpm install --frozen-lockfile
 ```
+
+Use the committed `pnpm-lock.yaml` for source installs. Do not replace this step with `npm install`; the lockfile and workspace build settings are maintained for pnpm, and pnpm is the path tested by the one-line installer.
 
 ## First-Run Onboarding
 

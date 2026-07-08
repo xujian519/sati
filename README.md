@@ -332,8 +332,11 @@ GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenBMB/PilotDeck.git
 cd PilotDeck
 
 node --version          # must be v22.13.0 or newer, and below v23
+corepack enable         # enables the pinned pnpm version from package.json
 corepack pnpm install --frozen-lockfile
 ```
+
+PilotDeck uses the committed `pnpm-lock.yaml` for reproducible source installs. Prefer the `corepack pnpm ...` command above instead of `npm install`; on macOS, this also avoids unnecessary native rebuild fallbacks when matching prebuilt packages are available.
 
 **2. Configure a model provider**
 
