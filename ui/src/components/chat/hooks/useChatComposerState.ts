@@ -1179,6 +1179,7 @@ export function useChatComposerState({
 
       setInput(nextValue);
       inputValueRef.current = nextValue;
+      syncQueuedBusySendSnapshot({ input: nextValue });
       setCursorPosition(nextCursor);
 
       if (char === '/') {
@@ -1198,7 +1199,7 @@ export function useChatComposerState({
         }
       });
     },
-    [handleCommandInputChange, input, setCursorPosition, setInput, textareaRef],
+    [handleCommandInputChange, input, setCursorPosition, setInput, syncQueuedBusySendSnapshot, textareaRef],
   );
 
   const handleKeyDown = useCallback(
@@ -1267,13 +1268,14 @@ export function useChatComposerState({
     setInput('');
     inputValueRef.current = '';
     setDocumentReferences([]);
+    cancelBusySendQueue();
     resetCommandMenuState();
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.focus();
     }
     setIsTextareaExpanded(false);
-  }, [resetCommandMenuState]);
+  }, [cancelBusySendQueue, resetCommandMenuState]);
 
   const handleAbortSession = useCallback(() => {
     if (!canAbortSession) {
