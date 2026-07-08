@@ -325,6 +325,14 @@ cd ..
 PilotDeck 依赖 `~/.pilotdeck/pilotdeck.yaml` 进行配置。您可以手动创建、运行启动脚本自动生成，**或者在启动 Web UI 后直接在设置界面中进行可视化配置**。
 支持 OpenAI、Anthropic、原生 Google Gemini、DeepSeek、Qwen、Kimi、MiniMax 等多种协议。
 
+如果本机还没有配置文件，生产模式启动前请先生成占位配置：
+
+```bash
+node scripts/bootstrap-pilotdeck-config.mjs
+```
+
+该命令会创建 `~/.pilotdeck/pilotdeck.yaml`，使用可启动 Gateway 的占位值；随后可在 Web UI 设置面板中替换为真实 Provider 信息。
+
 ```yaml
 schemaVersion: 1
 agent:

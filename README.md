@@ -327,6 +327,14 @@ cd ..
 PilotDeck reads `~/.pilotdeck/pilotdeck.yaml`. You can create it manually, let the bootstrap script generate one, **or just open the Web UI and configure providers visually in the settings panel.**
 Supported protocols include OpenAI, Anthropic, native Google Gemini, DeepSeek, Qwen, Kimi, MiniMax and other OpenAI-compatible endpoints.
 
+If you do not already have a config file, generate a placeholder before starting in production mode:
+
+```bash
+node scripts/bootstrap-pilotdeck-config.mjs
+```
+
+This creates `~/.pilotdeck/pilotdeck.yaml` with onboarding placeholders so the Gateway can boot; you can then replace them in the Web UI settings panel.
+
 ```yaml
 schemaVersion: 1
 agent:
