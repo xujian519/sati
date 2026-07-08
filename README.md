@@ -307,13 +307,14 @@ pilotdeck status     # check runtime status
 
 ### Option B: From source (for developers)
 
+> Need platform-specific dependency installation commands? See the [Source Installation Guide](./README_SOURCE_INSTALL.md).
+
 **1. Clone and install dependencies**
 
-> This repo uses [Git LFS](https://git-lfs.com/) for large media assets. Make sure `git lfs` is installed before cloning.
-> If you don't need the demo videos/GIFs, add `GIT_LFS_SKIP_SMUDGE=1` before `git clone` to skip downloading them.
+> By default, skip large Git LFS demo media to keep the source install lightweight. If you need the demo videos/GIFs later, run `git lfs pull` after cloning.
 
 ```bash
-git clone https://github.com/OpenBMB/PilotDeck.git
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenBMB/PilotDeck.git
 cd PilotDeck
 
 node --version          # must be v22.13.0 or newer

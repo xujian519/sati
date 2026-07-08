@@ -307,13 +307,14 @@ pilotdeck status     # 查看运行状态
 
 ### 方式二：源码启动 (适合开发者)
 
+> 需要按平台安装依赖的命令？请查看[源码安装指南](./README_SOURCE_INSTALL.zh.md)。
+
 **1. 克隆代码与安装依赖**
 
-> 本仓库使用 [Git LFS](https://git-lfs.com/) 管理大型媒体文件。克隆前请确保已安装 `git lfs`。
-> 如果不需要演示视频/GIF，可在 clone 前加上 `GIT_LFS_SKIP_SMUDGE=1` 跳过下载。
+> 源码安装默认跳过 Git LFS 管理的大型演示媒体文件，以保持安装轻量。如果之后需要演示视频/GIF，可在克隆后运行 `git lfs pull` 下载。
 
 ```bash
-git clone https://github.com/OpenBMB/PilotDeck.git
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenBMB/PilotDeck.git
 cd PilotDeck
 
 npm install              # 安装根目录依赖 (Gateway 运行时)
