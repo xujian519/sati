@@ -159,13 +159,62 @@ function Ensure-NodeRuntime {
   Write-Ok "Node.js v$version installed"
 }
 
+function Add-PortableGitToPath {
+  $gitRoot = Join-Path $HOME '.pilotdeck\git'
+  if (-not (Test-Path $gitRoot)) { return $false }
+  $gitExe = Get-ChildItem -Path $gitRoot -Recurse -Filter git.exe -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -match '[\\/]cmd[\\/]git\.exe$' } |
+    Sort-Object FullName -Descending |
+    Select-Object -First 1
+  if (-not $gitExe) { return $false }
+  $gitCmdDir = Split-Path -Parent $gitExe.FullName
+  $env:Path = "$gitCmdDir;$env:Path"
+  return $true
+}
+
+function Resolve-MinGitDownload {
+  $latestUrl = 'https://github.com/git-for-windows/git/releases/latest'
+  $page = Invoke-WebRequest -Uri $latestUrl -UseBasicParsing
+  $tagUrl = [string]$page.BaseResponse.ResponseUri
+  if ($tagUrl -notmatch '/tag/(v[0-9.]+)\.windows\.([0-9]+)') {
+    if ($page.Content -match '/git-for-windows/git/releases/tag/(v[0-9.]+)\.windows\.([0-9]+)') {
+      $tagUrl = "/tag/$($Matches[1]).windows.$($Matches[2])"
+    } else {
+      Write-Fail 'Could not resolve the latest Git for Windows release tag.'
+    }
+  }
+  $assetVersion = "$($Matches[1].TrimStart('v')).$($Matches[2])"
+  $tag = "$($Matches[1]).windows.$($Matches[2])"
+  return "https://github.com/git-for-windows/git/releases/download/$tag/MinGit-$assetVersion-64-bit.zip"
+}
+
+function Install-PortableGit {
+  if (Add-PortableGitToPath) { return }
+  $installRoot = Join-Path $HOME '.pilotdeck\git'
+  New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
+  $zipPath = Join-Path ([System.IO.Path]::GetTempPath()) 'pilotdeck-mingit.zip'
+  Write-Step 'Downloading portable Git for Windows (MinGit)...'
+  $url = Resolve-MinGitDownload
+  Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
+  $extractRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'pilotdeck-mingit'
+  Remove-Item -Recurse -Force -LiteralPath $extractRoot -ErrorAction SilentlyContinue
+  Expand-Archive -LiteralPath $zipPath -DestinationPath $extractRoot -Force
+  Remove-Item -Recurse -Force -LiteralPath $installRoot -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
+  Get-ChildItem -LiteralPath $extractRoot -Force | Move-Item -Destination $installRoot
+  Remove-Item -Recurse -Force -LiteralPath $extractRoot -ErrorAction SilentlyContinue
+  Remove-Item -Force -LiteralPath $zipPath -ErrorAction SilentlyContinue
+  if (-not (Add-PortableGitToPath)) { Write-Fail 'Portable Git install completed but git.exe was not found.' }
+}
+
 function Ensure-Prerequisites {
   if (-not (Test-Command git)) {
     if (Test-Command winget) {
       Write-Step 'Installing Git with winget...'
       & winget install --id Git.Git -e --accept-package-agreements --accept-source-agreements
+      if (-not (Test-Command git)) { Install-PortableGit }
     } else {
-      Write-Fail 'git is required. Install Git for Windows, then rerun this script.'
+      Install-PortableGit
     }
   }
   Write-Ok 'git found'
@@ -232,7 +281,7 @@ function Install-OrUpdateRepo {
   $parent = Split-Path -Parent $InstallDir
   New-Item -ItemType Directory -Force -Path $parent | Out-Null
   $env:GIT_LFS_SKIP_SMUDGE = '1'
-  & git clone --branch $Branch --depth 1 $RepoUrl $InstallDir
+  & git -c filter.lfs.smudge= -c filter.lfs.process= -c filter.lfs.required=false clone --branch $Branch --depth 1 $RepoUrl $InstallDir
   if ($LASTEXITCODE -ne 0) { Write-Fail 'git clone failed' }
   Write-Ok "Repository cloned to $InstallDir"
 }
@@ -403,6 +452,8 @@ if (-not $SkipStart) {
   Set-Location (Join-Path $InstallDir 'ui')
   & npm run start:built
 }
+
+
 
 
 
