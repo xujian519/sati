@@ -187,7 +187,9 @@ export function useChatRealtimeHandlers({
             const slot = sessionStore.getSessionSlot?.(statusSessionId);
             const hasLiveStreaming = Boolean(slot?.realtimeMessages?.some((message) => (
               message.id === `__streaming_${statusSessionId}`
+              || message.id.startsWith(`__streaming_${statusSessionId}_`)
               || message.id === `__streaming_thinking_${statusSessionId}`
+              || message.id.startsWith(`__streaming_thinking_${statusSessionId}_`)
             )));
             const replayedToolIds = new Set(
               (slot?.realtimeMessages || [])
