@@ -341,6 +341,7 @@ export class AgentLoop {
 
       let pendingContextBudget: TokenBudgetSnapshot | undefined;
       const ctx = this.dependencies.context;
+      const preRoutingMaxContextTokens = this.currentMaxContextTokens(this.config.provider, this.config.model);
       if (ctx?.tryAutoCompact) {
         try {
           const reservedOutputTokens = this.getReservedOutputTokens();
@@ -350,7 +351,7 @@ export class AgentLoop {
             reservedOutputTokens,
             lastUsage: lastModelUsage,
             budgetEvaluator: this.createBudgetEvaluator(input, {
-              maxContextTokens: this.config.maxContextTokens,
+              maxContextTokens: preRoutingMaxContextTokens,
               reservedOutputTokens,
             }),
           });
@@ -420,12 +421,10 @@ export class AgentLoop {
       const routedLimits = this.getModelTokenLimits(decision.provider, decision.model);
       const routedMaxOutputTokens = routedLimits?.maxOutputTokens;
 
-      const getMaxCtx = this.dependencies.getModelMaxContextTokens;
-      const agentMaxCtx = this.currentMaxContextTokens(decision.provider, decision.model);
       let emittedContextBudget = false;
       if (ctx?.tryAutoCompact) {
-        const routedMaxCtx = routedLimits?.maxContextTokens ?? getMaxCtx?.(decision.provider, decision.model);
-        const currentBudgetMaxCtx = agentMaxCtx;
+        const routedMaxCtx = routedLimits?.maxContextTokens ?? this.dependencies.getModelMaxContextTokens?.(decision.provider, decision.model);
+        const currentBudgetMaxCtx = preRoutingMaxContextTokens;
         if (routedMaxCtx !== undefined && routedMaxCtx !== currentBudgetMaxCtx) {
           try {
             const reservedOutputTokens = this.getReservedOutputTokens(decision.provider, decision.model);
