@@ -336,7 +336,8 @@ function Invoke-Npm([string[]]$Arguments, [string]$WorkingDirectory) {
   Push-Location $WorkingDirectory
   try {
     $env:HUSKY = '0'
-    & npm @Arguments
+    $npmPath = Resolve-NpmCommand
+    & $npmPath @Arguments
     if ($LASTEXITCODE -ne 0) { Write-Fail "npm $($Arguments -join ' ') failed in $WorkingDirectory" }
   } finally {
     Pop-Location
