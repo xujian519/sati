@@ -14,6 +14,14 @@ The Docker Compose setup persists the full `PILOT_HOME` directory, including gen
 - [Docker](https://docs.docker.com/get-docker/) v20+
 - [Docker Compose](https://docs.docker.com/compose/) v2+
 
+Make sure the Docker daemon is running before starting PilotDeck. On macOS/Windows, start Docker Desktop first and wait until the engine is ready:
+
+```bash
+docker info
+```
+
+The first build pulls base images such as `node:22-bookworm` and `node:22-bookworm-slim` from Docker Hub. If pulling images is slow or fails with `context deadline exceeded`, configure a Docker registry mirror or Docker Desktop proxy, then retry `docker compose up -d --build`. On Docker Desktop, registry mirrors can be configured in **Settings → Docker Engine**. On Linux, add mirrors to `/etc/docker/daemon.json`, then restart Docker.
+
 ### Option A: Configure via environment variables
 
 Set the model provider variables in `docker-compose.yml` or an `.env` file:
