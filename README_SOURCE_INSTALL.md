@@ -73,13 +73,41 @@ Make sure `node --version` reports v22.13.0 or newer.
 
 ### Windows
 
-For source installs on Windows, use WSL2 with a Linux distribution such as Ubuntu. Then follow the Debian / Ubuntu instructions inside WSL:
+For the smoothest Windows source install, use WSL2 with a Linux distribution such as Ubuntu. Then follow the Debian / Ubuntu instructions inside WSL:
 
 ```powershell
 wsl --install -d Ubuntu
 ```
 
-After WSL starts, run the Linux dependency commands from the Debian / Ubuntu section. Native Windows shells such as PowerShell or Git Bash are not the recommended source-install path because terminal, native npm modules, and browser/tool integrations are primarily tested on macOS, Linux, and WSL.
+After WSL starts, run the Linux dependency commands from the Debian / Ubuntu section.
+
+Native Windows PowerShell is also supported for basic source installs. Install the required tools with `winget`:
+
+```powershell
+winget install --id Git.Git -e
+winget install --id GitHub.GitLFS -e
+winget install --id BurntSushi.ripgrep.MSVC -e
+winget install --id OpenJS.NodeJS -e
+winget install --id Python.Python.3.12 -e
+```
+
+Then open a new PowerShell window and verify:
+
+```powershell
+node --version   # must be v22.13.0 or newer
+git --version
+git lfs version
+rg --version
+python --version
+```
+
+If `npm install` fails while building native packages, install Visual Studio Build Tools with the Desktop C++ workload:
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+If `winget` is not available, install the same tools manually, or use Chocolatey equivalents such as `choco install git git-lfs ripgrep nodejs-lts python visualstudio2022buildtools visualstudio2022-workload-vctools`.
 
 ## Clone the Repository
 

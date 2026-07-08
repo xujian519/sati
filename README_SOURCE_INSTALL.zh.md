@@ -93,13 +93,41 @@ sudo pacman -Sy --needed git git-lfs ripgrep base-devel python nodejs npm
 
 ### Windows
 
-Windows 源码安装推荐使用 WSL2，并在 WSL 中安装 Ubuntu 等 Linux 发行版。进入 WSL 后，按上面的 Debian / Ubuntu 步骤安装依赖：
+Windows 源码安装最推荐使用 WSL2，并在 WSL 中安装 Ubuntu 等 Linux 发行版。进入 WSL 后，按上面的 Debian / Ubuntu 步骤安装依赖：
 
 ```powershell
 wsl --install -d Ubuntu
 ```
 
-WSL 启动后，在 WSL 终端中执行 Debian / Ubuntu 小节里的 Linux 依赖安装命令。不建议直接在 PowerShell 或 Git Bash 中走源码安装路径，因为终端能力、原生 npm 模块以及浏览器/工具集成主要在 macOS、Linux 和 WSL 环境中验证。
+WSL 启动后，在 WSL 终端中执行 Debian / Ubuntu 小节里的 Linux 依赖安装命令。
+
+如果希望使用原生 Windows PowerShell，也可以进行基础源码安装。先用 `winget` 安装依赖：
+
+```powershell
+winget install --id Git.Git -e
+winget install --id GitHub.GitLFS -e
+winget install --id BurntSushi.ripgrep.MSVC -e
+winget install --id OpenJS.NodeJS -e
+winget install --id Python.Python.3.12 -e
+```
+
+然后打开新的 PowerShell 窗口并检查：
+
+```powershell
+node --version   # 必须为 v22.13.0 或更新版本
+git --version
+git lfs version
+rg --version
+python --version
+```
+
+如果 `npm install` 在编译原生依赖时报错，请安装 Visual Studio Build Tools，并包含 Desktop C++ workload：
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+如果没有 `winget`，也可以手动安装同类工具，或使用 Chocolatey 等价命令，例如 `choco install git git-lfs ripgrep nodejs-lts python visualstudio2022buildtools visualstudio2022-workload-vctools`。
 
 ## 克隆仓库
 
