@@ -945,7 +945,19 @@ export async function runChatViaGateway(
             try {
                 await gw.abortTurn({ sessionKey, runId: state.runId, reason: 'user:force_start_next_turn' });
             } catch (err) {
-                console.warn('[pilotdeck-bridge] force-start abort failed (continuing):', err?.message || err);
+                const message = 'Could not stop the current turn before sending the queued message. Please wait for the current turn to finish or try stopping it again.';
+                console.warn('[pilotdeck-bridge] force-start abort failed:', err?.message || err);
+                writer.send(
+                    createNormalizedMessage({
+                        provider,
+                        sessionId: sessionKey,
+                        kind: 'error',
+                        code: 'force_start_abort_failed',
+                        content: message,
+                        userHint: message,
+                    }),
+                );
+                return;
             }
             state.active = false;
             state.runId = undefined;

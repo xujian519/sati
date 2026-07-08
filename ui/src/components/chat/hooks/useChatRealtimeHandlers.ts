@@ -420,7 +420,7 @@ export function useChatRealtimeHandlers({
       // Finalize thinking if still active (model moved past thinking)
       if (thinkingBySessionRef.current.has(sid)) {
         thinkingBySessionRef.current.delete(sid);
-        sessionStore.finalizeStreamingThinking(sid);
+        sessionStore.finalizeStreamingThinking(sid, msgRunId);
       }
       // Finalize content stream on tool_use / complete / error.
       // The gateway may not send stream_end, so tool_use is the
