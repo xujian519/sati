@@ -158,6 +158,73 @@ test("provider output caps are scoped per routed provider and model", async () =
   assert.equal(requests[1]?.maxOutputTokens, 65_536);
 });
 
+test("provider output caps are hard bounds below configured and catalog caps", async () => {
+  const requests: CanonicalModelRequest[] = [];
+  let executeCount = 0;
+
+  const dependencies: AgentRuntimeDependencies = {
+    router: {
+      async decide(): Promise<RouterDecision> {
+        return {
+          provider: "provider-a",
+          model: "model-a",
+          scenarioType: "default",
+          isSubagent: false,
+          orchestrating: false,
+          resolvedFrom: "scenario",
+          mutations: {},
+        };
+      },
+      async *execute(_decision: RouterDecision, request: CanonicalModelRequest): AsyncIterable<CanonicalModelEvent> {
+        requests.push(request);
+        executeCount += 1;
+        yield { type: "message_start", role: "assistant" };
+        if (executeCount === 1) {
+          yield {
+            type: "error",
+            error: {
+              provider: "provider-a",
+              protocol: "openai",
+              code: "invalid_request",
+              message: "max_tokens must be at most 32768",
+              retryable: false,
+              maxOutputTokens: 32_768,
+            },
+          };
+          return;
+        }
+        yield { type: "text_delta", text: "ok" };
+        yield { type: "message_end", finishReason: "stop" };
+      },
+      stream(): AsyncIterable<CanonicalModelEvent> {
+        throw new Error("not used");
+      },
+    },
+    tools: {
+      scheduler: { executeAll: async () => [] },
+      registry: { list: () => [], toCanonicalSchemas: () => [] },
+    },
+    context: {
+      prepareForModel: async (input: AgentContextPrepareInput) => ({
+        messages: input.messages,
+        systemPromptParts: [],
+        tools: input.tools,
+        diagnostics: [],
+        boundaries: [],
+      }),
+      recoverFromModelError: async () => ({ type: "adjust_output_and_retry", maxOutputTokens: 32_768, reason: "provider-output-cap" }),
+    },
+    getModelTokenLimits: () => ({ maxContextTokens: 1_000_000, maxOutputTokens: 65_536 }),
+  } as unknown as AgentRuntimeDependencies;
+
+  const loop = new AgentLoop(baseConfig(), dependencies);
+  const result = await collectLoop(loop, []);
+
+  assert.equal(result.result.type, "success");
+  assert.equal(requests[0]?.maxOutputTokens, 65_536);
+  assert.equal(requests[1]?.maxOutputTokens, 32_768);
+});
+
 test("empty length output jump is clamped by model output cap", async () => {
   const requests: CanonicalModelRequest[] = [];
   let executeCount = 0;

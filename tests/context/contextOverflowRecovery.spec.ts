@@ -46,10 +46,18 @@ test("mixed context/output errors compact when available output is too small", (
   );
 });
 
-test("mixed context/output errors lower output after compaction was attempted", () => {
+test("mixed context/output errors truncate after compaction when available output remains too small", () => {
   const recovery = new ContextOverflowRecovery();
   assert.deepEqual(
     recovery.decide({ error: error({ availableOutputTokens: 128, recoverableViaCompact: true }), hasAttemptedCompact: true }),
-    { type: "adjust_output_and_retry", maxOutputTokens: 128, reason: "provider-output-cap" },
+    { type: "truncate_head_and_retry", keepRatio: 0.25, reason: "provider-available-output-too-small-after-compact" },
+  );
+});
+
+test("mixed context/output errors lower output after compaction when available is safe", () => {
+  const recovery = new ContextOverflowRecovery();
+  assert.deepEqual(
+    recovery.decide({ error: error({ availableOutputTokens: 8_192, recoverableViaCompact: true }), hasAttemptedCompact: true }),
+    { type: "adjust_output_and_retry", maxOutputTokens: 8_192, reason: "provider-output-cap" },
   );
 });
