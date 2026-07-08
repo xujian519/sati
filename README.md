@@ -315,6 +315,12 @@ powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Ope
 
 The PowerShell installer uses Windows-native paths under `%USERPROFILE%\.pilotdeck`, checks Node.js 22.13+ with `node:sqlite`, installs missing prerequisites with `winget` when available, builds PilotDeck, and creates a `pilotdeck.cmd` launcher in `%USERPROFILE%\.pilotdeck\bin`.
 
+After installation, the script starts PilotDeck and prints the UI URL, usually `http://localhost:3001`. It does not automatically open a browser, so copy that URL into your browser to finish onboarding (provider + API key). You can also open it from PowerShell:
+
+```powershell
+Start-Process http://localhost:3001
+```
+
 If this is your first install, open a new PowerShell window after the script updates your user `PATH`, then run:
 
 ```powershell

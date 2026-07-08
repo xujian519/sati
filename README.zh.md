@@ -315,6 +315,12 @@ powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Ope
 
 PowerShell 安装脚本会使用 `%USERPROFILE%\.pilotdeck` 下的 Windows 原生路径，检查 Node.js 22.13+ 与 `node:sqlite`，在可用时通过 `winget` 安装缺失依赖，构建 PilotDeck，并在 `%USERPROFILE%\.pilotdeck\bin` 生成 `pilotdeck.cmd` 启动器。
 
+安装完成后，脚本会启动 PilotDeck 并打印 UI 地址，通常是 `http://localhost:3001`。脚本不会自动打开浏览器，请把该地址复制到浏览器中完成初始化配置（Provider + API key）。也可以在 PowerShell 中打开：
+
+```powershell
+Start-Process http://localhost:3001
+```
+
 如果脚本刚刚更新了用户 `PATH`，请新开一个 PowerShell 窗口后运行：
 
 ```powershell
