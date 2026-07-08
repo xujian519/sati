@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { effectiveInputContextTokens, TokenBudgetManager } from "../../src/context/index.js";
+import { DefaultContextRuntime, effectiveInputContextTokens, TokenBudgetManager } from "../../src/context/index.js";
+import { AutoCompactionPolicy } from "../../src/context/compaction/AutoCompactionPolicy.js";
 import type { CanonicalMessage } from "../../src/model/index.js";
 
 test("effective input context subtracts output reservation", () => {
@@ -32,4 +33,44 @@ test("token budget can use provider usage for pressure", () => {
   assert.equal(snapshot.usageTokens, 650);
   assert.equal(snapshot.estimateSource, "usage");
   assert.equal(snapshot.state, "warning");
+});
+
+test("token budget never lets stale usage undercount current messages", () => {
+  const budget = new TokenBudgetManager({ warningRatio: 0.5, blockingRatio: 0.9 });
+  const messages: CanonicalMessage[] = [
+    { role: "user", content: [{ type: "text", text: "x".repeat(10_000) }] },
+  ];
+  const estimated = budget.estimateMessagesTokens(messages);
+  const snapshot = budget.evaluate(messages, estimated * 2, 0, { inputTokens: 1, outputTokens: 1, totalTokens: 2 });
+  assert.equal(snapshot.tokens, estimated);
+  assert.equal(snapshot.usageTokens, 2);
+  assert.equal(snapshot.estimateSource, "usage");
+});
+
+test("post-compaction snapshots use compacted messages instead of stale usage", async () => {
+  const budget = new TokenBudgetManager({ warningRatio: 0.5, blockingRatio: 0.9 });
+  const compactedMessages: CanonicalMessage[] = [
+    { role: "user", content: [{ type: "text", text: "ok" }] },
+  ];
+  const runtime = new DefaultContextRuntime({
+    tokenBudget: budget,
+    autoCompactionPolicy: new AutoCompactionPolicy({ tokenBudget: budget }),
+    maxContextTokens: 1_000,
+    microCompaction: {
+      apply: () => ({
+        messages: compactedMessages,
+        rewritten: 1,
+        rewrittenBytes: 1,
+        toolCallIds: ["call-1"],
+        appliedTrigger: "time_based" as const,
+      }),
+    } as any,
+  });
+  const result = await runtime.tryAutoCompact({
+    messages: [{ role: "user", content: [{ type: "text", text: "x".repeat(10_000) }] }],
+    lastUsage: { inputTokens: 10_000, outputTokens: 1, totalTokens: 10_001 },
+  });
+  assert.equal(result.type, "compacted");
+  assert.equal(result.snapshot.estimateSource, "estimator");
+  assert.equal(result.snapshot.state, "ok");
 });

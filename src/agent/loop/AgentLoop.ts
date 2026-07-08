@@ -730,6 +730,123 @@ export class AgentLoop {
         return { result, messages };
       }
 
+      if (!assembled.error && toolCalls.length === 0 && textFromMessage(assistantMessage).length === 0) {
+        if (maxOutputRecoveryCount > 0) {
+          consecutiveEmptyCount++;
+          if (consecutiveEmptyCount < MAX_CONSECUTIVE_EMPTY
+            && maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
+            maxOutputRecoveryCount++;
+            if (assembled.finishReason === "length") {
+              const previousMaxOutputTokens = this.currentMaxOutputTokens(decision.provider, decision.model);
+              const nextMaxOutputTokens = clampOutputToModelCap(
+                Math.max((previousMaxOutputTokens ?? 0) * 2, EMPTY_LENGTH_OUTPUT_RETRY_FLOOR),
+                routedMaxOutputTokens,
+              );
+              if (nextMaxOutputTokens !== undefined && nextMaxOutputTokens !== previousMaxOutputTokens) {
+                this.setTransientTokenCap(decision.provider, decision.model, { maxOutputTokens: nextMaxOutputTokens });
+                yield {
+                  type: "empty_output_recovery",
+                  sessionId: input.sessionId,
+                  turnId: input.turnId,
+                  provider: decision.provider,
+                  model: decision.model,
+                  finishReason: assembled.finishReason,
+                  previousMaxOutputTokens,
+                  nextMaxOutputTokens,
+                };
+              }
+            }
+            pushTransientSyntheticPrompt(
+              "Output token limit hit. Resume directly - no apology, no recap of what you were doing. "
+                + "Pick up mid-sentence if that is where the cut happened.",
+              "max_output_recovery",
+            );
+            yield {
+              type: "turn_continued",
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              reason: "model_error",
+            };
+            continue;
+          }
+          finalMessage = messages.filter((m) => m.role === "assistant").at(-1);
+          const status = createEmptyResponseStatus({
+            provider: request.provider,
+            model: request.model,
+            attempts: consecutiveEmptyCount,
+          });
+          yield await emitStatus(status);
+          const result = this.createTurnResult(input, {
+            type: "success",
+            stopReason: "completed",
+            usage,
+            permissionDenials,
+            turns: turnCount,
+            startedAt,
+            finalMessage,
+          });
+          await captureTurn(true);
+          yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+          return { result, messages };
+        }
+
+        if (!hasAttemptedEmptyRetry) {
+          hasAttemptedEmptyRetry = true;
+          maxOutputRecoveryCount++;
+          if (assembled.finishReason === "length") {
+            const previousMaxOutputTokens = this.currentMaxOutputTokens(decision.provider, decision.model);
+            const nextMaxOutputTokens = clampOutputToModelCap(
+              Math.max((previousMaxOutputTokens ?? 0) * 2, EMPTY_LENGTH_OUTPUT_RETRY_FLOOR),
+              routedMaxOutputTokens,
+            );
+            if (nextMaxOutputTokens !== undefined && nextMaxOutputTokens !== previousMaxOutputTokens) {
+              this.setTransientTokenCap(decision.provider, decision.model, { maxOutputTokens: nextMaxOutputTokens });
+              yield {
+                type: "empty_output_recovery",
+                sessionId: input.sessionId,
+                turnId: input.turnId,
+                provider: decision.provider,
+                model: decision.model,
+                finishReason: assembled.finishReason,
+                previousMaxOutputTokens,
+                nextMaxOutputTokens,
+              };
+            }
+          }
+          pushTransientSyntheticPrompt(
+            "Your previous response was empty (thinking only, no visible text). "
+              + "Please provide your answer as visible text output.",
+            "empty_response_retry",
+          );
+          yield {
+            type: "turn_continued",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            reason: "model_error",
+          };
+          continue;
+        }
+
+        const status = createEmptyResponseStatus({
+          provider: request.provider,
+          model: request.model,
+          attempts: 2,
+        });
+        yield await emitStatus(status);
+        const result = this.createTurnResult(input, {
+          type: "success",
+          stopReason: "completed",
+          usage,
+          permissionDenials,
+          turns: turnCount,
+          startedAt,
+          finalMessage: messages.filter((m) => m.role === "assistant").at(-1),
+        });
+        await captureTurn(true);
+        yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+        return { result, messages };
+      }
+
       messages.push(assistantMessage);
       yield { type: "assistant_message", sessionId: input.sessionId, turnId: input.turnId, message: assistantMessage };
       await input.onDurableMessage?.(assistantMessage);
@@ -993,6 +1110,26 @@ export class AgentLoop {
             if (consecutiveEmptyCount < MAX_CONSECUTIVE_EMPTY
               && maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
               maxOutputRecoveryCount++;
+              if (assembled.finishReason === "length") {
+                const previousMaxOutputTokens = this.currentMaxOutputTokens(decision.provider, decision.model);
+                const nextMaxOutputTokens = clampOutputToModelCap(
+                  Math.max((previousMaxOutputTokens ?? 0) * 2, EMPTY_LENGTH_OUTPUT_RETRY_FLOOR),
+                  routedMaxOutputTokens,
+                );
+                if (nextMaxOutputTokens !== undefined && nextMaxOutputTokens !== previousMaxOutputTokens) {
+                  this.setTransientTokenCap(decision.provider, decision.model, { maxOutputTokens: nextMaxOutputTokens });
+                  yield {
+                    type: "empty_output_recovery",
+                    sessionId: input.sessionId,
+                    turnId: input.turnId,
+                    provider: decision.provider,
+                    model: decision.model,
+                    finishReason: assembled.finishReason,
+                    previousMaxOutputTokens,
+                    nextMaxOutputTokens,
+                  };
+                }
+              }
               pushTransientSyntheticPrompt(
                 "Output token limit hit. Resume directly - no apology, no recap of what you were doing. "
                   + "Pick up mid-sentence if that is where the cut happened.",
@@ -1031,6 +1168,7 @@ export class AgentLoop {
           } else if (!hasAttemptedEmptyRetry) {
             // First occurrence: prompt the model to produce visible output.
             hasAttemptedEmptyRetry = true;
+            maxOutputRecoveryCount++;
             if (assembled.finishReason === "length") {
               const previousMaxOutputTokens = this.currentMaxOutputTokens(decision.provider, decision.model);
               const nextMaxOutputTokens = clampOutputToModelCap(

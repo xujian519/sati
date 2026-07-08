@@ -48,7 +48,7 @@ function config(protocol: "openai" | "anthropic" | "google", url = "https://exam
   };
 }
 
-test("OpenAI chat completions uses /chat/completions and max_tokens 65536", async () => {
+test("OpenAI chat completions uses /v1/chat/completions and max_tokens 65536", async () => {
   const calls: Array<{ url: string; body: any }> = [];
   await complete(request("test"), config("openai"), {
     fetch: async (url, init) => {
@@ -56,7 +56,7 @@ test("OpenAI chat completions uses /chat/completions and max_tokens 65536", asyn
       return Response.json({ choices: [{ message: { content: "ok" }, finish_reason: "stop" }] });
     },
   });
-  assert.equal(calls[0]?.url, "https://example.test/llm/chat/completions");
+  assert.equal(calls[0]?.url, "https://example.test/llm/v1/chat/completions");
   assert.equal(calls[0]?.body.max_tokens, 65_536);
 });
 
