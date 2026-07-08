@@ -45,4 +45,38 @@ describe("BackgroundTaskRuntime completion notifications", () => {
     assert.equal(events[0]?.status, "cancelled");
     assert.equal(events[0]?.taskId, task.taskId);
   });
+
+  it("waits for a task to finish without polling", async () => {
+    const runtime = new BackgroundTaskRuntime();
+    const task = await runtime.start({
+      command: `${process.execPath} -e "setTimeout(() => { process.stdout.write('done') }, 25)"`,
+      cwd: process.cwd(),
+    });
+
+    const waited = await runtime.wait(task.taskId, { timeoutMs: 1_000 });
+
+    assert.ok(waited);
+    assert.equal(waited.task.status, "completed");
+    assert.equal(waited.task.exitCode, 0);
+    assert.equal(waited.timedOut, false);
+    assert.match(runtime.getOutput(task.taskId, 0).content, /done/u);
+  });
+
+  it("returns running on wait timeout without killing the task", async () => {
+    const runtime = new BackgroundTaskRuntime();
+    const task = await runtime.start({
+      command: `${process.execPath} -e "setTimeout(() => { process.stdout.write('late') }, 80)"`,
+      cwd: process.cwd(),
+    });
+
+    const early = await runtime.wait(task.taskId, { timeoutMs: 1 });
+    assert.ok(early);
+    assert.equal(early.task.status, "running");
+    assert.equal(early.timedOut, true);
+
+    const late = await runtime.wait(task.taskId, { timeoutMs: 1_000 });
+    assert.ok(late);
+    assert.equal(late.task.status, "completed");
+    assert.equal(runtime.get(task.taskId)?.status, "completed");
+  });
 });

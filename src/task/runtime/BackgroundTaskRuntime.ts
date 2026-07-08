@@ -73,6 +73,17 @@ export type StopTaskOptions = {
   graceMs?: number;
 };
 
+export type WaitTaskOptions = {
+  timeoutMs?: number;
+  abortSignal?: AbortSignal;
+};
+
+export type WaitTaskResult = {
+  task: PilotDeckBackgroundBashTask;
+  timedOut: boolean;
+  waitedMs: number;
+};
+
 type RuntimeEntry = {
   task: PilotDeckBackgroundBashTask;
   child?: ChildProcess;
@@ -119,6 +130,39 @@ export class BackgroundTaskRuntime {
 
   get(taskId: string): PilotDeckBackgroundBashTask | undefined {
     return this.entries.get(taskId)?.task;
+  }
+
+  async wait(taskId: string, options: WaitTaskOptions = {}): Promise<WaitTaskResult | undefined> {
+    const entry = this.entries.get(taskId);
+    if (!entry) return undefined;
+
+    const startedAt = Date.now();
+    const timeoutMs = Math.max(0, Math.floor(options.timeoutMs ?? 0));
+    const timeoutPromise = timeoutMs > 0
+      ? new Promise<"timeout">((resolve) => {
+          setTimeout(() => resolve("timeout"), timeoutMs).unref?.();
+        })
+      : undefined;
+    const abortPromise = options.abortSignal
+      ? new Promise<"aborted">((resolve) => {
+          if (options.abortSignal?.aborted) {
+            resolve("aborted");
+            return;
+          }
+          options.abortSignal?.addEventListener("abort", () => resolve("aborted"), { once: true });
+        })
+      : undefined;
+
+    const waits: Array<Promise<void | "timeout" | "aborted">> = [entry.done];
+    if (timeoutPromise) waits.push(timeoutPromise);
+    if (abortPromise) waits.push(abortPromise);
+    const result = await Promise.race(waits);
+
+    return {
+      task: entry.task,
+      timedOut: result === "timeout" || result === "aborted",
+      waitedMs: Date.now() - startedAt,
+    };
   }
 
   /**
