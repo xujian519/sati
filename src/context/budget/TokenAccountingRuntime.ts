@@ -95,12 +95,26 @@ export class TokenAccountingRuntime {
     options: EvaluateRequestBudgetOptions,
   ): Promise<TokenBudgetSnapshot> {
     const counted = await this.countRequestInput(request, options);
-    return this.buildSnapshot(counted.tokens, options.maxContextTokens, {
+    return this.snapshotFromTokens(counted.tokens, options.maxContextTokens, {
       reservedOutputTokens: options.reservedOutputTokens,
       source: counted.source,
       exact: counted.exact,
       estimatorError: counted.estimatorError,
     });
+  }
+
+  snapshotFromTokens(
+    tokens: number,
+    maxContextTokens: number,
+    metadata: {
+      reservedOutputTokens?: number;
+      source?: TokenCountSource;
+      exact?: boolean;
+      estimatorError?: string;
+      usageTokens?: number;
+    } = {},
+  ): TokenBudgetSnapshot {
+    return this.tokenBudget.snapshotFromTokens(tokens, maxContextTokens, metadata);
   }
 
   estimateMessages(messages: CanonicalMessage[], options: TokenBudgetEvaluateOptions = {}): number {
@@ -129,19 +143,6 @@ export class TokenAccountingRuntime {
     const system = request.systemPrompt ? this.tokenBudget.estimateTextTokens(request.systemPrompt) : 0;
     const tools = estimateToolSchemas(this.tokenBudget, request.tools ?? []);
     return messages + system + tools;
-  }
-
-  private buildSnapshot(
-    tokens: number,
-    maxContextTokens: number,
-    metadata: {
-      reservedOutputTokens?: number;
-      source: TokenCountSource;
-      exact: boolean;
-      estimatorError?: string;
-    },
-  ): TokenBudgetSnapshot {
-    return this.tokenBudget.snapshotFromTokens(tokens, maxContextTokens, metadata);
   }
 
   private async countWithProvider(

@@ -64,6 +64,7 @@ import {
 const TOOL_EVENT_PUMP_INTERVAL_MS = 500;
 const SUBAGENT_STATUS_HEARTBEAT_MS = 2_000;
 const DEFAULT_RESERVED_OUTPUT_TOKENS = 4_096;
+const EMPTY_LENGTH_OUTPUT_RETRY_FLOOR = 4_096;
 const CIRCUIT_BREAKER_GRACE_PROMPT = [
   "Your last several tool calls all failed input validation with the same error.",
   "This may indicate a tool-side issue rather than a problem with your approach.",
@@ -128,6 +129,12 @@ export class AgentLoop {
   private readonly readFileState: PilotDeckReadFileStateMap;
   private readonly writeSnapshots: PilotDeckWriteSnapshotMap;
   private readonly allowedReadFiles: Set<string>;
+  private readonly transientTokenCaps = new Map<string, {
+    maxContextTokens?: number;
+    requestedMaxOutputTokens?: number;
+    attemptMaxOutputTokens?: number;
+    hardMaxOutputTokens?: number;
+  }>();
 
   constructor(
     private readonly config: AgentRuntimeConfig,
@@ -148,6 +155,7 @@ export class AgentLoop {
   }
 
   async *run(input: AgentLoopInput): AsyncGenerator<AgentEvent, AgentLoopRunResult, unknown> {
+    this.clearTurnScopedTokenCaps();
     this.applyRunModeOverride(input.runMode);
     this.applyPermissionOverrides(input.permissionMode, input.permissionRules, input.basePermissionMode);
     for (const filePath of input.allowedReadFiles ?? []) {
@@ -157,6 +165,7 @@ export class AgentLoop {
     let messages = [...input.messages];
     let turnCount = 1;
     let usage: CanonicalUsage = {};
+    let lastModelUsage: CanonicalUsage | undefined;
     let permissionDenials: AgentPermissionDenial[] = [];
     let structuredOutput: unknown;
     let finalMessage: CanonicalMessage | undefined;
@@ -338,6 +347,7 @@ export class AgentLoop {
 
       let pendingContextBudget: TokenBudgetSnapshot | undefined;
       const ctx = this.dependencies.context;
+      const preRoutingMaxContextTokens = this.currentMaxContextTokens(this.config.provider, this.config.model);
       if (ctx?.tryAutoCompact) {
         try {
           const reservedOutputTokens = this.getReservedOutputTokens();
@@ -345,8 +355,9 @@ export class AgentLoop {
             messages,
             abortSignal: input.abortSignal,
             reservedOutputTokens,
+            lastUsage: lastModelUsage,
             budgetEvaluator: this.createBudgetEvaluator(input, {
-              maxContextTokens: this.config.maxContextTokens,
+              maxContextTokens: preRoutingMaxContextTokens,
               reservedOutputTokens,
             }),
           });
@@ -413,22 +424,22 @@ export class AgentLoop {
           }
           : previousTier ? { previousTier } : undefined,
       });
-      const routedMaxOutputTokens = this.dependencies.getModelMaxOutputTokens?.(decision.provider, decision.model);
+      const routedLimits = this.getModelTokenLimits(decision.provider, decision.model);
+      const routedMaxOutputTokens = routedLimits?.maxOutputTokens;
 
-      const getMaxCtx = this.dependencies.getModelMaxContextTokens;
-      const agentMaxCtx = this.config.maxContextTokens;
       let emittedContextBudget = false;
-      if (ctx?.tryAutoCompact && getMaxCtx) {
-        const routedMaxCtx = getMaxCtx(decision.provider, decision.model);
-        const currentBudgetMaxCtx = agentMaxCtx;
+      if (ctx?.tryAutoCompact) {
+        const routedMaxCtx = routedLimits?.maxContextTokens ?? this.dependencies.getModelMaxContextTokens?.(decision.provider, decision.model);
+        const currentBudgetMaxCtx = preRoutingMaxContextTokens;
         if (routedMaxCtx !== undefined && routedMaxCtx !== currentBudgetMaxCtx) {
           try {
-            const reservedOutputTokens = this.getReservedOutputTokens();
+            const reservedOutputTokens = this.getReservedOutputTokens(decision.provider, decision.model);
             const recompact = await ctx.tryAutoCompact({
               messages,
               abortSignal: input.abortSignal,
               maxContextTokens: routedMaxCtx,
               reservedOutputTokens,
+              lastUsage: lastModelUsage,
               budgetEvaluator: this.createBudgetEvaluator(input, {
                 decision,
                 baseRequest: request,
@@ -439,6 +450,7 @@ export class AgentLoop {
             if (recompact.type === "compacted") {
               messages = recompact.messages;
               request = await this.createModelRequest(messages, input);
+              request = this.applyTokenCapsToRequest(request, decision.provider, decision.model);
               yield {
                 type: "turn_continued",
                 sessionId: input.sessionId,
@@ -458,6 +470,8 @@ export class AgentLoop {
           }
         }
       }
+      request = this.applyTokenCapsToRequest(request, decision.provider, decision.model);
+      this.clearAttemptOutputTokenCap(decision.provider, decision.model);
       if (pendingContextBudget && !emittedContextBudget) {
         yield {
           type: "context_budget",
@@ -563,6 +577,7 @@ export class AgentLoop {
 
       const assembled = assembleAssistantMessage(assembler);
       usage = mergeUsage(usage, assembled.usage);
+      lastModelUsage = assembled.usage;
       let assistantMessage = assembled.message;
       let toolCalls = collectToolCalls(assistantMessage);
       if (assembled.hasTextFallbackToolCalls) {
@@ -647,15 +662,27 @@ export class AgentLoop {
         }
 
         // Phase A: token doubling (if not yet attempted)
-        if (!hasAttemptedOutputRetry) {
-          hasAttemptedOutputRetry = true;
-          const nextMaxOutputTokens = resolveOutputTokenRetryBump({
-            currentMaxOutputTokens: this.config.maxOutputTokens,
-            modelMaxOutputTokens: routedMaxOutputTokens,
-          });
-          if (nextMaxOutputTokens !== undefined) {
-            this.config.maxOutputTokens = nextMaxOutputTokens;
-            yield {
+          if (!hasAttemptedOutputRetry) {
+            hasAttemptedOutputRetry = true;
+            const nextMaxOutputTokens = resolveOutputTokenRetryBump({
+              currentMaxOutputTokens: this.currentMaxOutputTokens(decision.provider, decision.model),
+              modelMaxOutputTokens: routedMaxOutputTokens,
+            });
+            if (nextMaxOutputTokens !== undefined) {
+              const previousOutput = this.currentMaxOutputTokens(decision.provider, decision.model);
+              this.setTransientTokenCap(decision.provider, decision.model, { requestedMaxOutputTokens: nextMaxOutputTokens });
+              yield {
+                type: "token_cap_adjusted",
+                sessionId: input.sessionId,
+                turnId: input.turnId,
+                provider: decision.provider,
+                model: decision.model,
+                cap: "output",
+                previous: previousOutput,
+                next: nextMaxOutputTokens,
+                reason: "max-output-retry-bump",
+              };
+              yield {
               type: "turn_continued",
               sessionId: input.sessionId,
               turnId: input.turnId,
@@ -709,6 +736,123 @@ export class AgentLoop {
         return { result, messages };
       }
 
+      if (!assembled.error && toolCalls.length === 0 && textFromMessage(assistantMessage).length === 0) {
+        if (maxOutputRecoveryCount > 0) {
+          consecutiveEmptyCount++;
+          if (consecutiveEmptyCount < MAX_CONSECUTIVE_EMPTY
+            && maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
+            maxOutputRecoveryCount++;
+            if (assembled.finishReason === "length") {
+              const previousMaxOutputTokens = this.currentMaxOutputTokens(decision.provider, decision.model);
+              const nextMaxOutputTokens = clampOutputToModelCap(
+                Math.max((previousMaxOutputTokens ?? 0) * 2, EMPTY_LENGTH_OUTPUT_RETRY_FLOOR),
+                routedMaxOutputTokens,
+              );
+              if (nextMaxOutputTokens !== undefined && nextMaxOutputTokens !== previousMaxOutputTokens) {
+                this.setTransientTokenCap(decision.provider, decision.model, { requestedMaxOutputTokens: nextMaxOutputTokens });
+                yield {
+                  type: "empty_output_recovery",
+                  sessionId: input.sessionId,
+                  turnId: input.turnId,
+                  provider: decision.provider,
+                  model: decision.model,
+                  finishReason: assembled.finishReason,
+                  previousMaxOutputTokens,
+                  nextMaxOutputTokens,
+                };
+              }
+            }
+            pushTransientSyntheticPrompt(
+              "Output token limit hit. Resume directly - no apology, no recap of what you were doing. "
+                + "Pick up mid-sentence if that is where the cut happened.",
+              "max_output_recovery",
+            );
+            yield {
+              type: "turn_continued",
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              reason: "model_error",
+            };
+            continue;
+          }
+          finalMessage = messages.filter((m) => m.role === "assistant").at(-1);
+          const status = createEmptyResponseStatus({
+            provider: request.provider,
+            model: request.model,
+            attempts: consecutiveEmptyCount,
+          });
+          yield await emitStatus(status);
+          const result = this.createTurnResult(input, {
+            type: "success",
+            stopReason: "completed",
+            usage,
+            permissionDenials,
+            turns: turnCount,
+            startedAt,
+            finalMessage,
+          });
+          await captureTurn(true);
+          yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+          return { result, messages };
+        }
+
+        if (!hasAttemptedEmptyRetry) {
+          hasAttemptedEmptyRetry = true;
+          maxOutputRecoveryCount++;
+          if (assembled.finishReason === "length") {
+            const previousMaxOutputTokens = this.currentMaxOutputTokens(decision.provider, decision.model);
+            const nextMaxOutputTokens = clampOutputToModelCap(
+              Math.max((previousMaxOutputTokens ?? 0) * 2, EMPTY_LENGTH_OUTPUT_RETRY_FLOOR),
+              routedMaxOutputTokens,
+            );
+            if (nextMaxOutputTokens !== undefined && nextMaxOutputTokens !== previousMaxOutputTokens) {
+              this.setTransientTokenCap(decision.provider, decision.model, { requestedMaxOutputTokens: nextMaxOutputTokens });
+              yield {
+                type: "empty_output_recovery",
+                sessionId: input.sessionId,
+                turnId: input.turnId,
+                provider: decision.provider,
+                model: decision.model,
+                finishReason: assembled.finishReason,
+                previousMaxOutputTokens,
+                nextMaxOutputTokens,
+              };
+            }
+          }
+          pushTransientSyntheticPrompt(
+            "Your previous response was empty (thinking only, no visible text). "
+              + "Please provide your answer as visible text output.",
+            "empty_response_retry",
+          );
+          yield {
+            type: "turn_continued",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            reason: "model_error",
+          };
+          continue;
+        }
+
+        const status = createEmptyResponseStatus({
+          provider: request.provider,
+          model: request.model,
+          attempts: 2,
+        });
+        yield await emitStatus(status);
+        const result = this.createTurnResult(input, {
+          type: "success",
+          stopReason: "completed",
+          usage,
+          permissionDenials,
+          turns: turnCount,
+          startedAt,
+          finalMessage: messages.filter((m) => m.role === "assistant").at(-1),
+        });
+        await captureTurn(true);
+        yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+        return { result, messages };
+      }
+
       messages.push(assistantMessage);
       yield { type: "assistant_message", sessionId: input.sessionId, turnId: input.turnId, message: assistantMessage };
       await input.onDurableMessage?.(assistantMessage);
@@ -757,6 +901,103 @@ export class AgentLoop {
         // model error (e.g. `prompt_too_long` → truncate head and retry).
         // Single-shot per turn — see legacy parity §3.1 #8.
         const reactive = await this.tryReactiveRecover(input, assembled.error, messages, hasAttemptedCompact);
+        if (reactive && reactive.type === "adjust_output_and_retry" && !hasAttemptedOutputRetry) {
+          hasAttemptedOutputRetry = true;
+          const target = modelErrorTarget(assembled.error, decision.provider, decision.model);
+          const previousOutput = this.currentMaxOutputTokens(target.provider, target.model);
+          this.setTransientTokenCap(target.provider, target.model, reactive.scope === "attempt"
+            ? { attemptMaxOutputTokens: reactive.maxOutputTokens }
+            : { hardMaxOutputTokens: reactive.maxOutputTokens });
+          if (target.provider !== decision.provider || target.model !== decision.model) {
+            this.setTransientTokenCap(decision.provider, decision.model, { attemptMaxOutputTokens: reactive.maxOutputTokens });
+          }
+          messages = stripTrailingErrorPair(messages);
+          yield {
+            type: "token_cap_adjusted",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            provider: target.provider,
+            model: target.model,
+            cap: "output",
+            previous: previousOutput,
+            next: reactive.maxOutputTokens,
+            reason: reactive.reason,
+          };
+          yield {
+            type: "turn_continued",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            reason: "model_error",
+          };
+          continue;
+        }
+
+        if (reactive && reactive.type === "compact_and_retry" && !hasAttemptedCompact) {
+          const target = modelErrorTarget(assembled.error, decision.provider, decision.model);
+          const previousContext = this.currentMaxContextTokens(target.provider, target.model);
+          if (reactive.maxContextTokens !== undefined) {
+            this.setTransientTokenCap(target.provider, target.model, { maxContextTokens: reactive.maxContextTokens });
+            yield {
+              type: "token_cap_adjusted",
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              provider: target.provider,
+              model: target.model,
+              cap: "context",
+              previous: previousContext,
+              next: reactive.maxContextTokens,
+              reason: reactive.reason,
+            };
+          }
+          if (reactive.maxOutputTokens !== undefined) {
+            const previousOutput = this.currentMaxOutputTokens(target.provider, target.model);
+            this.setTransientTokenCap(target.provider, target.model, { attemptMaxOutputTokens: reactive.maxOutputTokens });
+            if (target.provider !== decision.provider || target.model !== decision.model) {
+              this.setTransientTokenCap(decision.provider, decision.model, { attemptMaxOutputTokens: reactive.maxOutputTokens });
+            }
+            yield {
+              type: "token_cap_adjusted",
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              provider: target.provider,
+              model: target.model,
+              cap: "output",
+              previous: previousOutput,
+              next: reactive.maxOutputTokens,
+              reason: reactive.reason,
+            };
+          }
+          messages = stripTrailingErrorPair(messages);
+          if (ctx?.tryAutoCompact) {
+            try {
+              const compact = await ctx.tryAutoCompact({
+                messages,
+                abortSignal: input.abortSignal,
+                maxContextTokens: this.currentMaxContextTokens(target.provider, target.model),
+                reservedOutputTokens: this.getReservedOutputTokens(target.provider, target.model),
+                lastUsage: lastModelUsage,
+              });
+              if (compact.type === "compacted") {
+                messages = compact.messages;
+              } else {
+                messages = truncateHeadKeepRatio(messages, 0.5);
+              }
+            } catch {
+              messages = truncateHeadKeepRatio(messages, 0.5);
+            }
+          } else {
+            messages = truncateHeadKeepRatio(messages, 0.5);
+          }
+          hasAttemptedCompact = true;
+          yield {
+            type: "turn_continued",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            reason: "model_error",
+          };
+          continue;
+        }
+
         if (reactive && reactive.type === "truncate_head_and_retry") {
           // Drop the failed assistant message + any synthetic tool_result we just
           // pushed so the retry doesn't carry a half-baked tool_call. Then apply
@@ -798,12 +1039,24 @@ export class AgentLoop {
           if (!hasAttemptedOutputRetry) {
             hasAttemptedOutputRetry = true;
             const nextMaxOutputTokens = resolveOutputTokenRetryBump({
-              currentMaxOutputTokens: this.config.maxOutputTokens,
+              currentMaxOutputTokens: this.currentMaxOutputTokens(decision.provider, decision.model),
               modelMaxOutputTokens: routedMaxOutputTokens,
             });
             if (nextMaxOutputTokens !== undefined) {
               messages = stripTrailingErrorPair(messages);
-              this.config.maxOutputTokens = nextMaxOutputTokens;
+              const previousOutput = this.currentMaxOutputTokens(decision.provider, decision.model);
+              this.setTransientTokenCap(decision.provider, decision.model, { requestedMaxOutputTokens: nextMaxOutputTokens });
+              yield {
+                type: "token_cap_adjusted",
+                sessionId: input.sessionId,
+                turnId: input.turnId,
+                provider: decision.provider,
+                model: decision.model,
+                cap: "output",
+                previous: previousOutput,
+                next: nextMaxOutputTokens,
+                reason: "max-output-retry-bump",
+              };
               yield {
                 type: "turn_continued",
                 sessionId: input.sessionId,
@@ -873,6 +1126,26 @@ export class AgentLoop {
             if (consecutiveEmptyCount < MAX_CONSECUTIVE_EMPTY
               && maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
               maxOutputRecoveryCount++;
+              if (assembled.finishReason === "length") {
+                const previousMaxOutputTokens = this.currentMaxOutputTokens(decision.provider, decision.model);
+                const nextMaxOutputTokens = clampOutputToModelCap(
+                  Math.max((previousMaxOutputTokens ?? 0) * 2, EMPTY_LENGTH_OUTPUT_RETRY_FLOOR),
+                  routedMaxOutputTokens,
+                );
+                if (nextMaxOutputTokens !== undefined && nextMaxOutputTokens !== previousMaxOutputTokens) {
+                  this.setTransientTokenCap(decision.provider, decision.model, { requestedMaxOutputTokens: nextMaxOutputTokens });
+                  yield {
+                    type: "empty_output_recovery",
+                    sessionId: input.sessionId,
+                    turnId: input.turnId,
+                    provider: decision.provider,
+                    model: decision.model,
+                    finishReason: assembled.finishReason,
+                    previousMaxOutputTokens,
+                    nextMaxOutputTokens,
+                  };
+                }
+              }
               pushTransientSyntheticPrompt(
                 "Output token limit hit. Resume directly - no apology, no recap of what you were doing. "
                   + "Pick up mid-sentence if that is where the cut happened.",
@@ -911,6 +1184,27 @@ export class AgentLoop {
           } else if (!hasAttemptedEmptyRetry) {
             // First occurrence: prompt the model to produce visible output.
             hasAttemptedEmptyRetry = true;
+            maxOutputRecoveryCount++;
+            if (assembled.finishReason === "length") {
+              const previousMaxOutputTokens = this.currentMaxOutputTokens(decision.provider, decision.model);
+              const nextMaxOutputTokens = clampOutputToModelCap(
+                Math.max((previousMaxOutputTokens ?? 0) * 2, EMPTY_LENGTH_OUTPUT_RETRY_FLOOR),
+                routedMaxOutputTokens,
+              );
+              if (nextMaxOutputTokens !== undefined && nextMaxOutputTokens !== previousMaxOutputTokens) {
+                this.setTransientTokenCap(decision.provider, decision.model, { requestedMaxOutputTokens: nextMaxOutputTokens });
+                yield {
+                  type: "empty_output_recovery",
+                  sessionId: input.sessionId,
+                  turnId: input.turnId,
+                  provider: decision.provider,
+                  model: decision.model,
+                  finishReason: assembled.finishReason,
+                  previousMaxOutputTokens,
+                  nextMaxOutputTokens,
+                };
+              }
+            }
             pushTransientSyntheticPrompt(
               "Your previous response was empty (thinking only, no visible text). "
                 + "Please provide your answer as visible text output.",
@@ -1467,13 +1761,13 @@ export class AgentLoop {
       maxContextTokens?: number;
       reservedOutputTokens: number;
     },
-  ): ((candidateMessages: CanonicalMessage[]) => Promise<TokenBudgetSnapshot>) | undefined {
+  ): ((candidateMessages: CanonicalMessage[], lastUsage?: CanonicalUsage) => Promise<TokenBudgetSnapshot>) | undefined {
     const tokenAccounting = this.dependencies.tokenAccounting;
     const maxContextTokens = options.maxContextTokens;
     if (!tokenAccounting || !maxContextTokens) {
       return undefined;
     }
-    return async (candidateMessages) => {
+    return async (candidateMessages, lastUsage) => {
       let candidateRequest = await this.createModelRequest(candidateMessages, input, {
         emitInstructionEvents: false,
       });
@@ -1486,16 +1780,100 @@ export class AgentLoop {
           cacheBreakpoints: candidateRequest.cacheBreakpoints,
         });
       }
-      return tokenAccounting.evaluateRequestBudget(candidateRequest, {
+      const snapshot = await tokenAccounting.evaluateRequestBudget(candidateRequest, {
         maxContextTokens,
         reservedOutputTokens: options.reservedOutputTokens,
         signal: input.abortSignal,
       });
+      const usageTokens = tokensFromUsage(lastUsage);
+      if (usageTokens === undefined || usageTokens <= snapshot.tokens) {
+        return snapshot;
+      }
+      return tokenAccounting.snapshotFromTokens(usageTokens, maxContextTokens, {
+        reservedOutputTokens: options.reservedOutputTokens,
+        usageTokens,
+        source: snapshot.source,
+        exact: snapshot.exact,
+        estimatorError: snapshot.estimatorError,
+      });
     };
   }
 
-  private getReservedOutputTokens(): number {
-    return this.config.maxOutputTokens ?? DEFAULT_RESERVED_OUTPUT_TOKENS;
+  private getReservedOutputTokens(provider?: string, model?: string): number {
+    if (provider && model) {
+      return this.currentMaxOutputTokens(provider, model) ?? DEFAULT_RESERVED_OUTPUT_TOKENS;
+    }
+    return this.currentMaxOutputTokens(this.config.provider, this.config.model) ?? DEFAULT_RESERVED_OUTPUT_TOKENS;
+  }
+
+  private tokenCapKey(provider: string, model: string): string {
+    return `${provider}/${model}`;
+  }
+
+  private getModelTokenLimits(provider: string, model: string): { maxContextTokens?: number; maxOutputTokens?: number } | undefined {
+    const combined = this.dependencies.getModelTokenLimits?.(provider, model);
+    if (combined) return combined;
+    const maxContextTokens = this.dependencies.getModelMaxContextTokens?.(provider, model);
+    const maxOutputTokens = this.dependencies.getModelMaxOutputTokens?.(provider, model);
+    if (maxContextTokens === undefined && maxOutputTokens === undefined) return undefined;
+    return { maxContextTokens, maxOutputTokens };
+  }
+
+  private currentMaxContextTokens(provider: string, model: string): number {
+    const transient = this.transientTokenCaps.get(this.tokenCapKey(provider, model))?.maxContextTokens;
+    return transient ?? this.getModelTokenLimits(provider, model)?.maxContextTokens ?? this.config.maxContextTokens ?? 1_000_000;
+  }
+
+  private currentMaxOutputTokens(provider: string, model: string): number | undefined {
+    const transient = this.transientTokenCaps.get(this.tokenCapKey(provider, model));
+    const modelMaxOutputTokens = this.getModelTokenLimits(provider, model)?.maxOutputTokens;
+    const requested = transient?.attemptMaxOutputTokens ?? transient?.requestedMaxOutputTokens ?? this.config.maxOutputTokens ?? modelMaxOutputTokens;
+    const candidates = [requested, modelMaxOutputTokens, transient?.hardMaxOutputTokens]
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0);
+    return candidates.length > 0 ? Math.min(...candidates.map((value) => Math.floor(value))) : undefined;
+  }
+
+  private setTransientTokenCap(provider: string, model: string, cap: {
+    maxContextTokens?: number;
+    requestedMaxOutputTokens?: number;
+    attemptMaxOutputTokens?: number;
+    hardMaxOutputTokens?: number;
+  }): void {
+    const key = this.tokenCapKey(provider, model);
+    const previous = this.transientTokenCaps.get(key) ?? {};
+    this.transientTokenCaps.set(key, { ...previous, ...cap });
+  }
+
+  private clearAttemptOutputTokenCap(provider: string, model: string): void {
+    const key = this.tokenCapKey(provider, model);
+    const previous = this.transientTokenCaps.get(key);
+    if (!previous || previous.attemptMaxOutputTokens === undefined) return;
+    const { attemptMaxOutputTokens: _attemptMaxOutputTokens, ...rest } = previous;
+    this.transientTokenCaps.set(key, rest);
+  }
+
+  private clearTurnScopedTokenCaps(): void {
+    for (const [key, cap] of this.transientTokenCaps) {
+      const {
+        requestedMaxOutputTokens: _requestedMaxOutputTokens,
+        attemptMaxOutputTokens: _attemptMaxOutputTokens,
+        ...sessionCaps
+      } = cap;
+      if (sessionCaps.maxContextTokens === undefined && sessionCaps.hardMaxOutputTokens === undefined) {
+        this.transientTokenCaps.delete(key);
+      } else {
+        this.transientTokenCaps.set(key, sessionCaps);
+      }
+    }
+  }
+
+  private applyTokenCapsToRequest(request: CanonicalModelRequest, provider: string, model: string): CanonicalModelRequest {
+    return {
+      ...request,
+      provider,
+      model,
+      maxOutputTokens: this.currentMaxOutputTokens(provider, model),
+    };
   }
 
   private repairTextExtractedToolNames(
@@ -2690,6 +3068,37 @@ function isPromptTooLong(error: CanonicalModelError): boolean {
     return true;
   }
   return false;
+}
+
+function clampOutputToModelCap(requested: number, modelMaxOutputTokens: number | undefined): number | undefined {
+  if (!Number.isFinite(requested) || requested <= 0) return undefined;
+  const next = Math.floor(requested);
+  if (modelMaxOutputTokens !== undefined && Number.isFinite(modelMaxOutputTokens) && modelMaxOutputTokens > 0) {
+    return Math.min(next, Math.floor(modelMaxOutputTokens));
+  }
+  return next;
+}
+
+function tokensFromUsage(usage: CanonicalUsage | undefined): number | undefined {
+  if (!usage) return undefined;
+  const inputTokens = usage.inputTokens;
+  if (typeof inputTokens !== "number" || !Number.isFinite(inputTokens) || inputTokens <= 0) {
+    return undefined;
+  }
+  const outputTokens = typeof usage.outputTokens === "number" && Number.isFinite(usage.outputTokens) && usage.outputTokens > 0
+    ? usage.outputTokens
+    : 0;
+  return Math.ceil(inputTokens + outputTokens);
+}
+
+function modelErrorTarget(error: CanonicalModelError, fallbackProvider: string, fallbackModel: string): {
+  provider: string;
+  model: string;
+} {
+  return {
+    provider: error.provider || fallbackProvider,
+    model: error.model || fallbackModel,
+  };
 }
 
 function composeAbortSignal(args: {

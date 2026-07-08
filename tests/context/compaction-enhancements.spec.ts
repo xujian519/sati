@@ -339,3 +339,92 @@ test("agent loop does not run post-routing compaction when only reserved output 
   assert.equal(compactCalls, 1);
   assert.equal(events.filter((event) => event === "context_budget").length, 1);
 });
+
+test("agent loop runs post-routing compaction when routed context is smaller", async () => {
+  const { AgentLoop } = await import("../../src/agent/index.js");
+  const { ToolRegistry } = await import("../../src/tool/index.js");
+  const { createDefaultPermissionContext } = await import("../../src/permission/index.js");
+
+  const compactMaxContexts: Array<number | undefined> = [];
+  const contextRuntime = {
+    async prepareForModel(input: { messages: CanonicalMessage[]; tools: CanonicalToolSchema[] }) {
+      return {
+        messages: input.messages,
+        systemPrompt: undefined,
+        systemPromptParts: [],
+        tools: input.tools,
+        diagnostics: [],
+        boundaries: [],
+        metadata: {},
+      };
+    },
+    async tryAutoCompact(input: { maxContextTokens?: number }) {
+      compactMaxContexts.push(input.maxContextTokens);
+      return {
+        type: "skipped" as const,
+        snapshot: {
+          tokens: 1,
+          maxContextTokens: input.maxContextTokens ?? 1_000_000,
+          warningRatio: 0.8,
+          blockingRatio: 0.95,
+          state: "ok" as const,
+          ratio: 0,
+        },
+      };
+    },
+  };
+
+  const loop = new AgentLoop({
+    provider: "large-provider",
+    model: "large-model",
+    cwd: "/tmp",
+    maxContextTokens: 1_000_000,
+    maxOutputTokens: 65_536,
+    permissionMode: "default",
+    permissionContext: createDefaultPermissionContext({ cwd: "/tmp" }),
+  }, {
+    router: {
+      async decide() {
+        return {
+          provider: "small-provider",
+          model: "small-model",
+          scenarioType: "default",
+          isSubagent: false,
+          orchestrating: false,
+          resolvedFrom: "scenario",
+          mutations: {},
+        };
+      },
+      async *execute() {
+        yield { type: "message_start", role: "assistant" };
+        yield { type: "text_delta", text: "done" };
+        yield { type: "message_end", finishReason: "stop" };
+      },
+      async *stream() {},
+      materializeRequest(_decision, request) {
+        return request;
+      },
+    },
+    tools: {
+      registry: new ToolRegistry(),
+      scheduler: { executeAll: async () => [] },
+    },
+    context: contextRuntime,
+    getModelTokenLimits: (provider, model) => {
+      if (provider === "small-provider" && model === "small-model") {
+        return { maxContextTokens: 32_768, maxOutputTokens: 8_192 };
+      }
+      return { maxContextTokens: 1_000_000, maxOutputTokens: 65_536 };
+    },
+  });
+
+  for await (const _event of loop.run({
+    sessionId: "s",
+    turnId: "t",
+    messages: [user("hello")],
+  })) {
+    // drain
+  }
+
+  assert.deepEqual(compactMaxContexts, [undefined, 32_768]);
+});

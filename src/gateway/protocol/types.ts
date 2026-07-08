@@ -205,7 +205,21 @@ export type GatewayEvent =
     }
   | { type: "turn_completed"; usage: TurnUsage; finishReason: AgentTurnResult["stopReason"] | string }
   | { type: "agent_status"; event: string; detail?: Record<string, unknown> }
-  | { type: "error"; message: string; code?: string; recoverable: boolean; userHint?: string };
+  | {
+      type: "error";
+      message: string;
+      code?: string;
+      recoverable: boolean;
+      userHint?: string;
+      providerError?: {
+        provider?: string;
+        protocol?: string;
+        status?: number;
+        code?: string;
+        message?: string;
+        raw?: string;
+      };
+    };
 
 export type GatewayActiveTurnSnapshotInput = {
   sessionKey: string;
