@@ -34,23 +34,12 @@ function normalizeModelList(models: unknown[]): ApiModelListItem[] {
 
 export async function fetchRemoteDefaultModels(providerId: string): Promise<ApiModelListItem[]> {
   if (providerId !== 'openrouter') return [];
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 10_000);
-  try {
-    const response = await fetch('https://openrouter.ai/api/v1/models', {
-      headers: { Accept: 'application/json' },
-      signal: controller.signal,
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const message = data?.error?.message || data?.message || `HTTP ${response.status}`;
-      throw new Error(String(message));
-    }
-    const models = Array.isArray(data?.data) ? data.data : Array.isArray(data?.models) ? data.models : [];
-    return normalizeModelList(models);
-  } finally {
-    window.clearTimeout(timer);
-  }
+  return fetchProviderModels({
+    protocol: 'openai',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    apiKey: '',
+    providerId,
+  });
 }
 
 export async function fetchProviderModels({
