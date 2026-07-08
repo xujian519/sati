@@ -298,7 +298,7 @@ We provide a one-line installer for macOS / Linux, plus a source-based workflow 
 curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | bash
 ```
 
-The script auto-installs Node.js 22.13+ (required for the built-in SQLite runtime), clones the repo, installs dependencies, and builds the frontend. Once it finishes:
+The script checks Node.js 22.13+ (required for the built-in SQLite runtime), clones the repo, installs dependencies, and builds the frontend. On Linux it can install missing system packages when `sudo` and a supported package manager are available. On macOS, make sure Xcode Command Line Tools and a Python with `distutils` are usable before running the installer. Once it finishes:
 
 ```bash
 pilotdeck            # starts the server at http://localhost:3001

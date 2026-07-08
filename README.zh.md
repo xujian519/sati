@@ -298,7 +298,7 @@ https://github.com/user-attachments/assets/a7245467-ee3c-4939-a055-c56576ac56d1
 curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | bash
 ```
 
-该脚本将自动配置 Node.js 22 环境、克隆代码、安装依赖并编译前端。安装完成后，直接运行：
+该脚本会检查 Node.js 22.13+（内置 SQLite 运行时所需）、克隆代码、安装依赖并编译前端。在 Linux 上，如果存在 `sudo` 和支持的包管理器，脚本可安装缺失的系统依赖；在 macOS 上，请先确保 Xcode Command Line Tools 以及带 `distutils` 的 Python 可用。安装完成后，直接运行：
 
 ```bash
 pilotdeck            # 在 http://localhost:3001 启动服务
