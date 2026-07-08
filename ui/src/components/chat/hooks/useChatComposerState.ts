@@ -789,6 +789,12 @@ export function useChatComposerState({
       }
 
       if (isLoading && isBusySendQueued) {
+        queuedBusySendSnapshotRef.current = {
+          input: currentInput,
+          attachedImages: submitAttachedImages,
+          documentReferences: submitDocumentReferences,
+        };
+
         const pendingSessionId = typeof window !== 'undefined' ? sessionStorage.getItem('pendingSessionId') : null;
         const targetSessionId = [
           currentSessionId,
@@ -802,9 +808,7 @@ export function useChatComposerState({
         }
 
         queuedBusySendSnapshotRef.current = {
-          input: currentInput,
-          attachedImages: submitAttachedImages,
-          documentReferences: submitDocumentReferences,
+          ...queuedBusySendSnapshotRef.current,
           forceStart: true,
         };
         queuedBusySendConfirmedRef.current = true;
