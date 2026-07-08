@@ -398,6 +398,60 @@ run_as_root() {
   fi
 }
 
+has_linux_package_manager() {
+  command -v apt-get >/dev/null 2>&1 || \
+    command -v dnf >/dev/null 2>&1 || \
+    command -v yum >/dev/null 2>&1 || \
+    command -v pacman >/dev/null 2>&1 || \
+    command -v zypper >/dev/null 2>&1
+}
+
+can_install_system_packages() {
+  [[ "${EUID:-$(id -u)}" -eq 0 ]] || command -v sudo >/dev/null 2>&1
+}
+
+print_minimum_requirements() {
+  if [[ "$PLATFORM" == "linux" ]]; then
+    warn "$(L "Minimum requirements: bash, curl, network access, and either root or sudo with apt/dnf/yum/pacman/zypper." "最低要求:bash、curl、网络访问,以及 root 或 sudo 权限,并安装 apt/dnf/yum/pacman/zypper 之一。")"
+  else
+    warn "$(L "Minimum requirements: bash, curl, network access, Xcode Command Line Tools, and Homebrew for optional package installs." "最低要求:bash、curl、网络访问、Xcode 命令行工具,以及用于安装可选包的 Homebrew。")"
+  fi
+}
+
+check_bootstrap_requirements() {
+  print_minimum_requirements
+
+  if [[ -z "${BASH_VERSION:-}" ]]; then
+    fail "$(L "This installer must run with bash. Try: curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | bash" "该安装器必须使用 bash 运行。请尝试:curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | bash")"
+  fi
+
+  if ! command -v curl >/dev/null 2>&1; then
+    fail "$(L "curl is required to install Node.js and optional browser assets. Please install curl and re-run this installer." "安装 Node.js 和可选浏览器资源需要 curl。请先安装 curl 后重新运行安装器。")"
+  fi
+  ok "$(L "curl found" "已找到 curl")"
+
+  if [[ "$PLATFORM" == "linux" ]]; then
+    if ! has_linux_package_manager; then
+      fail "$(L "Unsupported Linux package manager. Please install apt, dnf, yum, pacman, or zypper, or install dependencies manually before re-running." "不支持当前 Linux 包管理器。请安装 apt、dnf、yum、pacman 或 zypper,或先手动安装依赖后再重新运行。")"
+    fi
+    ok "$(L "supported Linux package manager found" "已找到支持的 Linux 包管理器")"
+
+    if ! can_install_system_packages; then
+      fail "$(L "Installing missing system packages requires root or sudo. Please install sudo, run as root, or preinstall git, ripgrep, lsof, python3, make, and a C++ compiler." "安装缺失的系统软件包需要 root 或 sudo 权限。请安装 sudo、以 root 身份运行,或预先安装 git、ripgrep、lsof、python3、make 和 C++ 编译器。")"
+    fi
+    ok "$(L "root/sudo available for system packages" "可使用 root/sudo 安装系统软件包")"
+  else
+    if ! command -v xcode-select >/dev/null 2>&1 || ! xcode-select -p >/dev/null 2>&1; then
+      fail "$(L "macOS requires Xcode Command Line Tools for git, lsof, and native module builds. Install them with: xcode-select --install" "macOS 需要 Xcode 命令行工具来提供 git、lsof 和原生模块构建能力。请运行:xcode-select --install")"
+    fi
+    ok "$(L "Xcode Command Line Tools found" "已找到 Xcode 命令行工具")"
+
+    if ! command -v brew >/dev/null 2>&1; then
+      warn "$(L "Homebrew is not installed. If ripgrep or Git LFS are missing, install Homebrew first, then run: brew install ripgrep git-lfs" "未安装 Homebrew。若缺少 ripgrep 或 Git LFS,请先安装 Homebrew,然后运行:brew install ripgrep git-lfs")"
+    fi
+  fi
+}
+
 install_linux_packages() {
   local requested=("$@")
   local apt_packages=()
@@ -774,6 +828,7 @@ case "$(uname -s)" in
     fail "$(L "Unsupported OS: $(uname -s). This installer supports macOS and Linux." "不支持的操作系统:$(uname -s)。该安装器仅支持 macOS 和 Linux。")"
     ;;
 esac
+check_bootstrap_requirements
 echo ""
 
 echo "$(L "Checking Node.js..." "正在检查 Node.js...")"
@@ -859,6 +914,7 @@ if has_playwright_chrome_for_testing; then
   ok "$(L "Chrome for Testing already installed" "Chrome for Testing 已安装")"
 elif [[ "${PILOTDECK_SKIP_BROWSER_INSTALL:-1}" == "1" ]]; then
   warn "$(L "Skipping Chrome for Testing download (default) to keep install fast." "默认跳过 Chrome for Testing 下载,以加快安装速度。")"
+  warn "$(L "PilotDeck core features are still available without this optional browser-use dependency." "缺少该可选 browser-use 依赖时,PilotDeck 核心功能仍可正常使用。")"
   warn "$(L "To enable browser-use, run: cd \"$INSTALL_DIR\" && npm run install:browser" "如需启用 browser-use,请运行:cd \"$INSTALL_DIR\" && npm run install:browser")"
   warn "$(L "Or re-run the installer with PILOTDECK_SKIP_BROWSER_INSTALL=0." "或以 PILOTDECK_SKIP_BROWSER_INSTALL=0 重新运行安装器。")"
 else
