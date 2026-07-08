@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$RepoUrl = $env:PILOTDECK_REPO_URL,
   [string]$Branch = $env:PILOTDECK_BRANCH,
   [string]$InstallDir = $env:PILOTDECK_INSTALL_DIR,
@@ -50,6 +50,21 @@ function Test-NodeSqlite {
   } finally {
     $ErrorActionPreference = $previousErrorAction
   }
+}
+
+function Refresh-ProcessPath {
+  $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+  $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+  $paths = @($machinePath, $userPath, $env:Path) -join ';'
+  $env:Path = ($paths -split ';' | Where-Object { $_ } | Select-Object -Unique) -join ';'
+}
+
+function Resolve-NpmCommand {
+  $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
+  if ($npmCommand) { return $npmCommand.Source }
+  $npmCommand = Get-Command npm -ErrorAction SilentlyContinue
+  if ($npmCommand) { return $npmCommand.Source }
+  Write-Fail 'npm was not found after Node.js setup. Open a new terminal or fix Node.js PATH, then rerun this script.'
 }
 
 function Add-UserPath([string]$Directory) {
@@ -131,7 +146,9 @@ function Install-NodeRuntime {
   if (Test-Command winget) {
     Write-Step "Installing Node.js $NodeInstallVersion LTS with winget..."
     & winget install --id OpenJS.NodeJS.LTS -e --accept-package-agreements --accept-source-agreements
-    return
+    Refresh-ProcessPath
+    if (Test-Command node) { return }
+    Write-Step 'Node.js installed by winget is not visible in this shell; using portable Node.js for this run.'
   }
 
   Install-PortableNodeRuntime
@@ -212,6 +229,7 @@ function Ensure-Prerequisites {
     if (Test-Command winget) {
       Write-Step 'Installing Git with winget...'
       & winget install --id Git.Git -e --accept-package-agreements --accept-source-agreements
+      Refresh-ProcessPath
       if (-not (Test-Command git)) { Install-PortableGit }
     } else {
       Install-PortableGit
@@ -224,13 +242,12 @@ function Ensure-Prerequisites {
   } elseif (Test-Command winget) {
     Write-Step 'Installing Git LFS with winget...'
     & winget install --id GitHub.GitLFS -e --accept-package-agreements --accept-source-agreements
+    Refresh-ProcessPath
   } else {
     Write-Step 'git-lfs not found; continuing without LFS media assets.'
   }
 
-  if (-not (Test-Command npm)) {
-    Write-Fail 'npm was not found after Node.js setup. Open a new terminal or fix Node.js PATH, then rerun this script.'
-  }
+  [void](Resolve-NpmCommand)
 }
 
 function Test-PortFree([int]$Port) {
@@ -349,9 +366,9 @@ function Write-CmdLauncher {
   $escapedInstallDir = $InstallDir.Replace("'", "''")
   $escapedConfigPath = $ConfigPath.Replace("'", "''")
   $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
-  $npmCommand = Get-Command npm -ErrorAction SilentlyContinue
+  $npmPath = Resolve-NpmCommand
   $escapedNodeDir = if ($nodeCommand) { (Split-Path -Parent $nodeCommand.Source).Replace("'", "''") } else { '' }
-  $escapedNpmPath = if ($npmCommand) { $npmCommand.Source.Replace("'", "''") } else { 'npm' }
+  $escapedNpmPath = $npmPath.Replace("'", "''")
 
   @"
 @echo off
@@ -450,11 +467,6 @@ Write-Host ''
 if (-not $SkipStart) {
   Write-Host "Starting server; open http://localhost:$env:SERVER_PORT"
   Set-Location (Join-Path $InstallDir 'ui')
-  & npm run start:built
+  $npmPath = Resolve-NpmCommand
+  & $npmPath run start:built
 }
-
-
-
-
-
-
