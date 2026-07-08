@@ -93,41 +93,109 @@ sudo pacman -Sy --needed git git-lfs ripgrep base-devel python nodejs npm
 
 ### Windows
 
-Windows 源码安装最推荐使用 WSL2，并在 WSL 中安装 Ubuntu 等 Linux 发行版。进入 WSL 后，按上面的 Debian / Ubuntu 步骤安装依赖：
+Windows 支持多种源码部署路径。你不需要为每条路径安装所有工具。
+
+| 路径 | 需要在 Windows 安装 | 适合场景 |
+|---|---|---|
+| WSL2 Ubuntu | WSL2、Ubuntu，然后在 Ubuntu 内安装 Linux 编译工具 | 源码部署和开发 |
+| Docker Desktop | 启用 WSL2 backend 的 Docker Desktop、Git for Windows | 不想在本机管理 Node/native build 环境，只想运行 PilotDeck |
+| 原生 Windows | Node.js、Git LFS、Python、Visual Studio C++ Build Tools、ripgrep | 只用 PowerShell 进行开发 |
+| Portable Node | 官方 Node.js zip、Git for Windows、Git LFS、ripgrep | 不修改系统 Node 设置，先验证部署流程 |
+
+先在 PowerShell 中快速检查依赖：
+
+```powershell
+node --version
+npm --version
+git --version
+git lfs version
+python --version
+rg --version
+docker --version
+docker compose version
+wsl --status
+```
+
+缺少命令说明对应工具还没有安装，或还没有加入 `PATH`。安装工具后，请关闭并重新打开 PowerShell 再检查。
+
+#### WSL2 Ubuntu（推荐）
+
+在管理员 PowerShell 中安装 WSL2 和 Ubuntu：
 
 ```powershell
 wsl --install -d Ubuntu
 ```
 
-WSL 启动后，在 WSL 终端中执行 Debian / Ubuntu 小节里的 Linux 依赖安装命令。
+如果系统提示重启，请重启 Windows；完成 Ubuntu 首次用户设置后，在 Ubuntu shell 中按 Debian / Ubuntu 小节安装依赖。
 
-如果希望使用原生 Windows PowerShell，也可以进行基础源码安装。先用 `winget` 安装依赖：
+#### Docker Desktop
+
+安装 Docker Desktop 并启用 WSL2 backend：
 
 ```powershell
-winget install --id Git.Git -e
-winget install --id GitHub.GitLFS -e
-winget install --id BurntSushi.ripgrep.MSVC -e
-winget install --id OpenJS.NodeJS -e
-winget install --id Python.Python.3.12 -e
+winget install Docker.DockerDesktop
 ```
 
-然后打开新的 PowerShell 窗口并检查：
+安装后启动一次 Docker Desktop，等待 engine 运行，然后检查：
 
 ```powershell
+docker --version
+docker compose version
+```
+
+如果选择 Docker 路径，请按 `README_DOCKER.md` 中的 Docker 说明操作。
+
+#### 原生 Windows PowerShell
+
+原生 Windows 适合希望直接在 PowerShell 中开发的用户，但它比 WSL2 更容易受到 native npm 依赖编译环境影响。
+
+使用 `winget` 安装依赖：
+
+```powershell
+winget install OpenJS.NodeJS.LTS
+winget install Git.Git
+winget install GitHub.GitLFS
+winget install Python.Python.3.12
+winget install BurntSushi.ripgrep.MSVC
+winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+然后打开新的 PowerShell 窗口并运行：
+
+```powershell
+git lfs install
 node --version   # 必须为 v22.13.0 或更新版本
-git --version
-git lfs version
-rg --version
+npm --version
 python --version
+rg --version
 ```
 
-如果 `npm install` 在编译原生依赖时报错，请安装 Visual Studio Build Tools，并包含 Desktop C++ workload：
+按下面的克隆、安装、启动步骤操作时，请使用分开的 PowerShell 命令行，不要使用 Bash 风格的链式命令。如果 PowerShell 拦截 `npm.ps1`，请改用 `npm.cmd`。
+
+#### Portable Node 验证路径
+
+如果想在全局安装 Node.js 前先验证 PilotDeck，可只在当前 PowerShell 会话中使用官方 Windows Node.js zip：
 
 ```powershell
-winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+$NodeVersion = '22.23.1'
+$WorkDir = Join-Path $PWD '.pilotdeck-node'
+$ZipPath = Join-Path $WorkDir "node-v$NodeVersion-win-x64.zip"
+$NodeUrl = "https://nodejs.org/dist/v$NodeVersion/node-v$NodeVersion-win-x64.zip"
+
+New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
+Invoke-WebRequest -Uri $NodeUrl -OutFile $ZipPath
+
+$ExtractDir = Join-Path $WorkDir 'node'
+New-Item -ItemType Directory -Force -Path $ExtractDir | Out-Null
+tar -xf $ZipPath -C $ExtractDir
+$NodeDir = Join-Path $ExtractDir "node-v$NodeVersion-win-x64"
+$env:PATH = "$NodeDir;$env:PATH"
+
+node --version
+npm.cmd --version
 ```
 
-如果没有 `winget`，也可以手动安装同类工具，或使用 Chocolatey 等价命令，例如 `choco install git git-lfs ripgrep nodejs-lts python visualstudio2022buildtools visualstudio2022-workload-vctools`。
+使用 Portable Node 时，请用 `npm.cmd install`、`npm.cmd run build` 和 `npm.cmd --prefix ui run build`。
 
 ## 克隆仓库
 

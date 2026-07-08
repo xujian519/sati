@@ -73,41 +73,109 @@ Make sure `node --version` reports v22.13.0 or newer.
 
 ### Windows
 
-For the smoothest Windows source install, use WSL2 with a Linux distribution such as Ubuntu. Then follow the Debian / Ubuntu instructions inside WSL:
+Windows supports several source-deployment paths. You do **not** need to install every tool for every path.
+
+| Path | Install on Windows | Best for |
+|---|---|---|
+| WSL2 Ubuntu | WSL2, Ubuntu, then Linux build tools inside Ubuntu | Source deployment and development |
+| Docker Desktop | Docker Desktop with WSL2 backend, Git for Windows | Running PilotDeck without local Node/native build setup |
+| Native Windows | Node.js, Git LFS, Python, Visual Studio C++ Build Tools, ripgrep | PowerShell-only development |
+| Portable Node | Official Node.js zip, Git for Windows, Git LFS, ripgrep | Verifying deployment without changing system Node settings |
+
+Quick prerequisite check in PowerShell:
+
+```powershell
+node --version
+npm --version
+git --version
+git lfs version
+python --version
+rg --version
+docker --version
+docker compose version
+wsl --status
+```
+
+Missing commands mean the corresponding tool still needs to be installed or added to `PATH`. After installing tools, close and reopen PowerShell before checking again.
+
+#### WSL2 Ubuntu (recommended)
+
+Install WSL2 and Ubuntu from an elevated PowerShell window:
 
 ```powershell
 wsl --install -d Ubuntu
 ```
 
-After WSL starts, run the Linux dependency commands from the Debian / Ubuntu section.
+Restart Windows if prompted, finish Ubuntu first-run setup, then follow the Debian / Ubuntu instructions inside the Ubuntu shell.
 
-Native Windows PowerShell is also supported for basic source installs. Install the required tools with `winget`:
+#### Docker Desktop
+
+Install Docker Desktop and enable the WSL2 backend:
 
 ```powershell
-winget install --id Git.Git -e
-winget install --id GitHub.GitLFS -e
-winget install --id BurntSushi.ripgrep.MSVC -e
-winget install --id OpenJS.NodeJS -e
-winget install --id Python.Python.3.12 -e
+winget install Docker.DockerDesktop
 ```
 
-Then open a new PowerShell window and verify:
+Start Docker Desktop once after installation, wait until the engine is running, then verify:
 
 ```powershell
+docker --version
+docker compose version
+```
+
+Use the Docker instructions in `README_DOCKER.md` if you choose this path.
+
+#### Native Windows PowerShell
+
+Native Windows is useful if you want to develop directly from PowerShell. It is more sensitive to native npm dependency compilation than WSL2.
+
+Install prerequisites with `winget`:
+
+```powershell
+winget install OpenJS.NodeJS.LTS
+winget install Git.Git
+winget install GitHub.GitLFS
+winget install Python.Python.3.12
+winget install BurntSushi.ripgrep.MSVC
+winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+Then open a new PowerShell window and run:
+
+```powershell
+git lfs install
 node --version   # must be v22.13.0 or newer
-git --version
-git lfs version
-rg --version
+npm --version
 python --version
+rg --version
 ```
 
-If `npm install` fails while building native packages, install Visual Studio Build Tools with the Desktop C++ workload:
+Use separate PowerShell lines instead of Bash-style chained commands when following the clone/install/start steps below. If PowerShell blocks `npm.ps1`, call `npm.cmd` instead of `npm`.
+
+#### Portable Node for verification
+
+If you want to test PilotDeck before installing Node.js globally, use the official Windows Node.js zip for the current terminal session only:
 
 ```powershell
-winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+$NodeVersion = '22.23.1'
+$WorkDir = Join-Path $PWD '.pilotdeck-node'
+$ZipPath = Join-Path $WorkDir "node-v$NodeVersion-win-x64.zip"
+$NodeUrl = "https://nodejs.org/dist/v$NodeVersion/node-v$NodeVersion-win-x64.zip"
+
+New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
+Invoke-WebRequest -Uri $NodeUrl -OutFile $ZipPath
+
+$ExtractDir = Join-Path $WorkDir 'node'
+New-Item -ItemType Directory -Force -Path $ExtractDir | Out-Null
+tar -xf $ZipPath -C $ExtractDir
+$NodeDir = Join-Path $ExtractDir "node-v$NodeVersion-win-x64"
+$env:PATH = "$NodeDir;$env:PATH"
+
+node --version
+npm.cmd --version
 ```
 
-If `winget` is not available, install the same tools manually, or use Chocolatey equivalents such as `choco install git git-lfs ripgrep nodejs-lts python visualstudio2022buildtools visualstudio2022-workload-vctools`.
+With portable Node, use `npm.cmd install`, `npm.cmd run build`, and `npm.cmd --prefix ui run build`.
 
 ## Clone the Repository
 
