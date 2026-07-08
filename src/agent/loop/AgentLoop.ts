@@ -1776,7 +1776,7 @@ export class AgentLoop {
     if (provider && model) {
       return this.currentMaxOutputTokens(provider, model) ?? DEFAULT_RESERVED_OUTPUT_TOKENS;
     }
-    return this.config.maxOutputTokens ?? DEFAULT_RESERVED_OUTPUT_TOKENS;
+    return this.currentMaxOutputTokens(this.config.provider, this.config.model) ?? DEFAULT_RESERVED_OUTPUT_TOKENS;
   }
 
   private tokenCapKey(provider: string, model: string): string {

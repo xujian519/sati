@@ -29,3 +29,27 @@ test("context cap errors request compaction against provider cap", () => {
     { type: "compact_and_retry", maxContextTokens: 262144, reason: "provider-context-cap" },
   );
 });
+
+test("mixed context/output errors compact when available output is too small", () => {
+  const recovery = new ContextOverflowRecovery();
+  assert.deepEqual(
+    recovery.decide({
+      error: error({ availableOutputTokens: 128, maxContextTokens: 65_536, recoverableViaCompact: true }),
+      hasAttemptedCompact: false,
+    }),
+    {
+      type: "compact_and_retry",
+      maxContextTokens: 65_536,
+      maxOutputTokens: 4_096,
+      reason: "provider-available-output-too-small",
+    },
+  );
+});
+
+test("mixed context/output errors lower output after compaction was attempted", () => {
+  const recovery = new ContextOverflowRecovery();
+  assert.deepEqual(
+    recovery.decide({ error: error({ availableOutputTokens: 128, recoverableViaCompact: true }), hasAttemptedCompact: true }),
+    { type: "adjust_output_and_retry", maxOutputTokens: 128, reason: "provider-output-cap" },
+  );
+});

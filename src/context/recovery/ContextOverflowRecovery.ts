@@ -8,6 +8,7 @@ export type ContextOverflowRecoveryOptions = {
 
 const DEFAULT_FIRST_KEEP = 0.5;
 const DEFAULT_SECOND_KEEP = 0.25;
+const MIN_SAFE_AVAILABLE_OUTPUT_TOKENS = 4_096;
 
 /**
  * Single-shot recovery decision (decision §3.1 #8). The first PTL within a
@@ -30,7 +31,26 @@ export class ContextOverflowRecovery {
     if (input.error.code === "image_too_large") {
       return { type: "strip_images_and_retry", reason: "image-too-large" };
     }
-    const parsedOutput = input.error.maxOutputTokens ?? input.error.availableOutputTokens;
+    if (input.error.availableOutputTokens !== undefined && input.error.availableOutputTokens > 0) {
+      const available = Math.floor(input.error.availableOutputTokens);
+      if (available < MIN_SAFE_AVAILABLE_OUTPUT_TOKENS && !input.hasAttemptedCompact) {
+        return {
+          type: "compact_and_retry",
+          ...(input.error.maxContextTokens !== undefined && input.error.maxContextTokens > 0
+            ? { maxContextTokens: Math.floor(input.error.maxContextTokens) }
+            : {}),
+          maxOutputTokens: MIN_SAFE_AVAILABLE_OUTPUT_TOKENS,
+          reason: "provider-available-output-too-small",
+        };
+      }
+      return {
+        type: "adjust_output_and_retry",
+        maxOutputTokens: Math.max(1, available),
+        reason: "provider-output-cap",
+      };
+    }
+
+    const parsedOutput = input.error.maxOutputTokens;
     if (parsedOutput !== undefined && parsedOutput > 0) {
       return {
         type: "adjust_output_and_retry",

@@ -1227,7 +1227,7 @@ class ProjectRuntimeRegistry {
     }
     maxOutputTokens = readPositiveIntegerEnv(this.options.env.PILOTDECK_MAX_OUTPUT_TOKENS)
       ?? agent.maxOutputTokens
-      ?? undefined;
+      ?? maxOutputTokens;
     return {
       provider: agent.model.provider,
       model: agent.model.model,

@@ -246,6 +246,68 @@ test("routed requests clamp configured output to routed model cap", async () => 
   assert.equal(requests[0]?.maxOutputTokens, 8_192);
 });
 
+test("pre-routing compaction reserves the current model output cap by default", async () => {
+  let reservedOutputTokens: number | undefined;
+  const dependencies: AgentRuntimeDependencies = {
+    router: {
+      async decide(): Promise<RouterDecision> {
+        return {
+          provider: "google",
+          model: "gemini-test",
+          scenarioType: "default",
+          isSubagent: false,
+          orchestrating: false,
+          resolvedFrom: "scenario",
+          mutations: {},
+        };
+      },
+      async *execute(_decision: RouterDecision, request: CanonicalModelRequest): AsyncIterable<CanonicalModelEvent> {
+        yield { type: "message_start", role: "assistant" };
+        yield { type: "text_delta", text: `reserved=${request.maxOutputTokens}` };
+        yield { type: "message_end", finishReason: "stop" };
+      },
+      stream(): AsyncIterable<CanonicalModelEvent> {
+        throw new Error("not used");
+      },
+    },
+    tools: {
+      scheduler: { executeAll: async () => [] },
+      registry: { list: () => [], toCanonicalSchemas: () => [] },
+    },
+    context: {
+      prepareForModel: async (input: AgentContextPrepareInput) => ({
+        messages: input.messages,
+        systemPromptParts: [],
+        tools: input.tools,
+        diagnostics: [],
+        boundaries: [],
+      }),
+      tryAutoCompact: async (input: { reservedOutputTokens?: number }) => {
+        reservedOutputTokens = input.reservedOutputTokens;
+        return {
+          type: "skipped" as const,
+          snapshot: {
+            tokens: 1,
+            maxContextTokens: 1_000_000,
+            warningRatio: 0.8,
+            blockingRatio: 0.95,
+            state: "ok" as const,
+            ratio: 0,
+          },
+        };
+      },
+    },
+    getModelTokenLimits: () => ({ maxContextTokens: 1_000_000, maxOutputTokens: 65_536 }),
+  } as unknown as AgentRuntimeDependencies;
+
+  const config = { ...baseConfig(), maxOutputTokens: undefined };
+  const loop = new AgentLoop(config, dependencies);
+  const result = await collectLoop(loop, []);
+
+  assert.equal(result.result.type, "success");
+  assert.equal(reservedOutputTokens, 65_536);
+});
+
 function baseConfig(): AgentRuntimeConfig {
   return {
     provider: "google",
