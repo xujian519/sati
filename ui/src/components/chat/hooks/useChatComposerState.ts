@@ -244,7 +244,7 @@ export function useChatComposerState({
     queuedBusySendSnapshotRef.current = null;
     setIsBusySendQueued(false);
     setIsBusySendConfirmed(false);
-  }, [syncQueuedBusySendSnapshot]);
+  }, []);
 
   const syncQueuedBusySendSnapshot = useCallback((updates: Partial<QueuedBusySendSnapshot> = {}) => {
     if (!queuedBusySendRef.current) return;
