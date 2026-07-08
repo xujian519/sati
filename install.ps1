@@ -6,7 +6,9 @@
   [int]$ServerPort = $(if ($env:SERVER_PORT) { [int]$env:SERVER_PORT } else { 3001 }),
   [int]$GatewayPort = $(if ($env:PILOTDECK_GATEWAY_PORT) { [int]$env:PILOTDECK_GATEWAY_PORT } else { 18789 }),
   [int]$MaxPortTries = $(if ($env:PILOTDECK_MAX_PORT_TRIES) { [int]$env:PILOTDECK_MAX_PORT_TRIES } else { 20 }),
+  [int]$LfsTimeoutSeconds = $(if ($env:PILOTDECK_LFS_TIMEOUT_SECONDS) { [int]$env:PILOTDECK_LFS_TIMEOUT_SECONDS } else { 300 }),
   [switch]$SkipStart,
+  [switch]$SkipLfs,
   [switch]$NoPathUpdate,
   [switch]$ForceInstall
 )
@@ -65,18 +67,64 @@ function Add-UserPath([string]$Directory) {
   Write-Step "Open a new PowerShell window before using pilotdeck globally."
 }
 
+function Add-FnmNodeToPath {
+  $fnmRoot = if ($env:FNM_DIR) { $env:FNM_DIR } else { Join-Path $env:APPDATA 'fnm' }
+  $versionsDir = Join-Path $fnmRoot 'node-versions'
+  if (-not (Test-Path $versionsDir)) { return $false }
+  $nodeExe = Get-ChildItem -Path $versionsDir -Directory -Filter "v$NodeInstallVersion*" -ErrorAction SilentlyContinue |
+    Sort-Object Name -Descending |
+    ForEach-Object { Join-Path $_.FullName 'installation\node.exe' } |
+    Where-Object { Test-Path $_ } |
+    Select-Object -First 1
+  if (-not $nodeExe) { return $false }
+  $nodeDir = Split-Path -Parent $nodeExe
+  $env:Path = "$nodeDir;$env:Path"
+  return $true
+}
+
+function Resolve-NodeDownloadVersion {
+  if ($NodeInstallVersion -match '^v?\d+\.\d+\.\d+$') {
+    if ($NodeInstallVersion.StartsWith('v')) { return $NodeInstallVersion }
+    return "v$NodeInstallVersion"
+  }
+  $major = ($NodeInstallVersion -replace '^v', '' -split '\.')[0]
+  try {
+    $index = Invoke-RestMethod -Uri 'https://nodejs.org/dist/index.json' -UseBasicParsing
+    $match = $index | Where-Object { $_.version -like "v$major.*" -and $_.files -contains 'win-x64-zip' } | Select-Object -First 1
+    if ($match) { return $match.version }
+  } catch {
+    Write-Step "Could not resolve latest Node.js $major from nodejs.org; using minimum runtime $MinimumNodeVersion."
+  }
+  return "v$MinimumNodeVersion"
+}
+
+function Install-PortableNodeRuntime {
+  $nodeVersion = Resolve-NodeDownloadVersion
+  $installRoot = Join-Path $HOME '.pilotdeck\node'
+  $nodeDir = Join-Path $installRoot "node-$nodeVersion-win-x64"
+  $nodeExe = Join-Path $nodeDir 'node.exe'
+  if (-not (Test-Path $nodeExe)) {
+    New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
+    $zipPath = Join-Path ([System.IO.Path]::GetTempPath()) "node-$nodeVersion-win-x64.zip"
+    $url = "https://nodejs.org/dist/$nodeVersion/node-$nodeVersion-win-x64.zip"
+    Write-Step "Downloading portable Node.js $nodeVersion..."
+    Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
+    $extractRoot = Join-Path ([System.IO.Path]::GetTempPath()) "pilotdeck-node-$nodeVersion"
+    Remove-Item -Recurse -Force -LiteralPath $extractRoot -ErrorAction SilentlyContinue
+    Expand-Archive -LiteralPath $zipPath -DestinationPath $extractRoot -Force
+    $extracted = Join-Path $extractRoot "node-$nodeVersion-win-x64"
+    Remove-Item -Recurse -Force -LiteralPath $nodeDir -ErrorAction SilentlyContinue
+    Move-Item -LiteralPath $extracted -Destination $nodeDir
+    Remove-Item -Recurse -Force -LiteralPath $extractRoot -ErrorAction SilentlyContinue
+    Remove-Item -Force -LiteralPath $zipPath -ErrorAction SilentlyContinue
+  }
+  $env:Path = "$nodeDir;$env:Path"
+}
+
 function Install-NodeRuntime {
   if (Test-Command fnm) {
     & fnm install $NodeInstallVersion
-    $fnmRoot = if ($env:FNM_DIR) { $env:FNM_DIR } else { Join-Path $env:APPDATA 'fnm' }
-    $nodeExe = Get-ChildItem -Path (Join-Path $fnmRoot 'node-versions') -Recurse -Filter node.exe -ErrorAction SilentlyContinue |
-      Where-Object { $_.FullName -match "\\v$([regex]::Escape($NodeInstallVersion))(\.|\\)" } |
-      Sort-Object FullName -Descending |
-      Select-Object -First 1
-    if ($nodeExe) {
-      $nodeDir = Split-Path -Parent $nodeExe.FullName
-      $env:Path = "$nodeDir;$env:Path"
-    }
+    [void](Add-FnmNodeToPath)
     return
   }
 
@@ -86,10 +134,11 @@ function Install-NodeRuntime {
     return
   }
 
-  Write-Fail "Node.js >= $MinimumNodeVersion with node:sqlite is required. Install Node.js $NodeInstallVersion LTS or fnm, then rerun this script."
+  Install-PortableNodeRuntime
 }
 
 function Ensure-NodeRuntime {
+  if (-not (Test-Command node)) { [void](Add-FnmNodeToPath) }
   $version = Get-NodeVersion
   if ($version -and $version -ge $MinimumNodeVersion -and (Test-NodeSqlite)) {
     Write-Ok "Node.js v$version found"
@@ -189,12 +238,22 @@ function Install-OrUpdateRepo {
 }
 
 function Ensure-LfsAssets {
+  if ($SkipLfs -or $env:PILOTDECK_SKIP_LFS -eq '1') {
+    Write-Step 'Skipping Git LFS assets.'
+    return
+  }
   if (-not (Test-Command git-lfs)) { return }
+
   Push-Location $InstallDir
   try {
     & git lfs install --local *> $null
-    & git lfs pull
-    if ($LASTEXITCODE -ne 0) { Write-Step 'git lfs pull failed; continuing without optional media assets.' }
+    $process = Start-Process -FilePath 'git' -ArgumentList @('lfs', 'pull') -NoNewWindow -PassThru
+    if (-not $process.WaitForExit($LfsTimeoutSeconds * 1000)) {
+      Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+      Write-Step "git lfs pull timed out after ${LfsTimeoutSeconds}s; continuing without optional media assets."
+      return
+    }
+    if ($process.ExitCode -ne 0) { Write-Step 'git lfs pull failed; continuing without optional media assets.' }
   } finally {
     Pop-Location
   }
@@ -240,6 +299,10 @@ function Write-CmdLauncher {
   $ps1Path = Join-Path $binDir 'pilotdeck.ps1'
   $escapedInstallDir = $InstallDir.Replace("'", "''")
   $escapedConfigPath = $ConfigPath.Replace("'", "''")
+  $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+  $npmCommand = Get-Command npm -ErrorAction SilentlyContinue
+  $escapedNodeDir = if ($nodeCommand) { (Split-Path -Parent $nodeCommand.Source).Replace("'", "''") } else { '' }
+  $escapedNpmPath = if ($npmCommand) { $npmCommand.Source.Replace("'", "''") } else { 'npm' }
 
   @"
 @echo off
@@ -253,6 +316,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0pilotdeck.ps1" %*
 `$ServerPort = if (`$env:SERVER_PORT) { [int]`$env:SERVER_PORT } else { 3001 }
 `$GatewayPort = if (`$env:PILOTDECK_GATEWAY_PORT) { [int]`$env:PILOTDECK_GATEWAY_PORT } else { 18789 }
 `$MaxPortTries = if (`$env:PILOTDECK_MAX_PORT_TRIES) { [int]`$env:PILOTDECK_MAX_PORT_TRIES } else { 20 }
+`$NodeDir = '$escapedNodeDir'
+`$NpmPath = '$escapedNpmPath'
+if (`$NodeDir -and (Test-Path `$NodeDir)) { `$env:Path = "`$NodeDir;`$env:Path" }
 
 function Test-PortFree([int]`$Port) {
   try {
@@ -292,10 +358,10 @@ for (`$i = 0; `$i -lt `$args.Count; `$i++) {
 `$env:SERVER_PORT = [string](Find-FreePort `$ServerPort)
 `$env:PILOTDECK_GATEWAY_PORT = [string](Find-FreePort `$GatewayPort)
 `$env:PILOTDECK_GATEWAY_URL = "ws://127.0.0.1:`$env:PILOTDECK_GATEWAY_PORT/ws"
-node (Join-Path `$InstallDir 'scripts\bootstrap-pilotdeck-config.mjs')
+& node (Join-Path `$InstallDir 'scripts\bootstrap-pilotdeck-config.mjs')
 Write-Host "pilotdeck: starting at http://localhost:`$env:SERVER_PORT"
 Set-Location (Join-Path `$InstallDir 'ui')
-npm run start:built
+& `$NpmPath run start:built
 "@ | Set-Content -LiteralPath $ps1Path -Encoding UTF8
 
   if (-not $NoPathUpdate) { Add-UserPath $binDir }
@@ -337,6 +403,7 @@ if (-not $SkipStart) {
   Set-Location (Join-Path $InstallDir 'ui')
   & npm run start:built
 }
+
 
 
 
