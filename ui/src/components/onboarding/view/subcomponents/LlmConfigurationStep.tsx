@@ -7,7 +7,7 @@ import {
   type CatalogProvider,
   type CatalogProviderProtocol,
 } from '../../../../shared/catalogProviders';
-import { fetchProviderModels, type ApiModelListItem } from '../../../../shared/modelListApi';
+import { fetchProviderModels, fetchRemoteDefaultModels, type ApiModelListItem } from '../../../../shared/modelListApi';
 
 type LlmConfigurationStepProps = {
   onSaved: () => void | Promise<void>;
@@ -98,6 +98,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
     ? customProtocol
     : (selectedProvider?.protocol ?? 'openai');
   const effectiveProviderId = isCustomMode ? customProviderId.trim() : (selectedProvider?.id ?? '');
+  const canFetchModels = Boolean(selectedProvider && effectiveProviderId && effectiveUrl);
   const canTest = Boolean(
     selectedProvider &&
     apiKey.trim() &&
@@ -113,12 +114,41 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
   }, [effectiveProviderId, effectiveUrl, effectiveProtocol]);
 
   useEffect(() => {
-    const key = apiKey.trim();
-    if (!selectedProvider || !effectiveProviderId || !effectiveUrl || !key || hasUsableApiKey(key) === false) return;
+    if (!selectedProvider || isCustomMode || apiKey.trim()) return;
+    const catalogModels = selectedProvider.models;
     const controller = new AbortController();
     setModelListStatus('loading');
     setModelListMessage('');
-    fetchProviderModels({ protocol: effectiveProtocol, baseUrl: effectiveUrl, apiKey: key })
+    fetchRemoteDefaultModels(selectedProvider.id)
+      .then((models) => {
+        if (controller.signal.aborted) return;
+        setApiModels(models.length > 0 ? models : catalogModels);
+        setModelListStatus('idle');
+        const nextModels = models.length > 0 ? models : catalogModels;
+        setSelectedModelId((current) => (
+          nextModels.length > 0 && !nextModels.some((model) => model.id === current)
+            ? nextModels[0].id
+            : current
+        ));
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setApiModels(catalogModels);
+        setModelListStatus('idle');
+        const message = error instanceof Error ? error.message : String(error);
+        setModelListMessage(`Using bundled model list. Remote model list unavailable: ${message}`);
+      });
+    return () => controller.abort();
+  }, [apiKey, isCustomMode, selectedProvider]);
+
+  useEffect(() => {
+    const key = apiKey.trim();
+    if (!selectedProvider || !effectiveProviderId || !effectiveUrl) return;
+    if (!hasUsableApiKey(key) && !isCustomMode) return;
+    const controller = new AbortController();
+    setModelListStatus('loading');
+    setModelListMessage('');
+    fetchProviderModels({ protocol: effectiveProtocol, baseUrl: effectiveUrl, apiKey: hasUsableApiKey(key) ? key : '', providerId: effectiveProviderId })
       .then((models) => {
         if (controller.signal.aborted) return;
         setApiModels(models);
@@ -133,7 +163,32 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
         setModelListMessage(error instanceof Error ? error.message : String(error));
       });
     return () => controller.abort();
-  }, [apiKey, effectiveProviderId, effectiveProtocol, effectiveUrl, selectedModelId, selectedProvider]);
+  }, [apiKey, effectiveProviderId, effectiveProtocol, effectiveUrl, isCustomMode, selectedModelId, selectedProvider]);
+
+  const handleFetchModels = useCallback(async () => {
+    if (!canFetchModels) return;
+    setModelListStatus('loading');
+    setModelListMessage('');
+    try {
+      const key = apiKey.trim();
+      const models = await fetchProviderModels({
+        protocol: effectiveProtocol,
+        baseUrl: effectiveUrl,
+        apiKey: hasUsableApiKey(key) ? key : '',
+        providerId: effectiveProviderId,
+      });
+      setApiModels(models);
+      setModelListStatus('idle');
+      setSelectedModelId((current) => (
+        models.length > 0 && !models.some((model) => model.id === current)
+          ? models[0].id
+          : current
+      ));
+    } catch (error) {
+      setModelListStatus('error');
+      setModelListMessage(error instanceof Error ? error.message : String(error));
+    }
+  }, [apiKey, canFetchModels, effectiveProviderId, effectiveProtocol, effectiveUrl]);
 
   const handleProviderSelect = useCallback((provider: CatalogProvider) => {
     setSelectedProvider((prev) => {
@@ -445,11 +500,24 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
             )}
             {modelListStatus === 'loading' && (
               <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin" /> Fetching models from API...
+                <Loader2 className="h-3 w-3 animate-spin" /> Fetching remote model list...
               </p>
+            )}
+            {isCustomMode && (
+              <button
+                type="button"
+                onClick={handleFetchModels}
+                disabled={!canFetchModels || modelListStatus === 'loading'}
+                className="mt-2 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Fetch model list
+              </button>
             )}
             {modelListStatus === 'error' && modelListMessage && (
               <p className="mt-1 text-[11px] text-destructive">{modelListMessage}</p>
+            )}
+            {modelListStatus === 'idle' && modelListMessage && (
+              <p className="mt-1 text-[11px] text-muted-foreground">{modelListMessage}</p>
             )}
             {selectedModels.length > 0 && (
               <div className="mt-2">

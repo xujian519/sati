@@ -424,8 +424,8 @@ router.post('/models', async (req, res) => {
       if (typeof provider?.apiKey === 'string') effectiveApiKey = provider.apiKey;
     } catch { /* fall through to validation below */ }
   }
-  if (!baseUrl || !effectiveApiKey || effectiveApiKey === '********') {
-    return res.status(400).json({ ok: false, error: 'baseUrl and apiKey are required' });
+  if (!baseUrl) {
+    return res.status(400).json({ ok: false, error: 'baseUrl is required' });
   }
 
   const normalizedType = String(providerType || '').toLowerCase();
@@ -439,10 +439,13 @@ router.post('/models', async (req, res) => {
   try {
     const urls = buildProviderModelsEndpointCandidates({ protocol, baseUrl: normalizedBaseUrl });
     const headers = isGoogle
-      ? { 'x-goog-api-key': effectiveApiKey }
+      ? (effectiveApiKey && effectiveApiKey !== '********' ? { 'x-goog-api-key': effectiveApiKey } : {})
       : isAnthropic
-        ? { 'x-api-key': effectiveApiKey, 'anthropic-version': '2023-06-01' }
-        : { Authorization: `Bearer ${effectiveApiKey}` };
+        ? {
+            ...(effectiveApiKey && effectiveApiKey !== '********' ? { 'x-api-key': effectiveApiKey } : {}),
+            'anthropic-version': '2023-06-01',
+          }
+        : (effectiveApiKey && effectiveApiKey !== '********' ? { Authorization: `Bearer ${effectiveApiKey}` } : {});
     const { url, response, responseText } = await fetchWithEndpointFallback(
       urls,
       { method: 'GET', headers, signal: controller.signal },
