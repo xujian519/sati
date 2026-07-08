@@ -1043,7 +1043,7 @@ function ProviderCard({
     setApiModelsStatus('loading');
     setApiModelsError('');
     try {
-      const models = hasProviderApiKey || !catalogEntry || effectiveUrl !== catalogEntry.defaultUrl
+      const models = hasProviderApiKey || !catalogEntry || ![catalogEntry.defaultUrl, catalogEntry.modelListUrl].includes(effectiveUrl)
         ? await fetchProviderModels({ protocol, baseUrl: effectiveUrl, apiKey: hasProviderApiKey ? provider.apiKey : '', providerId })
         : await fetchRemoteDefaultModels(providerId);
       setApiModels(!hasProviderApiKey && catalogEntry && models.length === 0 ? catalogEntry.models : models);

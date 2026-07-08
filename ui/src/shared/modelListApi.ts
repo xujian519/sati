@@ -37,7 +37,7 @@ export async function fetchRemoteDefaultModels(providerId: string): Promise<ApiM
   if (!provider?.defaultUrl) return [];
   return fetchProviderModels({
     protocol: provider.protocol,
-    baseUrl: provider.defaultUrl,
+    baseUrl: provider.modelListUrl ?? provider.defaultUrl,
     apiKey: '',
     providerId,
   });
