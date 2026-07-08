@@ -66,4 +66,28 @@ describe('gatewayEventToFrames agent status errors', () => {
             userHint: 'Check UI server logs.',
         });
     });
+
+    it('renders gateway unavailable preflight status as an error frame', () => {
+        const frames = gatewayEventToFrames({
+            type: 'agent_status',
+            event: 'gateway_unavailable',
+            detail: {
+                message: 'PilotDeck gateway is unavailable.',
+                code: 'gateway_unavailable',
+                severity: 'error',
+                visible: true,
+                userHint: 'Start or restart the PilotDeck gateway, then retry this message.',
+                scope: 'preflight',
+                source: 'web_bridge',
+            },
+        }, 'web:s_test', 'pilotdeck');
+
+        expect(frames).toHaveLength(1);
+        expect(frames[0]).toMatchObject({
+            kind: 'error',
+            content: 'PilotDeck gateway is unavailable.',
+            code: 'gateway_unavailable',
+            userHint: 'Start or restart the PilotDeck gateway, then retry this message.',
+        });
+    });
 });

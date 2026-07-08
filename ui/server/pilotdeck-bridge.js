@@ -967,7 +967,6 @@ export async function runChatViaGateway(
     writer,
     provider = 'pilotdeck',
 ) {
-    const gw = await ensureGateway();
     const projectKey = options.projectPath || options.cwd || GENERAL_HOME;
     const channelKey = 'web';
 
@@ -976,24 +975,7 @@ export async function runChatViaGateway(
     const isNewSession = sessionKey !== incoming;
 
     const state = ensureSessionState(sessionKey, projectKey, channelKey);
-
-    // If a previous turn for this session is still in-flight (e.g. the
-    // browser reloaded while a permission prompt was pending), abort it
-    // before starting the new one. Without this the gateway rejects
-    // with session_busy because the old turn's inFlightTurns slot is
-    // still occupied.
-    if (state.active && state.runId) {
-        console.log(
-            `[pilotdeck-bridge] aborting stale turn ${state.runId} for ${sessionKey} before resubmit`,
-        );
-        try {
-            await gw.abortTurn({ sessionKey, runId: state.runId, reason: 'system:stale_turn' });
-        } catch (err) {
-            console.warn('[pilotdeck-bridge] stale abort failed (continuing):', err?.message || err);
-        }
-        state.active = false;
-        state.runId = undefined;
-    }
+    const staleRunId = state.active ? state.runId : undefined;
 
     if (isNewSession) {
         writer.send(
@@ -1021,7 +1003,26 @@ export async function runChatViaGateway(
     const runMode = normalizeRunMode(options?.runMode) || (resolvedMode === 'plan' ? 'plan' : 'agent');
     console.log(`[pilotdeck-bridge] submitTurn runMode=${runMode} mode=${resolvedMode} (options.permissionMode=${options?.permissionMode}, options.mode=${options?.mode})`);
 
+    let gw = null;
     try {
+        gw = await ensureGateway();
+
+        // If a previous turn for this session is still in-flight (e.g. the
+        // browser reloaded while a permission prompt was pending), abort it
+        // before starting the new one. Without this the gateway rejects
+        // with session_busy because the old turn's inFlightTurns slot is
+        // still occupied.
+        if (staleRunId) {
+            console.log(
+                `[pilotdeck-bridge] aborting stale turn ${staleRunId} for ${sessionKey} before resubmit`,
+            );
+            try {
+                await gw.abortTurn({ sessionKey, runId: staleRunId, reason: 'system:stale_turn' });
+            } catch (err) {
+                console.warn('[pilotdeck-bridge] stale abort failed (continuing):', err?.message || err);
+            }
+        }
+
         const stream = gw.submitTurn({
             sessionKey,
             channelKey,
@@ -1105,25 +1106,39 @@ export async function runChatViaGateway(
             sendBridgeStatusEvent(writer, statusEvent, sessionKey, provider);
         }
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        const statusEvent = createBridgeFailureStatusEvent({
-            event: 'gateway_bridge_error',
-            message,
-            userHint: 'The Web bridge failed while streaming this turn. Retry this message; if it repeats, check the UI server and gateway logs.',
-        });
+        const rawMessage = error instanceof Error ? error.message : String(error);
+        const gatewayUnavailable = !gw;
+        const message = gatewayUnavailable ? 'PilotDeck gateway is unavailable.' : rawMessage;
+        const statusEvent = gatewayUnavailable
+            ? createBridgeFailureStatusEvent({
+                event: 'gateway_unavailable',
+                message,
+                userHint: 'Start or restart the PilotDeck gateway, then retry this message.',
+                scope: 'preflight',
+                detail: {
+                    gatewayUrl: GATEWAY_URL,
+                },
+            })
+            : createBridgeFailureStatusEvent({
+                event: 'gateway_bridge_error',
+                message,
+                userHint: 'The Web bridge failed while streaming this turn. Retry this message; if it repeats, check the UI server and gateway logs.',
+            });
 
         console.error(
             '[pilotdeck-bridge] runChatViaGateway threw:',
             error instanceof Error ? (error.stack || error.message) : error,
         );
-        await recordGatewayStatusMessage(gw, {
-            sessionKey,
-            turnId: runId,
-            projectKey,
-            event: statusEvent.event,
-            text: message,
-            detail: statusEvent.detail,
-        });
+        if (gw) {
+            await recordGatewayStatusMessage(gw, {
+                sessionKey,
+                turnId: runId,
+                projectKey,
+                event: statusEvent.event,
+                text: message,
+                detail: statusEvent.detail,
+            });
+        }
         state.hasVisibleFailureStatus = true;
         sendBridgeStatusEvent(writer, statusEvent, sessionKey, provider);
     } finally {
