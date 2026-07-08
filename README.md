@@ -305,6 +305,13 @@ pilotdeck            # starts the server at http://localhost:3001
 pilotdeck status     # check runtime status
 ```
 
+To open PilotDeck again later on macOS / Linux, run `pilotdeck` in a terminal and open the printed URL in your browser. If your shell has not picked up the PATH update yet, open a new terminal or source your shell profile first.
+
+```bash
+pilotdeck
+# then open http://localhost:3001, or the URL printed by the command
+```
+
 ### Option A2: One-line install (Windows PowerShell)
 
 Run PowerShell as a normal user, then execute:

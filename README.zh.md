@@ -305,6 +305,13 @@ pilotdeck            # 在 http://localhost:3001 启动服务
 pilotdeck status     # 查看运行状态
 ```
 
+之后如果想在 macOS / Linux 上再次打开 PilotDeck，请在终端运行 `pilotdeck`，然后在浏览器中打开终端打印的地址。如果当前 shell 还没有刷新 PATH，请新开一个终端，或先 source 对应的 shell 配置文件。
+
+```bash
+pilotdeck
+# 然后打开 http://localhost:3001，或命令打印的地址
+```
+
 ### 方式一补充：一键安装 (Windows PowerShell)
 
 在普通用户 PowerShell 中执行：
