@@ -1,0 +1,35 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { effectiveInputContextTokens, TokenBudgetManager } from "../../src/context/index.js";
+import type { CanonicalMessage } from "../../src/model/index.js";
+
+test("effective input context subtracts output reservation", () => {
+  assert.equal(effectiveInputContextTokens(1_000_000, 65_536), 934_464);
+  assert.equal(effectiveInputContextTokens(262_144, 65_536), 196_608);
+  assert.equal(effectiveInputContextTokens(65_536, 65_536), 1);
+  assert.equal(effectiveInputContextTokens(65_536, 131_072), 1);
+});
+
+test("token budget ratio uses effective input context", () => {
+  const budget = new TokenBudgetManager({ warningRatio: 0.5, blockingRatio: 0.9 });
+  const messages: CanonicalMessage[] = [
+    { role: "user", content: [{ type: "text", text: "x".repeat(1000) }] },
+  ];
+  const tokens = budget.estimateMessagesTokens(messages);
+  const snapshot = budget.evaluate(messages, tokens * 4, tokens * 2);
+  assert.equal(snapshot.effectiveContextTokens, tokens * 2);
+  assert.equal(snapshot.ratio, 0.5);
+  assert.equal(snapshot.state, "warning");
+});
+
+test("token budget can use provider usage for pressure", () => {
+  const budget = new TokenBudgetManager({ warningRatio: 0.5, blockingRatio: 0.9 });
+  const messages: CanonicalMessage[] = [
+    { role: "user", content: [{ type: "text", text: "tiny" }] },
+  ];
+  const snapshot = budget.evaluate(messages, 1_000, 0, { inputTokens: 600, outputTokens: 50, totalTokens: 650 });
+  assert.equal(snapshot.tokens, 650);
+  assert.equal(snapshot.usageTokens, 650);
+  assert.equal(snapshot.estimateSource, "usage");
+  assert.equal(snapshot.state, "warning");
+});

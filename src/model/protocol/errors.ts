@@ -41,6 +41,12 @@ export type CanonicalModelError = {
   userHint?: string;
   /** Structured settings fix info — config path, CLI command, or URL the user can act on. */
   settingsFix?: SettingsFix;
+  /** Provider-reported lower context window parsed from an overflow error. */
+  maxContextTokens?: number;
+  /** Provider-reported output cap parsed from a max_tokens error. */
+  maxOutputTokens?: number;
+  /** Provider-reported output space available for this prompt. */
+  availableOutputTokens?: number;
 };
 
 /**
