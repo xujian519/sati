@@ -312,7 +312,6 @@ export function useChatRealtimeHandlers({
       if (thinkingBySessionRef.current.has(sid)) {
         thinkingBySessionRef.current.delete(sid);
       }
-      sessionStore.clearAssistantRealtime?.(sid);
     }
 
     if (msg.kind === 'agent_activity') {

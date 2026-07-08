@@ -238,10 +238,19 @@ export function useChatComposerState({
   const queuedBusySendSnapshotRef = useRef<QueuedBusySendSnapshot | null>(null);
   const pendingSessionGrantResolversRef = useRef(new Map<string, (result: PermissionGrantResult) => void>());
 
+  const cancelBusySendQueue = useCallback(() => {
+    queuedBusySendRef.current = false;
+    queuedBusySendConfirmedRef.current = false;
+    queuedBusySendSnapshotRef.current = null;
+    setIsBusySendQueued(false);
+    setIsBusySendConfirmed(false);
+  }, []);
+
   useEffect(() => {
     const handleAddDocumentReference = (event: Event) => {
       const detail = (event as CustomEvent).detail;
       if (!isDocumentSelectionReference(detail)) return;
+      cancelBusySendQueue();
       setDocumentReferences((previous) => {
         if (previous.some((reference) => reference.id === detail.id)) return previous;
         return [...previous, detail];
@@ -255,7 +264,7 @@ export function useChatComposerState({
     return () => {
       window.removeEventListener('pilotdeck:add-chat-reference', handleAddDocumentReference);
     };
-  }, []);
+  }, [cancelBusySendQueue]);
 
   useEffect(() => {
     if (!subscribe) {
@@ -707,6 +716,7 @@ export function useChatComposerState({
     });
 
     if (validFiles.length > 0) {
+      cancelBusySendQueue();
       setAttachedImages((previous) => {
         const result = addAttachmentFiles(previous, validFiles);
         if (result.droppedCount > 0) {
@@ -1130,11 +1140,7 @@ export function useChatComposerState({
 
       setInput(newValue);
       inputValueRef.current = newValue;
-      queuedBusySendRef.current = false;
-      queuedBusySendConfirmedRef.current = false;
-      queuedBusySendSnapshotRef.current = null;
-      setIsBusySendQueued(false);
-      setIsBusySendConfirmed(false);
+      cancelBusySendQueue();
       setCursorPosition(cursorPos);
 
       if (!newValue.trim()) {
@@ -1146,16 +1152,8 @@ export function useChatComposerState({
 
       handleCommandInputChange(newValue, cursorPos);
     },
-    [handleCommandInputChange, resetCommandMenuState, setCursorPosition],
+    [cancelBusySendQueue, handleCommandInputChange, resetCommandMenuState, setCursorPosition],
   );
-
-  const cancelBusySendQueue = useCallback(() => {
-    queuedBusySendRef.current = false;
-    queuedBusySendConfirmedRef.current = false;
-    queuedBusySendSnapshotRef.current = null;
-    setIsBusySendQueued(false);
-    setIsBusySendConfirmed(false);
-  }, []);
 
   const insertAtCursor = useCallback(
     (char: string) => {
@@ -1462,9 +1460,13 @@ export function useChatComposerState({
     renderInputWithMentions,
     selectFile,
     attachedImages,
-    setAttachedImages,
+    setAttachedImages: (value: SetStateAction<File[]>) => {
+      cancelBusySendQueue();
+      setAttachedImages(value);
+    },
     documentReferences,
     removeDocumentReference: (id: string) => {
+      cancelBusySendQueue();
       setDocumentReferences((previous) => previous.filter((reference) => reference.id !== id));
     },
     uploadingImages,
