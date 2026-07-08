@@ -24,7 +24,8 @@ import {
   type ImLiveReplyControllerOptions,
   type ImLiveReplyTransport,
 } from "../protocol/ImLiveReplyController.js";
-import { WeixinSessionMapper } from "./WeixinSessionMapper.js";
+import { WeixinSessionMapper, type WeixinSessionMapperState } from "./WeixinSessionMapper.js";
+import { createVisibleErrorStatusDetail } from "../../../status/agentStatus.js";
 
 const CREDENTIALS_PATH = join(homedir(), ".pilotdeck", "weixin-credentials.json");
 const POLL_RETRY_DELAY_MS = 3000;
@@ -52,6 +53,7 @@ export type WeixinChannelOptions = {
   liveReplyOptions?: Omit<ImLiveReplyControllerOptions<void>, "transport" | "onTransportError">;
   clientFactory?: (options: ClientOptions) => WeixinIlinkClient;
   loginWithQR?: typeof loginWithQR;
+  onStateChange?: (state: WeixinSessionMapperState) => void;
 };
 
 type SavedCredentials = {
@@ -106,6 +108,7 @@ export class WeixinChannel implements ChannelAdapter {
   private readonly liveReplyOptions?: WeixinChannelOptions["liveReplyOptions"];
   private readonly clientFactory: (options: ClientOptions) => WeixinIlinkClient;
   private readonly login: typeof loginWithQR;
+  private readonly onStateChange?: (state: WeixinSessionMapperState) => void;
 
   private gateway?: Gateway;
   private logger?: ChannelLogger;
@@ -133,6 +136,7 @@ export class WeixinChannel implements ChannelAdapter {
     this.liveReplyOptions = options.liveReplyOptions;
     this.clientFactory = options.clientFactory ?? ((clientOptions) => new ILinkClient(clientOptions) as unknown as WeixinIlinkClient);
     this.login = options.loginWithQR ?? loginWithQR;
+    this.onStateChange = options.onStateChange;
     this.attachmentStore = new ImAttachmentStore({
       rootDir: join(homedir(), ".pilotdeck", "im-attachments"),
       channelKey: this.channelKey,
@@ -359,6 +363,7 @@ export class WeixinChannel implements ChannelAdapter {
     const previousSessionKey = this.mapper.getSession(fromUser);
     const mapped = this.mapper.resolve({ chatId: fromUser, text: messageText });
     if (mapped.command === "new") {
+      this.onStateChange?.(this.mapper.snapshot());
       const activeRun = this.chatState.activeRun(fromUser);
       this.resetChatInteractionState(fromUser);
       await this.gateway?.abortTurn({
@@ -405,8 +410,9 @@ export class WeixinChannel implements ChannelAdapter {
         reply: async (msg) => {
           await this.sendReply(fromUser, msg);
         },
-        bindProject: (projectKey) => this.mapper.bindProject(fromUser, projectKey),
+        bindProject: (projectKey) => { this.mapper.bindProject(fromUser, projectKey); this.onStateChange?.(this.mapper.snapshot()); },
         getProject: () => this.mapper.getProject(fromUser),
+        resetSession: () => { this.mapper.resolve({ chatId: fromUser, text: "/new" }); this.onStateChange?.(this.mapper.snapshot()); },
         logger: this.logger as any,
       });
       if (handled) return;
@@ -669,9 +675,18 @@ export class WeixinChannel implements ChannelAdapter {
     } catch (e) {
       this.logger?.error?.(`weixin: submitTurn error: ${formatWeixinError(e)}`);
       await liveReply.handleEvent({
-        type: "error",
-        message: "处理消息时发生错误，请重试。",
-        recoverable: true,
+        type: "agent_status",
+        event: "channel_submit_failed",
+        detail: createVisibleErrorStatusDetail({
+          message: "处理消息时发生错误，请重试。",
+          code: "channel_submit_failed",
+          userHint: "PilotDeck failed before this IM turn could finish. Retry the message; if it repeats, check the channel and gateway logs.",
+          scope: "channel",
+          source: "im_channel",
+          detail: {
+            channel: "weixin",
+          },
+        }),
       });
     } finally {
       watchdogSettled = true;
