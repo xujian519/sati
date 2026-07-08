@@ -244,16 +244,29 @@ export function useChatComposerState({
     queuedBusySendSnapshotRef.current = null;
     setIsBusySendQueued(false);
     setIsBusySendConfirmed(false);
-  }, []);
+  }, [syncQueuedBusySendSnapshot]);
+
+  const syncQueuedBusySendSnapshot = useCallback((updates: Partial<QueuedBusySendSnapshot> = {}) => {
+    if (!queuedBusySendRef.current) return;
+    const previous = queuedBusySendSnapshotRef.current;
+    queuedBusySendSnapshotRef.current = {
+      input: updates.input ?? previous?.input ?? inputValueRef.current,
+      attachedImages: updates.attachedImages ?? previous?.attachedImages ?? attachedImages,
+      documentReferences: updates.documentReferences ?? previous?.documentReferences ?? documentReferences,
+      ...(previous?.forceStart ? { forceStart: true } : {}),
+      ...(updates.forceStart ? { forceStart: true } : {}),
+    };
+  }, [attachedImages, documentReferences]);
 
   useEffect(() => {
     const handleAddDocumentReference = (event: Event) => {
       const detail = (event as CustomEvent).detail;
       if (!isDocumentSelectionReference(detail)) return;
-      cancelBusySendQueue();
       setDocumentReferences((previous) => {
         if (previous.some((reference) => reference.id === detail.id)) return previous;
-        return [...previous, detail];
+        const next = [...previous, detail];
+        syncQueuedBusySendSnapshot({ documentReferences: next });
+        return next;
       });
       requestAnimationFrame(() => {
         textareaRef.current?.focus();
@@ -264,7 +277,7 @@ export function useChatComposerState({
     return () => {
       window.removeEventListener('pilotdeck:add-chat-reference', handleAddDocumentReference);
     };
-  }, [cancelBusySendQueue]);
+  }, [syncQueuedBusySendSnapshot]);
 
   useEffect(() => {
     if (!subscribe) {
@@ -716,7 +729,6 @@ export function useChatComposerState({
     });
 
     if (validFiles.length > 0) {
-      cancelBusySendQueue();
       setAttachedImages((previous) => {
         const result = addAttachmentFiles(previous, validFiles);
         if (result.droppedCount > 0) {
@@ -726,6 +738,7 @@ export function useChatComposerState({
             return next;
           });
         }
+        syncQueuedBusySendSnapshot({ attachedImages: result.files });
         return result.files;
       });
     }
@@ -1140,7 +1153,7 @@ export function useChatComposerState({
 
       setInput(newValue);
       inputValueRef.current = newValue;
-      cancelBusySendQueue();
+      syncQueuedBusySendSnapshot({ input: newValue });
       setCursorPosition(cursorPos);
 
       if (!newValue.trim()) {
@@ -1152,7 +1165,7 @@ export function useChatComposerState({
 
       handleCommandInputChange(newValue, cursorPos);
     },
-    [cancelBusySendQueue, handleCommandInputChange, resetCommandMenuState, setCursorPosition],
+    [handleCommandInputChange, resetCommandMenuState, setCursorPosition, syncQueuedBusySendSnapshot],
   );
 
   const insertAtCursor = useCallback(
@@ -1461,13 +1474,21 @@ export function useChatComposerState({
     selectFile,
     attachedImages,
     setAttachedImages: (value: SetStateAction<File[]>) => {
-      cancelBusySendQueue();
-      setAttachedImages(value);
+      setAttachedImages((previous) => {
+        const next = typeof value === 'function'
+          ? (value as (previous: File[]) => File[])(previous)
+          : value;
+        syncQueuedBusySendSnapshot({ attachedImages: next });
+        return next;
+      });
     },
     documentReferences,
     removeDocumentReference: (id: string) => {
-      cancelBusySendQueue();
-      setDocumentReferences((previous) => previous.filter((reference) => reference.id !== id));
+      setDocumentReferences((previous) => {
+        const next = previous.filter((reference) => reference.id !== id);
+        syncQueuedBusySendSnapshot({ documentReferences: next });
+        return next;
+      });
     },
     uploadingImages,
     imageErrors,
