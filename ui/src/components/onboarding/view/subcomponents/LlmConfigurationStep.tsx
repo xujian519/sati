@@ -151,11 +151,14 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
     fetchProviderModels({ protocol: effectiveProtocol, baseUrl: effectiveUrl, apiKey: hasUsableApiKey(key) ? key : '', providerId: effectiveProviderId })
       .then((models) => {
         if (controller.signal.aborted) return;
-        setApiModels(models);
+        setApiModels(!hasUsableApiKey(key) && models.length === 0 ? selectedProvider.models : models);
         setModelListStatus('idle');
-        if (models.length > 0 && !models.some((model) => model.id === selectedModelId)) {
-          setSelectedModelId(models[0].id);
-        }
+        const nextModels = !hasUsableApiKey(key) && models.length === 0 ? selectedProvider.models : models;
+        setSelectedModelId((current) => (
+          nextModels.length > 0 && !nextModels.some((model) => model.id === current)
+            ? nextModels[0].id
+            : current
+        ));
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
@@ -177,18 +180,21 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
         apiKey: hasUsableApiKey(key) ? key : '',
         providerId: effectiveProviderId,
       });
-      setApiModels(models);
+      const nextModels = !hasUsableApiKey(key) && !isCustomMode && selectedProvider
+        ? (models.length > 0 ? models : selectedProvider.models)
+        : models;
+      setApiModels(nextModels);
       setModelListStatus('idle');
       setSelectedModelId((current) => (
-        models.length > 0 && !models.some((model) => model.id === current)
-          ? models[0].id
+        nextModels.length > 0 && !nextModels.some((model) => model.id === current)
+          ? nextModels[0].id
           : current
       ));
     } catch (error) {
       setModelListStatus('error');
       setModelListMessage(error instanceof Error ? error.message : String(error));
     }
-  }, [apiKey, canFetchModels, effectiveProviderId, effectiveProtocol, effectiveUrl]);
+  }, [apiKey, canFetchModels, effectiveProviderId, effectiveProtocol, effectiveUrl, isCustomMode, selectedProvider]);
 
   const handleProviderSelect = useCallback((provider: CatalogProvider) => {
     setSelectedProvider((prev) => {
@@ -503,7 +509,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
                 <Loader2 className="h-3 w-3 animate-spin" /> Fetching remote model list...
               </p>
             )}
-            {isCustomMode && (
+            {selectedProvider && (
               <button
                 type="button"
                 onClick={handleFetchModels}

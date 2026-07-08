@@ -1043,9 +1043,9 @@ function ProviderCard({
     setApiModelsStatus('loading');
     setApiModelsError('');
     try {
-      const models = !hasProviderApiKey && catalogEntry
-        ? await fetchRemoteDefaultModels(providerId)
-        : await fetchProviderModels({ protocol, baseUrl: effectiveUrl, apiKey: hasProviderApiKey ? provider.apiKey : '', providerId });
+      const models = hasProviderApiKey || !catalogEntry || effectiveUrl !== catalogEntry.defaultUrl
+        ? await fetchProviderModels({ protocol, baseUrl: effectiveUrl, apiKey: hasProviderApiKey ? provider.apiKey : '', providerId })
+        : await fetchRemoteDefaultModels(providerId);
       setApiModels(!hasProviderApiKey && catalogEntry && models.length === 0 ? catalogEntry.models : models);
       setApiModelsStatus('idle');
     } catch (error) {

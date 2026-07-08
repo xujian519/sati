@@ -1,5 +1,5 @@
 import { authenticatedFetch } from '../utils/api';
-import type { CatalogModel, CatalogProviderProtocol } from './catalogProviders';
+import { findCatalogProviderById, type CatalogModel, type CatalogProviderProtocol } from './catalogProviders';
 
 export type ApiModelListItem = Pick<CatalogModel, 'id' | 'displayName'>;
 
@@ -33,10 +33,11 @@ function normalizeModelList(models: unknown[]): ApiModelListItem[] {
 }
 
 export async function fetchRemoteDefaultModels(providerId: string): Promise<ApiModelListItem[]> {
-  if (providerId !== 'openrouter') return [];
+  const provider = findCatalogProviderById(providerId);
+  if (!provider?.defaultUrl) return [];
   return fetchProviderModels({
-    protocol: 'openai',
-    baseUrl: 'https://openrouter.ai/api/v1',
+    protocol: provider.protocol,
+    baseUrl: provider.defaultUrl,
     apiKey: '',
     providerId,
   });
