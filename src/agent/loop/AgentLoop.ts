@@ -1799,7 +1799,12 @@ export class AgentLoop {
 
   private currentMaxOutputTokens(provider: string, model: string): number | undefined {
     const transient = this.transientTokenCaps.get(this.tokenCapKey(provider, model))?.maxOutputTokens;
-    return transient ?? this.config.maxOutputTokens ?? this.getModelTokenLimits(provider, model)?.maxOutputTokens;
+    const modelMaxOutputTokens = this.getModelTokenLimits(provider, model)?.maxOutputTokens;
+    const configured = transient ?? this.config.maxOutputTokens;
+    if (configured !== undefined && modelMaxOutputTokens !== undefined) {
+      return Math.min(configured, modelMaxOutputTokens);
+    }
+    return configured ?? modelMaxOutputTokens;
   }
 
   private setTransientTokenCap(provider: string, model: string, cap: { maxContextTokens?: number; maxOutputTokens?: number }): void {

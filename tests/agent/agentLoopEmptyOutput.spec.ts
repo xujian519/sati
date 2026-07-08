@@ -205,6 +205,47 @@ test("empty length output jump is clamped by model output cap", async () => {
   assert.equal(requests[1]?.maxOutputTokens, 2_048);
 });
 
+test("routed requests clamp configured output to routed model cap", async () => {
+  const requests: CanonicalModelRequest[] = [];
+  const dependencies: AgentRuntimeDependencies = {
+    router: {
+      async decide(): Promise<RouterDecision> {
+        return {
+          provider: "small-provider",
+          model: "small-model",
+          scenarioType: "default",
+          isSubagent: false,
+          orchestrating: false,
+          resolvedFrom: "scenario",
+          mutations: {},
+        };
+      },
+      async *execute(_decision: RouterDecision, request: CanonicalModelRequest): AsyncIterable<CanonicalModelEvent> {
+        requests.push(request);
+        yield { type: "message_start", role: "assistant" };
+        yield { type: "text_delta", text: "ok" };
+        yield { type: "message_end", finishReason: "stop" };
+      },
+      stream(): AsyncIterable<CanonicalModelEvent> {
+        throw new Error("not used");
+      },
+    },
+    tools: {
+      scheduler: { executeAll: async () => [] },
+      registry: { list: () => [], toCanonicalSchemas: () => [] },
+    },
+    getModelTokenLimits: () => ({ maxContextTokens: 32_768, maxOutputTokens: 8_192 }),
+  } as unknown as AgentRuntimeDependencies;
+
+  const loop = new AgentLoop(baseConfig(), dependencies);
+  const result = await collectLoop(loop, []);
+
+  assert.equal(result.result.type, "success");
+  assert.equal(requests[0]?.provider, "small-provider");
+  assert.equal(requests[0]?.model, "small-model");
+  assert.equal(requests[0]?.maxOutputTokens, 8_192);
+});
+
 function baseConfig(): AgentRuntimeConfig {
   return {
     provider: "google",
