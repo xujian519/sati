@@ -903,17 +903,21 @@ export class AgentLoop {
         const reactive = await this.tryReactiveRecover(input, assembled.error, messages, hasAttemptedCompact);
         if (reactive && reactive.type === "adjust_output_and_retry" && !hasAttemptedOutputRetry) {
           hasAttemptedOutputRetry = true;
-          const previousOutput = this.currentMaxOutputTokens(decision.provider, decision.model);
-          this.setTransientTokenCap(decision.provider, decision.model, reactive.scope === "attempt"
+          const target = modelErrorTarget(assembled.error, decision.provider, decision.model);
+          const previousOutput = this.currentMaxOutputTokens(target.provider, target.model);
+          this.setTransientTokenCap(target.provider, target.model, reactive.scope === "attempt"
             ? { attemptMaxOutputTokens: reactive.maxOutputTokens }
             : { hardMaxOutputTokens: reactive.maxOutputTokens });
+          if (target.provider !== decision.provider || target.model !== decision.model) {
+            this.setTransientTokenCap(decision.provider, decision.model, { attemptMaxOutputTokens: reactive.maxOutputTokens });
+          }
           messages = stripTrailingErrorPair(messages);
           yield {
             type: "token_cap_adjusted",
             sessionId: input.sessionId,
             turnId: input.turnId,
-            provider: decision.provider,
-            model: decision.model,
+            provider: target.provider,
+            model: target.model,
             cap: "output",
             previous: previousOutput,
             next: reactive.maxOutputTokens,
@@ -929,15 +933,16 @@ export class AgentLoop {
         }
 
         if (reactive && reactive.type === "compact_and_retry" && !hasAttemptedCompact) {
-          const previousContext = this.currentMaxContextTokens(decision.provider, decision.model);
+          const target = modelErrorTarget(assembled.error, decision.provider, decision.model);
+          const previousContext = this.currentMaxContextTokens(target.provider, target.model);
           if (reactive.maxContextTokens !== undefined) {
-            this.setTransientTokenCap(decision.provider, decision.model, { maxContextTokens: reactive.maxContextTokens });
+            this.setTransientTokenCap(target.provider, target.model, { maxContextTokens: reactive.maxContextTokens });
             yield {
               type: "token_cap_adjusted",
               sessionId: input.sessionId,
               turnId: input.turnId,
-              provider: decision.provider,
-              model: decision.model,
+              provider: target.provider,
+              model: target.model,
               cap: "context",
               previous: previousContext,
               next: reactive.maxContextTokens,
@@ -945,14 +950,17 @@ export class AgentLoop {
             };
           }
           if (reactive.maxOutputTokens !== undefined) {
-            const previousOutput = this.currentMaxOutputTokens(decision.provider, decision.model);
-            this.setTransientTokenCap(decision.provider, decision.model, { attemptMaxOutputTokens: reactive.maxOutputTokens });
+            const previousOutput = this.currentMaxOutputTokens(target.provider, target.model);
+            this.setTransientTokenCap(target.provider, target.model, { attemptMaxOutputTokens: reactive.maxOutputTokens });
+            if (target.provider !== decision.provider || target.model !== decision.model) {
+              this.setTransientTokenCap(decision.provider, decision.model, { attemptMaxOutputTokens: reactive.maxOutputTokens });
+            }
             yield {
               type: "token_cap_adjusted",
               sessionId: input.sessionId,
               turnId: input.turnId,
-              provider: decision.provider,
-              model: decision.model,
+              provider: target.provider,
+              model: target.model,
               cap: "output",
               previous: previousOutput,
               next: reactive.maxOutputTokens,
@@ -965,8 +973,8 @@ export class AgentLoop {
               const compact = await ctx.tryAutoCompact({
                 messages,
                 abortSignal: input.abortSignal,
-                maxContextTokens: this.currentMaxContextTokens(decision.provider, decision.model),
-                reservedOutputTokens: this.getReservedOutputTokens(decision.provider, decision.model),
+                maxContextTokens: this.currentMaxContextTokens(target.provider, target.model),
+                reservedOutputTokens: this.getReservedOutputTokens(target.provider, target.model),
                 lastUsage: lastModelUsage,
               });
               if (compact.type === "compacted") {
@@ -3081,6 +3089,16 @@ function tokensFromUsage(usage: CanonicalUsage | undefined): number | undefined 
     ? usage.outputTokens
     : 0;
   return Math.ceil(inputTokens + outputTokens);
+}
+
+function modelErrorTarget(error: CanonicalModelError, fallbackProvider: string, fallbackModel: string): {
+  provider: string;
+  model: string;
+} {
+  return {
+    provider: error.provider || fallbackProvider,
+    model: error.model || fallbackModel,
+  };
 }
 
 function composeAbortSignal(args: {

@@ -266,6 +266,10 @@ export class SubAgentSession {
       uuid: this.options.parentDependencies.uuid,
       auditRecorder: this.options.parentDependencies.auditRecorder,
       lifecycle: this.options.parentDependencies.lifecycle,
+      tokenAccounting: this.options.parentDependencies.tokenAccounting,
+      getModelMaxContextTokens: this.options.parentDependencies.getModelMaxContextTokens,
+      getModelMaxOutputTokens: this.options.parentDependencies.getModelMaxOutputTokens,
+      getModelTokenLimits: this.options.parentDependencies.getModelTokenLimits,
       subagentTranscript: this.options.parentDependencies.subagentTranscript,
     };
   }
