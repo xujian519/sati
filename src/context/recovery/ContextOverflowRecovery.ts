@@ -68,15 +68,15 @@ export class ContextOverflowRecovery {
     if (!isContextError) {
       return { type: "give_up", reason: `non_recoverable_model_error:${input.error.code}` };
     }
+    if (input.hasAttemptedCompact) {
+      return { type: "truncate_head_and_retry", keepRatio: this.second, reason: "ptl-second-attempt" };
+    }
     if (input.error.maxContextTokens !== undefined && input.error.maxContextTokens > 0) {
       return {
         type: "compact_and_retry",
         maxContextTokens: Math.floor(input.error.maxContextTokens),
         reason: "provider-context-cap",
       };
-    }
-    if (input.hasAttemptedCompact) {
-      return { type: "give_up", reason: "ptl-exhausted-after-two-attempts" };
     }
     return { type: "truncate_head_and_retry", keepRatio: this.first, reason: "ptl-first-attempt" };
   }

@@ -30,6 +30,14 @@ test("context cap errors request compaction against provider cap", () => {
   );
 });
 
+test("repeated context cap errors use second-stage truncation", () => {
+  const recovery = new ContextOverflowRecovery();
+  assert.deepEqual(
+    recovery.decide({ error: error({ maxContextTokens: 262144, recoverableViaCompact: true }), hasAttemptedCompact: true }),
+    { type: "truncate_head_and_retry", keepRatio: 0.25, reason: "ptl-second-attempt" },
+  );
+});
+
 test("mixed context/output errors compact when available output is too small", () => {
   const recovery = new ContextOverflowRecovery();
   assert.deepEqual(
