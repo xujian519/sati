@@ -320,7 +320,7 @@ Run PowerShell as a normal user, then execute:
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.ps1 | iex"
 ```
 
-The PowerShell installer uses Windows-native paths under `%USERPROFILE%\.pilotdeck`, checks Node.js 22.13+ with `node:sqlite`, installs missing prerequisites with `winget` when available, builds PilotDeck, and creates a `pilotdeck.cmd` launcher in `%USERPROFILE%\.pilotdeck\bin`.
+The PowerShell installer uses Windows-native paths under `%USERPROFILE%\.pilotdeck`, checks Node.js 22.13+ with `node:sqlite`, installs missing prerequisites with `winget` when available, builds PilotDeck, and creates a `pilotdeck.cmd` launcher in `%USERPROFILE%\.pilotdeck\bin`. Git LFS media assets are optional for the core app; if Git LFS is unavailable or times out, the installer continues without demo videos/GIFs.
 
 After installation, the script starts PilotDeck and prints the UI URL, usually `http://localhost:3001`. It does not automatically open a browser, so copy that URL into your browser to finish onboarding (provider + API key). You can also open it from PowerShell:
 
@@ -358,6 +358,10 @@ If you do not want to change the user policy, run the cmd shim explicitly instea
 ```powershell
 npm.cmd run dev
 ```
+
+**Native dependency build errors (`node-gyp`, `MSBuild`, or Python not found)**
+
+The installer normally uses prebuilt packages for native dependencies such as `node-pty`, `sqlite3`, `better-sqlite3`, and `sharp`. On a fresh Windows machine, if npm cannot download a matching prebuild and falls back to compiling from source, install Visual Studio Build Tools with the C++ workload and Python, then rerun the installer.
 
 ### Option B: From source (for developers)
 

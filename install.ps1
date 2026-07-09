@@ -66,6 +66,19 @@ function Resolve-NpmCommand {
   if ($npmCommand) { return $npmCommand.Source }
   Write-Fail 'npm was not found after Node.js setup. Open a new terminal or fix Node.js PATH, then rerun this script.'
 }
+function Invoke-WingetInstall([string]$PackageId, [string]$PackageName, [switch]$Optional) {
+  & winget install --id $PackageId -e --accept-package-agreements --accept-source-agreements
+  if ($LASTEXITCODE -eq 0) { return $true }
+
+  $message = "winget failed to install $PackageName (exit code $LASTEXITCODE)."
+  if ($Optional) {
+    Write-Step "$message Continuing without $PackageName."
+    return $false
+  }
+
+  Write-Step $message
+  return $false
+}
 
 function Add-UserPath([string]$Directory) {
   $resolved = [System.IO.Path]::GetFullPath($Directory)
@@ -145,10 +158,10 @@ function Install-NodeRuntime {
 
   if (Test-Command winget) {
     Write-Step "Installing Node.js $NodeInstallVersion LTS with winget..."
-    & winget install --id OpenJS.NodeJS.LTS -e --accept-package-agreements --accept-source-agreements
+    [void](Invoke-WingetInstall 'OpenJS.NodeJS.LTS' 'Node.js')
     Refresh-ProcessPath
     if (Test-Command node) { return }
-    Write-Step 'Node.js installed by winget is not visible in this shell; using portable Node.js for this run.'
+    Write-Step 'Node.js is not visible in this shell after winget; using portable Node.js for this run.'
   }
 
   Install-PortableNodeRuntime
@@ -228,7 +241,7 @@ function Ensure-Prerequisites {
   if (-not (Test-Command git)) {
     if (Test-Command winget) {
       Write-Step 'Installing Git with winget...'
-      & winget install --id Git.Git -e --accept-package-agreements --accept-source-agreements
+      [void](Invoke-WingetInstall 'Git.Git' 'Git')
       Refresh-ProcessPath
       if (-not (Test-Command git)) { Install-PortableGit }
     } else {
@@ -241,8 +254,10 @@ function Ensure-Prerequisites {
     Write-Ok 'git-lfs found'
   } elseif (Test-Command winget) {
     Write-Step 'Installing Git LFS with winget...'
-    & winget install --id GitHub.GitLFS -e --accept-package-agreements --accept-source-agreements
-    Refresh-ProcessPath
+    if (Invoke-WingetInstall 'GitHub.GitLFS' 'Git LFS' -Optional) {
+      Refresh-ProcessPath
+      if (-not (Test-Command git-lfs)) { Write-Step 'Git LFS is not visible in this shell; continuing without optional media assets.' }
+    }
   } else {
     Write-Step 'git-lfs not found; continuing without LFS media assets.'
   }

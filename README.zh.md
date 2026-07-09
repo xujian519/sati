@@ -320,7 +320,7 @@ pilotdeck
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.ps1 | iex"
 ```
 
-PowerShell 安装脚本会使用 `%USERPROFILE%\.pilotdeck` 下的 Windows 原生路径，检查 Node.js 22.13+ 与 `node:sqlite`，在可用时通过 `winget` 安装缺失依赖，构建 PilotDeck，并在 `%USERPROFILE%\.pilotdeck\bin` 生成 `pilotdeck.cmd` 启动器。
+PowerShell 安装脚本会使用 `%USERPROFILE%\.pilotdeck` 下的 Windows 原生路径，检查 Node.js 22.13+ 与 `node:sqlite`，在可用时通过 `winget` 安装缺失依赖，构建 PilotDeck，并在 `%USERPROFILE%\.pilotdeck\bin` 生成 `pilotdeck.cmd` 启动器。Git LFS 媒体资源对核心功能是可选的；如果 Git LFS 不可用或下载超时，安装脚本会跳过演示视频/GIF 并继续安装。
 
 安装完成后，脚本会启动 PilotDeck 并打印 UI 地址，通常是 `http://localhost:3001`。脚本不会自动打开浏览器，请把该地址复制到浏览器中完成初始化配置（Provider + API key）。也可以在 PowerShell 中打开：
 
@@ -358,6 +358,10 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```powershell
 npm.cmd run dev
 ```
+
+**原生依赖构建失败（提示 `node-gyp`、`MSBuild` 或 Python 缺失）**
+
+安装脚本通常会使用 `node-pty`、`sqlite3`、`better-sqlite3`、`sharp` 等原生依赖的预编译包。全新的 Windows 机器上，如果 npm 无法下载匹配的预编译包并回退到源码编译，请先安装带 C++ 工作负载的 Visual Studio Build Tools 和 Python，然后重新运行安装脚本。
 
 ### 方式二：源码启动 (适合开发者)
 
