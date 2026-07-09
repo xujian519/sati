@@ -359,6 +359,42 @@ function Invoke-Npm([string[]]$Arguments, [string]$WorkingDirectory) {
   }
 }
 
+function Test-PlaywrightChromeForTesting {
+  $candidates = @()
+  if ($env:LOCALAPPDATA) {
+    $candidates += Join-Path $env:LOCALAPPDATA 'ms-playwright'
+  }
+  if ($env:USERPROFILE) {
+    $candidates += Join-Path $env:USERPROFILE '.cache\ms-playwright'
+  }
+
+  foreach ($root in $candidates) {
+    if (-not (Test-Path $root)) { continue }
+    $match = Get-ChildItem -LiteralPath $root -Directory -Filter 'mcp-chrome-for-testing-*' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($match) { return $true }
+  }
+  return $false
+}
+
+function Ensure-BrowserUseDependency {
+  Write-Step 'Checking Playwright browser for browser-use plugin...'
+  if (Test-PlaywrightChromeForTesting) {
+    Write-Ok 'Chrome for Testing already installed'
+    return
+  }
+
+  if ($env:PILOTDECK_SKIP_BROWSER_INSTALL -ne '0') {
+    Write-Step 'Skipping Chrome for Testing download (default) to keep install fast.'
+    Write-Step 'PilotDeck core features are still available without this optional browser-use dependency.'
+    Write-Step "To enable browser-use later, run: Set-Location `"$InstallDir`"; npm run install:browser"
+    Write-Step 'Or re-run the installer with PILOTDECK_SKIP_BROWSER_INSTALL=0.'
+    return
+  }
+
+  Invoke-Npm -Arguments @('run', 'install:browser') -WorkingDirectory $InstallDir
+  Write-Ok 'Chrome for Testing installed'
+}
+
 function Install-AndBuild {
   if (-not $RepoChanged -and (Test-DepsUpToDate)) {
     Write-Ok 'Dependencies and build artifacts are up to date'
@@ -461,6 +497,7 @@ Ensure-Prerequisites
 Install-OrUpdateRepo
 Ensure-LfsAssets
 Install-AndBuild
+Ensure-BrowserUseDependency
 Write-CmdLauncher
 
 $env:PILOTDECK_CONFIG_PATH = $ConfigPath
