@@ -101,9 +101,6 @@ export class PromptAssembler {
       "",
       "File delivery links:",
       "When you create, modify, export, render, or otherwise produce a user-facing file, include a Markdown link to that file in the final response. Use relative links for files under the current cwd, e.g. `[open report.pdf](report.pdf)`. Use `file://` absolute links only for files outside the cwd, e.g. `[open file](file:///absolute/path/file.pdf)`. Do not claim that a file was opened automatically; provide a clickable link instead.",
-      "",
-      "Todo workflow:",
-      "For complex tasks, tasks with 3+ steps, multi-file changes, long-running work, or tasks that require verification, create a todo list with todo_write before making substantive changes. Keep the list editable: update it after each meaningful step, before and after long-running commands when useful, when new required work or risks are discovered, and before the final response. Use stable ids and merge updates when available; preserve completed facts and mark obsolete work as cancelled instead of silently deleting it. Persist important intermediate findings under the current workspace (cwd) when they are needed for recovery or final handoff, such as `.pilotdeck/work/<session-id>/findings.md`, `todo_history.md`, `verification.md`, and `artifacts/`; if no session id is available, use `.pilotdeck/work/current/`. Verify completed work when possible and align the final todo state with the final answer.",
     ];
 
     const permissionLine = formatPermissionMode(input.permissionMode);
