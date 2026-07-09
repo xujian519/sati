@@ -103,4 +103,35 @@ describe("BackgroundTaskRuntime completion notifications", () => {
     assert.ok(late);
     assert.equal(late.task.status, "completed");
   });
+
+  it("removes abort listeners after wait settles", async () => {
+    const runtime = new BackgroundTaskRuntime();
+    const task = await runtime.start({
+      command: `${process.execPath} -e "process.stdout.write('done')"`,
+      cwd: process.cwd(),
+    });
+    const controller = new AbortController();
+    let added = 0;
+    let removed = 0;
+    const addEventListener = controller.signal.addEventListener.bind(controller.signal);
+    const removeEventListener = controller.signal.removeEventListener.bind(controller.signal);
+    controller.signal.addEventListener = ((type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) => {
+      if (type === "abort") added += 1;
+      return addEventListener(type, listener, options);
+    }) as AbortSignal["addEventListener"];
+    controller.signal.removeEventListener = ((type: string, listener: EventListenerOrEventListenerObject, options?: boolean | EventListenerOptions) => {
+      if (type === "abort") removed += 1;
+      return removeEventListener(type, listener, options);
+    }) as AbortSignal["removeEventListener"];
+
+    const waited = await runtime.wait(task.taskId, {
+      timeoutMs: 1_000,
+      abortSignal: controller.signal,
+    });
+
+    assert.ok(waited);
+    assert.equal(waited.outcome, "completed");
+    assert.equal(added, 1);
+    assert.equal(removed, 1);
+  });
 });

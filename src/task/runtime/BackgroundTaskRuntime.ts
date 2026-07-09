@@ -144,13 +144,15 @@ export class BackgroundTaskRuntime {
           setTimeout(() => resolve("timeout"), timeoutMs).unref?.();
         })
       : undefined;
+    let abortHandler: (() => void) | undefined;
     const abortPromise = options.abortSignal
       ? new Promise<"aborted">((resolve) => {
           if (options.abortSignal?.aborted) {
             resolve("aborted");
             return;
           }
-          options.abortSignal?.addEventListener("abort", () => resolve("aborted"), { once: true });
+          abortHandler = () => resolve("aborted");
+          options.abortSignal?.addEventListener("abort", abortHandler, { once: true });
         })
       : undefined;
 
@@ -158,6 +160,9 @@ export class BackgroundTaskRuntime {
     if (timeoutPromise) waits.push(timeoutPromise);
     if (abortPromise) waits.push(abortPromise);
     const result = await Promise.race(waits);
+    if (abortHandler) {
+      options.abortSignal?.removeEventListener("abort", abortHandler);
+    }
 
     const outcome = result === "timeout"
       ? "timeout"
