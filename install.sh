@@ -381,22 +381,6 @@ node_supports_sqlite() {
   node -e "import('node:sqlite').then(() => {}, () => process.exit(1))" >/dev/null 2>&1
 }
 
-expected_node_arch() {
-  case "$(uname -m)" in
-    x86_64|amd64) printf "x64" ;;
-    arm64|aarch64) printf "arm64" ;;
-    *) return 1 ;;
-  esac
-}
-
-node_arch_matches_host() {
-  local expected actual
-  expected="$(expected_node_arch 2>/dev/null || true)"
-  [[ -n "$expected" ]] || return 0
-  actual="$(node -p "process.arch" 2>/dev/null || true)"
-  [[ "$actual" == "$expected" ]]
-}
-
 load_node_managers() {
   if ! command -v fnm >/dev/null 2>&1 && [[ -d "$HOME/.local/share/fnm" ]]; then
     export PATH="$HOME/.local/share/fnm:$PATH"
@@ -1258,6 +1242,22 @@ node_tarball_platform() {
     *) return 1 ;;
   esac
   printf "%s-%s" "$os" "$arch"
+}
+
+expected_node_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64) printf "x64" ;;
+    arm64|aarch64) printf "arm64" ;;
+    *) return 1 ;;
+  esac
+}
+
+node_arch_matches_host() {
+  local expected actual
+  expected="$(expected_node_arch 2>/dev/null || true)"
+  [[ -n "$expected" ]] || return 0
+  actual="$(node -p "process.arch" 2>/dev/null || true)"
+  [[ "$actual" == "$expected" ]]
 }
 
 load_direct_node_runtime() {
