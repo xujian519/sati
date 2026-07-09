@@ -307,6 +307,15 @@ function getSelectedProjectId(req) {
     : '';
 }
 
+function hasDashboardRequestContext(req) {
+  return [
+    req.query?.projectPath,
+    req.body?.projectPath,
+    req.query?.projectName,
+    req.params?.projectName,
+  ].some((value) => typeof value === 'string' && value.trim());
+}
+
 async function withMemoryService(req, res, fn) {
   try {
     const { projectPath, dataDir, service } = await getMemoryServiceForRequest(req);
@@ -595,7 +604,20 @@ router.post('/clear', async (req, res) => {
   const scope = req.body?.scope === 'all_memory' ? 'all_memory' : 'current_project';
   if (scope === 'all_memory') {
     try {
-      res.json(await clearAllMemoryData());
+      const result = await clearAllMemoryData();
+      if (!hasDashboardRequestContext(req)) {
+        res.json(result);
+        return;
+      }
+
+      const { service } = await getMemoryServiceForRequest(req);
+      res.json({
+        ...result,
+        dashboard: buildDashboardSnapshot(service, service.repository, {
+          query: getQuery(req),
+          selectedProjectId: getSelectedProjectId(req),
+        }),
+      });
     } catch (error) {
       res.status(500).json({
         error: error instanceof Error ? error.message : String(error),
