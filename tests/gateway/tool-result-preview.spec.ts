@@ -41,6 +41,39 @@ test("mapAgentEvent bounds live tool result previews at the gateway", () => {
   assert.equal(frame.resultBytes, Buffer.byteLength(largeOutput, "utf8"));
 });
 
+test("mapAgentEvent bounds large strings inside successful tool data", () => {
+  const baseResult = toolResultPayload();
+  assert.equal(baseResult.type, "success");
+  const frames = mapAgentEvent({
+    ...(textToolResultEvent() as Extract<AgentEvent, { type: "tool_result" }>),
+    result: {
+      ...baseResult,
+      data: {
+        command: "cat huge.log",
+        stdout: largeOutput,
+        nested: { stderr: largeOutput },
+      },
+    },
+  }, "run-1");
+  const frame = frames.find((event): event is Extract<GatewayEvent, { type: "tool_call_finished" }> =>
+    event.type === "tool_call_finished"
+  );
+
+  assert.ok(frame);
+  const data = frame.data as {
+    command?: string;
+    stdout?: { preview?: string; originalBytes?: number; truncated?: true };
+    nested?: { stderr?: { preview?: string; originalBytes?: number; truncated?: true } };
+  };
+  assert.equal(data.command, "cat huge.log");
+  assert.equal(data.stdout?.truncated, true);
+  assert.equal(data.stdout?.originalBytes, Buffer.byteLength(largeOutput, "utf8"));
+  assert.ok(data.stdout?.preview && data.stdout.preview.length <= 4_500);
+  assert.match(data.stdout?.preview ?? "", /Gateway data string truncated/);
+  assert.equal(data.nested?.stderr?.truncated, true);
+  assert.notEqual(data.stdout, largeOutput);
+});
+
 test("mapAgentEvent bounds subagent tool result content and preview", () => {
   const frames = mapAgentEvent({
     type: "subagent_tool_result",

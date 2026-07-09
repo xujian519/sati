@@ -87,6 +87,7 @@ import type { TelemetryExecutionKind, TelemetryModule } from "../../telemetry/in
 
 const PLAN_COMMAND_USAGE = "用法：/plan <任务>\n例如：/plan 设计一个新功能";
 const MAX_GATEWAY_TOOL_RESULT_PREVIEW_CHARS = 20_000;
+const MAX_GATEWAY_TOOL_DATA_STRING_CHARS = 4_000;
 
 export type InProcessGatewayOptions = {
   now?: () => Date;
@@ -1374,7 +1375,7 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
           ...(images.length > 0 ? { images } : {}),
           ...(event.result.type === "error" && { errorCode: event.result.error.code }),
           ...(event.result.type === "success" && event.result.data
-            ? { data: event.result.data as Record<string, unknown> }
+            ? { data: sanitizeGatewayToolData(event.result.data) }
             : {}),
         },
         ...attachments,
@@ -1624,6 +1625,55 @@ function limitGatewayToolResultPreview(text: string): string {
   const headLength = Math.ceil(available / 2);
   const tailLength = Math.floor(available / 2);
   return `${text.slice(0, headLength)}${marker}${text.slice(-tailLength)}`;
+}
+
+function sanitizeGatewayToolData(value: unknown): Record<string, unknown> {
+  const sanitized = sanitizeGatewayToolDataValue(value);
+  return isRecord(sanitized) ? sanitized : { value: sanitized };
+}
+
+function sanitizeGatewayToolDataValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    return limitGatewayToolDataString(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(sanitizeGatewayToolDataValue);
+  }
+  if (isRecord(value)) {
+    const output: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      output[key] = sanitizeGatewayToolDataValue(item);
+    }
+    return output;
+  }
+  return value;
+}
+
+function limitGatewayToolDataString(value: string): string | { preview: string; originalChars: number; originalBytes: number; truncated: true } {
+  if (value.length <= MAX_GATEWAY_TOOL_DATA_STRING_CHARS) {
+    return value;
+  }
+  return {
+    preview: headTailString(value, MAX_GATEWAY_TOOL_DATA_STRING_CHARS, "Gateway data string truncated"),
+    originalChars: value.length,
+    originalBytes: Buffer.byteLength(value, "utf8"),
+    truncated: true,
+  };
+}
+
+function headTailString(text: string, maxChars: number, label: string): string {
+  if (text.length <= maxChars) {
+    return text;
+  }
+  const marker = `\n\n... [${label}: ${text.length - maxChars} characters omitted] ...\n\n`;
+  const available = Math.max(0, maxChars - marker.length);
+  const headLength = Math.ceil(available / 2);
+  const tailLength = Math.floor(available / 2);
+  return `${text.slice(0, headLength)}${marker}${text.slice(-tailLength)}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function mapModelEvent(event: CanonicalModelEvent): GatewayEvent[] {
