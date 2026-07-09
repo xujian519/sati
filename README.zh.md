@@ -290,7 +290,7 @@ https://github.com/user-attachments/assets/a7245467-ee3c-4939-a055-c56576ac56d1
 
 ## 📦 安装与快速开始
 
-我们提供了 macOS/Linux 下的一键安装脚本，以及适合开发者的源码启动方式。
+我们提供了 macOS/Linux 与 Windows PowerShell 下的一键安装脚本，以及适合开发者的源码启动方式。
 
 ### 方式一：一键安装 (推荐, macOS/Linux)
 
@@ -304,6 +304,64 @@ curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh |
 pilotdeck            # 在 http://localhost:3001 启动服务
 pilotdeck status     # 查看运行状态
 ```
+
+之后如果想在 macOS / Linux 上再次打开 PilotDeck，请在终端运行 `pilotdeck`，然后在浏览器中打开终端打印的地址。如果当前 shell 还没有刷新 PATH，请新开一个终端，或先 source 对应的 shell 配置文件。
+
+```bash
+pilotdeck
+# 然后打开 http://localhost:3001，或命令打印的地址
+```
+
+### 方式一补充：一键安装 (Windows PowerShell)
+
+在普通用户 PowerShell 中执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.ps1 | iex"
+```
+
+PowerShell 安装脚本会使用 `%USERPROFILE%\.pilotdeck` 下的 Windows 原生路径，检查 Node.js 22.13+ 与 `node:sqlite`，在可用时通过 `winget` 安装缺失依赖，构建 PilotDeck，并在 `%USERPROFILE%\.pilotdeck\bin` 生成 `pilotdeck.cmd` 启动器。Git LFS 媒体资源对核心功能是可选的；如果 Git LFS 不可用或下载超时，安装脚本会跳过演示视频/GIF 并继续安装。
+
+安装完成后，脚本会启动 PilotDeck 并打印 UI 地址，通常是 `http://localhost:3001`。脚本不会自动打开浏览器，请把该地址复制到浏览器中完成初始化配置（Provider + API key）。也可以在 PowerShell 中打开：
+
+```powershell
+Start-Process http://localhost:3001
+```
+
+如果脚本刚刚更新了用户 `PATH`，请新开一个 PowerShell 窗口后运行：
+
+```powershell
+pilotdeck            # 在 http://localhost:3001 启动服务
+pilotdeck status     # 查看运行状态
+```
+
+之后如果想再次打开 PilotDeck，请在新的 PowerShell 窗口运行 `pilotdeck`，然后在浏览器中打开终端打印的地址。如果当前窗口还识别不到 `pilotdeck`，可以直接运行启动器：
+
+```powershell
+& "$HOME\.pilotdeck\bin\pilotdeck.cmd"
+```
+
+#### Windows PowerShell FAQ
+
+**首次运行 `npm run dev` 报错：`npm.ps1` 因系统禁止运行脚本而无法加载**
+
+这个问题现在仍可能出现：当你在 Windows PowerShell 中直接运行 `npm run dev` 等开发命令时，PowerShell 可能优先解析到 `npm.ps1`，而默认执行策略会阻止该脚本。
+
+对当前用户设置一次执行策略，然后重新打开 PowerShell：
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+如果不想修改用户执行策略，也可以显式调用 cmd shim：
+
+```powershell
+npm.cmd run dev
+```
+
+**原生依赖构建失败（提示 `node-gyp`、`MSBuild` 或 Python 缺失）**
+
+安装脚本通常会使用 `node-pty`、`sqlite3`、`better-sqlite3`、`sharp` 等原生依赖的预编译包。全新的 Windows 机器上，如果 npm 无法下载匹配的预编译包并回退到源码编译，请先安装带 C++ 工作负载的 Visual Studio Build Tools 和 Python，然后重新运行安装脚本。
 
 ### 方式二：源码启动 (适合开发者)
 
