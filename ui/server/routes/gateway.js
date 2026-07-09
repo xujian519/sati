@@ -291,7 +291,9 @@ router.get('/feishu/qr-poll', async (req, res) => {
       // Auto-save to config
       const config = loadYaml();
       if (!config.adapters) config.adapters = {};
+      const previous = config.adapters.feishu ?? {};
       config.adapters.feishu = {
+        ...previous,
         enabled: true,
         appId,
         appSecret,
@@ -340,12 +342,14 @@ router.post('/feishu/save', async (req, res) => {
   try {
     const config = loadYaml();
     if (!config.adapters) config.adapters = {};
+    const previous = config.adapters.feishu ?? {};
     config.adapters.feishu = {
+      ...previous,
       enabled: true,
       appId,
       appSecret,
-      connectionMode: connectionMode || 'stream',
-      domainName: domainName || 'feishu',
+      connectionMode: connectionMode || previous.connectionMode || 'stream',
+      domainName: domainName || previous.domainName || 'feishu',
     };
     saveYaml(config);
 
