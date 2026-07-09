@@ -2341,6 +2341,7 @@ function MemorySection({
   const targetIsAllMemory = selectedMemoryTarget === MEMORY_ALL_TARGET;
   const selectedProjectPath = targetIsAllMemory ? '' : memoryProjectPathFromTarget(selectedMemoryTarget);
   const selectedProjectTarget = projectTargets.find((target) => target.path === selectedProjectPath) ?? null;
+  const dashboardProjectPath = selectedProjectPath || projectTargets[0]?.path || '';
   const selectedTargetLabel = targetIsAllMemory
     ? t('pilotDeckConfig.panels.memory.data.target.all')
     : selectedProjectTarget?.label ?? t('pilotDeckConfig.panels.memory.data.target.projectFallback');
@@ -2469,7 +2470,7 @@ function MemorySection({
         method: 'POST',
         body: JSON.stringify(
           targetIsAllMemory
-            ? { scope: 'all_memory' }
+            ? { scope: 'all_memory', ...(dashboardProjectPath ? { projectPath: dashboardProjectPath } : {}) }
             : { scope: 'current_project', projectPath: selectedProjectPath },
         ),
         suppressServerErrorToast: true,
