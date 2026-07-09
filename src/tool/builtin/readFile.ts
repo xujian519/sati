@@ -481,12 +481,13 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         limit: input.limit,
         pages: input.pages,
       });
-      if (ranged.fullContent !== undefined) {
-        recordWriteSnapshot(
-          context, resolved.absolutePath, ranged.fullContent, ranged.mtimeMs,
-          { offset: input.offset, limit: input.limit },
-        );
-      }
+      recordWriteSnapshot(
+        context,
+        resolved.absolutePath,
+        ranged.fullContent ?? ranged.content,
+        ranged.mtimeMs,
+        { offset: input.offset, limit: input.limit },
+      );
       return {
         content: [{ type: "text", text }],
         data: {

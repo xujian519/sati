@@ -78,3 +78,29 @@ test("large tool error references preserve error semantics for model replay", as
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("multibyte truncated tool result references still advertise read_file access", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pilotdeck-tool-result-multibyte-"));
+  try {
+    const budget = new ToolResultBudget({ toolResultsDir: dir, maxResultSizeChars: 80, previewBytes: 40 });
+    const applied = await budget.applyToMessage({
+      role: "user",
+      content: [{
+        type: "tool_result",
+        toolCallId: "call-large-error",
+        content: [{ type: "text", text: "错误原因：" + "模型输出过长".repeat(20) }],
+      }],
+    }, { turnId: "turn-1" });
+
+    const ref = applied.content.find((block) => block.type === "tool_result_reference");
+    assert.ok(ref, "expected a persisted tool_result_reference");
+    assert.equal(ref.hasMore, true);
+    assert.ok(Buffer.byteLength(ref.preview, "utf8") < ref.originalBytes);
+
+    const openai = buildOpenAIRequest(requestWith({ ...applied, content: [ref] }), model);
+    const openaiTool = openai.messages.find((message) => message.role === "tool");
+    assert.match(String(openaiTool?.content), /Use read_file on this path/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

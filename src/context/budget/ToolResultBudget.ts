@@ -214,7 +214,7 @@ export class ToolResultBudget {
       path: record.path,
       originalBytes: record.originalBytes,
       preview: record.preview,
-      hasMore: record.preview.length < record.originalBytes,
+      hasMore: Buffer.byteLength(record.preview, "utf8") < record.originalBytes,
       mimeType: record.mimeType,
       reason: record.reason,
     };

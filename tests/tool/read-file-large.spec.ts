@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+import { createEditFileTool } from "../../src/tool/builtin/editFile.js";
 import { createReadFileTool } from "../../src/tool/builtin/readFile.js";
 
 function context(cwd: string) {
@@ -61,6 +62,26 @@ test("read_file explicit limit reads a large file range without auto paging", as
     assert.doesNotMatch(text, /^3003\|line-3003/m);
     assert.equal((result.data as { autoPaged?: boolean }).autoPaged, false);
     assert.equal((result.data as { nextOffset?: number }).nextOffset, 3003);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("read_file explicit limit records a ranged snapshot for follow-up edits", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-read-range-edit-"));
+  try {
+    await writeFile(join(projectRoot, "target.txt"), "alpha\nbeta\ngamma\n");
+    const runtimeContext = context(projectRoot);
+
+    await createReadFileTool().execute({ file_path: "target.txt", offset: 2, limit: 1 }, runtimeContext);
+    const edited = await createEditFileTool().execute({
+      file_path: "target.txt",
+      old_string: "beta",
+      new_string: "BETA",
+    }, runtimeContext);
+
+    const text = edited.content[0]?.type === "text" ? edited.content[0].text : "";
+    assert.match(text, /Updated target\.txt/);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
   }
