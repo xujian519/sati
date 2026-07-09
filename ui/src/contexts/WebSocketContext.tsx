@@ -48,24 +48,22 @@ const BACKOFF_FACTOR = 2;
 const MAX_QUEUED_MESSAGES = 100;
 
 export function getQueuedMessageKey(message: any): string | null {
-  if (message?.type === 'pilotdeck-command') return null;
   if (message?.type === 'check-session-status' && typeof message.sessionId === 'string' && message.sessionId.trim()) {
     return `check-session-status:${message.sessionId.trim()}`;
   }
   return null;
 }
 
-function shouldQueueWhileDisconnected(message: any): boolean {
-  return message?.type === 'pilotdeck-command' || getQueuedMessageKey(message) !== null;
+export function isQueueableDisconnectedMessage(message: any): boolean {
+  return getQueuedMessageKey(message) !== null;
 }
 
 export function enqueueDisconnectedMessage(queue: any[], message: any, maxQueuedMessages = MAX_QUEUED_MESSAGES): void {
   const key = getQueuedMessageKey(message);
-  if (key) {
-    const existingIndex = queue.findIndex((queuedMessage) => getQueuedMessageKey(queuedMessage) === key);
-    if (existingIndex >= 0) {
-      queue.splice(existingIndex, 1);
-    }
+  if (!key) return;
+  const existingIndex = queue.findIndex((queuedMessage) => getQueuedMessageKey(queuedMessage) === key);
+  if (existingIndex >= 0) {
+    queue.splice(existingIndex, 1);
   }
   queue.push(message);
   if (queue.length > maxQueuedMessages) {
@@ -214,7 +212,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     const socket = wsRef.current;
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(message));
-    } else if (shouldQueueWhileDisconnected(message)) {
+    } else if (isQueueableDisconnectedMessage(message)) {
       enqueueDisconnectedMessage(queuedMessagesRef.current, message);
       console.warn('WebSocket not connected');
     } else {

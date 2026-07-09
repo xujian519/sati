@@ -3,16 +3,19 @@ import {
   clearDisconnectedQueue,
   enqueueDisconnectedMessage,
   getQueuedMessageKey,
+  isQueueableDisconnectedMessage,
 } from './WebSocketContext';
 
 describe('WebSocket disconnected send queue', () => {
-  it('does not dedupe pilotdeck commands', () => {
+  it('does not queue pilotdeck commands without an idempotency key', () => {
     const queue: any[] = [];
 
     enqueueDisconnectedMessage(queue, { type: 'pilotdeck-command', text: 'one' });
     enqueueDisconnectedMessage(queue, { type: 'pilotdeck-command', text: 'two' });
 
-    expect(queue.map((message) => message.text)).toEqual(['one', 'two']);
+    expect(getQueuedMessageKey({ type: 'pilotdeck-command', text: 'one' })).toBeNull();
+    expect(isQueueableDisconnectedMessage({ type: 'pilotdeck-command', text: 'one' })).toBe(false);
+    expect(queue).toEqual([]);
   });
 
   it('dedupes check-session-status by sessionId and keeps the latest message', () => {
@@ -40,16 +43,17 @@ describe('WebSocket disconnected send queue', () => {
     expect(getQueuedMessageKey({ type: 'abort-session', sessionId: 'session-1' })).toBeNull();
     expect(getQueuedMessageKey({ type: 'permission-response', sessionId: 'session-1' })).toBeNull();
     expect(getQueuedMessageKey({ type: 'watch-session', sessionId: 'session-1' })).toBeNull();
+    expect(isQueueableDisconnectedMessage({ type: 'abort-session', sessionId: 'session-1' })).toBe(false);
   });
 
   it('drops the oldest messages when the queue exceeds its cap', () => {
     const queue: any[] = [];
 
-    enqueueDisconnectedMessage(queue, { type: 'pilotdeck-command', text: 'one' }, 2);
-    enqueueDisconnectedMessage(queue, { type: 'pilotdeck-command', text: 'two' }, 2);
-    enqueueDisconnectedMessage(queue, { type: 'pilotdeck-command', text: 'three' }, 2);
+    enqueueDisconnectedMessage(queue, { type: 'check-session-status', sessionId: 'session-1' }, 2);
+    enqueueDisconnectedMessage(queue, { type: 'check-session-status', sessionId: 'session-2' }, 2);
+    enqueueDisconnectedMessage(queue, { type: 'check-session-status', sessionId: 'session-3' }, 2);
 
-    expect(queue.map((message) => message.text)).toEqual(['two', 'three']);
+    expect(queue.map((message) => message.sessionId)).toEqual(['session-2', 'session-3']);
   });
 
   it('clears queued messages on provider cleanup so old token messages cannot flush later', () => {
