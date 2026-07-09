@@ -300,18 +300,12 @@ curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh |
 
 该脚本会检查/使用受支持的 Node.js 22 运行时（22.13+ 且低于 23，内置 SQLite 运行时所需）、克隆代码、安装依赖并编译前端。在 Linux 上，如果存在 `sudo` 和支持的包管理器，脚本可安装缺失的系统依赖；在 macOS 上，请先确保 Xcode Command Line Tools 以及带 `distutils` 的 Python 可用。安装完成后，直接运行：
 
-如果所在网络下载 Node.js/fnm 较慢或被阻断，可以先指定一个可访问的 fnm 安装脚本地址，例如：
+如果所在网络下载 Node.js 或 npm 依赖较慢/受阻，可以在运行安装器时指定国内镜像：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | \
-  PILOTDECK_FNM_INSTALL_URL=https://raw.githubusercontent.com/Schniz/fnm/master/.ci/install.sh bash
-```
-
-如果 Node.js 二进制本身下载受阻，也可以指定 Node.js 镜像：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | \
-  PILOTDECK_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node bash
+  PILOTDECK_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node \
+  NPM_CONFIG_REGISTRY=https://registry.npmmirror.com bash
 ```
 
 ```bash

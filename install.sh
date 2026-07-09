@@ -15,13 +15,9 @@ MIN_NODE_VERSION="22.13.0"
 MAX_NODE_MAJOR="22"
 NODE_INSTALL_VERSION="${PILOTDECK_NODE_VERSION:-22}"
 NODE_FALLBACK_VERSION="${PILOTDECK_NODE_FALLBACK_VERSION:-22.13.0}"
+NODE_DIRECT_INSTALL_ROOT="$HOME/.local/share/pilotdeck-node"
 NODE_DIST_MIRROR="${PILOTDECK_NODE_DIST_MIRROR:-https://nodejs.org/dist}"
 APT_UPDATED=0
-FNM_INSTALL_URLS=(
-  "${PILOTDECK_FNM_INSTALL_URL:-}"
-  "https://raw.githubusercontent.com/Schniz/fnm/master/.ci/install.sh"
-  "https://fnm.vercel.app/install"
-)
 # 1 = repo was (re)cloned or its HEAD changed; drives whether we reinstall/rebuild.
 REPO_CHANGED=1
 
@@ -334,6 +330,37 @@ node_major() {
   printf "%s" "${version%%.*}"
 }
 
+node_tarball_platform() {
+  local os
+  local arch
+  os="$(uname -s)"
+  arch="$(uname -m)"
+  case "$os" in
+    Linux) os="linux" ;;
+    Darwin) os="darwin" ;;
+    *) return 1 ;;
+  esac
+  case "$arch" in
+    x86_64|amd64) arch="x64" ;;
+    arm64|aarch64) arch="arm64" ;;
+    *) return 1 ;;
+  esac
+  printf "%s-%s" "$os" "$arch"
+}
+
+load_direct_node_runtime() {
+  local platform
+  local node_dir
+  platform="$(node_tarball_platform 2>/dev/null || true)"
+  [[ -n "$platform" ]] || return 0
+  node_dir="$NODE_DIRECT_INSTALL_ROOT/node-v${NODE_FALLBACK_VERSION}-${platform}"
+  if [[ -x "$node_dir/bin/node" ]]; then
+    export PATH="$node_dir/bin:$PATH"
+    export npm_config_nodedir="${npm_config_nodedir:-$node_dir}"
+    export npm_config_disturl="${npm_config_disturl:-${NODE_DIST_MIRROR%/}}"
+  fi
+}
+
 node_supports_sqlite() {
   node -e "import('node:sqlite').then(() => {}, () => process.exit(1))" >/dev/null 2>&1
 }
@@ -362,61 +389,8 @@ install_node_runtime() {
     nvm install "$NODE_INSTALL_VERSION" </dev/null
     nvm use "$NODE_INSTALL_VERSION"
   else
-    warn "$(L "Installing fnm (Fast Node Manager)..." "正在安装 fnm(Fast Node Manager)...")"
-    if install_fnm; then
-      export PATH="$HOME/.local/share/fnm:$PATH"
-      eval "$(fnm env)"
-      if fnm install "$NODE_INSTALL_VERSION" </dev/null && fnm use "$NODE_INSTALL_VERSION"; then
-        return
-      fi
-      warn "$(L "fnm could not install Node.js; falling back to a direct Node.js download..." "fnm 无法安装 Node.js;正在回退为直接下载 Node.js...")"
-    else
-      warn "$(L "fnm could not be installed; falling back to a direct Node.js download..." "fnm 无法安装;正在回退为直接下载 Node.js...")"
-    fi
     install_node_tarball
   fi
-}
-
-install_fnm() {
-  local url
-  local tmp_file
-  tmp_file="$(mktemp)"
-  trap 'rm -f "$tmp_file"' RETURN
-
-  for url in "${FNM_INSTALL_URLS[@]}"; do
-    [[ -n "$url" ]] || continue
-    warn "$(L "Downloading fnm installer from ${url}" "正在从 ${url} 下载 fnm 安装脚本")"
-    if run_with_timeout 60 curl -fsSL "$url" -o "$tmp_file"; then
-      bash "$tmp_file"
-      rm -f "$tmp_file"
-      trap - RETURN
-      return
-    fi
-    warn "$(L "Could not download fnm installer from ${url}; trying the next source..." "无法从 ${url} 下载 fnm 安装脚本;正在尝试下一个来源...")"
-  done
-
-  return 1
-}
-
-node_tarball_platform() {
-  local os
-  local arch
-  os="$(uname -s)"
-  arch="$(uname -m)"
-
-  case "$os" in
-    Linux) os="linux" ;;
-    Darwin) os="darwin" ;;
-    *) return 1 ;;
-  esac
-
-  case "$arch" in
-    x86_64|amd64) arch="x64" ;;
-    arm64|aarch64) arch="arm64" ;;
-    *) return 1 ;;
-  esac
-
-  printf "%s-%s" "$os" "$arch"
 }
 
 install_node_tarball() {
@@ -430,7 +404,7 @@ install_node_tarball() {
   platform="$(node_tarball_platform)" || fail "$(L "Unsupported platform for direct Node.js download. Please install Node.js 22 manually." "当前平台不支持直接下载 Node.js。请手动安装 Node.js 22。")"
   tarball="node-v${NODE_FALLBACK_VERSION}-${platform}.tar.xz"
   url="${NODE_DIST_MIRROR%/}/v${NODE_FALLBACK_VERSION}/${tarball}"
-  install_root="$HOME/.local/share/pilotdeck-node"
+  install_root="$NODE_DIRECT_INSTALL_ROOT"
   node_dir="$install_root/node-v${NODE_FALLBACK_VERSION}-${platform}"
   tmp_dir="$(mktemp -d)"
 
@@ -445,6 +419,8 @@ install_node_tarball() {
   tar -xJf "$tmp_dir/$tarball" -C "$install_root"
   rm -rf "$tmp_dir"
   export PATH="$node_dir/bin:$PATH"
+  export npm_config_nodedir="$node_dir"
+  export npm_config_disturl="${NODE_DIST_MIRROR%/}"
   ok "$(L "Node.js installed directly at ${node_dir}" "已直接安装 Node.js 到 ${node_dir}")"
 }
 
@@ -452,6 +428,7 @@ ensure_node_runtime() {
   local node_version
 
   load_node_managers
+  load_direct_node_runtime
 
   if command -v node >/dev/null 2>&1; then
     node_version="$(node --version)"
@@ -461,7 +438,7 @@ ensure_node_runtime() {
     fi
     warn "$(L "Node.js ${node_version} is not the supported Node.js 22 runtime (need >=${MIN_NODE_VERSION} and <23). Installing/using Node.js ${NODE_INSTALL_VERSION}..." "Node.js ${node_version} 不是受支持的 Node.js 22 运行时(需要 >=${MIN_NODE_VERSION} 且 <23)。正在安装/使用 Node.js ${NODE_INSTALL_VERSION}...")"
   else
-    warn "$(L "Node.js not found. Installing via fnm..." "未找到 Node.js,正在通过 fnm 安装...")"
+    warn "$(L "Node.js not found. Installing Node.js ${NODE_FALLBACK_VERSION}..." "未找到 Node.js,正在安装 Node.js ${NODE_FALLBACK_VERSION}...")"
   fi
 
   install_node_runtime
@@ -504,6 +481,13 @@ run_as_root() {
   else
     fail "$(L "Need root privileges to install system packages. Please install sudo or run as root." "安装系统软件包需要 root 权限。请安装 sudo 或以 root 身份运行。")"
   fi
+}
+
+can_install_system_packages() {
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    return 0
+  fi
+  command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1
 }
 
 install_linux_packages() {
@@ -900,12 +884,18 @@ deps_up_to_date() {
 }
 
 run_pnpm() {
-  if command -v corepack >/dev/null 2>&1; then
+  if command -v pnpm >/dev/null 2>&1; then
+    pnpm "$@"
+  elif command -v corepack >/dev/null 2>&1 && corepack pnpm --version >/dev/null 2>&1; then
     corepack pnpm "$@"
-  elif command -v pnpm >/dev/null 2>&1; then
+  elif command -v npm >/dev/null 2>&1; then
+    local pnpm_version
+    pnpm_version="$(node -e "const pm=require('./package.json').packageManager||'pnpm@10.32.1'; console.log(pm.replace(/^pnpm@/, ''))")"
+    warn "$(L "Corepack pnpm is unavailable; installing pnpm@${pnpm_version} with npm..." "Corepack pnpm 不可用;正在用 npm 安装 pnpm@${pnpm_version}...")"
+    npm install -g "pnpm@${pnpm_version}" --loglevel=error </dev/null
     pnpm "$@"
   else
-    fail "$(L "pnpm is required but neither corepack nor pnpm is available. Install Node.js 22 with corepack, or install pnpm manually." "需要 pnpm,但未找到 corepack 或 pnpm。请安装带 corepack 的 Node.js 22,或手动安装 pnpm。")"
+    fail "$(L "pnpm is required but pnpm, corepack, and npm are unavailable. Install Node.js 22 or pnpm manually." "需要 pnpm,但未找到 pnpm、corepack 或 npm。请手动安装 Node.js 22 或 pnpm。")"
   fi
 }
 
@@ -984,6 +974,8 @@ fi
 echo "$(L "Checking ripgrep..." "正在检查 ripgrep...")"
 if command -v rg >/dev/null 2>&1; then
   ok "$(L "ripgrep $(rg --version | head -1) found" "已找到 ripgrep $(rg --version | head -1)")"
+elif ! can_install_system_packages; then
+  warn "$(L "ripgrep not found and sudo is unavailable; continuing because PilotDeck uses its bundled ripgrep dependency." "未找到 ripgrep 且 sudo 不可用;PilotDeck 会使用内置 ripgrep 依赖,继续安装。")"
 else
   warn "$(L "ripgrep not found. Installing..." "未找到 ripgrep,正在安装...")"
   install_ripgrep
@@ -993,10 +985,16 @@ echo ""
 
 echo "$(L "Checking lsof..." "正在检查 lsof...")"
 if ! command -v lsof >/dev/null 2>&1; then
-  warn "$(L "lsof not found. Installing..." "未找到 lsof,正在安装...")"
-  install_lsof
+  if can_install_system_packages; then
+    warn "$(L "lsof not found. Installing..." "未找到 lsof,正在安装...")"
+    install_lsof
+  else
+    warn "$(L "lsof not found and sudo is unavailable; continuing with a built-in port check fallback." "未找到 lsof 且 sudo 不可用;将使用内置端口检查回退逻辑继续安装。")"
+  fi
 fi
-ok "$(L "lsof found" "已找到 lsof")"
+if command -v lsof >/dev/null 2>&1; then
+  ok "$(L "lsof found" "已找到 lsof")"
+fi
 echo ""
 
 echo "$(L "Checking native build tools..." "正在检查原生编译工具...")"
@@ -1090,6 +1088,9 @@ MAX_PORT_TRIES="${PILOTDECK_MAX_PORT_TRIES:-20}"
 MIN_NODE_VERSION="22.13.0"
 MAX_NODE_MAJOR="22"
 NODE_INSTALL_VERSION="${PILOTDECK_NODE_VERSION:-22}"
+NODE_FALLBACK_VERSION="${PILOTDECK_NODE_FALLBACK_VERSION:-22.13.0}"
+NODE_DIRECT_INSTALL_ROOT="$HOME/.local/share/pilotdeck-node"
+NODE_DIST_MIRROR="${PILOTDECK_NODE_DIST_MIRROR:-https://nodejs.org/dist}"
 
 fail() { printf "pilotdeck: %s\n" "$1" >&2; exit 1; }
 warn() { printf "pilotdeck: %s\n" "$1" >&2; }
@@ -1121,6 +1122,37 @@ node_major() {
   printf "%s" "${version%%.*}"
 }
 
+node_tarball_platform() {
+  local os
+  local arch
+  os="$(uname -s)"
+  arch="$(uname -m)"
+  case "$os" in
+    Linux) os="linux" ;;
+    Darwin) os="darwin" ;;
+    *) return 1 ;;
+  esac
+  case "$arch" in
+    x86_64|amd64) arch="x64" ;;
+    arm64|aarch64) arch="arm64" ;;
+    *) return 1 ;;
+  esac
+  printf "%s-%s" "$os" "$arch"
+}
+
+load_direct_node_runtime() {
+  local platform
+  local node_dir
+  platform="$(node_tarball_platform 2>/dev/null || true)"
+  [[ -n "$platform" ]] || return 0
+  node_dir="$NODE_DIRECT_INSTALL_ROOT/node-v${NODE_FALLBACK_VERSION}-${platform}"
+  if [[ -x "$node_dir/bin/node" ]]; then
+    export PATH="$node_dir/bin:$PATH"
+    export npm_config_nodedir="${npm_config_nodedir:-$node_dir}"
+    export npm_config_disturl="${npm_config_disturl:-${NODE_DIST_MIRROR%/}}"
+  fi
+}
+
 load_node_managers() {
   if ! command -v fnm >/dev/null 2>&1 && [[ -d "$HOME/.local/share/fnm" ]]; then
     export PATH="$HOME/.local/share/fnm:$PATH"
@@ -1137,6 +1169,7 @@ load_node_managers() {
 
 use_supported_node_runtime() {
   load_node_managers
+  load_direct_node_runtime
   if command -v fnm >/dev/null 2>&1; then
     fnm use "$NODE_INSTALL_VERSION" >/dev/null 2>&1 || true
   elif command -v nvm >/dev/null 2>&1; then

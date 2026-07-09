@@ -300,18 +300,12 @@ curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh |
 
 The script checks/uses the supported Node.js 22 runtime (22.13+ and <23, required for the built-in SQLite runtime), clones the repo, installs dependencies, and builds the frontend. On Linux it can install missing system packages when `sudo` and a supported package manager are available. On macOS, make sure Xcode Command Line Tools and a Python with `distutils` are usable before running the installer. Once it finishes:
 
-If the Node.js/fnm download is slow or blocked in your network, set a reachable fnm install script URL before running the installer, for example:
+If Node.js or npm package downloads are slow or blocked in your network, set reachable mirrors before running the installer:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | \
-  PILOTDECK_FNM_INSTALL_URL=https://raw.githubusercontent.com/Schniz/fnm/master/.ci/install.sh bash
-```
-
-If the Node.js binary download itself is blocked, also set a Node.js mirror:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | \
-  PILOTDECK_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node bash
+  PILOTDECK_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node \
+  NPM_CONFIG_REGISTRY=https://registry.npmmirror.com bash
 ```
 
 ```bash
