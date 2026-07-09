@@ -52,6 +52,11 @@ function Test-NodeSqlite {
   }
 }
 
+function Test-CurrentNodeRuntime {
+  $version = Get-NodeVersion
+  return $version -and $version -ge $MinimumNodeVersion -and (Test-NodeSqlite)
+}
+
 function Refresh-ProcessPath {
   $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
   $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -131,7 +136,9 @@ function Install-PortableNodeRuntime {
   $installRoot = Join-Path $HOME '.pilotdeck\node'
   $nodeDir = Join-Path $installRoot "node-$nodeVersion-win-x64"
   $nodeExe = Join-Path $nodeDir 'node.exe'
-  if (-not (Test-Path $nodeExe)) {
+  if (Test-Path $nodeExe) {
+    Write-Ok "Portable Node.js $nodeVersion already installed"
+  } else {
     New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
     $zipPath = Join-Path ([System.IO.Path]::GetTempPath()) "node-$nodeVersion-win-x64.zip"
     $url = "https://nodejs.org/dist/$nodeVersion/node-$nodeVersion-win-x64.zip"
@@ -151,12 +158,21 @@ function Install-PortableNodeRuntime {
 
 function Install-NodeRuntime {
   if (Test-Command fnm) {
+    & fnm use $NodeInstallVersion 1>$null 2>$null
+    [void](Add-FnmNodeToPath)
+    if (Test-CurrentNodeRuntime) {
+      Write-Ok "Node.js $NodeInstallVersion already available via fnm"
+      return
+    }
     & fnm install $NodeInstallVersion
+    if ($LASTEXITCODE -ne 0) { Write-Fail "fnm failed to install Node.js $NodeInstallVersion." }
     [void](Add-FnmNodeToPath)
     return
   }
 
   if (Test-Command winget) {
+    Refresh-ProcessPath
+    if (Test-CurrentNodeRuntime) { return }
     Write-Step "Installing Node.js $NodeInstallVersion LTS with winget..."
     [void](Invoke-WingetInstall 'OpenJS.NodeJS.LTS' 'Node.js')
     Refresh-ProcessPath
@@ -170,7 +186,7 @@ function Install-NodeRuntime {
 function Ensure-NodeRuntime {
   if (-not (Test-Command node)) { [void](Add-FnmNodeToPath) }
   $version = Get-NodeVersion
-  if ($version -and $version -ge $MinimumNodeVersion -and (Test-NodeSqlite)) {
+  if (Test-CurrentNodeRuntime) {
     Write-Ok "Node.js v$version found"
     return
   }
