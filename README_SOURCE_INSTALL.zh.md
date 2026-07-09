@@ -160,7 +160,7 @@ docker --version
 docker compose version
 ```
 
-如果选择 Docker 路径，请按 `README_DOCKER.md` 中的 Docker 说明操作。
+如果选择 Docker 路径，请按 `README_DOCKER.md` 中的 Docker 说明操作。Docker 构建会在容器内使用 Node.js 22 和仓库提交的 pnpm lockfile，因此不依赖宿主机 Node.js 架构。
 
 #### 原生 Windows PowerShell
 
@@ -182,12 +182,15 @@ winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --add M
 ```powershell
 git lfs install
 node --version   # 必须为 v22.13.0 或更新版本，且低于 v23
+node -p "process.arch" # 原生 Windows 源码安装应输出 x64
 npm --version
 python --version
 rg --version
 ```
 
 `OpenJS.NodeJS.LTS` 可能会随时间切换到更新的 Node.js 大版本。如果 `node --version` 不是 `v22.x`，请先切换到 Portable Node 或 Node 版本管理器，再安装依赖。
+
+原生 Windows 源码安装按 x64 Node.js 验证。如果 `node -p "process.arch"` 不是 `x64`，请先切换到官方 x64 Node.js 22 zip，或其他 x64 Node.js 运行时，再安装依赖。
 
 执行上面的前置依赖检查命令时，请使用分开的 PowerShell 命令行，不要使用 Bash 风格的链式命令。安装 Git for Windows 后，PilotDeck 内置终端会自动优先使用 Git Bash。如果 PowerShell 拦截 `npm.ps1`，请改用 `npm.cmd`。
 

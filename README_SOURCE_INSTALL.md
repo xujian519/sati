@@ -140,7 +140,7 @@ docker --version
 docker compose version
 ```
 
-Use the Docker instructions in `README_DOCKER.md` if you choose this path.
+Use the Docker instructions in `README_DOCKER.md` if you choose this path. Docker builds use Node.js 22 and the committed pnpm lockfile inside the container, so they do not depend on the host Node.js architecture.
 
 #### Native Windows PowerShell
 
@@ -162,12 +162,15 @@ Then open a new PowerShell window and run:
 ```powershell
 git lfs install
 node --version   # must be v22.13.0 or newer, and below v23
+node -p "process.arch" # native Windows source installs should print x64
 npm --version
 python --version
 rg --version
 ```
 
 `OpenJS.NodeJS.LTS` may move to a newer major Node.js release over time. If `node --version` is not `v22.x`, switch to Portable Node or a Node version manager before installing dependencies.
+
+Native Windows source installs are tested on x64 Node.js. If `node -p "process.arch"` does not print `x64`, switch to the official x64 Node.js 22 zip or another x64 Node.js runtime before installing dependencies.
 
 Use separate PowerShell lines instead of Bash-style chained commands when following the prerequisite commands above. For PilotDeck's in-app terminal, Git Bash is preferred automatically after Git for Windows is installed. If PowerShell blocks `npm.ps1`, call `npm.cmd` instead of `npm`.
 
