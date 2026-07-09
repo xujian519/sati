@@ -1,4 +1,5 @@
 import type { ModelProtocol } from "../protocol/canonical.js";
+import { NetworkFetchError } from "../../network/fetch.js";
 import {
   BILLING_PATTERN,
   CONTEXT_OVERFLOW_PATTERN,
@@ -38,9 +39,10 @@ export function normalizeModelError(
 
   const message = sanitizeErrorMessage(rawMessage);
 
+  const networkCode = classifyNetworkError(error, message);
   const semanticCode = classifySemanticError(message, status, protocol);
   const code: CanonicalModelErrorCode | (string & {}) =
-    semanticCode ?? readString(source?.code) ?? readString(source?.type) ?? statusCodeToCode(status, message);
+    networkCode ?? semanticCode ?? readString(source?.code) ?? readString(source?.type) ?? statusCodeToCode(status, message);
 
   const hint = resolveUserHint(code, message, status, provider);
 
@@ -78,6 +80,38 @@ export function normalizeModelError(
     result.retryAfterMs = retryAfterMs;
   }
   return result;
+}
+
+function classifyNetworkError(error: unknown, message: string): CanonicalModelErrorCode | undefined {
+  if (error instanceof NetworkFetchError) {
+    switch (error.code) {
+      case "network_dns_error":
+        return "dns_error";
+      case "network_connection_reset":
+        return "connection_reset";
+      case "network_connection_refused":
+        return "connection_refused";
+      case "network_tls_error":
+        return "tls_error";
+      case "network_proxy_error":
+        return "proxy_error";
+      case "network_rate_limited":
+        return "rate_limit_error";
+      case "network_server_error":
+        return "server_error";
+      case "network_timeout":
+        return "timeout";
+      default:
+        return undefined;
+    }
+  }
+  const text = message.toLowerCase();
+  if (text.includes("enotfound") || text.includes("eai_again") || text.includes("dns")) return "dns_error";
+  if (text.includes("econnreset") || text.includes("socket hang up")) return "connection_reset";
+  if (text.includes("econnrefused")) return "connection_refused";
+  if (text.includes("certificate") || text.includes("tls") || text.includes("ssl")) return "tls_error";
+  if (text.includes("proxy connect") || text.includes("proxy error") || text.includes("tunnel") || text.includes("econnrefused proxy")) return "proxy_error";
+  return undefined;
 }
 
 function firstErrorRecord(error: unknown): Record<string, unknown> | undefined {
@@ -147,7 +181,16 @@ function isRetryable(status: number | undefined, code: string): boolean {
     return true;
   }
 
-  return ["rate_limit_error", "overloaded_error", "timeout", "server_error"].includes(code);
+  return [
+    "rate_limit_error",
+    "overloaded_error",
+    "timeout",
+    "server_error",
+    "dns_error",
+    "connection_reset",
+    "connection_refused",
+    "proxy_error",
+  ].includes(code);
 }
 
 /**

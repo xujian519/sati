@@ -654,7 +654,12 @@ export function useChatSessionState({
 
     // Check session status
     if (ws && !sessionIsReadOnly) {
-      sendMessage({ type: 'check-session-status', sessionId: selectedSession.id, provider });
+      sendMessage({
+        type: 'check-session-status',
+        sessionId: selectedSession.id,
+        provider,
+        includeActiveTurnMessages: true,
+      });
     }
 
     lastLoadedSessionKeyRef.current = sessionKey;

@@ -14,6 +14,11 @@ export type CanonicalModelErrorCode =
   | "context_overflow"
   | "image_too_large"
   | "payload_too_large"
+  | "dns_error"
+  | "connection_reset"
+  | "connection_refused"
+  | "tls_error"
+  | "proxy_error"
   | "unknown";
 
 export type SettingsFix = {

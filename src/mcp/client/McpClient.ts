@@ -35,6 +35,7 @@ import { join } from "node:path";
 import { recursivelySanitizeUnicode } from "../runtime/sanitize.js";
 import { truncateMcpToolDescription } from "../runtime/truncate.js";
 import { buildMcpToolWireName } from "../runtime/wireName.js";
+import { networkFetch } from "../../network/fetch.js";
 import type {
   PilotDeckMcpServerSpec,
   PilotDeckMcpStatus,
@@ -179,6 +180,19 @@ export class McpClient {
       const url = new URL(this.spec.url);
       return new StreamableHTTPClientTransport(url, {
         requestInit: { headers: this.spec.headers ?? {} },
+        fetch: (input, init) => {
+          const method = String(init?.method ?? "GET").toUpperCase();
+          return networkFetch(input as RequestInfo, init, {
+            timeoutMs: method === "POST"
+              ? this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS
+              : this.options.handshakeTimeoutMs ?? 10_000,
+            retry: {
+              maxRetries: 1,
+              baseDelayMs: 500,
+              maxDelayMs: 5_000,
+            },
+          });
+        },
       });
     }
     const fallback = this.spec as PilotDeckMcpServerSpec;
