@@ -52,6 +52,8 @@ export interface NormalizedMessage {
   // kind-specific fields (flat for simplicity)
   role?: 'user' | 'assistant';
   content?: string;
+  contentI18n?: { key: string; params?: Record<string, unknown> };
+  userHintI18n?: { key: string; params?: Record<string, unknown> };
   images?: string[];
   attachments?: Array<{
     kind?: 'file' | 'document-selection';
