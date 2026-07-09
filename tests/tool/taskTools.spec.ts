@@ -14,14 +14,15 @@ import {
 import { ToolRuntime } from "../../src/tool/execution/ToolRuntime.js";
 import { ToolRegistry } from "../../src/tool/registry/ToolRegistry.js";
 
-function createContext(): PilotDeckToolRuntimeContext {
+function createContext(mode: "bypassPermissions" | "plan" | "default" = "bypassPermissions"): PilotDeckToolRuntimeContext {
   const cwd = process.cwd();
   return {
     sessionId: "session-1",
     turnId: "turn-1",
     cwd,
-    permissionMode: "bypassPermissions",
-    permissionContext: createDefaultPermissionContext({ cwd, mode: "bypassPermissions", canPrompt: false }),
+    permissionMode: mode,
+    runMode: mode === "default" ? "ask" : undefined,
+    permissionContext: createDefaultPermissionContext({ cwd, mode, canPrompt: false }),
   };
 }
 
@@ -183,5 +184,25 @@ describe("task_wait tool", () => {
     assert.equal(result.error.code, "tool_aborted");
     assert.equal(backgroundTasks.get(taskId)?.status, "running");
     await backgroundTasks.stop(taskId, { graceMs: 1 });
+  });
+
+  it("allows read-only waits in plan and ask modes", async () => {
+    for (const mode of ["plan", "default"] as const) {
+      const backgroundTasks = new BackgroundTaskRuntime();
+      const runtime = createRuntime(backgroundTasks);
+      const task = await backgroundTasks.start({
+        command: `${process.execPath} -e "process.stdout.write('${mode}')"`,
+        cwd: process.cwd(),
+      });
+
+      const result = await runtime.execute({
+        id: `call-wait-${mode}`,
+        name: "task_wait",
+        input: { taskId: task.taskId, timeoutMs: 1_000 },
+      }, createContext(mode));
+
+      assert.equal(result.type, "success", mode);
+      assert.match(firstText(result), new RegExp(mode, "u"));
+    }
   });
 });
