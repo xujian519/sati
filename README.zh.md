@@ -308,6 +308,8 @@ curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh |
   NPM_CONFIG_REGISTRY=https://registry.npmmirror.com bash
 ```
 
+如果希望优先使用官方 Node.js 下载地址，也可以通过 `PILOTDECK_NODE_DIST_FALLBACK_MIRRORS` 显式设置一个或多个可信的备用镜像。
+
 ```bash
 pilotdeck            # 在 http://localhost:3001 启动服务
 pilotdeck status     # 查看运行状态
