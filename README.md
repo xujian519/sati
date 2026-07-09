@@ -468,7 +468,7 @@ If Docker is installed, you can start PilotDeck with:
 docker compose up -d --build
 ```
 
-For full Docker configuration, see [README_DOCKER.md](./README_DOCKER.md).
+For full Docker configuration, see [README_DOCKER.md](README_DOCKER.md).
 
 ---
 

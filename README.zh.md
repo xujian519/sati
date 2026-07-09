@@ -446,7 +446,7 @@ cd ui && npm run start   # 生产模式，访问 http://localhost:3001
 docker compose up -d --build
 ```
 
-完整 Docker 配置请查看 [README_DOCKER.zh.md](./README_DOCKER.zh.md)。
+完整 Docker 配置请查看 [README_DOCKER.zh.md](README_DOCKER.zh.md)。
 
 ---
 
