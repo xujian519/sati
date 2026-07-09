@@ -54,6 +54,8 @@ export type McpClientOptions = {
   handshakeTimeoutMs?: number;
   /** Optional override for testing — supply a pre-built Transport instance. */
   transportFactory?: (spec: PilotDeckMcpServerSpec) => Transport;
+  /** Optional fetch override for testing streamable HTTP transports. */
+  fetch?: typeof fetch;
 };
 
 export class McpClientError extends Error {
@@ -182,7 +184,8 @@ export class McpClient {
         requestInit: { headers: this.spec.headers ?? {} },
         fetch: (input, init) => {
           const method = String(init?.method ?? "GET").toUpperCase();
-          return networkFetch(input as RequestInfo, init, {
+          const fetchImpl = this.options.fetch;
+          return (fetchImpl ?? networkFetch)(input as RequestInfo, init, {
             timeoutMs: method === "POST"
               ? this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS
               : this.options.handshakeTimeoutMs ?? 10_000,
