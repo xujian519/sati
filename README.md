@@ -371,6 +371,10 @@ npm.cmd run dev
 
 The installer normally uses prebuilt packages for native dependencies such as `node-pty`, `better-sqlite3`, `bcrypt`, and `sharp`. On a fresh Windows machine, if npm cannot download a matching prebuild and falls back to compiling from source, install Visual Studio Build Tools with the C++ workload and Python, then rerun the installer.
 
+**GitHub returns `429: Too Many Requests` while downloading `install.ps1`**
+
+GitHub may rate-limit repeated `raw.githubusercontent.com` requests from shared networks. Wait a few minutes and rerun the one-line command, or download `install.ps1` from the repository and run it locally with `powershell -ExecutionPolicy Bypass -File .\install.ps1`.
+
 ### Option B: From source (for developers)
 
 > Need platform-specific dependency installation commands? See the [Source Installation Guide](./README_SOURCE_INSTALL.md).

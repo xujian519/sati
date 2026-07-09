@@ -371,6 +371,10 @@ npm.cmd run dev
 
 安装脚本通常会使用 `node-pty`、`better-sqlite3`、`bcrypt`、`sharp` 等原生依赖的预编译包。全新的 Windows 机器上，如果 npm 无法下载匹配的预编译包并回退到源码编译，请先安装带 C++ 工作负载的 Visual Studio Build Tools 和 Python，然后重新运行安装脚本。
 
+**下载 `install.ps1` 时 GitHub 返回 `429: Too Many Requests`**
+
+共享网络下频繁访问 `raw.githubusercontent.com` 可能触发 GitHub 限流。请等待几分钟后重新运行一键安装命令，或从仓库下载 `install.ps1` 后用 `powershell -ExecutionPolicy Bypass -File .\install.ps1` 本地执行。
+
 ### 方式二：源码启动 (适合开发者)
 
 > 需要按平台安装依赖的命令？请查看[源码安装指南](./README_SOURCE_INSTALL.zh.md)。
