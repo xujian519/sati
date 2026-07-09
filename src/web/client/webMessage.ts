@@ -107,6 +107,8 @@ export type WebMessage = {
   requestId?: string;
   ok?: boolean;
   text?: string;
+  contentI18n?: { key: string; params?: Record<string, unknown> };
+  userHintI18n?: { key: string; params?: Record<string, unknown> };
   images?: Array<{
     data: string;
     name?: string;
@@ -452,10 +454,14 @@ export function applyWebGatewayEvent(
         role: kind === "error" ? "error" : "system",
         kind,
         text,
+        ...(isI18nDescriptor(detail.messageI18n) ? { contentI18n: detail.messageI18n } : {}),
+        ...(isI18nDescriptor(detail.userHintI18n) ? { userHintI18n: detail.userHintI18n } : {}),
         payload: {
           event: event.event,
           detail,
           ...(typeof detail.userHint === "string" ? { userHint: detail.userHint } : {}),
+          ...(isI18nDescriptor(detail.messageI18n) ? { contentI18n: detail.messageI18n } : {}),
+          ...(isI18nDescriptor(detail.userHintI18n) ? { userHintI18n: detail.userHintI18n } : {}),
         },
         source: "live",
       };
@@ -514,6 +520,12 @@ function defaultNewId(): string {
     return c.randomUUID();
   }
   return `web-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+}
+
+function isI18nDescriptor(value: unknown): value is { key: string; params?: Record<string, unknown> } {
+  return typeof value === "object"
+    && value !== null
+    && typeof (value as { key?: unknown }).key === "string";
 }
 
 function isErrorAgentStatusEvent(event: WebGatewayEvent & { type: "agent_status" }): boolean {

@@ -32,7 +32,9 @@ describe('gatewayEventToFrames agent status errors', () => {
             event: 'model_request_failed',
             detail: {
                 message: 'Provider rejected the request.',
+                messageI18n: { key: 'chat:agentStatus.modelRequestFailed.message', params: { providerMessage: 'Provider rejected the request.' } },
                 userHint: 'Check provider settings.',
+                userHintI18n: { key: 'chat:agentStatus.modelRequestFailed.actions.settingsDefault' },
                 visible: true,
             },
         }, 'web:s_test', 'pilotdeck');
@@ -41,8 +43,10 @@ describe('gatewayEventToFrames agent status errors', () => {
         expect(frames[0]).toMatchObject({
             kind: 'error',
             content: 'Provider rejected the request.',
+            contentI18n: { key: 'chat:agentStatus.modelRequestFailed.message', params: { providerMessage: 'Provider rejected the request.' } },
             code: 'model_request_failed',
             userHint: 'Check provider settings.',
+            userHintI18n: { key: 'chat:agentStatus.modelRequestFailed.actions.settingsDefault' },
         });
     });
 

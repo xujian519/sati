@@ -216,6 +216,8 @@ function convertSingleMessage(
         content: msg.content || 'Unknown error',
         timestamp: msg.timestamp,
         ...(msg.userHint ? { userHint: msg.userHint } : {}),
+        ...(msg.contentI18n ? { contentI18n: msg.contentI18n } : {}),
+        ...(msg.userHintI18n ? { userHintI18n: msg.userHintI18n } : {}),
       };
 
     case 'interactive_prompt':

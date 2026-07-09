@@ -687,9 +687,11 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                         ...base,
                         kind: 'error',
                         content: detail.message || 'The model returned empty content repeatedly, so this turn has stopped. Try again later or increase max output tokens.',
+                        contentI18n: detail.messageI18n,
                         code: event.event,
                         recoverable: false,
                         userHint: detail.userHint,
+                        userHintI18n: detail.userHintI18n,
                     }),
                 ];
             }
@@ -699,9 +701,11 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                         ...base,
                         kind: 'error',
                         content: detail.message || 'Reached the maximum number of turns, so this turn has stopped. Increase maxTurns or split the task into smaller steps and try again.',
+                        contentI18n: detail.messageI18n,
                         code: event.event,
                         recoverable: false,
                         userHint: detail.userHint,
+                        userHintI18n: detail.userHintI18n,
                     }),
                 ];
             }
@@ -711,9 +715,11 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                         ...base,
                         kind: 'error',
                         content: detail.message || 'Agent execution stopped before producing a complete response. Please retry or adjust the task.',
+                        contentI18n: detail.messageI18n,
                         code: event.event,
                         recoverable: false,
                         userHint: detail.userHint,
+                        userHintI18n: detail.userHintI18n,
                     }),
                 ];
             }
@@ -723,9 +729,11 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                         ...base,
                         kind: 'status',
                         content: detail.message || 'This turn ended before producing a standard assistant response.',
+                        contentI18n: detail.messageI18n,
                         code: event.event,
                         recoverable: false,
                         userHint: detail.userHint,
+                        userHintI18n: detail.userHintI18n,
                     }),
                 ];
             }
