@@ -1100,9 +1100,10 @@ router.post('/execute', async (req, res) => {
     // Security: validate commandPath is within allowed directories.
     {
       const resolvedPath = path.resolve(commandPath);
+      const pilotHome = resolvePilotHome(process.env);
       const allowedBases = [
-        path.resolve(path.join(os.homedir(), '.pilotdeck', 'commands')),
-        path.resolve(path.join(os.homedir(), '.pilotdeck', 'skills')),
+        path.resolve(path.join(pilotHome, 'commands')),
+        path.resolve(path.join(pilotHome, 'skills')),
       ];
       if (context?.projectPath) {
         allowedBases.push(
