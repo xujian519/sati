@@ -79,4 +79,28 @@ describe("BackgroundTaskRuntime completion notifications", () => {
     assert.equal(late.task.status, "completed");
     assert.equal(runtime.get(task.taskId)?.status, "completed");
   });
+
+  it("reports aborted waits without stopping the task", async () => {
+    const runtime = new BackgroundTaskRuntime();
+    const task = await runtime.start({
+      command: `${process.execPath} -e "setTimeout(() => { process.stdout.write('late') }, 80)"`,
+      cwd: process.cwd(),
+    });
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 1).unref();
+
+    const aborted = await runtime.wait(task.taskId, {
+      timeoutMs: 1_000,
+      abortSignal: controller.signal,
+    });
+
+    assert.ok(aborted);
+    assert.equal(aborted.outcome, "aborted");
+    assert.equal(aborted.timedOut, true);
+    assert.equal(runtime.get(task.taskId)?.status, "running");
+
+    const late = await runtime.wait(task.taskId, { timeoutMs: 1_000 });
+    assert.ok(late);
+    assert.equal(late.task.status, "completed");
+  });
 });

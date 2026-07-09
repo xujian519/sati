@@ -158,4 +158,30 @@ describe("task_wait tool", () => {
     assert.equal(result.type, "error");
     assert.equal(result.error.code, "invalid_tool_input");
   });
+
+  it("returns tool_aborted when the wait is interrupted", async () => {
+    const backgroundTasks = new BackgroundTaskRuntime();
+    const runtime = createRuntime(backgroundTasks);
+    const controller = new AbortController();
+    const context = { ...createContext(), abortSignal: controller.signal };
+
+    const created = await runtime.execute({
+      id: "call-create",
+      name: "task_create",
+      input: { command: `${process.execPath} -e "setTimeout(() => {}, 10000)"` },
+    }, context);
+    const taskId = successData<TaskCreateOutput>(created).taskId;
+    setTimeout(() => controller.abort(), 1).unref();
+
+    const result = await runtime.execute({
+      id: "call-wait",
+      name: "task_wait",
+      input: { taskId, timeoutMs: 1_000 },
+    }, context);
+
+    assert.equal(result.type, "error");
+    assert.equal(result.error.code, "tool_aborted");
+    assert.equal(backgroundTasks.get(taskId)?.status, "running");
+    await backgroundTasks.stop(taskId, { graceMs: 1 });
+  });
 });

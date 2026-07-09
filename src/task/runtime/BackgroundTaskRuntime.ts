@@ -81,6 +81,7 @@ export type WaitTaskOptions = {
 export type WaitTaskResult = {
   task: PilotDeckBackgroundBashTask;
   timedOut: boolean;
+  outcome: "completed" | "timeout" | "aborted";
   waitedMs: number;
 };
 
@@ -158,9 +159,15 @@ export class BackgroundTaskRuntime {
     if (abortPromise) waits.push(abortPromise);
     const result = await Promise.race(waits);
 
+    const outcome = result === "timeout"
+      ? "timeout"
+      : result === "aborted"
+        ? "aborted"
+        : "completed";
     return {
       task: entry.task,
-      timedOut: result === "timeout" || result === "aborted",
+      timedOut: outcome === "timeout" || outcome === "aborted",
+      outcome,
       waitedMs: Date.now() - startedAt,
     };
   }

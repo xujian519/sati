@@ -400,6 +400,12 @@ export function createTaskWaitTool(
           `Unknown taskId: ${input.taskId}`,
         );
       }
+      if (waited.outcome === "aborted") {
+        throw new PilotDeckToolRuntimeError(
+          "tool_aborted",
+          `task_wait aborted before task ${input.taskId} finished.`,
+        );
+      }
       const slice = rt.getOutput(input.taskId, requestedOffset, input.maxBytes);
       const data: TaskWaitResult = {
         taskId: input.taskId,
