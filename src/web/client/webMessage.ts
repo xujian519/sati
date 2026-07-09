@@ -119,6 +119,7 @@ export type WebMessage = {
    * uses this.
    */
   errorCode?: string;
+  resultPath?: string;
   /** UUID of the subagent spawned by this tool_use (agent/Task) call. */
   subagentId?: string;
   payload?: unknown;
@@ -156,6 +157,17 @@ export function createWebMessageReducerState(): WebMessageReducerState {
     toolMessageByCallId: {},
     hasVisibleFailureStatus: false,
   };
+}
+
+const MAX_WEB_TOOL_RESULT_PREVIEW_CHARS = 20_000;
+
+function limitToolResultPreview(value: string | undefined): string | undefined {
+  if (value === undefined || value.length <= MAX_WEB_TOOL_RESULT_PREVIEW_CHARS) {
+    return value;
+  }
+  const headLength = Math.floor(MAX_WEB_TOOL_RESULT_PREVIEW_CHARS / 2);
+  const tailLength = MAX_WEB_TOOL_RESULT_PREVIEW_CHARS - headLength;
+  return `${value.slice(0, headLength)}\n\n... [UI preview truncated: ${value.length - MAX_WEB_TOOL_RESULT_PREVIEW_CHARS} characters omitted] ...\n\n${value.slice(-tailLength)}`;
 }
 
 export function applyWebGatewayEvent(
@@ -287,7 +299,7 @@ export function applyWebGatewayEvent(
                   ...m,
                   kind: "tool_result",
                   ok: event.ok,
-                  text: event.resultPreview ?? m.text,
+                  text: limitToolResultPreview(event.resultPreview) ?? m.text,
                   ...(eventImages ? { images: eventImages } : {}),
                   ...(normalizedErrorCode && { errorCode: normalizedErrorCode }),
                 }
@@ -306,7 +318,7 @@ export function applyWebGatewayEvent(
         kind: "tool_result",
         toolCallId: event.toolCallId,
         ok: event.ok,
-        text: event.resultPreview,
+        text: limitToolResultPreview(event.resultPreview),
         ...(eventImages ? { images: eventImages } : {}),
         ...(normalizedErrorCode && { errorCode: normalizedErrorCode }),
         source: "live",
@@ -314,6 +326,24 @@ export function applyWebGatewayEvent(
       return {
         ...state,
         messages: [...state.messages, message],
+      };
+    }
+
+    case "tool_result_detail_available": {
+      const matchedId = state.toolMessageByCallId[event.toolCallId];
+      if (!matchedId) {
+        return state;
+      }
+      return {
+        ...state,
+        messages: state.messages.map((m) =>
+          m.id === matchedId
+            ? {
+                ...m,
+                ...(event.resultPath ? { resultPath: event.resultPath } : {}),
+              }
+            : m,
+        ),
       };
     }
 

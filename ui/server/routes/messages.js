@@ -201,6 +201,7 @@ function mapWebMessageToNormalized(message, sessionId) {
         toolId: message.toolCallId,
         content: message.text || '',
         isError: message.ok === false,
+        ...(message.resultPath ? { resultPath: message.resultPath } : {}),
         ...(message.errorCode ? { errorCode: message.errorCode } : {}),
         // Inline tool-result images (e.g. read_file on a PNG). The web
         // server already wraps the bare base64 from canonical messages as

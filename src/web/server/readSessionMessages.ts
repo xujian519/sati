@@ -505,8 +505,9 @@ function flushBlock(
         role: "tool",
         kind: "tool_result",
         toolCallId: block.toolCallId,
-        ok: true,
+        ok: !block.isError,
         text: block.preview,
+        resultPath: block.path,
         payload: {
           path: block.path,
           originalBytes: block.originalBytes,
