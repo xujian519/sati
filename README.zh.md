@@ -385,7 +385,7 @@ cd ui && npm run start   # 生产模式，访问 http://localhost:3001
 如果您已安装 Docker，也可以直接使用容器方式启动：
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 完整 Docker 配置请查看 [README_DOCKER.zh.md](./README_DOCKER.zh.md)。

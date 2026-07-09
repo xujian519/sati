@@ -407,7 +407,7 @@ cd ui && npm run start   # production mode, visit http://localhost:3001
 If Docker is installed, you can start PilotDeck with:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 For full Docker configuration, see [README_DOCKER.md](./README_DOCKER.md).
