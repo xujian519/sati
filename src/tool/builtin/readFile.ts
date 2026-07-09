@@ -486,7 +486,7 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         resolved.absolutePath,
         ranged.fullContent ?? ranged.content,
         ranged.mtimeMs,
-        { offset: input.offset, limit: input.limit },
+        { offset: input.offset, limit: input.limit ?? (ranged.fullContent === undefined ? ranged.lineCount : undefined) },
       );
       return {
         content: [{ type: "text", text }],

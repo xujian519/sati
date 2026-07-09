@@ -87,6 +87,27 @@ test("read_file explicit limit records a ranged snapshot for follow-up edits", a
   }
 });
 
+test("read_file auto-paged large files record a ranged snapshot for follow-up edits", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-read-autopage-edit-"));
+  try {
+    const lines = Array.from({ length: 5000 }, (_, index) => `line-${index + 1} ${"x".repeat(80)}`);
+    await writeFile(join(projectRoot, "large.txt"), lines.join("\n"));
+    const runtimeContext = context(projectRoot);
+
+    await createReadFileTool().execute({ file_path: "large.txt" }, runtimeContext);
+    const edited = await createEditFileTool().execute({
+      file_path: "large.txt",
+      old_string: "line-1 ",
+      new_string: "LINE-1 ",
+    }, runtimeContext);
+
+    const text = edited.content[0]?.type === "text" ? edited.content[0].text : "";
+    assert.match(text, /Updated large\.txt/);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
 test("read_file returns a head-tail preview for a single oversized line", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-read-long-line-"));
   try {
