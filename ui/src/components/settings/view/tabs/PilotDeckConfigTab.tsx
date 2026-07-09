@@ -65,6 +65,8 @@ import { isCronConfigEnabled, patch } from './pilotDeckConfigForm';
 // Schema mirrors ~/.pilotdeck/pilotdeck.yaml exactly. No more
 // pre-/post-translation in the backend — disk shape === UI shape.
 
+type MemoryReasoningMode = 'answer_first' | 'accuracy_first';
+
 type V2Provider = {
   protocol?: CatalogProviderProtocol;
   url?: string;
@@ -96,7 +98,7 @@ type PilotDeckConfig = {
     enabled?: boolean;
     model?: string;
     apiType?: string;
-    reasoningMode?: string;
+    reasoningMode?: MemoryReasoningMode;
     autoIndexIntervalMinutes?: number;
     autoDreamIntervalMinutes?: number;
     captureStrategy?: string;

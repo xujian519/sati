@@ -66,6 +66,69 @@ describe('memory clear route', () => {
   });
 });
 
+describe('memory settings route', () => {
+  it('saves answer_first reasoning mode', async () => {
+    const { request, writePilotDeckConfig } = await createMemorySettingsApp({
+      memory: {
+        reasoningMode: 'accuracy_first',
+        autoIndexIntervalMinutes: 30,
+        autoDreamIntervalMinutes: 60,
+      },
+    });
+
+    const result = await request('/api/memory/settings?projectPath=/tmp/pilotdeck-project', {
+      method: 'POST',
+      body: JSON.stringify({ reasoningMode: 'answer_first' }),
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body.reasoningMode).toBe('answer_first');
+    expect(writePilotDeckConfig).toHaveBeenCalledWith(expect.objectContaining({
+      memory: expect.objectContaining({ reasoningMode: 'answer_first' }),
+    }));
+  });
+
+  it('saves accuracy_first reasoning mode', async () => {
+    const { request, writePilotDeckConfig } = await createMemorySettingsApp({
+      memory: {
+        reasoningMode: 'answer_first',
+        autoIndexIntervalMinutes: 30,
+        autoDreamIntervalMinutes: 60,
+      },
+    });
+
+    const result = await request('/api/memory/settings?projectPath=/tmp/pilotdeck-project', {
+      method: 'POST',
+      body: JSON.stringify({ reasoningMode: 'accuracy_first' }),
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body.reasoningMode).toBe('accuracy_first');
+    expect(writePilotDeckConfig).toHaveBeenCalledWith(expect.objectContaining({
+      memory: expect.objectContaining({ reasoningMode: 'accuracy_first' }),
+    }));
+  });
+
+  it('rejects invalid reasoning mode without saving config', async () => {
+    const { request, writePilotDeckConfig } = await createMemorySettingsApp({
+      memory: {
+        reasoningMode: 'answer_first',
+        autoIndexIntervalMinutes: 30,
+        autoDreamIntervalMinutes: 60,
+      },
+    });
+
+    const result = await request('/api/memory/settings?projectPath=/tmp/pilotdeck-project', {
+      method: 'POST',
+      body: JSON.stringify({ reasoningMode: 'fast_mode' }),
+    });
+
+    expect(result.status).toBe(400);
+    expect(result.body.error).toBe('memory.reasoningMode must be answer_first or accuracy_first');
+    expect(writePilotDeckConfig).not.toHaveBeenCalled();
+  });
+});
+
 async function createMemoryApp() {
   const clearAllMemoryData = vi.fn(async () => ({
     scope: 'all_memory',
@@ -136,6 +199,53 @@ async function createMemoryApp() {
   return {
     clearAllMemoryData,
     getMemoryServiceForRequest,
+    request: (path, init) => requestJson(app, path, init),
+  };
+}
+
+async function createMemorySettingsApp(initialConfig) {
+  let config = structuredClone(initialConfig);
+  const writePilotDeckConfig = vi.fn(async (nextConfig) => {
+    config = structuredClone(nextConfig);
+    return { config };
+  });
+
+  vi.doMock('../services/memoryService.js', () => ({
+    clearAllMemoryData: vi.fn(),
+    exportAllProjectsMemoryBundle: vi.fn(),
+    getMemoryServiceForRequest: vi.fn(async () => ({
+      projectPath: '/tmp/pilotdeck-project',
+      dataDir: '/tmp/pilotdeck-data',
+      service: { repository: {} },
+    })),
+    getMemorySchedulerStatus: vi.fn(() => ({
+      enabled: true,
+      running: false,
+      intervalMs: 60000,
+    })),
+    importAllProjectsMemoryBundle: vi.fn(),
+    rollbackLastMemoryDream: vi.fn(),
+    runManualMemoryDream: vi.fn(),
+    runManualMemoryFlush: vi.fn(),
+  }));
+  vi.doMock('../services/pilotdeckConfig.js', () => ({
+    readPilotDeckConfigFile: vi.fn(() => ({ config })),
+    writePilotDeckConfig,
+  }));
+  vi.doMock('../services/pilotdeckConfigReloader.js', () => ({
+    reloadPilotDeckConfig: vi.fn(async () => undefined),
+  }));
+  vi.doMock('../services/pilotdeckConfigWatcher.js', () => ({
+    suppressNextWatchEvent: vi.fn(),
+  }));
+
+  const { default: memoryRoutes } = await import('./memory.js');
+  const app = express();
+  app.use(express.json());
+  app.use('/api/memory', memoryRoutes);
+
+  return {
+    writePilotDeckConfig,
     request: (path, init) => requestJson(app, path, init),
   };
 }
