@@ -212,6 +212,15 @@ corepack pnpm install --frozen-lockfile
 
 Use the committed `pnpm-lock.yaml` for source installs. Do not replace this step with `npm install`; the lockfile and workspace build settings are maintained for pnpm, and pnpm is the path tested by the one-line installer.
 
+ClawHub CLI is optional, but recommended for skill marketplace features:
+
+```bash
+npm install -g clawhub
+clawhub --version
+```
+
+On Windows, use `npm.cmd install -g clawhub` if PowerShell blocks `npm.ps1`. With Portable Node, this installs `clawhub` into the portable Node prefix, so keep that Node directory on `PATH` when running PilotDeck.
+
 ## First-Run Onboarding
 
 PilotDeck reads `~/.pilotdeck/pilotdeck.yaml`. If you do not already have a config file, prepare the Web UI onboarding flow before starting in production mode:

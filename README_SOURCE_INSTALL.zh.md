@@ -232,6 +232,15 @@ corepack pnpm install --frozen-lockfile
 
 源码安装请使用仓库提交的 `pnpm-lock.yaml`。不要把这一步替换成 `npm install`；当前 lockfile 和 workspace 构建配置按 pnpm 维护，一键安装脚本验证的也是这条路径。
 
+ClawHub CLI 是可选项，但如果需要使用技能市场功能，建议安装：
+
+```bash
+npm install -g clawhub
+clawhub --version
+```
+
+在 Windows 上，如果 PowerShell 拦截 `npm.ps1`，请使用 `npm.cmd install -g clawhub`。如果使用 Portable Node，`clawhub` 会安装到当前 portable Node 前缀下；运行 PilotDeck 时需要继续保留该 Node 目录在 `PATH` 中。
+
 ## 首次 Onboarding
 
 PilotDeck 读取 `~/.pilotdeck/pilotdeck.yaml`。如果本机还没有配置文件，生产模式启动前请先准备 Web UI 的首次 onboarding 流程：
