@@ -308,6 +308,8 @@ curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh |
   NPM_CONFIG_REGISTRY=https://registry.npmmirror.com bash
 ```
 
+You can also keep the official Node.js host as the primary source and opt in to one or more trusted fallback mirrors with `PILOTDECK_NODE_DIST_FALLBACK_MIRRORS`.
+
 ```bash
 pilotdeck            # starts the server at http://localhost:3001
 pilotdeck status     # check runtime status

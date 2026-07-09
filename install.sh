@@ -17,7 +17,7 @@ NODE_INSTALL_VERSION="${PILOTDECK_NODE_VERSION:-22}"
 NODE_FALLBACK_VERSION="${PILOTDECK_NODE_FALLBACK_VERSION:-22.13.0}"
 NODE_DIRECT_INSTALL_ROOT="$HOME/.local/share/pilotdeck-node"
 NODE_DIST_MIRROR="${PILOTDECK_NODE_DIST_MIRROR:-https://nodejs.org/dist}"
-NODE_DIST_FALLBACK_MIRRORS="${PILOTDECK_NODE_DIST_FALLBACK_MIRRORS:-https://npmmirror.com/mirrors/node}"
+NODE_DIST_FALLBACK_MIRRORS="${PILOTDECK_NODE_DIST_FALLBACK_MIRRORS:-}"
 APT_UPDATED=0
 # 1 = repo was (re)cloned or its HEAD changed; drives whether we reinstall/rebuild.
 REPO_CHANGED=1
@@ -445,7 +445,7 @@ install_node_tarball() {
 
   if [[ "$downloaded" != "1" ]]; then
     rm -rf "$tmp_dir"
-    fail "$(L "Could not download Node.js. Check your network/proxy, or set PILOTDECK_NODE_DIST_MIRROR / PILOTDECK_NODE_DIST_FALLBACK_MIRRORS to a reachable Node.js mirror such as https://npmmirror.com/mirrors/node." "无法下载 Node.js。请检查网络/代理，或将 PILOTDECK_NODE_DIST_MIRROR / PILOTDECK_NODE_DIST_FALLBACK_MIRRORS 设置为可访问的 Node.js 镜像，例如 https://npmmirror.com/mirrors/node。")"
+    fail "$(L "Could not download Node.js. Check your network/proxy, or explicitly set PILOTDECK_NODE_DIST_MIRROR / PILOTDECK_NODE_DIST_FALLBACK_MIRRORS to a trusted reachable Node.js mirror." "无法下载 Node.js。请检查网络/代理，或显式将 PILOTDECK_NODE_DIST_MIRROR / PILOTDECK_NODE_DIST_FALLBACK_MIRRORS 设置为可信且可访问的 Node.js 镜像。")"
   fi
 
   mkdir -p "$install_root"
