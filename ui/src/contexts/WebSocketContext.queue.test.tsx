@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clearDisconnectedQueue,
   enqueueDisconnectedMessage,
   getQueuedMessageKey,
 } from './WebSocketContext';
@@ -49,5 +50,16 @@ describe('WebSocket disconnected send queue', () => {
     enqueueDisconnectedMessage(queue, { type: 'pilotdeck-command', text: 'three' }, 2);
 
     expect(queue.map((message) => message.text)).toEqual(['two', 'three']);
+  });
+
+  it('clears queued messages on provider cleanup so old token messages cannot flush later', () => {
+    const queue: any[] = [];
+
+    enqueueDisconnectedMessage(queue, { type: 'pilotdeck-command', text: 'stale' });
+    enqueueDisconnectedMessage(queue, { type: 'check-session-status', sessionId: 'session-1' });
+
+    clearDisconnectedQueue(queue);
+
+    expect(queue).toEqual([]);
   });
 });

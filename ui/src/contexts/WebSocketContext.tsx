@@ -73,6 +73,10 @@ export function enqueueDisconnectedMessage(queue: any[], message: any, maxQueued
   }
 }
 
+export function clearDisconnectedQueue(queue: any[]): void {
+  queue.splice(0, queue.length);
+}
+
 const useWebSocketProviderState = (): WebSocketContextType => {
   const wsRef = useRef<WebSocket | null>(null);
   const unmountedRef = useRef(false);
@@ -188,6 +192,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
     return () => {
       connectIdRef.current++;
+      clearDisconnectedQueue(queuedMessagesRef.current);
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;

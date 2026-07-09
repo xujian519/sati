@@ -212,9 +212,9 @@ function shouldRetryStatus(status: number, configured?: readonly number[]): bool
 
 function resolveRetryDelay(attempt: number, retry: NetworkRetryOptions, retryAfterHeader?: string | null): number {
   const retryAfter = parseRetryAfterHeader(retryAfterHeader);
-  if (retryAfter !== undefined) return retryAfter;
-  const base = retry.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
   const cap = retry.maxDelayMs ?? DEFAULT_MAX_DELAY_MS;
+  if (retryAfter !== undefined) return Math.min(cap, retryAfter);
+  const base = retry.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
   const exponential = Math.min(cap, base * 2 ** attempt);
   const jitter = Math.floor(Math.random() * Math.max(1, Math.floor(exponential * 0.25)));
   return Math.min(cap, exponential + jitter);

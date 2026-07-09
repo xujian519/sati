@@ -22,6 +22,10 @@ describe('networkFetch', () => {
     expect(jitteredBackoff(0, { baseDelayMs: 1, maxDelayMs: 10_000 }, '2')).toBe(2000);
   });
 
+  it('caps retry-after delays with maxDelayMs', () => {
+    expect(jitteredBackoff(0, { baseDelayMs: 1, maxDelayMs: 5_000 }, '3600')).toBe(5000);
+  });
+
   it('normalizes DNS and reset errors', () => {
     expect(normalizeNetworkError(Object.assign(new Error('getaddrinfo ENOTFOUND api.test'), { code: 'ENOTFOUND' })).code).toBe('network_dns_error');
     expect(normalizeNetworkError(Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })).code).toBe('network_connection_reset');
