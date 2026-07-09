@@ -104,7 +104,7 @@ docker compose version
 wsl --status
 ```
 
-Missing commands mean the corresponding tool still needs to be installed or added to `PATH`. After installing tools, close and reopen PowerShell before checking again.
+Missing commands mean the corresponding tool still needs to be installed or added to `PATH`. After installing tools, close and reopen PowerShell before checking again. Git for Windows includes Git Bash; PilotDeck uses Git Bash as the default Windows terminal shell when it is available, and falls back to PowerShell only when Git Bash cannot be found.
 
 #### WSL2 Ubuntu (recommended)
 
@@ -158,7 +158,7 @@ python --version
 rg --version
 ```
 
-Use separate PowerShell lines instead of Bash-style chained commands when following the clone/install/start steps below. If PowerShell blocks `npm.ps1`, call `npm.cmd` instead of `npm`.
+Use separate PowerShell lines instead of Bash-style chained commands when following the prerequisite commands above. For PilotDeck's in-app terminal, Git Bash is preferred automatically after Git for Windows is installed. If PowerShell blocks `npm.ps1`, call `npm.cmd` instead of `npm`.
 
 #### Portable Node for verification
 

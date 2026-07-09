@@ -124,7 +124,7 @@ docker compose version
 wsl --status
 ```
 
-缺少命令说明对应工具还没有安装，或还没有加入 `PATH`。安装工具后，请关闭并重新打开 PowerShell 再检查。
+缺少命令说明对应工具还没有安装，或还没有加入 `PATH`。安装工具后，请关闭并重新打开 PowerShell 再检查。Git for Windows 会包含 Git Bash；PilotDeck 在 Windows 上会优先使用 Git Bash 作为默认终端 shell，只有找不到 Git Bash 时才回退到 PowerShell。
 
 #### WSL2 Ubuntu（推荐）
 
@@ -178,7 +178,7 @@ python --version
 rg --version
 ```
 
-按下面的克隆、安装、启动步骤操作时，请使用分开的 PowerShell 命令行，不要使用 Bash 风格的链式命令。如果 PowerShell 拦截 `npm.ps1`，请改用 `npm.cmd`。
+执行上面的前置依赖检查命令时，请使用分开的 PowerShell 命令行，不要使用 Bash 风格的链式命令。安装 Git for Windows 后，PilotDeck 内置终端会自动优先使用 Git Bash。如果 PowerShell 拦截 `npm.ps1`，请改用 `npm.cmd`。
 
 #### Portable Node 验证路径
 
