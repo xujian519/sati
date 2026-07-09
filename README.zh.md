@@ -298,7 +298,15 @@ https://github.com/user-attachments/assets/a7245467-ee3c-4939-a055-c56576ac56d1
 curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | bash
 ```
 
-该脚本将自动配置 Node.js 22 环境、克隆代码、安装依赖并编译前端。安装完成后，直接运行：
+该脚本会检查/使用受支持的 Node.js 22 运行时（22.13+ 且低于 23，内置 SQLite 运行时所需）、克隆代码、安装依赖并编译前端。在 Linux 上，如果存在 `sudo` 和支持的包管理器，脚本可安装缺失的系统依赖；在 macOS 上，请先确保 Xcode Command Line Tools 以及带 `distutils` 的 Python 可用。安装完成后，直接运行：
+
+如果所在网络下载 Node.js 或 npm 依赖较慢、连接不稳定，可以在运行安装器时指定国内镜像：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | \
+  PILOTDECK_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node \
+  NPM_CONFIG_REGISTRY=https://registry.npmmirror.com bash
+```
 
 ```bash
 pilotdeck            # 在 http://localhost:3001 启动服务
@@ -365,19 +373,22 @@ npm.cmd run dev
 
 ### 方式二：源码启动 (适合开发者)
 
+> 需要按平台安装依赖的命令？请查看[源码安装指南](./README_SOURCE_INSTALL.zh.md)。
+
 **1. 克隆代码与安装依赖**
 
-> 本仓库使用 [Git LFS](https://git-lfs.com/) 管理大型媒体文件。克隆前请确保已安装 `git lfs`。
-> 如果不需要演示视频/GIF，可在 clone 前加上 `GIT_LFS_SKIP_SMUDGE=1` 跳过下载。
+> 源码安装默认跳过 Git LFS 管理的大型演示媒体文件，以保持安装轻量。如果之后需要演示视频/GIF，可在克隆后运行 `git lfs pull` 下载。
 
 ```bash
-git clone https://github.com/OpenBMB/PilotDeck.git
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenBMB/PilotDeck.git
 cd PilotDeck
 
-npm install              # 安装根目录依赖 (Gateway 运行时)
-cd ui && npm install     # 安装 UI 依赖
-cd ..
+node --version          # 必须为 v22.13.0 或更新版本，且低于 v23
+corepack enable         # 启用 package.json 中固定的 pnpm 版本
+corepack pnpm install --frozen-lockfile
 ```
+
+PilotDeck 使用仓库提交的 `pnpm-lock.yaml` 保证源码安装可复现。请优先使用上面的 `corepack pnpm ...`，不要改用 `npm install`；在 macOS 上，这也能减少原生依赖不必要地回退到源码编译的概率。
 
 **2. 配置模型 Provider**
 PilotDeck 依赖 `~/.pilotdeck/pilotdeck.yaml` 进行配置。您可以手动创建、运行启动脚本自动生成，**或者在启动 Web UI 后直接在设置界面中进行可视化配置**。
@@ -432,8 +443,10 @@ cd ui && npm run start   # 生产模式，访问 http://localhost:3001
 如果您已安装 Docker，也可以直接使用容器方式启动：
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
+
+完整 Docker 配置请查看 [README_DOCKER.zh.md](README_DOCKER.zh.md)。
 
 ---
 

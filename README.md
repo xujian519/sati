@@ -298,7 +298,15 @@ We provide one-line installers for macOS / Linux and Windows PowerShell, plus a 
 curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | bash
 ```
 
-The script auto-installs Node.js 22.13+ (required for the built-in SQLite runtime), clones the repo, installs dependencies, and builds the frontend. Once it finishes:
+The script checks/uses the supported Node.js 22 runtime (22.13+ and <23, required for the built-in SQLite runtime), clones the repo, installs dependencies, and builds the frontend. On Linux it can install missing system packages when `sudo` and a supported package manager are available. On macOS, make sure Xcode Command Line Tools and a Python with `distutils` are usable before running the installer. Once it finishes:
+
+If Node.js or npm package downloads are slow or unreliable on your network, set reachable mirrors before running the installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | \
+  PILOTDECK_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node \
+  NPM_CONFIG_REGISTRY=https://registry.npmmirror.com bash
+```
 
 ```bash
 pilotdeck            # starts the server at http://localhost:3001
@@ -365,20 +373,22 @@ The installer normally uses prebuilt packages for native dependencies such as `n
 
 ### Option B: From source (for developers)
 
+> Need platform-specific dependency installation commands? See the [Source Installation Guide](./README_SOURCE_INSTALL.md).
+
 **1. Clone and install dependencies**
 
-> This repo uses [Git LFS](https://git-lfs.com/) for large media assets. Make sure `git lfs` is installed before cloning.
-> If you don't need the demo videos/GIFs, add `GIT_LFS_SKIP_SMUDGE=1` before `git clone` to skip downloading them.
+> By default, skip large Git LFS demo media to keep the source install lightweight. If you need the demo videos/GIFs later, run `git lfs pull` after cloning.
 
 ```bash
-git clone https://github.com/OpenBMB/PilotDeck.git
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenBMB/PilotDeck.git
 cd PilotDeck
 
-node --version          # must be v22.13.0 or newer
-npm install              # root deps (Gateway runtime)
-cd ui && npm install     # UI deps
-cd ..
+node --version          # must be v22.13.0 or newer, and below v23
+corepack enable         # enables the pinned pnpm version from package.json
+corepack pnpm install --frozen-lockfile
 ```
+
+PilotDeck uses the committed `pnpm-lock.yaml` for reproducible source installs. Prefer the `corepack pnpm ...` command above instead of `npm install`; on macOS, this also avoids unnecessary native rebuild fallbacks when matching prebuilt packages are available.
 
 **2. Configure a model provider**
 
@@ -455,8 +465,10 @@ cd ui && npm run start   # production mode, visit http://localhost:3001
 If Docker is installed, you can start PilotDeck with:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
+
+For full Docker configuration, see [README_DOCKER.md](README_DOCKER.md).
 
 ---
 

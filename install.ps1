@@ -52,6 +52,11 @@ function Test-NodeSqlite {
   }
 }
 
+function Test-CurrentNodeRuntime {
+  $version = Get-NodeVersion
+  return $version -and $version -ge $MinimumNodeVersion -and (Test-NodeSqlite)
+}
+
 function Refresh-ProcessPath {
   $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
   $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -66,6 +71,14 @@ function Resolve-NpmCommand {
   if ($npmCommand) { return $npmCommand.Source }
   Write-Fail 'npm was not found after Node.js setup. Open a new terminal or fix Node.js PATH, then rerun this script.'
 }
+function Resolve-ClawHubCommand {
+  $clawhubCommand = Get-Command clawhub.cmd -ErrorAction SilentlyContinue
+  if ($clawhubCommand) { return $clawhubCommand.Source }
+  $clawhubCommand = Get-Command clawhub -ErrorAction SilentlyContinue
+  if ($clawhubCommand) { return $clawhubCommand.Source }
+  return $null
+}
+
 function Invoke-WingetInstall([string]$PackageId, [string]$PackageName, [switch]$Optional) {
   & winget install --id $PackageId -e --accept-package-agreements --accept-source-agreements
   if ($LASTEXITCODE -eq 0) { return $true }
@@ -131,7 +144,9 @@ function Install-PortableNodeRuntime {
   $installRoot = Join-Path $HOME '.pilotdeck\node'
   $nodeDir = Join-Path $installRoot "node-$nodeVersion-win-x64"
   $nodeExe = Join-Path $nodeDir 'node.exe'
-  if (-not (Test-Path $nodeExe)) {
+  if (Test-Path $nodeExe) {
+    Write-Ok "Portable Node.js $nodeVersion already installed"
+  } else {
     New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
     $zipPath = Join-Path ([System.IO.Path]::GetTempPath()) "node-$nodeVersion-win-x64.zip"
     $url = "https://nodejs.org/dist/$nodeVersion/node-$nodeVersion-win-x64.zip"
@@ -151,12 +166,21 @@ function Install-PortableNodeRuntime {
 
 function Install-NodeRuntime {
   if (Test-Command fnm) {
+    & fnm use $NodeInstallVersion 1>$null 2>$null
+    [void](Add-FnmNodeToPath)
+    if (Test-CurrentNodeRuntime) {
+      Write-Ok "Node.js $NodeInstallVersion already available via fnm"
+      return
+    }
     & fnm install $NodeInstallVersion
+    if ($LASTEXITCODE -ne 0) { Write-Fail "fnm failed to install Node.js $NodeInstallVersion." }
     [void](Add-FnmNodeToPath)
     return
   }
 
   if (Test-Command winget) {
+    Refresh-ProcessPath
+    if (Test-CurrentNodeRuntime) { return }
     Write-Step "Installing Node.js $NodeInstallVersion LTS with winget..."
     [void](Invoke-WingetInstall 'OpenJS.NodeJS.LTS' 'Node.js')
     Refresh-ProcessPath
@@ -170,7 +194,7 @@ function Install-NodeRuntime {
 function Ensure-NodeRuntime {
   if (-not (Test-Command node)) { [void](Add-FnmNodeToPath) }
   $version = Get-NodeVersion
-  if ($version -and $version -ge $MinimumNodeVersion -and (Test-NodeSqlite)) {
+  if (Test-CurrentNodeRuntime) {
     Write-Ok "Node.js v$version found"
     return
   }
@@ -359,6 +383,64 @@ function Invoke-Npm([string[]]$Arguments, [string]$WorkingDirectory) {
   }
 }
 
+function Test-PlaywrightChromeForTesting {
+  $candidates = @()
+  if ($env:LOCALAPPDATA) {
+    $candidates += Join-Path $env:LOCALAPPDATA 'ms-playwright'
+  }
+  if ($env:USERPROFILE) {
+    $candidates += Join-Path $env:USERPROFILE '.cache\ms-playwright'
+  }
+
+  foreach ($root in $candidates) {
+    if (-not (Test-Path $root)) { continue }
+    $match = Get-ChildItem -LiteralPath $root -Directory -Filter 'mcp-chrome-for-testing-*' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($match) { return $true }
+  }
+  return $false
+}
+
+function Ensure-BrowserUseDependency {
+  Write-Step 'Checking Playwright browser for browser-use plugin...'
+  if (Test-PlaywrightChromeForTesting) {
+    Write-Ok 'Chrome for Testing already installed'
+    return
+  }
+
+  if ($env:PILOTDECK_SKIP_BROWSER_INSTALL -ne '0') {
+    Write-Step 'Skipping Chrome for Testing download (default) to keep install fast.'
+    Write-Step 'PilotDeck core features are still available without this optional browser-use dependency.'
+    Write-Step "To enable browser-use later, run: Set-Location `"$InstallDir`"; npm run install:browser"
+    Write-Step 'Or re-run the installer with PILOTDECK_SKIP_BROWSER_INSTALL=0.'
+    return
+  }
+
+  Invoke-Npm -Arguments @('run', 'install:browser') -WorkingDirectory $InstallDir
+  Write-Ok 'Chrome for Testing installed'
+}
+
+function Ensure-ClawHubCli {
+  Write-Step 'Checking ClawHub CLI for skill marketplace features...'
+  $clawhubPath = Resolve-ClawHubCommand
+  if ($clawhubPath) {
+    Write-Ok "ClawHub CLI already installed ($clawhubPath)"
+    return
+  }
+
+  try {
+    Invoke-Npm -Arguments @('install', '-g', 'clawhub', '--no-audit', '--no-fund', '--loglevel=error') -WorkingDirectory $InstallDir
+    Refresh-ProcessPath
+    $clawhubPath = Resolve-ClawHubCommand
+    if ($clawhubPath) {
+      Write-Ok 'ClawHub CLI installed'
+    } else {
+      Write-Step 'ClawHub CLI install completed but clawhub is not on PATH; skill marketplace features may not work until PATH is refreshed.'
+    }
+  } catch {
+    Write-Step "ClawHub CLI install failed; skill marketplace features may not work. $($_.Exception.Message)"
+  }
+}
+
 function Install-AndBuild {
   if (-not $RepoChanged -and (Test-DepsUpToDate)) {
     Write-Ok 'Dependencies and build artifacts are up to date'
@@ -461,6 +543,8 @@ Ensure-Prerequisites
 Install-OrUpdateRepo
 Ensure-LfsAssets
 Install-AndBuild
+Ensure-BrowserUseDependency
+Ensure-ClawHubCli
 Write-CmdLauncher
 
 $env:PILOTDECK_CONFIG_PATH = $ConfigPath
