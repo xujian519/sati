@@ -867,7 +867,7 @@ checkout_existing_installation() {
 
   # Fetch from the configured (HTTPS) URL rather than the existing "origin"
   # remote, which may be an SSH URL (git@github.com) that hangs when port 22
-  # is blocked. Cap the fetch so a dead network can't stall the installer.
+  # connectivity is unavailable. Cap the fetch so a bad network can't stall the installer.
   if run_with_timeout "${PILOTDECK_FETCH_TIMEOUT:-45}" env GIT_LFS_SKIP_SMUDGE=1 git fetch "$REPO_URL" "$BRANCH"; then
     GIT_LFS_SKIP_SMUDGE=1 git checkout -B "$BRANCH" FETCH_HEAD || return 1
   else

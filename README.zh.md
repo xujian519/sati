@@ -300,7 +300,7 @@ curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh |
 
 该脚本会检查/使用受支持的 Node.js 22 运行时（22.13+ 且低于 23，内置 SQLite 运行时所需）、克隆代码、安装依赖并编译前端。在 Linux 上，如果存在 `sudo` 和支持的包管理器，脚本可安装缺失的系统依赖；在 macOS 上，请先确保 Xcode Command Line Tools 以及带 `distutils` 的 Python 可用。安装完成后，直接运行：
 
-如果所在网络下载 Node.js 或 npm 依赖较慢/受阻，可以在运行安装器时指定国内镜像：
+如果所在网络下载 Node.js 或 npm 依赖较慢、连接不稳定，可以在运行安装器时指定国内镜像：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | \
