@@ -36,6 +36,19 @@ export class CronTaskStore {
     });
   }
 
+  async replaceTask(task: CronTask): Promise<boolean> {
+    return this.mutateTaskFile(async (file) => {
+      const index = file.tasks.findIndex((entry) => entry.taskId === task.taskId);
+      if (index < 0) {
+        return false;
+      }
+      const nextTasks = [...file.tasks];
+      nextTasks[index] = task;
+      await this.writeTaskFile({ schemaVersion: 1, tasks: sortTasks(nextTasks) });
+      return true;
+    });
+  }
+
   async updateTask(taskId: string, update: (task: CronTask) => CronTask | undefined): Promise<CronTask | undefined> {
     return this.mutateTaskFile(async (file) => {
       let updated: CronTask | undefined;
