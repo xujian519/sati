@@ -122,7 +122,11 @@ function resolveProviderApiKey(
   if (providerId === "ollama" && value === undefined) {
     return "ollama";
   }
-  const effectiveValue = value ?? (catalogEnvVar ? `\${${catalogEnvVar}}` : undefined);
+  const hasBlankString = typeof value === "string" && value.trim().length === 0;
+  const hasConfigValue = value !== undefined && value !== null && !hasBlankString;
+  const effectiveValue = hasConfigValue
+    ? value
+    : catalogEnvVar ? `\${${catalogEnvVar}}` : value;
   return resolveApiKey(effectiveValue, env);
 }
 
