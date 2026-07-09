@@ -7,8 +7,10 @@ import {
   flattenToolResultBlockText,
   type CanonicalContentBlock,
   type CanonicalMessage,
+  type CanonicalModelError,
   type CanonicalModelEvent,
 } from "../../model/index.js";
+import type { AgentError } from "../../agent/index.js";
 import { contentToText } from "../../tool/index.js";
 import type { SessionRouter } from "../SessionRouter.js";
 import { GatewayElicitationBus } from "../elicitation/GatewayElicitationBus.js";
@@ -1388,8 +1390,46 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
           message: event.error.message,
           recoverable: false,
           userHint: event.error.userHint,
+          providerError: providerErrorFromAgentError(event.error),
         },
       ];
+    case "token_cap_adjusted":
+      return [{
+        type: "agent_status",
+        event: "token_cap_adjusted",
+        detail: {
+          provider: event.provider,
+          model: event.model,
+          cap: event.cap,
+          previous: event.previous,
+          next: event.next,
+          reason: event.reason,
+        },
+      }];
+    case "empty_output_recovery":
+      return [{
+        type: "agent_status",
+        event: "empty_output_recovery",
+        detail: {
+          provider: event.provider,
+          model: event.model,
+          finishReason: event.finishReason,
+          previousMaxOutputTokens: event.previousMaxOutputTokens,
+          nextMaxOutputTokens: event.nextMaxOutputTokens,
+        },
+      }];
+    case "model_recovery_failed":
+      return [{
+        type: "agent_status",
+        event: "model_recovery_failed",
+        detail: {
+          provider: event.provider,
+          model: event.model,
+          code: event.error.code,
+          message: event.error.message,
+          providerError: providerErrorFromModelError(event.error),
+        },
+      }];
     case "session_aborted":
       return [
         {
@@ -1837,6 +1877,59 @@ async function attachmentsToContentBlocks(
 
 function sanitizeAttachmentName(name: string): string {
   return name.replace(/[\r\n]+/g, " ").trim() || "attachment";
+}
+
+function providerErrorFromAgentError(error: AgentError): GatewayEventProviderError | undefined {
+  const details = error.details;
+  if (!details || typeof details !== "object") return undefined;
+  return providerErrorFromRecord(details as Record<string, unknown>);
+}
+
+function providerErrorFromModelError(error: CanonicalModelError): GatewayEventProviderError {
+  return {
+    provider: error.provider,
+    protocol: error.protocol,
+    status: error.status,
+    code: error.code,
+    message: error.message,
+    raw: stringifyProviderRaw(error.raw),
+  };
+}
+
+type GatewayEventProviderError = NonNullable<Extract<GatewayEvent, { type: "error" }>["providerError"]>;
+
+function providerErrorFromRecord(details: Record<string, unknown>): GatewayEventProviderError | undefined {
+  const provider = stringOrUndefined(details.provider);
+  const protocol = stringOrUndefined(details.protocol);
+  const status = numberOrUndefined(details.status);
+  const code = stringOrUndefined(details.code);
+  const message = stringOrUndefined(details.message);
+  const raw = stringifyProviderRaw(details.raw);
+  if (!provider && !protocol && status === undefined && !code && !message && !raw) return undefined;
+  return { provider, protocol, status, code, message, raw };
+}
+
+function stringifyProviderRaw(raw: unknown): string | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const text = typeof raw === "string" ? raw : safeJsonStringify(raw);
+  if (!text) return undefined;
+  return text.length > 1_200 ? `${text.slice(0, 1_200)}…` : text;
+}
+
+function stringOrUndefined(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function numberOrUndefined(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function safeJsonStringify(value: unknown): string | undefined {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
 function extensionForMime(mimeType: string): string {

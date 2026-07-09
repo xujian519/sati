@@ -483,13 +483,99 @@ run_as_root() {
   fi
 }
 
+has_linux_package_manager() {
+  command -v apt-get >/dev/null 2>&1 || \
+    command -v dnf >/dev/null 2>&1 || \
+    command -v yum >/dev/null 2>&1 || \
+    command -v pacman >/dev/null 2>&1 || \
+    command -v zypper >/dev/null 2>&1
+}
+
 can_install_system_packages() {
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    return 0
+  fi
+  command -v sudo >/dev/null 2>&1
+}
+
+can_install_optional_system_packages() {
   if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     return 0
   fi
   command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1
 }
 
+missing_required_linux_system_packages() {
+  local missing=()
+  command -v git >/dev/null 2>&1 || missing+=(git)
+  command -v python3 >/dev/null 2>&1 || missing+=(python3)
+  command -v make >/dev/null 2>&1 || missing+=(make)
+  has_cxx_compiler || missing+=(c++-compiler)
+
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    printf "%s" "${missing[*]}"
+  fi
+}
+
+print_minimum_requirements() {
+  if [[ "$PLATFORM" == "linux" ]]; then
+    warn "$(L "Minimum requirements: bash, curl, network access, git, Python 3, make, and a C++ compiler. sudo/root is only needed when required system packages are missing." "最低要求:bash、curl、网络访问、git、Python 3、make 和 C++ 编译器。仅当缺少必需系统软件包时才需要 sudo/root。")"
+  else
+    warn "$(L "Minimum requirements: bash, curl, network access, and Xcode Command Line Tools. Homebrew is only needed if optional tools such as ripgrep or Git LFS are missing." "最低要求:bash、curl、网络访问和 Xcode 命令行工具。仅当缺少 ripgrep 或 Git LFS 等可选工具时才需要 Homebrew。")"
+  fi
+}
+
+check_bootstrap_requirements() {
+  print_minimum_requirements
+
+  if [[ -z "${BASH_VERSION:-}" ]]; then
+    fail "$(L "This installer must run with bash. Try: curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | bash" "该安装器必须使用 bash 运行。请尝试:curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | bash")"
+  fi
+
+  if ! command -v curl >/dev/null 2>&1; then
+    fail "$(L "curl is required to install Node.js and optional browser assets. Please install curl and re-run this installer." "安装 Node.js 和可选浏览器资源需要 curl。请先安装 curl 后重新运行安装器。")"
+  fi
+  ok "$(L "curl found" "已找到 curl")"
+
+  if ! command -v tar >/dev/null 2>&1; then
+    fail "$(L "tar is required to unpack Node.js. Please install tar and re-run this installer." "解压 Node.js 需要 tar。请先安装 tar 后重新运行安装器。")"
+  fi
+  ok "$(L "tar found" "已找到 tar")"
+
+  if ! tar --help 2>/dev/null | grep -q -- '-J'; then
+    warn "$(L "tar may not support .tar.xz archives; install xz/xz-utils if the Node.js download cannot be unpacked." "当前 tar 可能不支持 .tar.xz;如果 Node.js 下载后无法解压,请安装 xz/xz-utils。")"
+  fi
+
+  if [[ "$PLATFORM" == "linux" ]]; then
+    local missing_packages
+    missing_packages="$(missing_required_linux_system_packages)"
+    if [[ -z "$missing_packages" ]]; then
+      ok "$(L "required Linux build dependencies already present" "Linux 必需构建依赖已齐备")"
+      return
+    fi
+
+    warn "$(L "Missing required Linux build dependencies: ${missing_packages}" "缺少 Linux 必需构建依赖:${missing_packages}")"
+
+    if ! has_linux_package_manager; then
+      fail "$(L "Unsupported Linux package manager. Please install apt, dnf, yum, pacman, or zypper, or install dependencies manually before re-running." "不支持当前 Linux 包管理器。请安装 apt、dnf、yum、pacman 或 zypper,或先手动安装依赖后再重新运行。")"
+    fi
+    ok "$(L "supported Linux package manager found" "已找到支持的 Linux 包管理器")"
+
+    if ! can_install_system_packages; then
+      fail "$(L "Installing missing required system packages needs root or sudo. Please run as root, configure sudo, or preinstall git, python3, make, and a C++ compiler." "安装缺失的必需系统软件包需要 root 或 sudo。请以 root 身份运行、配置 sudo,或预先安装 git、python3、make 和 C++ 编译器。")"
+    fi
+    ok "$(L "root user or sudo command available for system package installs" "root 用户或 sudo 命令可用于安装系统软件包")"
+  else
+    if ! command -v xcode-select >/dev/null 2>&1 || ! xcode-select -p >/dev/null 2>&1; then
+      fail "$(L "macOS requires Xcode Command Line Tools for git, lsof, and native module builds. Install them with: xcode-select --install" "macOS 需要 Xcode 命令行工具来提供 git、lsof 和原生模块构建能力。请运行:xcode-select --install")"
+    fi
+    ok "$(L "Xcode Command Line Tools found" "已找到 Xcode 命令行工具")"
+
+    if ! command -v brew >/dev/null 2>&1; then
+      warn "$(L "Homebrew is not installed. If ripgrep or Git LFS are missing, install Homebrew first, then run: brew install ripgrep git-lfs" "未安装 Homebrew。若缺少 ripgrep 或 Git LFS,请先安装 Homebrew,然后运行:brew install ripgrep git-lfs")"
+    fi
+  fi
+}
 install_linux_packages() {
   local requested=("$@")
   local apt_packages=()
@@ -943,6 +1029,7 @@ case "$(uname -s)" in
     fail "$(L "Unsupported OS: $(uname -s). This installer supports macOS and Linux." "不支持的操作系统:$(uname -s)。该安装器仅支持 macOS 和 Linux。")"
     ;;
 esac
+check_bootstrap_requirements
 echo ""
 
 echo "$(L "Checking Node.js..." "正在检查 Node.js...")"
@@ -974,7 +1061,7 @@ fi
 echo "$(L "Checking ripgrep..." "正在检查 ripgrep...")"
 if command -v rg >/dev/null 2>&1; then
   ok "$(L "ripgrep $(rg --version | head -1) found" "已找到 ripgrep $(rg --version | head -1)")"
-elif ! can_install_system_packages; then
+elif ! can_install_optional_system_packages; then
   warn "$(L "ripgrep not found and sudo is unavailable; continuing because PilotDeck uses its bundled ripgrep dependency." "未找到 ripgrep 且 sudo 不可用;PilotDeck 会使用内置 ripgrep 依赖,继续安装。")"
 else
   warn "$(L "ripgrep not found. Installing..." "未找到 ripgrep,正在安装...")"
@@ -985,7 +1072,7 @@ echo ""
 
 echo "$(L "Checking lsof..." "正在检查 lsof...")"
 if ! command -v lsof >/dev/null 2>&1; then
-  if can_install_system_packages; then
+  if can_install_optional_system_packages; then
     warn "$(L "lsof not found. Installing..." "未找到 lsof,正在安装...")"
     install_lsof
   else
@@ -1033,6 +1120,7 @@ if has_playwright_chrome_for_testing; then
   ok "$(L "Chrome for Testing already installed" "Chrome for Testing 已安装")"
 elif [[ "${PILOTDECK_SKIP_BROWSER_INSTALL:-1}" == "1" ]]; then
   warn "$(L "Skipping Chrome for Testing download (default) to keep install fast." "默认跳过 Chrome for Testing 下载,以加快安装速度。")"
+  warn "$(L "PilotDeck core features are still available without this optional browser-use dependency." "缺少该可选 browser-use 依赖时,PilotDeck 核心功能仍可正常使用。")"
   warn "$(L "To enable browser-use, run: cd \"$INSTALL_DIR\" && npm run install:browser" "如需启用 browser-use,请运行:cd \"$INSTALL_DIR\" && npm run install:browser")"
   warn "$(L "Or re-run the installer with PILOTDECK_SKIP_BROWSER_INSTALL=0." "或以 PILOTDECK_SKIP_BROWSER_INSTALL=0 重新运行安装器。")"
 else

@@ -94,7 +94,21 @@ export type WebGatewayEvent =
   | { type: "worktree_removed"; cwd: string }
   | { type: "agent_status"; event: string; detail?: Record<string, unknown> }
   | { type: "turn_completed"; usage: Record<string, number>; finishReason: string }
-  | { type: "error"; message: string; code?: string; recoverable: boolean; userHint?: string };
+  | {
+      type: "error";
+      message: string;
+      code?: string;
+      recoverable: boolean;
+      userHint?: string;
+      providerError?: {
+        provider?: string;
+        protocol?: string;
+        status?: number;
+        code?: string;
+        message?: string;
+        raw?: string;
+      };
+    };
 
 export type WebGatewayMethod =
   | "submit_turn"

@@ -112,6 +112,7 @@ export {
   type StructuredOutputExtractionError,
 } from "./structuredOutput/extractStructuredOutput.js";
 export type { ModelCapabilities } from "./protocol/capabilities.js";
+export { parseTokenLimitError, type ParsedTokenLimitError } from "./errors/tokenLimitParsing.js";
 export { downgradeUnsupportedContent } from "./protocol/multimodal.js";
 export type { InputModality, MultimodalConstraints } from "./protocol/multimodal.js";
 export {

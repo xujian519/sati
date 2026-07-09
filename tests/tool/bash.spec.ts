@@ -38,7 +38,9 @@ describe("bash long-running guardrails", () => {
 
     assert.equal(result.type, "error");
     assert.equal(result.error.code, "invalid_tool_input");
+    assert.match(result.error.message, /timeout=600000 or less/u);
     assert.match(result.error.message, /task_create/u);
+    assert.match(result.error.message, /task_wait/u);
     assert.equal(ran, false);
   });
 
@@ -61,6 +63,7 @@ describe("bash long-running guardrails", () => {
       assert.equal(result.type, "error", command);
       assert.equal(result.error.code, "invalid_tool_input", command);
       assert.match(result.error.message, /task_create/u, command);
+      assert.match(result.error.message, /task_wait/u, command);
       assert.match(result.error.message, /task_output/u, command);
     }
   });

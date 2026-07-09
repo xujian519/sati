@@ -68,6 +68,7 @@ export {
   type TokenCountResult,
   type TokenCountSource,
 } from "./budget/TokenAccountingRuntime.js";
+export { effectiveInputContextTokens } from "./budget/effectiveContext.js";
 export { countTokens, getTokenizer } from "./budget/tokenizer.js";
 export {
   CompactionEngine,

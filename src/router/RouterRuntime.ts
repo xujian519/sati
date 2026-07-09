@@ -996,7 +996,7 @@ export function createRouterRuntime(
           }
         }
       }
-      yield { type: "error", error: lastError };
+      yield { type: "error", error: { ...lastError, provider: lastAttempt.provider, model: lastAttempt.model } };
     }
   }
 

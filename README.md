@@ -290,7 +290,7 @@ https://github.com/user-attachments/assets/a7245467-ee3c-4939-a055-c56576ac56d1
 
 ## 📦 Installation & Quick Start
 
-We provide a one-line installer for macOS / Linux, plus a source-based workflow for developers.
+We provide one-line installers for macOS / Linux and Windows PowerShell, plus a source-based workflow for developers.
 
 ### Option A: One-line install (recommended, macOS / Linux)
 
@@ -312,6 +312,64 @@ curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh |
 pilotdeck            # starts the server at http://localhost:3001
 pilotdeck status     # check runtime status
 ```
+
+To open PilotDeck again later on macOS / Linux, run `pilotdeck` in a terminal and open the printed URL in your browser. If your shell has not picked up the PATH update yet, open a new terminal or source your shell profile first.
+
+```bash
+pilotdeck
+# then open http://localhost:3001, or the URL printed by the command
+```
+
+### Option A2: One-line install (Windows PowerShell)
+
+Run PowerShell as a normal user, then execute:
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.ps1 | iex"
+```
+
+The PowerShell installer uses Windows-native paths under `%USERPROFILE%\.pilotdeck`, checks Node.js 22.13+ with `node:sqlite`, installs missing prerequisites with `winget` when available, builds PilotDeck, and creates a `pilotdeck.cmd` launcher in `%USERPROFILE%\.pilotdeck\bin`. Git LFS media assets are optional for the core app; if Git LFS is unavailable or times out, the installer continues without demo videos/GIFs.
+
+After installation, the script starts PilotDeck and prints the UI URL, usually `http://localhost:3001`. It does not automatically open a browser, so copy that URL into your browser to finish onboarding (provider + API key). You can also open it from PowerShell:
+
+```powershell
+Start-Process http://localhost:3001
+```
+
+If this is your first install, open a new PowerShell window after the script updates your user `PATH`, then run:
+
+```powershell
+pilotdeck            # starts the server at http://localhost:3001
+pilotdeck status     # check runtime status
+```
+
+To open PilotDeck again later, run `pilotdeck` from a new PowerShell window, then open the printed URL in your browser. If `pilotdeck` is not yet on `PATH`, run the launcher directly:
+
+```powershell
+& "$HOME\.pilotdeck\bin\pilotdeck.cmd"
+```
+
+#### Windows PowerShell FAQ
+
+**`npm.ps1` cannot be loaded because running scripts is disabled**
+
+This can still happen when you run development commands such as `npm run dev` directly in Windows PowerShell for the first time. PowerShell may resolve `npm` to `npm.ps1`, and the default execution policy can block that shim.
+
+Fix it once for the current user, then reopen PowerShell:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+If you do not want to change the user policy, run the cmd shim explicitly instead:
+
+```powershell
+npm.cmd run dev
+```
+
+**Native dependency build errors (`node-gyp`, `MSBuild`, or Python not found)**
+
+The installer normally uses prebuilt packages for native dependencies such as `node-pty`, `sqlite3`, `better-sqlite3`, and `sharp`. On a fresh Windows machine, if npm cannot download a matching prebuild and falls back to compiling from source, install Visual Studio Build Tools with the C++ workload and Python, then rerun the installer.
 
 ### Option B: From source (for developers)
 

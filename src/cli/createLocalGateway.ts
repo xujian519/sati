@@ -1014,6 +1014,14 @@ class ProjectRuntimeRegistry {
           return undefined;
         }
       },
+      getModelTokenLimits: (provider, model) => {
+        try {
+          const caps = runtime.model.getCapabilities(provider, model);
+          return { maxContextTokens: caps.maxContextTokens, maxOutputTokens: caps.maxOutputTokens };
+        } catch {
+          return undefined;
+        }
+      },
     };
     const sessionTitleGenerator = createSessionTitleGenerator({
       modelRuntime: runtime.model,
@@ -1209,15 +1217,17 @@ class ProjectRuntimeRegistry {
       // Model or provider not found — fall back to text-only.
     }
     let maxContextTokens: number | undefined;
+    let maxOutputTokens: number | undefined;
     try {
       const caps = runtime.model.getCapabilities(agent.model.provider, agent.model.model);
       maxContextTokens = agent.maxContextTokens ?? caps.maxContextTokens;
+      maxOutputTokens = caps.maxOutputTokens;
     } catch {
       maxContextTokens = agent.maxContextTokens;
     }
-    const maxOutputTokens = readPositiveIntegerEnv(this.options.env.PILOTDECK_MAX_OUTPUT_TOKENS)
+    maxOutputTokens = readPositiveIntegerEnv(this.options.env.PILOTDECK_MAX_OUTPUT_TOKENS)
       ?? agent.maxOutputTokens
-      ?? undefined;
+      ?? maxOutputTokens;
     return {
       provider: agent.model.provider,
       model: agent.model.model,

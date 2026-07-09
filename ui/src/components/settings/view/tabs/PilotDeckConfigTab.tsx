@@ -57,7 +57,7 @@ import {
   type CatalogProviderProtocol,
   type CatalogModel,
 } from '../../../../shared/catalogProviders';
-import { fetchProviderModels, type ApiModelListItem } from '../../../../shared/modelListApi';
+import { fetchProviderModels, fetchRemoteDefaultModels, type ApiModelListItem } from '../../../../shared/modelListApi';
 import type { SettingsProject } from '../../types/types';
 import { isCronConfigEnabled, patch } from './pilotDeckConfigForm';
 
@@ -1036,20 +1036,45 @@ function ProviderCard({
     }
   };
   const visibleModels: Array<ApiModelListItem | CatalogModel> = apiModels ?? catalogEntry?.models ?? [];
-  const canFetchModels = Boolean(effectiveUrl && provider.apiKey);
+  const hasProviderApiKey = Boolean(provider.apiKey) && !isMaskedKey;
+  const canFetchModels = Boolean(effectiveUrl);
   const refreshModels = async () => {
     if (!canFetchModels) return;
     setApiModelsStatus('loading');
     setApiModelsError('');
     try {
-      const models = await fetchProviderModels({ protocol, baseUrl: effectiveUrl, apiKey: provider.apiKey ?? '', providerId });
-      setApiModels(models);
+      const models = hasProviderApiKey || !catalogEntry || ![catalogEntry.defaultUrl, catalogEntry.modelListUrl].includes(effectiveUrl)
+        ? await fetchProviderModels({ protocol, baseUrl: effectiveUrl, apiKey: hasProviderApiKey ? provider.apiKey : '', providerId })
+        : await fetchRemoteDefaultModels(providerId);
+      setApiModels(!hasProviderApiKey && catalogEntry && models.length === 0 ? catalogEntry.models : models);
       setApiModelsStatus('idle');
     } catch (error) {
       setApiModelsStatus('error');
       setApiModelsError(error instanceof Error ? error.message : String(error));
     }
   };
+
+  useEffect(() => {
+    if (!catalogEntry || hasProviderApiKey) return;
+    const catalogModels = catalogEntry.models;
+    const controller = new AbortController();
+    setApiModelsStatus('loading');
+    setApiModelsError('');
+    fetchRemoteDefaultModels(providerId)
+      .then((models) => {
+        if (controller.signal.aborted) return;
+        setApiModels(models.length > 0 ? models : catalogModels);
+        setApiModelsStatus('idle');
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setApiModels(catalogModels);
+        setApiModelsStatus('idle');
+        const message = error instanceof Error ? error.message : String(error);
+        setApiModelsError(`Using bundled model list. Remote model list unavailable: ${message}`);
+      });
+    return () => controller.abort();
+  }, [catalogEntry, hasProviderApiKey, providerId]);
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-background/50 p-4 transition-colors">
@@ -1166,11 +1191,16 @@ function ProviderCard({
             className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw className={cn('h-2.5 w-2.5', apiModelsStatus === 'loading' && 'animate-spin')} />
-            Fetch API models
+            {hasProviderApiKey || !catalogEntry ? 'Fetch API models' : 'Fetch remote models'}
           </button>
         </div>
         {apiModelsStatus === 'error' && apiModelsError && (
           <div className="mb-2 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive">
+            {apiModelsError}
+          </div>
+        )}
+        {apiModelsStatus === 'idle' && apiModelsError && (
+          <div className="mb-2 rounded-md border border-border bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground">
             {apiModelsError}
           </div>
         )}
@@ -1330,9 +1360,6 @@ function CatalogPicker({
             className="rounded-md border border-border bg-background px-3 py-2 text-left text-sm transition-colors hover:border-foreground/40 hover:bg-muted"
           >
             <div className="font-medium text-foreground">{p.displayName}</div>
-            <div className="mt-0.5 text-[10px] text-muted-foreground">
-              {t('pilotDeckConfig.panels.models.modelCount', { count: p.models.length })}
-            </div>
           </button>
         ))}
         <button
