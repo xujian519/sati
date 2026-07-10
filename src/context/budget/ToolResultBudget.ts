@@ -1,5 +1,6 @@
-import { mkdir, writeFile, access } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { mkdir, writeFile, access, copyFile } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { basename, dirname, extname, relative, resolve } from "node:path";
 import type {
   CanonicalContentBlock,
   CanonicalMessage,
@@ -18,12 +19,14 @@ export const PREVIEW_SIZE_BYTES = 2_000;
 
 export type ToolResultBudgetState = {
   replacements: Map<string, ToolResultReplacementRecord>;
+  nextReadFileAliasIndex?: number;
 };
 
 export type ToolResultReplacementRecord = {
   toolCallId: string;
   isError?: boolean;
   path: string;
+  readFilePath?: string;
   originalBytes: number;
   preview: string;
   mimeType?: string;
@@ -55,7 +58,7 @@ export type ToolResultBudgetApplyOptions = {
 };
 
 export function createToolResultBudgetState(): ToolResultBudgetState {
-  return { replacements: new Map() };
+  return { replacements: new Map(), nextReadFileAliasIndex: 1 };
 }
 
 /**
@@ -191,12 +194,14 @@ export class ToolResultBudget {
     } catch {
       await writeFile(path, flat, { flag: "wx", mode: 0o600, encoding: "utf8" });
     }
+    const readFilePath = await this.createReadFileAlias(path, ext);
 
     const preview = headTailPreview(flat, this.previewBytes);
     const record: ToolResultReplacementRecord = {
       toolCallId: block.toolCallId,
       isError: block.isError,
       path,
+      readFilePath,
       originalBytes: byteLength,
       preview,
       mimeType: isJson ? "application/json" : "text/plain",
@@ -212,11 +217,47 @@ export class ToolResultBudget {
       toolCallId: record.toolCallId,
       isError: record.isError,
       path: record.path,
+      readFilePath: record.readFilePath,
       originalBytes: record.originalBytes,
       preview: record.preview,
       hasMore: Buffer.byteLength(record.preview, "utf8") < record.originalBytes,
       mimeType: record.mimeType,
       reason: record.reason,
+    };
+  }
+
+  private async createReadFileAlias(sourcePath: string, ext: string): Promise<string> {
+    const { refsDir, workspaceRoot } = this.resolveReadFileAliasLocation();
+    await mkdir(refsDir, { recursive: true, mode: 0o700 });
+
+    const normalizedExt = extname(ext) ? ext.slice(1) : ext;
+    while (true) {
+      const index = this.state.nextReadFileAliasIndex ?? 1;
+      this.state.nextReadFileAliasIndex = index + 1;
+      const aliasPath = resolve(refsDir, `result-${String(index).padStart(4, "0")}.${normalizedExt || "txt"}`);
+      try {
+        await copyFile(sourcePath, aliasPath, fsConstants.COPYFILE_EXCL);
+        return relative(workspaceRoot, aliasPath);
+      } catch (error) {
+        if (isFileExistsError(error)) {
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+
+  private resolveReadFileAliasLocation(): { refsDir: string; workspaceRoot: string } {
+    const maybeToolResultsRoot = dirname(this.toolResultsDir);
+    if (basename(maybeToolResultsRoot) === "tool-results") {
+      return {
+        refsDir: resolve(maybeToolResultsRoot, "refs"),
+        workspaceRoot: dirname(dirname(maybeToolResultsRoot)),
+      };
+    }
+    return {
+      refsDir: resolve(this.toolResultsDir, "refs"),
+      workspaceRoot: dirname(dirname(this.toolResultsDir)),
     };
   }
 
@@ -339,6 +380,10 @@ function scopedToolResultKey(toolCallId: string, turnId: string | undefined): st
 
 function safePathPart(value: string): string {
   return value.trim().replace(/[^A-Za-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function isFileExistsError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "EEXIST";
 }
 
 function extensionForMedia(mediaType: "image" | "pdf" | "audio", mimeType: string): string {

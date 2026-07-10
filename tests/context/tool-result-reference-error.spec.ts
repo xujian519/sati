@@ -62,7 +62,8 @@ test("large tool error references preserve error semantics for model replay", as
 
     const openai = buildOpenAIRequest(requestWith(applied), model);
     const openaiTool = openai.messages.find((message) => message.role === "tool");
-    assert.match(String(openaiTool?.content), /Truncated: original/);
+    assert.match(String(openaiTool?.content), /Tool result preview only/);
+    assert.match(String(openaiTool?.content), /read_file\(\{ file_path: ".*refs\/result-0001\.txt"/);
 
     const anthropic = buildAnthropicRequest(requestWith(applied), model);
     const anthropicTool = anthropic.messages[1]?.content.find((part: any) => part?.type === "tool_result") as any;
@@ -72,14 +73,14 @@ test("large tool error references preserve error semantics for model replay", as
     const functionResponse = google.contents
       .flatMap((content: any) => content.parts ?? [])
       .find((part: any) => part.functionResponse);
-    assert.match(String(functionResponse?.functionResponse?.response?.error), /Truncated: original/);
+    assert.match(String(functionResponse?.functionResponse?.response?.error), /Tool result preview only/);
     assert.equal(functionResponse?.functionResponse?.response?.output, undefined);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 });
 
-test("multibyte truncated tool result references still advertise read_file access", async () => {
+test("multibyte truncated tool result references advertise read_file access", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pilotdeck-tool-result-multibyte-"));
   try {
     const budget = new ToolResultBudget({ toolResultsDir: dir, maxResultSizeChars: 80, previewBytes: 40 });
@@ -99,7 +100,9 @@ test("multibyte truncated tool result references still advertise read_file acces
 
     const openai = buildOpenAIRequest(requestWith({ ...applied, content: [ref] }), model);
     const openaiTool = openai.messages.find((message) => message.role === "tool");
-    assert.match(String(openaiTool?.content), /Use read_file on this path/);
+    assert.match(String(openaiTool?.content), /read_file/);
+    assert.match(String(openaiTool?.content), /refs\/result-0001\.txt/);
+    assert.doesNotMatch(String(openaiTool?.content), /read_tool_result/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -21,6 +21,7 @@ import { flattenToolResultBlockText } from "../../protocol/toolResultContent.js"
 import { normalizeGoogleModelId } from "./modelId.js";
 import { cleanSchemaForGoogle, normalizeGoogleToolSchema } from "./schema.js";
 import { resolveThinkingPlan, throwIfUnsupportedThinkingPlan } from "../../thinking/registry.js";
+import { formatToolResultReferenceText } from "../toolResultReferenceText.js";
 
 export type GoogleRequestBody = GenerateContentParameters;
 
@@ -186,9 +187,7 @@ function toGoogleParts(block: CanonicalContentBlock, toolNamesById: Map<string, 
       return [toGoogleFunctionResponsePart(
         sanitizeGoogleToolCallId(block.toolCallId),
         toolNamesById.get(sanitizeGoogleToolCallId(block.toolCallId)) ?? block.toolCallId,
-        block.preview + (block.hasMore
-          ? `\n\n[Truncated: original ${block.originalBytes} bytes, file: ${block.path}. Use read_file on this path if you need more of the result.]`
-          : ""),
+        formatToolResultReferenceText(block),
         block.isError,
         [],
       )];

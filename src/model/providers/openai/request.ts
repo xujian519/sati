@@ -13,6 +13,7 @@ import { flattenToolResultBlockText } from "../../protocol/toolResultContent.js"
 import { cleanSchemaForGoogle, normalizeGoogleToolSchema } from "../google/schema.js";
 import { normalizeOpenAISchema } from "./schema.js";
 import { resolveThinkingPlan, throwIfUnsupportedThinkingPlan } from "../../thinking/registry.js";
+import { formatToolResultReferenceText } from "../toolResultReferenceText.js";
 
 export type OpenAIRequestBody = {
   model: string;
@@ -287,9 +288,7 @@ function toOpenAIToolResultReferenceMessage(
   return {
     role: "tool",
     tool_call_id: block.toolCallId,
-    content: block.preview + (block.hasMore
-      ? `\n\n[Truncated: original ${block.originalBytes} bytes, file: ${block.path}. Use read_file on this path if you need more of the result.]`
-      : ""),
+    content: formatToolResultReferenceText(block),
   };
 }
 

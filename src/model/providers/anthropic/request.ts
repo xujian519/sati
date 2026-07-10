@@ -8,6 +8,7 @@ import type {
   ModelDefinition,
 } from "../../protocol/canonical.js";
 import { resolveThinkingPlan, throwIfUnsupportedThinkingPlan } from "../../thinking/registry.js";
+import { formatToolResultReferenceText } from "../toolResultReferenceText.js";
 
 export type AnthropicRequestBody = {
   model: string;
@@ -197,9 +198,7 @@ function toAnthropicContentBlock(block: CanonicalContentBlock): unknown {
         tool_use_id: block.toolCallId,
         content: [{
           type: "text",
-          text: block.preview + (block.hasMore
-            ? `\n\n[Truncated: original ${block.originalBytes} bytes, file: ${block.path}. Use read_file on this path if you need more of the result.]`
-            : ""),
+          text: formatToolResultReferenceText(block),
         }],
         is_error: block.isError,
       };
