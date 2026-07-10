@@ -269,6 +269,7 @@ export type WebReadSessionMessagesResult = {
   messages: import("./webMessage.js").WebMessage[];
   nextCursor?: string;
   total?: number;
+  tokenUsage?: Record<string, unknown>;
   session: WebSessionInfo;
 };
 
