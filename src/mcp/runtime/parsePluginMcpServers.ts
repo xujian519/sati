@@ -10,14 +10,13 @@
  *     a single misconfigured plugin entry can't take down the gateway.
  */
 
-import { homedir } from "node:os";
+import { expandMcpString } from "../config/expandPlaceholders.js";
 import type { PilotDeckMcpServerSpec } from "../protocol/types.js";
 
-function expandHome(s: string): string {
-  if (s.startsWith("~/")) return homedir() + s.slice(1);
-  if (s.startsWith("~\\")) return homedir() + s.slice(1);
-  if (s === "~") return homedir();
-  return s;
+function expandStringRecord(rec: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(rec).map(([k, v]) => [k, expandMcpString(v)]),
+  );
 }
 
 export type ParsePluginMcpServersResult = {
@@ -45,10 +44,10 @@ export function parsePluginMcpServers(
         transport: "stdio",
         command: v.command,
         args: Array.isArray(v.args)
-          ? (v.args.filter((a): a is string => typeof a === "string").map(expandHome))
+          ? (v.args.filter((a): a is string => typeof a === "string").map(expandMcpString))
           : undefined,
-        env: isStringRecord(v.env) ? (v.env as Record<string, string>) : undefined,
-        cwd: typeof v.cwd === "string" ? v.cwd : undefined,
+        env: isStringRecord(v.env) ? expandStringRecord(v.env as Record<string, string>) : undefined,
+        cwd: typeof v.cwd === "string" ? expandMcpString(v.cwd) : undefined,
         perSession: v.perSession === true ? true : undefined,
       });
       continue;
@@ -58,8 +57,8 @@ export function parsePluginMcpServers(
       servers.push({
         id,
         transport: "streamable_http",
-        url,
-        headers: isStringRecord(v.headers) ? (v.headers as Record<string, string>) : undefined,
+        url: expandMcpString(url),
+        headers: isStringRecord(v.headers) ? expandStringRecord(v.headers as Record<string, string>) : undefined,
       });
       continue;
     }
