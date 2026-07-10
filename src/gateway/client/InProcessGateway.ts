@@ -470,6 +470,19 @@ export class InProcessGateway implements Gateway {
             phase: telemetryContext.phase,
           });
           for (const gatewayEvent of mapAgentEvent(event, runId)) {
+            if (gatewayEvent.type === "context_budget") {
+              this.recordGatewayStatusMessage({
+                sessionKey: input.sessionKey,
+                turnId: runId,
+                projectKey: input.projectKey,
+                status: {
+                  event: "context_budget",
+                  kind: "status",
+                  text: "context_budget",
+                  detail: { ...gatewayEvent },
+                },
+              }).catch(() => {});
+            }
             this.recordActiveTurnEvent(input.sessionKey, gatewayEvent);
             queue.enqueue(gatewayEvent);
           }
@@ -1501,6 +1514,8 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
       return [{
         type: "context_budget",
         used: event.snapshot.tokens,
+        displayUsed: event.snapshot.displayTokens,
+        budgetUsed: event.snapshot.budgetTokens,
         total: totalContextTokens,
         effectiveTotal: event.snapshot.effectiveContextTokens ?? event.snapshot.maxContextTokens,
         reservedOutputTokens,

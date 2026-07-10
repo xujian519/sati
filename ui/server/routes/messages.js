@@ -63,6 +63,7 @@ router.get('/:sessionId/messages', async (req, res) => {
       hasMore,
       offset,
       limit,
+      ...(result.tokenUsage ? { tokenUsage: result.tokenUsage } : {}),
     });
   } catch (error) {
     console.error('[messages] read_session_messages failed:', error);

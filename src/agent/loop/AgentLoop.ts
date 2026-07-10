@@ -1788,6 +1788,7 @@ export class AgentLoop {
         maxContextTokens,
         reservedOutputTokens: options.reservedOutputTokens,
         signal: input.abortSignal,
+        usePadding: true,
       });
       const usageTokens = tokensFromUsage(lastUsage);
       if (usageTokens === undefined || usageTokens <= snapshot.tokens) {
@@ -1796,6 +1797,7 @@ export class AgentLoop {
       return tokenAccounting.snapshotFromTokens(usageTokens, maxContextTokens, {
         reservedOutputTokens: options.reservedOutputTokens,
         usageTokens,
+        budgetTokens: snapshot.budgetTokens,
         source: snapshot.source,
         exact: snapshot.exact,
         estimatorError: snapshot.estimatorError,

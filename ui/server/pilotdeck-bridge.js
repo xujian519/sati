@@ -624,6 +624,8 @@ export function gatewayEventToFrames(event, sessionId, provider) {
                     text: 'token_budget',
                     tokenBudget: {
                         used: event.used,
+                        displayUsed: event.displayUsed,
+                        budgetUsed: event.budgetUsed,
                         total: event.total,
                         effectiveTotal: event.effectiveTotal,
                         reservedOutputTokens: event.reservedOutputTokens,
@@ -1131,6 +1133,8 @@ export async function runChatViaGateway(
             if (event && event.type === 'context_budget') {
                 state.tokenBudget = {
                     used: event.used,
+                    displayUsed: event.displayUsed,
+                    budgetUsed: event.budgetUsed,
                     total: event.total,
                     effectiveTotal: event.effectiveTotal,
                     reservedOutputTokens: event.reservedOutputTokens,
@@ -2206,6 +2210,8 @@ export function registerAlwaysOnNotificationForwarding(clients) {
                 const aoState = ensureSessionState(sessionKey, '', channelKey || 'web');
                 aoState.tokenBudget = {
                     used: event.used,
+                    displayUsed: event.displayUsed,
+                    budgetUsed: event.budgetUsed,
                     total: event.total,
                     effectiveTotal: event.effectiveTotal,
                     reservedOutputTokens: event.reservedOutputTokens,
