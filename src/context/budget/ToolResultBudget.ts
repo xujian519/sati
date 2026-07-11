@@ -11,11 +11,17 @@ import type {
   CanonicalToolResultReferenceBlock,
 } from "../../model/index.js";
 import { flattenToolResultBlockText } from "../../model/index.js";
+import { countTokens } from "./tokenizer.js";
 
-/** Default aggregate cap (chars) — mirrors legacy `DEFAULT_MAX_RESULT_SIZE_CHARS`. */
-export const DEFAULT_MAX_RESULT_SIZE_CHARS = 50_000;
+/** Default model-visible text cap for inline tool results. */
+export const DEFAULT_MAX_RESULT_SIZE_TOKENS = 10_000;
+/** Byte safety cap used as a cheap guardrail before tokenization can dominate. */
+export const DEFAULT_MAX_RESULT_SIZE_CHARS = 200_000;
 /** Inline preview length included alongside the persisted reference. */
-export const PREVIEW_SIZE_BYTES = 2_000;
+export const PREVIEW_SIZE_BYTES = 12_000;
+
+const EXACT_TOKEN_COUNT_MAX_BYTES = 40_000;
+const TOKEN_ESTIMATE_SAMPLE_BYTES = 6_000;
 
 export type ToolResultBudgetState = {
   replacements: Map<string, ToolResultReplacementRecord>;
@@ -48,6 +54,7 @@ export type MediaReplacementRecord = {
 
 export type ToolResultBudgetOptions = {
   maxResultSizeChars?: number;
+  maxResultSizeTokens?: number;
   previewBytes?: number;
   toolResultsDir: string;
   state?: ToolResultBudgetState;
@@ -69,12 +76,14 @@ export function createToolResultBudgetState(): ToolResultBudgetState {
  */
 export class ToolResultBudget {
   private readonly maxResultSizeChars: number;
+  private readonly maxResultSizeTokens: number;
   private readonly previewBytes: number;
   private readonly toolResultsDir: string;
   private readonly state: ToolResultBudgetState;
 
   constructor(options: ToolResultBudgetOptions) {
     this.maxResultSizeChars = options.maxResultSizeChars ?? DEFAULT_MAX_RESULT_SIZE_CHARS;
+    this.maxResultSizeTokens = options.maxResultSizeTokens ?? DEFAULT_MAX_RESULT_SIZE_TOKENS;
     this.previewBytes = options.previewBytes ?? PREVIEW_SIZE_BYTES;
     this.toolResultsDir = resolve(options.toolResultsDir);
     this.state = options.state ?? createToolResultBudgetState();
@@ -180,7 +189,7 @@ export class ToolResultBudget {
 
     const flat = flattenToolResultBlockText(block);
     const byteLength = Buffer.byteLength(flat, "utf8");
-    if (byteLength <= this.maxResultSizeChars) {
+    if (this.shouldInlineTextResult(flat, byteLength)) {
       return block;
     }
 
@@ -209,6 +218,13 @@ export class ToolResultBudget {
     };
     this.state.replacements.set(replacementKey, record);
     return this.toReferenceBlock(record);
+  }
+
+  private shouldInlineTextResult(text: string, byteLength: number): boolean {
+    if (byteLength > this.maxResultSizeChars) {
+      return false;
+    }
+    return estimateTokens(text, byteLength) <= this.maxResultSizeTokens;
   }
 
   private toReferenceBlock(record: ToolResultReplacementRecord): CanonicalToolResultReferenceBlock {
@@ -360,6 +376,35 @@ function headTailPreview(value: string, budgetBytes: number): string {
 /** Helper for tests / inspection. */
 export function flattenToolResultText(block: CanonicalToolResultBlock): string {
   return flattenToolResultBlockText(block);
+}
+
+function estimateTokens(text: string, byteLength: number): number {
+  if (byteLength <= EXACT_TOKEN_COUNT_MAX_BYTES) {
+    return countTokens(text);
+  }
+  const samples = sampleTextForTokenEstimate(text);
+  let sampledBytes = 0;
+  let sampledTokens = 0;
+  for (const sample of samples) {
+    sampledBytes += Buffer.byteLength(sample, "utf8");
+    sampledTokens += countTokens(sample);
+  }
+  if (sampledBytes === 0) {
+    return 0;
+  }
+  return Math.ceil((sampledTokens / sampledBytes) * byteLength);
+}
+
+function sampleTextForTokenEstimate(text: string): string[] {
+  if (text.length <= TOKEN_ESTIMATE_SAMPLE_BYTES * 3) {
+    return [text];
+  }
+  const middleStart = Math.max(0, Math.floor((text.length - TOKEN_ESTIMATE_SAMPLE_BYTES) / 2));
+  return [
+    text.slice(0, TOKEN_ESTIMATE_SAMPLE_BYTES),
+    text.slice(middleStart, middleStart + TOKEN_ESTIMATE_SAMPLE_BYTES),
+    text.slice(-TOKEN_ESTIMATE_SAMPLE_BYTES),
+  ];
 }
 
 function isToolResultMediaBlock(

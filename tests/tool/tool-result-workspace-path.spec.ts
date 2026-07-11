@@ -38,7 +38,12 @@ test("large tool results are persisted under workspace .pilotdeck and readable b
     });
     assert.match(relative(projectRoot, storage.toolResultsDir), /^\.pilotdeck[\/\\]tool-results[\/\\]/);
 
-    const budget = new ToolResultBudget({ toolResultsDir: storage.toolResultsDir, maxResultSizeChars: 64, previewBytes: 32 });
+    const budget = new ToolResultBudget({
+      toolResultsDir: storage.toolResultsDir,
+      maxResultSizeChars: 64,
+      maxResultSizeTokens: 20,
+      previewBytes: 32,
+    });
     const message = await budget.applyToMessage({
       role: "user",
       content: [{
@@ -74,7 +79,12 @@ test("large tool result read_file aliases are short and sequential", async () =>
       sessionId: "web:s_test",
       now: () => new Date("2026-07-09T00:00:00.000Z"),
     });
-    const budget = new ToolResultBudget({ toolResultsDir: storage.toolResultsDir, maxResultSizeChars: 16, previewBytes: 8 });
+    const budget = new ToolResultBudget({
+      toolResultsDir: storage.toolResultsDir,
+      maxResultSizeChars: 16,
+      maxResultSizeTokens: 5,
+      previewBytes: 8,
+    });
 
     const first = await budget.applyToMessage({
       role: "user",
