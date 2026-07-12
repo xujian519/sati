@@ -69,7 +69,7 @@ test("tool text under token budget remains inline even when over legacy byte thr
   }
 });
 
-test("tool text over token budget is persisted with expanded read_file preview", async () => {
+test("tool text over token budget is persisted with expanded grep-first preview", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pilotdeck-tool-result-token-ref-"));
   try {
     const budget = new ToolResultBudget({
@@ -96,7 +96,8 @@ test("tool text over token budget is persisted with expanded read_file preview",
 
     const openai = buildOpenAIRequest(requestWith({ ...applied, content: [ref] }, "call-over-token-budget"), model);
     const openaiTool = openai.messages.find((message) => message.role === "tool");
-    assert.match(String(openaiTool?.content), /limit: 100/);
+    assert.match(String(openaiTool?.content), /grep\(\{ pattern: "<keyword>", path: ".*refs\/result-0001\.txt"/);
+    assert.match(String(openaiTool?.content), /Avoid paging through the whole file from offset 1/);
     assert.match(String(openaiTool?.content), /search candidates/);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -124,6 +125,7 @@ test("large tool error references preserve error semantics for model replay", as
     const openai = buildOpenAIRequest(requestWith(applied), model);
     const openaiTool = openai.messages.find((message) => message.role === "tool");
     assert.match(String(openaiTool?.content), /Tool result preview only/);
+    assert.match(String(openaiTool?.content), /grep\(\{ pattern: "<keyword>", path: ".*refs\/result-0001\.txt"/);
     assert.match(String(openaiTool?.content), /read_file\(\{ file_path: ".*refs\/result-0001\.txt"/);
 
     const anthropic = buildAnthropicRequest(requestWith(applied), model);
@@ -161,6 +163,7 @@ test("multibyte truncated tool result references advertise read_file access", as
 
     const openai = buildOpenAIRequest(requestWith({ ...applied, content: [ref] }), model);
     const openaiTool = openai.messages.find((message) => message.role === "tool");
+    assert.match(String(openaiTool?.content), /grep/);
     assert.match(String(openaiTool?.content), /read_file/);
     assert.match(String(openaiTool?.content), /refs\/result-0001\.txt/);
     assert.doesNotMatch(String(openaiTool?.content), /read_tool_result/);
