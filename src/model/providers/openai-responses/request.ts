@@ -8,6 +8,7 @@ import type {
   CanonicalModelRequest,
 } from "../../protocol/canonical.js";
 import { flattenToolResultBlockText } from "../../protocol/toolResultContent.js";
+import { messageContent } from "../../protocol/clone.js";
 import { normalizeOpenAISchema } from "../openai/schema.js";
 import { resolveThinkingPlan, throwIfUnsupportedThinkingPlan } from "../../thinking/registry.js";
 import { formatToolResultReferenceText } from "../toolResultReferenceText.js";
@@ -112,6 +113,7 @@ export function buildOpenAIResponsesRequest(
 function toResponsesInputItems(message: CanonicalMessage): OpenAIResponsesInputItem[] {
   const items: OpenAIResponsesInputItem[] = [];
   const normalContent: CanonicalContentBlock[] = [];
+  const content = messageContent(message);
 
   const flushContent = () => {
     if (normalContent.length === 0) return;
@@ -122,7 +124,7 @@ function toResponsesInputItems(message: CanonicalMessage): OpenAIResponsesInputI
     normalContent.length = 0;
   };
 
-  for (const block of message.content) {
+  for (const block of content) {
     if (block.type === "tool_call") {
       flushContent();
       items.push({
