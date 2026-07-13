@@ -1153,6 +1153,7 @@
     "connected": "Connected",
     "notConfigured": "Not configured",
     "enabled": "Enabled",
+    "loadFailed": "Unable to load IM channel status. Try again later.",
     "edit": "Edit",
     "setup": "Set Up",
     "testConnection": "Test Connection",
@@ -1187,7 +1188,9 @@
       "waitingForLogin": "WeChat waiting for QR login",
       "starting": "WeChat channel is starting",
       "expired": "WeChat login expired; scan again",
-      "failed": "WeChat channel failed to start"
+      "failed": "WeChat channel failed to start",
+      "qrPreparing": "The WeChat background channel is preparing a QR code. Try again shortly.",
+      "noRuntimeQr": "No QR code is available. Make sure the WeChat channel is enabled and waiting for login."
     },
     "wecom": {
       "title": "Enterprise WeChat / WeCom",

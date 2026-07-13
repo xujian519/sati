@@ -133,6 +133,7 @@ export class WeixinChannel implements ChannelAdapter {
   private attachmentStore: ImAttachmentStore;
   private loginRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
   private loginRecoveryPromise: Promise<void> | null = null;
+  private currentLoginQrUrl: string | undefined;
 
   constructor(options: WeixinChannelOptions = {}) {
     this.credentialsPath = options.credentialsPath ?? CREDENTIALS_PATH;
@@ -266,6 +267,7 @@ export class WeixinChannel implements ChannelAdapter {
     }
 
     this.logger?.info?.("weixin: no credentials found, starting QR login...");
+    this.currentLoginQrUrl = undefined;
     this.reportStatus("waiting_for_login", "微信等待扫码登录");
     console.log("\n╔══════════════════════════════════════════════╗");
     console.log("║  微信 iLink 登录 — 请用微信扫描二维码        ║");
@@ -284,6 +286,8 @@ export class WeixinChannel implements ChannelAdapter {
       const result: LoginResult = await this.login({
         onQRCode: (url) => {
           if (this.isStaleGeneration(generation)) return;
+          this.currentLoginQrUrl = url;
+          this.reportStatus("waiting_for_login", "微信等待扫码登录", { qrUrl: url });
           console.log(`[weixin] 扫码登录链接:\n${url}\n`);
         },
         onStatusChange: (status) => {
@@ -296,7 +300,9 @@ export class WeixinChannel implements ChannelAdapter {
           };
           console.log(`[weixin] ${labels[status] ?? status}`);
           if (status === "waiting" || status === "scanned" || status === "refreshing") {
-            this.reportStatus("waiting_for_login", `weixin: ${labels[status] ?? status}`);
+            this.reportStatus("waiting_for_login", `weixin: ${labels[status] ?? status}`, {
+              qrUrl: this.currentLoginQrUrl,
+            });
           }
         },
       });
@@ -308,12 +314,14 @@ export class WeixinChannel implements ChannelAdapter {
         accountId: result.accountId,
       };
       this.saveCredentials(creds);
+      this.currentLoginQrUrl = undefined;
       console.log(`[weixin] 登录成功! accountId: ${result.accountId}\n`);
       this.logger?.info?.(`weixin: login successful, accountId=${result.accountId}`);
       this.startPollingWithCredentials(creds);
     } catch (e) {
       if (this.isStaleGeneration(generation)) return;
       const message = formatWeixinError(e);
+      this.currentLoginQrUrl = undefined;
       this.logger?.error?.(`weixin: QR login failed: ${e}`);
       console.error(`[weixin] 登录失败: ${e}`);
       this.reportStatus("failed", "weixin: QR login failed", { error: message });
@@ -328,7 +336,7 @@ export class WeixinChannel implements ChannelAdapter {
   private reportStatus(
     state: "starting" | "connected" | "waiting_for_login" | "expired" | "failed" | "stopped",
     message: string,
-    details: { accountId?: string; error?: string } = {},
+    details: { accountId?: string; error?: string; qrUrl?: string } = {},
   ): void {
     this.reportChannelStatus?.(this.channelKey, { state, message, ...details });
   }

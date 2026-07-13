@@ -34,6 +34,7 @@ type GatewayStatus = {
       message?: string;
       accountId?: string;
       error?: string;
+      qrUrl?: string;
       updatedAt?: string;
     } | null;
   };
@@ -51,25 +52,29 @@ type GatewayStatus = {
 
 type TestResult = { ok: boolean; message?: string; error?: string } | null;
 type WeComAccessPolicy = 'open' | 'allowlist' | 'disabled';
+type FetchGatewayStatusOptions = { showLoading?: boolean };
+type RefreshGatewayStatus = (options?: FetchGatewayStatusOptions) => Promise<GatewayStatus | null>;
 
 function useGatewayStatus() {
   const [status, setStatus] = useState<GatewayStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetch_ = useCallback(async () => {
-    setLoading(true);
+  const fetch_ = useCallback<RefreshGatewayStatus>(async ({ showLoading = false } = {}) => {
+    if (showLoading) setLoading(true);
     try {
       const res = await authenticatedFetch('/api/gateway/status');
       const data = await res.json();
       setStatus(data);
+      return data;
     } catch {
-      setStatus(null);
+      if (showLoading) setStatus(null);
+      return null;
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { void fetch_(); }, [fetch_]);
+  useEffect(() => { void fetch_({ showLoading: true }); }, [fetch_]);
 
   useEffect(() => {
     const state = status?.weixin?.runtime?.state;
@@ -441,12 +446,38 @@ function FeishuSection({ status, onSaved }: { status: GatewayStatus['feishu']; o
 
 // ─── Weixin Section ──────────────────────────────────────────────────────────
 
-function WeixinSection({ status, onSaved }: { status: GatewayStatus['weixin']; onSaved: () => void }) {
+const WEIXIN_QR_PREPARE_TIMEOUT_MS = 30_000;
+
+function isWeixinRuntimeCurrent(
+  runtime: GatewayStatus['weixin']['runtime'] | undefined | null,
+  requestedAt: string | null,
+): boolean {
+  if (!requestedAt) return true;
+  if (!runtime?.updatedAt) return false;
+  const runtimeUpdatedAt = Date.parse(runtime.updatedAt);
+  const requestStartedAt = Date.parse(requestedAt);
+  return Number.isFinite(runtimeUpdatedAt)
+    && Number.isFinite(requestStartedAt)
+    && runtimeUpdatedAt >= requestStartedAt;
+}
+
+function readWeixinRuntimeQr(
+  status: GatewayStatus['weixin'] | undefined | null,
+  requestedAt: string | null = null,
+): string | null {
+  if (!status?.enabled || status.runtime?.state !== 'waiting_for_login') return null;
+  if (!isWeixinRuntimeCurrent(status.runtime, requestedAt)) return null;
+  return status.runtime.qrUrl ?? null;
+}
+
+function WeixinSection({ status, refreshStatus }: { status: GatewayStatus['weixin']; refreshStatus: RefreshGatewayStatus }) {
   const { t } = useTranslation('settings');
   const [phase, setPhase] = useState<'idle' | 'loading-qr' | 'scanning' | 'success' | 'error'>('idle');
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [error, setError] = useState('');
   const pollRef = useRef<number | null>(null);
+  const prepareTimeoutRef = useRef<number | null>(null);
+  const requestedAtRef = useRef<string | null>(null);
   const runtimeState = status.enabled ? status.runtime?.state : undefined;
   const runtimeLabel =
     runtimeState === 'waiting_for_login'
@@ -471,46 +502,128 @@ function WeixinSection({ status, onSaved }: { status: GatewayStatus['weixin']; o
           ? 'green'
           : 'muted';
 
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
+  const clearPoll = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
   }, []);
+
+  const clearPrepareTimeout = useCallback(() => {
+    if (prepareTimeoutRef.current) {
+      clearTimeout(prepareTimeoutRef.current);
+      prepareTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearLoginTimers = useCallback(() => {
+    clearPoll();
+    clearPrepareTimeout();
+  }, [clearPoll, clearPrepareTimeout]);
+
+  const beginStatusPoll = useCallback(() => {
+    clearLoginTimers();
+    pollRef.current = window.setInterval(async () => {
+      const latest = await refreshStatus();
+      const next = latest?.weixin;
+      if (!next) return;
+
+      const nextRuntimeState = next.enabled ? next.runtime?.state : undefined;
+      const requestStartedAt = requestedAtRef.current;
+      const nextQrUrl = readWeixinRuntimeQr(next, requestStartedAt);
+      if (nextQrUrl) {
+        clearPrepareTimeout();
+        setQrUrl(nextQrUrl);
+        setPhase('scanning');
+      }
+
+      if (next.hasCredentials || nextRuntimeState === 'connected') {
+        clearLoginTimers();
+        setPhase('success');
+        return;
+      }
+
+      if (
+        (nextRuntimeState === 'failed' || nextRuntimeState === 'expired' || nextRuntimeState === 'stopped')
+        && isWeixinRuntimeCurrent(next.runtime, requestStartedAt)
+      ) {
+        clearLoginTimers();
+        setError(next.runtime?.error || next.runtime?.message || t('gateway.weixin.noRuntimeQr'));
+        setPhase('error');
+      }
+    }, 2000);
+  }, [clearLoginTimers, clearPrepareTimeout, refreshStatus, t]);
+
+  const showQrAndPoll = useCallback((url: string) => {
+    clearPrepareTimeout();
+    setQrUrl(url);
+    setPhase('scanning');
+    beginStatusPoll();
+  }, [beginStatusPoll, clearPrepareTimeout]);
+
+  useEffect(() => clearLoginTimers, [clearLoginTimers]);
+
+  useEffect(() => {
+    if (phase !== 'loading-qr' && phase !== 'scanning') return;
+
+    const requestStartedAt = requestedAtRef.current;
+    const nextQrUrl = readWeixinRuntimeQr(status, requestStartedAt);
+    if (nextQrUrl && nextQrUrl !== qrUrl) {
+      clearPrepareTimeout();
+      setQrUrl(nextQrUrl);
+      setPhase('scanning');
+    }
+
+    if (status.hasCredentials || runtimeState === 'connected') {
+      clearLoginTimers();
+      setPhase('success');
+      return;
+    }
+
+    if (
+      (runtimeState === 'failed' || runtimeState === 'expired' || runtimeState === 'stopped')
+      && isWeixinRuntimeCurrent(status.runtime, requestStartedAt)
+    ) {
+      clearLoginTimers();
+      setError(status.runtime?.error || status.runtime?.message || t('gateway.weixin.noRuntimeQr'));
+      setPhase('error');
+    }
+  }, [clearLoginTimers, clearPrepareTimeout, phase, qrUrl, runtimeState, status, t]);
 
   const startQRLogin = async () => {
     setPhase('loading-qr');
     setError('');
     setQrUrl(null);
+    requestedAtRef.current = null;
+    clearLoginTimers();
     try {
-      const res = await authenticatedFetch('/api/gateway/weixin/qr');
+      const currentQrUrl = readWeixinRuntimeQr(status);
+      if (currentQrUrl) {
+        showQrAndPoll(currentQrUrl);
+        return;
+      }
+
+      const refreshed = await refreshStatus();
+      const refreshedQrUrl = readWeixinRuntimeQr(refreshed?.weixin);
+      if (refreshedQrUrl) {
+        showQrAndPoll(refreshedQrUrl);
+        return;
+      }
+
+      const res = await authenticatedFetch('/api/gateway/weixin/qr-begin', { method: 'POST' });
       const data = await res.json();
       if (!data.ok) {
         setPhase('error');
-        setError(data.error || 'Failed to get QR code');
+        setError(data.error || t('gateway.weixin.qrPreparing'));
         return;
       }
-      setQrUrl(data.qrUrl);
-      setPhase('scanning');
-
-      // Start polling for login result
-      pollRef.current = window.setInterval(async () => {
-        try {
-          const pollRes = await authenticatedFetch('/api/gateway/weixin/qr-poll');
-          const pollData = await pollRes.json();
-          if (pollData.pending) return;
-          if (pollRef.current) clearInterval(pollRef.current);
-          pollRef.current = null;
-          if (pollData.ok) {
-            setPhase('success');
-            onSaved();
-          } else {
-            setPhase('error');
-            setError(pollData.error || 'Login failed');
-          }
-        } catch {
-          // Network error, keep polling
-        }
-      }, 2000);
+      requestedAtRef.current = data.requestedAt || new Date().toISOString();
+      beginStatusPoll();
+      prepareTimeoutRef.current = window.setTimeout(() => {
+        clearPoll();
+        setError(t('gateway.weixin.qrPreparing'));
+        setPhase('error');
+      }, WEIXIN_QR_PREPARE_TIMEOUT_MS);
     } catch (err: any) {
       setPhase('error');
       setError(err.message);
@@ -519,8 +632,9 @@ function WeixinSection({ status, onSaved }: { status: GatewayStatus['weixin']; o
 
   const handleDisable = async () => {
     try {
+      clearLoginTimers();
       await authenticatedFetch('/api/gateway/weixin/disable', { method: 'POST' });
-      onSaved();
+      void refreshStatus();
     } catch { /* ignore */ }
   };
 
@@ -605,7 +719,8 @@ function WeixinSection({ status, onSaved }: { status: GatewayStatus['weixin']; o
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+                    clearLoginTimers();
+                    requestedAtRef.current = null;
                     setPhase('idle');
                   }}
                 >
@@ -1012,10 +1127,18 @@ export default function GatewaySettingsTab() {
   const { t } = useTranslation('settings');
   const { status, loading, refresh } = useGatewayStatus();
 
-  if (loading || !status) {
+  if (loading && !status) {
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!status) {
+    return (
+      <div className="flex items-center justify-center py-16 text-xs text-muted-foreground">
+        {t('gateway.loadFailed')}
       </div>
     );
   }
@@ -1026,7 +1149,7 @@ export default function GatewaySettingsTab() {
         {t('gateway.description')}
       </p>
       <FeishuSection status={status.feishu} onSaved={refresh} />
-      <WeixinSection status={status.weixin} onSaved={refresh} />
+      <WeixinSection status={status.weixin} refreshStatus={refresh} />
       <WeComSection status={status.wecom} onSaved={refresh} />
     </div>
   );

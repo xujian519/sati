@@ -17,6 +17,7 @@ export type ChannelRuntimeStatus = {
   message?: string;
   accountId?: string;
   error?: string;
+  qrUrl?: string;
 };
 
 export type ChannelRuntimeStatusUpdate = {
@@ -24,6 +25,7 @@ export type ChannelRuntimeStatusUpdate = {
   message?: string;
   accountId?: string;
   error?: string;
+  qrUrl?: string;
 };
 
 export type ChannelRuntimeStatusSnapshot = {
@@ -74,6 +76,7 @@ export function createChannelRuntimeStatusReporter(pilotHome: string): ChannelRu
           ...(update.message ? { message: update.message } : {}),
           ...(update.accountId ? { accountId: update.accountId } : {}),
           ...(update.error ? { error: update.error } : {}),
+          ...(update.qrUrl ? { qrUrl: update.qrUrl } : {}),
         },
       },
     };

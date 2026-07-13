@@ -21,7 +21,10 @@ test("WeixinChannel.start returns while QR login is waiting", async (t) => {
   const updates: Array<{ channelKey: GatewayChannelKey; update: ChannelRuntimeStatusUpdate }> = [];
   const channel = new WeixinChannel({
     credentialsPath: join(tempDir, "weixin-credentials.json"),
-    loginWithQR: async () => new Promise(() => undefined),
+    loginWithQR: async ({ onQRCode }) => {
+      onQRCode?.("https://wechat.example/qr");
+      return new Promise(() => undefined);
+    },
   });
 
   const handle = await Promise.race([
@@ -38,6 +41,13 @@ test("WeixinChannel.start returns while QR login is waiting", async (t) => {
       entry.channelKey === "weixin" && entry.update.state === "waiting_for_login"
     ),
   );
+  assert.ok(
+    updates.some((entry) =>
+      entry.channelKey === "weixin"
+      && entry.update.state === "waiting_for_login"
+      && entry.update.qrUrl === "https://wechat.example/qr"
+    ),
+  );
 
   await (handle as Awaited<ReturnType<WeixinChannel["start"]>>).stop("test");
 });
@@ -52,10 +62,12 @@ test("channel runtime status reporter persists the latest channel state", async 
   report("weixin", {
     state: "waiting_for_login",
     message: "微信等待扫码登录",
+    qrUrl: "https://wechat.example/qr",
   });
 
   const snapshot = readChannelRuntimeStatusSnapshot(pilotHome);
   assert.equal(snapshot.channels.weixin.channelKey, "weixin");
   assert.equal(snapshot.channels.weixin.state, "waiting_for_login");
   assert.equal(snapshot.channels.weixin.message, "微信等待扫码登录");
+  assert.equal(snapshot.channels.weixin.qrUrl, "https://wechat.example/qr");
 });
