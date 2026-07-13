@@ -26,6 +26,7 @@ import type {
 import { isReadOnlySession } from '../../../types/app';
 import { api } from '../../../utils/api';
 import MainContentStateView from './subcomponents/MainContentStateView';
+import ConversationSwitcher from './subcomponents/ConversationSwitcher';
 import ErrorBoundary from './ErrorBoundary';
 
 const AlwaysOnV2 = React.lazy(() => import('../../main-content-v2/AlwaysOnV2'));
@@ -97,6 +98,7 @@ function MainContent({
   onSessionNotProcessing,
   onSessionActivityBump,
   processingSessions,
+  unreadSessionIds,
   onReplaceTemporarySession,
   onNavigateToSession,
   onStartNewSession,
@@ -363,8 +365,11 @@ function MainContent({
           onSessionNotProcessing={onSessionNotProcessing}
           onSessionActivityBump={onSessionActivityBump}
           processingSessions={processingSessions}
+          unreadSessionIds={unreadSessionIds}
           onReplaceTemporarySession={onReplaceTemporarySession}
           onNavigateToSession={onNavigateToSession}
+          onStartNewSession={onStartNewSession}
+          onSelectSession={onSelectSession}
           onShowSettings={onShowSettings}
           externalMessageUpdate={externalMessageUpdate}
           autoExpandTools={autoExpandTools}
@@ -422,7 +427,7 @@ function MainContent({
 type SplitBodyProps = {
   projects: Project[];
   selectedProject: Project | null;
-  selectedSession: any;
+  selectedSession: ProjectSession | null;
   activeTab: string;
   shouldShowTasksTab: boolean;
   tasksEnabled: boolean;
@@ -443,9 +448,12 @@ type SplitBodyProps = {
     sessionId: string,
     optimisticTitle?: string,
   ) => void;
-  processingSessions: any;
+  processingSessions: Set<string>;
+  unreadSessionIds: Set<string>;
   onReplaceTemporarySession: any;
   onNavigateToSession: (sessionId: string) => void;
+  onStartNewSession: MainContentProps['onStartNewSession'];
+  onSelectSession: MainContentProps['onSelectSession'];
   onShowSettings: any;
   externalMessageUpdate: any;
   autoExpandTools: any;
@@ -489,8 +497,11 @@ function SplitBody(props: SplitBodyProps) {
     onSessionNotProcessing,
     onSessionActivityBump,
     processingSessions,
+    unreadSessionIds,
     onReplaceTemporarySession,
     onNavigateToSession,
+    onStartNewSession,
+    onSelectSession,
     onShowSettings,
     externalMessageUpdate,
     autoExpandTools,
@@ -678,10 +689,6 @@ function SplitBody(props: SplitBodyProps) {
     && !editorExpanded
     && !isMobile
     && !assistantVisible;
-  const assistantTitle = selectedSession?.title
-    || selectedSession?.summary
-    || 'PilotDeck Assistant';
-
   return (
     <div
       ref={isFiles && showChat ? filesSplitContainerRef : undefined}
@@ -780,16 +787,27 @@ function SplitBody(props: SplitBodyProps) {
         aria-hidden={!showChat || (isFiles && !assistantVisible)}
       >
         {isFiles ? (
-          <div className="flex h-12 flex-shrink-0 items-center gap-2 border-b border-neutral-200 px-3 dark:border-neutral-800">
-            <MessageSquare className="h-4 w-4 flex-shrink-0 text-neutral-500 dark:text-neutral-400" strokeWidth={1.8} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[12px] font-medium text-neutral-700 dark:text-neutral-300">
-                {assistantTitle}
-              </p>
-              <p className="truncate text-[10px] text-neutral-400 dark:text-neutral-500">
-                {t('filesWorkbench.assistant')}
-              </p>
-            </div>
+          <div className="relative z-50 flex h-12 flex-shrink-0 items-center gap-1 border-b border-neutral-200 px-2 dark:border-neutral-800">
+            {selectedProject ? (
+              <ConversationSwitcher
+                project={selectedProject}
+                selectedSession={selectedSession}
+                processingSessions={processingSessions}
+                unreadSessionIds={unreadSessionIds}
+                onSelectSession={(session) => {
+                  if (onSelectSession) {
+                    onSelectSession(selectedProject, session.id, session, {
+                      preserveActiveTab: true,
+                    });
+                    return;
+                  }
+                  onNavigateToSession(session.id);
+                }}
+                onNewSession={() => onStartNewSession(selectedProject, {
+                  preserveActiveTab: true,
+                })}
+              />
+            ) : null}
             <button
               type="button"
               onClick={() => {

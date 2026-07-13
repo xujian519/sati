@@ -2,6 +2,24 @@
 
 final result: passed
 
+## Files assistant conversation switcher follow-up
+
+- Reference: `/var/folders/xt/0thdvc4d0kb_165pd393wz1c0000gn/T/TemporaryItems/NSIRD_screencaptureui_5f748N/截屏2026-07-13 17.52.26.png`
+- Implementation: `design-qa/conversation-switcher-panel-open.png`
+- Combined comparison: `design-qa/conversation-switcher-comparison.png`
+- Result: the compact assistant title is now the project-scoped conversation switcher. Its popover provides search, a new-conversation action, recent conversations, selected state, processing/unread status, relative activity time, and full-title tooltips while keeping the existing assistant proportions and visual language.
+
+### Conversation switcher behavior checks
+
+- Switching between two existing conversations kept Files selected and replaced only the assistant transcript.
+- The open `config.yaml` editor tab remained mounted across conversation changes; editor and explorer state did not reset.
+- Creating a new conversation stayed in Files and retained the open artifact.
+- Draft text was independently restored for two conversations, then removed after the QA run.
+- Chat scroll positions are keyed by project and conversation; bottom-follow and mid-transcript reading positions are restored independently.
+- The assistant collapse/reopen control remained functional and did not close the active file.
+- At 1000 × 800 the assistant opened as an overlay and the switcher popover remained fully inside the viewport.
+- Keyboard Escape closed the popover, and the browser console reported no runtime errors.
+
 ## File explorer collapse icon follow-up
 
 - Reference: `/var/folders/xt/0thdvc4d0kb_165pd393wz1c0000gn/T/TemporaryItems/NSIRD_screencaptureui_iiL3HH/截屏2026-07-13 17.45.00.png`
@@ -34,6 +52,6 @@ The implementation follows the approved workbench direction: the project/session
 ## Known repository-level checks
 
 - `vite build`: passed (existing CSS minifier warnings remain).
-- Targeted Vitest: 2 files, 9 tests passed.
-- Targeted ESLint: 0 errors; three pre-existing warnings remain in touched files.
+- Targeted Vitest: 3 files, 9 tests passed.
+- Targeted ESLint: 0 errors; six pre-existing warnings remain in touched files.
 - Full TypeScript check remains blocked by the repository's existing duplicate React type definitions and unrelated baseline errors. Filtering the output to the touched components showed only the same global Lucide/React JSX type incompatibility.

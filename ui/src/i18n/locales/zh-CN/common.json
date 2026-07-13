@@ -38,7 +38,17 @@
     "assistant": "助手",
     "collapseAssistant": "收起助手",
     "openAssistant": "打开助手",
-    "resizeAssistant": "调整助手宽度"
+    "resizeAssistant": "调整助手宽度",
+    "conversations": {
+      "switchConversation": "切换对话",
+      "newConversation": "新建对话",
+      "searchPlaceholder": "搜索对话…",
+      "recentConversations": "最近对话",
+      "running": "智能体正在运行",
+      "unread": "未读消息",
+      "noResults": "没有找到对话",
+      "recentOnly": "仅显示最近加载的对话"
+    }
   },
   "skillsTab": {
     "pickProject": "选一个项目来管理它的技能。",

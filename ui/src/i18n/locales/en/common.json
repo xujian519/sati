@@ -38,7 +38,17 @@
     "assistant": "Assistant",
     "collapseAssistant": "Collapse assistant",
     "openAssistant": "Open assistant",
-    "resizeAssistant": "Resize assistant"
+    "resizeAssistant": "Resize assistant",
+    "conversations": {
+      "switchConversation": "Switch conversation",
+      "newConversation": "New conversation",
+      "searchPlaceholder": "Search conversations…",
+      "recentConversations": "Recent conversations",
+      "running": "Agent is running",
+      "unread": "Unread messages",
+      "noResults": "No conversations found",
+      "recentOnly": "Showing recently loaded conversations"
+    }
   },
   "skillsTab": {
     "pickProject": "Open a project to manage its skills.",

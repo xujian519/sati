@@ -24,6 +24,7 @@ import {
 } from '../../types/app';
 import { api } from '../../utils/api';
 import { resolveMarkdownFileHref } from '../chat/utils/resolveMarkdownFileHref';
+import type { SessionNavigationOptions } from '../main-content/types/types';
 import SidebarV2 from './SidebarV2';
 import MainAreaV2 from './MainAreaV2';
 import { ConnectionBanner } from '../ui/ConnectionBanner';
@@ -519,7 +520,12 @@ export default function AppShellV2() {
   );
 
   const handleSelectSession = useCallback(
-    (project: Project, sessId: string, fallbackSession?: ProjectSession) => {
+    (
+      project: Project,
+      sessId: string,
+      fallbackSession?: ProjectSession,
+      options?: SessionNavigationOptions,
+    ) => {
       setUnreadSessionIds((previous) => {
         if (!previous.has(sessId)) return previous;
         const next = new Set(previous);
@@ -537,7 +543,9 @@ export default function AppShellV2() {
       } else {
         navigate(`/session/${sessId}`);
       }
-      setActiveTab('chat');
+      if (!options?.preserveActiveTab) {
+        setActiveTab('chat');
+      }
     },
     [handleProjectSelect, handleSessionSelect, navigate, selectedProject?.name, setActiveTab],
   );
@@ -563,14 +571,14 @@ export default function AppShellV2() {
   );
 
   const handleStartNewSession = useCallback(
-    (project: Project | null) => {
+    (project: Project | null, options?: SessionNavigationOptions) => {
       if (project) {
         handleNewSession(project);
         navigate(`/p/${encodeURIComponent(project.name)}`);
-        setActiveTab('chat');
+        setActiveTab(options?.preserveActiveTab ? 'files' : 'chat');
       } else if (selectedProject) {
         handleNewSession(selectedProject);
-        setActiveTab('chat');
+        setActiveTab(options?.preserveActiveTab ? 'files' : 'chat');
       } else {
         // No project context yet — land on /, MainContent's empty state
         // will prompt the user to create or pick a project.
@@ -675,12 +683,13 @@ export default function AppShellV2() {
           onSessionNotProcessing={markSessionAsNotProcessing}
           onSessionActivityBump={bumpSessionActivity}
           processingSessions={processingSessions}
+          unreadSessionIds={unreadSessionIds}
           onReplaceTemporarySession={handleReplaceTemporarySession}
           onNavigateToSession={(sid: string) => {
             setSelectedSession((prev) => prev?.id === sid ? prev : { id: sid } as ProjectSession);
             navigate(`/session/${sid}`);
           }}
-          onStartNewSession={handleNewSession}
+          onStartNewSession={handleStartNewSession}
           onSelectSession={handleSelectSession}
           onShowSettings={onShowSettings}
           onSelectProjectByName={(name: string) => {

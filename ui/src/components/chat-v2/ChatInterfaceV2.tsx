@@ -15,7 +15,7 @@ import { useChatRealtimeHandlers } from '../chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../chat/hooks/useChatComposerState';
 import { getThinkingModeAvailability } from '../chat/constants/thinkingModeAvailability';
 import { useSessionStore } from '../../stores/useSessionStore';
-import { safeLocalStorage } from '../chat/utils/chatStorage';
+import { getDraftInputStorageKey, safeLocalStorage } from '../chat/utils/chatStorage';
 import { useSessionWatch } from '../../hooks/useSessionWatch';
 import MessagesPaneV2 from './MessagesPaneV2';
 import ComposerV2 from './ComposerV2';
@@ -391,10 +391,11 @@ function ChatInterfaceV2({
         : message.type === 'user'
           ? message.content || ''
           : '';
+      const forkDraftStorageKey = getDraftInputStorageKey(selectedProject.name, newSessionId);
       if (forkDraft) {
-        safeLocalStorage.setItem(`draft_input_${selectedProject.name}`, forkDraft);
+        safeLocalStorage.setItem(forkDraftStorageKey, forkDraft);
       } else {
-        safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
+        safeLocalStorage.removeItem(forkDraftStorageKey);
       }
 
       onNavigateToSession?.(newSessionId);
