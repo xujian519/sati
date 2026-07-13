@@ -1,0 +1,4 @@
+interface:
+  display_name: "Word Documents"
+  short_description: "Create, edit, review, and verify Word DOCX files"
+  default_prompt: "Use $docx to create or improve a professional Word document and verify the final layout."
