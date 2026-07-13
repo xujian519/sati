@@ -23,6 +23,7 @@ type CodeEditorHeaderProps = {
   onSave: () => void;
   onToggleFullscreen: () => void;
   onClose: () => void;
+  showClose?: boolean;
   labels: {
     showingChanges: string;
     editMarkdown: string;
@@ -58,6 +59,7 @@ export default function CodeEditorHeader({
   onSave,
   onToggleFullscreen,
   onClose,
+  showClose = true,
   labels,
 }: CodeEditorHeaderProps) {
   const saveTitle = saveSuccess ? labels.saved : saving ? labels.saving : labels.save;
@@ -180,9 +182,11 @@ export default function CodeEditorHeader({
           </button>
         ) : null}
 
-        <button type="button" onClick={onClose} className={iconBtn} title={labels.close}>
-          <X className="h-3.5 w-3.5" strokeWidth={1.75} />
-        </button>
+        {showClose ? (
+          <button type="button" onClick={onClose} className={iconBtn} title={labels.close}>
+            <X className="h-3.5 w-3.5" strokeWidth={1.75} />
+          </button>
+        ) : null}
       </div>
     </div>
   );

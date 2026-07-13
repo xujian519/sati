@@ -15,6 +15,7 @@ type CodeEditorBinaryFileProps = {
   onToggleFullscreen: () => void;
   title: string;
   message: string;
+  headerPrefix?: ReactNode;
 };
 
 type BlobSource = 'raw' | 'office-pdf';
@@ -597,6 +598,7 @@ export default function CodeEditorBinaryFile({
   onToggleFullscreen,
   title,
   message,
+  headerPrefix,
 }: CodeEditorBinaryFileProps) {
   const { t } = useTranslation('codeEditor');
   const iconBtn =
@@ -661,16 +663,18 @@ export default function CodeEditorBinaryFile({
             )}
           </button>
         )}
-        <button type="button" onClick={onClose} className={iconBtn} title={t('actions.close')}>
-          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.75}
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        </button>
+        {!headerPrefix ? (
+          <button type="button" onClick={onClose} className={iconBtn} title={t('actions.close')}>
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.75}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -678,6 +682,7 @@ export default function CodeEditorBinaryFile({
   if (isSidebar) {
     return (
       <div className="flex h-full w-full flex-col bg-white dark:bg-neutral-950">
+        {headerPrefix}
         {headerTopBar}
         {previewContent}
       </div>
@@ -699,6 +704,7 @@ export default function CodeEditorBinaryFile({
   return (
     <div className={containerClassName}>
       <div className={innerClassName}>
+        {headerPrefix}
         {headerTopBar}
         {previewContent}
       </div>

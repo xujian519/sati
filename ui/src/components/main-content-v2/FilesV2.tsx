@@ -36,6 +36,9 @@ import {
 type FilesV2Props = {
   selectedProject: Project | null;
   onFileOpen?: (filePath: string) => void;
+  activeFilePath?: string | null;
+  onFileRename?: (oldPath: string, newPath: string) => void;
+  onFileDelete?: (deletedPath: string) => void;
   onClose?: () => void;
   canAddToChat?: boolean;
 };
@@ -88,6 +91,9 @@ function flatten(
 export default function FilesV2({
   selectedProject,
   onFileOpen,
+  activeFilePath,
+  onFileRename,
+  onFileDelete,
   onClose,
   canAddToChat = true,
 }: FilesV2Props) {
@@ -112,6 +118,12 @@ export default function FilesV2({
     setInlineEdit(null);
     setUploadMenuOpen(false);
   }, [selectedProject?.name]);
+
+  useEffect(() => {
+    if (activeFilePath !== undefined) {
+      setActivePath(activeFilePath);
+    }
+  }, [activeFilePath]);
 
   const setFolderInputRef = useCallback((el: HTMLInputElement | null) => {
     folderInputRef.current = el;
@@ -233,6 +245,9 @@ export default function FilesV2({
             oldPath: inlineEdit.path,
             newName: trimmed,
           });
+          const slashIndex = inlineEdit.path.lastIndexOf('/');
+          const parentPath = slashIndex >= 0 ? inlineEdit.path.slice(0, slashIndex + 1) : '';
+          onFileRename?.(inlineEdit.path, `${parentPath}${trimmed}`);
         } else {
           const parentPath = inlineEdit.parentPath || '';
           await api.createFile(projectName, {
@@ -254,7 +269,7 @@ export default function FilesV2({
       }
       setInlineEdit(null);
     },
-    [inlineEdit, projectName, refreshFiles, selectedProject],
+    [inlineEdit, onFileRename, projectName, refreshFiles, selectedProject],
   );
 
   const handleInlineKeyDown = useCallback(
@@ -339,12 +354,16 @@ export default function FilesV2({
           path: node.path,
           type: node.type === 'directory' ? 'directory' : 'file',
         });
+        onFileDelete?.(node.path);
+        setActivePath((previous) => (
+          previous === node.path || previous?.startsWith(`${node.path}/`) ? null : previous
+        ));
         await refreshFiles();
       } catch (error) {
         console.error('Delete failed:', error);
       }
     },
-    [closeContextMenu, projectName, refreshFiles, selectedProject],
+    [closeContextMenu, onFileDelete, projectName, refreshFiles, selectedProject],
   );
 
   const handleCopyPath = useCallback(
@@ -358,6 +377,7 @@ export default function FilesV2({
   const handleOpen = useCallback(
     (node: FileTreeNode) => {
       closeContextMenu();
+      setActivePath(node.path);
       onFileOpen?.(node.path);
     },
     [closeContextMenu, onFileOpen],

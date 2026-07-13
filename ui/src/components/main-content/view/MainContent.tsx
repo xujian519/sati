@@ -106,9 +106,10 @@ function MainContent({
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
 
   const {
+    editorTabs,
+    activeEditorTabId,
+    activeFilePath,
     editingFile,
-    canGoBack,
-    parentFile,
     editorWidth,
     editorExpanded,
     hasManualWidth,
@@ -116,7 +117,11 @@ function MainContent({
     handleFileOpen,
     handlePreviewFileOpen,
     handleFileGoBack,
-    handleCloseEditor,
+    handleTabSelect,
+    handleTabClose,
+    handleTabDirtyChange,
+    handleFileRename,
+    handleFileDelete,
     handleToggleEditorExpand,
     handleResizeStart,
   } = useEditorSidebar({
@@ -360,23 +365,27 @@ function MainContent({
           handleOpenExecutionSession={handleOpenExecutionSession}
           editorExpanded={editorExpanded}
           hasEditor={editingFile !== null}
+          activeFilePath={activeFilePath}
+          onFileRename={handleFileRename}
+          onFileDelete={handleFileDelete}
           onSelectProjectByName={onSelectProjectByName}
         />
 
         {selectedProject && (
           <EditorSidebar
-            editingFile={editingFile}
+            editorTabs={editorTabs}
+            activeEditorTabId={activeEditorTabId}
             isMobile={isMobile}
             editorExpanded={editorExpanded}
             editorWidth={editorWidth}
             hasManualWidth={hasManualWidth}
             resizeHandleRef={resizeHandleRef}
             onResizeStart={handleResizeStart}
-            onCloseEditor={handleCloseEditor}
+            onTabSelect={handleTabSelect}
+            onTabClose={handleTabClose}
+            onTabDirtyChange={handleTabDirtyChange}
             onToggleEditorExpand={handleToggleEditorExpand}
             onPreviewFileOpen={handlePreviewFileOpen}
-            canGoBack={canGoBack}
-            parentFile={parentFile}
             onGoBack={handleFileGoBack}
             projectPath={selectedProject.path}
             fillSpace={activeTab === 'files'}
@@ -440,6 +449,9 @@ type SplitBodyProps = {
   handleOpenExecutionSession: (projectKey: string, runId: string, projectName?: string) => void;
   editorExpanded: boolean;
   hasEditor: boolean;
+  activeFilePath: string | null;
+  onFileRename: (oldPath: string, newPath: string) => void;
+  onFileDelete: (deletedPath: string) => void;
   onSelectProjectByName?: (projectName: string) => void;
 };
 
@@ -479,6 +491,9 @@ function SplitBody(props: SplitBodyProps) {
     handleOpenExecutionSession,
     editorExpanded,
     hasEditor,
+    activeFilePath,
+    onFileRename,
+    onFileDelete,
     onSelectProjectByName,
   } = props;
 
@@ -701,6 +716,9 @@ function SplitBody(props: SplitBodyProps) {
                 key={selectedProject?.name ?? ''}
                 selectedProject={selectedProject}
                 onFileOpen={handleFileOpen}
+                activeFilePath={activeFilePath}
+                onFileRename={onFileRename}
+                onFileDelete={onFileDelete}
                 onClose={() => setActiveTab('chat')}
                 canAddToChat={!isReadOnlySession(selectedSession)}
               />

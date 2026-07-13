@@ -1,7 +1,7 @@
 import { EditorView } from '@codemirror/view';
 import { unifiedMergeView } from '@codemirror/merge';
 import type { Extension } from '@codemirror/state';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCodeEditorDocument } from '../hooks/useCodeEditorDocument';
 import { useCodeEditorSettings } from '../hooks/useCodeEditorSettings';
@@ -29,6 +29,9 @@ type CodeEditorProps = {
   canGoBack?: boolean;
   parentFileName?: string | null;
   onGoBack?: () => void;
+  headerPrefix?: ReactNode;
+  isActive?: boolean;
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 export default function CodeEditor({
@@ -43,6 +46,9 @@ export default function CodeEditor({
   canGoBack = false,
   parentFileName = null,
   onGoBack,
+  headerPrefix,
+  isActive = true,
+  onDirtyChange,
 }: CodeEditorProps) {
   const { t } = useTranslation('codeEditor');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -67,6 +73,7 @@ export default function CodeEditor({
     saveSuccess,
     saveError,
     isBinary,
+    isDirty,
     projectName,
     handleSave,
     handleDownload,
@@ -74,6 +81,14 @@ export default function CodeEditor({
     file,
     projectPath,
   });
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  useEffect(() => {
+    setShowDiff(Boolean(file.diffInfo));
+  }, [file.diffInfo]);
 
   const isMarkdownFile = useMemo(() => {
     const extension = file.name.split('.').pop()?.toLowerCase();
@@ -162,6 +177,7 @@ export default function CodeEditor({
     onGoBack,
     canGoBack,
     dependency: content,
+    enabled: isActive,
   });
 
   if (loading) {
@@ -170,6 +186,7 @@ export default function CodeEditor({
         isDarkMode={isDarkMode}
         isSidebar={isSidebar}
         loadingText={t('loading', { fileName: file.name })}
+        headerPrefix={headerPrefix}
       />
     );
   }
@@ -183,6 +200,7 @@ export default function CodeEditor({
         errorMessage={loadError}
         onRetry={reload}
         onClose={onClose}
+        headerPrefix={headerPrefix}
         labels={{
           title: t('loadError.title'),
           description: t('loadError.description', { fileName: file.name }),
@@ -204,6 +222,7 @@ export default function CodeEditor({
         onToggleFullscreen={() => setIsFullscreen((previous) => !previous)}
         title={t('binaryFile.title', 'Binary File')}
         message={t('binaryFile.message', 'The file "{{fileName}}" cannot be displayed in the text editor because it is a binary file.', { fileName: file.name })}
+        headerPrefix={headerPrefix}
       />
     );
   }
@@ -225,6 +244,7 @@ export default function CodeEditor({
       <style>{getEditorStyles(isDarkMode)}</style>
       <div className={outerContainerClassName}>
         <div className={innerContainerClassName}>
+          {headerPrefix}
           <CodeEditorHeader
             file={file}
             isSidebar={isSidebar}
@@ -243,6 +263,7 @@ export default function CodeEditor({
             onSave={handleSave}
             onToggleFullscreen={() => setIsFullscreen((previous) => !previous)}
             onClose={onClose}
+            showClose={!headerPrefix}
             labels={{
               showingChanges: t('header.showingChanges'),
               editMarkdown: t('actions.editMarkdown'),
