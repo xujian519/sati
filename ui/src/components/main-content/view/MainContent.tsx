@@ -1,5 +1,13 @@
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  FileText,
+  FolderOpen,
+  MessageSquare,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+} from 'lucide-react';
 import ChatInterfaceV2 from '../../chat-v2/ChatInterfaceV2';
 import PluginTabContent from '../../plugins/view/PluginTabContent';
 import { cn } from '../../../lib/utils.js';
@@ -51,10 +59,14 @@ type TasksSettingsContextValue = {
 
 type MainContentToast = { kind: 'error' | 'info'; text: string } | null;
 
-const FILES_CHAT_DEFAULT_WIDTH = 460;
-const FILES_CHAT_MIN_WIDTH = 320;
-const FILES_TREE_MIN_WIDTH = 280;
-const FILES_TREE_ONLY_WIDTH = 300;
+const FILES_EXPLORER_DEFAULT_WIDTH = 300;
+const FILES_EXPLORER_MIN_WIDTH = 240;
+const FILES_EXPLORER_MAX_WIDTH = 420;
+const FILES_ASSISTANT_DEFAULT_WIDTH = 380;
+const FILES_ASSISTANT_MIN_WIDTH = 320;
+const FILES_ASSISTANT_MAX_WIDTH = 480;
+const FILES_ARTIFACT_MIN_WIDTH = 480;
+const FILES_NARROW_BREAKPOINT = 1040;
 
 async function readJsonPayload<T>(response: Response): Promise<T | null> {
   try {
@@ -369,28 +381,25 @@ function MainContent({
           onFileRename={handleFileRename}
           onFileDelete={handleFileDelete}
           onSelectProjectByName={onSelectProjectByName}
+          isMobile={isMobile}
+          editorSidebarProps={{
+            editorTabs,
+            activeEditorTabId,
+            isMobile,
+            editorExpanded,
+            editorWidth,
+            hasManualWidth,
+            resizeHandleRef,
+            onResizeStart: handleResizeStart,
+            onTabSelect: handleTabSelect,
+            onTabClose: handleTabClose,
+            onTabDirtyChange: handleTabDirtyChange,
+            onToggleEditorExpand: handleToggleEditorExpand,
+            onPreviewFileOpen: handlePreviewFileOpen,
+            onGoBack: handleFileGoBack,
+            projectPath: selectedProject?.path,
+          }}
         />
-
-        {selectedProject && (
-          <EditorSidebar
-            editorTabs={editorTabs}
-            activeEditorTabId={activeEditorTabId}
-            isMobile={isMobile}
-            editorExpanded={editorExpanded}
-            editorWidth={editorWidth}
-            hasManualWidth={hasManualWidth}
-            resizeHandleRef={resizeHandleRef}
-            onResizeStart={handleResizeStart}
-            onTabSelect={handleTabSelect}
-            onTabClose={handleTabClose}
-            onTabDirtyChange={handleTabDirtyChange}
-            onToggleEditorExpand={handleToggleEditorExpand}
-            onPreviewFileOpen={handlePreviewFileOpen}
-            onGoBack={handleFileGoBack}
-            projectPath={selectedProject.path}
-            fillSpace={activeTab === 'files'}
-          />
-        )}
       </div>
       {toast ? (
         <div
@@ -453,9 +462,12 @@ type SplitBodyProps = {
   onFileRename: (oldPath: string, newPath: string) => void;
   onFileDelete: (deletedPath: string) => void;
   onSelectProjectByName?: (projectName: string) => void;
+  isMobile: boolean;
+  editorSidebarProps: React.ComponentProps<typeof EditorSidebar>;
 };
 
 function SplitBody(props: SplitBodyProps) {
+  const { t } = useTranslation();
   const {
     projects,
     selectedProject,
@@ -495,12 +507,14 @@ function SplitBody(props: SplitBodyProps) {
     onFileRename,
     onFileDelete,
     onSelectProjectByName,
+    isMobile,
+    editorSidebarProps,
   } = props;
 
   // Render-mode taxonomy:
   //   - 'chat':    Agent surface. No session shows the welcome composer;
   //                existing sessions show the transcript.
-  //   - 'split':   Files tab only. Chat on the left, file tree/editor on right.
+  //   - 'workbench': Files tab only. Explorer left, artifact center, assistant right.
   //   - 'tool':    Always-On / Dashboard / Memory / Tasks / Shell / Git /
   //                plugin tabs. Tool fills the whole main area, no chat
   //                alongside — matches the legacy single-pane layout users
@@ -526,52 +540,74 @@ function SplitBody(props: SplitBodyProps) {
   const renderTasksAsTool = activeTab === 'tasks' && shouldShowTasksTab;
   const isFiles = activeTab === 'files';
   const filesSplitContainerRef = useRef<HTMLDivElement | null>(null);
-  const [filesChatWidth, setFilesChatWidth] = useState(FILES_CHAT_DEFAULT_WIDTH);
-  const [isFilesSplitResizing, setIsFilesSplitResizing] = useState(false);
-
-  const clampFilesChatWidth = useCallback((width: number, containerWidth: number) => {
-    const maxWidth = Math.max(FILES_CHAT_MIN_WIDTH, containerWidth - FILES_TREE_MIN_WIDTH);
-    return Math.min(Math.max(width, FILES_CHAT_MIN_WIDTH), maxWidth);
-  }, []);
+  const [filesExplorerWidth, setFilesExplorerWidth] = useState(FILES_EXPLORER_DEFAULT_WIDTH);
+  const [filesAssistantWidth, setFilesAssistantWidth] = useState(FILES_ASSISTANT_DEFAULT_WIDTH);
+  const [filesResizeTarget, setFilesResizeTarget] = useState<'explorer' | 'assistant' | null>(null);
+  const [explorerCollapsed, setExplorerCollapsed] = useState(false);
+  const [assistantCollapsed, setAssistantCollapsed] = useState(false);
+  const [assistantOverlayOpen, setAssistantOverlayOpen] = useState(false);
+  const [workbenchWidth, setWorkbenchWidth] = useState(0);
+  const isNarrowWorkbench = workbenchWidth > 0 && workbenchWidth < FILES_NARROW_BREAKPOINT;
 
   useEffect(() => {
-    if (!isFiles) return;
+    if (!isFiles) return undefined;
     const container = filesSplitContainerRef.current;
-    if (!container) return;
-    const containerWidth = container.getBoundingClientRect().width;
-    if (hasEditor) {
-      setFilesChatWidth(FILES_CHAT_DEFAULT_WIDTH);
-    } else {
-      setFilesChatWidth(Math.max(FILES_CHAT_MIN_WIDTH, containerWidth - FILES_TREE_ONLY_WIDTH));
-    }
-  }, [hasEditor, isFiles]);
+    if (!container) return undefined;
 
-  const handleFilesSplitResizeStart = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (!isFiles) {
-      return;
-    }
+    const updateWidth = () => setWorkbenchWidth(container.getBoundingClientRect().width);
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [isFiles]);
 
-    setIsFilesSplitResizing(true);
+  useEffect(() => {
+    if (!isNarrowWorkbench) setAssistantOverlayOpen(false);
+  }, [isNarrowWorkbench]);
+
+  const handleFilesResizeStart = useCallback((
+    target: 'explorer' | 'assistant',
+    event: React.MouseEvent<HTMLDivElement>,
+  ) => {
+    if (!isFiles) return;
+    setFilesResizeTarget(target);
     event.preventDefault();
   }, [isFiles]);
 
   useEffect(() => {
-    if (!isFilesSplitResizing) {
-      return undefined;
-    }
+    if (!filesResizeTarget) return undefined;
 
     const handleMouseMove = (event: globalThis.MouseEvent) => {
       const container = filesSplitContainerRef.current;
-      if (!container) {
+      if (!container) return;
+
+      const rect = container.getBoundingClientRect();
+      if (filesResizeTarget === 'explorer') {
+        const available = rect.width - filesAssistantWidth - FILES_ARTIFACT_MIN_WIDTH;
+        const maxWidth = Math.max(
+          FILES_EXPLORER_MIN_WIDTH,
+          Math.min(FILES_EXPLORER_MAX_WIDTH, available),
+        );
+        setFilesExplorerWidth(Math.min(
+          Math.max(event.clientX - rect.left, FILES_EXPLORER_MIN_WIDTH),
+          maxWidth,
+        ));
         return;
       }
 
-      const rect = container.getBoundingClientRect();
-      setFilesChatWidth(clampFilesChatWidth(event.clientX - rect.left, rect.width));
+      const available = rect.width - filesExplorerWidth - FILES_ARTIFACT_MIN_WIDTH;
+      const maxWidth = Math.max(
+        FILES_ASSISTANT_MIN_WIDTH,
+        Math.min(FILES_ASSISTANT_MAX_WIDTH, available),
+      );
+      setFilesAssistantWidth(Math.min(
+        Math.max(rect.right - event.clientX, FILES_ASSISTANT_MIN_WIDTH),
+        maxWidth,
+      ));
     };
 
     const handleMouseUp = () => {
-      setIsFilesSplitResizing(false);
+      setFilesResizeTarget(null);
     };
 
     document.addEventListener('mousemove', handleMouseMove);
@@ -585,7 +621,7 @@ function SplitBody(props: SplitBodyProps) {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
-  }, [clampFilesChatWidth, isFilesSplitResizing]);
+  }, [filesAssistantWidth, filesExplorerWidth, filesResizeTarget]);
 
   const renderTool = () => {
     if (activeTab === 'shell') {
@@ -630,11 +666,26 @@ function SplitBody(props: SplitBodyProps) {
 
   const showFullScreenTool = isFullScreenTool && (activeTab !== 'tasks' || shouldShowTasksTab);
   const showChat = !showFullScreenTool;
+  const assistantVisible = isFiles
+    && showChat
+    && !editorExpanded
+    && !isMobile
+    && !assistantCollapsed
+    && (!isNarrowWorkbench || assistantOverlayOpen);
+  const assistantIsOverlay = assistantVisible && isNarrowWorkbench;
+  const showAssistantRail = isFiles
+    && showChat
+    && !editorExpanded
+    && !isMobile
+    && !assistantVisible;
+  const assistantTitle = selectedSession?.title
+    || selectedSession?.summary
+    || 'PilotDeck Assistant';
 
   return (
     <div
       ref={isFiles && showChat ? filesSplitContainerRef : undefined}
-      className={cn('flex min-h-0 min-w-0 flex-1 overflow-hidden', editorExpanded && 'hidden')}
+      className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
     >
       {/* Full-screen tool surface (Memory, Dashboard, Always-On, etc.) */}
       {showFullScreenTool && (
@@ -645,24 +696,114 @@ function SplitBody(props: SplitBodyProps) {
         </div>
       )}
 
-      {/* Agent surface — kept mounted even when a full-screen tool is active
-          so that the session store, WebSocket subscriptions, and streaming
-          state survive tab switches. Hidden via CSS to avoid layout cost. */}
+      {/* Files workbench explorer. On mobile it yields to the opened artifact. */}
+      {isFiles && showChat && !editorExpanded && (!isMobile || !hasEditor) ? (
+        explorerCollapsed && !isMobile ? (
+          <div className="flex h-full w-11 flex-shrink-0 flex-col items-center border-r border-neutral-200 bg-neutral-50/60 py-2 dark:border-neutral-800 dark:bg-neutral-900/40">
+            <button
+              type="button"
+              onClick={() => setExplorerCollapsed(false)}
+              className="flex h-8 w-8 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-200/70 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+              title={t('filesWorkbench.openExplorer')}
+              aria-label={t('filesWorkbench.openExplorer')}
+            >
+              <PanelLeftOpen className="h-4 w-4" strokeWidth={1.8} />
+            </button>
+            <FolderOpen className="mt-3 h-4 w-4 text-neutral-400 dark:text-neutral-500" strokeWidth={1.7} />
+          </div>
+        ) : (
+          <>
+            <div
+              className="flex h-full min-w-0 flex-shrink-0 flex-col overflow-hidden border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950"
+              style={isMobile ? { width: '100%' } : { width: filesExplorerWidth }}
+            >
+              <Suspense fallback={<TabSkeleton />}>
+                <FilesV2
+                  key={selectedProject?.name ?? ''}
+                  selectedProject={selectedProject}
+                  onFileOpen={handleFileOpen}
+                  activeFilePath={activeFilePath}
+                  onFileRename={onFileRename}
+                  onFileDelete={onFileDelete}
+                  onClose={isMobile ? () => setActiveTab('chat') : () => setExplorerCollapsed(true)}
+                  canAddToChat={!isReadOnlySession(selectedSession)}
+                />
+              </Suspense>
+            </div>
+            {!isMobile ? (
+              <div
+                onMouseDown={(event) => handleFilesResizeStart('explorer', event)}
+                className="group relative z-20 w-px flex-shrink-0 cursor-col-resize bg-neutral-200 transition-colors hover:bg-neutral-400 dark:bg-neutral-800 dark:hover:bg-neutral-600"
+                title={t('filesWorkbench.resizeExplorer')}
+              >
+                <div className="absolute inset-y-0 left-1/2 w-3 -translate-x-1/2" />
+                <div className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-neutral-400 opacity-0 transition-opacity group-hover:opacity-100 dark:bg-neutral-600" />
+              </div>
+            ) : null}
+          </>
+        )
+      ) : null}
+
+      {/* Artifact canvas — the visual center and primary surface in Files. */}
+      {isFiles && showChat && (hasEditor || !isMobile) ? (
+        <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden bg-neutral-50/40 dark:bg-neutral-950">
+          {hasEditor && selectedProject ? (
+            <EditorSidebar {...editorSidebarProps} workspaceMode />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-400 shadow-sm dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-500">
+                <FileText className="h-5 w-5" strokeWidth={1.6} />
+              </div>
+              <p className="text-[14px] font-medium text-neutral-700 dark:text-neutral-300">
+                {t('filesWorkbench.openFileTitle')}
+              </p>
+              <p className="mt-1 max-w-64 text-[12px] leading-5 text-neutral-400 dark:text-neutral-500">
+                {t('filesWorkbench.openFileDescription')}
+              </p>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {/* Agent surface stays mounted so streaming state survives tab switches. */}
       <div
+        key="agent-surface"
         className={cn(
-          'flex min-h-0 min-w-0 flex-col',
-          showChat
-            ? (isFiles ? 'flex-shrink-0' : 'flex-1')
-            : 'invisible absolute h-0 w-0 overflow-hidden',
+          'flex min-h-0 min-w-0 flex-col bg-white dark:bg-neutral-950',
+          !showChat && 'invisible absolute h-0 w-0 overflow-hidden',
+          showChat && !isFiles && 'flex-1',
+          assistantVisible && !assistantIsOverlay && 'flex-shrink-0 border-l border-neutral-200 dark:border-neutral-800',
+          assistantIsOverlay && 'absolute inset-y-0 right-0 z-40 border-l border-neutral-200 shadow-2xl dark:border-neutral-800',
+          isFiles && !assistantVisible && 'invisible absolute h-0 w-0 overflow-hidden',
         )}
-        style={showChat && isFiles
-          ? {
-              minWidth: `${FILES_CHAT_MIN_WIDTH}px`,
-              width: `min(${filesChatWidth}px, calc(100% - ${FILES_TREE_MIN_WIDTH}px))`,
-            }
-          : undefined}
-        aria-hidden={!showChat}
+        style={assistantVisible ? { width: filesAssistantWidth } : undefined}
+        aria-hidden={!showChat || (isFiles && !assistantVisible)}
       >
+        {isFiles ? (
+          <div className="flex h-12 flex-shrink-0 items-center gap-2 border-b border-neutral-200 px-3 dark:border-neutral-800">
+            <MessageSquare className="h-4 w-4 flex-shrink-0 text-neutral-500 dark:text-neutral-400" strokeWidth={1.8} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[12px] font-medium text-neutral-700 dark:text-neutral-300">
+                {assistantTitle}
+              </p>
+              <p className="truncate text-[10px] text-neutral-400 dark:text-neutral-500">
+                {t('filesWorkbench.assistant')}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (isNarrowWorkbench) setAssistantOverlayOpen(false);
+                else setAssistantCollapsed(true);
+              }}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+              title={t('filesWorkbench.collapseAssistant')}
+              aria-label={t('filesWorkbench.collapseAssistant')}
+            >
+              <PanelRightClose className="h-4 w-4" strokeWidth={1.8} />
+            </button>
+          </div>
+        ) : null}
         <ErrorBoundary showDetails>
           <ChatInterfaceV2
             selectedProject={selectedProject}
@@ -690,41 +831,48 @@ function SplitBody(props: SplitBodyProps) {
             externalMessageUpdate={externalMessageUpdate}
             onShowAllTasks={tasksEnabled ? () => setActiveTab('tasks') : null}
             forceWelcome={false}
-            onExitWelcome={() => setActiveTab('chat')}
+            onExitWelcome={isFiles ? undefined : () => setActiveTab('chat')}
+            compact={isFiles}
           />
         </ErrorBoundary>
       </div>
 
-      {/* Right half — only mounted when the user is on Files (chat-paired
-          file tree + editor). */}
-      {isFiles && showChat ? (
-        <>
+      {assistantVisible && !assistantIsOverlay ? (
+        <div
+          onMouseDown={(event) => handleFilesResizeStart('assistant', event)}
+          className="group absolute inset-y-0 z-30 w-px cursor-col-resize bg-neutral-200 transition-colors hover:bg-neutral-400 dark:bg-neutral-800 dark:hover:bg-neutral-600"
+          style={{ right: filesAssistantWidth }}
+          title={t('filesWorkbench.resizeAssistant')}
+        >
+          <div className="absolute inset-y-0 left-1/2 w-3 -translate-x-1/2" />
+          <div className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-neutral-400 opacity-0 transition-opacity group-hover:opacity-100 dark:bg-neutral-600" />
+        </div>
+      ) : null}
+
+      {showAssistantRail ? (
+        <div className="flex h-full w-11 flex-shrink-0 flex-col items-center border-l border-neutral-200 bg-neutral-50/60 py-2 dark:border-neutral-800 dark:bg-neutral-900/40">
           <div
-            onMouseDown={handleFilesSplitResizeStart}
-            className="group relative z-10 w-px flex-shrink-0 cursor-col-resize bg-neutral-200 transition-colors hover:bg-neutral-400 dark:bg-neutral-800 dark:hover:bg-neutral-600"
-            title="Drag to resize"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-200/70 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
           >
-            <div className="absolute inset-y-0 left-1/2 w-3 -translate-x-1/2" />
-            <div className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-neutral-400 opacity-0 transition-opacity group-hover:opacity-100 dark:bg-neutral-600" />
+            <button
+              type="button"
+              onClick={() => {
+                if (isNarrowWorkbench) setAssistantOverlayOpen(true);
+                else setAssistantCollapsed(false);
+              }}
+              title={t('filesWorkbench.openAssistant')}
+              aria-label={t('filesWorkbench.openAssistant')}
+            >
+              <PanelRightOpen className="h-4 w-4" strokeWidth={1.8} />
+            </button>
           </div>
-          <div
-            className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-            style={{ minWidth: `${FILES_TREE_MIN_WIDTH}px` }}
-          >
-            <Suspense fallback={<TabSkeleton />}>
-              <FilesV2
-                key={selectedProject?.name ?? ''}
-                selectedProject={selectedProject}
-                onFileOpen={handleFileOpen}
-                activeFilePath={activeFilePath}
-                onFileRename={onFileRename}
-                onFileDelete={onFileDelete}
-                onClose={() => setActiveTab('chat')}
-                canAddToChat={!isReadOnlySession(selectedSession)}
-              />
-            </Suspense>
-          </div>
-        </>
+          <MessageSquare className="mt-3 h-4 w-4 text-neutral-400 dark:text-neutral-500" strokeWidth={1.7} />
+        </div>
+      ) : null}
+
+      {/* Outside Files, retain the existing chat + editor pairing. */}
+      {!isFiles && selectedProject && hasEditor ? (
+        <EditorSidebar {...editorSidebarProps} />
       ) : null}
     </div>
   );

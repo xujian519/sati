@@ -103,6 +103,7 @@ export default function AppShellV2() {
 
   const { isMobile } = useDeviceSettings({ trackPWA: false });
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
+  const filesAutoCollapsedSidebarRef = useRef(false);
   const { ws, sendMessage, latestMessage, isConnected, subscribe } = useWebSocket();
   const wasConnectedRef = useRef(false);
   const [unreadSessionIds, setUnreadSessionIds] = useState<Set<string>>(() => new Set());
@@ -370,10 +371,35 @@ export default function AppShellV2() {
     if (isMobile) {
       setSidebarOpen(false);
     } else {
+      filesAutoCollapsedSidebarRef.current = false;
       setDesktopSidebarOpen(false);
     }
   }, [isMobile, setSidebarOpen]);
-  const onOpenDesktopSidebar = useCallback(() => setDesktopSidebarOpen(true), []);
+  const onOpenDesktopSidebar = useCallback(() => {
+    filesAutoCollapsedSidebarRef.current = false;
+    setDesktopSidebarOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile) {
+      filesAutoCollapsedSidebarRef.current = false;
+      return;
+    }
+
+    if (activeTab === 'files') {
+      setDesktopSidebarOpen((open) => {
+        if (!open) return open;
+        filesAutoCollapsedSidebarRef.current = true;
+        return false;
+      });
+      return;
+    }
+
+    if (filesAutoCollapsedSidebarRef.current) {
+      filesAutoCollapsedSidebarRef.current = false;
+      setDesktopSidebarOpen(true);
+    }
+  }, [activeTab, isMobile]);
 
   // Project creation wizard (local existing / new local / github clone). The
   // sidebar's Projects-section "+" opens this; row-level "+" is for new sessions.

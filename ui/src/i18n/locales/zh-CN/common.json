@@ -30,6 +30,16 @@
     "skills": "技能",
     "cron": "Cron"
   },
+  "filesWorkbench": {
+    "openFileTitle": "打开文件开始工作",
+    "openFileDescription": "从文件树选择文件。在这里查看文件不会把它发送给模型。",
+    "openExplorer": "打开文件树",
+    "resizeExplorer": "调整文件树宽度",
+    "assistant": "助手",
+    "collapseAssistant": "收起助手",
+    "openAssistant": "打开助手",
+    "resizeAssistant": "调整助手宽度"
+  },
   "skillsTab": {
     "pickProject": "选一个项目来管理它的技能。",
     "generalChat": "通用聊天 — 仅显示用户级技能",

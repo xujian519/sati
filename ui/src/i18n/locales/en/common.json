@@ -30,6 +30,16 @@
     "skills": "Skills",
     "cron": "Cron"
   },
+  "filesWorkbench": {
+    "openFileTitle": "Open a file to start working",
+    "openFileDescription": "Select a file from the explorer. Viewing it here does not send it to the model.",
+    "openExplorer": "Open file explorer",
+    "resizeExplorer": "Resize file explorer",
+    "assistant": "Assistant",
+    "collapseAssistant": "Collapse assistant",
+    "openAssistant": "Open assistant",
+    "resizeAssistant": "Resize assistant"
+  },
   "skillsTab": {
     "pickProject": "Open a project to manage its skills.",
     "generalChat": "General chat — user-scope skills only",

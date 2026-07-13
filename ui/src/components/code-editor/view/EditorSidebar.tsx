@@ -22,6 +22,7 @@ type EditorSidebarProps = {
   onGoBack?: () => void;
   projectPath?: string;
   fillSpace?: boolean;
+  workspaceMode?: boolean;
 };
 
 // Keep enough of the Files split visible so the editor cannot cover the chat
@@ -48,6 +49,7 @@ export default function EditorSidebar({
   onGoBack,
   projectPath,
   fillSpace,
+  workspaceMode = false,
 }: EditorSidebarProps) {
   const { t } = useTranslation('codeEditor');
   const [poppedOut, setPoppedOut] = useState(false);
@@ -61,7 +63,7 @@ export default function EditorSidebar({
   // measured width rather than letting the editor's content influence flex
   // sizing while CodeMirror virtualizes long lines during scroll.
   useEffect(() => {
-    if (!editingFile || isMobile || poppedOut) return;
+    if (!editingFile || isMobile || poppedOut || workspaceMode) return;
 
     const updateWidth = () => {
       if (!containerRef.current) return;
@@ -98,7 +100,7 @@ export default function EditorSidebar({
       window.removeEventListener('resize', updateWidth);
       resizeObserver.disconnect();
     };
-  }, [editingFile, fillSpace, hasManualWidth, isMobile, poppedOut, editorExpanded, editorWidth]);
+  }, [editingFile, fillSpace, hasManualWidth, isMobile, poppedOut, editorExpanded, editorWidth, workspaceMode]);
 
   if (!editingFile || !activeEditorTabId) {
     return null;
@@ -172,10 +174,10 @@ export default function EditorSidebar({
   }
 
   const useAutoFilesWidth = fillSpace && !hasManualWidth && !editorExpanded;
-  const containerClassName = editorExpanded
+  const containerClassName = editorExpanded || workspaceMode
     ? 'flex h-full min-w-0 flex-1 basis-0'
     : 'flex h-full min-w-0 flex-shrink-0';
-  const containerStyle = editorExpanded
+  const containerStyle = editorExpanded || workspaceMode
     ? undefined
     : {
         width: useAutoFilesWidth
@@ -186,7 +188,7 @@ export default function EditorSidebar({
 
   return (
     <div ref={containerRef} className={containerClassName} style={containerStyle}>
-      {!editorExpanded && (
+      {!editorExpanded && !workspaceMode && (
         <div
           ref={resizeHandleRef}
           onMouseDown={onResizeStart}
@@ -199,7 +201,9 @@ export default function EditorSidebar({
       )}
 
       <div
-        className="h-full min-w-0 flex-1 overflow-hidden border-l border-neutral-200 dark:border-neutral-800"
+        className={workspaceMode
+          ? 'h-full min-w-0 flex-1 overflow-hidden'
+          : 'h-full min-w-0 flex-1 overflow-hidden border-l border-neutral-200 dark:border-neutral-800'}
       >
         {editors}
       </div>
