@@ -13,6 +13,7 @@ import {
   FolderOpen,
   FolderPlus,
   Loader2,
+  MessageSquarePlus,
   Pencil,
   RefreshCw,
   Trash2,
@@ -27,11 +28,16 @@ import { cn } from '../../lib/utils.js';
 import { api } from '../../utils/api';
 import { copyTextToClipboard } from '../../utils/clipboard';
 import { isImeEnterEvent } from '../../utils/ime';
+import {
+  ADD_WORKSPACE_FILE_MENTION_EVENT,
+  getWorkspaceRelativePath,
+} from '../../utils/workspaceFileMention';
 
 type FilesV2Props = {
   selectedProject: Project | null;
   onFileOpen?: (filePath: string) => void;
   onClose?: () => void;
+  canAddToChat?: boolean;
 };
 
 type FlattenedNode = {
@@ -51,7 +57,7 @@ type InlineEdit =
   | { kind: 'create'; parentPath: string; type: 'file' | 'directory'; depth: number };
 
 const CONTEXT_MENU_WIDTH = 180;
-const CONTEXT_MENU_HEIGHT = 200;
+const CONTEXT_MENU_HEIGHT = 240;
 const CONTEXT_MENU_MARGIN = 8;
 
 function clampMenuPosition(x: number, y: number) {
@@ -79,7 +85,12 @@ function flatten(
   return out;
 }
 
-export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV2Props) {
+export default function FilesV2({
+  selectedProject,
+  onFileOpen,
+  onClose,
+  canAddToChat = true,
+}: FilesV2Props) {
   const { t } = useTranslation();
   const { files, loading, refreshFiles } = useFileTreeData(selectedProject);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -355,6 +366,27 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
   // --- Upload / Download / Preview ---
 
   const projectRoot = selectedProject?.fullPath || selectedProject?.path || '';
+
+  const handleAddToChat = useCallback(
+    (node: FileTreeNode) => {
+      closeContextMenu();
+      if (!canAddToChat || !selectedProject?.name || node.type !== 'file') return;
+
+      const relativePath = getWorkspaceRelativePath(node.path, projectRoot);
+      if (!relativePath) {
+        console.error('Cannot add file mention outside the current workspace:', node.path);
+        return;
+      }
+
+      window.dispatchEvent(new CustomEvent(ADD_WORKSPACE_FILE_MENTION_EVENT, {
+        detail: {
+          projectName: selectedProject.name,
+          relativePath,
+        },
+      }));
+    },
+    [canAddToChat, closeContextMenu, projectRoot, selectedProject?.name],
+  );
 
   const uploadSelectedFiles = useCallback(
     async (fileList: FileList | null) => {
@@ -882,6 +914,21 @@ export default function FilesV2({ selectedProject, onFileOpen, onClose }: FilesV
                 <ClipboardCopy className={menuIconClass} strokeWidth={1.75} />
                 {t('fileTree.context.copyPath', { defaultValue: 'Copy Path' })}
               </button>
+              {contextMenu.node.type === 'file' ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!canAddToChat}
+                  onClick={() => handleAddToChat(contextMenu.node!)}
+                  className={cn(
+                    menuItemClass,
+                    !canAddToChat && 'pointer-events-none cursor-not-allowed opacity-45',
+                  )}
+                >
+                  <MessageSquarePlus className={menuIconClass} strokeWidth={1.75} />
+                  {t('fileTree.context.addToChat', { defaultValue: 'Add to Conversation' })}
+                </button>
+              ) : null}
               <div className="my-1 border-t border-neutral-100 dark:border-neutral-800" />
               <button
                 type="button"

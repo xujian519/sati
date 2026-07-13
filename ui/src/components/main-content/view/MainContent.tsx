@@ -15,6 +15,7 @@ import type {
   Project,
   ProjectSession,
 } from '../../../types/app';
+import { isReadOnlySession } from '../../../types/app';
 import { api } from '../../../utils/api';
 import MainContentStateView from './subcomponents/MainContentStateView';
 import ErrorBoundary from './ErrorBoundary';
@@ -701,6 +702,7 @@ function SplitBody(props: SplitBodyProps) {
                 selectedProject={selectedProject}
                 onFileOpen={handleFileOpen}
                 onClose={() => setActiveTab('chat')}
+                canAddToChat={!isReadOnlySession(selectedSession)}
               />
             </Suspense>
           </div>
