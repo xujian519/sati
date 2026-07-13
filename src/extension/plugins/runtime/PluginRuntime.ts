@@ -130,7 +130,7 @@ export class PluginRuntime {
     return {
       plugins,
       commands: plugins.flatMap((plugin) => (plugin.commands ?? []).map((command) => toCommandContribution(plugin, command))),
-      skills: plugins.flatMap((plugin) => (plugin.skills ?? []).map((skill) => toSkillContribution(plugin, skill))),
+      skills: collectSkillContributions(plugins),
       outputStyles: plugins.flatMap((plugin) => plugin.outputStyles ?? []),
       hooks: loadPluginHooks(plugins),
       mcpServers: this.mcpServers(),
@@ -160,15 +160,32 @@ export class PluginRuntime {
   }
 
   async loadSkillPrompt(extensionId: string): Promise<string | undefined> {
-    for (const plugin of this.registry.list()) {
+    const plugins = sortByResolutionPriority(this.registry.list());
+
+    for (const plugin of plugins) {
       const prompt = plugin.promptContributions?.find((contribution) => contribution.name === extensionId);
       if (prompt) {
         return prompt.content;
       }
-      const skill = plugin.skills?.find((entry) => entry.name === extensionId || entry.name.endsWith(`:${extensionId}`));
+    }
+
+    for (const plugin of plugins) {
+      const skill = plugin.skills?.find((entry) => entry.name === extensionId);
       if (skill) {
         return skill.content;
       }
+    }
+
+    // Resolve namespaced plugin skills by their short name only after exact
+    // standalone names have had a chance to resolve.
+    for (const plugin of plugins) {
+      const skill = plugin.skills?.find((entry) => entry.name.endsWith(`:${extensionId}`));
+      if (skill) {
+        return skill.content;
+      }
+    }
+
+    for (const plugin of plugins) {
       const command = plugin.commands?.find((entry) => entry.name === extensionId || entry.name.endsWith(`:${extensionId}`));
       if (command) {
         return command.content;
@@ -261,3 +278,33 @@ function toSkillContribution(
   };
 }
 
+function sourcePriority(source: PilotDeckLoadedPlugin["source"]): number {
+  switch (source) {
+    case "project":
+      return 2;
+    case "global":
+      return 1;
+    case "builtin":
+    default:
+      return 0;
+  }
+}
+
+function sortByResolutionPriority(plugins: PilotDeckLoadedPlugin[]): PilotDeckLoadedPlugin[] {
+  return [...plugins].sort((a, b) => sourcePriority(b.source) - sourcePriority(a.source));
+}
+
+function collectSkillContributions(plugins: PilotDeckLoadedPlugin[]): PluginSkillContribution[] {
+  const selected = new Map<string, { contribution: PluginSkillContribution; priority: number }>();
+  for (const plugin of plugins) {
+    const priority = sourcePriority(plugin.source);
+    for (const skill of plugin.skills ?? []) {
+      const contribution = toSkillContribution(plugin, skill);
+      const existing = selected.get(contribution.name);
+      if (!existing || priority >= existing.priority) {
+        selected.set(contribution.name, { contribution, priority });
+      }
+    }
+  }
+  return [...selected.values()].map((entry) => entry.contribution);
+}
