@@ -13,6 +13,7 @@ const router = express.Router();
 const PILOT_HOME = process.env.PILOT_HOME || join(homedir(), '.pilotdeck');
 const PILOTDECK_YAML = process.env.PILOTDECK_CONFIG_PATH || join(PILOT_HOME, 'pilotdeck.yaml');
 const WEIXIN_CREDS = join(PILOT_HOME, 'weixin-credentials.json');
+const CHANNEL_RUNTIME_STATUS = join(PILOT_HOME, 'channels', 'runtime-status.json');
 
 const FEISHU_TOKEN_URL = 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal';
 const LARK_TOKEN_URL = 'https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal';
@@ -44,6 +45,16 @@ function loadYaml() {
     if (!existsSync(PILOTDECK_YAML)) return {};
     return parseYaml(readFileSync(PILOTDECK_YAML, 'utf-8')) ?? {};
   } catch { return {}; }
+}
+
+function loadChannelRuntimeStatus() {
+  try {
+    if (!existsSync(CHANNEL_RUNTIME_STATUS)) return {};
+    const parsed = JSON.parse(readFileSync(CHANNEL_RUNTIME_STATUS, 'utf-8'));
+    return parsed?.channels && typeof parsed.channels === 'object' ? parsed.channels : {};
+  } catch {
+    return {};
+  }
 }
 
 function saveYaml(config) {
@@ -120,6 +131,8 @@ router.get('/status', (_req, res) => {
     const wecom = config.adapters?.wecom ?? {};
     const wecomExtra = wecom.extra ?? {};
     const weixinEnabled = config.adapters?.weixin?.enabled === true;
+    const runtimeStatus = loadChannelRuntimeStatus();
+    const weixinRuntime = runtimeStatus.weixin ?? null;
 
     let weixinCredentials = null;
     try {
@@ -143,6 +156,7 @@ router.get('/status', (_req, res) => {
         enabled: weixinEnabled,
         hasCredentials: !!weixinCredentials,
         accountId: weixinCredentials?.accountId || null,
+        runtime: weixinRuntime,
       },
       wecom: {
         enabled: wecom.enabled === true,

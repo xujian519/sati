@@ -29,6 +29,13 @@ type GatewayStatus = {
     enabled: boolean;
     hasCredentials: boolean;
     accountId: string | null;
+    runtime?: {
+      state: 'starting' | 'connected' | 'waiting_for_login' | 'expired' | 'failed' | 'stopped';
+      message?: string;
+      accountId?: string;
+      error?: string;
+      updatedAt?: string;
+    } | null;
   };
   wecom: {
     enabled: boolean;
@@ -63,6 +70,15 @@ function useGatewayStatus() {
   }, []);
 
   useEffect(() => { void fetch_(); }, [fetch_]);
+
+  useEffect(() => {
+    const state = status?.weixin?.runtime?.state;
+    if (state !== 'starting' && state !== 'waiting_for_login') return undefined;
+    const timer = window.setInterval(() => {
+      void fetch_();
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [fetch_, status?.weixin?.runtime?.state]);
 
   return { status, loading, refresh: fetch_ };
 }
@@ -431,6 +447,29 @@ function WeixinSection({ status, onSaved }: { status: GatewayStatus['weixin']; o
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [error, setError] = useState('');
   const pollRef = useRef<number | null>(null);
+  const runtimeState = status.enabled ? status.runtime?.state : undefined;
+  const runtimeLabel =
+    runtimeState === 'waiting_for_login'
+      ? t('gateway.weixin.waitingForLogin')
+      : runtimeState === 'starting'
+        ? t('gateway.weixin.starting')
+        : runtimeState === 'expired'
+          ? t('gateway.weixin.expired')
+          : runtimeState === 'failed'
+            ? t('gateway.weixin.failed')
+            : null;
+  const statusText = runtimeLabel
+    ?? (status.enabled && status.hasCredentials
+      ? `${t('gateway.connected')}${status.accountId ? ` · ${status.accountId}` : ''}`
+      : t('gateway.notConfigured'));
+  const badgeTone =
+    runtimeState === 'waiting_for_login' || runtimeState === 'starting'
+      ? 'amber'
+      : runtimeState === 'expired' || runtimeState === 'failed'
+        ? 'red'
+        : status.enabled
+          ? 'green'
+          : 'muted';
 
   useEffect(() => {
     return () => {
@@ -496,17 +535,31 @@ function WeixinSection({ status, onSaved }: { status: GatewayStatus['weixin']; o
               <div>
                 <div className="text-[13px] font-medium text-foreground">{t('gateway.weixin.label')}</div>
                 <div className="text-xs text-muted-foreground">
-                  {status.enabled && status.hasCredentials
-                    ? `${t('gateway.connected')}${status.accountId ? ` · ${status.accountId}` : ''}`
-                    : t('gateway.notConfigured')}
+                  {statusText}
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
               {status.enabled && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-600 dark:text-green-400">
-                  <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                  {t('gateway.enabled')}
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
+                    badgeTone === 'amber' && 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+                    badgeTone === 'red' && 'bg-red-500/10 text-red-700 dark:text-red-400',
+                    badgeTone === 'green' && 'bg-green-500/10 text-green-600 dark:text-green-400',
+                    badgeTone === 'muted' && 'bg-muted text-muted-foreground',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'h-1.5 w-1.5 rounded-full',
+                      badgeTone === 'amber' && 'bg-amber-500',
+                      badgeTone === 'red' && 'bg-red-500',
+                      badgeTone === 'green' && 'bg-green-500',
+                      badgeTone === 'muted' && 'bg-muted-foreground',
+                    )}
+                  />
+                  {runtimeLabel ?? t('gateway.enabled')}
                 </span>
               )}
             </div>

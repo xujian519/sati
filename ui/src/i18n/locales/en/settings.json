@@ -1183,7 +1183,11 @@
       "relogin": "Re-login",
       "loadingQr": "Generating QR code…",
       "scanPrompt": "Open WeChat and scan the QR code to log in",
-      "loginSuccess": "Login successful — credentials saved"
+      "loginSuccess": "Login successful — credentials saved",
+      "waitingForLogin": "WeChat waiting for QR login",
+      "starting": "WeChat channel is starting",
+      "expired": "WeChat login expired; scan again",
+      "failed": "WeChat channel failed to start"
     },
     "wecom": {
       "title": "Enterprise WeChat / WeCom",

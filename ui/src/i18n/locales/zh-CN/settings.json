@@ -1177,7 +1177,11 @@
       "relogin": "重新登录",
       "loadingQr": "正在生成二维码…",
       "scanPrompt": "请打开微信扫描二维码登录",
-      "loginSuccess": "登录成功 — 凭据已保存"
+      "loginSuccess": "登录成功 — 凭据已保存",
+      "waitingForLogin": "微信等待扫码登录",
+      "starting": "微信通道正在启动",
+      "expired": "微信登录已过期，请重新扫码",
+      "failed": "微信通道启动失败"
     },
     "wecom": {
       "title": "企业微信 WeCom",
