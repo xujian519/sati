@@ -96,7 +96,7 @@ test("tool text over token budget is persisted with expanded grep-first preview"
 
     const openai = buildOpenAIRequest(requestWith({ ...applied, content: [ref] }, "call-over-token-budget"), model);
     const openaiTool = openai.messages.find((message) => message.role === "tool");
-    assert.match(String(openaiTool?.content), /grep\(\{ pattern: "<keyword>", path: ".*refs\/result-0001\.txt"/);
+    assert.match(String(openaiTool?.content), /grep\(\{ pattern: "<keyword>", path: ".*refs\/result-0001\.txt", output_mode: "content", head_limit: 20 \}/);
     assert.match(String(openaiTool?.content), /Avoid paging through the whole file from offset 1/);
     assert.match(String(openaiTool?.content), /search candidates/);
   } finally {
@@ -125,7 +125,7 @@ test("large tool error references preserve error semantics for model replay", as
     const openai = buildOpenAIRequest(requestWith(applied), model);
     const openaiTool = openai.messages.find((message) => message.role === "tool");
     assert.match(String(openaiTool?.content), /Tool result preview only/);
-    assert.match(String(openaiTool?.content), /grep\(\{ pattern: "<keyword>", path: ".*refs\/result-0001\.txt"/);
+    assert.match(String(openaiTool?.content), /grep\(\{ pattern: "<keyword>", path: ".*refs\/result-0001\.txt", output_mode: "content", head_limit: 20 \}/);
     assert.match(String(openaiTool?.content), /read_file\(\{ file_path: ".*refs\/result-0001\.txt"/);
 
     const anthropic = buildAnthropicRequest(requestWith(applied), model);
