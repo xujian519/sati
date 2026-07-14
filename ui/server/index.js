@@ -491,8 +491,8 @@ app.use('/api/mcp-utils', authenticateToken, mcpUtilsRoutes);
 app.use('/api/commands', authenticateToken, commandsRoutes);
 
 // Skills API Routes (protected) — list/edit/install skills surfaced in the
-// top-right Skills tab. Backed by ~/.pilotdeck/skills/ and project-level
-// .pilotdeck/skills/ via PilotDeck plugin runtime.
+// top-right Skills tab. Backed by bundled skills, ~/.pilotdeck/skills/, and
+// project-level .pilotdeck/skills/ via PilotDeck plugin runtime.
 app.use('/api/skills', authenticateToken, skillsRoutes);
 
 // Settings API Routes (protected)

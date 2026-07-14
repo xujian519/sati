@@ -33,6 +33,8 @@ export type PilotDeckMcpInstructionEntry = {
 export type PluginRuntimeOptions = {
   projectRoot: string;
   pilotHome: string;
+  /** Read-only skills shipped with the active PilotDeck build. */
+  builtinSkillsRoot?: string;
   builtinPlugins?: PilotDeckLoadedPlugin[];
   builtinPluginsEnabled?: Record<string, boolean>;
 };
@@ -210,6 +212,9 @@ export class PluginRuntime {
         { path: paths.projectPluginsDir, source: "project" },
       ]),
       discoverSkillPaths([
+        ...(this.options.builtinSkillsRoot
+          ? [{ path: this.options.builtinSkillsRoot, source: "builtin" as const }]
+          : []),
         { path: paths.globalSkillsDir, source: "global" },
         { path: paths.projectSkillsDir, source: "project" },
       ]),

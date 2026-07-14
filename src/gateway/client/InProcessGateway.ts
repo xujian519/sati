@@ -139,7 +139,7 @@ export type InProcessGatewayOptions = {
    */
   refreshConfigBeforeTurn?: () => Promise<void>;
   /**
-   * Authoritative skill CRUD manager backed by `~/.pilotdeck/skills/`.
+   * Authoritative skill CRUD manager for built-in, user, and project skills.
    * Wired by `createLocalGateway` so every host (CLI, TUI, Web UI bridge,
    * SDK) reads and writes the same skill directory the agent loads from.
    */

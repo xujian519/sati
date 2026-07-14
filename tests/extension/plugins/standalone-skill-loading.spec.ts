@@ -49,11 +49,18 @@ test("a plugin skill directory used as the configured base never derives a paren
   );
 });
 
-test("project standalone skills override global skills without legacy aliases", async () => {
+test("standalone skill precedence is project > user > builtin without legacy aliases", async () => {
   const root = await mkdtemp(join(tmpdir(), "pilotdeck-skill-precedence-"));
   try {
     const pilotHome = join(root, "pilot-home");
     const projectRoot = join(root, "project");
+    const builtinSkillsRoot = join(root, "bundled-skills");
+    await writeSkill(
+      join(builtinSkillsRoot, "docx"),
+      "docx",
+      "Built-in DOCX skill description.",
+      "# Built-in DOCX skill",
+    );
     await writeSkill(
       join(pilotHome, "skills", "docx"),
       "docx",
@@ -81,7 +88,7 @@ test("project standalone skills override global skills without legacy aliases", 
       "# Plugin DOCX skill",
     );
 
-    const runtime = new PluginRuntime({ projectRoot, pilotHome });
+    const runtime = new PluginRuntime({ projectRoot, pilotHome, builtinSkillsRoot });
     await runtime.refresh();
 
     const docxSkills = runtime.getAllSkills().filter((skill) => skill.name.includes("docx"));
@@ -92,6 +99,22 @@ test("project standalone skills override global skills without legacy aliases", 
     assert.equal(await runtime.loadSkillPrompt("docx:..:docx"), undefined);
     assert.equal(await runtime.loadSkillPrompt("docx:docx"), undefined);
     assert.match(await runtime.loadSkillPrompt("office:docx") ?? "", /# Plugin DOCX skill/);
+
+    await rm(join(projectRoot, ".pilotdeck", "skills", "docx"), { recursive: true, force: true });
+    await runtime.refresh();
+    assert.equal(
+      runtime.getAllSkills().find((skill) => skill.name === "docx")?.description,
+      "Global DOCX skill description.",
+    );
+    assert.match(await runtime.loadSkillPrompt("docx") ?? "", /# Global DOCX skill/);
+
+    await rm(join(pilotHome, "skills", "docx"), { recursive: true, force: true });
+    await runtime.refresh();
+    assert.equal(
+      runtime.getAllSkills().find((skill) => skill.name === "docx")?.description,
+      "Built-in DOCX skill description.",
+    );
+    assert.match(await runtime.loadSkillPrompt("docx") ?? "", /# Built-in DOCX skill/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
