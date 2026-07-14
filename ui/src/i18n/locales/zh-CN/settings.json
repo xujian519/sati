@@ -1147,6 +1147,7 @@
     "connected": "已连接",
     "notConfigured": "未配置",
     "enabled": "已启用",
+    "loadFailed": "无法加载 IM 通道状态，请稍后重试",
     "edit": "编辑",
     "setup": "配置",
     "testConnection": "测试连接",
@@ -1177,7 +1178,13 @@
       "relogin": "重新登录",
       "loadingQr": "正在生成二维码…",
       "scanPrompt": "请打开微信扫描二维码登录",
-      "loginSuccess": "登录成功 — 凭据已保存"
+      "loginSuccess": "登录成功 — 凭据已保存",
+      "waitingForLogin": "微信等待扫码登录",
+      "starting": "微信通道正在启动",
+      "expired": "微信登录已过期，请重新扫码",
+      "failed": "微信通道启动失败",
+      "qrPreparing": "微信后台通道正在准备二维码，请稍后再试",
+      "noRuntimeQr": "当前没有可用二维码，请确认微信通道已启用并正在等待登录"
     },
     "wecom": {
       "title": "企业微信 WeCom",
