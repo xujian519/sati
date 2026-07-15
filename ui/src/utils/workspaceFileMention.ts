@@ -20,6 +20,13 @@ export function isWorkspaceFileMentionRequest(
 
 const normalizeSlashes = (value: string) => value.replace(/\\/g, '/');
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+export function hasWorkspaceFileMention(input: string, relativePath: string): boolean {
+  if (!input || !relativePath) return false;
+  return new RegExp(`(?:^|\\s)${escapeRegExp(relativePath)}(?=$|\\s)`).test(input);
+}
+
 const isAbsolutePath = (value: string) =>
   value.startsWith('/') || /^[A-Za-z]:\//.test(value) || value.startsWith('//');
 
@@ -71,7 +78,7 @@ export function insertWorkspaceFileMention(
   relativePath: string,
   requestedCursorPosition: number,
 ): FileMentionInsertion {
-  if (input.includes(relativePath)) {
+  if (hasWorkspaceFileMention(input, relativePath)) {
     return {
       input,
       cursorPosition: Math.max(0, Math.min(requestedCursorPosition, input.length)),

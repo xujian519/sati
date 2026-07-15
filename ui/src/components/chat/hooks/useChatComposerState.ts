@@ -687,6 +687,7 @@ export function useChatComposerState({
     handleFileMentionsKeyDown,
   } = useFileMentions({
     selectedProject,
+    mentionScopeKey: draftStorageKey,
     input,
     setInput,
     textareaRef,

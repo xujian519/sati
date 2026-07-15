@@ -4,6 +4,7 @@ import { api } from '../../../utils/api';
 import { isImeEnterEvent } from '../../../utils/ime';
 import {
   ADD_WORKSPACE_FILE_MENTION_EVENT,
+  hasWorkspaceFileMention,
   insertWorkspaceFileMention,
   isWorkspaceFileMentionRequest,
 } from '../../../utils/workspaceFileMention';
@@ -25,6 +26,7 @@ export interface MentionableFile {
 
 interface UseFileMentionsOptions {
   selectedProject: Project | null;
+  mentionScopeKey: string | null;
   input: string;
   setInput: Dispatch<SetStateAction<string>>;
   textareaRef: RefObject<HTMLTextAreaElement>;
@@ -52,7 +54,13 @@ const flattenFileTree = (files: ProjectFileNode[], basePath = ''): MentionableFi
   return flattened;
 };
 
-export function useFileMentions({ selectedProject, input, setInput, textareaRef }: UseFileMentionsOptions) {
+export function useFileMentions({
+  selectedProject,
+  mentionScopeKey,
+  input,
+  setInput,
+  textareaRef,
+}: UseFileMentionsOptions) {
   const [fileList, setFileList] = useState<MentionableFile[]>([]);
   const [fileMentions, setFileMentions] = useState<string[]>([]);
   const [filteredFiles, setFilteredFiles] = useState<MentionableFile[]>([]);
@@ -61,6 +69,7 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
   const [cursorPosition, setCursorPositionState] = useState(0);
   const [atSymbolPosition, setAtSymbolPosition] = useState(-1);
   const hasCursorPositionRef = useRef(false);
+  const wasDropdownOpenRef = useRef(false);
 
   const setCursorPosition = useCallback((position: number) => {
     hasCursorPositionRef.current = true;
@@ -119,12 +128,25 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
     };
   }, [fetchProjectFiles]);
 
+  // Cursor and mention UI state belong to a single draft. A conversation
+  // switch can keep the same project mounted, so project identity alone is
+  // not enough to prevent insertion at a previous conversation's cursor.
+  useEffect(() => {
+    setFileMentions([]);
+    setFilteredFiles([]);
+    setShowFileDropdown(false);
+    setSelectedFileIndex(-1);
+    setCursorPositionState(0);
+    setAtSymbolPosition(-1);
+    hasCursorPositionRef.current = false;
+    wasDropdownOpenRef.current = false;
+  }, [mentionScopeKey]);
+
   // Refresh whenever the @ dropdown transitions from closed → open, so
   // files created / renamed / deleted in the Files tab since the last
   // project switch show up immediately. We intentionally do NOT refetch
   // on every keystroke while the dropdown is already open — the snapshot
   // taken on open is good enough for that session of typing.
-  const wasDropdownOpenRef = useRef(false);
   useEffect(() => {
     const wasOpen = wasDropdownOpenRef.current;
     wasDropdownOpenRef.current = showFileDropdown;
@@ -169,7 +191,7 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
     if (!input || fileMentions.length === 0) {
       return [];
     }
-    return fileMentions.filter((path) => input.includes(path));
+    return fileMentions.filter((path) => hasWorkspaceFileMention(input, path));
   }, [fileMentions, input]);
 
   const sortedFileMentions = useMemo(() => {
@@ -185,7 +207,7 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
       return null;
     }
     const pattern = sortedFileMentions.map(escapeRegExp).join('|');
-    return new RegExp(`(${pattern})`, 'g');
+    return new RegExp(`((?<!\\S)(?:${pattern})(?=$|\\s))`, 'g');
   }, [sortedFileMentions]);
 
   const fileMentionSet = useMemo(() => new Set(sortedFileMentions), [sortedFileMentions]);

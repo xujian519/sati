@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getWorkspaceRelativePath,
+  hasWorkspaceFileMention,
   insertWorkspaceFileMention,
 } from './workspaceFileMention';
 
@@ -55,5 +56,19 @@ describe('insertWorkspaceFileMention', () => {
       cursorPosition: 30,
       alreadyPresent: true,
     });
+  });
+
+  it('does not mistake a longer path with the same prefix for an existing mention', () => {
+    expect(insertWorkspaceFileMention('docs/report.docx.bak', 'docs/report.docx', 20)).toEqual({
+      input: 'docs/report.docx.bak docs/report.docx ',
+      cursorPosition: 38,
+      alreadyPresent: false,
+    });
+  });
+
+  it('matches mentions only at explicit whitespace boundaries', () => {
+    expect(hasWorkspaceFileMention('Review docs/report.docx please', 'docs/report.docx')).toBe(true);
+    expect(hasWorkspaceFileMention('docs/report.docx.bak', 'docs/report.docx')).toBe(false);
+    expect(hasWorkspaceFileMention('archive/docs/report.docx', 'docs/report.docx')).toBe(false);
   });
 });
