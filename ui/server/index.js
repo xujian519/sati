@@ -584,6 +584,43 @@ app.get('/api/always-on/cron-jobs', authenticateToken, async (_req, res) => {
     }
 });
 
+app.post('/api/always-on/cron-jobs', authenticateToken, async (req, res) => {
+    try {
+        const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+        const projectKey = typeof req.body?.projectKey === 'string' ? req.body.projectKey : '';
+        const schedule = req.body?.schedule;
+        const timezone = typeof req.body?.timezone === 'string' && req.body.timezone.trim()
+            ? req.body.timezone.trim()
+            : undefined;
+
+        if (!message) {
+            res.status(400).json({ error: 'Cron message is required.' });
+            return;
+        }
+        if (!projectKey) {
+            res.status(400).json({ error: 'Cron projectKey is required.' });
+            return;
+        }
+        if (!schedule || typeof schedule !== 'object') {
+            res.status(400).json({ error: 'Cron schedule is required.' });
+            return;
+        }
+
+        const gateway = await getPilotDeckGateway();
+        const result = await gateway.cronCreate({
+            message,
+            projectKey,
+            schedule,
+            timezone,
+            channelKey: 'web',
+        });
+        res.json(result);
+    } catch (error) {
+        console.error('[always-on-cron-create] failed:', error);
+        res.status(500).json({ error: error?.message || 'cron create failed' });
+    }
+});
+
 app.post('/api/always-on/cron-jobs/:taskId/run-now', authenticateToken, async (req, res) => {
     try {
         const gateway = await getPilotDeckGateway();
