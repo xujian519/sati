@@ -16,6 +16,7 @@ import { getIntrinsicMessageKey } from '../chat/utils/messageKeys';
 import MessageRowV2 from './MessageRowV2';
 import SubagentDetailModal from './SubagentDetailModal';
 import ChatHistorySearchBar from './ChatHistorySearchBar';
+import { useRegisterChatHistorySearchControls } from './ChatHistorySearchController';
 import { useChatHistorySearch } from './useChatHistorySearch';
 import { useSubagentMessages } from './useSubagentMessages';
 import { ProcessLiveStatus, ProcessRunHeader, StreamingThinkingPreview, type ProcessTraceStep } from './ProcessTrace';
@@ -953,6 +954,7 @@ export default function MessagesPaneV2({
     loadAllMessages,
     sessionId,
   });
+  useRegisterChatHistorySearchControls(chatHistorySearch);
 
   return (
     <div className="relative min-h-0 flex-1">

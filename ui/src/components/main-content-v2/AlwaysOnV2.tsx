@@ -26,6 +26,7 @@ type AlwaysOnV2Props = {
   onSubTabChange: (tab: AlwaysOnSubTab) => void;
   onApplyWorkCycle?: (projectName: string, cycleId: string) => Promise<void>;
   onOpenExecutionSession?: (projectKey: string, runId: string, projectName?: string) => void;
+  compact?: boolean;
 };
 
 export default function AlwaysOnV2({
@@ -34,6 +35,7 @@ export default function AlwaysOnV2({
   onSubTabChange,
   onApplyWorkCycle,
   onOpenExecutionSession,
+  compact = false,
 }: AlwaysOnV2Props) {
   const { t } = useTranslation('alwaysOn');
   const [planDetail, setPlanDetail] = useState<PlanDetailTarget | null>(null);
@@ -56,7 +58,10 @@ export default function AlwaysOnV2({
   return (
     <div className="flex h-full flex-col bg-white dark:bg-neutral-950">
       {/* Sub-tab bar */}
-      <div className="flex shrink-0 gap-1 border-b border-neutral-200 px-8 pt-4 dark:border-neutral-800">
+      <div className={cn(
+        'flex shrink-0 gap-1 overflow-x-auto border-b border-neutral-200 pt-3 dark:border-neutral-800',
+        compact ? 'px-3' : 'px-8',
+      )}>
         {SUB_TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = subTab === tab.id;
@@ -91,11 +96,12 @@ export default function AlwaysOnV2({
             backLabel={t('dashboard.runDetail.backToPlans', { defaultValue: 'Back to Plans' })}
             onBack={() => setPlanDetail(null)}
             onOpenExecutionSession={onOpenExecutionSession}
+            compact={compact}
           />
         ) : subTab === 'dashboard' ? (
-          <AlwaysOnDashboard onOpenExecutionSession={onOpenExecutionSession} />
+          <AlwaysOnDashboard onOpenExecutionSession={onOpenExecutionSession} compact={compact} />
         ) : (
-          <PlansAndCronJobs onApplyWorkCycle={onApplyWorkCycle} onOpenPlanDetail={handleOpenPlanDetail} />
+          <PlansAndCronJobs onApplyWorkCycle={onApplyWorkCycle} onOpenPlanDetail={handleOpenPlanDetail} compact={compact} />
         )}
       </div>
     </div>

@@ -121,9 +121,10 @@ const COL = {
 type PlansAndCronJobsProps = {
   onApplyWorkCycle?: (projectName: string, cycleId: string) => Promise<void>;
   onOpenPlanDetail?: (planId: string, projectName: string, projectDisplayName: string, sourceRunId: string, projectKey: string) => void;
+  compact?: boolean;
 };
 
-export default function PlansAndCronJobs({ onApplyWorkCycle, onOpenPlanDetail }: PlansAndCronJobsProps) {
+export default function PlansAndCronJobs({ onApplyWorkCycle, onOpenPlanDetail, compact = false }: PlansAndCronJobsProps) {
   const { t } = useTranslation('alwaysOn');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -242,9 +243,9 @@ export default function PlansAndCronJobs({ onApplyWorkCycle, onOpenPlanDetail }:
   };
 
   return (
-    <div className="w-full space-y-5 px-8 py-5">
+    <div className={cn('w-full space-y-5 py-5', compact ? 'px-4' : 'px-8')}>
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className={cn('flex items-start justify-between gap-3', compact && 'flex-col')}>
         <div>
           <h2 className="text-[20px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
             {t('plansCron.title', { defaultValue: 'Plans' })}
@@ -431,7 +432,7 @@ export default function PlansAndCronJobs({ onApplyWorkCycle, onOpenPlanDetail }:
                             </div>
                           }
                         >
-                          <ColumnHeaders t={t} />
+                          {!compact ? <ColumnHeaders t={t} /> : null}
                           <div className="divide-y divide-neutral-100 dark:divide-neutral-900">
                             {items.map((item) => (
                               <ItemRow
@@ -440,6 +441,7 @@ export default function PlansAndCronJobs({ onApplyWorkCycle, onOpenPlanDetail }:
                                 t={t}
                                 onRefresh={refresh}
                                 onOpenPlanDetail={onOpenPlanDetail}
+                                compact={compact}
                               />
                             ))}
                           </div>
@@ -539,11 +541,13 @@ function ItemRow({
   t,
   onRefresh,
   onOpenPlanDetail,
+  compact = false,
 }: {
   item: PlanItem;
   t: (key: string, opts?: Record<string, string>) => string;
   onRefresh: () => Promise<void>;
   onOpenPlanDetail?: (planId: string, projectName: string, projectDisplayName: string, sourceRunId: string, projectKey: string) => void;
+  compact?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
 
@@ -576,9 +580,17 @@ function ItemRow({
   };
 
   return (
-    <div className="flex items-center gap-4 px-5 py-2.5 transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/40">
+    <div className={cn(
+      'transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/40',
+      compact
+        ? 'grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 px-4 py-3'
+        : 'flex items-center gap-4 px-5 py-2.5',
+    )}>
       {/* Title */}
-      <div className={cn(COL.title, 'truncate text-[13px] text-neutral-900 dark:text-neutral-100')} title={fullTitle}>
+      <div className={cn(
+        compact ? 'col-span-2 min-w-0' : COL.title,
+        'truncate text-[13px] text-neutral-900 dark:text-neutral-100',
+      )} title={fullTitle}>
         {onOpenPlanDetail ? (
           <button
             type="button"
@@ -593,32 +605,39 @@ function ItemRow({
       </div>
 
       {/* Created */}
-      <div className={cn(COL.createdAt, 'font-mono text-xxs tabular-nums text-neutral-500 dark:text-neutral-400')}>
+      <div className={cn(
+        compact ? 'w-auto' : COL.createdAt,
+        'font-mono text-xxs tabular-nums text-neutral-500 dark:text-neutral-400',
+      )}>
         {formatAbsoluteTime(createdAt)}
       </div>
 
       {/* Status */}
-      <div className={COL.status}>
+      <div className={compact ? 'w-auto justify-self-end' : COL.status}>
         <span className={cn('inline-block rounded-full px-2 py-0.5 text-[11px] font-medium', statusStyle)}>
           {statusLabel}
         </span>
       </div>
 
       {/* Actions */}
-      <div className={cn(COL.actions, 'flex items-center gap-1.5')}>
+      <div className={cn(
+        compact ? 'col-span-2 flex w-full justify-end' : COL.actions,
+        'items-center gap-1.5',
+        !compact && 'flex',
+      )}>
         {showRetry && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void handleRetry()}
-              className="inline-flex h-7 items-center rounded-md bg-blue-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-700 dark:hover:bg-blue-600"
-            >
-              {busy ? (
-                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
-              ) : (
-                t('plansCron.actions.retry', { defaultValue: 'Retry' })
-              )}
-            </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void handleRetry()}
+            className="inline-flex h-7 items-center rounded-md bg-blue-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-700 dark:hover:bg-blue-600"
+          >
+            {busy ? (
+              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
+            ) : (
+              t('plansCron.actions.retry', { defaultValue: 'Retry' })
+            )}
+          </button>
         )}
       </div>
     </div>
