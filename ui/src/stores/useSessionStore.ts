@@ -338,6 +338,8 @@ function hasSameTurnServerFinalMessage(
   if (tailIndex < 0) return false;
   const realtimeTimestamp = parseTimestampMs(realtimeMessage.timestamp);
   if (realtimeTimestamp == null) return false;
+  const realtimeText = normalizeRealtimeText(realtimeMessage.content);
+  if (!realtimeText) return false;
 
   return serverMessages.slice(tailIndex + 1).some((serverMessage) => {
     if (serverMessage.kind !== realtimeMessage.kind) return false;
@@ -347,7 +349,8 @@ function hasSameTurnServerFinalMessage(
     }
     const serverTimestamp = parseTimestampMs(serverMessage.timestamp);
     if (serverTimestamp == null) return false;
-    return serverTimestamp >= realtimeTimestamp;
+    if (serverTimestamp < realtimeTimestamp) return false;
+    return normalizeRealtimeText(serverMessage.content) === realtimeText;
   });
 }
 
@@ -436,7 +439,38 @@ function getUpsertKey(message: NormalizedMessage): string {
   return message.id;
 }
 
-function upsertRealtimeMessages(
+function isCompatibleRealtimeTextRun(a: NormalizedMessage, b: NormalizedMessage): boolean {
+  if (a.runId != null && b.runId != null) return a.runId === b.runId;
+  const hasActiveStream = a.kind === 'stream_delta' || b.kind === 'stream_delta';
+  if (!hasActiveStream) return false;
+  const aTime = parseTimestampMs(a.timestamp);
+  const bTime = parseTimestampMs(b.timestamp);
+  if (aTime == null || bTime == null) return false;
+  return Math.abs(aTime - bTime) <= 10_000;
+}
+
+function findDuplicateAssistantRealtimeTextIndex(
+  messages: NormalizedMessage[],
+  incoming: NormalizedMessage,
+): number {
+  if (incoming.kind !== 'text' || incoming.role !== 'assistant') return -1;
+  const incomingText = normalizeRealtimeText(incoming.content);
+  if (!incomingText) return -1;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const existing = messages[index];
+    const isAssistantText = existing.kind === 'text' && existing.role === 'assistant';
+    const isActiveAssistantStream = existing.kind === 'stream_delta' && String(existing.id || '').startsWith('__streaming_');
+    if (!isAssistantText && !isActiveAssistantStream) continue;
+    if (!isCompatibleRealtimeTextRun(existing, incoming)) continue;
+    if (normalizeRealtimeText(existing.content) !== incomingText) continue;
+    return index;
+  }
+
+  return -1;
+}
+
+export function upsertRealtimeMessages(
   existing: NormalizedMessage[],
   incoming: NormalizedMessage[],
 ): NormalizedMessage[] {
@@ -453,6 +487,17 @@ function upsertRealtimeMessages(
         };
         continue;
       }
+    }
+    const duplicateAssistantTextIndex = findDuplicateAssistantRealtimeTextIndex(updated, message);
+    if (duplicateAssistantTextIndex >= 0) {
+      const previousKey = getUpsertKey(updated[duplicateAssistantTextIndex]);
+      updated[duplicateAssistantTextIndex] = {
+        ...message,
+        serverTailIdAtStart: message.serverTailIdAtStart ?? updated[duplicateAssistantTextIndex].serverTailIdAtStart,
+      };
+      indexByKey.delete(previousKey);
+      indexByKey.set(getUpsertKey(message), duplicateAssistantTextIndex);
+      continue;
     }
     const key = getUpsertKey(message);
     const existingIndex = indexByKey.get(key);

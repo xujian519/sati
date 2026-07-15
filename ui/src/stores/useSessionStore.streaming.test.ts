@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { SessionProvider } from '../types/app';
+import { getDuplicateAssistantStreamTextState } from '../components/chat/hooks/useChatRealtimeHandlers';
 import {
   computeMerged,
   createRafNotifyScheduler,
   getFinalizedSubagentThinkingId,
   patchMergedStreamingMessage,
+  upsertRealtimeMessages,
   type NormalizedMessage,
   type SessionSlot,
 } from './useSessionStore';
@@ -99,10 +101,29 @@ describe('patchMergedStreamingMessage', () => {
 });
 
 describe('computeMerged', () => {
-  it('drops finalized realtime assistant text once the same turn is persisted', () => {
+  it('keeps finalized realtime assistant text until an equivalent same-turn server text is persisted', () => {
     const server = [
       textMessage('tail-before-turn', 'Previous answer', '2026-05-28T00:00:00.000Z'),
       textMessage('persisted-answer', 'Persisted answer', '2026-05-28T00:00:02.000Z'),
+    ];
+    const realtime = [
+      textMessage('text-local-final', 'Realtime answer', '2026-05-28T00:00:01.000Z', {
+        isFinal: true,
+        serverTailIdAtStart: 'tail-before-turn',
+      }),
+    ];
+
+    expect(computeMerged(server, realtime).map((message) => message.id)).toEqual([
+      'tail-before-turn',
+      'persisted-answer',
+      'text-local-final',
+    ]);
+  });
+
+  it('drops finalized realtime assistant text once equivalent same-turn text is persisted', () => {
+    const server = [
+      textMessage('tail-before-turn', 'Previous answer', '2026-05-28T00:00:00.000Z'),
+      textMessage('persisted-answer', 'Realtime answer', '2026-05-28T00:00:02.000Z'),
     ];
     const realtime = [
       textMessage('text-local-final', 'Realtime answer', '2026-05-28T00:00:01.000Z', {
@@ -134,6 +155,189 @@ describe('computeMerged', () => {
       'persisted-earlier-answer',
       'text-local-second-final',
     ]);
+  });
+});
+
+describe('getDuplicateAssistantStreamTextState', () => {
+  it('detects standalone assistant text duplicated by an active stream row', () => {
+    const incoming = textMessage('server-text', 'Hello from stream', '2026-05-28T00:00:02.000Z', {
+      runId: 'run-1',
+    });
+    const realtime = [
+      {
+        id: '__streaming_web:s_test_run-1',
+        sessionId: 'web:s_test',
+        timestamp: '2026-05-28T00:00:01.000Z',
+        provider: PROVIDER,
+        kind: 'stream_delta' as const,
+        content: 'Hello\nfrom stream',
+        runId: 'run-1',
+      },
+    ];
+
+    expect(getDuplicateAssistantStreamTextState(incoming, realtime)).toEqual({
+      isDuplicate: true,
+      hasActiveStream: true,
+      activeStreamRunId: 'run-1',
+    });
+  });
+
+  it('returns null activeStreamRunId for duplicate active stream without runId', () => {
+    const incoming = textMessage('server-text', 'Hello from stream', '2026-05-28T00:00:02.000Z', {
+      runId: 'run-1',
+    });
+    const realtime = [
+      {
+        id: '__streaming_web:s_test',
+        sessionId: 'web:s_test',
+        timestamp: '2026-05-28T00:00:01.000Z',
+        provider: PROVIDER,
+        kind: 'stream_delta' as const,
+        content: 'Hello from stream',
+      },
+    ];
+
+    expect(getDuplicateAssistantStreamTextState(incoming, realtime)).toEqual({
+      isDuplicate: true,
+      hasActiveStream: true,
+      activeStreamRunId: null,
+    });
+  });
+
+  it('does not dedupe assistant text against a different run stream', () => {
+    const incoming = textMessage('server-text', 'Hello from stream', '2026-05-28T00:00:02.000Z', {
+      runId: 'run-2',
+    });
+    const realtime = [
+      {
+        id: '__streaming_web:s_test_run-1',
+        sessionId: 'web:s_test',
+        timestamp: '2026-05-28T00:00:01.000Z',
+        provider: PROVIDER,
+        kind: 'stream_delta' as const,
+        content: 'Hello from stream',
+        runId: 'run-1',
+      },
+    ];
+
+    expect(getDuplicateAssistantStreamTextState(incoming, realtime)).toEqual({
+      isDuplicate: false,
+      hasActiveStream: false,
+    });
+  });
+
+  it('does not dedupe finalized assistant text without runId in the handler helper', () => {
+    const incoming = textMessage('incoming-text', 'Same answer', '2026-05-28T00:00:10.000Z');
+    const realtime = [
+      textMessage('existing-text', 'Same answer', '2026-05-28T00:00:01.000Z'),
+    ];
+
+    expect(getDuplicateAssistantStreamTextState(incoming, realtime)).toEqual({
+      isDuplicate: false,
+      hasActiveStream: false,
+    });
+  });
+
+  it('does not dedupe active stream text without runId outside the short time window', () => {
+    const incoming = textMessage('incoming-text', 'Same answer', '2026-05-28T00:01:00.000Z');
+    const realtime = [
+      {
+        id: '__streaming_web:s_test',
+        sessionId: 'web:s_test',
+        timestamp: '2026-05-28T00:00:01.000Z',
+        provider: PROVIDER,
+        kind: 'stream_delta' as const,
+        content: 'Same answer',
+      },
+    ];
+
+    expect(getDuplicateAssistantStreamTextState(incoming, realtime)).toEqual({
+      isDuplicate: false,
+      hasActiveStream: false,
+    });
+  });
+});
+
+describe('upsertRealtimeMessages', () => {
+  it('replaces an active stream row with duplicate standalone assistant text', () => {
+    const existing: NormalizedMessage[] = [
+      {
+        id: '__streaming_web:s_test_run-1',
+        sessionId: 'web:s_test',
+        timestamp: '2026-05-28T00:00:01.000Z',
+        provider: PROVIDER,
+        kind: 'stream_delta',
+        content: 'Final answer',
+        runId: 'run-1',
+        serverTailIdAtStart: 'tail-before-turn',
+      },
+    ];
+    const incoming = textMessage('server-text', 'Final answer', '2026-05-28T00:00:02.000Z', {
+      runId: 'run-1',
+    });
+
+    const updated = upsertRealtimeMessages(existing, [incoming]);
+
+    expect(updated).toHaveLength(1);
+    expect(updated[0]?.id).toBe('server-text');
+    expect(updated[0]?.kind).toBe('text');
+    expect(updated[0]?.serverTailIdAtStart).toBe('tail-before-turn');
+  });
+
+  it('dedupes duplicate standalone assistant text in the same run', () => {
+    const existing = [
+      textMessage('local-text', 'Final answer', '2026-05-28T00:00:01.000Z', { runId: 'run-1' }),
+    ];
+    const incoming = textMessage('server-text', 'Final answer', '2026-05-28T00:00:02.000Z', {
+      runId: 'run-1',
+    });
+
+    const updated = upsertRealtimeMessages(existing, [incoming]);
+
+    expect(updated).toHaveLength(1);
+    expect(updated[0]?.id).toBe('server-text');
+  });
+
+  it('keeps identical assistant text from different runs', () => {
+    const existing = [
+      textMessage('run-1-text', 'Same answer', '2026-05-28T00:00:01.000Z', { runId: 'run-1' }),
+    ];
+    const incoming = textMessage('run-2-text', 'Same answer', '2026-05-28T00:01:01.000Z', {
+      runId: 'run-2',
+    });
+
+    const updated = upsertRealtimeMessages(existing, [incoming]);
+
+    expect(updated.map((message) => message.id)).toEqual(['run-1-text', 'run-2-text']);
+  });
+
+  it('keeps duplicate finalized assistant text when runId is missing', () => {
+    const existing = [
+      textMessage('first-text', 'Same answer', '2026-05-28T00:00:01.000Z'),
+    ];
+    const incoming = textMessage('second-text', 'Same answer', '2026-05-28T00:00:02.000Z');
+
+    const updated = upsertRealtimeMessages(existing, [incoming]);
+
+    expect(updated.map((message) => message.id)).toEqual(['first-text', 'second-text']);
+  });
+
+  it('keeps duplicate active stream text without runId outside the short time window', () => {
+    const existing: NormalizedMessage[] = [
+      {
+        id: '__streaming_web:s_test',
+        sessionId: 'web:s_test',
+        timestamp: '2026-05-28T00:00:01.000Z',
+        provider: PROVIDER,
+        kind: 'stream_delta',
+        content: 'Same answer',
+      },
+    ];
+    const incoming = textMessage('incoming-text', 'Same answer', '2026-05-28T00:01:00.000Z');
+
+    const updated = upsertRealtimeMessages(existing, [incoming]);
+
+    expect(updated.map((message) => message.id)).toEqual(['__streaming_web:s_test', 'incoming-text']);
   });
 });
 
