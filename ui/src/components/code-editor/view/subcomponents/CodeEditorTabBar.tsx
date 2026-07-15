@@ -10,6 +10,7 @@ type CodeEditorTabBarProps = {
   activeTabId: string;
   onSelect: (tabId: string) => void;
   onClose: (tabId: string) => void;
+  reserveToolbarSpace?: boolean;
   labels: {
     tabList: string;
     closeTab: (fileName: string) => string;
@@ -26,6 +27,7 @@ export default function CodeEditorTabBar({
   activeTabId,
   onSelect,
   onClose,
+  reserveToolbarSpace = false,
   labels,
 }: CodeEditorTabBarProps) {
   const tabButtonRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -68,7 +70,10 @@ export default function CodeEditorTabBar({
     <div
       role="tablist"
       aria-label={labels.tabList}
-      className="scrollbar-hide flex h-10 min-w-0 flex-shrink-0 items-end gap-0.5 overflow-x-auto border-b border-neutral-200 bg-neutral-50 px-2 pt-1 dark:border-neutral-800 dark:bg-neutral-900/70"
+      className={cn(
+        'scrollbar-hide flex h-10 min-w-0 flex-shrink-0 items-end gap-0.5 overflow-x-auto border-b border-neutral-200 bg-neutral-50 px-2 pt-1 dark:border-neutral-800 dark:bg-neutral-900/70',
+        reserveToolbarSpace && 'pr-32',
+      )}
     >
       {tabs.map((tab, index) => {
         const file = getTabFile(tab);
@@ -98,7 +103,9 @@ export default function CodeEditorTabBar({
               id={`code-editor-tab-${tab.id}`}
               aria-controls={`code-editor-panel-${tab.id}`}
               aria-selected={active}
+              aria-label={`${file.name} — ${file.path}`}
               tabIndex={active ? 0 : -1}
+              title={file.path}
               onClick={() => onSelect(tab.id)}
               onKeyDown={(event) => handleKeyDown(event, index)}
               className="flex min-w-0 flex-1 items-center gap-2 self-stretch px-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"

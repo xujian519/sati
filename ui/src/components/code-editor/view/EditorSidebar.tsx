@@ -130,6 +130,7 @@ export default function EditorSidebar({
         closeTab: (fileName) => t('tabs.closeTab', { fileName }),
         modified: t('tabs.modified'),
       }}
+      reserveToolbarSpace={workspaceMode}
     />
   );
 
@@ -157,11 +158,12 @@ export default function EditorSidebar({
           parentFileName={parentFile?.name ?? null}
           onGoBack={active ? onGoBack : undefined}
           onClose={() => requestCloseTab(tab.id)}
-          isSidebar={!isMobile && !poppedOut}
+          isSidebar={workspaceMode || (!isMobile && !poppedOut)}
           isExpanded={editorExpanded}
           onToggleExpand={onToggleEditorExpand}
           onPopOut={() => setPoppedOut(true)}
           headerPrefix={active ? tabBar : null}
+          compactHeader={workspaceMode}
           isActive={active}
           onDirtyChange={(dirty) => onTabDirtyChange(tab.id, dirty)}
         />

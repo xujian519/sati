@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Box,
   ChevronDown,
   ChevronRight,
   ChevronsDownUp,
@@ -570,7 +571,8 @@ export default function FilesV2({
   return (
     <div className="flex h-full flex-col bg-white dark:bg-neutral-950">
       <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-800">
-        <div className="flex h-7 items-center px-3 pt-1">
+        <div className="flex h-7 items-center gap-1.5 px-3 pt-1">
+          <Box className="h-3 w-3 shrink-0 text-neutral-400 dark:text-neutral-500" strokeWidth={1.75} />
           <span className="truncate font-mono text-xxs text-neutral-500 dark:text-neutral-400">
             {cwd}
           </span>

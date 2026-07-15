@@ -30,12 +30,30 @@
     "skills": "技能",
     "cron": "Cron"
   },
+  "dashboardSwitcher": {
+    "open": "打开看板菜单",
+    "menuLabel": "看板",
+    "closeActive": "关闭{{tool}}看板",
+    "closePanel": "关闭{{tool}}看板",
+    "resizePanel": "调整{{tool}}看板宽度"
+  },
+  "chatSearch": {
+    "ariaLabel": "搜索当前对话",
+    "open": "搜索当前对话",
+    "openShortcut": "搜索当前对话（Ctrl/⌘+F）",
+    "placeholder": "搜索当前对话…",
+    "matchCount": "{{current}} / {{total}}",
+    "noMatches": "无匹配结果",
+    "previous": "上一个匹配项",
+    "next": "下一个匹配项",
+    "close": "关闭搜索"
+  },
   "filesWorkbench": {
     "openFileTitle": "打开文件开始工作",
     "openFileDescription": "从文件树选择文件。在这里查看文件不会把它发送给模型。",
     "openExplorer": "打开文件树",
     "resizeExplorer": "调整文件树宽度",
-    "assistant": "助手",
+    "assistant": "智能体",
     "collapseAssistant": "收起助手",
     "openAssistant": "打开助手",
     "resizeAssistant": "调整助手宽度",
@@ -55,6 +73,7 @@
     "generalChat": "通用聊天 — 内置技能和用户技能",
     "refresh": "刷新",
     "newSkill": "新建",
+    "backToSkills": "返回技能列表",
     "loading": "加载中…",
     "empty": "还没有技能。点 \"新建\" 来安装或创建一个。",
     "selectHint": "在左侧选一个技能查看或编辑它的 SKILL.md。",

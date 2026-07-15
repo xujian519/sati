@@ -30,12 +30,30 @@
     "skills": "Skills",
     "cron": "Cron"
   },
+  "dashboardSwitcher": {
+    "open": "Open dashboards menu",
+    "menuLabel": "Dashboards",
+    "closeActive": "Close {{tool}} dashboard",
+    "closePanel": "Close {{tool}} dashboard",
+    "resizePanel": "Resize {{tool}} dashboard"
+  },
+  "chatSearch": {
+    "ariaLabel": "Search in conversation",
+    "open": "Search current conversation",
+    "openShortcut": "Search current conversation (Ctrl/⌘+F)",
+    "placeholder": "Search in chat…",
+    "matchCount": "{{current}} / {{total}}",
+    "noMatches": "No matches",
+    "previous": "Previous match",
+    "next": "Next match",
+    "close": "Close search"
+  },
   "filesWorkbench": {
     "openFileTitle": "Open a file to start working",
     "openFileDescription": "Select a file from the explorer. Viewing it here does not send it to the model.",
     "openExplorer": "Open file explorer",
     "resizeExplorer": "Resize file explorer",
-    "assistant": "Assistant",
+    "assistant": "Agent",
     "collapseAssistant": "Collapse assistant",
     "openAssistant": "Open assistant",
     "resizeAssistant": "Resize assistant",
@@ -55,6 +73,7 @@
     "generalChat": "General chat — built-in and user skills",
     "refresh": "Refresh",
     "newSkill": "New",
+    "backToSkills": "Back to skills",
     "loading": "Loading…",
     "empty": "No skills yet. Click \"New\" to install or create one.",
     "selectHint": "Pick a skill on the left to view or edit its SKILL.md.",

@@ -5,6 +5,7 @@ import { markdown } from '@codemirror/lang-markdown';
 import { EditorView } from '@codemirror/view';
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRightLeft,
   CheckCircle2,
   Download,
@@ -33,6 +34,7 @@ import { cn } from '../../lib/utils.js';
 type SkillsV2Props = {
   selectedProject: Project | null;
   projects: Project[];
+  compact?: boolean;
 };
 
 type SkillScope = 'builtin' | 'user' | 'project';
@@ -104,7 +106,7 @@ async function api<T>(url: string, body: unknown): Promise<T> {
 
 // ---------------------------------------------------------------------------
 
-export default function SkillsV2({ selectedProject, projects }: SkillsV2Props) {
+export default function SkillsV2({ selectedProject, projects, compact = false }: SkillsV2Props) {
   const { t } = useTranslation();
   const { isDarkMode } = useTheme() as { isDarkMode: boolean };
 
@@ -310,27 +312,49 @@ export default function SkillsV2({ selectedProject, projects }: SkillsV2Props) {
         loading={loading}
         onRefresh={refresh}
         onNew={() => setShowNew(true)}
+        compact={compact}
         t={t}
       />
 
       <div className="flex min-h-0 flex-1">
-        <SkillsList
-          skills={skills}
-          loading={loading}
-          activeSlug={activeSlug}
-          activeScope={activeScope}
-          generalCwd={generalCwd}
-          onSelect={handleSelect}
-          selectedSkill={activeSkill}
-          effectiveProjectPath={effectiveProjectPath}
-          projects={projects}
-          refresh={refresh}
-          flashToast={flashToast}
-          setActiveSlug={setActiveSlug}
-          setActiveScope={setActiveScope}
-          t={t}
-        />
-        <div className="flex min-h-0 flex-1 flex-col border-l border-neutral-200 dark:border-neutral-800">
+        {!compact || !activeSkill ? (
+          <SkillsList
+            skills={skills}
+            loading={loading}
+            activeSlug={activeSlug}
+            activeScope={activeScope}
+            generalCwd={generalCwd}
+            onSelect={handleSelect}
+            selectedSkill={activeSkill}
+            effectiveProjectPath={effectiveProjectPath}
+            projects={projects}
+            refresh={refresh}
+            flashToast={flashToast}
+            setActiveSlug={setActiveSlug}
+            setActiveScope={setActiveScope}
+            compact={compact}
+            t={t}
+          />
+        ) : null}
+        {!compact || activeSkill ? (
+        <div className={cn(
+          'flex min-h-0 flex-1 flex-col',
+          !compact && 'border-l border-neutral-200 dark:border-neutral-800',
+        )}>
+          {compact && activeSkill ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (isDirty && !window.confirm(t('skillsTab.discardUnsaved', { defaultValue: 'Discard unsaved changes?' }) as string)) return;
+                setActiveSlug(null);
+                setActiveScope(null);
+              }}
+              className="flex h-9 shrink-0 items-center gap-1.5 border-b border-neutral-200 px-3 text-[12px] font-medium text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-900 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
+              <span>{t('skillsTab.backToSkills', { defaultValue: 'Back to skills' })}</span>
+            </button>
+          ) : null}
           {activeSkill ? (
             <SkillDetail
               skill={activeSkill}
@@ -344,12 +368,14 @@ export default function SkillsV2({ selectedProject, projects }: SkillsV2Props) {
               onDelete={handleDelete}
               onCreateUserOverride={handleCreateUserOverride}
               onRevert={() => setEditorContent(originalContent)}
+              compact={compact}
               t={t}
             />
           ) : (
             <EmptyState t={t} />
           )}
         </div>
+        ) : null}
       </div>
 
       {showNew ? (
@@ -392,6 +418,7 @@ function Header({
   loading,
   onRefresh,
   onNew,
+  compact,
   t,
 }: {
   cwd: string | null;
@@ -399,10 +426,14 @@ function Header({
   loading: boolean;
   onRefresh: () => void;
   onNew: () => void;
+  compact: boolean;
   t: ReturnType<typeof useTranslation>['t'];
 }) {
   return (
-    <div className="flex h-10 shrink-0 items-center justify-between border-b border-neutral-200 px-6 dark:border-neutral-800">
+    <div className={cn(
+      'flex h-10 shrink-0 items-center justify-between border-b border-neutral-200 dark:border-neutral-800',
+      compact ? 'px-3' : 'px-6',
+    )}>
       <div className="flex min-w-0 items-center gap-2 truncate font-mono text-xxs text-neutral-500 dark:text-neutral-400">
         <Sparkles className="h-3.5 w-3.5 text-amber-500" strokeWidth={1.75} />
         {generalCwd ? (
@@ -451,6 +482,7 @@ function SkillsList({
   flashToast,
   setActiveSlug,
   setActiveScope,
+  compact,
   t,
 }: {
   skills: SkillsListResponse | null;
@@ -466,6 +498,7 @@ function SkillsList({
   flashToast: (t: ToastState, ms?: number) => void;
   setActiveSlug: (slug: string | null) => void;
   setActiveScope: (scope: SkillScope | null) => void;
+  compact: boolean;
   t: ReturnType<typeof useTranslation>['t'];
 }) {
   const handleDeleteSkill = useCallback(async (skill: Skill) => {
@@ -538,7 +571,10 @@ function SkillsList({
   }, [projects]);
 
   return (
-    <div className="flex w-72 shrink-0 flex-col border-r border-neutral-200 dark:border-neutral-800">
+    <div className={cn(
+      'flex shrink-0 flex-col',
+      compact ? 'w-full' : 'w-72 border-r border-neutral-200 dark:border-neutral-800',
+    )}>
       <div className="min-h-0 flex-1 overflow-y-auto py-2 text-[13px]">
         {loading && !skills ? (
           <div className="flex items-center justify-center gap-2 py-6 text-xxs text-neutral-500 dark:text-neutral-400">
@@ -817,6 +853,7 @@ function SkillDetail({
   onDelete,
   onCreateUserOverride,
   onRevert,
+  compact,
   t,
 }: {
   skill: Skill;
@@ -830,11 +867,15 @@ function SkillDetail({
   onDelete: () => void;
   onCreateUserOverride: () => void;
   onRevert: () => void;
+  compact: boolean;
   t: ReturnType<typeof useTranslation>['t'];
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="shrink-0 border-b border-neutral-200 px-6 py-3 dark:border-neutral-800">
+      <div className={cn(
+        'shrink-0 border-b border-neutral-200 py-3 dark:border-neutral-800',
+        compact ? 'px-4' : 'px-6',
+      )}>
         <div className="flex items-baseline gap-2">
           <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
             {skill.name}
@@ -894,7 +935,10 @@ function SkillDetail({
         )}
       </div>
 
-      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-neutral-200 px-6 py-2 dark:border-neutral-800">
+      <div className={cn(
+        'flex shrink-0 items-center justify-between gap-2 border-t border-neutral-200 py-2 dark:border-neutral-800',
+        compact ? 'flex-wrap px-3' : 'px-6',
+      )}>
         {skill.readonly ? (
           <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
             {skill.overriddenBy

@@ -10,6 +10,7 @@ type CodeEditorBinaryFileProps = {
   file: CodeEditorFile;
   projectName?: string;
   isSidebar: boolean;
+  compactHeader?: boolean;
   isFullscreen: boolean;
   onClose: () => void;
   onToggleFullscreen: () => void;
@@ -593,6 +594,7 @@ export default function CodeEditorBinaryFile({
   file,
   projectName,
   isSidebar,
+  compactHeader = false,
   isFullscreen,
   onClose,
   onToggleFullscreen,
@@ -618,13 +620,19 @@ export default function CodeEditorBinaryFile({
         : <FallbackContent title={title} message={message} onClose={onClose} />;
 
   const headerTopBar = (
-    <div className="flex flex-shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950">
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <FileTypeBadge fileName={file.name} />
-        <h3 className="truncate text-[13px] font-medium text-neutral-900 dark:text-neutral-100">
-          {file.name}
-        </h3>
-      </div>
+    <div
+      className={compactHeader
+        ? 'absolute right-2 top-1 z-10 flex h-8 items-center rounded-md bg-neutral-50 px-1 dark:bg-neutral-900'
+        : 'flex flex-shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950'}
+    >
+      {!compactHeader && (
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <FileTypeBadge fileName={file.name} />
+          <h3 className="truncate text-[13px] font-medium text-neutral-900 dark:text-neutral-100">
+            {file.name}
+          </h3>
+        </div>
+      )}
       <div className="flex shrink-0 items-center gap-0.5">
         {isOffice && (
           <RefreshButton
@@ -681,7 +689,7 @@ export default function CodeEditorBinaryFile({
 
   if (isSidebar) {
     return (
-      <div className="flex h-full w-full flex-col bg-white dark:bg-neutral-950">
+      <div className="relative flex h-full w-full flex-col bg-white dark:bg-neutral-950">
         {headerPrefix}
         {headerTopBar}
         {previewContent}

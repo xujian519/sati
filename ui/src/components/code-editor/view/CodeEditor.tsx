@@ -30,6 +30,7 @@ type CodeEditorProps = {
   parentFileName?: string | null;
   onGoBack?: () => void;
   headerPrefix?: ReactNode;
+  compactHeader?: boolean;
   isActive?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
 };
@@ -47,6 +48,7 @@ export default function CodeEditor({
   parentFileName = null,
   onGoBack,
   headerPrefix,
+  compactHeader = false,
   isActive = true,
   onDirtyChange,
 }: CodeEditorProps) {
@@ -120,8 +122,8 @@ export default function CodeEditor({
         isSidebar,
         isExpanded,
         onToggleDiff: () => setShowDiff((previous) => !previous),
-        onPopOut,
-        onToggleExpand,
+        onPopOut: compactHeader ? null : onPopOut,
+        onToggleExpand: compactHeader ? null : onToggleExpand,
         labels: {
           changes: t('toolbar.changes'),
           previousChange: t('toolbar.previousChange'),
@@ -133,7 +135,7 @@ export default function CodeEditor({
         },
       })
     ),
-    [file, isExpanded, isSidebar, onPopOut, onToggleExpand, showDiff, t],
+    [compactHeader, file, isExpanded, isSidebar, onPopOut, onToggleExpand, showDiff, t],
   );
 
   const extensions = useMemo(() => {
@@ -217,6 +219,7 @@ export default function CodeEditor({
         file={file}
         projectName={projectName}
         isSidebar={isSidebar}
+        compactHeader={compactHeader}
         isFullscreen={isFullscreen}
         onClose={onClose}
         onToggleFullscreen={() => setIsFullscreen((previous) => !previous)}
@@ -244,42 +247,45 @@ export default function CodeEditor({
       <style>{getEditorStyles(isDarkMode)}</style>
       <div className={outerContainerClassName}>
         <div className={innerContainerClassName}>
-          {headerPrefix}
-          <CodeEditorHeader
-            file={file}
-            isSidebar={isSidebar}
-            isFullscreen={isFullscreen}
-            isMarkdownFile={isMarkdownFile}
-            markdownPreview={markdownPreview}
-            saving={saving}
-            saveSuccess={saveSuccess}
-            isExpanded={isExpanded}
-            onToggleExpand={onToggleExpand}
-            canGoBack={canGoBack}
-            parentFileName={parentFileName}
-            onGoBack={onGoBack}
-            onToggleMarkdownPreview={() => setMarkdownPreview((previous) => !previous)}
-            onDownload={handleDownload}
-            onSave={handleSave}
-            onToggleFullscreen={() => setIsFullscreen((previous) => !previous)}
-            onClose={onClose}
-            showClose={!headerPrefix}
-            labels={{
-              showingChanges: t('header.showingChanges'),
-              editMarkdown: t('actions.editMarkdown'),
-              previewMarkdown: t('actions.previewMarkdown'),
-              download: t('actions.download'),
-              save: t('actions.save'),
-              saving: t('actions.saving'),
-              saved: t('actions.saved'),
-              fullscreen: t('actions.fullscreen'),
-              exitFullscreen: t('actions.exitFullscreen'),
-              expand: t('actions.expand', { defaultValue: 'Expand to full width' }),
-              collapse: t('actions.collapse', { defaultValue: 'Collapse to split view' }),
-              close: t('actions.close'),
-              goBack: t('actions.goBack'),
-            }}
-          />
+          <div className="relative flex-shrink-0">
+            {headerPrefix}
+            <CodeEditorHeader
+              file={file}
+              isSidebar={isSidebar}
+              isFullscreen={isFullscreen}
+              isMarkdownFile={isMarkdownFile}
+              markdownPreview={markdownPreview}
+              saving={saving}
+              saveSuccess={saveSuccess}
+              isExpanded={isExpanded}
+              onToggleExpand={onToggleExpand}
+              canGoBack={canGoBack}
+              parentFileName={parentFileName}
+              onGoBack={onGoBack}
+              onToggleMarkdownPreview={() => setMarkdownPreview((previous) => !previous)}
+              onDownload={handleDownload}
+              onSave={handleSave}
+              onToggleFullscreen={() => setIsFullscreen((previous) => !previous)}
+              onClose={onClose}
+              showClose={!headerPrefix}
+              compact={compactHeader}
+              labels={{
+                showingChanges: t('header.showingChanges'),
+                editMarkdown: t('actions.editMarkdown'),
+                previewMarkdown: t('actions.previewMarkdown'),
+                download: t('actions.download'),
+                save: t('actions.save'),
+                saving: t('actions.saving'),
+                saved: t('actions.saved'),
+                fullscreen: t('actions.fullscreen'),
+                exitFullscreen: t('actions.exitFullscreen'),
+                expand: t('actions.expand', { defaultValue: 'Expand to full width' }),
+                collapse: t('actions.collapse', { defaultValue: 'Collapse to split view' }),
+                close: t('actions.close'),
+                goBack: t('actions.goBack'),
+              }}
+            />
+          </div>
 
           {saveError && (
             <div className="border-b border-red-200/60 bg-red-50 px-4 py-1.5 text-xxs text-red-700 dark:border-red-900/40 dark:bg-red-900/10 dark:text-red-300">
