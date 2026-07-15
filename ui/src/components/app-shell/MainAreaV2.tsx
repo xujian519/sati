@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import {
   BarChart3,
   Bot,
+  Clock,
   Database,
   Folder,
   PanelLeftOpen,
@@ -40,6 +41,7 @@ const TABS: Tab[] = [
   { id: 'dashboard', labelKey: 'tabs.dashboard', icon: BarChart3 },
   { id: 'memory',    labelKey: 'tabs.memory',    icon: Database },
   { id: 'always-on', labelKey: 'tabs.alwaysOn',  icon: Radio },
+  { id: 'cron',      labelKey: 'tabs.cron',      icon: Clock },
 ];
 
 const ALWAYS_ON_EVENT_BADGE_POLL_INTERVAL_MS = 15_000;
