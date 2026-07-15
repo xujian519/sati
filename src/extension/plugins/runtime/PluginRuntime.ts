@@ -56,6 +56,8 @@ export type PluginCommandContribution = {
 export type PluginSkillContribution = {
   name: string;
   description?: string;
+  /** Absolute path to the resolved SKILL.md. */
+  path: string;
   namespace?: string;
 };
 
@@ -279,6 +281,7 @@ function toSkillContribution(
   return {
     name: skill.name,
     description: typeof skill.frontmatter.description === "string" ? skill.frontmatter.description : undefined,
+    path: skill.path,
     namespace: plugin.name,
   };
 }

@@ -94,6 +94,14 @@ test("standalone skill precedence is project > user > builtin without legacy ali
     const docxSkills = runtime.getAllSkills().filter((skill) => skill.name.includes("docx"));
     assert.deepEqual(docxSkills.map((skill) => skill.name).sort(), ["docx", "office:docx"]);
     assert.equal(docxSkills.find((skill) => skill.name === "docx")?.description, "Project DOCX skill description.");
+    assert.equal(
+      docxSkills.find((skill) => skill.name === "docx")?.path,
+      join(projectRoot, ".pilotdeck", "skills", "docx", "SKILL.md"),
+    );
+    assert.equal(
+      docxSkills.find((skill) => skill.name === "office:docx")?.path,
+      join(pluginDir, "skills", "docx", "SKILL.md"),
+    );
 
     assert.match(await runtime.loadSkillPrompt("docx") ?? "", /# Project DOCX skill/);
     assert.equal(await runtime.loadSkillPrompt("docx:..:docx"), undefined);
@@ -106,6 +114,10 @@ test("standalone skill precedence is project > user > builtin without legacy ali
       runtime.getAllSkills().find((skill) => skill.name === "docx")?.description,
       "Global DOCX skill description.",
     );
+    assert.equal(
+      runtime.getAllSkills().find((skill) => skill.name === "docx")?.path,
+      join(pilotHome, "skills", "docx", "SKILL.md"),
+    );
     assert.match(await runtime.loadSkillPrompt("docx") ?? "", /# Global DOCX skill/);
 
     await rm(join(pilotHome, "skills", "docx"), { recursive: true, force: true });
@@ -113,6 +125,10 @@ test("standalone skill precedence is project > user > builtin without legacy ali
     assert.equal(
       runtime.getAllSkills().find((skill) => skill.name === "docx")?.description,
       "Built-in DOCX skill description.",
+    );
+    assert.equal(
+      runtime.getAllSkills().find((skill) => skill.name === "docx")?.path,
+      join(builtinSkillsRoot, "docx", "SKILL.md"),
     );
     assert.match(await runtime.loadSkillPrompt("docx") ?? "", /# Built-in DOCX skill/);
   } finally {
