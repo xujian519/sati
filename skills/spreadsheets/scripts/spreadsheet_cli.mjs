@@ -25,6 +25,7 @@ const { DOMParser } = require("@xmldom/xmldom");
 const sharp = require("sharp");
 
 const FORMULA_ERROR_RE = /#(?:REF!|DIV\/0!|VALUE!|NAME\?|N\/A|NUM!|NULL!|SPILL!|CALC!|CIRC!)/i;
+const SPREADSHEET_MAIN_NAMESPACE = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const HARD_RISK_FEATURES = new Set([
   "macros",
   "charts",
@@ -121,10 +122,52 @@ function createWorkbook() {
   return workbook;
 }
 
+function escapeRegularExpression(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function normalizePrefixedSpreadsheetPackage(filePath) {
+  const data = await fs.readFile(filePath);
+  const zip = await JSZip.loadAsync(data);
+  let changed = false;
+
+  for (const [entryName, entry] of Object.entries(zip.files)) {
+    if (entry.dir || !entryName.endsWith(".xml")) continue;
+    const xml = await entry.async("string");
+    const namespaceMatch = xml.match(
+      /xmlns:([A-Za-z_][\w.-]*)=(["'])http:\/\/schemas\.openxmlformats\.org\/spreadsheetml\/2006\/main\2/,
+    );
+    if (!namespaceMatch) continue;
+
+    const prefix = escapeRegularExpression(namespaceMatch[1]);
+    const quote = namespaceMatch[2];
+    let normalized = xml.replace(new RegExp(`(<\\/?)(?:${prefix}):`, "g"), "$1");
+    const defaultNamespace = `xmlns=${quote}${SPREADSHEET_MAIN_NAMESPACE}${quote}`;
+    normalized = normalized.includes(defaultNamespace)
+      ? normalized.replace(namespaceMatch[0], "")
+      : normalized.replace(namespaceMatch[0], defaultNamespace);
+
+    if (normalized !== xml) {
+      zip.file(entryName, normalized);
+      changed = true;
+    }
+  }
+
+  return changed ? zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }) : null;
+}
+
 async function loadXlsx(filePath) {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(path.resolve(filePath));
-  return workbook;
+  try {
+    await workbook.xlsx.readFile(path.resolve(filePath));
+    return workbook;
+  } catch (error) {
+    const normalizedPackage = await normalizePrefixedSpreadsheetPackage(filePath);
+    if (!normalizedPackage) throw error;
+    const normalizedWorkbook = new ExcelJS.Workbook();
+    await normalizedWorkbook.xlsx.load(normalizedPackage);
+    return normalizedWorkbook;
+  }
 }
 
 function inferScalar(value) {
@@ -1024,6 +1067,27 @@ async function commandSelfTest(options) {
   const inspection = await inspectXlsx(finalPath, { sheet: "Summary", range: "A1:F8", styles: true });
   if (inspection.formulas.count < 4 || inspection.package.features.tables < 1) throw new Error("Inspection missed formulas or tables");
   steps.push({ name: "inspect", status: "ok", formulas: inspection.formulas.count, tables: inspection.package.features.tables });
+
+  const prefixedPath = path.join(outputDir, "prefixed-main-namespace.xlsx");
+  const prefixedZip = await JSZip.loadAsync(await fs.readFile(rawPath));
+  let prefixedPartCount = 0;
+  for (const [entryName, entry] of Object.entries(prefixedZip.files)) {
+    if (entry.dir || !entryName.endsWith(".xml")) continue;
+    const xml = await entry.async("string");
+    const defaultNamespace = `xmlns="${SPREADSHEET_MAIN_NAMESPACE}"`;
+    if (!xml.includes(defaultNamespace)) continue;
+    const prefixed = xml
+      .replace(defaultNamespace, `xmlns:x="${SPREADSHEET_MAIN_NAMESPACE}"`)
+      .replace(/(<\/?)([A-Za-z_][\w.-]*)(?=[\s/>])/g, "$1x:$2");
+    prefixedZip.file(entryName, prefixed);
+    prefixedPartCount += 1;
+  }
+  await fs.writeFile(prefixedPath, await prefixedZip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));
+  const prefixedInspection = await inspectXlsx(prefixedPath, { sheet: "Summary", range: "A1:F8" });
+  if (prefixedPartCount === 0 || prefixedInspection.selection.cells.length === 0) {
+    throw new Error("Inspection failed for prefixed SpreadsheetML namespaces");
+  }
+  steps.push({ name: "inspect-prefixed-ooxml", status: "ok", normalizedParts: prefixedPartCount });
 
   const audit = await auditXlsx(finalPath);
   if (audit.status === "error") throw new Error("Clean workbook failed audit");
