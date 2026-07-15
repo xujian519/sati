@@ -27,7 +27,8 @@
     "tasks": "Tasks",
     "dashboard": "Routing",
     "memory": "Memory",
-    "skills": "Skills"
+    "skills": "Skills",
+    "cron": "Cron"
   },
   "skillsTab": {
     "pickProject": "Open a project to manage its skills.",

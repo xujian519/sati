@@ -27,7 +27,8 @@
     "tasks": "任务",
     "dashboard": "路由",
     "memory": "记忆",
-    "skills": "技能"
+    "skills": "技能",
+    "cron": "Cron"
   },
   "skillsTab": {
     "pickProject": "选一个项目来管理它的技能。",

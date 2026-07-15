@@ -17,7 +17,7 @@ type PlanDetailTarget = {
 
 const SUB_TABS: { id: AlwaysOnSubTab; labelKey: string; defaultLabel: string; icon: typeof BarChart3 }[] = [
   { id: 'dashboard', labelKey: 'tabs.dashboard', defaultLabel: 'Dashboard', icon: BarChart3 },
-  { id: 'plans-cron', labelKey: 'tabs.plansCron', defaultLabel: 'Plans & Cron Jobs', icon: ListChecks },
+  { id: 'plans', labelKey: 'tabs.plans', defaultLabel: 'Plans', icon: ListChecks },
 ];
 
 type AlwaysOnV2Props = {
@@ -88,7 +88,7 @@ export default function AlwaysOnV2({
             projectDisplayName={planDetail.projectDisplayName}
             runId={planDetail.sourceRunId}
             projectKey={planDetail.projectKey}
-            backLabel={t('dashboard.runDetail.backToPlans', { defaultValue: 'Back to Plans & Cron Jobs' })}
+            backLabel={t('dashboard.runDetail.backToPlans', { defaultValue: 'Back to Plans' })}
             onBack={() => setPlanDetail(null)}
             onOpenExecutionSession={onOpenExecutionSession}
           />
