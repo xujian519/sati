@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { SessionProvider } from '../types/app';
-import { getDuplicateAssistantStreamTextState } from '../components/chat/hooks/useChatRealtimeHandlers';
+import {
+  getActiveTurnReplayMessagesToApply,
+  getDuplicateAssistantStreamTextState,
+} from '../components/chat/hooks/useChatRealtimeHandlers';
 import {
   computeMerged,
   createRafNotifyScheduler,
@@ -255,6 +258,159 @@ describe('getDuplicateAssistantStreamTextState', () => {
       isDuplicate: false,
       hasActiveStream: false,
     });
+  });
+});
+
+describe('getActiveTurnReplayMessagesToApply', () => {
+  it('skips active-turn stream replay already represented by finalized realtime text', () => {
+    const activeTurnMessages = [
+      {
+        id: 'delta-1',
+        sessionId: 'web:s_test',
+        timestamp: '2026-05-28T00:00:02.000Z',
+        provider: PROVIDER,
+        kind: 'stream_delta' as const,
+        content: 'Hello ',
+        runId: 'run-1',
+      },
+      {
+        id: 'delta-2',
+        sessionId: 'web:s_test',
+        timestamp: '2026-05-28T00:00:03.000Z',
+        provider: PROVIDER,
+        kind: 'stream_delta' as const,
+        content: 'world',
+        runId: 'run-1',
+      },
+      {
+        id: 'end-1',
+        sessionId: 'web:s_test',
+        timestamp: '2026-05-28T00:00:04.000Z',
+        provider: PROVIDER,
+        kind: 'stream_end' as const,
+        runId: 'run-1',
+      },
+    ];
+
+    const messagesToApply = getActiveTurnReplayMessagesToApply(activeTurnMessages, {
+      realtimeMessages: [
+        textMessage('local-final', 'Hello world', '2026-05-28T00:00:01.000Z', {
+          isFinal: true,
+          runId: 'run-1',
+        }),
+      ],
+    });
+
+    expect(messagesToApply).toEqual([]);
+  });
+
+  it('keeps non-volatile replay frames while dropping duplicate stream blocks', () => {
+    const activeTurnMessages = [
+      {
+        id: 'delta-1',
+        sessionId: 'web:s_test',
+        timestamp: '2026-05-28T00:00:02.000Z',
+        provider: PROVIDER,
+        kind: 'stream_delta' as const,
+        content: 'Already rendered',
+        runId: 'run-1',
+      },
+      {
+        id: 'end-1',
+        sessionId: 'web:s_test',
+        timestamp: '2026-05-28T00:00:03.000Z',
+        provider: PROVIDER,
+        kind: 'stream_end' as const,
+        runId: 'run-1',
+      },
+      {
+        id: 'tool-1',
+        sessionId: 'web:s_test',
+        timestamp: '2026-05-28T00:00:04.000Z',
+        provider: PROVIDER,
+        kind: 'tool_use' as const,
+        toolId: 'tool-call-1',
+        toolName: 'Read',
+      },
+    ];
+
+    const messagesToApply = getActiveTurnReplayMessagesToApply(activeTurnMessages, {
+      realtimeMessages: [
+        textMessage('local-final', 'Already rendered', '2026-05-28T00:00:01.000Z', {
+          isFinal: true,
+          runId: 'run-1',
+        }),
+      ],
+    });
+
+    expect(messagesToApply.map((message) => message.id)).toEqual(['tool-1']);
+  });
+
+  it('drops only the rendered stream block when a later block is new', () => {
+    const activeTurnMessages = [
+      {
+        id: 'delta-1',
+        sessionId: 'web:s_test',
+        timestamp: '2026-05-28T00:00:02.000Z',
+        provider: PROVIDER,
+        kind: 'stream_delta' as const,
+        content: 'First block',
+        runId: 'run-1',
+      },
+      {
+        id: 'end-1',
+        sessionId: 'web:s_test',
+        timestamp: '2026-05-28T00:00:03.000Z',
+        provider: PROVIDER,
+        kind: 'stream_end' as const,
+        runId: 'run-1',
+      },
+      {
+        id: 'delta-2',
+        sessionId: 'web:s_test',
+        timestamp: '2026-05-28T00:00:04.000Z',
+        provider: PROVIDER,
+        kind: 'stream_delta' as const,
+        content: 'Second block',
+        runId: 'run-1',
+      },
+    ];
+
+    const messagesToApply = getActiveTurnReplayMessagesToApply(activeTurnMessages, {
+      realtimeMessages: [
+        textMessage('local-final', 'First block', '2026-05-28T00:00:01.000Z', {
+          isFinal: true,
+          runId: 'run-1',
+        }),
+      ],
+    });
+
+    expect(messagesToApply.map((message) => message.id)).toEqual(['delta-2']);
+  });
+
+  it('does not drop same-content stream blocks from a different known run', () => {
+    const activeTurnMessages = [
+      {
+        id: 'delta-1',
+        sessionId: 'web:s_test',
+        timestamp: '2026-05-28T00:00:02.000Z',
+        provider: PROVIDER,
+        kind: 'stream_delta' as const,
+        content: 'Same text',
+        runId: 'run-2',
+      },
+    ];
+
+    const messagesToApply = getActiveTurnReplayMessagesToApply(activeTurnMessages, {
+      realtimeMessages: [
+        textMessage('local-final', 'Same text', '2026-05-28T00:00:01.000Z', {
+          isFinal: true,
+          runId: 'run-1',
+        }),
+      ],
+    });
+
+    expect(messagesToApply.map((message) => message.id)).toEqual(['delta-1']);
   });
 });
 

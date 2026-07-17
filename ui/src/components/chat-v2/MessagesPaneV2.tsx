@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, ReactNode, RefObject, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 import { XCircle, GitBranch } from 'lucide-react';
@@ -295,7 +295,7 @@ function isForkedChatSession(session: ProjectSession | null): boolean {
   );
 }
 
-export default function MessagesPaneV2({
+function MessagesPaneV2({
   scrollContainerRef,
   onWheel,
   onTouchMove,
@@ -1188,6 +1188,8 @@ export default function MessagesPaneV2({
     </div>
   );
 }
+
+export default memo(MessagesPaneV2);
 
 function isSubagentActivity(activity: ChatMessage): boolean {
   const activityId = String(activity.activityId || activity.runId || '');
