@@ -10,6 +10,7 @@
 - Confirm `coverage.status` is `passed` for every non-trivial task.
 - Add `requiredCellTypes` for important KPI, amount, percentage, date, and identifier ranges so number-format contamination cannot pass as a visual-only issue.
 - When a chart is requested, confirm a native chart part, worksheet mapping, chart type, series count, and source formulas. An image is not a chart.
+- Confirm `package.compatibility.status` is `ok`. For native charts, verify the reported drawing part and object counts, and treat malformed anchors or dangling worksheet/drawing/chart relationships as hard failures.
 
 ## Formula verification
 

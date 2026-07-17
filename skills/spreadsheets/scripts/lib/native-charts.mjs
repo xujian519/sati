@@ -3,6 +3,8 @@ import path from "node:path";
 const REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships";
 const DRAWING_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing";
 const CHART_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
+const DRAWING_NS = "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing";
+const OFFICE_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
 function escapeXml(value) {
   return String(value ?? "")
@@ -52,6 +54,58 @@ function relativePackageTarget(basePart, targetPart) {
 
 function relationshipPart(part) {
   return path.posix.join(path.posix.dirname(part), "_rels", `${path.posix.basename(part)}.rels`);
+}
+
+function escapeRegularExpression(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function localName(node) {
+  return node?.localName ?? node?.nodeName?.split(":").at(-1) ?? null;
+}
+
+function childElements(node) {
+  const children = [];
+  for (let child = node?.firstChild; child; child = child.nextSibling) {
+    if (child.nodeType === 1) children.push(child);
+  }
+  return children;
+}
+
+function descendantElements(node, expectedLocalName) {
+  const matches = [];
+  const elements = node?.getElementsByTagName?.("*") ?? [];
+  for (let index = 0; index < elements.length; index += 1) {
+    const element = elements.item(index);
+    if (localName(element) === expectedLocalName) matches.push(element);
+  }
+  return matches;
+}
+
+function parseDrawingDocument(xml, DOMParser) {
+  const document = new DOMParser().parseFromString(xml, "application/xml");
+  if (!document?.documentElement || localName(document.documentElement) !== "wsDr") return null;
+  return document;
+}
+
+function drawingAnchors(document) {
+  const anchorNames = new Set(["twoCellAnchor", "oneCellAnchor", "absoluteAnchor"]);
+  return childElements(document.documentElement).filter((element) => anchorNames.has(localName(element)));
+}
+
+function worksheetDrawingIds(xml) {
+  return Array.from(xml.matchAll(/<(?:[A-Za-z_][\w.-]*:)?drawing\b[^>]*\br:id=(["'])([^"']+)\1[^>]*\/?\s*>/gi)).map((match) => match[2]);
+}
+
+function removeWorksheetDrawing(xml, relationshipId) {
+  const escapedId = escapeRegularExpression(relationshipId);
+  const expression = new RegExp(`<(?:[A-Za-z_][\\w.-]*:)?drawing\\b[^>]*\\br:id=(["'])${escapedId}\\1[^>]*/\\s*>`, "gi");
+  return xml.replace(expression, "");
+}
+
+function removeContentTypeOverride(xml, partName) {
+  const escapedPart = escapeRegularExpression(`/${partName}`);
+  return xml.replace(new RegExp(`<Override\\b(?=[^>]*\\bPartName=(["'])${escapedPart}\\1)[^>]*/\\s*>`, "gi"), "");
 }
 
 async function workbookSheetParts(zip) {
@@ -193,7 +247,7 @@ function anchorXml(spec, relationshipId, drawingObjectId) {
   const from = cellAnchor(spec.anchor?.from ?? "G2");
   const to = cellAnchor(spec.anchor?.to ?? "N18");
   if (to.column <= from.column || to.row <= from.row) throw new Error("Chart anchor.to must be below and to the right of anchor.from");
-  return `<xdr:twoCellAnchor editAs="twoCell"><xdr:from><xdr:col>${from.column}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${from.row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>${to.column}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${to.row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${drawingObjectId}" name="Chart ${drawingObjectId}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="${relationshipId}"/></a:graphicData></a:graphic><xdr:clientData/></xdr:graphicFrame></xdr:twoCellAnchor>`;
+  return `<xdr:twoCellAnchor editAs="twoCell"><xdr:from><xdr:col>${from.column}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${from.row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>${to.column}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${to.row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${drawingObjectId}" name="Chart ${drawingObjectId}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="${OFFICE_REL_NS}" r:id="${relationshipId}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>`;
 }
 
 function ensureOverride(contentTypesXml, partName, contentType) {
@@ -238,7 +292,7 @@ export async function injectNativeCharts(filePath, specs, { JSZip, loadXlsx }) {
       sheetRelationships.push({ id: drawingRelationshipId, type: DRAWING_REL, target: relativePackageTarget(sheetPart, drawingPart) });
       sheetXml = sheetXml.replace("</worksheet>", `<drawing r:id="${drawingRelationshipId}"/></worksheet>`);
       zip.file(sheetPart, sheetXml);
-      zip.file(drawingPart, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"></xdr:wsDr>');
+      zip.file(drawingPart, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="${DRAWING_NS}" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="${OFFICE_REL_NS}"></xdr:wsDr>`);
       contentTypesXml = ensureOverride(contentTypesXml, drawingPart, "application/vnd.openxmlformats-officedocument.drawing+xml");
     }
     zip.file(sheetRelsPart, relationshipXml(sheetRelationships));
@@ -267,6 +321,154 @@ export async function injectNativeCharts(filePath, specs, { JSZip, loadXlsx }) {
   const output = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
   await (await import("node:fs/promises")).writeFile(filePath, output);
   return { chartCount: created.length, charts: created };
+}
+
+export async function pruneEmptyDrawingParts(zip, { DOMParser }) {
+  const sheetParts = await workbookSheetParts(zip);
+  const references = [];
+  for (const [sheet, sheetPart] of sheetParts.entries()) {
+    const sheetFile = zip.file(sheetPart);
+    if (!sheetFile) continue;
+    const sheetXml = await sheetFile.async("string");
+    const sheetRelsPart = relationshipPart(sheetPart);
+    const relationships = zip.file(sheetRelsPart)
+      ? relationshipRecords(await zip.file(sheetRelsPart).async("string"))
+      : [];
+    for (const relationshipId of worksheetDrawingIds(sheetXml)) {
+      const relationship = relationships.find((record) => record.id === relationshipId && record.type === DRAWING_REL);
+      if (!relationship?.target) continue;
+      references.push({ sheet, sheetPart, sheetRelsPart, sheetXml, relationships, relationshipId, drawingPart: normalizePackageTarget(sheetPart, relationship.target) });
+    }
+  }
+
+  const referenceCounts = new Map();
+  for (const reference of references) referenceCounts.set(reference.drawingPart, (referenceCounts.get(reference.drawingPart) ?? 0) + 1);
+  const removedParts = [];
+  let contentTypesXml = zip.file("[Content_Types].xml") ? await zip.file("[Content_Types].xml").async("string") : null;
+
+  for (const reference of references) {
+    if (referenceCounts.get(reference.drawingPart) !== 1) continue;
+    const drawingFile = zip.file(reference.drawingPart);
+    if (!drawingFile) continue;
+    const drawingXml = await drawingFile.async("string");
+    const document = parseDrawingDocument(drawingXml, DOMParser);
+    if (!document || drawingAnchors(document).length > 0) continue;
+    const drawingRelsPart = relationshipPart(reference.drawingPart);
+    const drawingRelationships = zip.file(drawingRelsPart)
+      ? relationshipRecords(await zip.file(drawingRelsPart).async("string"))
+      : [];
+    if (drawingRelationships.length > 0) continue;
+
+    const latestSheetXml = await zip.file(reference.sheetPart).async("string");
+    zip.file(reference.sheetPart, removeWorksheetDrawing(latestSheetXml, reference.relationshipId));
+    const latestRelationships = zip.file(reference.sheetRelsPart)
+      ? relationshipRecords(await zip.file(reference.sheetRelsPart).async("string"))
+      : reference.relationships;
+    const remainingRelationships = latestRelationships.filter((record) => record.id !== reference.relationshipId);
+    if (remainingRelationships.length > 0) zip.file(reference.sheetRelsPart, relationshipXml(remainingRelationships));
+    else zip.remove(reference.sheetRelsPart);
+    zip.remove(reference.drawingPart);
+    zip.remove(drawingRelsPart);
+    if (contentTypesXml !== null) contentTypesXml = removeContentTypeOverride(contentTypesXml, reference.drawingPart);
+    removedParts.push({ part: reference.drawingPart, sheet: reference.sheet });
+  }
+
+  if (contentTypesXml !== null && removedParts.length > 0) zip.file("[Content_Types].xml", contentTypesXml);
+  return { removed: removedParts.length, parts: removedParts };
+}
+
+export async function inspectDrawingPackage(zip, { DOMParser }) {
+  const issues = [];
+  const sheetParts = await workbookSheetParts(zip);
+  const references = new Map();
+
+  for (const [sheet, sheetPart] of sheetParts.entries()) {
+    const sheetFile = zip.file(sheetPart);
+    if (!sheetFile) continue;
+    const sheetXml = await sheetFile.async("string");
+    const relationshipIds = worksheetDrawingIds(sheetXml);
+    if (relationshipIds.length === 0) continue;
+    const sheetRelsPart = relationshipPart(sheetPart);
+    const relationships = zip.file(sheetRelsPart)
+      ? relationshipRecords(await zip.file(sheetRelsPart).async("string"))
+      : [];
+    for (const relationshipId of relationshipIds) {
+      const relationship = relationships.find((record) => record.id === relationshipId && record.type === DRAWING_REL);
+      if (!relationship?.target) {
+        issues.push({ type: "unresolved_worksheet_drawing_relationship", sheet, part: sheetPart, relationshipId });
+        continue;
+      }
+      const drawingPart = normalizePackageTarget(sheetPart, relationship.target);
+      if (!zip.file(drawingPart)) {
+        issues.push({ type: "missing_drawing_part", sheet, part: drawingPart, relationshipId });
+        continue;
+      }
+      const owners = references.get(drawingPart) ?? [];
+      owners.push({ sheet, sheetPart, relationshipId });
+      references.set(drawingPart, owners);
+    }
+  }
+
+  const drawingPartNames = Object.keys(zip.files).filter((name) => /^xl\/drawings\/[^/]+\.xml$/i.test(name) && !zip.files[name].dir);
+  const parts = [];
+  for (const part of drawingPartNames) {
+    const owners = references.get(part) ?? [];
+    if (owners.length === 0) issues.push({ type: "orphan_drawing_part", part });
+    const xml = await zip.file(part).async("string");
+    const document = parseDrawingDocument(xml, DOMParser);
+    if (!document) {
+      issues.push({ type: "malformed_drawing_xml", part });
+      parts.push({ part, sheet: owners[0]?.sheet ?? null, objects: 0, relationships: 0 });
+      continue;
+    }
+    const anchors = drawingAnchors(document);
+    const drawingRelsPart = relationshipPart(part);
+    const relationships = zip.file(drawingRelsPart)
+      ? relationshipRecords(await zip.file(drawingRelsPart).async("string"))
+      : [];
+    const relationshipsById = new Map(relationships.map((record) => [record.id, record]));
+    if (anchors.length === 0 && relationships.length > 0) {
+      issues.push({ type: "empty_drawing_with_relationships", part, relationshipCount: relationships.length });
+    }
+
+    anchors.forEach((anchor, anchorIndex) => {
+      const children = childElements(anchor);
+      const clientDataIndexes = children.map((child, index) => localName(child) === "clientData" ? index : -1).filter((index) => index >= 0);
+      if (clientDataIndexes.length !== 1 || clientDataIndexes[0] !== children.length - 1) {
+        issues.push({
+          type: "invalid_drawing_anchor_structure",
+          part,
+          anchor: anchorIndex + 1,
+          anchorType: localName(anchor),
+          reason: clientDataIndexes.length === 0 ? "missing_direct_client_data" : clientDataIndexes.length > 1 ? "multiple_direct_client_data" : "client_data_not_last",
+        });
+      }
+      const nestedClientData = descendantElements(anchor, "clientData").filter((element) => element.parentNode !== anchor);
+      if (nestedClientData.length > 0) {
+        issues.push({ type: "invalid_drawing_anchor_structure", part, anchor: anchorIndex + 1, anchorType: localName(anchor), reason: "nested_client_data" });
+      }
+      for (const graphicFrame of children.filter((child) => localName(child) === "graphicFrame")) {
+        const frameChildren = new Set(childElements(graphicFrame).map(localName));
+        const missing = ["nvGraphicFramePr", "xfrm", "graphic"].filter((name) => !frameChildren.has(name));
+        if (missing.length > 0) {
+          issues.push({ type: "invalid_drawing_graphic_frame", part, anchor: anchorIndex + 1, missing });
+        }
+        for (const chart of descendantElements(graphicFrame, "chart")) {
+          const relationshipId = chart.getAttribute("r:id") || chart.getAttributeNS?.(OFFICE_REL_NS, "id");
+          const relationship = relationshipsById.get(relationshipId);
+          if (!relationshipId || relationship?.type !== CHART_REL) {
+            issues.push({ type: "unresolved_drawing_chart_relationship", part, anchor: anchorIndex + 1, relationshipId: relationshipId || null });
+            continue;
+          }
+          const chartPart = normalizePackageTarget(part, relationship.target);
+          if (!zip.file(chartPart)) issues.push({ type: "missing_chart_part", part: chartPart, drawingPart: part, relationshipId });
+        }
+      }
+    });
+    parts.push({ part, sheet: owners[0]?.sheet ?? null, objects: anchors.length, relationships: relationships.length });
+  }
+
+  return { parts, issues };
 }
 
 export async function inspectNativeCharts(zip) {

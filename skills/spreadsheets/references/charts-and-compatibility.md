@@ -58,6 +58,8 @@ helpers.addNativeChart(workbook, {
 - Render and inspect chart titles, category labels, legend labels, units, placement, and empty-data behavior.
 - Do not round-trip an existing chart workbook through ExcelJS by default. Net-new chart creation does not imply safe editing of arbitrary existing chart packages.
 
+The native-chart helper owns the DrawingML anchor and relationship XML. Do not hand-edit it in a builder. `audit` rejects malformed anchors, nested or misplaced `clientData`, unresolved worksheet-to-drawing links, unresolved chart relationships, and missing chart parts. A chart is structurally deliverable only when `package.compatibility.status` is `ok` in addition to meeting the chart requirements.
+
 Other chart types remain unsupported. If a requested type is unavailable, choose the closest supported native type only when it preserves the intended analytical takeaway, and state the substitution.
 
 ## Images and drawings
@@ -72,4 +74,4 @@ ExcelJS can create images, but existing drawing packages can contain unsupported
 
 ## LibreOffice round-trip limitations
 
-LibreOffice provides deterministic headless recalculation and rendering, but it is not Microsoft Excel. Complex Excel-only formulas, external connections, and advanced objects may behave differently. Keep final Microsoft Excel smoke testing as an optional higher-assurance step when the environment provides Excel.
+LibreOffice provides deterministic headless recalculation and rendering, but it is not Microsoft Excel. Recalculation can introduce empty drawing parts on worksheets with filters. The runtime removes only drawing parts that have zero anchors, zero drawing relationships, and exactly one resolvable worksheet owner; it preserves and rejects ambiguous or populated drawing structures instead of guessing. Complex Excel-only formulas, external connections, and advanced objects may behave differently. Keep final Microsoft Excel smoke testing as an optional higher-assurance step when the environment provides Excel.

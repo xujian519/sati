@@ -9,7 +9,12 @@ import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { injectNativeCharts, inspectNativeCharts } from "./lib/native-charts.mjs";
+import {
+  injectNativeCharts,
+  inspectDrawingPackage,
+  inspectNativeCharts,
+  pruneEmptyDrawingParts,
+} from "./lib/native-charts.mjs";
 
 const execFileAsync = promisify(execFile);
 const runtimeRoot = process.env.SPREADSHEET_RUNTIME_ROOT;
@@ -186,6 +191,88 @@ async function normalizePrefixedSpreadsheetPackage(filePath) {
   }
 
   return changed ? zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }) : null;
+}
+
+function elementsByLocalName(root, localName) {
+  const matches = [];
+  const elements = root.getElementsByTagName("*");
+  for (let index = 0; index < elements.length; index += 1) {
+    const element = elements.item(index);
+    const elementLocalName = element?.localName ?? element?.nodeName?.split(":").at(-1);
+    if (elementLocalName === localName) matches.push(element);
+  }
+  return matches;
+}
+
+function normalizeLibreOfficeDataValidations(xml) {
+  const validationPattern = /<(?:(?:[A-Za-z_][\w.-]*):)?dataValidation\b[^>]*(?:\/>|>[\s\S]*?<\/(?:(?:[A-Za-z_][\w.-]*):)?dataValidation\s*>)/gi;
+  const formula2Pattern = /<(?:(?:[A-Za-z_][\w.-]*):)?formula2\b[^>]*(?:\/>|>[\s\S]*?<\/(?:(?:[A-Za-z_][\w.-]*):)?formula2\s*>)/gi;
+  let normalizedCount = 0;
+  const normalizedXml = xml.replace(validationPattern, (validationXml) => {
+    const openingEnd = validationXml.indexOf(">");
+    if (openingEnd < 0) return validationXml;
+    const opening = validationXml.slice(0, openingEnd + 1);
+    const type = opening.match(/\stype=(["'])([^"']+)\1/i)?.[2]?.toLowerCase();
+    if (!new Set(["list", "custom"]).has(type)) return validationXml;
+
+    const normalizedOpening = opening.replace(/\soperator=(["'])[^"']*\1/gi, "");
+    const normalizedBody = validationXml.slice(openingEnd + 1).replace(formula2Pattern, "");
+    const normalized = `${normalizedOpening}${normalizedBody}`;
+    if (normalized !== validationXml) normalizedCount += 1;
+    return normalized;
+  });
+  return { xml: normalizedXml, normalizedCount };
+}
+
+async function normalizeLibreOfficeRoundTripPackage(filePath) {
+  const zip = await JSZip.loadAsync(await fs.readFile(filePath));
+  let normalizedValidations = 0;
+  let changedParts = 0;
+  for (const [entryName, entry] of Object.entries(zip.files)) {
+    if (entry.dir || !/^xl\/worksheets\/sheet\d+\.xml$/i.test(entryName)) continue;
+    const xml = await entry.async("string");
+    const normalized = normalizeLibreOfficeDataValidations(xml);
+    if (normalized.xml === xml) continue;
+    zip.file(entryName, normalized.xml);
+    normalizedValidations += normalized.normalizedCount;
+    changedParts += 1;
+  }
+  const drawingCleanup = await pruneEmptyDrawingParts(zip, { DOMParser });
+  if (changedParts > 0 || drawingCleanup.removed > 0) {
+    await fs.writeFile(filePath, await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));
+  }
+  return {
+    changed: changedParts > 0 || drawingCleanup.removed > 0,
+    changedParts: changedParts + drawingCleanup.removed,
+    normalizedValidations,
+    removedEmptyDrawings: drawingCleanup.removed,
+    removedDrawingParts: drawingCleanup.parts,
+  };
+}
+
+async function collectSpreadsheetCompatibilityIssues(zip) {
+  const issues = [];
+  for (const [entryName, entry] of Object.entries(zip.files)) {
+    if (entry.dir || !/^xl\/worksheets\/sheet\d+\.xml$/i.test(entryName)) continue;
+    const xml = await entry.async("string");
+    const document = new DOMParser().parseFromString(xml, "application/xml");
+    for (const validation of elementsByLocalName(document, "dataValidation")) {
+      const type = validation.getAttribute("type")?.toLowerCase() ?? "none";
+      if (!new Set(["list", "custom"]).has(type)) continue;
+      const operator = validation.getAttribute("operator");
+      const formula2 = elementsByLocalName(validation, "formula2")[0]?.textContent ?? null;
+      if (operator === null && formula2 === null) continue;
+      issues.push({
+        type: "invalid_data_validation_semantics",
+        part: entryName,
+        range: validation.getAttribute("sqref") ?? null,
+        validationType: type,
+        unexpectedOperator: operator,
+        unexpectedFormula2: formula2,
+      });
+    }
+  }
+  return issues;
 }
 
 async function loadXlsx(filePath) {
@@ -625,22 +712,9 @@ async function inspectPackage(filePath) {
   const zip = await JSZip.loadAsync(data);
   const entries = Object.keys(zip.files).filter((entry) => !zip.files[entry].dir);
   const count = (predicate) => entries.filter(predicate).length;
-  const drawingParts = entries.filter((entry) => /^xl\/drawings\/drawing\d+\.xml$/i.test(entry));
-  const drawings = [];
-  let drawingObjectCount = 0;
-  for (const entry of drawingParts) {
-    const xml = await zip.file(entry).async("string");
-    const document = new DOMParser().parseFromString(xml, "application/xml");
-    const anchors = ["twoCellAnchor", "oneCellAnchor", "absoluteAnchor"]
-      .reduce((total, tag) => total + Math.max(
-        document.getElementsByTagName(`xdr:${tag}`).length,
-        document.getElementsByTagNameNS("http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing", tag).length,
-      ), 0);
-    if (anchors > 0) {
-      drawings.push({ part: entry, objects: anchors });
-      drawingObjectCount += anchors;
-    }
-  }
+  const drawingInspection = await inspectDrawingPackage(zip, { DOMParser });
+  const drawings = drawingInspection.parts;
+  const drawingObjectCount = drawings.reduce((total, drawing) => total + drawing.objects, 0);
 
   const features = {
     macros: count((entry) => /(?:^|\/)vbaProject\.bin$/i.test(entry)),
@@ -651,6 +725,7 @@ async function inspectPackage(filePath) {
     connections: count((entry) => /^xl\/connections\.xml$/i.test(entry)),
     queryTables: count((entry) => /^xl\/queryTables\//i.test(entry)),
     drawings: drawingObjectCount,
+    drawingParts: drawings.length,
     media: count((entry) => /^xl\/media\//i.test(entry)),
     embeddings: count((entry) => /^xl\/embeddings\//i.test(entry)),
     activeX: count((entry) => /^xl\/activeX\//i.test(entry)),
@@ -662,6 +737,10 @@ async function inspectPackage(filePath) {
   };
 
   const charts = await inspectNativeCharts(zip);
+  const compatibilityIssues = [
+    ...await collectSpreadsheetCompatibilityIssues(zip),
+    ...drawingInspection.issues,
+  ];
 
   const risks = Object.entries(features)
     .filter(([name, amount]) => amount > 0 && HARD_RISK_FEATURES.has(name))
@@ -672,6 +751,10 @@ async function inspectPackage(filePath) {
     features,
     charts,
     drawings,
+    compatibility: {
+      status: compatibilityIssues.length > 0 ? "error" : "ok",
+      issues: compatibilityIssues,
+    },
     unsafeForRoundTrip: risks.length > 0,
     roundTripRisks: risks,
   };
@@ -1124,6 +1207,7 @@ async function auditXlsx(filePath, requirements = null) {
     ...facts.formulaReferencesWithErrors.map((error) => ({ type: "invalid_formula_reference", ...error })),
     ...facts.invalidDates.map((error) => ({ type: "invalid_date_value", ...error })),
     ...chartFailures,
+    ...packageInfo.compatibility.issues,
     ...coverage.failures.map((failure) => ({ type: "requirement_not_met", requirement: failure })),
   ];
   return {
@@ -1269,9 +1353,10 @@ async function recalculateWorkbook(inputPath, outputPath) {
     if (!(await pathExists(convertedPath))) {
       throw new Error(`LibreOffice did not produce a recalculated XLSX. ${conversion.stderr || conversion.stdout}`.trim());
     }
+    const compatibilityNormalization = await normalizeLibreOfficeRoundTripPackage(convertedPath);
     await ensureParent(outputPath);
     await fs.copyFile(convertedPath, outputPath);
-    return { output: path.resolve(outputPath), engine: "LibreOffice" };
+    return { output: path.resolve(outputPath), engine: "LibreOffice", compatibilityNormalization };
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
@@ -1293,6 +1378,7 @@ async function convertLegacyXls(inputPath, outputPath) {
     const conversion = await runLibreOffice(["--convert-to", "xlsx:Calc MS Excel 2007 XML", "--outdir", convertedDir, sourcePath], profileDir);
     const convertedPath = path.join(convertedDir, "workbook.xlsx");
     if (!(await pathExists(convertedPath))) throw new Error(`LibreOffice did not convert the legacy XLS file. ${conversion.stderr || conversion.stdout}`.trim());
+    const compatibilityNormalization = await normalizeLibreOfficeRoundTripPackage(convertedPath);
     const workbook = await loadXlsx(convertedPath);
     if (workbook.worksheets.length === 0) throw new Error("Converted XLSX has no worksheets");
     if (workbook.worksheets.every((worksheet) => worksheet.actualRowCount === 0)) throw new Error("Converted XLSX contains no populated worksheets");
@@ -1300,7 +1386,7 @@ async function convertLegacyXls(inputPath, outputPath) {
     await fs.copyFile(convertedPath, outputPath);
     const audit = await auditXlsx(outputPath);
     if (audit.status === "error") throw new Error("Converted XLSX failed structural or formula audit");
-    return { status: audit.status, input: path.resolve(inputPath), output: path.resolve(outputPath), engine: "LibreOffice", audit };
+    return { status: audit.status, input: path.resolve(inputPath), output: path.resolve(outputPath), engine: "LibreOffice", compatibilityNormalization, audit };
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
@@ -1979,7 +2065,7 @@ async function commandSelfTest(options) {
   await workbook.xlsx.writeFile(rawPath);
   steps.push({ name: "create", status: "ok", output: rawPath });
 
-  await recalculateWorkbook(rawPath, finalPath);
+  const recalculation = await recalculateWorkbook(rawPath, finalPath);
   await injectNativeCharts(finalPath, nativeCharts, { JSZip, loadXlsx });
   const recalculated = await loadXlsx(finalPath);
   const margin = recalculated.getWorksheet("汇总").getCell("D4").result;
@@ -1987,11 +2073,134 @@ async function commandSelfTest(options) {
   if (Math.abs(Number(margin) - 0.3) > 0.000001 || Math.abs(Number(projected) - 110000) > 0.01) {
     throw new Error(`Formula recalculation failed: margin=${margin}, projected=${projected}`);
   }
-  steps.push({ name: "recalculate", status: "ok", margin, projected });
+  steps.push({ name: "recalculate", status: "ok", margin, projected, compatibilityNormalization: recalculation.compatibilityNormalization });
 
   const inspection = await inspectXlsx(finalPath, { sheet: "汇总", range: "A1:F8", styles: true });
   if (inspection.formulas.count < 4 || inspection.package.features.tables < 1 || inspection.package.features.charts !== 1) throw new Error("Inspection missed formulas, tables, or native charts");
-  steps.push({ name: "inspect", status: "ok", formulas: inspection.formulas.count, tables: inspection.package.features.tables, charts: inspection.package.features.charts });
+  if (inspection.package.compatibility.status !== "ok") throw new Error("Inspection missed invalid post-recalculation OOXML semantics");
+  if (inspection.package.features.drawingParts !== 1 || inspection.package.features.drawings !== 1) {
+    throw new Error(`Drawing cleanup or native chart injection left an unexpected package shape: ${inspection.package.features.drawingParts} parts, ${inspection.package.features.drawings} objects`);
+  }
+  steps.push({
+    name: "inspect",
+    status: "ok",
+    formulas: inspection.formulas.count,
+    tables: inspection.package.features.tables,
+    charts: inspection.package.features.charts,
+    drawingParts: inspection.package.features.drawingParts,
+    drawingObjects: inspection.package.features.drawings,
+  });
+
+  const invalidDrawingPath = path.join(outputDir, "invalid-drawing-anchor.xlsx");
+  const invalidDrawingZip = await JSZip.loadAsync(await fs.readFile(finalPath));
+  let invalidDrawingPart = null;
+  for (const [entryName, entry] of Object.entries(invalidDrawingZip.files)) {
+    if (entry.dir || !/^xl\/drawings\/[^/]+\.xml$/i.test(entryName) || invalidDrawingPart) continue;
+    const xml = await entry.async("string");
+    const malformed = xml.replace(
+      /<\/a:graphic>\s*<\/xdr:graphicFrame>\s*<xdr:clientData\s*\/>/i,
+      "</a:graphic><xdr:clientData/></xdr:graphicFrame>",
+    );
+    if (malformed === xml) continue;
+    invalidDrawingZip.file(entryName, malformed);
+    invalidDrawingPart = entryName;
+  }
+  if (!invalidDrawingPart) throw new Error("Self-test could not create a malformed DrawingML anchor fixture");
+  await fs.writeFile(invalidDrawingPath, await invalidDrawingZip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));
+  const invalidDrawingAudit = await auditXlsx(invalidDrawingPath);
+  const invalidDrawingReasons = new Set(invalidDrawingAudit.hardFailures
+    .filter((failure) => failure.type === "invalid_drawing_anchor_structure")
+    .map((failure) => failure.reason));
+  if (!invalidDrawingReasons.has("missing_direct_client_data") || !invalidDrawingReasons.has("nested_client_data")) {
+    throw new Error("DrawingML audit did not reject a nested clientData element");
+  }
+
+  const missingChartPath = path.join(outputDir, "missing-chart-part.xlsx");
+  const missingChartZip = await JSZip.loadAsync(await fs.readFile(finalPath));
+  const removedChartPart = Object.keys(missingChartZip.files).find((entryName) => /^xl\/charts\/chart\d+\.xml$/i.test(entryName));
+  if (!removedChartPart) throw new Error("Self-test could not locate the native chart part");
+  missingChartZip.remove(removedChartPart);
+  await fs.writeFile(missingChartPath, await missingChartZip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));
+  const missingChartAudit = await auditXlsx(missingChartPath);
+  if (!missingChartAudit.hardFailures.some((failure) => failure.type === "missing_chart_part" && failure.part === removedChartPart)) {
+    throw new Error("DrawingML audit did not reject a dangling chart relationship");
+  }
+  steps.push({
+    name: "drawingml-compatibility",
+    status: "ok",
+    malformedAnchorIssues: invalidDrawingAudit.package.compatibility.issues.length,
+    danglingRelationshipIssues: missingChartAudit.package.compatibility.issues.length,
+  });
+
+  const emptyDrawingPath = path.join(outputDir, "empty-drawing-part.xlsx");
+  const emptyDrawingZip = await JSZip.loadAsync(await fs.readFile(rawPath));
+  const emptyDrawingRelationshipId = "rIdPilotDeckEmptyDrawing";
+  const emptyDrawingPart = "xl/drawings/drawing999.xml";
+  const emptyDrawingSheetPart = "xl/worksheets/sheet1.xml";
+  const emptyDrawingSheetRelsPart = "xl/worksheets/_rels/sheet1.xml.rels";
+  const emptyDrawingSheetXml = await emptyDrawingZip.file(emptyDrawingSheetPart).async("string");
+  emptyDrawingZip.file(emptyDrawingSheetPart, emptyDrawingSheetXml.replace("</worksheet>", `<drawing r:id="${emptyDrawingRelationshipId}"/></worksheet>`));
+  const emptyDrawingRelationshipXml = emptyDrawingZip.file(emptyDrawingSheetRelsPart)
+    ? await emptyDrawingZip.file(emptyDrawingSheetRelsPart).async("string")
+    : '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
+  emptyDrawingZip.file(emptyDrawingSheetRelsPart, emptyDrawingRelationshipXml.replace(
+    "</Relationships>",
+    `<Relationship Id="${emptyDrawingRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing999.xml"/></Relationships>`,
+  ));
+  emptyDrawingZip.file(emptyDrawingPart, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"></xdr:wsDr>');
+  const emptyDrawingContentTypes = await emptyDrawingZip.file("[Content_Types].xml").async("string");
+  emptyDrawingZip.file("[Content_Types].xml", emptyDrawingContentTypes.replace(
+    "</Types>",
+    `<Override PartName="/${emptyDrawingPart}" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`,
+  ));
+  await fs.writeFile(emptyDrawingPath, await emptyDrawingZip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));
+  const emptyDrawingNormalization = await normalizeLibreOfficeRoundTripPackage(emptyDrawingPath);
+  const cleanedEmptyDrawingZip = await JSZip.loadAsync(await fs.readFile(emptyDrawingPath));
+  const cleanedSheetXml = await cleanedEmptyDrawingZip.file(emptyDrawingSheetPart).async("string");
+  const cleanedSheetRelsXml = cleanedEmptyDrawingZip.file(emptyDrawingSheetRelsPart)
+    ? await cleanedEmptyDrawingZip.file(emptyDrawingSheetRelsPart).async("string")
+    : "";
+  const cleanedContentTypes = await cleanedEmptyDrawingZip.file("[Content_Types].xml").async("string");
+  if (emptyDrawingNormalization.removedEmptyDrawings !== 1
+    || cleanedEmptyDrawingZip.file(emptyDrawingPart)
+    || cleanedSheetXml.includes(emptyDrawingRelationshipId)
+    || cleanedSheetRelsXml.includes(emptyDrawingRelationshipId)
+    || cleanedContentTypes.includes(`/${emptyDrawingPart}`)) {
+    throw new Error("Empty DrawingML package cleanup left an orphan part or relationship");
+  }
+  steps.push({ name: "empty-drawing-cleanup", status: "ok", removed: emptyDrawingNormalization.removedEmptyDrawings });
+
+  const incompatibleValidationPath = path.join(outputDir, "invalid-list-validation.xlsx");
+  const incompatibleValidationZip = await JSZip.loadAsync(await fs.readFile(rawPath));
+  let injectedInvalidValidation = false;
+  for (const [entryName, entry] of Object.entries(incompatibleValidationZip.files)) {
+    if (entry.dir || !/^xl\/worksheets\/sheet\d+\.xml$/i.test(entryName) || injectedInvalidValidation) continue;
+    const xml = await entry.async("string");
+    const invalid = xml.replace(
+      /(<(?:(?:[A-Za-z_][\w.-]*):)?dataValidation\b)([^>]*\btype=(["'])list\3[^>]*>)([\s\S]*?)(<\/(?:(?:[A-Za-z_][\w.-]*):)?dataValidation\s*>)/i,
+      (_match, opening, attributes, _quote, body, closing) => `${opening} operator="between"${attributes}${body}<formula2>0</formula2>${closing}`,
+    );
+    if (invalid === xml) continue;
+    incompatibleValidationZip.file(entryName, invalid);
+    injectedInvalidValidation = true;
+  }
+  if (!injectedInvalidValidation) throw new Error("Self-test could not create an invalid list-validation fixture");
+  await fs.writeFile(incompatibleValidationPath, await incompatibleValidationZip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));
+  const incompatibleValidationAudit = await auditXlsx(incompatibleValidationPath);
+  if (!incompatibleValidationAudit.hardFailures.some((failure) => failure.type === "invalid_data_validation_semantics")) {
+    throw new Error("Audit did not reject invalid list-validation OOXML semantics");
+  }
+  const fixtureNormalization = await normalizeLibreOfficeRoundTripPackage(incompatibleValidationPath);
+  const repairedValidationAudit = await auditXlsx(incompatibleValidationPath);
+  if (fixtureNormalization.normalizedValidations !== 1 || repairedValidationAudit.package.compatibility.status !== "ok") {
+    throw new Error("List-validation OOXML normalization did not repair the invalid fixture");
+  }
+  steps.push({
+    name: "list-validation-compatibility",
+    status: "ok",
+    detected: incompatibleValidationAudit.package.compatibility.issues.length,
+    normalized: fixtureNormalization.normalizedValidations,
+  });
 
   const prefixedPath = path.join(outputDir, "prefixed-main-namespace.xlsx");
   const prefixedZip = await JSZip.loadAsync(await fs.readFile(rawPath));
