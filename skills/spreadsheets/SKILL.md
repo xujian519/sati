@@ -22,6 +22,7 @@ Work with standalone spreadsheet files through a reproducible JavaScript `.mjs` 
 - Fix formula errors, clipped content, broken tables, unreadable formats, unexpected blank sheets, and poor page layout before delivery.
 - Build to a scratch candidate and use `deliver` to seal the final XLSX. Do not manually copy an unaudited candidate to the final path.
 - A failed `build`, `audit`, or `deliver` means the workbook is not deliverable. Do not copy a raw/debug workbook, remove requested features, append `|| true`, or claim success after a gate fails.
+- Use the bundled helpers for conditional formatting and native charts. Do not replace them with unsupported ExcelJS chart APIs or unvalidated low-level conditional-formatting objects.
 - Resolve every audit warning or add a task-specific `warningDispositions` entry with a concrete rationale. Undisposed warnings block `deliver`.
 
 ## Read the relevant references
@@ -135,7 +136,7 @@ bash "$SHEET" build \
   --out "$WORKSPACE/tmp/candidate.xlsx"
 ```
 
-`build` preserves the input, blocks unsafe round trips, recalculates formula-driven XLSX files, and performs a compact formula audit. It stages output and updates the requested candidate only after audit passes, so a failed build must be fixed and rerun. Never add `--allow-risky-roundtrip` unless the user has explicitly accepted the listed compatibility risks.
+`build` preserves the input, validates builder structures and requirements, blocks unsafe round trips, recalculates formula-driven XLSX files, and performs a compact formula audit. It stages output and updates the requested candidate only after audit passes, so a failed build must be fixed and rerun. Fix the reported `stage`, worksheet, range, and field instead of disabling requested features or switching to a second builder. Never add `--allow-risky-roundtrip` unless the user has explicitly accepted the listed compatibility risks.
 
 ## Formula and data rules
 

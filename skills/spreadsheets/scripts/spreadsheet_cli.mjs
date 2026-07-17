@@ -29,6 +29,24 @@ const iconv = require("iconv-lite");
 
 const NATIVE_CHART_SPECS = new WeakMap();
 
+class SpreadsheetStageError extends Error {
+  constructor(stage, message, cause) {
+    super(`${stage}: ${message}`, { cause });
+    this.name = "SpreadsheetStageError";
+    this.stage = stage;
+  }
+}
+
+async function runStage(stage, operation) {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof SpreadsheetStageError) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new SpreadsheetStageError(stage, message, error);
+  }
+}
+
 const FORMULA_ERROR_RE = /#(?:REF!|DIV\/0!|VALUE!|NAME\?|N\/A|NUM!|NULL!|SPILL!|CALC!|CIRC!)/i;
 const SPREADSHEET_MAIN_NAMESPACE = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const HARD_RISK_FEATURES = new Set([
@@ -369,10 +387,31 @@ function addListValidation(worksheet, rangeRef, values, options = {}) {
   });
 }
 
+function validateConditionalFormattingRule(rule, location) {
+  if (!rule || typeof rule !== "object" || Array.isArray(rule)) {
+    throw new Error(`${location} must be an object`);
+  }
+  if (Object.hasOwn(rule, "formula") && !Object.hasOwn(rule, "formulae")) {
+    throw new Error(`${location}.formula is invalid; use ${location}.formulae as an array`);
+  }
+  if (["expression", "cellIs"].includes(rule.type) && (!Array.isArray(rule.formulae) || rule.formulae.length === 0)) {
+    throw new Error(`${location}.formulae must be a non-empty array for conditional-formatting type '${rule.type}'`);
+  }
+}
+
+function validateConditionalFormattingEntry(entry, location) {
+  if (!entry?.ref) throw new Error(`${location}.ref is required`);
+  if (!Array.isArray(entry.rules) || entry.rules.length === 0) {
+    throw new Error(`${location}.rules must contain at least one rule`);
+  }
+  entry.rules.forEach((rule, index) => validateConditionalFormattingRule(rule, `${location}.rules[${index}]`));
+}
+
 function addConditionalFormatting(worksheet, { range, rules }) {
   if (!range || !Array.isArray(rules) || rules.length === 0) {
     throw new Error("addConditionalFormatting requires range and at least one rule");
   }
+  validateConditionalFormattingEntry({ ref: range, rules }, `worksheet '${worksheet.name}' conditionalFormatting '${range}'`);
   worksheet.addConditionalFormatting({ ref: range, rules: structuredClone(rules) });
 }
 
@@ -398,7 +437,13 @@ function safeDateIso(value) {
 }
 
 function displayCellText(cell) {
-  if (cell.text !== undefined && cell.text !== null && cell.text !== "") return String(cell.text);
+  let renderedText;
+  try {
+    renderedText = cell.text;
+  } catch {
+    renderedText = undefined;
+  }
+  if (renderedText !== undefined && renderedText !== null && renderedText !== "") return String(renderedText);
   const value = cell.value;
   if (value === null || value === undefined) return "";
   if (value instanceof Date) return safeDateIso(value)?.slice(0, 10) ?? "<Invalid Date>";
@@ -753,12 +798,75 @@ async function inspectDelimited(filePath, options = {}) {
   };
 }
 
+const REQUIREMENT_KEYS = new Set([
+  "requiredSheets",
+  "exactSheetCount",
+  "minFormulaCount",
+  "requiredFormulaRanges",
+  "requiredNonEmptyRanges",
+  "expectedCells",
+  "requiredCellTypes",
+  "requiredNativeCharts",
+  "requiredTables",
+  "requiredConditionalFormatting",
+  "requiredDataValidations",
+  "maxTotalPages",
+  "maxPagesPerSheet",
+  "warningDispositions",
+]);
+
+const REQUIREMENT_ARRAY_KEYS = [
+  "requiredSheets",
+  "requiredFormulaRanges",
+  "requiredNonEmptyRanges",
+  "expectedCells",
+  "requiredCellTypes",
+  "requiredNativeCharts",
+  "requiredTables",
+  "requiredConditionalFormatting",
+  "requiredDataValidations",
+  "maxPagesPerSheet",
+  "warningDispositions",
+];
+
+function validateRequirements(requirements, source = "requirements") {
+  if (requirements === null || requirements === undefined) return null;
+  if (typeof requirements !== "object" || Array.isArray(requirements)) {
+    throw new Error(`${source} must be a JSON object`);
+  }
+  if (Object.hasOwn(requirements, "coverage") || Object.hasOwn(requirements, "status")) {
+    throw new Error(`${source} must declare checks, not audit results; remove coverage/status`);
+  }
+  const unknown = Object.keys(requirements).filter((key) => !REQUIREMENT_KEYS.has(key));
+  if (unknown.length > 0) throw new Error(`${source} contains unsupported key(s): ${unknown.join(", ")}`);
+  for (const key of REQUIREMENT_ARRAY_KEYS) {
+    if (requirements[key] !== undefined && !Array.isArray(requirements[key])) {
+      throw new Error(`${source}.${key} must be an array`);
+    }
+  }
+  if (requirements.requiredSheets?.some((sheet) => typeof sheet !== "string" || sheet.trim().length === 0)) {
+    throw new Error(`${source}.requiredSheets must contain non-empty worksheet names`);
+  }
+  for (const [key, value] of [["exactSheetCount", requirements.exactSheetCount], ["minFormulaCount", requirements.minFormulaCount], ["maxTotalPages", requirements.maxTotalPages]]) {
+    if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
+      throw new Error(`${source}.${key} must be a non-negative integer`);
+    }
+  }
+  for (const [index, disposition] of (requirements.warningDispositions ?? []).entries()) {
+    if (!disposition || typeof disposition.type !== "string" || disposition.type.trim().length === 0 || typeof disposition.rationale !== "string" || disposition.rationale.trim().length === 0) {
+      throw new Error(`${source}.warningDispositions[${index}] requires non-empty type and rationale strings`);
+    }
+  }
+  return requirements;
+}
+
 async function resolveRequirements(requirementsPath, inlineRequirements = null) {
   let fileRequirements = null;
-  if (requirementsPath) fileRequirements = JSON.parse(await fs.readFile(requirementsPath, "utf8"));
-  if (!fileRequirements) return inlineRequirements;
-  if (!inlineRequirements) return fileRequirements;
-  return { ...inlineRequirements, ...fileRequirements };
+  if (requirementsPath) fileRequirements = validateRequirements(JSON.parse(await fs.readFile(requirementsPath, "utf8")), path.resolve(requirementsPath));
+  const validatedInline = validateRequirements(inlineRequirements, "builder requirements");
+  if (!fileRequirements) return validatedInline;
+  if (!validatedInline) return fileRequirements;
+  return validateRequirements({ ...validatedInline, ...fileRequirements }, "merged requirements");
 }
 
 function normalizeChartFormula(value) {
@@ -1012,6 +1120,7 @@ async function auditXlsx(filePath, requirements = null) {
   const warningDispositions = evaluateWarningDispositions(warnings, requirements);
   const hardFailures = [
     ...facts.errors.map((error) => ({ type: "formula_error", ...error })),
+    ...facts.missingCachedResults.map((error) => ({ type: "missing_cached_formula_result", ...error })),
     ...facts.formulaReferencesWithErrors.map((error) => ({ type: "invalid_formula_reference", ...error })),
     ...facts.invalidDates.map((error) => ({ type: "invalid_date_value", ...error })),
     ...chartFailures,
@@ -1266,6 +1375,30 @@ function createToolkit(inputPath) {
   };
 }
 
+function validateNativeChartSpec(workbook, spec, location) {
+  if (!spec || typeof spec !== "object" || Array.isArray(spec)) throw new Error(`${location} must be an object`);
+  if (!spec.sheet || !workbook.getWorksheet(spec.sheet)) throw new Error(`${location}.sheet references missing worksheet '${spec.sheet ?? ""}'`);
+  if (!["line", "column", "bar"].includes(spec.type)) throw new Error(`${location}.type must be line, column, or bar`);
+  if (typeof spec.categories !== "string" || spec.categories.trim().length === 0) throw new Error(`${location}.categories must be a non-empty range`);
+  if (!Array.isArray(spec.series) || spec.series.length === 0) throw new Error(`${location}.series must contain at least one series`);
+  spec.series.forEach((series, index) => {
+    if (!series || typeof series.name !== "string" || series.name.trim().length === 0 || typeof series.values !== "string" || series.values.trim().length === 0) {
+      throw new Error(`${location}.series[${index}] requires non-empty name and values`);
+    }
+  });
+}
+
+function validateWorkbookForSerialization(workbook, nativeCharts) {
+  if (workbook.worksheets.length === 0) throw new Error("Workbook must contain at least one worksheet");
+  for (const worksheet of workbook.worksheets) {
+    for (const [index, entry] of (worksheet.conditionalFormattings ?? []).entries()) {
+      validateConditionalFormattingEntry(entry, `worksheet '${worksheet.name}' conditionalFormattings[${index}]`);
+    }
+  }
+  if (!Array.isArray(nativeCharts)) throw new Error("Builder nativeCharts must be an array");
+  nativeCharts.forEach((spec, index) => validateNativeChartSpec(workbook, spec, `nativeCharts[${index}]`));
+}
+
 async function buildFromBuilder(builderPath, inputPath) {
   const builderUrl = `${pathToFileURL(path.resolve(builderPath)).href}?pilotdeck=${Date.now()}`;
   const module = await import(builderUrl);
@@ -1353,11 +1486,18 @@ async function commandBuild(options) {
     }
   }
 
-  const { workbook, sheetName, nativeCharts, requirements: builderRequirements } = await buildFromBuilder(builderPath, inputPath);
+  const { workbook, sheetName, nativeCharts, requirements: builderRequirements } = await runStage(
+    "builder_execution",
+    () => buildFromBuilder(builderPath, inputPath),
+  );
   workbook.calcProperties.fullCalcOnLoad = true;
   workbook.calcProperties.forceFullCalc = true;
+  await runStage("builder_validation", async () => validateWorkbookForSerialization(workbook, nativeCharts));
   const facts = collectWorkbookFacts(workbook);
-  const requirements = await resolveRequirements(options.requirements ? String(options.requirements) : null, builderRequirements);
+  const requirements = await runStage(
+    "requirements_validation",
+    () => resolveRequirements(options.requirements ? String(options.requirements) : null, builderRequirements),
+  );
 
   if (outputExtension === ".xlsx" && workbookRequiresRequirements(workbook, nativeCharts, facts) && !requirements) {
     throw new Error("Non-trivial XLSX builds require verifiable requirements. Return requirements from the builder or pass --requirements.");
@@ -1381,16 +1521,16 @@ async function commandBuild(options) {
   try {
     const rawPath = path.join(tempRoot, "raw.xlsx");
     const stagedPath = path.join(tempRoot, "candidate.xlsx");
-    await workbook.xlsx.writeFile(rawPath);
+    await runStage("workbook_serialization", () => workbook.xlsx.writeFile(rawPath));
     let recalculated = false;
     if (facts.formulaCount > 0) {
-      await recalculateWorkbook(rawPath, stagedPath);
+      await runStage("formula_recalculation", () => recalculateWorkbook(rawPath, stagedPath));
       recalculated = true;
     } else {
       await fs.copyFile(rawPath, stagedPath);
     }
-    const chartResult = await injectNativeCharts(stagedPath, nativeCharts, { JSZip, loadXlsx });
-    const audit = await auditXlsx(stagedPath, requirements);
+    const chartResult = await runStage("chart_injection", () => injectNativeCharts(stagedPath, nativeCharts, { JSZip, loadXlsx }));
+    const audit = await runStage("audit", () => auditXlsx(stagedPath, requirements));
     if (audit.status === "error") {
       if (options.report) await writeJson(String(options.report), { status: "error", outputUpdated: false, audit });
       throw new Error("Workbook failed formula, structure, or requirement coverage audit; the candidate output was not updated");
@@ -1436,8 +1576,14 @@ async function commandInspect(options) {
 async function commandAudit(options) {
   const inputPath = requireOption(options, "input");
   const extension = assertSupportedInput(inputPath);
-  const requirements = await resolveRequirements(options.requirements ? String(options.requirements) : null);
-  const report = extension === ".xlsx" ? await auditXlsx(inputPath, requirements) : await auditDelimited(inputPath);
+  const requirements = await runStage(
+    "requirements_validation",
+    () => resolveRequirements(options.requirements ? String(options.requirements) : null),
+  );
+  const report = await runStage(
+    "audit",
+    () => extension === ".xlsx" ? auditXlsx(inputPath, requirements) : auditDelimited(inputPath),
+  );
   await emitReport(report, options.out && String(options.out));
   if (report.status === "error") process.exitCode = 1;
 }
@@ -1461,8 +1607,8 @@ async function commandRecalculate(options) {
     const names = packageInfo.roundTripRisks.map((risk) => `${risk.feature}(${risk.count})`).join(", ");
     throw new Error(`Input workbook contains objects that are unsafe for a LibreOffice round trip: ${names}. Do not bypass without explicit user approval.`);
   }
-  const result = await recalculateWorkbook(inputPath, outputPath);
-  const audit = await auditXlsx(outputPath);
+  const result = await runStage("formula_recalculation", () => recalculateWorkbook(inputPath, outputPath));
+  const audit = await runStage("audit", () => auditXlsx(outputPath));
   await emitReport({ status: audit.status, ...result, audit }, options.report && String(options.report));
   if (audit.status === "error") process.exitCode = 1;
 }
@@ -1691,8 +1837,8 @@ async function commandDeliver(options) {
   }
   if (path.resolve(inputPath) === path.resolve(outputPath)) throw new Error("Deliverable must be distinct from the candidate workbook");
   if (await pathExists(outputPath)) throw new Error(`Refusing to overwrite existing deliverable: ${outputPath}`);
-  const requirements = await resolveRequirements(requirementsPath);
-  const audit = await auditXlsx(inputPath, requirements);
+  const requirements = await runStage("requirements_validation", () => resolveRequirements(requirementsPath));
+  const audit = await runStage("audit", () => auditXlsx(inputPath, requirements));
   if (audit.status === "error") throw new Error("Candidate workbook failed structural, formula, or requirement coverage audit");
   if (audit.coverage.status !== "passed" || audit.coverage.total === 0) {
     throw new Error("Candidate workbook has no passing, verifiable requirement coverage");
@@ -1701,7 +1847,7 @@ async function commandDeliver(options) {
     throw new Error(`Candidate workbook has unresolved audit warnings: ${audit.warningDispositions.unresolved.map((warning) => warning.type).join(", ")}`);
   }
 
-  const rendered = await renderWorkbook(inputPath, qaDir, { perSheet: true, montagePath: path.join(qaDir, "montage.png") });
+  const rendered = await runStage("render", () => renderWorkbook(inputPath, qaDir, { perSheet: true, montagePath: path.join(qaDir, "montage.png") }));
   const blankPages = rendered.pageStats.filter((page) => page.blank);
   if (blankPages.length > 0) {
     throw new Error(`Candidate workbook produced ${blankPages.length} blank print page(s): ${blankPages.map((page) => `${page.sheet}:${path.basename(page.path)}`).join(", ")}`);
@@ -1950,6 +2096,55 @@ async function commandSelfTest(options) {
   if (disposedWarningAudit.warningDispositions.status !== "passed") throw new Error("Explicit warning disposition was not accepted");
   steps.push({ name: "warning-dispositions", status: "ok" });
 
+  const invalidRequirementMessages = [];
+  for (const invalid of [
+    { coverage: { status: "passed" } },
+    { warningDispositions: { cjk_font_fallback: "invalid shape" } },
+  ]) {
+    try {
+      validateRequirements(invalid, "self-test requirements");
+    } catch (error) {
+      invalidRequirementMessages.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  if (invalidRequirementMessages.length !== 2) throw new Error("Malformed requirements were not rejected deterministically");
+  steps.push({ name: "requirements-schema", status: "ok", detected: invalidRequirementMessages.length });
+
+  const invalidConditionalBuilderPath = path.join(outputDir, "invalid-conditional-builder.mjs");
+  await fs.writeFile(invalidConditionalBuilderPath, `export default async function build({ createWorkbook }) {\n  const workbook = createWorkbook();\n  const sheet = workbook.addWorksheet("行动项");\n  sheet.addConditionalFormatting({ ref: "A1:A2", rules: [{ type: "expression", formula: ["A1>0"], style: {} }] });\n  return { workbook, requirements: { requiredSheets: ["行动项"] } };\n}\n`, "utf8");
+  let conditionalValidationError;
+  try {
+    await commandBuild({ builder: invalidConditionalBuilderPath, out: path.join(outputDir, "invalid-conditional.xlsx") });
+  } catch (error) {
+    conditionalValidationError = error;
+  }
+  if (!(conditionalValidationError instanceof SpreadsheetStageError)
+    || conditionalValidationError.stage !== "builder_validation"
+    || !conditionalValidationError.message.includes(".formulae as an array")) {
+    throw new Error("Invalid conditional-formatting formulas did not produce an actionable builder-validation error");
+  }
+  steps.push({ name: "builder-validation", status: "ok", stage: conditionalValidationError.stage });
+
+  const nullFormulaPath = path.join(outputDir, "missing-formula-cache.xlsx");
+  const nullFormulaWorkbook = createWorkbook();
+  nullFormulaWorkbook.addWorksheet("Formula").getCell("A1").value = { formula: "1+1" };
+  await nullFormulaWorkbook.xlsx.writeFile(nullFormulaPath);
+  const nullFormulaAudit = await auditXlsx(nullFormulaPath);
+  if (!nullFormulaAudit.hardFailures.some((failure) => failure.type === "missing_cached_formula_result" && failure.address === "A1")) {
+    throw new Error("Missing formula cache was not reported as a hard failure");
+  }
+  steps.push({ name: "missing-formula-cache", status: "ok", detected: nullFormulaAudit.formulas.missingCachedResults.length });
+
+  const blankMergePath = path.join(outputDir, "blank-merge.xlsx");
+  const blankMergeWorkbook = createWorkbook();
+  const blankMergeSheet = blankMergeWorkbook.addWorksheet("Merged");
+  blankMergeSheet.mergeCells("A1:B1");
+  blankMergeSheet.getCell("C1").value = "keeps sheet populated";
+  await blankMergeWorkbook.xlsx.writeFile(blankMergePath);
+  const blankMergeAudit = await auditXlsx(blankMergePath);
+  if (blankMergeAudit.status === "error") throw new Error("Blank merged cells crashed or failed workbook audit");
+  steps.push({ name: "blank-merge-audit", status: "ok" });
+
   const atomicCandidatePath = path.join(outputDir, "atomic-candidate.xlsx");
   await fs.copyFile(finalPath, atomicCandidatePath);
   const atomicCandidateHash = await fileSha256(atomicCandidatePath);
@@ -2083,6 +2278,10 @@ main().catch((error) => {
   const payload = {
     status: "error",
     error: error instanceof Error ? error.message : String(error),
+    ...(error instanceof SpreadsheetStageError ? { stage: error.stage } : {}),
+    ...(error instanceof Error && error.cause instanceof Error ? { cause: error.cause.message } : {}),
+    ...(error instanceof Error && error.cause instanceof Error && error.cause.stack ? { causeStack: error.cause.stack.split("\n").slice(0, 12) } : {}),
+    ...(error instanceof Error && error.stack ? { stack: error.stack.split("\n").slice(0, 8) } : {}),
   };
   process.stderr.write(`${JSON.stringify(payload, null, 2)}\n`);
   process.exitCode = 1;

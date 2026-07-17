@@ -61,6 +61,8 @@ Chart types are `line`, `column`, or `bar`. Source ranges are matched against na
 
 `warningDispositions` is not a wildcard bypass. Each entry must match a reported warning `type` and contain a concrete, task-specific rationale. Prefer fixing the warning; use a disposition only when the workbook is intentionally correct.
 
+Requirements declare checks only. Do not write audit output such as `status` or `coverage` into `requirements.json`; the runtime calculates those fields. Keep `warningDispositions` as an array of `{ "type": "...", "rationale": "..." }` objects.
+
 ## Candidate workflow
 
 Build to a scratch candidate, not the final destination:

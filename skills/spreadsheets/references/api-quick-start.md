@@ -159,6 +159,8 @@ helpers.addConditionalFormatting(sheet, {
 
 Use conditional formatting for states that must respond to future edits.
 
+Use `formulae` (plural) for `expression` and `cellIs` rules. The build preflight rejects `formula` before ExcelJS serialization and reports the worksheet, range, and rule index.
+
 ## Native charts
 
 Use a native chart instead of inserting a rendered SVG or PNG:
