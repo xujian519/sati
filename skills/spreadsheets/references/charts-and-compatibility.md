@@ -28,16 +28,37 @@ Review `package.unsafeForRoundTrip` and `package.roundTripRisks`. If risks are p
 3. Prefer read-only analysis, a new companion workbook, or a narrowly designed future OOXML operation.
 4. Use `--allow-risky-roundtrip` only after explicit user approval and only when losing or rewriting the listed objects is acceptable.
 
-## Current chart support
+## Native chart support
 
-This version can detect native chart parts, chart types, and source range formulas during inspection. It does not create or edit native Excel charts.
+Net-new workbooks support editable native `line`, `column`, and `bar` charts. The runtime recalculates formulas first and injects the chart OOXML afterward, so LibreOffice cannot erase the newly created chart during recalculation.
 
-- Do not claim chart authoring support.
-- Do not replace a requested editable chart with a raster image without user approval.
-- Do not round-trip an existing chart workbook through ExcelJS by default.
-- If the user requests a chart, offer a clear formatted data table or report that native chart support is not yet available.
+Create a chart through the builder helper:
 
-Future native chart support should use tested OOXML chart templates or another engine that preserves editable chart objects. It must include category/series length checks, source-range verification, and rendering regression tests before it is enabled.
+```js
+helpers.addNativeChart(workbook, {
+  sheet: "KPI趋势",
+  type: "line",
+  title: "Q1 指标趋势",
+  categories: "A4:A11",
+  series: [
+    { name: "实际值", values: "B4:B11", color: "4472C4" },
+    { name: "目标值", values: "C4:C11", color: "ED7D31" }
+  ],
+  anchor: { from: "F3", to: "N19" },
+  valueFormat: "0.0%",
+  legend: "b"
+});
+```
+
+- Category and series ranges must have equal lengths.
+- Series values must be numeric after recalculation.
+- Keep chart sources visible and formula-backed when reshaping is needed.
+- Do not use an image to satisfy a requested chart.
+- Add every requested chart to `requirements.json`; audit the sheet, type, source ranges, and native chart count.
+- Render and inspect chart titles, category labels, legend labels, units, placement, and empty-data behavior.
+- Do not round-trip an existing chart workbook through ExcelJS by default. Net-new chart creation does not imply safe editing of arbitrary existing chart packages.
+
+Other chart types remain unsupported. If a requested type is unavailable, choose the closest supported native type only when it preserves the intended analytical takeaway, and state the substitution.
 
 ## Images and drawings
 
@@ -45,7 +66,7 @@ ExcelJS can create images, but existing drawing packages can contain unsupported
 
 ## Legacy and macro-enabled formats
 
-- Do not edit `.xls` through this skill. Ask for an `.xlsx` conversion or create a new `.xlsx` copy.
+- Convert `.xls` to a temporary `.xlsx` with `convert-legacy`, inspect the converted workbook, and continue through the XLSX workflow. Preserve the `.xls` source and deliver `.xlsx`.
 - Do not edit `.xlsm`; macro preservation and signature integrity are outside the current contract.
 - Do not rename an unsupported file to `.xlsx`.
 

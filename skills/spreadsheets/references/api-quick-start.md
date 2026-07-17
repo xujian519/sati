@@ -1,6 +1,6 @@
 # JavaScript builder API
 
-Use one executable `.mjs` builder. The builder exports a default async function and returns an ExcelJS workbook.
+Use one executable `.mjs` builder. The builder exports a default async function and returns an ExcelJS workbook or `{ workbook, requirements }`.
 
 ## Builder contract
 
@@ -17,9 +17,10 @@ export default async function build({
   const workbook = inputPath
     ? await loadWorkbook(inputPath)
     : createWorkbook();
+  const requirements = { requiredSheets: ["Summary"] };
 
   // Modify the workbook here.
-  return workbook;
+  return { workbook, requirements };
 }
 ```
 
@@ -91,11 +92,27 @@ sheet.getRow(1).height = 28;
 
 ARGB colors contain alpha plus RGB, normally `FF` followed by six hexadecimal digits.
 
+Never assign one reusable object to `cell.style` across a range. ExcelJS style objects are mutable and may be shared by reference; changing one cell's number format later can silently turn unrelated numbers into dates. Use the helpers, which clone styles per cell:
+
+```js
+helpers.applyStyle(sheet, "A3:E20", {
+  alignment: { vertical: "middle" },
+  border: { bottom: { style: "thin", color: { argb: "FFE2E8F0" } } },
+});
+helpers.setNumberFormat(sheet, "B4:C20", '¥#,##0');
+helpers.setNumberFormat(sheet, "D4:D20", "0.0%");
+```
+
 Apply the bundled header baseline when no stronger style exists:
 
 ```js
 helpers.styleHeader(sheet, "A3:D3");
 helpers.autoFitColumns(sheet, { min: 10, max: 30 });
+helpers.autoFitRows(sheet);
+helpers.applyChineseTypography(sheet, {
+  platform: "cross-platform",
+  titleRanges: ["A1:H1"],
+});
 ```
 
 Do not use `autoFitColumns` to restyle an established workbook unless the requested edit needs it.
@@ -103,20 +120,14 @@ Do not use `autoFitColumns` to restyle an established workbook unless the reques
 ## Tables and filters
 
 ```js
-sheet.addTable({
+sheet.addRows([
+  ["Month", "Revenue", "Cost"],
+  ["Jan", 100000, 70000],
+  ["Feb", 120000, 78000],
+]);
+helpers.addTableFromRange(sheet, {
   name: "RevenueTable",
-  ref: "A3",
-  headerRow: true,
-  style: { theme: "TableStyleMedium2", showRowStripes: true },
-  columns: [
-    { name: "Month" },
-    { name: "Revenue" },
-    { name: "Cost" },
-  ],
-  rows: [
-    ["Jan", 100000, 70000],
-    ["Feb", 120000, 78000],
-  ],
+  range: "A1:C3",
 });
 ```
 
@@ -125,11 +136,9 @@ Use unique table names. Do not overlap tables.
 ## Data validation
 
 ```js
-sheet.getCell("F4").dataValidation = {
-  type: "list",
+helpers.addListValidation(sheet, "F4:F100", ["On Track", "At Risk", "Blocked"], {
   allowBlank: false,
-  formulae: ['"On Track,At Risk,Blocked"'],
-};
+});
 ```
 
 Prefer a hidden or clearly labeled source range for long validation lists.
@@ -137,8 +146,8 @@ Prefer a hidden or clearly labeled source range for long validation lists.
 ## Conditional formatting
 
 ```js
-sheet.addConditionalFormatting({
-  ref: "D4:D100",
+helpers.addConditionalFormatting(sheet, {
+  range: "D4:D100",
   rules: [{
     type: "cellIs",
     operator: "lessThan",
@@ -149,6 +158,24 @@ sheet.addConditionalFormatting({
 ```
 
 Use conditional formatting for states that must respond to future edits.
+
+## Native charts
+
+Use a native chart instead of inserting a rendered SVG or PNG:
+
+```js
+helpers.addNativeChart(workbook, {
+  sheet: "Summary",
+  type: "column",
+  title: "Revenue by month",
+  categories: "A4:A15",
+  series: [{ name: "Revenue", values: "B4:B15" }],
+  anchor: { from: "F3", to: "N20" },
+  valueFormat: '"$"#,##0',
+});
+```
+
+Supported types are `line`, `column`, and `bar`. Add the chart to `requirements.json`; the audit must confirm its native OOXML part and source ranges.
 
 ## Comments and sources
 
@@ -162,12 +189,13 @@ For row-wise researched data, include a visible source URL column instead of hid
 
 ## CSV and TSV
 
-Load delimited input without unwanted type conversion:
+Load delimited input without unwanted type conversion. Encoding defaults to automatic UTF-8/GB18030 detection:
 
 ```js
 const workbook = await loadDelimited(inputPath, {
   sheetName: "Data",
   inferTypes: false,
+  encoding: "auto",
 });
 ```
 
@@ -177,9 +205,11 @@ Return a workbook and choose `.csv` or `.tsv` as the `build --out` extension. Th
 
 ```bash
 bash "$SHEET" scaffold --out builder.mjs
-bash "$SHEET" build --builder builder.mjs --out output.xlsx
-bash "$SHEET" build --builder builder.mjs --input input.xlsx --out output.xlsx
+bash "$SHEET" build --builder builder.mjs --requirements requirements.json --out candidate.xlsx
+bash "$SHEET" build --builder builder.mjs --input input.xlsx --requirements requirements.json --out candidate.xlsx
+bash "$SHEET" convert-legacy --input input.xls --out converted.xlsx
 bash "$SHEET" inspect --input output.xlsx --sheet Summary --range A1:H20 --styles
-bash "$SHEET" audit --input output.xlsx --out audit.json
-bash "$SHEET" render --input output.xlsx --out-dir render
+bash "$SHEET" audit --input candidate.xlsx --requirements requirements.json --out audit.json
+bash "$SHEET" render --input candidate.xlsx --out-dir render --per-sheet
+bash "$SHEET" deliver --input candidate.xlsx --out output.xlsx --qa-dir qa --requirements requirements.json
 ```
