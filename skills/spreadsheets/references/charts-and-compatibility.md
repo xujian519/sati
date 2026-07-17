@@ -39,6 +39,7 @@ helpers.addNativeChart(workbook, {
   sheet: "KPI趋势",
   type: "line",
   title: "Q1 指标趋势",
+  minPoints: 3,
   categories: "A4:A11",
   series: [
     { name: "实际值", values: "B4:B11", color: "4472C4" },
@@ -51,10 +52,10 @@ helpers.addNativeChart(workbook, {
 ```
 
 - Category and series ranges must have equal lengths.
-- Series values must be numeric after recalculation.
+- Categories must be non-blank, series values must be non-blank and numeric after recalculation, and line charts must contain at least two complete points.
 - Keep chart sources visible and formula-backed when reshaping is needed.
 - Do not use an image to satisfy a requested chart.
-- Add every requested chart to `requirements.json`; audit the sheet, type, source ranges, and native chart count.
+- Add every requested chart to `requirements.json`; audit the sheet, type, source ranges, native chart count, and `minPoints`. For a requested three-month trend, use `minPoints: 3`.
 - Render and inspect chart titles, category labels, legend labels, units, placement, and empty-data behavior.
 - Do not round-trip an existing chart workbook through ExcelJS by default. Net-new chart creation does not imply safe editing of arbitrary existing chart packages.
 

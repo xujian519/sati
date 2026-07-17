@@ -882,12 +882,16 @@ async function inspectDelimited(filePath, options = {}) {
 }
 
 const REQUIREMENT_KEYS = new Set([
+  "sourceBacked",
+  "sourceFiles",
+  "sourceBackedSheets",
   "requiredSheets",
   "exactSheetCount",
   "minFormulaCount",
   "requiredFormulaRanges",
   "requiredNonEmptyRanges",
   "expectedCells",
+  "expectedRanges",
   "requiredCellTypes",
   "requiredNativeCharts",
   "requiredTables",
@@ -899,10 +903,13 @@ const REQUIREMENT_KEYS = new Set([
 ]);
 
 const REQUIREMENT_ARRAY_KEYS = [
+  "sourceFiles",
+  "sourceBackedSheets",
   "requiredSheets",
   "requiredFormulaRanges",
   "requiredNonEmptyRanges",
   "expectedCells",
+  "expectedRanges",
   "requiredCellTypes",
   "requiredNativeCharts",
   "requiredTables",
@@ -930,6 +937,12 @@ function validateRequirements(requirements, source = "requirements") {
   if (requirements.requiredSheets?.some((sheet) => typeof sheet !== "string" || sheet.trim().length === 0)) {
     throw new Error(`${source}.requiredSheets must contain non-empty worksheet names`);
   }
+  if (requirements.sourceBacked !== undefined && typeof requirements.sourceBacked !== "boolean") {
+    throw new Error(`${source}.sourceBacked must be true or false`);
+  }
+  if (requirements.sourceBackedSheets?.some((sheet) => typeof sheet !== "string" || sheet.trim().length === 0)) {
+    throw new Error(`${source}.sourceBackedSheets must contain non-empty worksheet names`);
+  }
   for (const [key, value] of [["exactSheetCount", requirements.exactSheetCount], ["minFormulaCount", requirements.minFormulaCount], ["maxTotalPages", requirements.maxTotalPages]]) {
     if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
       throw new Error(`${source}.${key} must be a non-negative integer`);
@@ -939,6 +952,34 @@ function validateRequirements(requirements, source = "requirements") {
     if (!disposition || typeof disposition.type !== "string" || disposition.type.trim().length === 0 || typeof disposition.rationale !== "string" || disposition.rationale.trim().length === 0) {
       throw new Error(`${source}.warningDispositions[${index}] requires non-empty type and rationale strings`);
     }
+  }
+  for (const [index, sourceFile] of (requirements.sourceFiles ?? []).entries()) {
+    if (!sourceFile || typeof sourceFile.path !== "string" || !path.isAbsolute(sourceFile.path) || !/^[a-f0-9]{64}$/i.test(String(sourceFile.sha256 ?? ""))) {
+      throw new Error(`${source}.sourceFiles[${index}] requires an absolute path and SHA-256 hash`);
+    }
+  }
+  for (const [index, item] of (requirements.expectedRanges ?? []).entries()) {
+    if (!item || typeof item.sheet !== "string" || typeof item.range !== "string" || !Array.isArray(item.values) || item.values.length === 0 || item.values.some((row) => !Array.isArray(row))) {
+      throw new Error(`${source}.expectedRanges[${index}] requires sheet, range, and a non-empty values matrix`);
+    }
+    const bounds = parseRangeReference(item.range);
+    const expectedRows = bounds.endRow - bounds.startRow + 1;
+    const expectedColumns = bounds.endCol - bounds.startCol + 1;
+    if (item.values.length !== expectedRows || item.values.some((row) => row.length !== expectedColumns)) {
+      throw new Error(`${source}.expectedRanges[${index}].values must match ${item.range} (${expectedRows}x${expectedColumns})`);
+    }
+  }
+  for (const [index, item] of (requirements.requiredNativeCharts ?? []).entries()) {
+    if (item.minPoints !== undefined && (!Number.isInteger(item.minPoints) || item.minPoints < 1)) {
+      throw new Error(`${source}.requiredNativeCharts[${index}].minPoints must be a positive integer`);
+    }
+    if (item.sourceRanges !== undefined && (!Array.isArray(item.sourceRanges) || item.sourceRanges.some((range) => typeof range !== "string" || range.trim().length === 0))) {
+      throw new Error(`${source}.requiredNativeCharts[${index}].sourceRanges must contain non-empty ranges`);
+    }
+  }
+  if (requirements.sourceBacked) {
+    if ((requirements.sourceFiles?.length ?? 0) === 0) throw new Error(`${source}.sourceBacked requires sourceFiles`);
+    if ((requirements.sourceBackedSheets?.length ?? 0) === 0) throw new Error(`${source}.sourceBacked requires sourceBackedSheets`);
   }
   return requirements;
 }
@@ -958,6 +999,12 @@ function normalizeChartFormula(value) {
 
 function valuesEqual(actual, expected, tolerance = 0) {
   if (typeof expected === "number") return Number.isFinite(Number(actual)) && Math.abs(Number(actual) - expected) <= tolerance;
+  if (typeof expected === "string" && /^\d{4}-\d{2}-\d{2}$/.test(expected) && actual instanceof Date && isValidDate(actual)) {
+    return actual.toISOString().startsWith(expected);
+  }
+  if (typeof expected === "string" && /^\d{4}-\d{2}-\d{2}$/.test(expected) && typeof actual === "string") {
+    return actual.startsWith(expected);
+  }
   return String(actual ?? "") === String(expected ?? "");
 }
 
@@ -1027,6 +1074,24 @@ function evaluateRequirements(workbook, packageInfo, requirements) {
     const actual = cell ? cellDisplayValueForAudit(cell) : null;
     record("expected_cell", Boolean(cell) && valuesEqual(actual, item.value, item.tolerance ?? 0), { sheet: item.sheet, cell: item.cell, expected: item.value, actual });
   }
+  for (const item of requirements.expectedRanges ?? []) {
+    const worksheet = workbook.getWorksheet(item.sheet);
+    const bounds = parseRangeReference(item.range);
+    const mismatches = [];
+    let matched = 0;
+    let total = 0;
+    for (let rowOffset = 0; rowOffset < item.values.length; rowOffset += 1) {
+      for (let columnOffset = 0; columnOffset < item.values[rowOffset].length; columnOffset += 1) {
+        total += 1;
+        const address = `${columnLetters(bounds.startCol + columnOffset)}${bounds.startRow + rowOffset}`;
+        const actual = worksheet ? cellDisplayValueForAudit(worksheet.getCell(address)) : null;
+        const expected = item.values[rowOffset][columnOffset];
+        if (worksheet && valuesEqual(actual, expected, item.tolerance ?? 0)) matched += 1;
+        else if (mismatches.length < 100) mismatches.push({ address, expected, actual });
+      }
+    }
+    record("expected_range", Boolean(worksheet) && matched === total, { sheet: item.sheet, range: item.range, expected: total, actual: matched, mismatches });
+  }
   for (const item of requirements.requiredCellTypes ?? []) {
     const worksheet = workbook.getWorksheet(item.sheet);
     const expectedType = String(item.type ?? "").toLowerCase();
@@ -1067,10 +1132,20 @@ function evaluateRequirements(workbook, packageInfo, requirements) {
         const actual = chart.sourceFormulas.map(normalizeChartFormula);
         if (!item.sourceRanges.every((range) => actual.some((formula) => formula.includes(normalizeChartFormula(range))))) return false;
       }
+      if (Number.isInteger(item.minPoints)) {
+        if ((chart.series ?? []).length === 0 || chart.series.some((series) => {
+          const stats = chartPointStats(workbook, series);
+          return !stats
+            || stats.categories !== stats.values
+            || stats.blankCategories > 0
+            || stats.blankValues > 0
+            || stats.numericValues < item.minPoints;
+        })) return false;
+      }
       return true;
     });
     const minimum = item.minCount ?? 1;
-    record("required_native_chart", candidates.length >= minimum, { sheet: item.sheet ?? null, chartType: item.type ?? null, expected: minimum, actual: candidates.length, sourceRanges: item.sourceRanges ?? [] });
+    record("required_native_chart", candidates.length >= minimum, { sheet: item.sheet ?? null, chartType: item.type ?? null, expected: minimum, actual: candidates.length, sourceRanges: item.sourceRanges ?? [], minPoints: item.minPoints ?? null });
   }
   for (const item of requirements.requiredTables ?? []) {
     const worksheets = item.sheet ? [workbook.getWorksheet(item.sheet)].filter(Boolean) : workbook.worksheets;
@@ -1092,8 +1167,56 @@ function evaluateRequirements(workbook, packageInfo, requirements) {
     record("required_data_validation", passed, { sheet: item.sheet, cell: item.cell ?? null, actualCells: addresses.slice(0, 100) });
   }
 
+  const semanticAssertionCount = [
+    ...(requirements.expectedCells ?? []),
+    ...(requirements.expectedRanges ?? []),
+    ...(requirements.requiredNonEmptyRanges ?? []),
+    ...(requirements.requiredCellTypes ?? []),
+    ...(requirements.requiredNativeCharts ?? []),
+    ...(requirements.requiredTables ?? []),
+    ...(requirements.requiredConditionalFormatting ?? []),
+    ...(requirements.requiredDataValidations ?? []),
+  ].length;
+  record("semantic_requirement_floor", semanticAssertionCount > 0, { actual: semanticAssertionCount, minimum: 1 });
+
+  const formulaCount = collectWorkbookFacts(workbook).formulaCount;
+  if (formulaCount > 0) {
+    record("formula_requirement_floor", (requirements.requiredFormulaRanges?.length ?? 0) > 0, { formulaCount, requiredFormulaRanges: requirements.requiredFormulaRanges?.length ?? 0 });
+  }
+  if (packageInfo.charts.length > 0) {
+    const chartRequirements = requirements.requiredNativeCharts ?? [];
+    const complete = chartRequirements.length > 0 && chartRequirements.every((item) => (
+      Array.isArray(item.sourceRanges) && item.sourceRanges.length >= 2 && Number.isInteger(item.minPoints) && item.minPoints >= 1
+    ));
+    record("native_chart_requirement_floor", complete, { charts: packageInfo.charts.length, declared: chartRequirements.length });
+  }
+  for (const sheetName of requirements.sourceBackedSheets ?? []) {
+    const assertions = [
+      ...(requirements.expectedCells ?? []).filter((item) => item.sheet === sheetName),
+      ...(requirements.expectedRanges ?? []).filter((item) => item.sheet === sheetName),
+    ];
+    record("source_backed_sheet_assertions", assertions.length > 0, { sheet: sheetName, assertions: assertions.length });
+  }
+
   const failures = checks.filter((check) => !check.passed);
   return { status: failures.length === 0 ? "passed" : "failed", total: checks.length, passed: checks.length - failures.length, checks, failures };
+}
+
+async function evaluateSourceFiles(requirements) {
+  if (!requirements?.sourceBacked) return [];
+  const checks = [];
+  for (const sourceFile of requirements.sourceFiles ?? []) {
+    const exists = await pathExists(sourceFile.path);
+    const actual = exists ? await fileSha256(sourceFile.path) : null;
+    checks.push({
+      type: "source_file_integrity",
+      passed: exists && actual === sourceFile.sha256.toLowerCase(),
+      path: sourceFile.path,
+      expectedSha256: sourceFile.sha256.toLowerCase(),
+      actualSha256: actual,
+    });
+  }
+  return checks;
 }
 
 function cellDisplayValueForAudit(cell) {
@@ -1145,17 +1268,34 @@ function collectCjkFontWarnings(workbook) {
   return warnings;
 }
 
-function chartRangeCellCount(workbook, formula) {
+function chartRangeDetails(workbook, formula) {
   const match = /^(?:'((?:[^']|'')+)'|([^!]+))!(.+)$/.exec(String(formula ?? "").replaceAll("$", ""));
   if (!match) return null;
   const sheetName = match[1]?.replaceAll("''", "'") ?? match[2];
-  if (!workbook.getWorksheet(sheetName)) return null;
+  const worksheet = workbook.getWorksheet(sheetName);
+  if (!worksheet) return null;
   try {
     const range = parseRangeReference(match[3]);
-    return (range.endRow - range.startRow + 1) * (range.endCol - range.startCol + 1);
+    const values = [];
+    for (let row = range.startRow; row <= range.endRow; row += 1) {
+      for (let column = range.startCol; column <= range.endCol; column += 1) {
+        values.push(effectiveCellValue(worksheet.getCell(row, column)));
+      }
+    }
+    return { count: values.length, values };
   } catch {
     return null;
   }
+}
+
+function chartPointStats(workbook, series) {
+  const categories = chartRangeDetails(workbook, series.categories);
+  const values = chartRangeDetails(workbook, series.values);
+  if (!categories || !values) return null;
+  const blankCategories = categories.values.filter((value) => value === null || value === undefined || String(value).trim() === "").length;
+  const blankValues = values.values.filter((value) => value === null || value === undefined || String(value).trim() === "").length;
+  const numericValues = values.values.filter((value) => value !== null && value !== undefined && String(value).trim() !== "" && Number.isFinite(Number(value))).length;
+  return { categories: categories.count, values: values.count, blankCategories, blankValues, numericValues };
 }
 
 function collectChartFailures(workbook, packageInfo) {
@@ -1164,12 +1304,17 @@ function collectChartFailures(workbook, packageInfo) {
     if (!chart.sheet) failures.push({ type: "unmapped_native_chart", chart: chart.part });
     for (const series of chart.series ?? []) {
       if (!series.categories || !series.values) continue;
-      const categories = chartRangeCellCount(workbook, series.categories);
-      const values = chartRangeCellCount(workbook, series.values);
-      if (categories === null || values === null) {
+      const stats = chartPointStats(workbook, series);
+      if (!stats) {
         failures.push({ type: "invalid_chart_source_range", chart: chart.part, series: series.index, categories: series.categories, values: series.values });
-      } else if (categories !== values) {
-        failures.push({ type: "chart_series_length_mismatch", chart: chart.part, series: series.index, categories, values });
+      } else if (stats.categories !== stats.values) {
+        failures.push({ type: "chart_series_length_mismatch", chart: chart.part, series: series.index, categories: stats.categories, values: stats.values });
+      } else if (stats.blankCategories > 0) {
+        failures.push({ type: "chart_blank_categories", chart: chart.part, series: series.index, blank: stats.blankCategories, total: stats.categories });
+      } else if (stats.blankValues > 0 || stats.numericValues !== stats.values) {
+        failures.push({ type: "chart_invalid_values", chart: chart.part, series: series.index, blank: stats.blankValues, numeric: stats.numericValues, total: stats.values });
+      } else if (chart.types.includes("line") && stats.values < 2) {
+        failures.push({ type: "chart_insufficient_points", chart: chart.part, series: series.index, minimum: 2, actual: stats.values });
       }
     }
   }
@@ -1181,6 +1326,14 @@ async function auditXlsx(filePath, requirements = null) {
   const workbook = await loadXlsx(filePath);
   const facts = collectWorkbookFacts(workbook);
   const coverage = evaluateRequirements(workbook, packageInfo, requirements);
+  const sourceFileChecks = await evaluateSourceFiles(requirements);
+  if (sourceFileChecks.length > 0) {
+    coverage.checks.push(...sourceFileChecks);
+    coverage.failures.push(...sourceFileChecks.filter((check) => !check.passed));
+    coverage.total = coverage.checks.length;
+    coverage.passed = coverage.checks.filter((check) => check.passed).length;
+    coverage.status = coverage.failures.length === 0 ? "passed" : "failed";
+  }
   const cjkFontWarnings = collectCjkFontWarnings(workbook);
   const chartFailures = collectChartFailures(workbook, packageInfo);
   const blankSheets = workbook.worksheets
@@ -1228,6 +1381,24 @@ async function auditXlsx(filePath, requirements = null) {
     warningDispositions,
     advisories,
   };
+}
+
+function summarizeAuditFailures(audit, limit = 8) {
+  return audit.hardFailures.slice(0, limit).map((failure) => {
+    if (failure.type === "requirement_not_met") {
+      const requirement = failure.requirement ?? {};
+      const location = [requirement.sheet, requirement.range ?? requirement.cell].filter(Boolean).join("!");
+      const mismatch = requirement.mismatches?.[0];
+      const comparison = mismatch
+        ? `${mismatch.address}: expected ${JSON.stringify(mismatch.expected)}, actual ${JSON.stringify(mismatch.actual)}`
+        : `expected ${JSON.stringify(requirement.expected ?? requirement.minimum ?? "pass")}, actual ${JSON.stringify(requirement.actual ?? requirement.matched ?? "failed")}`;
+      return `${requirement.type}${location ? ` (${location})` : ""}: ${comparison}`;
+    }
+    if (failure.type.startsWith("chart_")) {
+      return `${failure.type} (${failure.chart ?? "chart"}, series ${failure.series ?? 0}): ${JSON.stringify(failure)}`;
+    }
+    return `${failure.type}: ${JSON.stringify(failure)}`;
+  }).join("; ");
 }
 
 async function auditDelimited(filePath) {
@@ -1466,6 +1637,7 @@ function validateNativeChartSpec(workbook, spec, location) {
   if (!spec.sheet || !workbook.getWorksheet(spec.sheet)) throw new Error(`${location}.sheet references missing worksheet '${spec.sheet ?? ""}'`);
   if (!["line", "column", "bar"].includes(spec.type)) throw new Error(`${location}.type must be line, column, or bar`);
   if (typeof spec.categories !== "string" || spec.categories.trim().length === 0) throw new Error(`${location}.categories must be a non-empty range`);
+  if (spec.minPoints !== undefined && (!Number.isInteger(spec.minPoints) || spec.minPoints < 1)) throw new Error(`${location}.minPoints must be a positive integer`);
   if (!Array.isArray(spec.series) || spec.series.length === 0) throw new Error(`${location}.series must contain at least one series`);
   spec.series.forEach((series, index) => {
     if (!series || typeof series.name !== "string" || series.name.trim().length === 0 || typeof series.values !== "string" || series.values.trim().length === 0) {
@@ -1619,7 +1791,7 @@ async function commandBuild(options) {
     const audit = await runStage("audit", () => auditXlsx(stagedPath, requirements));
     if (audit.status === "error") {
       if (options.report) await writeJson(String(options.report), { status: "error", outputUpdated: false, audit });
-      throw new Error("Workbook failed formula, structure, or requirement coverage audit; the candidate output was not updated");
+      throw new Error(`Workbook failed formula, structure, or requirement coverage audit; the candidate output was not updated. ${summarizeAuditFailures(audit)}`);
     }
     await replaceFileAtomically(stagedPath, outputPath);
     const reportedAudit = { ...audit, path: path.resolve(outputPath) };
@@ -1925,7 +2097,7 @@ async function commandDeliver(options) {
   if (await pathExists(outputPath)) throw new Error(`Refusing to overwrite existing deliverable: ${outputPath}`);
   const requirements = await runStage("requirements_validation", () => resolveRequirements(requirementsPath));
   const audit = await runStage("audit", () => auditXlsx(inputPath, requirements));
-  if (audit.status === "error") throw new Error("Candidate workbook failed structural, formula, or requirement coverage audit");
+  if (audit.status === "error") throw new Error(`Candidate workbook failed structural, formula, or requirement coverage audit. ${summarizeAuditFailures(audit)}`);
   if (audit.coverage.status !== "passed" || audit.coverage.total === 0) {
     throw new Error("Candidate workbook has no passing, verifiable requirement coverage");
   }
@@ -2045,6 +2217,7 @@ async function createSelfTestWorkbook() {
     sheet: "汇总",
     type: "line",
     title: "收入与成本趋势",
+    minPoints: 3,
     categories: "A4:A6",
     series: [{ name: "收入", values: "B4:B6" }, { name: "成本", values: "C4:C6" }],
     anchor: { from: "A10", to: "H25" },
@@ -2224,10 +2397,13 @@ async function commandSelfTest(options) {
   steps.push({ name: "inspect-prefixed-ooxml", status: "ok", normalizedParts: prefixedPartCount });
 
   const selfTestRequirements = {
+    sourceBacked: true,
+    sourceFiles: [{ path: rawPath, sha256: await fileSha256(rawPath) }],
+    sourceBackedSheets: ["汇总", "类型回归"],
     requiredSheets: ["输入数据", "汇总", "类型回归"],
     minFormulaCount: 4,
     requiredFormulaRanges: [{ sheet: "汇总", range: "D4:D6" }],
-    requiredNativeCharts: [{ sheet: "汇总", type: "line", sourceRanges: ["A4:A6", "B4:B6", "C4:C6"] }],
+    requiredNativeCharts: [{ sheet: "汇总", type: "line", minPoints: 3, sourceRanges: ["A4:A6", "B4:B6", "C4:C6"] }],
     requiredTables: [{ sheet: "汇总", minCount: 1 }],
     requiredConditionalFormatting: [{ sheet: "汇总", range: "D4:D6" }],
     requiredDataValidations: [{ sheet: "汇总", cell: "F4" }],
@@ -2239,12 +2415,35 @@ async function commandSelfTest(options) {
       { sheet: "类型回归", range: "C2:C3", type: "date" },
     ],
     expectedCells: [{ sheet: "汇总", cell: "B8", value: 110000, tolerance: 0.01 }],
+    expectedRanges: [
+      { sheet: "汇总", range: "A4:C6", values: [["1月", 100000, 70000], ["2月", 120000, 78000], ["3月", 135000, 85000]] },
+      { sheet: "类型回归", range: "A2:D3", values: [["A-001", 0.5, "2026-04-30", "进行中"], ["A-002", 0.8, "2026-05-31", "已完成"]] },
+    ],
   };
   const audit = await auditXlsx(finalPath, selfTestRequirements);
   if (audit.status === "error") throw new Error("Clean workbook failed audit");
   if (audit.coverage.status !== "passed") throw new Error("Self-test requirement coverage failed");
   if (audit.warnings.some((warning) => warning.type === "cjk_font_fallback")) throw new Error("Chinese font fallback remained unresolved after recalculation");
   steps.push({ name: "audit-clean", status: audit.status, coverage: audit.coverage.status });
+
+  const wrongFactRequirements = structuredClone(selfTestRequirements);
+  wrongFactRequirements.expectedRanges[0].values[0][1] = 999999;
+  const wrongFactAudit = await auditXlsx(finalPath, wrongFactRequirements);
+  if (!wrongFactAudit.coverage.failures.some((failure) => failure.type === "expected_range" && failure.mismatches?.[0]?.address === "B4")) {
+    throw new Error("Expected-range coverage did not reject a source-fact mismatch");
+  }
+
+  const changedSourcePath = path.join(outputDir, "changed-source.xlsx");
+  await fs.copyFile(rawPath, changedSourcePath);
+  const changedSourceHash = await fileSha256(changedSourcePath);
+  await fs.appendFile(changedSourcePath, "changed");
+  const changedSourceRequirements = structuredClone(selfTestRequirements);
+  changedSourceRequirements.sourceFiles = [{ path: changedSourcePath, sha256: changedSourceHash }];
+  const changedSourceAudit = await auditXlsx(finalPath, changedSourceRequirements);
+  if (!changedSourceAudit.coverage.failures.some((failure) => failure.type === "source_file_integrity")) {
+    throw new Error("Source-file integrity coverage did not reject a changed input");
+  }
+  steps.push({ name: "source-fact-coverage", status: "ok", expectedRangeFailures: wrongFactAudit.coverage.failures.length, sourceHashFailures: changedSourceAudit.coverage.failures.length });
   const failedCoverage = await auditXlsx(finalPath, { requiredNativeCharts: [{ sheet: "汇总", type: "bar", minCount: 1 }] });
   if (failedCoverage.status !== "error" || failedCoverage.coverage.status !== "failed") throw new Error("Requirement coverage did not reject a missing native chart type");
   steps.push({ name: "coverage-failure", status: "ok", detected: failedCoverage.coverage.failures.length });
@@ -2401,16 +2600,39 @@ async function commandSelfTest(options) {
     styleHeader(worksheet, "A1:C1");
     autoFitColumns(worksheet, { min: 10, max: 18 });
     applyChineseTypography(worksheet, { platform: "cross-platform" });
-    chartTypeSpecs.push({ sheet: type, type, title: `${type} 原生图表`, categories: "A2:A4", series: [{ name: "实际", values: "B2:B4" }, { name: "目标", values: "C2:C4" }], anchor: { from: "A6", to: "H20" } });
+    chartTypeSpecs.push({ sheet: type, type, title: `${type} 原生图表`, minPoints: 3, categories: "A2:A4", series: [{ name: "实际", values: "B2:B4" }, { name: "目标", values: "C2:C4" }], anchor: { from: "A6", to: "H20" } });
   }
   await chartTypesWorkbook.xlsx.writeFile(chartTypesPath);
   await injectNativeCharts(chartTypesPath, chartTypeSpecs, { JSZip, loadXlsx });
-  const chartTypesAudit = await auditXlsx(chartTypesPath, { requiredNativeCharts: chartTypeSpecs.map((spec) => ({ sheet: spec.sheet, type: spec.type, minCount: 1 })) });
+  const chartTypesAudit = await auditXlsx(chartTypesPath, { requiredNativeCharts: chartTypeSpecs.map((spec) => ({ sheet: spec.sheet, type: spec.type, minCount: 1, minPoints: 3, sourceRanges: ["A2:A4", "B2:B4", "C2:C4"] })) });
   const detectedTypes = new Set(chartTypesAudit.package.charts.flatMap((chart) => chart.types));
   if (chartTypesAudit.status === "error" || !["line", "column", "bar"].every((type) => detectedTypes.has(type))) throw new Error("Native chart type regression");
   const chartTypesRender = await renderWorkbook(chartTypesPath, path.join(outputDir, "chart-types-render"), { perSheet: true });
   if (chartTypesRender.pageStats.some((page) => page.blank)) throw new Error("A native chart type rendered as a blank page");
   steps.push({ name: "native-chart-types", status: "ok", types: [...detectedTypes], pages: chartTypesRender.pageCount });
+
+  const blankChartPath = path.join(outputDir, "blank-chart-source.xlsx");
+  const blankChartWorkbook = createWorkbook();
+  blankChartWorkbook.addWorksheet("趋势").addRows([["月份", "数值"], ["1月", 10], [null, null], ["3月", 14]]);
+  await blankChartWorkbook.xlsx.writeFile(blankChartPath);
+  let blankChartError = null;
+  try {
+    await injectNativeCharts(blankChartPath, [{
+      sheet: "趋势",
+      type: "line",
+      title: "空值回归",
+      minPoints: 3,
+      categories: "A2:A4",
+      series: [{ name: "数值", values: "B2:B4" }],
+      anchor: { from: "D2", to: "K16" },
+    }], { JSZip, loadXlsx });
+  } catch (error) {
+    blankChartError = error;
+  }
+  if (!(blankChartError instanceof Error) || !blankChartError.message.includes("blank categories")) {
+    throw new Error("Native chart injection did not reject blank categories and values");
+  }
+  steps.push({ name: "native-chart-data-quality", status: "ok", error: blankChartError.message });
 
   const legacySourceDir = path.join(outputDir, "legacy-source");
   const legacyProfileDir = path.join(outputDir, "legacy-profile");

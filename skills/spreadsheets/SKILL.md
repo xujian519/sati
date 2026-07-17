@@ -17,6 +17,7 @@ Work with standalone spreadsheet files through a reproducible JavaScript `.mjs` 
 - Recalculate formula-driven XLSX files through LibreOffice and scan the saved results for formula errors.
 - Use native Excel chart objects for requested charts. A raster image or SVG does not satisfy a chart requirement.
 - Create `requirements.json` for every non-trivial workbook and require `coverage.status=passed`.
+- For source-backed workbooks, freeze source file hashes and a compact fact matrix before building. Do not rely on remembered values or reconstruct missing facts from context.
 - Treat Chinese as first-class content when the user does not specify a language. Apply the cross-platform typography policy and verify glyphs after recalculation.
 - Render every final worksheet page and inspect the individual PNG files at full size. A montage is only an overview.
 - Fix formula errors, clipped content, broken tables, unreadable formats, unexpected blank sheets, and poor page layout before delivery.
@@ -115,7 +116,14 @@ bash "$SHEET" scaffold \
   --requirements-out "$WORKSPACE/tmp/requirements.json"
 ```
 
-Write `$WORKSPACE/tmp/requirements.json` from the user's requested sheets, formulas, native charts, validations, conditional formatting, expected cells, and print-page constraints.
+Write `$WORKSPACE/tmp/requirements.json` from the user's requested sheets, formulas, native charts, validations, conditional formatting, expected cells/ranges, and print-page constraints. A sheet list plus a formula count is not sufficient coverage.
+
+For a task based on input files:
+
+1. Inspect the exact source ranges or text sections first.
+2. Set `sourceBacked: true`, record every input in `sourceFiles` with its pre-build SHA-256, and list output data sheets in `sourceBackedSheets`.
+3. Add `expectedRanges` for complete user-critical tables such as KPI history, source rows, action items, owners, and deadlines. Use `expectedCells` for important totals and derived checkpoints.
+4. Do not create a builder until the fact matrix is written. If a source omits a status, owner, date, or value, keep it blank or label it as unconfirmed instead of inventing it.
 
 Patch and rerun that builder instead of creating duplicate scripts. Build a net-new workbook:
 
@@ -149,6 +157,7 @@ bash "$SHEET" build \
 - In ExcelJS formula objects, omit the leading `=`. See [formulas-and-data.md](references/formulas-and-data.md).
 - For CSV and TSV, preserve identifiers with leading zeroes as text and do not infer dates or numbers unless the task requires it.
 - Preserve identifiers longer than 15 digits as text. Detect UTF-8/UTF-8 BOM/GBK/GB18030 and default new delimited exports to UTF-8 BOM.
+- Preserve source facts exactly when translating labels or reorganizing tables. Never substitute plausible KPIs, channels, action items, owners, dates, or statuses.
 
 ## Validate and render
 
@@ -171,7 +180,7 @@ bash "$SHEET" render \
   --per-sheet
 ```
 
-Inspect every `page-N.png` at full resolution. Revise the builder, rebuild, and rerun audit/render until hard failures are gone and every warning is fixed or explicitly dispositioned in `requirements.json`.
+Inspect every `page-N.png` at full resolution. Revise the builder, rebuild, and rerun audit/render until hard failures are gone and every warning is fixed or explicitly dispositioned in `requirements.json`. Stop after the workbook is correct, legible, and usable; do not spend extra loops on decorative polish.
 
 After modifying this skill or its runtime, run:
 
@@ -192,4 +201,4 @@ bash "$SHEET" deliver \
   --report "$WORKSPACE/qa/delivery.json"
 ```
 
-Return the final `.xlsx`, `.csv`, or `.tsv` and a concise summary grounded in the delivery report. Mention deliberate compatibility limitations. Do not claim a native chart when package inspection reports zero charts. Do not deliver builders, requirements JSON, PDFs, renders, runtime files, or QA reports unless the user requests them.
+Return the final `.xlsx`, `.csv`, or `.tsv` and a concise summary grounded in the delivery report. Mention deliberate compatibility limitations. Do not claim a native chart when package inspection reports zero charts. Describe coverage as only the checks actually declared; never turn a shallow structural pass into “100% task coverage.” Do not deliver builders, requirements JSON, PDFs, renders, runtime files, or QA reports unless the user requests them.

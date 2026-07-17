@@ -9,6 +9,17 @@
       "range": "D4:D6"
     }
   ],
+  "expectedRanges": [
+    {
+      "sheet": "Summary",
+      "range": "A4:C6",
+      "values": [
+        ["1月", 100000, 70000],
+        ["2月", 120000, 78000],
+        ["3月", 135000, 85000]
+      ]
+    }
+  ],
   "requiredCellTypes": [
     {
       "sheet": "Summary",
@@ -26,6 +37,7 @@
       "sheet": "Summary",
       "type": "line",
       "minCount": 1,
+      "minPoints": 3,
       "sourceRanges": [
         "A4:A6",
         "B4:B6",

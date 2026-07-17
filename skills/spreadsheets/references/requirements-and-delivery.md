@@ -8,6 +8,14 @@ Use only fields that the task needs:
 
 ```json
 {
+  "sourceBacked": true,
+  "sourceFiles": [
+    {
+      "path": "/absolute/path/source.xlsx",
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    }
+  ],
+  "sourceBackedSheets": ["指标总览", "KPI趋势"],
   "requiredSheets": ["指标总览", "KPI趋势"],
   "exactSheetCount": 5,
   "minFormulaCount": 10,
@@ -20,6 +28,17 @@ Use only fields that the task needs:
   "expectedCells": [
     { "sheet": "指标总览", "cell": "F4", "value": 0.92, "tolerance": 0.0001 }
   ],
+  "expectedRanges": [
+    {
+      "sheet": "KPI趋势",
+      "range": "A4:C6",
+      "values": [
+        ["1月", 100, 90],
+        ["2月", 110, 95],
+        ["3月", 120, 105]
+      ]
+    }
+  ],
   "requiredCellTypes": [
     { "sheet": "指标总览", "range": "B4:F10", "type": "number" },
     { "sheet": "行动项", "range": "A4:A20", "type": "string" },
@@ -30,6 +49,7 @@ Use only fields that the task needs:
       "sheet": "KPI趋势",
       "type": "line",
       "minCount": 1,
+      "minPoints": 3,
       "sourceRanges": ["A4:A11", "B4:B11", "C4:C11"]
     }
   ],
@@ -55,7 +75,17 @@ Use only fields that the task needs:
 }
 ```
 
-Chart types are `line`, `column`, or `bar`. Source ranges are matched against native chart series formulas. An inserted SVG or PNG never satisfies `requiredNativeCharts`.
+## Source-backed workbooks
+
+Set `sourceBacked: true` whenever one or more files supply facts for the output. Record absolute input paths and their SHA-256 values before building; `audit` and `deliver` reject missing or changed sources. List every output sheet that materially reproduces source facts in `sourceBackedSheets`.
+
+Each source-backed sheet must have at least one `expectedCells` or `expectedRanges` assertion. Use `expectedRanges` for complete user-critical tables rather than checking one convenient cell. This is especially important for KPI histories, channel/source tables, schedules, action registers, owners, dates, and other facts where a plausible replacement would still look polished.
+
+Build the expected matrices from actual `inspect` output or exact text/JSON extraction. Do not type them from memory. Requirements prove that the output matches the frozen fact matrix; source hashes prove the inputs were not changed during the task.
+
+For non-trivial workbooks, structural checks alone are rejected. Formula-driven workbooks need `requiredFormulaRanges`. Native charts need `requiredNativeCharts` with exact `sourceRanges` and `minPoints`. Coverage means only that the declared checks passed; it is not a percentage of undeclared user intent.
+
+Chart types are `line`, `column`, or `bar`. Source ranges are matched against native chart series formulas. `minPoints` is the minimum number of complete category/value observations required in every series. Blank categories, blank/non-numeric values, mismatched lengths, and one-point line charts are rejected. An inserted SVG or PNG never satisfies `requiredNativeCharts`.
 
 `requiredCellTypes` supports `number`, `date`, `string`, and `boolean`. Unless `allowBlank` is true, every cell in the range must have the requested type. This catches accidental style sharing that causes ExcelJS or Excel to reinterpret ordinary KPI values as dates.
 
@@ -97,3 +127,4 @@ Base the final response on `delivery.json` and the final package inspection. Do 
 - formula-driven logic when the required formula ranges did not pass;
 - a one-page layout when the sheet render has multiple pages;
 - a clean final artifact when the reported SHA refers to a different file.
+- complete task coverage when requirements contain only structural checks or omit critical source facts.

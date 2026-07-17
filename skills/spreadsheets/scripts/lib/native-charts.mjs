@@ -196,14 +196,31 @@ function cacheXml(values, numeric) {
   return `${format}<c:ptCount val="${values.length}"/>${points}`;
 }
 
+function isBlankChartValue(value) {
+  return value === null || value === undefined || (typeof value === "string" && value.trim() === "");
+}
+
 function seriesXml(workbook, spec, series, index) {
   const categoriesFormula = absoluteRange(spec.sheet, spec.categories);
   const valuesFormula = absoluteRange(spec.sheet, series.values);
   const categories = rangeValues(workbook, spec.sheet, spec.categories);
-  const values = rangeValues(workbook, spec.sheet, series.values).map((value) => Number(value));
-  if (categories.length !== values.length) {
-    throw new Error(`Chart '${spec.title ?? spec.sheet}' series '${series.name ?? index + 1}' has ${categories.length} categories but ${values.length} values`);
+  const rawValues = rangeValues(workbook, spec.sheet, series.values);
+  if (categories.length !== rawValues.length) {
+    throw new Error(`Chart '${spec.title ?? spec.sheet}' series '${series.name ?? index + 1}' has ${categories.length} categories but ${rawValues.length} values`);
   }
+  const blankCategoryIndexes = categories.flatMap((value, pointIndex) => isBlankChartValue(value) ? [pointIndex + 1] : []);
+  if (blankCategoryIndexes.length > 0) {
+    throw new Error(`Chart '${spec.title ?? spec.sheet}' series '${series.name ?? index + 1}' contains blank categories at point(s) ${blankCategoryIndexes.join(", ")}`);
+  }
+  const blankValueIndexes = rawValues.flatMap((value, pointIndex) => isBlankChartValue(value) ? [pointIndex + 1] : []);
+  if (blankValueIndexes.length > 0) {
+    throw new Error(`Chart '${spec.title ?? spec.sheet}' series '${series.name ?? index + 1}' contains blank values at point(s) ${blankValueIndexes.join(", ")}`);
+  }
+  const minimumPoints = spec.minPoints ?? (spec.type === "line" ? 2 : 1);
+  if (categories.length < minimumPoints) {
+    throw new Error(`Chart '${spec.title ?? spec.sheet}' series '${series.name ?? index + 1}' requires at least ${minimumPoints} data points but found ${categories.length}`);
+  }
+  const values = rawValues.map((value) => Number(value));
   if (values.some((value) => !Number.isFinite(value))) {
     throw new Error(`Chart '${spec.title ?? spec.sheet}' series '${series.name ?? index + 1}' contains non-numeric values`);
   }

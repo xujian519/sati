@@ -37,6 +37,7 @@ export default async function build({ createWorkbook, helpers }) {
     sheet: "Summary",
     type: "line",
     title: "收入与成本趋势",
+    minPoints: 3,
     categories: "A4:A6",
     series: [
       { name: "收入", values: "B4:B6", color: "4472C4" },
@@ -52,7 +53,12 @@ export default async function build({ createWorkbook, helpers }) {
       requiredSheets: ["Summary"],
       minFormulaCount: 3,
       requiredFormulaRanges: [{ sheet: "Summary", range: "D4:D6" }],
-      requiredNativeCharts: [{ sheet: "Summary", type: "line", minCount: 1, sourceRanges: ["A4:A6", "B4:B6", "C4:C6"] }],
+      expectedRanges: [{
+        sheet: "Summary",
+        range: "A4:C6",
+        values: [["1月", 100000, 70000], ["2月", 120000, 78000], ["3月", 135000, 85000]],
+      }],
+      requiredNativeCharts: [{ sheet: "Summary", type: "line", minCount: 1, minPoints: 3, sourceRanges: ["A4:A6", "B4:B6", "C4:C6"] }],
       requiredTables: [{ sheet: "Summary", minCount: 1 }],
       requiredConditionalFormatting: [{ sheet: "Summary", range: "D4:D6" }],
       requiredDataValidations: [{ sheet: "Summary", cell: "E4" }],
