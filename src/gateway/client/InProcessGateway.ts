@@ -243,8 +243,9 @@ export class InProcessGateway implements Gateway {
   emitForSession(sessionKey: string, event: GatewayEvent): boolean {
     const sink = this.emitSinks.get(sessionKey);
     if (!sink) return false;
-    this.recordActiveTurnEvent(sessionKey, event);
-    sink(event);
+    const eventWithRunId = this.withActiveTurnRunId(sessionKey, event);
+    this.recordActiveTurnEvent(sessionKey, eventWithRunId);
+    sink(eventWithRunId);
     return true;
   }
 
@@ -386,6 +387,7 @@ export class InProcessGateway implements Gateway {
             }));
             const gatewayEvent: GatewayEvent = {
               type: "error",
+              runId,
               code: "turn_timeout",
               message,
               recoverable: false,
@@ -513,6 +515,7 @@ export class InProcessGateway implements Gateway {
           }));
           const gatewayEvent: GatewayEvent = {
             type: "error",
+            runId,
             code: "gateway_submit_failed",
             message,
             recoverable: false,
@@ -886,10 +889,28 @@ export class InProcessGateway implements Gateway {
       replay.truncated = true;
     }
   }
+
+  private withActiveTurnRunId(sessionKey: string, event: GatewayEvent): GatewayEvent {
+    if (getGatewayEventRunId(event)) return event;
+    const replay = this.activeTurnReplays.get(sessionKey);
+    if (!replay) return event;
+    return { ...event, runId: replay.runId };
+  }
 }
 
 function cloneGatewayEvent(event: GatewayEvent): GatewayEvent {
   return JSON.parse(JSON.stringify(event)) as GatewayEvent;
+}
+
+function getGatewayEventRunId(event: GatewayEvent): string | undefined {
+  return typeof event.runId === "string" && event.runId.trim()
+    ? event.runId.trim()
+    : undefined;
+}
+
+function withGatewayRunId(event: GatewayEvent, runId: string): GatewayEvent {
+  if (getGatewayEventRunId(event)) return event;
+  return { ...event, runId };
 }
 
 function resolveSubmitTurnTelemetry(input: GatewaySubmitTurnInput): {
@@ -1307,6 +1328,12 @@ function inferToolErrorCategory(code: string | undefined):
 }
 
 export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] {
+  return mapAgentEventForTurn(event, runId).map((gatewayEvent) =>
+    withGatewayRunId(gatewayEvent, runId)
+  );
+}
+
+function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] {
   switch (event.type) {
     case "turn_started":
       return [{ type: "turn_started", runId }];

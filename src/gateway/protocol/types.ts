@@ -127,12 +127,20 @@ export type GatewayRecordAgentStatusMessageInput = {
   status: AgentStatusMessageInput;
 };
 
-export type GatewayEvent =
+type GatewayTurnScopedEventMetadata = {
+  /**
+   * Stable id of the active turn that produced this event. Turn-scoped events
+   * carry it so streaming clients can match deltas with lifecycle boundaries.
+   */
+  runId?: string;
+};
+
+export type GatewayEvent = GatewayTurnScopedEventMetadata & (
   | { type: "turn_started"; runId: string }
   | { type: "model_request_started"; model?: string; provider?: string }
-  | { type: "assistant_text_delta"; text: string; runId?: string }
+  | { type: "assistant_text_delta"; text: string }
   | { type: "assistant_attachment"; attachment: GatewayOutboundAttachment }
-  | { type: "assistant_thinking_delta"; text: string; runId?: string }
+  | { type: "assistant_thinking_delta"; text: string }
   | { type: "tool_call_started"; toolCallId: string; name: string; argsPreview?: string }
   | {
       type: "tool_call_finished";
@@ -223,7 +231,8 @@ export type GatewayEvent =
         message?: string;
         raw?: string;
       };
-    };
+    }
+);
 
 export type GatewayActiveTurnSnapshotInput = {
   sessionKey: string;
