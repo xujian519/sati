@@ -1313,7 +1313,7 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
     case "model_request_started":
       return [{ type: "model_request_started", model: event.model, provider: event.provider }];
     case "model_event":
-      return mapModelEvent(event.event);
+      return mapModelEvent(event.event, runId);
     case "tool_calls_detected":
       return event.calls.map((call) => ({
         type: "tool_call_started",
@@ -1714,12 +1714,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function mapModelEvent(event: CanonicalModelEvent): GatewayEvent[] {
+function mapModelEvent(event: CanonicalModelEvent, runId: string): GatewayEvent[] {
   switch (event.type) {
     case "text_delta":
-      return [{ type: "assistant_text_delta", text: event.text }];
+      return [{ type: "assistant_text_delta", text: event.text, runId }];
     case "thinking_delta":
-      return [{ type: "assistant_thinking_delta", text: event.text }];
+      return [{ type: "assistant_thinking_delta", text: event.text, runId }];
     case "error":
       // Model-level errors are internal control flow until AgentLoop decides
       // whether they are recoverable. Surfacing them here duplicates the final

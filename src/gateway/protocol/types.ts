@@ -130,9 +130,9 @@ export type GatewayRecordAgentStatusMessageInput = {
 export type GatewayEvent =
   | { type: "turn_started"; runId: string }
   | { type: "model_request_started"; model?: string; provider?: string }
-  | { type: "assistant_text_delta"; text: string }
+  | { type: "assistant_text_delta"; text: string; runId?: string }
   | { type: "assistant_attachment"; attachment: GatewayOutboundAttachment }
-  | { type: "assistant_thinking_delta"; text: string }
+  | { type: "assistant_thinking_delta"; text: string; runId?: string }
   | { type: "tool_call_started"; toolCallId: string; name: string; argsPreview?: string }
   | {
       type: "tool_call_finished";
