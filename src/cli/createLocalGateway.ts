@@ -483,6 +483,9 @@ type ProjectRuntime = {
   perSessionServerSpecs?: import("../mcp/protocol/types.js").PilotDeckMcpServerSpec[];
 };
 
+const DEFAULT_BROWSER_ACTION_TIMEOUT_MS = 30_000;
+const DEFAULT_BROWSER_NAVIGATION_TIMEOUT_MS = 90_000;
+
 class ProjectRuntimeRegistry {
   private readonly runtimes = new Map<string, ProjectRuntime>();
   private gateway?: InProcessGateway;
@@ -916,7 +919,11 @@ class ProjectRuntimeRegistry {
             sanitizeSessionIdForPath(context.sessionKey),
           );
           mkdirSyncFs(outDir, { recursive: true });
-          return { ...spec, cwd: outDir, args: [...(spec.args ?? []), `--output-dir=${outDir}`] };
+          return {
+            ...spec,
+            cwd: outDir,
+            args: buildBrowserUseArgs(spec.args ?? [], outDir, this.options.env),
+          };
         }
         return spec;
       });
@@ -1424,4 +1431,78 @@ function readPositiveIntegerEnv(value: string | undefined): number | undefined {
   const parsed = Number.parseInt(value.trim(), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
   return Math.floor(parsed);
+}
+
+function buildBrowserUseArgs(
+  baseArgs: string[],
+  outputDir: string,
+  env: Record<string, string | undefined>,
+): string[] {
+  let args = [...baseArgs];
+  args = appendCliArg(args, "--output-dir", outputDir);
+  args = appendCliArg(
+    args,
+    "--timeout-action",
+    String(
+      readPositiveIntegerEnv(env.PILOTDECK_BROWSER_TIMEOUT_ACTION_MS)
+        ?? readPositiveIntegerEnv(env.PILOTDECK_BROWSER_ACTION_TIMEOUT_MS)
+        ?? DEFAULT_BROWSER_ACTION_TIMEOUT_MS,
+    ),
+  );
+  args = appendCliArg(
+    args,
+    "--timeout-navigation",
+    String(
+      readPositiveIntegerEnv(env.PILOTDECK_BROWSER_TIMEOUT_NAVIGATION_MS)
+        ?? readPositiveIntegerEnv(env.PILOTDECK_BROWSER_NAVIGATION_TIMEOUT_MS)
+        ?? DEFAULT_BROWSER_NAVIGATION_TIMEOUT_MS,
+    ),
+  );
+
+  const proxyServer = resolveBrowserProxyServer(env);
+  if (proxyServer) {
+    args = appendCliArg(args, "--proxy-server", proxyServer);
+    const proxyBypass = resolveBrowserProxyBypass(env);
+    if (proxyBypass) {
+      args = appendCliArg(args, "--proxy-bypass", proxyBypass);
+    }
+  }
+  return args;
+}
+
+function appendCliArg(args: string[], flag: string, value: string): string[] {
+  if (args.includes(flag) || args.some((arg) => arg.startsWith(`${flag}=`))) {
+    return args;
+  }
+  return [...args, flag, value];
+}
+
+function resolveBrowserProxyServer(env: Record<string, string | undefined>): string | undefined {
+  const explicit = cleanEnvValue(env.PILOTDECK_BROWSER_PROXY_SERVER);
+  if (explicit) {
+    if (/^(0|false|off|none|direct)$/i.test(explicit)) return undefined;
+    return explicit;
+  }
+  if (/^(0|false|off|none|direct)$/i.test(cleanEnvValue(env.PILOTDECK_BROWSER_PROXY_FROM_ENV) ?? "")) {
+    return undefined;
+  }
+  return (
+    cleanEnvValue(env.PILOTDECK_PROXY)
+    ?? cleanEnvValue(env.https_proxy)
+    ?? cleanEnvValue(env.HTTPS_PROXY)
+    ?? cleanEnvValue(env.http_proxy)
+    ?? cleanEnvValue(env.HTTP_PROXY)
+  );
+}
+
+function resolveBrowserProxyBypass(env: Record<string, string | undefined>): string {
+  const explicit = cleanEnvValue(env.PILOTDECK_BROWSER_PROXY_BYPASS);
+  if (explicit) return explicit;
+  const noProxy = cleanEnvValue(env.no_proxy) ?? cleanEnvValue(env.NO_PROXY);
+  return [noProxy, "localhost", "127.0.0.1", "host.docker.internal"].filter(Boolean).join(",");
+}
+
+function cleanEnvValue(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
