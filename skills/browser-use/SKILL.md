@@ -66,7 +66,8 @@ PilotDeck starts browser-use through `playwright-mcp` and uses practical default
 - `PILOTDECK_BROWSER_TIMEOUT_NAVIGATION_MS`: navigation timeout, default `90000`.
 - `PILOTDECK_BROWSER_PROXY_SERVER`: proxy passed directly to Chromium, for example `http://127.0.0.1:7890`.
 - `PILOTDECK_BROWSER_PROXY_BYPASS`: comma-separated proxy bypass list. Defaults include `localhost`, `127.0.0.1`, and `host.docker.internal`.
-- `PILOTDECK_BROWSER_PROXY_FROM_ENV=0`: do not infer a browser proxy from `PILOTDECK_PROXY`, `HTTPS_PROXY`, or `HTTP_PROXY`.
+- `PILOTDECK_BROWSER_PROXY_FROM_ENV=1`: infer a browser proxy from `PILOTDECK_PROXY`, `HTTPS_PROXY`, or `HTTP_PROXY`. This is disabled by default; use `PILOTDECK_BROWSER_PROXY_SERVER` when the proxy should be passed explicitly to Chromium.
+- If `pilotdeck.yaml` sets `proxy.url`, browser-use passes it to Chromium when no explicit browser proxy is set. `proxy.noProxy` is included in the browser proxy bypass list.
 
 Use a direct browser proxy when command-line HTTP tools can reach the network but browser navigation hangs or times out. Chromium does not always behave like curl or Python requests with inherited proxy environment variables.
 

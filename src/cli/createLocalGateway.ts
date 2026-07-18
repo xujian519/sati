@@ -61,7 +61,7 @@ import {
 } from "../mcp/index.js";
 import { createModelRuntime, type ModelRuntime } from "../model/index.js";
 import { createDefaultPermissionContext, type PermissionRule } from "../permission/index.js";
-import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
+import { loadPilotConfig, resolvePilotHome, type PilotProxyConfig } from "../pilot/index.js";
 import { createPilotConfigStoreSync, type PilotConfigStore } from "../pilot/config/PilotConfigStore.js";
 import type { PilotAgentModelSelection, PilotConfigSnapshot } from "../pilot/config/types.js";
 import { DEFAULT_JUDGE_TIMEOUT_MS, DEFAULT_ALLOWED_TOOLS, DEFAULT_TRIGGER_TIERS, type RouterConfig } from "../router/config/schema.js";
@@ -922,7 +922,7 @@ class ProjectRuntimeRegistry {
           return {
             ...spec,
             cwd: outDir,
-            args: buildBrowserUseArgs(spec.args ?? [], outDir, this.options.env),
+            args: buildBrowserUseArgs(spec.args ?? [], outDir, this.options.env, runtime.snapshot.config.proxy),
           };
         }
         return spec;
@@ -1433,10 +1433,11 @@ function readPositiveIntegerEnv(value: string | undefined): number | undefined {
   return Math.floor(parsed);
 }
 
-function buildBrowserUseArgs(
+export function buildBrowserUseArgs(
   baseArgs: string[],
   outputDir: string,
   env: Record<string, string | undefined>,
+  configProxy?: PilotProxyConfig,
 ): string[] {
   let args = [...baseArgs];
   args = appendCliArg(args, "--output-dir", outputDir);
@@ -1459,10 +1460,10 @@ function buildBrowserUseArgs(
     ),
   );
 
-  const proxyServer = resolveBrowserProxyServer(env);
-  if (proxyServer) {
-    args = appendCliArg(args, "--proxy-server", proxyServer);
-    const proxyBypass = resolveBrowserProxyBypass(env);
+  const proxy = resolveBrowserProxyServer(env, configProxy);
+  if (proxy) {
+    args = appendCliArg(args, "--proxy-server", proxy.server);
+    const proxyBypass = resolveBrowserProxyBypass(env, configProxy, proxy.source);
     if (proxyBypass) {
       args = appendCliArg(args, "--proxy-bypass", proxyBypass);
     }
@@ -1477,29 +1478,41 @@ function appendCliArg(args: string[], flag: string, value: string): string[] {
   return [...args, flag, value];
 }
 
-function resolveBrowserProxyServer(env: Record<string, string | undefined>): string | undefined {
+type BrowserProxySource = "browser-env" | "env" | "config";
+
+function resolveBrowserProxyServer(
+  env: Record<string, string | undefined>,
+  configProxy?: PilotProxyConfig,
+): { server: string; source: BrowserProxySource } | undefined {
   const explicit = cleanEnvValue(env.PILOTDECK_BROWSER_PROXY_SERVER);
   if (explicit) {
     if (/^(0|false|off|none|direct)$/i.test(explicit)) return undefined;
-    return explicit;
+    return { server: explicit, source: "browser-env" };
   }
-  if (/^(0|false|off|none|direct)$/i.test(cleanEnvValue(env.PILOTDECK_BROWSER_PROXY_FROM_ENV) ?? "")) {
-    return undefined;
+  if (/^(1|true|on|yes)$/i.test(cleanEnvValue(env.PILOTDECK_BROWSER_PROXY_FROM_ENV) ?? "")) {
+    const envProxy = (
+      cleanEnvValue(env.PILOTDECK_PROXY)
+      ?? cleanEnvValue(env.https_proxy)
+      ?? cleanEnvValue(env.HTTPS_PROXY)
+      ?? cleanEnvValue(env.http_proxy)
+      ?? cleanEnvValue(env.HTTP_PROXY)
+    );
+    if (envProxy) return { server: envProxy, source: "env" };
   }
-  return (
-    cleanEnvValue(env.PILOTDECK_PROXY)
-    ?? cleanEnvValue(env.https_proxy)
-    ?? cleanEnvValue(env.HTTPS_PROXY)
-    ?? cleanEnvValue(env.http_proxy)
-    ?? cleanEnvValue(env.HTTP_PROXY)
-  );
+  const configUrl = cleanEnvValue(configProxy?.url);
+  return configUrl ? { server: configUrl, source: "config" } : undefined;
 }
 
-function resolveBrowserProxyBypass(env: Record<string, string | undefined>): string {
+function resolveBrowserProxyBypass(
+  env: Record<string, string | undefined>,
+  configProxy: PilotProxyConfig | undefined,
+  proxySource: BrowserProxySource,
+): string {
   const explicit = cleanEnvValue(env.PILOTDECK_BROWSER_PROXY_BYPASS);
   if (explicit) return explicit;
   const noProxy = cleanEnvValue(env.no_proxy) ?? cleanEnvValue(env.NO_PROXY);
-  return [noProxy, "localhost", "127.0.0.1", "host.docker.internal"].filter(Boolean).join(",");
+  const configNoProxy = proxySource === "config" ? cleanEnvValue(configProxy?.noProxy) : undefined;
+  return [noProxy, configNoProxy, "localhost", "127.0.0.1", "host.docker.internal"].filter(Boolean).join(",");
 }
 
 function cleanEnvValue(value: string | undefined): string | undefined {
