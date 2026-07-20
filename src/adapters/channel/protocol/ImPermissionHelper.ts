@@ -20,21 +20,7 @@ export class ImPermissionHelper {
     });
     this.pending.set(chatId, entries);
 
-    if (entries.length > 1) {
-      return [
-        `还有 ${entries.length} 个工具权限请求正在等待。`,
-        "回复 1 允许当前所有待处理请求一次，回复 2 允许本会话，回复 0 拒绝。",
-      ].join("\n");
-    }
-    const lines = [
-      `工具 ${event.toolName} 需要权限才能继续执行。`,
-      "",
-      "请求内容：",
-      formatPayload(event.payload),
-      "",
-      "回复 1 允许一次，回复 2 允许本会话，回复 0 拒绝。",
-    ];
-    return lines.join("\n");
+    return formatPermissionPrompt(entries);
   }
 
   hasPending(chatId: string): boolean {
@@ -88,4 +74,34 @@ function formatPayload(payload: unknown): string {
   const trimmed = text.trim();
   if (trimmed.length <= 800) return trimmed || "(空)";
   return `${trimmed.slice(0, 800)}...`;
+}
+
+function formatPermissionPrompt(entries: PendingPermission[]): string {
+  if (entries.length === 1) {
+    const entry = entries[0]!;
+    return [
+      `工具 ${entry.toolName} 需要权限才能继续执行。`,
+      "",
+      "请求内容：",
+      formatPayload(entry.payload),
+      "",
+      "回复 1 允许一次，回复 2 允许本会话，回复 0 拒绝。",
+    ].join("\n");
+  }
+
+  const lines = [
+    `共有 ${entries.length} 个工具权限请求正在等待，以下请求都会被本次回复处理：`,
+  ];
+
+  entries.forEach((entry, index) => {
+    lines.push(
+      "",
+      `请求 ${index + 1}: 工具 ${entry.toolName}`,
+      "请求内容：",
+      formatPayload(entry.payload),
+    );
+  });
+
+  lines.push("", "回复 1 允许以上所有待处理请求一次，回复 2 允许本会话，回复 0 拒绝。");
+  return lines.join("\n");
 }

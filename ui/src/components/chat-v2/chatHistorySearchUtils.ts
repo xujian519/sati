@@ -1,5 +1,5 @@
 import type { ChatMessage } from '../chat/types/types';
-import { shouldHideToolResult } from '../chat/tools/configs/toolConfigs';
+import { getToolConfig, shouldHideToolResult } from '../chat/tools/configs/toolConfigs';
 
 export type ChatHistorySearchMatch = {
   /** Index in the rendered message list. */
@@ -28,10 +28,151 @@ export type SearchableChatMessage = {
 const HIGHLIGHT_CLASS = 'chat-history-search-highlight';
 const ACTIVE_HIGHLIGHT_CLASS = 'chat-history-search-highlight-active';
 
+function appendSearchPart(parts: string[], value: unknown): void {
+  if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
+    return;
+  }
+  const text = String(value).trim();
+  if (text) parts.push(text);
+}
+
+function parseToolPayload(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function callToolDisplayGetter<T>(
+  getter: ((value: unknown, helpers?: unknown) => T) | undefined,
+  value: unknown,
+  helpers?: unknown,
+): T | undefined {
+  if (typeof getter !== 'function') return undefined;
+  try {
+    return getter(value, helpers);
+  } catch {
+    return undefined;
+  }
+}
+
+function visibleFileName(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const normalized = value.replace(/\\/g, '/');
+  return normalized.split('/').pop() || value;
+}
+
+function collectVisibleToolInputText(message: ChatMessage): string[] {
+  const toolName = typeof message.toolName === 'string' && message.toolName.trim()
+    ? message.toolName.trim()
+    : 'UnknownTool';
+  const config = getToolConfig(toolName);
+  const displayConfig = config.input;
+  if (!displayConfig || displayConfig.type === 'hidden' || message.toolInput === undefined) {
+    return [];
+  }
+
+  const parsedInput = parseToolPayload(message.toolInput);
+  const parts: string[] = [];
+
+  if (displayConfig.type === 'one-line') {
+    const value = callToolDisplayGetter(displayConfig.getValue, parsedInput);
+    const secondary = callToolDisplayGetter(displayConfig.getSecondary, parsedInput);
+
+    if (displayConfig.style === 'terminal') {
+      appendSearchPart(parts, value);
+      appendSearchPart(parts, secondary);
+      return parts;
+    }
+
+    const visibleLabel = displayConfig.label || toolName;
+    appendSearchPart(parts, visibleLabel);
+    appendSearchPart(parts, displayConfig.action === 'open-file' ? visibleFileName(value) : value);
+    appendSearchPart(parts, secondary);
+    return parts;
+  }
+
+  if (displayConfig.type === 'collapsible') {
+    const rawTitle = typeof displayConfig.title === 'function'
+      ? callToolDisplayGetter(displayConfig.title as (value: unknown, helpers?: unknown) => unknown, parsedInput, {
+          toolResult: message.toolResult,
+        })
+      : displayConfig.title;
+    appendSearchPart(parts, toolName);
+    appendSearchPart(parts, rawTitle || 'Details');
+  }
+
+  return parts;
+}
+
+function collectVisibleToolResultText(message: ChatMessage): string[] {
+  const toolResult = message.toolResult;
+  if (!toolResult) return [];
+
+  const toolName = typeof message.toolName === 'string' && message.toolName.trim()
+    ? message.toolName.trim()
+    : 'UnknownTool';
+  if (shouldHideToolResult(toolName, toolResult)) return [];
+
+  const toolContent = toolResult.content;
+  if (toolResult.isError) {
+    const parts: string[] = [];
+    appendSearchPart(parts, toolContent);
+    return parts;
+  }
+
+  const config = getToolConfig(toolName);
+  const resultConfig = config.result;
+  if (!resultConfig) return [];
+
+  const parts: string[] = [];
+  const parsedResult = parseToolPayload(toolResult);
+  if (resultConfig.type === 'collapsible') {
+    const rawTitle = typeof resultConfig.title === 'function'
+      ? callToolDisplayGetter(resultConfig.title as (value: unknown, helpers?: unknown) => unknown, parsedResult)
+      : resultConfig.title;
+    appendSearchPart(parts, toolName);
+    appendSearchPart(parts, rawTitle || 'Details');
+    return parts;
+  }
+
+  if (resultConfig.type === 'card' && resultConfig.contentType === 'plan-card') {
+    const contentProps = callToolDisplayGetter(resultConfig.getContentProps, parsedResult);
+    if (contentProps && typeof contentProps === 'object') {
+      const record = contentProps as Record<string, unknown>;
+      appendSearchPart(parts, record.planTitle);
+      appendSearchPart(parts, record.planSummary);
+      appendSearchPart(parts, record.planFilePath);
+    }
+  }
+
+  return parts;
+}
+
+function collectVisibleSubagentContainerText(message: ChatMessage): string[] {
+  const parsedInput = parseToolPayload(message.toolInput);
+  if (!parsedInput || typeof parsedInput !== 'object') {
+    return [];
+  }
+
+  const input = parsedInput as Record<string, unknown>;
+  const parts: string[] = [];
+  appendSearchPart(parts, input.subagent_type || input.subagentType || 'agent');
+  appendSearchPart(parts, input.description);
+  return parts;
+}
+
 /** Collect plain text from a chat message for in-page search. */
 export function extractSearchableText(message: ChatMessage): string {
-  if (message.isSubagentContainer || message.isThinking) {
+  if (message.isThinking) {
     return '';
+  }
+  if (message.isSubagentContainer) {
+    return collectVisibleSubagentContainerText(message).join('\n');
   }
 
   const parts: string[] = [];
@@ -39,22 +180,10 @@ export function extractSearchableText(message: ChatMessage): string {
   if (typeof message.content === 'string' && message.content.trim()) {
     parts.push(message.content);
   }
-  if (typeof message.toolInput === 'string' && message.toolInput.trim()) {
-    parts.push(message.toolInput);
-  }
-  const toolResult = message.toolResult;
-  const toolContent = toolResult?.content;
-  const toolName = typeof message.toolName === 'string' ? message.toolName : '';
-  if (
-    toolResult &&
-    !shouldHideToolResult(toolName || 'UnknownTool', toolResult) &&
-    typeof toolContent === 'string' &&
-    toolContent.trim()
-  ) {
-    parts.push(toolContent);
-  }
-  if (toolName.trim()) {
-    parts.push(toolName);
+
+  if (message.isToolUse || message.toolName) {
+    parts.push(...collectVisibleToolInputText(message));
+    parts.push(...collectVisibleToolResultText(message));
   }
 
   return parts.join('\n');

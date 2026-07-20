@@ -120,6 +120,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
 
   useEffect(() => {
     if (!selectedProvider || isCustomMode || apiKey.trim()) return;
+    if (!selectedProviderRequiresApiKey) return;
     const catalogModels = selectedProvider.models;
     const controller = new AbortController();
     setModelListStatus('loading');
@@ -144,7 +145,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
         setModelListMessage(`Using bundled model list. Remote model list unavailable: ${message}`);
       });
     return () => controller.abort();
-  }, [apiKey, isCustomMode, selectedProvider]);
+  }, [apiKey, isCustomMode, selectedProvider, selectedProviderRequiresApiKey]);
 
   useEffect(() => {
     const key = apiKey.trim();
@@ -167,6 +168,13 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
+        if (!selectedProviderRequiresApiKey && selectedProvider.models.length > 0) {
+          setApiModels(selectedProvider.models);
+          setModelListStatus('idle');
+          const message = error instanceof Error ? error.message : String(error);
+          setModelListMessage(`Using bundled model list. Local model list unavailable: ${message}`);
+          return;
+        }
         setModelListStatus('error');
         setModelListMessage(error instanceof Error ? error.message : String(error));
       });

@@ -38,7 +38,12 @@ test("ImPermissionHelper resolves all pending permission requests for a chat", a
   });
 
   assert.match(first ?? "", /工具 read_file 需要权限/);
-  assert.match(second ?? "", /2 个工具权限请求/);
+  assert.match(first ?? "", /\/tmp\/a\.txt/);
+  assert.match(second ?? "", /2 个工具权限请求|2 个工具权限/);
+  assert.match(second ?? "", /请求 1: 工具 read_file/);
+  assert.match(second ?? "", /\/tmp\/a\.txt/);
+  assert.match(second ?? "", /请求 2: 工具 read_file/);
+  assert.match(second ?? "", /\/tmp\/b\.txt/);
   assert.equal(helper.hasPending("chat-1"), true);
 
   const confirmation = await helper.answer("chat-1", "1", gateway);

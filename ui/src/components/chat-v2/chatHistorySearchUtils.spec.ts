@@ -34,10 +34,78 @@ describe('chatHistorySearchUtils', () => {
     ]);
 
     expect(findChatHistoryMatches(searchableMessages, 'hidden-file-content-needle')).toHaveLength(0);
-    expect(findChatHistoryMatches(searchableMessages, 'src/App.tsx')).toHaveLength(1);
+    expect(findChatHistoryMatches(searchableMessages, 'src/App.tsx')).toHaveLength(0);
+    expect(findChatHistoryMatches(searchableMessages, 'App.tsx')).toHaveLength(1);
   });
 
-  it('does not index collapsed thinking or subagent container content', () => {
+  it('does not index collapsed tool input or result bodies', () => {
+    const writeMessage: ChatMessage = {
+      id: 'write-1',
+      type: 'assistant',
+      content: '',
+      timestamp: '2026-05-18T08:00:00.000Z',
+      isToolUse: true,
+      toolName: 'write_file',
+      toolId: 'write-1',
+      toolInput: JSON.stringify({
+        file_path: 'src/NewWidget.tsx',
+        content: 'hidden-write-body-needle',
+      }),
+      toolResult: { content: 'File written successfully', isError: false },
+    };
+    const bashMessage: ChatMessage = {
+      id: 'bash-1',
+      type: 'assistant',
+      content: '',
+      timestamp: '2026-05-18T08:00:01.000Z',
+      isToolUse: true,
+      toolName: 'Bash',
+      toolId: 'bash-1',
+      toolInput: JSON.stringify({ command: 'echo visible-command-needle' }),
+      toolResult: { content: 'hidden-output-needle', isError: false },
+    };
+
+    const searchableMessages = buildSearchableMessages([
+      { message: writeMessage, messageKey: 'write-1' },
+      { message: bashMessage, messageKey: 'bash-1' },
+    ]);
+
+    expect(findChatHistoryMatches(searchableMessages, 'hidden-write-body-needle')).toHaveLength(0);
+    expect(findChatHistoryMatches(searchableMessages, 'hidden-output-needle')).toHaveLength(0);
+    expect(findChatHistoryMatches(searchableMessages, 'NewWidget.tsx')).toHaveLength(1);
+    expect(findChatHistoryMatches(searchableMessages, 'visible-command-needle')).toHaveLength(1);
+    expect(findChatHistoryMatches(searchableMessages, 'Output')).toHaveLength(1);
+  });
+
+  it('keeps visible tool error text searchable', () => {
+    const errorMessage: ChatMessage = {
+      id: 'edit-error-1',
+      type: 'assistant',
+      content: '',
+      timestamp: '2026-05-18T08:00:00.000Z',
+      isToolUse: true,
+      toolName: 'edit_file',
+      toolId: 'edit-error-1',
+      toolInput: JSON.stringify({
+        file_path: 'src/App.tsx',
+        old_string: 'hidden-old-needle',
+        new_string: 'hidden-new-needle',
+      }),
+      toolResult: {
+        content: 'visible-error-needle: old_string was not found',
+        isError: true,
+      },
+    };
+
+    const searchableMessages = buildSearchableMessages([
+      { message: errorMessage, messageKey: 'edit-error-1' },
+    ]);
+
+    expect(findChatHistoryMatches(searchableMessages, 'hidden-old-needle')).toHaveLength(0);
+    expect(findChatHistoryMatches(searchableMessages, 'visible-error-needle')).toHaveLength(1);
+  });
+
+  it('indexes visible subagent card summaries without hidden detail content', () => {
     const thinkingMessage: ChatMessage = {
       id: 'thinking-1',
       type: 'assistant',
@@ -51,6 +119,11 @@ describe('chatHistorySearchUtils', () => {
       content: 'hidden subagent needle',
       timestamp: '2026-05-18T08:00:01.000Z',
       isSubagentContainer: true,
+      toolInput: JSON.stringify({
+        subagent_type: 'reviewer',
+        description: 'Audit checkout flow',
+        prompt: 'hidden subagent prompt needle',
+      }),
     };
 
     const searchableMessages = buildSearchableMessages([
@@ -58,7 +131,11 @@ describe('chatHistorySearchUtils', () => {
       { message: subagentMessage, messageKey: 'subagent-1' },
     ]);
 
-    expect(searchableMessages).toHaveLength(0);
+    expect(findChatHistoryMatches(searchableMessages, 'hidden thinking needle')).toHaveLength(0);
+    expect(findChatHistoryMatches(searchableMessages, 'hidden subagent needle')).toHaveLength(0);
+    expect(findChatHistoryMatches(searchableMessages, 'hidden subagent prompt needle')).toHaveLength(0);
+    expect(findChatHistoryMatches(searchableMessages, 'reviewer')).toHaveLength(1);
+    expect(findChatHistoryMatches(searchableMessages, 'Audit checkout flow')).toHaveLength(1);
   });
 
   it('highlights the active occurrence when earlier matches are in previous text nodes', () => {
