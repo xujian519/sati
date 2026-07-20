@@ -1847,28 +1847,6 @@ function safeGatewayPathPart(value: string): string {
 }
 
 const ATTACHMENT_PATH_NOTE_MARKER = "[Registered attachment files in this session:]";
-const READ_FILE_TEXT_ATTACHMENT_EXTENSIONS = new Set([
-  ".txt",
-  ".md",
-  ".json",
-  ".yaml",
-  ".yml",
-  ".csv",
-  ".tsv",
-  ".xml",
-  ".html",
-  ".css",
-  ".ts",
-  ".tsx",
-  ".js",
-  ".jsx",
-  ".py",
-  ".go",
-  ".rs",
-  ".java",
-  ".sh",
-  ".log",
-]);
 const READ_FILE_BINARY_ATTACHMENT_EXTENSIONS = new Set([
   ".zip",
   ".gz",
@@ -1976,7 +1954,7 @@ function isReadFileInspectableAttachment(attachment: ChannelAttachment): boolean
   const extension = extname(pathOrName).toLowerCase();
   if (extension === ".pdf" || extension === ".ipynb") return true;
   if (READ_FILE_BINARY_ATTACHMENT_EXTENSIONS.has(extension)) return false;
-  return READ_FILE_TEXT_ATTACHMENT_EXTENSIONS.has(extension);
+  return true;
 }
 
 function safeAllowedAttachmentPath(path: string, allowedReadFiles: Set<string>): string | undefined {
