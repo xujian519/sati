@@ -987,6 +987,7 @@ function ProviderCard({
   const isMaskedKey = isMaskedSecret(provider.apiKey);
   const protocol = provider.protocol ?? catalogEntry?.protocol ?? 'openai';
   const effectiveUrl = provider.url || catalogEntry?.defaultUrl || '';
+  const providerRequiresApiKey = catalogEntry?.requiresApiKey !== false;
   const enabledModels = Object.keys(provider.models ?? {});
   const [newModelId, setNewModelId] = useState('');
   const [showProviderAdvanced, setShowProviderAdvanced] = useState(false);
@@ -1168,10 +1169,12 @@ function ProviderCard({
 
       {/* API key — the only required field */}
       <label className="block text-xs text-muted-foreground">
-        <span className="mb-1 block">{t('pilotDeckConfig.panels.models.apiKey')}</span>
+        <span className="mb-1 block">
+          {t('pilotDeckConfig.panels.models.apiKey')}{providerRequiresApiKey ? '' : ' (optional)'}
+        </span>
         <SecretTextInput
           value={provider.apiKey}
-          emptyPlaceholder="sk-..."
+          emptyPlaceholder={providerRequiresApiKey ? 'sk-...' : 'Not required'}
           maskedPlaceholder={t('pilotDeckConfig.panels.models.maskedKeyPlaceholder')}
           onChange={(v) => update({ apiKey: v })}
         />

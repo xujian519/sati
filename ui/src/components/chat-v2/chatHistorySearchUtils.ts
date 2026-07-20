@@ -1,4 +1,5 @@
 import type { ChatMessage } from '../chat/types/types';
+import { shouldHideToolResult } from '../chat/tools/configs/toolConfigs';
 
 export type ChatHistorySearchMatch = {
   /** Index in the rendered message list. */
@@ -9,6 +10,12 @@ export type ChatHistorySearchMatch = {
   offset: number;
   /** Match length in characters. */
   length: number;
+};
+
+export type SearchableChatMessageInput = {
+  message: ChatMessage;
+  messageKey: string;
+  messageIndex?: number;
 };
 
 export type SearchableChatMessage = {
@@ -23,6 +30,10 @@ const ACTIVE_HIGHLIGHT_CLASS = 'chat-history-search-highlight-active';
 
 /** Collect plain text from a chat message for in-page search. */
 export function extractSearchableText(message: ChatMessage): string {
+  if (message.isSubagentContainer || message.isThinking) {
+    return '';
+  }
+
   const parts: string[] = [];
 
   if (typeof message.content === 'string' && message.content.trim()) {
@@ -31,25 +42,32 @@ export function extractSearchableText(message: ChatMessage): string {
   if (typeof message.toolInput === 'string' && message.toolInput.trim()) {
     parts.push(message.toolInput);
   }
-  const toolContent = message.toolResult?.content;
-  if (typeof toolContent === 'string' && toolContent.trim()) {
+  const toolResult = message.toolResult;
+  const toolContent = toolResult?.content;
+  const toolName = typeof message.toolName === 'string' ? message.toolName : '';
+  if (
+    toolResult &&
+    !shouldHideToolResult(toolName || 'UnknownTool', toolResult) &&
+    typeof toolContent === 'string' &&
+    toolContent.trim()
+  ) {
     parts.push(toolContent);
   }
-  if (typeof message.toolName === 'string' && message.toolName.trim()) {
-    parts.push(message.toolName);
+  if (toolName.trim()) {
+    parts.push(toolName);
   }
 
   return parts.join('\n');
 }
 
 export function buildSearchableMessages(
-  items: Array<{ message: ChatMessage; messageKey: string }>,
+  items: SearchableChatMessageInput[],
 ): SearchableChatMessage[] {
   return items
-    .map(({ message, messageKey }, messageIndex) => ({
+    .map(({ message, messageKey, messageIndex }, fallbackIndex) => ({
       message,
       messageKey,
-      messageIndex,
+      messageIndex: messageIndex ?? fallbackIndex,
       text: extractSearchableText(message),
     }))
     .filter((entry) => entry.text.trim().length > 0);
@@ -165,6 +183,22 @@ function highlightTextNode(
   return { highlighted: true, nextOccurrence: occurrence + 1 };
 }
 
+function countOccurrences(text: string, query: string): number {
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  if (!lowerQuery) return 0;
+
+  let count = 0;
+  let fromIndex = 0;
+  while (fromIndex < lowerText.length) {
+    const found = lowerText.indexOf(lowerQuery, fromIndex);
+    if (found < 0) break;
+    count += 1;
+    fromIndex = found + Math.max(1, lowerQuery.length);
+  }
+  return count;
+}
+
 function countOccurrencesBeforeOffset(text: string, query: string, offset: number): number {
   const lowerText = text.slice(0, offset).toLowerCase();
   const lowerQuery = query.toLowerCase();
@@ -181,6 +215,16 @@ function countOccurrencesBeforeOffset(text: string, query: string, offset: numbe
   return count;
 }
 
+function escapeMessageKeyForSelector(messageKey: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(messageKey);
+  }
+  return messageKey.replace(/[\0-\x1f\x7f"\\]/g, (character) => {
+    if (character === '"' || character === '\\') return `\\${character}`;
+    return `\\${character.charCodeAt(0).toString(16)} `;
+  });
+}
+
 /** Highlight the active match inside a message element and scroll it into view. */
 export function highlightActiveMatch(
   container: HTMLElement,
@@ -192,7 +236,7 @@ export function highlightActiveMatch(
   clearSearchHighlights(container);
 
   const messageEl = container.querySelector<HTMLElement>(
-    `.chat-message[data-message-key="${CSS.escape(messageKey)}"]`,
+    `.chat-message[data-message-key="${escapeMessageKeyForSelector(messageKey)}"]`,
   );
   if (!messageEl) return false;
 
@@ -206,12 +250,15 @@ export function highlightActiveMatch(
     if (!textNode.textContent?.trim()) continue;
     if (textNode.parentElement?.closest('mark')) continue;
 
-    const result = highlightTextNode(textNode, query, currentOccurrence - occurrence);
-    if (result.highlighted) {
-      highlighted = true;
+    const nodeOccurrenceCount = countOccurrences(textNode.textContent, query);
+    if (nodeOccurrenceCount === 0) continue;
+
+    if (occurrence < currentOccurrence + nodeOccurrenceCount) {
+      const result = highlightTextNode(textNode, query, occurrence - currentOccurrence);
+      highlighted = result.highlighted;
       break;
     }
-    currentOccurrence = result.nextOccurrence;
+    currentOccurrence += nodeOccurrenceCount;
   }
 
   const activeMark = messageEl.querySelector(`mark.${ACTIVE_HIGHLIGHT_CLASS}`);

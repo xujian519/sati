@@ -109,8 +109,8 @@ export default function SubagentDetailModal({
           </button>
         </div>
 
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto">
+        {/* Content */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
           {content}
         </div>
       </div>

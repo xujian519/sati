@@ -18,6 +18,7 @@ import SubagentDetailModal from './SubagentDetailModal';
 import ChatHistorySearchBar from './ChatHistorySearchBar';
 import { useRegisterChatHistorySearchControls } from './ChatHistorySearchController';
 import { useChatHistorySearch } from './useChatHistorySearch';
+import type { SearchableChatMessageInput } from './chatHistorySearchUtils';
 import { useSubagentMessages } from './useSubagentMessages';
 import { ProcessLiveStatus, ProcessRunHeader, StreamingThinkingPreview, type ProcessTraceStep } from './ProcessTrace';
 import { formatProcessDuration } from './processTraceUtils';
@@ -945,13 +946,15 @@ function MessagesPaneV2({
     t,
   ]);
 
-  const keyedMessagesForSearch = useMemo(
-    () => keyedMessageItems.map((item) => ({
-      message: item.message,
-      messageKey: item.itemKey,
-    })),
-    [keyedMessageItems],
-  );
+  const keyedMessagesForSearch = useMemo<SearchableChatMessageInput[]>(() => {
+    return keyedMessageItems.map((item) => (
+      {
+        message: item.message,
+        messageKey: item.itemKey,
+        messageIndex: item.renderIndex,
+      }
+    ));
+  }, [keyedMessageItems]);
 
   const chatHistorySearch = useChatHistorySearch({
     scrollContainerRef,
