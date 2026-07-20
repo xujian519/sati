@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { extname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import type { AgentEvent, AgentInput, AgentTurnResult } from "../../agent/index.js";
 import {
@@ -1847,6 +1847,25 @@ function safeGatewayPathPart(value: string): string {
 }
 
 const ATTACHMENT_PATH_NOTE_MARKER = "[Registered attachment files in this session:]";
+const READ_FILE_BINARY_ATTACHMENT_EXTENSIONS = new Set([
+  ".zip",
+  ".gz",
+  ".tar",
+  ".7z",
+  ".rar",
+  ".doc",
+  ".docx",
+  ".ppt",
+  ".pptx",
+  ".xls",
+  ".xlsx",
+  ".odt",
+  ".ods",
+  ".odp",
+  ".pages",
+  ".key",
+  ".numbers",
+]);
 
 async function buildAgentInputWithAttachments(
   message: string,
@@ -1901,12 +1920,41 @@ function buildAttachmentPathNote(
 
   if (lines.length === 0) return undefined;
   const guidance = hasDiagnostics
-    ? "Some attachments may not be directly visible; use read_file with the exact path only when needed."
+    ? attachmentDiagnosticsGuidance(attachments, allowedReadFiles)
     : "These are path references for reuse. If an image/PDF is already visible in this turn, do not call read_file just to view it.";
   return {
     type: "text",
     text: `\n\n${ATTACHMENT_PATH_NOTE_MARKER}\n${lines.join("\n")}\n${guidance}`,
   };
+}
+
+function attachmentDiagnosticsGuidance(
+  attachments: ChannelAttachment[],
+  allowedReadFiles: Set<string>,
+): string {
+  const hasInspectableAttachment = attachments.some((attachment) => {
+    if (!attachment.path) return false;
+    if (!safeAllowedAttachmentPath(attachment.path, allowedReadFiles)) return false;
+    return isReadFileInspectableAttachment(attachment);
+  });
+  if (!hasInspectableAttachment) {
+    return "Some attachments were not shown inline. These registered files are not directly inspectable with read_file; ask for a supported export or convert them before inspection.";
+  }
+  return "Some attachments were not shown inline. Use read_file with the exact path only for readable text, image, PDF, or notebook attachments; Office/archive/binary files need conversion before inspection.";
+}
+
+function isReadFileInspectableAttachment(attachment: ChannelAttachment): boolean {
+  const mimeType = attachment.mimeType?.toLowerCase() ?? "";
+  if (attachment.type === "image" || mimeType.startsWith("image/")) return true;
+  if (mimeType === "application/pdf") return true;
+  if (mimeType.startsWith("text/")) return true;
+  if (mimeType === "application/json" || mimeType.endsWith("+json")) return true;
+
+  const pathOrName = attachment.path || attachment.name || "";
+  const extension = extname(pathOrName).toLowerCase();
+  if (extension === ".pdf" || extension === ".ipynb") return true;
+  if (READ_FILE_BINARY_ATTACHMENT_EXTENSIONS.has(extension)) return false;
+  return true;
 }
 
 function safeAllowedAttachmentPath(path: string, allowedReadFiles: Set<string>): string | undefined {

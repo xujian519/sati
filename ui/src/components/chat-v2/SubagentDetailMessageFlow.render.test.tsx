@@ -1,11 +1,19 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ChatMessage } from '../chat/types/types';
 import SubagentDetailMessageFlow from './SubagentDetailMessageFlow';
 
 const baseTime = Date.parse('2026-05-18T08:00:00.000Z');
+
+beforeAll(() => {
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => (
+    window.setTimeout(() => callback(performance.now()), 0)
+  ));
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => window.clearTimeout(id));
+  Element.prototype.scrollIntoView = vi.fn();
+});
 
 function timestamp(offsetMs: number): string {
   return new Date(baseTime + offsetMs).toISOString();
@@ -70,6 +78,7 @@ function renderFlow(messages: ChatMessage[], isRunning = true) {
 
 afterEach(() => {
   cleanup();
+  document.body.innerHTML = '';
 });
 
 describe('SubagentDetailMessageFlow', () => {
@@ -117,5 +126,29 @@ describe('SubagentDetailMessageFlow', () => {
     expect(status.textContent).toContain('Completed thought two.');
     expect(screen.queryByText('Thought through next step')).toBeNull();
     expect(screen.getByText(/Explored 1 file|已探索 1 个文件/i)).toBeTruthy();
+  });
+
+  it('opens local search and highlights subagent message content', async () => {
+    const overlay = document.createElement('div');
+    overlay.dataset.modalOverlay = '';
+    document.body.appendChild(overlay);
+
+    renderFlow([
+      assistant('a-1', 'First Needle appears here.', 100),
+      assistant('a-2', 'Second Needle appears here.', 200),
+    ], false);
+
+    fireEvent.keyDown(document, { key: 'f', ctrlKey: true });
+
+    const search = screen.getByRole('search');
+    const input = search.querySelector('input[type="search"]') as HTMLInputElement | null;
+    if (!input) throw new Error('Expected subagent search input');
+
+    fireEvent.change(input, { target: { value: 'needle' } });
+
+    await waitFor(() => {
+      const activeMark = document.querySelector('mark.chat-history-search-highlight-active');
+      expect(activeMark?.textContent?.toLowerCase()).toBe('needle');
+    });
   });
 });

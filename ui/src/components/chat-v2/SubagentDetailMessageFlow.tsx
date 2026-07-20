@@ -1,7 +1,8 @@
-import { Fragment, useCallback, useMemo, useState } from 'react';
+import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChatMessage, ChatRunMode } from '../chat/types/types';
 import type { Project, SessionProvider } from '../../types/app';
+import ChatHistorySearchBar from './ChatHistorySearchBar';
 import MessageRowV2 from './MessageRowV2';
 import { ProcessLiveStatus, StreamingThinkingPreview, type ProcessTraceStep } from './ProcessTrace';
 import {
@@ -15,6 +16,8 @@ import {
   type ProcessAttachment,
   type RenderableMessageItem,
 } from './processGrouping';
+import { useChatHistorySearch } from './useChatHistorySearch';
+import type { SearchableChatMessageInput } from './chatHistorySearchUtils';
 
 type DiffLine = { type: string; content: string; lineNum: number };
 
@@ -85,6 +88,7 @@ export default function SubagentDetailMessageFlow({
   runMode = 'agent',
 }: SubagentDetailMessageFlowProps) {
   const { t } = useTranslation('chat');
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [expandedProcessRows, setExpandedProcessRows] = useState<Map<string, boolean>>(() => new Map());
 
   const streamingThinkingContent = useMemo(() => {
@@ -209,11 +213,25 @@ export default function SubagentDetailMessageFlow({
   const hasOpenEndedLiveProcessGroup = liveProcessGroups.some((group) => group.isRunning);
   const shouldRenderBottomLiveStatus = isRunning && !hasOpenEndedLiveProcessGroup;
   const shouldRenderBottomStreamingThinking = Boolean(streamingThinkingContent && !hasOpenEndedLiveProcessGroup);
+  const keyedMessagesForSearch = useMemo<SearchableChatMessageInput[]>(() => {
+    return keyedItems.map((item) => (
+      {
+        message: item.message,
+        messageKey: item.itemKey,
+        messageIndex: item.renderIndex,
+      }
+    ));
+  }, [keyedItems]);
+  const measuredItemHeights = useMemo(
+    () => keyedItems.map(() => 96),
+    [keyedItems],
+  );
 
   const isProcessExpanded = useCallback((processKey: string, defaultExpanded = false) => (
     expandedProcessRows.get(processKey) ?? defaultExpanded
   ), [expandedProcessRows]);
 
+  const loadAllSearchMessages = useCallback(() => {}, []);
   const handleProcessExpandedChange = useCallback((processKey: string, expanded: boolean) => {
     setExpandedProcessRows((prev) => {
       const next = new Map(prev);
@@ -221,6 +239,17 @@ export default function SubagentDetailMessageFlow({
       return next;
     });
   }, []);
+
+  const chatHistorySearch = useChatHistorySearch({
+    scrollContainerRef,
+    keyedMessages: keyedMessagesForSearch,
+    measuredItemHeights,
+    allMessagesLoaded: true,
+    hasMoreMessages: false,
+    loadAllMessages: loadAllSearchMessages,
+    sessionId: null,
+    captureFindShortcutInModal: true,
+  });
 
   const renderLiveProcessDetailMessages = useCallback((detailMessages: ChatMessage[], groupId: string) => {
     return detailMessages.map((message, index) => (
@@ -299,57 +328,79 @@ export default function SubagentDetailMessageFlow({
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-3 px-6 py-4">
-      {keyedItems.map((item) => {
-        const previousMessage = item.renderIndex > 0 ? keyedItems[item.renderIndex - 1].message : null;
-        const nextMessage = item.renderIndex < keyedItems.length - 1
-          ? keyedItems[item.renderIndex + 1].message
-          : null;
-        const anchoredLiveGroups = liveProcessGroupsByAnchor.get(item.originalIndex) || [];
-        const beforeLiveGroups = unanchoredLiveProcessGroupsByBeforeIndex.get(item.originalIndex) || [];
-
-        return (
-          <Fragment key={item.itemKey}>
-            {beforeLiveGroups.length > 0 ? (
-              <div className="flex min-w-0 flex-col gap-2">
-                {beforeLiveGroups.map(renderLiveProcessGroup)}
-              </div>
-            ) : null}
-            <MessageRowV2
-              message={item.message}
-              prevMessage={previousMessage}
-              nextMessage={nextMessage}
-              beforeProcessAttachments={item.beforeProcessAttachments}
-              afterProcessAttachments={item.afterProcessAttachments}
-              provider={provider}
-              selectedProject={selectedProject}
-              createDiff={createDiff}
-              onFileOpen={onFileOpen}
-              showThinking={showThinking}
-              isProcessExpanded={isProcessExpanded}
-              onProcessExpandedChange={handleProcessExpandedChange}
-            />
-            {anchoredLiveGroups.length > 0 ? (
-              <div className="flex min-w-0 flex-col gap-2">
-                {anchoredLiveGroups.map(renderLiveProcessGroup)}
-              </div>
-            ) : null}
-          </Fragment>
-        );
-      })}
-      {bottomUnanchoredLiveProcessGroups.length > 0 ? (
-        <div className="flex min-w-0 flex-col gap-2">
-          {bottomUnanchoredLiveProcessGroups.map(renderLiveProcessGroup)}
-        </div>
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      {chatHistorySearch.isOpen ? (
+        <ChatHistorySearchBar
+          query={chatHistorySearch.query}
+          onQueryChange={chatHistorySearch.setQuery}
+          matchCount={chatHistorySearch.matches.length}
+          activeMatchIndex={chatHistorySearch.activeMatchIndex}
+          onPrevious={chatHistorySearch.goToPrevious}
+          onNext={chatHistorySearch.goToNext}
+          onClose={chatHistorySearch.closeSearch}
+          inputRef={chatHistorySearch.inputRef}
+        />
       ) : null}
-      {shouldRenderBottomLiveStatus || shouldRenderBottomStreamingThinking ? (
-        <div className="flex min-w-0 flex-col">
-          <ProcessLiveStatus step={thinkingStatusStep} />
-          {shouldRenderBottomStreamingThinking ? (
-            <StreamingThinkingPreview content={streamingThinkingContent!} />
+      <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto">
+        <div className="flex min-w-0 flex-col gap-3 px-6 py-4">
+          {keyedItems.map((item) => {
+            const previousMessage = item.renderIndex > 0 ? keyedItems[item.renderIndex - 1].message : null;
+            const nextMessage = item.renderIndex < keyedItems.length - 1
+              ? keyedItems[item.renderIndex + 1].message
+              : null;
+            const anchoredLiveGroups = liveProcessGroupsByAnchor.get(item.originalIndex) || [];
+            const beforeLiveGroups = unanchoredLiveProcessGroupsByBeforeIndex.get(item.originalIndex) || [];
+
+            return (
+              <Fragment key={item.itemKey}>
+                {beforeLiveGroups.length > 0 ? (
+                  <div className="flex min-w-0 flex-col gap-2">
+                    {beforeLiveGroups.map(renderLiveProcessGroup)}
+                  </div>
+                ) : null}
+                <div
+                  className="chat-message"
+                  data-message-key={item.itemKey}
+                  data-message-timestamp={item.message.timestamp ? String(item.message.timestamp) : undefined}
+                >
+                  <MessageRowV2
+                    message={item.message}
+                    prevMessage={previousMessage}
+                    nextMessage={nextMessage}
+                    beforeProcessAttachments={item.beforeProcessAttachments}
+                    afterProcessAttachments={item.afterProcessAttachments}
+                    provider={provider}
+                    selectedProject={selectedProject}
+                    createDiff={createDiff}
+                    onFileOpen={onFileOpen}
+                    showThinking={showThinking}
+                    isProcessExpanded={isProcessExpanded}
+                    onProcessExpandedChange={handleProcessExpandedChange}
+                  />
+                </div>
+                {anchoredLiveGroups.length > 0 ? (
+                  <div className="flex min-w-0 flex-col gap-2">
+                    {anchoredLiveGroups.map(renderLiveProcessGroup)}
+                  </div>
+                ) : null}
+              </Fragment>
+            );
+          })}
+          {bottomUnanchoredLiveProcessGroups.length > 0 ? (
+            <div className="flex min-w-0 flex-col gap-2">
+              {bottomUnanchoredLiveProcessGroups.map(renderLiveProcessGroup)}
+            </div>
+          ) : null}
+          {shouldRenderBottomLiveStatus || shouldRenderBottomStreamingThinking ? (
+            <div className="flex min-w-0 flex-col">
+              <ProcessLiveStatus step={thinkingStatusStep} />
+              {shouldRenderBottomStreamingThinking ? (
+                <StreamingThinkingPreview content={streamingThinkingContent!} />
+              ) : null}
+            </div>
           ) : null}
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }
