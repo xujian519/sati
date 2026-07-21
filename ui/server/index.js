@@ -1072,6 +1072,16 @@ function parseRangeHeader(rangeHeader, fileSize) {
     };
 }
 
+async function sha256File(filePath) {
+    return new Promise((resolve, reject) => {
+        const hash = crypto.createHash('sha256');
+        const stream = fs.createReadStream(filePath);
+        stream.on('data', (chunk) => hash.update(chunk));
+        stream.on('error', reject);
+        stream.on('end', () => resolve(hash.digest('hex')));
+    });
+}
+
 async function streamFileWithRange(req, res, filePath, options = {}) {
     const stats = await fsPromises.stat(filePath);
     const fileSize = stats.size;
@@ -1129,7 +1139,12 @@ async function streamFileWithRange(req, res, filePath, options = {}) {
     });
 }
 
-const OFFICE_PDF_PREVIEW_EXTENSIONS = new Set(['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp']);
+const OFFICE_PDF_PREVIEW_EXTENSIONS = new Set([
+    'doc', 'docx', 'wps',
+    'xls', 'xlsx', 'et',
+    'ppt', 'pptx', 'dps',
+    'odt', 'ods', 'odp',
+]);
 
 const getFileExtension = (filePath) => path.extname(filePath).slice(1).toLowerCase();
 
@@ -1380,6 +1395,9 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
         }
 
         const mimeType = mime.lookup(resolved) || 'application/octet-stream';
+        if (req.method === 'HEAD' && (req.query.sha256 === '1' || req.query.sha256 === 'true')) {
+            res.setHeader('X-PilotDeck-Content-SHA256', await sha256File(resolved));
+        }
         await streamFileWithRange(req, res, resolved, {
             mimeType,
             downloadFilename: req.query.download ? path.basename(resolved) : null,
@@ -3234,6 +3252,9 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
             if (entry.name === 'node_modules' ||
                 entry.name === 'dist' ||
                 entry.name === 'build' ||
+                entry.name.startsWith('.pilotdeck') ||
+                entry.name === '.tmp' ||
+                /^\.pilotdeck_build\.(?:c|m)?js$/i.test(entry.name) ||
                 entry.name === '.git' ||
                 entry.name === '.svn' ||
                 entry.name === '.hg') continue;

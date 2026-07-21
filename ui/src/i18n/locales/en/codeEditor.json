@@ -36,7 +36,9 @@
     "close": "Close",
     "goBack": "Go back",
     "previewMarkdown": "Preview markdown",
-    "editMarkdown": "Edit markdown"
+    "editMarkdown": "Edit markdown",
+    "previewHtml": "Preview HTML",
+    "editHtml": "View HTML source"
   },
   "footer": {
     "lines": "Lines:",

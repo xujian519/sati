@@ -28,21 +28,21 @@ function getExtension(filename: string): string {
 
 function getFileTypeBadge(filename: string) {
   const extension = getExtension(filename);
-  if (['doc', 'docx', 'odt'].includes(extension)) {
+  if (['doc', 'docx', 'wps', 'odt'].includes(extension)) {
     return {
       label: 'W',
       className: 'bg-blue-600 text-white',
       titleKey: 'fileTypes.word',
     };
   }
-  if (['xls', 'xlsx', 'ods'].includes(extension)) {
+  if (['xls', 'xlsx', 'et', 'ods'].includes(extension)) {
     return {
       label: 'X',
       className: 'bg-emerald-600 text-white',
       titleKey: 'fileTypes.excel',
     };
   }
-  if (['ppt', 'pptx', 'odp'].includes(extension)) {
+  if (['ppt', 'pptx', 'dps', 'odp'].includes(extension)) {
     return {
       label: 'P',
       className: 'bg-orange-600 text-white',

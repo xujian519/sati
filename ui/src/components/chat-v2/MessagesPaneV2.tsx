@@ -157,11 +157,13 @@ export function estimateMessageItemHeight(item: RenderableMessageItem): number {
   const processSummaryHeight = processSummaryCount * 32;
   const runHeaderHeight = (item.beforeRunAttachment ? 34 : 0) + (item.afterRunAttachment ? 34 : 0);
   const attachmentHeight = Array.isArray(item.message.attachments) && item.message.attachments.length > 0 ? 56 : 0;
+  const artifactCount = Array.isArray(item.message.artifacts) ? item.message.artifacts.length : 0;
+  const artifactHeight = artifactCount > 0 ? Math.min(artifactCount, 3) * 64 + 34 : 0;
   const imageHeight = Array.isArray(item.message.images) && item.message.images.length > 0 ? 180 : 0;
   const toolHeight = item.message.isToolUse || item.message.toolName ? 140 : 0;
 
   return clampNumber(
-    baseHeight + roughLines * 20 + runHeaderHeight + processSummaryHeight + attachmentHeight + imageHeight + toolHeight + MESSAGE_GAP_PX,
+    baseHeight + roughLines * 20 + runHeaderHeight + processSummaryHeight + attachmentHeight + artifactHeight + imageHeight + toolHeight + MESSAGE_GAP_PX,
     72,
     720,
   );

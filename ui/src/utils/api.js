@@ -282,6 +282,13 @@ export const api = {
   },
   readFileBlob: (projectName, filePath) =>
     authenticatedFetch(api.fileContentUrl(projectName, filePath)),
+  fileContentSha256: (projectName, filePath) => {
+    const params = new URLSearchParams({ path: filePath, sha256: '1' });
+    return authenticatedFetch(
+      `/api/projects/${encodeURIComponent(projectName)}/files/content?${params.toString()}`,
+      { method: 'HEAD', cache: 'no-store' },
+    );
+  },
   officePdfPreviewUrl: (projectName, filePath, options = {}) => {
     const params = new URLSearchParams({ path: filePath });
     if (options.force) {

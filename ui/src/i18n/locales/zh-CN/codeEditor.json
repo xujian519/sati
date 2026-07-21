@@ -36,7 +36,9 @@
     "close": "关闭",
     "goBack": "返回",
     "previewMarkdown": "预览 Markdown",
-    "editMarkdown": "编辑 Markdown"
+    "editMarkdown": "编辑 Markdown",
+    "previewHtml": "预览 HTML",
+    "editHtml": "查看 HTML 源码"
   },
   "footer": {
     "lines": "行数：",

@@ -5,7 +5,7 @@ const IMAGE_EXTENSIONS = [
 const PDF_EXTENSIONS = ['pdf'];
 
 const OFFICE_EXTENSIONS = [
-  'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp',
+  'doc', 'docx', 'wps', 'xls', 'xlsx', 'et', 'ppt', 'pptx', 'dps', 'odt', 'ods', 'odp',
 ];
 
 const BINARY_EXTENSIONS = [
