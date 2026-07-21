@@ -45,15 +45,14 @@ SHEET="$SPREADSHEET_SKILL_ROOT/scripts/spreadsheet.sh"
 bash "$SHEET" check || bash "$SHEET" fix
 ```
 
-Use a task-specific scratch directory outside the skill:
+Use the turn-scoped PilotDeck work directory for every intermediate. The host sets `PILOTDECK_WORK_DIR`; the fallback keeps manual runs internal to the project:
 
 ```bash
-SCRATCH_ROOT="$(node -p "require('node:os').tmpdir()")"
-WORKSPACE="$SCRATCH_ROOT/pilotdeck-spreadsheets/${CODEX_THREAD_ID:-manual}/<task-slug>"
+WORKSPACE="${PILOTDECK_WORK_DIR:-$PWD/.pilotdeck/work/manual/<task-slug>}/spreadsheets"
 mkdir -p "$WORKSPACE/tmp" "$WORKSPACE/qa"
 ```
 
-Keep builders, source notes, inspections, renders, and QA reports in `WORKSPACE`. Put only requested deliverables in the project or user-selected output directory.
+Keep builders, converted inputs, source notes, inspections, candidates, renders, recalculation files, and QA reports in `WORKSPACE`. Put only requested deliverables in the project or user-selected output directory. Never create `.pilotdeck_build.mjs`, QA directories, or other intermediates beside the user's files.
 
 ## Route the request
 

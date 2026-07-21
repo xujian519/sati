@@ -205,13 +205,18 @@ Return a workbook and choose `.csv` or `.tsv` as the `build --out` extension. Th
 
 ## Common commands
 
+Keep every builder, candidate, conversion, render, and report under the turn work directory. Only `FINAL_XLSX` is user-facing.
+
 ```bash
-bash "$SHEET" scaffold --out builder.mjs
-bash "$SHEET" build --builder builder.mjs --requirements requirements.json --out candidate.xlsx
-bash "$SHEET" build --builder builder.mjs --input input.xlsx --requirements requirements.json --out candidate.xlsx
-bash "$SHEET" convert-legacy --input input.xls --out converted.xlsx
-bash "$SHEET" inspect --input output.xlsx --sheet Summary --range A1:H20 --styles
-bash "$SHEET" audit --input candidate.xlsx --requirements requirements.json --out audit.json
-bash "$SHEET" render --input candidate.xlsx --out-dir render --per-sheet
-bash "$SHEET" deliver --input candidate.xlsx --out output.xlsx --qa-dir qa --requirements requirements.json
+WORKSPACE="${PILOTDECK_WORK_DIR:-$PWD/.pilotdeck/work/manual/<task-slug>}/spreadsheets"
+FINAL_XLSX="$PWD/<requested-output>.xlsx"
+mkdir -p "$WORKSPACE/tmp" "$WORKSPACE/qa"
+bash "$SHEET" scaffold --out "$WORKSPACE/tmp/workbook.mjs" --requirements-out "$WORKSPACE/tmp/requirements.json"
+bash "$SHEET" build --builder "$WORKSPACE/tmp/workbook.mjs" --requirements "$WORKSPACE/tmp/requirements.json" --out "$WORKSPACE/tmp/candidate.xlsx"
+bash "$SHEET" build --builder "$WORKSPACE/tmp/workbook.mjs" --input "$INPUT_XLSX" --requirements "$WORKSPACE/tmp/requirements.json" --out "$WORKSPACE/tmp/candidate.xlsx"
+bash "$SHEET" convert-legacy --input "$INPUT_XLS" --out "$WORKSPACE/tmp/converted.xlsx"
+bash "$SHEET" inspect --input "$INPUT_XLSX" --sheet Summary --range A1:H20 --styles --out "$WORKSPACE/tmp/inspection.json"
+bash "$SHEET" audit --input "$WORKSPACE/tmp/candidate.xlsx" --requirements "$WORKSPACE/tmp/requirements.json" --out "$WORKSPACE/qa/audit.json"
+bash "$SHEET" render --input "$WORKSPACE/tmp/candidate.xlsx" --out-dir "$WORKSPACE/qa/render" --per-sheet
+bash "$SHEET" deliver --input "$WORKSPACE/tmp/candidate.xlsx" --out "$FINAL_XLSX" --qa-dir "$WORKSPACE/qa/final" --requirements "$WORKSPACE/tmp/requirements.json"
 ```

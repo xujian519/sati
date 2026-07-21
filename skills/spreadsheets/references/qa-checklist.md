@@ -25,7 +25,7 @@
 Use:
 
 ```bash
-bash "$SHEET" audit --input "$FINAL_FILE" --out audit.json
+bash "$SHEET" audit --input "$FINAL_FILE" --out "$WORKSPACE/qa/audit.json"
 ```
 
 Do not finalize when `status` is `error`. Fix every `warning`, or register its type and concrete rationale in `warningDispositions`; unresolved warnings block `deliver`. Pay particular attention to missing cached formula results, blank sheets, oversized used ranges, and CJK fallback. Review `advisories` and `package.roundTripRisks` before any future edit of a workbook containing native charts or drawings.
@@ -35,7 +35,7 @@ Do not finalize when `status` is `error`. Fix every `warning`, or register its t
 Render the candidate one worksheet at a time:
 
 ```bash
-bash "$SHEET" render --input "$CANDIDATE" --out-dir render --per-sheet
+bash "$SHEET" render --input "$CANDIDATE" --out-dir "$WORKSPACE/qa/render" --per-sheet
 ```
 
 Inspect the montage for overall coverage, then inspect every `page-N.png` at full resolution.

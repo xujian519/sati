@@ -18,7 +18,7 @@ Treat these as unsafe by default:
 Run:
 
 ```bash
-bash "$SHEET" inspect --input source.xlsx --out inspection.json
+bash "$SHEET" inspect --input "$INPUT_XLSX" --out "$WORKSPACE/tmp/inspection.json"
 ```
 
 Review `package.unsafeForRoundTrip` and `package.roundTripRisks`. If risks are present:

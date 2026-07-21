@@ -41,15 +41,14 @@ PPTX="$PPTX_SKILL_ROOT/scripts/pptx.sh"
 bash "$PPTX" check || bash "$PPTX" fix
 ```
 
-Use an external scratch directory for project-backed work. If the host does not provide one, derive it from Node:
+Use the turn-scoped PilotDeck work directory for every intermediate. The host sets `PILOTDECK_WORK_DIR`; the fallback keeps manual runs internal to the project:
 
 ```bash
-SCRATCH_ROOT="$(node -p "require('node:os').tmpdir()")"
-WORKSPACE="$SCRATCH_ROOT/pilotdeck-pptx/${CODEX_THREAD_ID:-manual}/<task-slug>"
+WORKSPACE="${PILOTDECK_WORK_DIR:-$PWD/.pilotdeck/work/manual/<task-slug>}/pptx"
 mkdir -p "$WORKSPACE/tmp" "$WORKSPACE/qa"
 ```
 
-Put the builder, source notes, renders, manifests, maps, and QA reports in `WORKSPACE`. Put only the requested final deliverables in the project or user-selected output directory. Do not conceal scratch files with Git ignore changes.
+Put the builder, converted inputs, source notes, renders, manifests, maps, candidates, and QA reports in `WORKSPACE`. Put only the requested final deliverables in the project or user-selected output directory. Never create `.pilotdeck_build.mjs`, QA directories, or other intermediates beside the user's files. Do not conceal scratch files with Git ignore changes.
 
 ## Route the request
 

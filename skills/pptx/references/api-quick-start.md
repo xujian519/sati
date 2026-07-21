@@ -1,5 +1,13 @@
 # API quick start
 
+All command examples assume the turn-scoped paths below. Keep every builder, candidate, conversion, render, and report under `WORKSPACE`; only `FINAL_PPTX` is user-facing.
+
+```bash
+WORKSPACE="${PILOTDECK_WORK_DIR:-$PWD/.pilotdeck/work/manual/<task-slug>}/pptx"
+FINAL_PPTX="$PWD/<requested-output>.pptx"
+mkdir -p "$WORKSPACE/tmp" "$WORKSPACE/qa"
+```
+
 ## Builder contract
 
 Create a plain ES module that exports one async function and returns a PptxGenJS presentation:
@@ -36,8 +44,8 @@ export default async function build({ createDeck, layouts, resolveDesignTokens, 
 Use `build` while iterating. Use `deliver` for the final build so the verified hash, audit, and render remain bound to one PPTX:
 
 ```bash
-bash "$PPTX" build --builder deck.mjs --out deck.pptx
-bash "$PPTX" deliver --builder deck.mjs --out deck.pptx --qa-dir qa --target-platform cross-platform --require-render
+bash "$PPTX" build --builder "$WORKSPACE/tmp/deck.mjs" --out "$WORKSPACE/tmp/candidate.pptx"
+bash "$PPTX" deliver --builder "$WORKSPACE/tmp/deck.mjs" --out "$FINAL_PPTX" --qa-dir "$WORKSPACE/qa" --target-platform cross-platform --require-render
 ```
 
 ## Toolkit members
@@ -57,14 +65,14 @@ Set PptxGenJS `objectName` for meaningful elements. Use stable names such as `Sl
 ## Useful commands
 
 ```bash
-bash "$PPTX" convert --input legacy.ppt --out converted.pptx --qa-dir legacy-qa
-bash "$PPTX" scaffold --out deck.mjs
-bash "$PPTX" build --builder deck.mjs --out deck.pptx --verify --qa-dir qa
-bash "$PPTX" deliver --builder deck.mjs --out deck.pptx --qa-dir qa --require-render
-bash "$PPTX" deliver --input qa/candidate.pptx --out deck.pptx --qa-dir qa --requirements requirements.json --require-coverage --dispositions warning-dispositions.json --require-render
-bash "$PPTX" inspect --input deck.pptx --out manifest.json
-bash "$PPTX" audit --input deck.pptx --out audit.json --target-platform cross-platform
-bash "$PPTX" render --input deck.pptx --out-dir slides --montage montage.png
+bash "$PPTX" convert --input "$SOURCE_PPT" --out "$WORKSPACE/tmp/converted.pptx" --qa-dir "$WORKSPACE/qa/legacy"
+bash "$PPTX" scaffold --out "$WORKSPACE/tmp/deck.mjs"
+bash "$PPTX" build --builder "$WORKSPACE/tmp/deck.mjs" --out "$WORKSPACE/tmp/candidate.pptx" --verify --qa-dir "$WORKSPACE/qa/iteration"
+bash "$PPTX" deliver --builder "$WORKSPACE/tmp/deck.mjs" --out "$FINAL_PPTX" --qa-dir "$WORKSPACE/qa" --require-render
+bash "$PPTX" deliver --input "$WORKSPACE/qa/candidate.pptx" --out "$FINAL_PPTX" --qa-dir "$WORKSPACE/qa" --requirements "$WORKSPACE/tmp/requirements.json" --require-coverage --dispositions "$WORKSPACE/tmp/warning-dispositions.json" --require-render
+bash "$PPTX" inspect --input "$FINAL_PPTX" --out "$WORKSPACE/qa/manifest.json"
+bash "$PPTX" audit --input "$FINAL_PPTX" --out "$WORKSPACE/qa/audit.json" --target-platform cross-platform
+bash "$PPTX" render --input "$FINAL_PPTX" --out-dir "$WORKSPACE/qa/slides" --montage "$WORKSPACE/qa/montage.png"
 ```
 
 `deliver --builder` writes an intermediate candidate under the QA directory. The requested output is created only when delivery status is `passed`. Do not bypass the exit status or deliver `candidate.pptx`.
