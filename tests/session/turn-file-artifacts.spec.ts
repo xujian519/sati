@@ -76,3 +76,53 @@ test("TurnRunner emits and persists file artifacts before completing the turn", 
     await rm(projectRoot, { recursive: true, force: true });
   }
 });
+
+test("TurnRunner does not collect generated files when artifacts are disabled", async () => {
+  const generalRoot = await mkdtemp(join(tmpdir(), "pilotdeck-general-no-artifacts-"));
+  try {
+    const result: AgentTurnResult = {
+      type: "success",
+      sessionId: "general-session",
+      turnId: "turn-1",
+      stopReason: "completed",
+      usage: {},
+      permissionDenials: [],
+      turns: 1,
+      startedAt: "2026-07-22T10:00:00.000Z",
+      completedAt: "2026-07-22T10:00:01.000Z",
+    };
+    const fakeLoop = {
+      async *run(input: AgentLoopInput): AsyncGenerator<AgentEvent, AgentLoopRunResult, unknown> {
+        await writeFile(join(generalRoot, "generated.md"), "# Generated in general chat\n");
+        await writeFile(join(generalRoot, `${input.sessionId}.jsonl`), '{"type":"turn_result"}\n');
+        yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+        return { result, messages: input.messages };
+      },
+      snapshotFileState: () => ({}),
+    } as unknown as AgentLoop;
+    const transcript = new InMemoryTranscriptWriter();
+    const runner = new TurnRunner(
+      fakeLoop,
+      transcript,
+      undefined,
+      () => new Date("2026-07-22T10:00:01.000Z"),
+      undefined,
+      { cwd: generalRoot, transcriptPath: "", collectFileArtifacts: false },
+    );
+
+    const eventTypes: string[] = [];
+    for await (const event of runner.run({
+      sessionId: "general-session",
+      turnId: "turn-1",
+      messages: [],
+      input: { type: "text", text: "你好" },
+    })) {
+      eventTypes.push(event.type);
+    }
+
+    assert.equal(eventTypes.includes("file_artifacts"), false);
+    assert.equal(transcript.entries.some((entry) => entry.type === "file_artifacts"), false);
+  } finally {
+    await rm(generalRoot, { recursive: true, force: true });
+  }
+});

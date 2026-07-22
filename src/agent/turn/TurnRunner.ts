@@ -43,6 +43,8 @@ export type TurnRunnerResult = {
 export type TurnRunnerRuntimeContext = {
   cwd: string;
   transcriptPath: string;
+  /** Disable Agent-generated file artifact collection for non-project chats. */
+  collectFileArtifacts?: boolean;
 };
 
 export type TurnRunnerRuntimeReloadSnapshot = {
@@ -83,11 +85,13 @@ export class TurnRunner {
 
   async *run(options: TurnRunnerOptions): AsyncGenerator<AgentEvent, TurnRunnerResult, unknown> {
     yield { type: "turn_started", sessionId: options.sessionId, turnId: options.turnId };
-    const artifactCollector = await FileArtifactCollector.start({
-      cwd: this.runtimeContext.cwd,
-      allowedInputPaths: options.allowedReadFiles,
-      now: this.now,
-    }).catch(() => undefined);
+    const artifactCollector = this.runtimeContext.collectFileArtifacts === false
+      ? undefined
+      : await FileArtifactCollector.start({
+          cwd: this.runtimeContext.cwd,
+          allowedInputPaths: options.allowedReadFiles,
+          now: this.now,
+        }).catch(() => undefined);
     let artifactsFinished = false;
     const finishArtifacts = async (result: AgentTurnResult): Promise<FileArtifact[]> => {
       if (!artifactCollector || artifactsFinished) return [];

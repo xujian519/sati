@@ -107,7 +107,9 @@ export async function readWebSessionMessages(
   }
 
   attachSubagentIds(entries, allMessages);
-  injectFileArtifactMessages(entries, allMessages, input.sessionKey, input.projectKey);
+  if (resolve(effectiveProjectRoot) !== resolve(options.pilotHome)) {
+    injectFileArtifactMessages(entries, allMessages, input.sessionKey, input.projectKey);
+  }
   injectAgentStatusMessages(entries, allMessages, input.sessionKey, input.projectKey);
   injectErrorTurnMessages(entries, allMessages, input.sessionKey, input.projectKey);
   if (incompleteTurnIds.length > 0) {

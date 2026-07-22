@@ -43,3 +43,37 @@ test("history replay restores structured agent file artifacts", async () => {
     await rm(pilotHome, { recursive: true, force: true });
   }
 });
+
+test("history replay hides Agent file artifacts in general conversations", async () => {
+  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-general-artifact-history-"));
+  try {
+    const sessionKey = "web:s_general_file_artifacts";
+    const storage = createAgentProjectSessionStorage({
+      projectRoot: pilotHome,
+      pilotHome,
+      sessionId: sessionKey,
+      now: () => new Date("2026-07-22T10:00:00.000Z"),
+    });
+    await storage.transcript.recordFileArtifacts(sessionKey, "turn-1", [{
+      id: "artifact-1",
+      name: "stale-general-artifact.jsonl",
+      path: "stale-general-artifact.jsonl",
+      operation: "updated",
+      source: "workspace_diff",
+      status: "complete",
+      size: 42,
+      sha256: "b".repeat(64),
+      mimeType: "application/x-ndjson",
+      createdAt: "2026-07-22T10:00:00.000Z",
+    }]);
+
+    const replay = await readWebSessionMessages(
+      { sessionKey, projectKey: pilotHome },
+      { projectRoot: pilotHome, pilotHome },
+    );
+
+    assert.equal(replay.messages.some((item) => item.kind === "file_artifacts"), false);
+  } finally {
+    await rm(pilotHome, { recursive: true, force: true });
+  }
+});
