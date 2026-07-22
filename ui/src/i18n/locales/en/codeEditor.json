@@ -61,6 +61,14 @@
     "libreOfficeUnavailableMessage": "This format requires LibreOffice for preview. Install LibreOffice, or switch the Office file preview service to None in Settings.",
     "failedMessage": "Failed to generate Office file preview."
   },
+  "spreadsheetPreview": {
+    "readingWorkbook": "Reading workbook...",
+    "renderingSheet": "Rendering worksheet preview...",
+    "failedMessage": "Failed to generate worksheet preview.",
+    "worksheets": "Worksheets",
+    "previousWorksheets": "Previous worksheets",
+    "nextWorksheets": "Next worksheets"
+  },
   "pdfToolbar": {
     "zoomOut": "Zoom out",
     "zoomIn": "Zoom in",

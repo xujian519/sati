@@ -8,6 +8,8 @@ const OFFICE_EXTENSIONS = [
   'doc', 'docx', 'wps', 'xls', 'xlsx', 'et', 'ppt', 'pptx', 'dps', 'odt', 'ods', 'odp',
 ];
 
+const SPREADSHEET_EXTENSIONS = ['xls', 'xlsx', 'et', 'ods'];
+
 const BINARY_EXTENSIONS = [
   // Images
   ...IMAGE_EXTENSIONS,
@@ -41,3 +43,6 @@ export const isPdfFile = (filename: string): boolean =>
 
 export const isOfficeFile = (filename: string): boolean =>
   OFFICE_EXTENSIONS.includes(getExtension(filename));
+
+export const isSpreadsheetFile = (filename: string): boolean =>
+  SPREADSHEET_EXTENSIONS.includes(getExtension(filename));

@@ -318,6 +318,41 @@ export const api = {
       },
       signal: options.signal,
     }),
+  spreadsheetPreviewManifest: (projectName, filePath, options = {}) => {
+    const params = new URLSearchParams({ path: filePath });
+    if (options.force) params.set('force', '1');
+    if (options.cacheKey !== undefined && options.cacheKey !== null) {
+      params.set('_', String(options.cacheKey));
+    }
+    return authenticatedFetch(
+      `/api/projects/${encodeURIComponent(projectName)}/files/preview/spreadsheet/manifest?${params.toString()}`,
+      { cache: 'no-store', signal: options.signal },
+    );
+  },
+  spreadsheetSheetPreviewUrl: (projectName, filePath, sheetIndex, options = {}) => {
+    const params = new URLSearchParams({
+      path: filePath,
+      sheet: String(sheetIndex),
+    });
+    if (options.force) params.set('force', '1');
+    if (options.cacheKey !== undefined && options.cacheKey !== null) {
+      params.set('_', String(options.cacheKey));
+    }
+    return appendAuthToken(
+      `/api/projects/${encodeURIComponent(projectName)}/files/preview/spreadsheet/sheet?${params.toString()}`,
+    );
+  },
+  preflightSpreadsheetSheetPreview: (projectName, filePath, sheetIndex, options = {}) =>
+    authenticatedFetch(api.spreadsheetSheetPreviewUrl(projectName, filePath, sheetIndex, {
+      force: options.force,
+      cacheKey: options.cacheKey,
+    }), {
+      cache: 'no-store',
+      headers: {
+        Range: 'bytes=0-0',
+      },
+      signal: options.signal,
+    }),
   officePreviewStatus: (options = {}) => {
     const params = new URLSearchParams();
     if (options.refresh) params.set('refresh', '1');
