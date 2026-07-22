@@ -27,6 +27,7 @@ import { resolveMarkdownFileHref } from '../chat/utils/resolveMarkdownFileHref';
 import type { SessionNavigationOptions } from '../main-content/types/types';
 import SidebarV2 from './SidebarV2';
 import MainAreaV2 from './MainAreaV2';
+import { chooseDefaultProject } from './appShellSelection';
 import { ConnectionBanner } from '../ui/ConnectionBanner';
 
 type TypedSettingsProps = {
@@ -194,10 +195,9 @@ export default function AppShellV2() {
     navigate,
   ]);
 
-  // Default selection: prefer a project named "general" so the project-centric
-  // sidebar always has something useful surfaced. Falls back to the first
-  // project when "general" is missing. Runs only when there's no URL hint and
-  // no current selection — never overrides user navigation.
+  // Default selection: prefer a regular project. General is only the fallback
+  // when no regular project exists. Explicit project/session URLs still own
+  // selection and are never overridden here.
   const didDefaultProjectRef = useRef(false);
   useEffect(() => {
     if (didDefaultProjectRef.current) return;
@@ -210,11 +210,8 @@ export default function AppShellV2() {
       didDefaultProjectRef.current = true;
       return;
     }
-    if (sidebarSharedProps.projects.length === 0) return;
-    const general = sidebarSharedProps.projects.find(
-      (p) => p.name === 'general' || p.displayName === 'general',
-    );
-    const target = general ?? sidebarSharedProps.projects[0];
+    const target = chooseDefaultProject(sidebarSharedProps.projects);
+    if (!target) return;
     handleProjectSelect(target);
     navigate(`/p/${encodeURIComponent(target.name)}`, { replace: true });
     didDefaultProjectRef.current = true;
