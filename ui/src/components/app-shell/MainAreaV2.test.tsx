@@ -87,6 +87,35 @@ afterEach(() => {
 });
 
 describe('MainAreaV2 dashboard switcher', () => {
+  it('renames the selected session inline after double-clicking the header title', () => {
+    render(<Harness withSession />);
+
+    fireEvent.doubleClick(screen.getByTitle('Searchable chat'));
+    const input = screen.getByRole('textbox', { name: 'Rename Session' });
+    expect((input as HTMLInputElement).value).toBe('Searchable chat');
+    expect(document.activeElement).toBe(input);
+
+    fireEvent.change(input, { target: { value: 'Renamed conversation' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(screen.getByTitle('Renamed conversation').textContent).toBe('Renamed conversation');
+    expect(JSON.parse(localStorage.getItem('pilotdeck:customSessionTitles') || '{}')).toEqual({
+      'session-1': 'Renamed conversation',
+    });
+  });
+
+  it('cancels an inline session rename when Escape is pressed', () => {
+    render(<Harness withSession />);
+
+    fireEvent.doubleClick(screen.getByTitle('Searchable chat'));
+    const input = screen.getByRole('textbox', { name: 'Rename Session' });
+    fireEvent.change(input, { target: { value: 'Discarded title' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+
+    expect(screen.getByTitle('Searchable chat').textContent).toBe('Searchable chat');
+    expect(localStorage.getItem('pilotdeck:customSessionTitles')).toBeNull();
+  });
+
   it('places an available chat search button before Files and keeps its state in sync', async () => {
     render(<Harness initialTab="files" withSession />);
 
