@@ -26,6 +26,7 @@ import {
   ChatHistorySearchControllerProvider,
   useChatHistorySearchController,
 } from '../chat-v2/ChatHistorySearchController';
+import ChatHistorySearchBar from '../chat-v2/ChatHistorySearchBar';
 import type { MainContentProps } from '../main-content/types/types';
 import { cn } from '../../lib/utils.js';
 import {
@@ -303,6 +304,16 @@ function MainAreaV2Content(props: MainAreaV2Props) {
             </span>
           </div>
         </div>
+
+        {chatHistorySearch.isOpen && chatHistorySearch.presentation ? (
+          <div className="ml-4 w-[min(360px,36vw)] min-w-[240px] shrink">
+            <ChatHistorySearchBar
+              {...chatHistorySearch.presentation}
+              onClose={chatHistorySearch.closeSearch}
+              placement="header"
+            />
+          </div>
+        ) : null}
 
         <div className="ml-4 flex h-9 shrink-0 items-center gap-1" aria-label="Tools">
           <button

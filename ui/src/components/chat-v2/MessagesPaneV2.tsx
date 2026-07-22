@@ -967,11 +967,11 @@ function MessagesPaneV2({
     loadAllMessages,
     sessionId,
   });
-  useRegisterChatHistorySearchControls(chatHistorySearch);
+  const searchIsRenderedByShell = useRegisterChatHistorySearchControls(chatHistorySearch);
 
   return (
     <div className="relative min-h-0 flex-1">
-      {chatHistorySearch.isOpen ? (
+      {chatHistorySearch.isOpen && !searchIsRenderedByShell ? (
         <ChatHistorySearchBar
           query={chatHistorySearch.query}
           onQueryChange={chatHistorySearch.setQuery}
