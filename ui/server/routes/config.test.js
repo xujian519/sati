@@ -345,6 +345,65 @@ describe('config test-web-search route', () => {
     expect(data.error).toBe('API key is required.');
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
+
+  it('does not send a saved masked API key to a caller-controlled provider endpoint', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+
+    const { request } = await createConfigApp({
+      config: {
+        tools: {
+          webSearch: {
+            provider: 'glm',
+            apiKey: 'saved-search-key',
+          },
+        },
+      },
+    });
+    const data = await request('/api/config/test-web-search', {
+      method: 'POST',
+      body: JSON.stringify({
+        provider: 'custom',
+        apiKey: '********',
+        endpoint: 'https://attacker.example/search',
+        customProvider: { auth: 'bearer', method: 'POST' },
+      }),
+    });
+
+    expect(data.ok).toBe(false);
+    expect(data.error).toContain('Enter the Web Search API key again');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not preserve a masked Web Search key when its credential scope changes on save', async () => {
+    const { request, writePilotDeckConfig } = await createConfigApp({
+      config: {
+        tools: {
+          webSearch: {
+            provider: 'glm',
+            apiKey: 'saved-search-key',
+          },
+        },
+      },
+    });
+    const data = await request('/api/config', {
+      method: 'PUT',
+      body: JSON.stringify({
+        config: {
+          tools: {
+            webSearch: {
+              provider: 'custom',
+              apiKey: '********',
+              endpoint: 'https://attacker.example/search',
+              customProvider: { auth: 'bearer', method: 'POST' },
+            },
+          },
+        },
+      }),
+    });
+
+    expect(data.error).toContain('Enter the Web Search API key again');
+    expect(writePilotDeckConfig).not.toHaveBeenCalled();
+  });
 });
 
 
@@ -421,6 +480,8 @@ describe('config routes invalid YAML fallback', () => {
 });
 
 async function createConfigApp({ config = {} } = {}) {
+  const writePilotDeckConfig = vi.fn();
+  const writeRawPilotDeckYaml = vi.fn();
   vi.doMock('../services/pilotdeckConfigWatcher.js', () => ({
     suppressNextWatchEvent: vi.fn(),
   }));
@@ -432,8 +493,8 @@ async function createConfigApp({ config = {} } = {}) {
     return {
       ...actual,
       readPilotDeckConfigFile: vi.fn(() => ({ exists: false, configPath: '', config, rawYaml: {} })),
-      writePilotDeckConfig: vi.fn(),
-      writeRawPilotDeckYaml: vi.fn(),
+      writePilotDeckConfig,
+      writeRawPilotDeckYaml,
     };
   });
   vi.doMock('../pilotdeck-bridge.js', () => ({
@@ -447,6 +508,8 @@ async function createConfigApp({ config = {} } = {}) {
 
   return {
     request: (path, init) => requestBodyJson(app, path, init),
+    writePilotDeckConfig,
+    writeRawPilotDeckYaml,
   };
 }
 
