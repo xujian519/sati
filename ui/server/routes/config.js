@@ -669,7 +669,17 @@ router.post('/test-web-search', async (req, res) => {
   const queryParam = typeof custom.queryParam === 'string' && custom.queryParam.trim() ? custom.queryParam.trim() : 'query';
   const apiKeyParam = typeof custom.apiKeyParam === 'string' && custom.apiKeyParam.trim() ? custom.apiKeyParam.trim() : 'api_key';
   const resultsPath = typeof custom.resultsPath === 'string' ? custom.resultsPath.trim() : '';
-  const trimmedKey = typeof apiKey === 'string' ? apiKey.trim() : '';
+  const requestedKey = typeof apiKey === 'string' ? apiKey.trim() : '';
+  let trimmedKey = requestedKey === '********' ? '' : requestedKey;
+  if (requestedKey === '********') {
+    try {
+      const record = readPilotDeckConfigFile();
+      const savedKey = record.config?.tools?.webSearch?.apiKey;
+      if (typeof savedKey === 'string' && savedKey.trim() !== '********') {
+        trimmedKey = savedKey.trim();
+      }
+    } catch { /* fall through to validation below */ }
+  }
   if (!trimmedKey && !(selectedProvider === 'custom' && customAuth === 'none')) {
     return res.status(400).json({ ok: false, error: 'API key is required.' });
   }

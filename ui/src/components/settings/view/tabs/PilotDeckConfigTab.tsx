@@ -2644,6 +2644,8 @@ function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange:
   const apiKey = typeof ws.apiKey === 'string' ? ws.apiKey : '';
   const endpoint = typeof ws.endpoint === 'string' ? ws.endpoint : '';
   const custom = ws.customProvider ?? {};
+  const apiKeyRequired = provider !== 'custom' || (custom.auth ?? 'bearer') !== 'none';
+  const hasConfiguredApiKey = hasUsableSecret(apiKey) || isMaskedSecret(apiKey);
   const endpointValue = endpoint || (provider === 'glm' ? glmDefaultEndpoint : '');
   const endpointPlaceholder = provider === 'custom'
     ? 'https://example.com/search'
@@ -2713,8 +2715,11 @@ function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange:
   };
 
   const handleTest = async () => {
-    const trimmedKey = hasUsableSecret(apiKey) ? apiKey.trim() : '';
-    if (!trimmedKey) {
+    // A saved secret is returned to the browser as MASK. Pass that sentinel
+    // back so the server can resolve the real key without exposing it to the
+    // client. A newly entered key still takes precedence.
+    const trimmedKey = hasUsableSecret(apiKey) ? apiKey.trim() : isMaskedSecret(apiKey) ? MASK : '';
+    if (apiKeyRequired && !trimmedKey) {
       setTestStatus('error');
       setTestMessage(t('pilotDeckConfig.panels.tools.test.needsKey'));
       return;
@@ -2893,7 +2898,7 @@ function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange:
               variant="outline"
               size="sm"
               onClick={handleTest}
-              disabled={!enabled || testStatus === 'testing' || !hasUsableSecret(apiKey)}
+              disabled={!enabled || testStatus === 'testing' || (apiKeyRequired && !hasConfiguredApiKey)}
             >
               {testStatus === 'testing' ? (
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
