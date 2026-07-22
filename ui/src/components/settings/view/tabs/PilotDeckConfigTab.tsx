@@ -62,7 +62,7 @@ import {
 } from '../../../../shared/catalogProviders';
 import { fetchProviderModels, fetchRemoteDefaultModels, type ApiModelListItem } from '../../../../shared/modelListApi';
 import type { SettingsProject } from '../../types/types';
-import { isCronConfigEnabled, patch } from './pilotDeckConfigForm';
+import { isCronConfigEnabled, patch, webSearchConfigForProvider } from './pilotDeckConfigForm';
 
 // ── V2 schema types ────────────────────────────────────────────────────
 // Schema mirrors ~/.pilotdeck/pilotdeck.yaml exactly. No more
@@ -2666,10 +2666,7 @@ function ToolsSection({ config, onChange }: { config: PilotDeckConfig; onChange:
 
   const setProvider = (nextProvider: 'glm' | 'tavily' | 'custom') => {
     const nextTools = {
-      webSearch: {
-        provider: nextProvider,
-        ...(nextProvider === 'glm' ? { endpoint: glmDefaultEndpoint } : {}),
-      },
+      webSearch: webSearchConfigForProvider(ws, nextProvider, glmDefaultEndpoint),
     };
     onChange(patch(config, ['tools'], nextTools));
     resetTest();

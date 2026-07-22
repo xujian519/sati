@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -66,6 +67,38 @@ test("file artifacts include every meaningful workspace change without an extens
     assert.equal(artifacts.find((artifact) => artifact.path === "notes.custom")?.mimeType, undefined);
     assert.ok(artifacts.every((artifact) => artifact.status === "incomplete"));
     assert.ok(artifacts.every((artifact) => artifact.sha256.length === 64));
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("file artifact fingerprints are reused for unchanged files across scans and turns", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-artifact-cache-"));
+  const trackedFile = join(projectRoot, "report.txt");
+  let hashCalls = 0;
+  const hashFile = async (filePath: string) => {
+    hashCalls += 1;
+    return createHash("sha256").update(await readFile(filePath)).digest("hex");
+  };
+
+  try {
+    await writeFile(trackedFile, "before");
+    await mkdir(join(projectRoot, ".venv", "lib"), { recursive: true });
+    await writeFile(join(projectRoot, ".venv", "lib", "dependency.py"), "ignored");
+
+    const firstTurn = await FileArtifactCollector.start({ cwd: projectRoot, hashFile });
+    assert.equal(hashCalls, 1, "the initial scan hashes only non-excluded workspace files");
+    assert.deepEqual(await firstTurn.finish("complete"), []);
+    assert.equal(hashCalls, 1, "the final scan reuses an unchanged baseline fingerprint");
+
+    const secondTurn = await FileArtifactCollector.start({ cwd: projectRoot, hashFile });
+    assert.equal(hashCalls, 1, "the next turn reuses the cached workspace fingerprint");
+
+    await writeFile(trackedFile, "after with a different size");
+    const artifacts = await secondTurn.finish("complete");
+
+    assert.equal(hashCalls, 2, "only the changed file is re-hashed");
+    assert.deepEqual(artifacts.map((artifact) => artifact.path), ["report.txt"]);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
   }

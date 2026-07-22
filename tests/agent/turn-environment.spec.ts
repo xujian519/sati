@@ -22,3 +22,22 @@ test("turn environment provides an isolated PilotDeck-owned work directory", () 
     join(cwd, ".pilotdeck", "work", "web-s_123-unsafe", "turn-456-unsafe"),
   );
 });
+
+test("turn environment inherits the process environment when no override is configured", () => {
+  const markerName = "PILOTDECK_TURN_ENV_INHERITANCE_TEST";
+  const previousMarker = process.env[markerName];
+  process.env[markerName] = "inherited";
+
+  try {
+    const env = buildTurnEnvironment(undefined, "/workspace/project", "session", "turn");
+
+    assert.equal(env[markerName], "inherited");
+    assert.equal(env.PATH, process.env.PATH);
+  } finally {
+    if (previousMarker === undefined) {
+      delete process.env[markerName];
+    } else {
+      process.env[markerName] = previousMarker;
+    }
+  }
+});

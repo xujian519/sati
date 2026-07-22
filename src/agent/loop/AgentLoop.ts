@@ -2356,7 +2356,7 @@ export function buildTurnEnvironment(
   turnId: string,
 ): NodeJS.ProcessEnv {
   return {
-    ...baseEnv,
+    ...(baseEnv ?? process.env),
     PILOTDECK_SESSION_ID: sessionId,
     PILOTDECK_TURN_ID: turnId,
     PILOTDECK_WORK_DIR: path.join(

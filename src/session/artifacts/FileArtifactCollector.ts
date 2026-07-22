@@ -13,6 +13,8 @@ import type {
 type FileFingerprint = {
   size: number;
   mtimeMs: number;
+  ctimeMs: number;
+  ino: number;
   sha256: string;
 };
 
@@ -26,7 +28,12 @@ export type FileArtifactCollectorOptions = {
   cwd: string;
   allowedInputPaths?: string[];
   now?: () => Date;
+  /** @internal Test seam for verifying fingerprint-cache behavior. */
+  hashFile?: (filePath: string) => Promise<string>;
 };
+
+const MAX_CACHED_WORKSPACES = 8;
+const workspaceFingerprintCache = new Map<string, Map<string, FileFingerprint>>();
 
 const EXCLUDED_DIRECTORY_NAMES = new Set([
   ".git",
@@ -36,10 +43,15 @@ const EXCLUDED_DIRECTORY_NAMES = new Set([
   ".next",
   ".nuxt",
   ".output",
+  ".mypy_cache",
+  ".pytest_cache",
   ".svelte-kit",
   ".temp",
   ".tmp",
+  ".tox",
+  ".venv",
   ".vscode",
+  "__pycache__",
   "build",
   "cache",
   "coverage",
@@ -51,6 +63,7 @@ const EXCLUDED_DIRECTORY_NAMES = new Set([
   "target",
   "temp",
   "tmp",
+  "venv",
 ]);
 
 const INTERNAL_FILE_PATTERNS = [
@@ -109,6 +122,7 @@ const MIME_BY_EXTENSION: Record<string, string> = {
 export class FileArtifactCollector {
   private readonly cwd: string;
   private readonly now: () => Date;
+  private readonly hashFile: (filePath: string) => Promise<string>;
   private readonly baseline = new Map<string, FileFingerprint>();
   private readonly explicitCandidates = new Map<string, ArtifactCandidate>();
   private readonly allowedInputPaths: Set<string>;
@@ -116,6 +130,7 @@ export class FileArtifactCollector {
   private constructor(options: FileArtifactCollectorOptions) {
     this.cwd = path.resolve(options.cwd);
     this.now = options.now ?? (() => new Date());
+    this.hashFile = options.hashFile ?? sha256File;
     this.allowedInputPaths = new Set(
       (options.allowedInputPaths ?? [])
         .map((inputPath) => path.isAbsolute(inputPath) ? path.resolve(inputPath) : path.resolve(this.cwd, inputPath))
@@ -126,10 +141,12 @@ export class FileArtifactCollector {
   static async start(options: FileArtifactCollectorOptions): Promise<FileArtifactCollector> {
     const collector = new FileArtifactCollector(options);
     collector.baseline.clear();
-    for (const file of await collector.scanWorkspace()) {
+    const cachedFingerprints = readCachedWorkspaceFingerprints(collector.cwd);
+    for (const file of await collector.scanWorkspace(cachedFingerprints)) {
       collector.baseline.set(file.absolutePath, file.fingerprint);
     }
-    await collector.captureAllowedInputFingerprints(collector.baseline);
+    await collector.captureAllowedInputFingerprints(collector.baseline, cachedFingerprints);
+    cacheWorkspaceFingerprints(collector.cwd, collector.baseline);
     return collector;
   }
 
@@ -149,7 +166,9 @@ export class FileArtifactCollector {
 
   async finish(status: FileArtifactStatus): Promise<FileArtifact[]> {
     const candidates = new Map<string, ArtifactCandidate>(this.explicitCandidates);
-    for (const file of await this.scanWorkspace()) {
+    const finalFingerprints = new Map<string, FileFingerprint>();
+    for (const file of await this.scanWorkspace(this.baseline)) {
+      finalFingerprints.set(file.absolutePath, file.fingerprint);
       const before = this.baseline.get(file.absolutePath);
       if (!before || before.sha256 !== file.fingerprint.sha256) {
         candidates.set(file.absolutePath, {
@@ -160,8 +179,9 @@ export class FileArtifactCollector {
       }
     }
     const allowedInputFinal = new Map<string, FileFingerprint>();
-    await this.captureAllowedInputFingerprints(allowedInputFinal);
+    await this.captureAllowedInputFingerprints(allowedInputFinal, this.baseline);
     for (const [absolutePath, fingerprint] of allowedInputFinal) {
+      finalFingerprints.set(absolutePath, fingerprint);
       const before = this.baseline.get(absolutePath);
       if (!before || before.sha256 !== fingerprint.sha256) {
         candidates.set(absolutePath, {
@@ -171,6 +191,7 @@ export class FileArtifactCollector {
         });
       }
     }
+    cacheWorkspaceFingerprints(this.cwd, finalFingerprints);
 
     const artifacts: FileArtifact[] = [];
     for (const candidate of candidates.values()) {
@@ -187,7 +208,9 @@ export class FileArtifactCollector {
     this.explicitCandidates.set(absolutePath, { absolutePath, source: "tool" });
   }
 
-  private async scanWorkspace(): Promise<Array<{ absolutePath: string; fingerprint: FileFingerprint }>> {
+  private async scanWorkspace(
+    reusableFingerprints?: ReadonlyMap<string, FileFingerprint>,
+  ): Promise<Array<{ absolutePath: string; fingerprint: FileFingerprint }>> {
     const paths: string[] = [];
     await walk(this.cwd, async (absolutePath) => {
       if (!this.isAllowedArtifactPath(absolutePath)) return;
@@ -197,7 +220,11 @@ export class FileArtifactCollector {
     for (let index = 0; index < paths.length; index += 8) {
       const batch = await Promise.all(
         paths.slice(index, index + 8).map(async (absolutePath) => {
-          const fingerprint = await fingerprintFile(absolutePath).catch(() => undefined);
+          const fingerprint = await fingerprintFile(
+            absolutePath,
+            reusableFingerprints?.get(absolutePath),
+            this.hashFile,
+          ).catch(() => undefined);
           return fingerprint ? { absolutePath, fingerprint } : undefined;
         }),
       );
@@ -208,9 +235,16 @@ export class FileArtifactCollector {
     return files;
   }
 
-  private async captureAllowedInputFingerprints(target: Map<string, FileFingerprint>): Promise<void> {
+  private async captureAllowedInputFingerprints(
+    target: Map<string, FileFingerprint>,
+    reusableFingerprints?: ReadonlyMap<string, FileFingerprint>,
+  ): Promise<void> {
     for (const absolutePath of this.allowedInputPaths) {
-      const fingerprint = await fingerprintFile(absolutePath).catch(() => undefined);
+      const fingerprint = await fingerprintFile(
+        absolutePath,
+        reusableFingerprints?.get(absolutePath),
+        this.hashFile,
+      ).catch(() => undefined);
       if (!fingerprint) continue;
       target.set(absolutePath, fingerprint);
     }
@@ -224,7 +258,11 @@ export class FileArtifactCollector {
       return undefined;
     }
     const fingerprint = candidate.fingerprint
-      ?? await fingerprintFile(candidate.absolutePath).catch(() => undefined);
+      ?? await fingerprintFile(
+        candidate.absolutePath,
+        undefined,
+        this.hashFile,
+      ).catch(() => undefined);
     if (!fingerprint) return undefined;
 
     const relativePath = normalizeRelativePath(path.relative(this.cwd, candidate.absolutePath));
@@ -257,14 +295,47 @@ export class FileArtifactCollector {
   }
 }
 
-async function fingerprintFile(filePath: string): Promise<FileFingerprint | undefined> {
+async function fingerprintFile(
+  filePath: string,
+  reusableFingerprint: FileFingerprint | undefined,
+  hashFile: (filePath: string) => Promise<string>,
+): Promise<FileFingerprint | undefined> {
   const fileStat = await stat(filePath);
   if (!fileStat.isFile()) return undefined;
+  if (
+    reusableFingerprint
+    && reusableFingerprint.size === fileStat.size
+    && reusableFingerprint.mtimeMs === fileStat.mtimeMs
+    && reusableFingerprint.ctimeMs === fileStat.ctimeMs
+    && reusableFingerprint.ino === fileStat.ino
+  ) {
+    return reusableFingerprint;
+  }
   return {
     size: fileStat.size,
     mtimeMs: fileStat.mtimeMs,
-    sha256: await sha256File(filePath),
+    ctimeMs: fileStat.ctimeMs,
+    ino: fileStat.ino,
+    sha256: await hashFile(filePath),
   };
+}
+
+function readCachedWorkspaceFingerprints(cwd: string): ReadonlyMap<string, FileFingerprint> | undefined {
+  const cached = workspaceFingerprintCache.get(cwd);
+  if (!cached) return undefined;
+  workspaceFingerprintCache.delete(cwd);
+  workspaceFingerprintCache.set(cwd, cached);
+  return cached;
+}
+
+function cacheWorkspaceFingerprints(cwd: string, fingerprints: ReadonlyMap<string, FileFingerprint>): void {
+  workspaceFingerprintCache.delete(cwd);
+  workspaceFingerprintCache.set(cwd, new Map(fingerprints));
+  while (workspaceFingerprintCache.size > MAX_CACHED_WORKSPACES) {
+    const oldest = workspaceFingerprintCache.keys().next().value as string | undefined;
+    if (!oldest) break;
+    workspaceFingerprintCache.delete(oldest);
+  }
 }
 
 async function sha256File(filePath: string): Promise<string> {
