@@ -155,29 +155,11 @@ export function useChatHistorySearch({
         }
         return;
       }
-
-      if (!isOpen) return;
-
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        closeSearch();
-        return;
-      }
-
-      if (event.key === 'Enter' && document.activeElement === inputRef.current) {
-        event.preventDefault();
-        if (event.shiftKey) {
-          goToPrevious();
-        } else {
-          goToNext();
-        }
-      }
     };
 
     document.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => document.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [captureFindShortcutInModal, closeSearch, goToNext, goToPrevious, isOpen, openSearch]);
+  }, [captureFindShortcutInModal, isOpen, openSearch]);
 
   useEffect(() => {
     if (!isOpen || !activeMatch || !query.trim()) return;
