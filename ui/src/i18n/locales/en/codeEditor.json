@@ -21,8 +21,14 @@
   "tabs": {
     "tabList": "Open files",
     "closeTab": "Close {{fileName}}",
+    "moreActions": "More tab actions",
+    "closeCurrent": "Close",
+    "closeOthers": "Close other tabs",
+    "closeToRight": "Close tabs to the right",
+    "closeAll": "Close all tabs",
     "modified": "Modified",
-    "unsavedConfirm": "Close {{fileName}} and discard unsaved changes?"
+    "unsavedConfirm": "Close {{fileName}} and discard unsaved changes?",
+    "unsavedBatchConfirm": "Close these tabs and discard unsaved changes in {{count}} files?"
   },
   "actions": {
     "download": "Download file",

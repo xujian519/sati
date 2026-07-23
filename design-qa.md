@@ -252,3 +252,42 @@ Comparison history:
 - P3 follow-up: consider a denser overflow treatment if the shared toolbar must support very narrow editor widths.
 
 final result: passed
+
+## Close-all file tabs follow-up
+
+Source visual truth:
+
+- Existing multi-tab file workbench: `/var/folders/xt/0thdvc4d0kb_165pd393wz1c0000gn/T/TemporaryItems/NSIRD_screencaptureui_sK6n9J/截屏2026-07-23 18.36.07.png`
+
+Post-fix implementation evidence:
+
+- Overflow menu with three open files, desktop 1280×720: `/tmp/pilotdeck-close-tabs-menu.png`
+- Focused source/implementation comparison: `/tmp/pilotdeck-close-tabs-comparison.png`
+
+State and normalization:
+
+- Light theme, Files workspace open, three text/source files open, active-tab actions visible.
+- Source pixels: 1630×470. Implementation pixels and CSS viewport: 1280×720 at 1× density.
+- The focused comparison scales the source to 1280 px wide and places it above a cropped implementation view of the tab strip and open menu.
+
+Fidelity and interaction review:
+
+- Existing tabs, file icons, active treatment, close buttons, typography, and compact density are preserved.
+- The initially tested ellipsis entry was removed after user review because it crowded the active tab and file toolbar. The existing per-tab close button remains unchanged.
+- The menu follows PilotDeck's neutral surfaces, radius, border, shadow, spacing, and dark-mode tokens.
+- The menu exposes Close, Close other tabs, Close tabs to the right, and Close all tabs. Unavailable operations use a visible disabled state.
+- Right-clicking a tab opens the same menu with that tab as the operation target; middle-click and the existing close button still close one tab.
+- Closing all three tabs returns to the Files workspace empty state instead of leaving Files or exposing chat.
+- Dirty tabs retain the existing discard confirmation; a batch operation with multiple dirty files uses one consolidated confirmation.
+- Fonts/typography, spacing/layout rhythm, colors/tokens, icons, and app-specific copy were checked. No image assets or custom artwork were introduced.
+- Browser interaction errors attributable to the feature: none. The retained tab log only contained transient fetch/WebSocket errors from the service restart before QA began.
+- P0/P1/P2 remaining: none.
+
+Verification:
+
+- Focused tab/hook/sidebar tests: 11/11 passed.
+- Production UI build: passed.
+- Browser checks: no visible ellipsis button, context menu, close-all, and empty-state restoration passed.
+- Detached `screen` service restarted; `http://localhost:3001/` returns HTTP 200.
+
+final result: passed
