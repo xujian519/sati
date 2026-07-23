@@ -4,6 +4,7 @@ import type { SettingsProject } from "../../shared/types";
 import { usePilotDeckConfig } from "../../../../hooks/usePilotDeckConfig";
 import { configToYamlString, safeParseYaml } from "../modelPool/utils/configYaml";
 import type { PilotDeckConfig } from "../modelPool/types";
+import { ConfigSaveError } from "../../shared/view";
 import AlwaysOnSection from "./components/AlwaysOnSection";
 
 type AgentResidentSectionsProps = {
@@ -16,7 +17,7 @@ export default function AgentResidentSections({
   projects,
 }: AgentResidentSectionsProps) {
   const { t } = useTranslation("settings");
-  const { raw, setRaw, save, loading } = usePilotDeckConfig();
+  const { raw, setRaw, save, loading, error } = usePilotDeckConfig();
   const parsedConfig = useMemo(() => safeParseYaml(raw), [raw]);
 
   const onFormChange = (next: PilotDeckConfig) => {
@@ -53,6 +54,7 @@ export default function AgentResidentSections({
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-semibold text-foreground">{title}</h2>
+      <ConfigSaveError error={error} />
       <AlwaysOnSection
         config={parsedConfig}
         projects={projects}

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePilotDeckConfig } from "../../../../hooks/usePilotDeckConfig";
 import {
+  ConfigSaveError,
   PageSectionHeader,
   SettingsCard,
   SettingsRow,
@@ -352,7 +353,7 @@ export default function AgentMemorySections({
   projects,
 }: AgentMemorySectionsProps) {
   const { t } = useTranslation("settings");
-  const { raw, setRaw, save, loading } = usePilotDeckConfig();
+  const { raw, setRaw, save, loading, error } = usePilotDeckConfig();
   const parsedConfig = useMemo(() => safeParseYaml(raw), [raw]);
 
   const onFormChange = (next: PilotDeckConfig) => {
@@ -389,6 +390,7 @@ export default function AgentMemorySections({
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-semibold text-foreground">{title}</h2>
+      <ConfigSaveError error={error} />
       <MemorySection config={parsedConfig} onChange={onFormChange} />
       <MemoryDataSection projects={projects} />
     </div>

@@ -9,7 +9,7 @@ import {
   safeLocalStorage,
 } from "../../../chat/utils/chatStorage";
 import type { PilotDeckSettings } from "../../../chat/types/types";
-import { PageSectionHeader } from "../../shared/view";
+import { ConfigSaveError, PageSectionHeader } from "../../shared/view";
 import type { StatusBanner } from "./types";
 import { QUICK_ADD_TOOLS, QUICK_BLOCK_TOOLS } from "./utils/constants";
 import {
@@ -32,7 +32,7 @@ type PrivacySectionsProps = {
 
 export default function PrivacySections({ title }: PrivacySectionsProps) {
   const { t } = useTranslation("settings");
-  const { raw, setRaw, save, loading } = usePilotDeckConfig();
+  const { raw, setRaw, save, loading, error } = usePilotDeckConfig();
   const [allowedTools, setAllowedTools] = useState<string[]>([]);
   const [disallowedTools, setDisallowedTools] = useState<string[]>([]);
   const [skipPermissions, setSkipPermissions] = useState(false);
@@ -227,6 +227,7 @@ export default function PrivacySections({ title }: PrivacySectionsProps) {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-semibold text-foreground">{title}</h2>
+      <ConfigSaveError error={error} />
       <PageSectionHeader title={t("permissions.controlTitle")} />
 
       <PermissionControlSection

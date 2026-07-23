@@ -406,11 +406,105 @@ describe('config test-web-search route', () => {
   });
 });
 
+describe('config provider rename secret preservation', () => {
+  it('restores masked provider secrets when only the provider ID changes', async () => {
+    const initial = stringifyYaml({
+      schemaVersion: 1,
+      agent: { model: 'old-provider/gpt-test' },
+      model: {
+        providers: {
+          'old-provider': {
+            protocol: 'openai',
+            url: 'https://api.example.test/v1',
+            apiKey: 'sk-saved-secret',
+            models: { 'gpt-test': {} },
+          },
+        },
+      },
+    });
+    const { request, configPath } = await createDiskConfigApp(initial);
+    const renamed = stringifyYaml({
+      schemaVersion: 1,
+      agent: { model: 'new-provider/gpt-test' },
+      model: {
+        providers: {
+          'new-provider': {
+            protocol: 'openai',
+            url: 'https://api.example.test/v1',
+            apiKey: '********',
+            models: { 'gpt-test': {} },
+          },
+        },
+      },
+    });
+
+    const response = await request('/api/config', {
+      method: 'PUT',
+      body: JSON.stringify({
+        raw: renamed,
+        providerRenames: [{ from: 'old-provider', to: 'new-provider' }],
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.validation.valid).toBe(true);
+    expect(
+      parseYaml(readFileSync(configPath, 'utf8')).model.providers['new-provider'].apiKey,
+    ).toBe('sk-saved-secret');
+  });
+
+  it('requires new credentials when a rename also changes the provider scope', async () => {
+    const initial = stringifyYaml({
+      schemaVersion: 1,
+      agent: { model: 'old-provider/gpt-test' },
+      model: {
+        providers: {
+          'old-provider': {
+            protocol: 'openai',
+            url: 'https://api.example.test/v1',
+            apiKey: 'sk-saved-secret',
+            models: { 'gpt-test': {} },
+          },
+        },
+      },
+    });
+    const { request, configPath } = await createDiskConfigApp(initial);
+    const renamed = stringifyYaml({
+      schemaVersion: 1,
+      agent: { model: 'new-provider/gpt-test' },
+      model: {
+        providers: {
+          'new-provider': {
+            protocol: 'openai',
+            url: 'https://other.example.test/v1',
+            apiKey: '********',
+            models: { 'gpt-test': {} },
+          },
+        },
+      },
+    });
+
+    const response = await request('/api/config', {
+      method: 'PUT',
+      body: JSON.stringify({
+        raw: renamed,
+        providerRenames: [{ from: 'old-provider', to: 'new-provider' }],
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Enter provider credentials again');
+    expect(
+      parseYaml(readFileSync(configPath, 'utf8')).model.providers['old-provider'].apiKey,
+    ).toBe('sk-saved-secret');
+  });
+});
+
 
 describe('config routes invalid YAML fallback', () => {
   it('returns raw invalid YAML instead of failing GET /api/config', async () => {
     const brokenRaw = 'schemaVersion: 1\nmodel:\n  providers: [\n';
-    const { request } = await createInvalidYamlConfigApp(brokenRaw);
+    const { request } = await createDiskConfigApp(brokenRaw);
 
     const response = await request('/api/config');
 
@@ -423,7 +517,7 @@ describe('config routes invalid YAML fallback', () => {
   });
 
   it('saves repaired raw YAML after the existing file is invalid', async () => {
-    const { request, configPath } = await createInvalidYamlConfigApp('schemaVersion: 1\nmodel:\n  providers: [\n');
+    const { request, configPath } = await createDiskConfigApp('schemaVersion: 1\nmodel:\n  providers: [\n');
     const repaired = stringifyYaml({
       schemaVersion: 1,
       agent: { model: 'openai/gpt-4.1-mini' },
@@ -452,7 +546,7 @@ describe('config routes invalid YAML fallback', () => {
 
   it('rejects reload without applying defaults when YAML is invalid', async () => {
     const reloadPilotDeckConfig = vi.fn(async () => ({ processEnv: { reloaded: true } }));
-    const { request } = await createInvalidYamlConfigApp('schemaVersion: 1\nmodel:\n  providers: [\n', { reloadPilotDeckConfig });
+    const { request } = await createDiskConfigApp('schemaVersion: 1\nmodel:\n  providers: [\n', { reloadPilotDeckConfig });
 
     const response = await request('/api/config/reload', { method: 'POST' });
 
@@ -465,7 +559,7 @@ describe('config routes invalid YAML fallback', () => {
 
   it('rejects structured config saves without overwriting invalid YAML', async () => {
     const brokenRaw = 'schemaVersion: 1\nmodel:\n  providers: [\n';
-    const { request, configPath } = await createInvalidYamlConfigApp(brokenRaw);
+    const { request, configPath } = await createDiskConfigApp(brokenRaw);
 
     const response = await request('/api/config', {
       method: 'PUT',
@@ -527,7 +621,7 @@ async function requestBodyJson(app, path, init = {}) {
   }
 }
 
-async function createInvalidYamlConfigApp(initialRaw, overrides = {}) {
+async function createDiskConfigApp(initialRaw, overrides = {}) {
   const pilotHome = mkdtempSync(join(tmpdir(), 'pilotdeck-config-route-'));
   tempDirs.push(pilotHome);
   const configPath = join(pilotHome, 'pilotdeck.yaml');

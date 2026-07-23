@@ -44,6 +44,7 @@ type SettingsNewSidebarProps = {
   onSelect: (key: SettingsNewMenuKey) => void;
   onClose: () => void;
   showAboutDot?: boolean;
+  mobileVisible?: boolean;
 };
 
 const isItemActive = (
@@ -60,11 +61,17 @@ export default function SettingsNewSidebar({
   onSelect,
   onClose,
   showAboutDot = false,
+  mobileVisible = true,
 }: SettingsNewSidebarProps) {
   const { t } = useTranslation("settings");
 
   return (
-    <aside className="w-full shrink-0 border-r border-border bg-muted/20 md:w-[260px]">
+    <aside
+      className={cn(
+        "h-full w-full shrink-0 border-r border-border bg-muted/20 md:block md:w-[260px]",
+        mobileVisible ? "block" : "hidden",
+      )}
+    >
       <div className="flex h-full flex-col">
         <div className="px-4 pt-4">
           <button

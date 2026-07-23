@@ -54,6 +54,9 @@ export default function SettingsNew({
   );
   const [selectedKey, setSelectedKey] =
     useState<SettingsNewMenuKey>(initialKey);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(
+    initialKey === "general",
+  );
   const [versionInfo, setVersionInfo] = useState<DesktopVersionCheckResult>({
     mode: isDesktopApp ? "desktop" : "web",
     hasUpdate: false,
@@ -97,9 +100,16 @@ export default function SettingsNew({
 
   useEffect(() => {
     if (!isOpen) return;
-    setSelectedKey(mapInitialTabToMenuKey(initialTab));
+    const nextKey = mapInitialTabToMenuKey(initialTab);
+    setSelectedKey(nextKey);
+    setMobileNavigationOpen(nextKey === "general");
     void checkVersion();
   }, [isOpen, initialTab, checkVersion]);
+
+  const selectMenuItem = useCallback((key: SettingsNewMenuKey) => {
+    setSelectedKey(key);
+    setMobileNavigationOpen(false);
+  }, []);
 
   if (!isOpen) {
     return null;
@@ -111,15 +121,18 @@ export default function SettingsNew({
         <div className="flex h-full w-full flex-col md:flex-row">
           <SettingsNewSidebar
             selectedKey={selectedKey}
-            onSelect={setSelectedKey}
+            onSelect={selectMenuItem}
             onClose={onClose}
             showAboutDot={versionInfo.hasUpdate}
+            mobileVisible={mobileNavigationOpen}
           />
           <SettingsNewContent
             selectedKey={selectedKey}
             projects={projects}
             versionInfo={versionInfo}
             checkingVersion={checkingVersion}
+            mobileVisible={!mobileNavigationOpen}
+            onOpenMobileNavigation={() => setMobileNavigationOpen(true)}
           />
         </div>
       </div>

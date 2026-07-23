@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { usePilotDeckConfig } from "../../../../hooks/usePilotDeckConfig";
 import { configToYamlString, safeParseYaml } from "../modelPool/utils/configYaml";
 import type { PilotDeckConfig } from "../modelPool/types";
+import { ConfigSaveError } from "../../shared/view";
 import CronSection from "./components/CronSection";
 
 type AgentScheduleSectionsProps = {
@@ -11,7 +12,7 @@ type AgentScheduleSectionsProps = {
 
 export default function AgentScheduleSections({ title }: AgentScheduleSectionsProps) {
   const { t } = useTranslation("settings");
-  const { raw, setRaw, save, loading } = usePilotDeckConfig();
+  const { raw, setRaw, save, loading, error } = usePilotDeckConfig();
   const parsedConfig = useMemo(() => safeParseYaml(raw), [raw]);
 
   const onFormChange = (next: PilotDeckConfig) => {
@@ -48,6 +49,7 @@ export default function AgentScheduleSections({ title }: AgentScheduleSectionsPr
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-semibold text-foreground">{title}</h2>
+      <ConfigSaveError error={error} />
       <CronSection config={parsedConfig} onChange={onFormChange} />
     </div>
   );

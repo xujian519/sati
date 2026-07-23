@@ -381,7 +381,7 @@ router.post('/restart', async (req, res) => {
       }
 
       // Local: spawn a new server process detached from this one
-      const projectRoot = path.resolve(PROJECT_ROOT, '..');
+      const projectRoot = PROJECT_ROOT;
       const restartCommand = await resolveRestartCommand({ projectRoot });
       const child = spawn(restartCommand.command, restartCommand.args, {
         cwd: projectRoot,

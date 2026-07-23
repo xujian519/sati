@@ -1,4 +1,6 @@
 import { useTranslation } from "react-i18next";
+import { ChevronLeft } from "lucide-react";
+import { cn } from "../../../lib/utils";
 import type { DesktopVersionCheckResult } from "../SettingsNew";
 import type { SettingsNewMenuKey } from "../types";
 import type { SettingsProject } from "../shared/types";
@@ -22,6 +24,8 @@ type SettingsNewContentProps = {
   projects: SettingsProject[];
   versionInfo: DesktopVersionCheckResult;
   checkingVersion: boolean;
+  mobileVisible?: boolean;
+  onOpenMobileNavigation?: () => void;
 };
 
 const MENU_TITLE_KEYS: Record<SettingsNewMenuKey, string> = {
@@ -48,14 +52,29 @@ export default function SettingsNewContent({
   projects,
   versionInfo,
   checkingVersion,
+  mobileVisible = true,
+  onOpenMobileNavigation,
 }: SettingsNewContentProps) {
   const { t } = useTranslation("settings");
   const title = t(MENU_TITLE_KEYS[selectedKey]);
   const isGeneral = selectedKey === "general";
 
   return (
-    <section className="settings-new-content min-h-0 flex-1 overflow-y-auto bg-background pb-5">
+    <section
+      className={cn(
+        "settings-new-content min-h-0 flex-1 overflow-y-auto bg-background pb-5 md:block",
+        mobileVisible ? "block" : "hidden",
+      )}
+    >
       <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-8 pb-6 pt-7">
+        <button
+          type="button"
+          onClick={onOpenMobileNavigation}
+          className="mb-5 inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground md:hidden"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          {t("settingsNew.backToSettings")}
+        </button>
         {isGeneral ? (
           <GeneralSections title={title} />
         ) : selectedKey === "agentModel" ? (

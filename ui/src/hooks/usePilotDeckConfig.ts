@@ -35,6 +35,19 @@ type ConfigResponse = {
   reload?: ConfigReload;
 };
 
+export type ConfigProviderRename = {
+  from: string;
+  to: string;
+};
+
+export type ConfigSaveOptions = {
+  providerRenames?: ConfigProviderRename[];
+};
+
+export type ConfigSaveResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
 type ReloadSource = 'ui-save' | 'ui-reload' | 'watcher' | 'refresh';
 
 type ReloadInfo = {
@@ -77,6 +90,9 @@ export function usePilotDeckConfig() {
   const { subscribe } = useWebSocket();
   const initialLoadDoneRef = useRef(false);
   const validateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const saveSequenceRef = useRef(0);
+  const pendingSaveCountRef = useRef(0);
 
   const applyResponse = useCallback((data: ConfigResponse, source: ReloadSource = 'refresh') => {
     setPath(data.path);
@@ -172,10 +188,21 @@ export function usePilotDeckConfig() {
       };
       const source: ReloadSource = payload.source ?? 'watcher';
 
-      if (isDirtyRef.current && source === 'watcher') {
-        setExternalChangeNotice(
-          'Config was changed on disk by an external edit. Your unsaved draft is kept — click Refresh to discard and load the new version.',
-        );
+      const keepLocalDraft = (
+        isDirtyRef.current
+        && source === 'watcher'
+      ) || (
+        source === 'ui-save'
+        && pendingSaveCountRef.current > 0
+        && payload.raw !== rawRef.current
+      );
+
+      if (keepLocalDraft) {
+        if (source === 'watcher') {
+          setExternalChangeNotice(
+            'Config was changed on disk by an external edit. Your unsaved draft is kept — click Refresh to discard and load the new version.',
+          );
+        }
         setValidation(payload.validation);
         setReload((payload.reload as ConfigReload | undefined) ?? null);
         setConfigDisabled(payload.configDisabled === true);
@@ -207,26 +234,71 @@ export function usePilotDeckConfig() {
     return unsub;
   }, [subscribe]);
 
-  const save = useCallback(async () => {
+  const save = useCallback((options: ConfigSaveOptions = {}): Promise<ConfigSaveResult> => {
     const draft = rawRef.current;
+    const sequence = ++saveSequenceRef.current;
+    pendingSaveCountRef.current += 1;
     setSaving(true);
     setError(null);
     setMessage(null);
-    try {
-      const response = await authenticatedFetch('/api/config', {
-        method: 'PUT',
-        body: JSON.stringify({ raw: draft }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || data.validation?.errors?.join(', ') || 'Failed to save config');
-      applyResponse(data, 'ui-save');
-      setMessage('Saved and reloaded');
-      setExternalChangeNotice(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to save config');
-    } finally {
-      setSaving(false);
-    }
+
+    const run = async (): Promise<ConfigSaveResult> => {
+      try {
+        const response = await authenticatedFetch('/api/config', {
+          method: 'PUT',
+          body: JSON.stringify({
+            raw: draft,
+            ...(options.providerRenames?.length
+              ? { providerRenames: options.providerRenames }
+              : {}),
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(
+            data.error
+              || data.validation?.errors?.join(', ')
+              || 'Failed to save config',
+          );
+        }
+
+        // Immediate-mode fields can enqueue another draft before this request
+        // finishes. Only the newest response may replace the editor state;
+        // every queued write still reaches disk in order.
+        if (
+          sequence === saveSequenceRef.current
+          && rawRef.current === draft
+        ) {
+          applyResponse(data, 'ui-save');
+          setMessage('Saved and reloaded');
+          setExternalChangeNotice(null);
+        }
+        return { ok: true };
+      } catch (caught) {
+        const message = caught instanceof Error
+          ? caught.message
+          : 'Failed to save config';
+        if (sequence === saveSequenceRef.current) {
+          setError(message);
+        }
+        return { ok: false, error: message };
+      } finally {
+        pendingSaveCountRef.current = Math.max(
+          0,
+          pendingSaveCountRef.current - 1,
+        );
+        if (pendingSaveCountRef.current === 0) {
+          setSaving(false);
+        }
+      }
+    };
+
+    const result = saveQueueRef.current.then(run, run);
+    saveQueueRef.current = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }, [applyResponse]);
 
   const reloadConfig = useCallback(async () => {

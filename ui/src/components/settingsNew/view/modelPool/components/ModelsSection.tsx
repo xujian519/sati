@@ -3,6 +3,10 @@ import {
   findCatalogProviderById,
   type CatalogProvider,
 } from "../../../../../shared/catalogProviders";
+import type {
+  ConfigSaveOptions,
+  ConfigSaveResult,
+} from "../../../../../hooks/usePilotDeckConfig";
 import { patch } from "../utils/patch";
 import type { PilotDeckConfig, V2Provider } from "../types";
 import { rewriteProviderRefs } from "../utils/providerRefs";
@@ -12,7 +16,10 @@ import ProviderCard from "./ProviderCard";
 
 type ModelsSectionProps = {
   config: PilotDeckConfig;
-  onChange: (next: PilotDeckConfig) => void | Promise<void>;
+  onChange: (
+    next: PilotDeckConfig,
+    options?: ConfigSaveOptions,
+  ) => void | ConfigSaveResult | Promise<void | ConfigSaveResult>;
 };
 
 export default function ModelsSection({ config, onChange }: ModelsSectionProps) {
@@ -20,13 +27,19 @@ export default function ModelsSection({ config, onChange }: ModelsSectionProps) 
   const providers = config.model?.providers ?? {};
   const ids = Object.keys(providers);
 
+  const applyChange = async (
+    next: PilotDeckConfig,
+    options?: ConfigSaveOptions,
+  ): Promise<ConfigSaveResult> =>
+    (await onChange(next, options)) ?? { ok: true };
+
   const setProvider = async (id: string, prov: V2Provider) =>
-    Promise.resolve(onChange(patch(config, ["model", "providers", id], prov)));
+    applyChange(patch(config, ["model", "providers", id], prov));
 
   const removeProvider = async (id: string) => {
     const next = { ...providers };
     delete next[id];
-    await Promise.resolve(onChange(patch(config, ["model", "providers"], next)));
+    await applyChange(patch(config, ["model", "providers"], next));
   };
 
   const buildRenamedConfig = (oldId: string, newId: string) => {
@@ -55,8 +68,12 @@ export default function ModelsSection({ config, onChange }: ModelsSectionProps) 
     }
     const targetId = trimmed || oldId;
     const nextConfig = patch(renamed.config, ["model", "providers", targetId], provider);
-    await Promise.resolve(onChange(nextConfig));
-    return { ok: true };
+    return applyChange(
+      nextConfig,
+      targetId !== oldId
+        ? { providerRenames: [{ from: oldId, to: targetId }] }
+        : undefined,
+    );
   };
 
   const handleCatalogPick = async (cp: CatalogProvider) => {

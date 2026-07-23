@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { usePilotDeckConfig } from "../../../../hooks/usePilotDeckConfig";
 import { configToYamlString, safeParseYaml } from "../modelPool/utils/configYaml";
 import type { PilotDeckConfig } from "../modelPool/types";
+import { ConfigSaveError } from "../../shared/view";
 import RouterSection from "./components/RouterSection";
 
 type AgentRouteSectionsProps = {
@@ -11,7 +12,7 @@ type AgentRouteSectionsProps = {
 
 export default function AgentRouteSections({ title }: AgentRouteSectionsProps) {
   const { t } = useTranslation("settings");
-  const { raw, setRaw, save, loading } = usePilotDeckConfig();
+  const { raw, setRaw, save, loading, error } = usePilotDeckConfig();
   const parsedConfig = useMemo(() => safeParseYaml(raw), [raw]);
 
   const onFormChange = (next: PilotDeckConfig) => {
@@ -48,6 +49,7 @@ export default function AgentRouteSections({ title }: AgentRouteSectionsProps) {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-semibold text-foreground">{title}</h2>
+      <ConfigSaveError error={error} />
       <RouterSection config={parsedConfig} onChange={onFormChange} />
     </div>
   );
