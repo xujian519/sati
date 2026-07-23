@@ -932,6 +932,7 @@ export default function CodeEditorBinaryFile({
   const isSpreadsheet = isSpreadsheetFile(file.name);
   const isOffice = isOfficeFile(file.name);
   const canPreview = isImage || isPdf || isOffice;
+  const hasEmbeddedDocumentToolbar = isPdf || isOffice;
   const documentIsFullscreen = isSidebar ? isExpanded : isFullscreen;
   const onToggleDocumentFullscreen = isSidebar ? onToggleExpand : onToggleFullscreen;
 
@@ -988,7 +989,7 @@ export default function CodeEditorBinaryFile({
         </div>
       )}
       <div className="flex shrink-0 items-center gap-0.5">
-        {!isSidebar && !canPreview && (
+        {!isSidebar && !hasEmbeddedDocumentToolbar && (
           <button
             type="button"
             onClick={onToggleFullscreen}

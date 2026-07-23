@@ -63,6 +63,11 @@ export default function CodeEditorTabBar({
   useEffect(() => {
     if (!menu) return undefined;
 
+    const focusFrame = window.requestAnimationFrame(() => {
+      menuRef.current
+        ?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')
+        ?.focus();
+    });
     const closeMenu = (event: globalThis.MouseEvent) => {
       const target = event.target as Node | null;
       if (target && menuRef.current?.contains(target)) {
@@ -71,7 +76,11 @@ export default function CodeEditorTabBar({
       setMenu(null);
     };
     const closeMenuOnEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') setMenu(null);
+      if (event.key === 'Escape') {
+        const targetTabId = menu.tabId;
+        setMenu(null);
+        window.requestAnimationFrame(() => tabButtonRefs.current.get(targetTabId)?.focus());
+      }
     };
     const closeMenuWithoutEvent = () => setMenu(null);
 
@@ -80,12 +89,19 @@ export default function CodeEditorTabBar({
     window.addEventListener('resize', closeMenuWithoutEvent);
     window.addEventListener('scroll', closeMenuWithoutEvent, true);
     return () => {
+      window.cancelAnimationFrame(focusFrame);
       document.removeEventListener('mousedown', closeMenu);
       document.removeEventListener('keydown', closeMenuOnEscape);
       window.removeEventListener('resize', closeMenuWithoutEvent);
       window.removeEventListener('scroll', closeMenuWithoutEvent, true);
     };
   }, [menu]);
+
+  useEffect(() => {
+    if (menu && !tabs.some((tab) => tab.id === menu.tabId)) {
+      setMenu(null);
+    }
+  }, [menu, tabs]);
 
   const openMenu = (tabId: string, x: number, y: number) => {
     setMenu({
@@ -129,7 +145,7 @@ export default function CodeEditorTabBar({
     } else if (event.key === 'Delete') {
       event.preventDefault();
       onClose(tabs[index].id);
-    } else if (event.key === 'F10' && event.shiftKey) {
+    } else if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
       event.preventDefault();
       const rect = event.currentTarget.getBoundingClientRect();
       openMenu(tabs[index].id, rect.left, rect.bottom + 4);
@@ -160,6 +176,37 @@ export default function CodeEditorTabBar({
       ref={menuRef}
       role="menu"
       aria-label={labels.moreActions}
+      onKeyDown={(event) => {
+        const items = Array.from(
+          event.currentTarget.querySelectorAll<HTMLButtonElement>(
+            '[role="menuitem"]:not(:disabled)',
+          ),
+        );
+        const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+        let nextIndex: number | null = null;
+        if (event.key === 'ArrowDown') {
+          nextIndex = (currentIndex + 1) % items.length;
+        } else if (event.key === 'ArrowUp') {
+          nextIndex = (currentIndex - 1 + items.length) % items.length;
+        } else if (event.key === 'Home') {
+          nextIndex = 0;
+        } else if (event.key === 'End') {
+          nextIndex = items.length - 1;
+        } else if (event.key === 'Escape' || event.key === 'Tab') {
+          const targetTabId = menu.tabId;
+          setMenu(null);
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            window.requestAnimationFrame(() => tabButtonRefs.current.get(targetTabId)?.focus());
+          }
+          return;
+        }
+
+        if (nextIndex !== null && items.length > 0) {
+          event.preventDefault();
+          items[nextIndex]?.focus();
+        }
+      }}
       className="fixed z-[120] w-[196px] rounded-lg border border-neutral-200 bg-white p-1.5 text-[12px] text-neutral-700 shadow-xl dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
       style={{ left: menu.x, top: menu.y }}
     >
@@ -189,7 +236,10 @@ export default function CodeEditorTabBar({
       >
         {labels.closeToRight}
       </button>
-      <div className="my-1 border-t border-neutral-200 dark:border-neutral-700" />
+      <div
+        role="separator"
+        className="my-1 border-t border-neutral-200 dark:border-neutral-700"
+      />
       <button
         type="button"
         role="menuitem"

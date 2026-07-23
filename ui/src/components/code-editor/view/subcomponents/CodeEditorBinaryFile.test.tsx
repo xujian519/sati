@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import CodeEditorBinaryFile from './CodeEditorBinaryFile';
 
@@ -75,5 +75,25 @@ describe('CodeEditorBinaryFile', () => {
     expect(preview.getAttribute('data-page-controls')).toBe('true');
     preview.click();
     expect(onToggleExpand).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the fullscreen action available for image previews outside the sidebar', () => {
+    const onToggleFullscreen = vi.fn();
+    render(
+      <CodeEditorBinaryFile
+        {...baseProps}
+        file={{
+          name: 'screenshot.png',
+          path: '/workspace/hundouluo/screenshot.png',
+          diffInfo: null,
+        }}
+        projectName={undefined}
+        isSidebar={false}
+        onToggleFullscreen={onToggleFullscreen}
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle('actions.fullscreen'));
+    expect(onToggleFullscreen).toHaveBeenCalledOnce();
   });
 });

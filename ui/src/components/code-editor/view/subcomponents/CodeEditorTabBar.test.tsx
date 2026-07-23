@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CodeEditorTabBar from './CodeEditorTabBar';
 
@@ -112,5 +112,35 @@ describe('CodeEditorTabBar', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Close tabs to the right' }));
 
     expect(onClose).toHaveBeenCalledWith('editor-tab-2');
+  });
+
+  it('focuses and navigates the context menu from the keyboard', async () => {
+    render(
+      <CodeEditorTabBar
+        tabs={tabs}
+        activeTabId="editor-tab-1"
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+        onCloseTabs={vi.fn()}
+        labels={labels}
+      />,
+    );
+
+    const targetTab = screen.getByRole('tab', {
+      name: 'styles.css — /workspace/hundouluo/styles.css',
+    });
+    targetTab.focus();
+    fireEvent.keyDown(targetTab, { key: 'F10', shiftKey: true });
+
+    const closeCurrent = screen.getByRole('menuitem', { name: 'Close' });
+    await waitFor(() => expect(document.activeElement).toBe(closeCurrent));
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(
+      screen.getByRole('menuitem', { name: 'Close other tabs' }),
+    );
+
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    await waitFor(() => expect(document.activeElement).toBe(targetTab));
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 });

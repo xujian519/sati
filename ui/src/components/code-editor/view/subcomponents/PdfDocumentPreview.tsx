@@ -806,7 +806,6 @@ export default function PdfDocumentPreview({
   useEffect(() => {
     let cancelled = false;
     let loadingTask: pdfjs.PDFDocumentLoadingTask | null = null;
-    let loadedDocument: pdfjs.PDFDocumentProxy | null = null;
     const viewer = viewerRef.current;
     const isSameFile = fileKeyRef.current === fileKey;
     const nextViewState = isSameFile
@@ -863,8 +862,23 @@ export default function PdfDocumentPreview({
         }
 
         const nextDocument = await loadingTask.promise;
-        loadedDocument = nextDocument;
         if (cancelled) return;
+        const restoredPage = clamp(
+          nextViewState.currentPage,
+          1,
+          Math.max(1, nextDocument.numPages),
+        );
+        if (restoredPage !== nextViewState.currentPage) {
+          const clampedViewState = {
+            ...nextViewState,
+            currentPage: restoredPage,
+            scrollTop: 0,
+          };
+          pendingRestoreRef.current = clampedViewState;
+          viewStateRef.current = clampedViewState;
+          setCurrentPage(restoredPage);
+          setPageInput(String(restoredPage));
+        }
         const firstPage = await nextDocument.getPage(1);
         if (cancelled) return;
         const viewport = firstPage.getViewport({ scale: 1 });
@@ -895,11 +909,7 @@ export default function PdfDocumentPreview({
     loadPdf();
     return () => {
       cancelled = true;
-      if (loadedDocument) {
-        ignorePdfCleanupError(() => loadedDocument?.destroy?.());
-      } else {
-        ignorePdfCleanupError(() => loadingTask?.destroy?.());
-      }
+      ignorePdfCleanupError(() => loadingTask?.destroy?.());
     };
   }, [blob, fileKey, navigationMode, url]);
 
@@ -1536,9 +1546,14 @@ export default function PdfDocumentPreview({
               value={searchQuery}
               placeholder={t('pdfToolbar.searchPlaceholder')}
               onChange={(event) => {
+                // Changing the query invalidates any in-flight search immediately.
+                // Otherwise a slow search for the previous query can repopulate
+                // stale results before the user submits the new value.
+                searchRequestIdRef.current += 1;
                 setSearchQuery(event.target.value);
                 setSearchResults([]);
                 setSearchResultIndex(-1);
+                setSearching(false);
                 setSearchCompleted(false);
               }}
               onKeyDown={(event) => {
