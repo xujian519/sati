@@ -15,11 +15,11 @@ export default function SettingsRow({
   className,
 }: SettingsRowProps) {
   return (
-    <div className={cn("flex items-center justify-between gap-4 px-4 py-3", className)}>
+    <div className={cn("flex min-h-12 items-center justify-between gap-4 px-4 py-2.5", className)}>
       <div className="min-w-0 flex-1">
-        <div className="text-[13px] font-medium leading-5 text-foreground">{label}</div>
+        <div className="text-sm font-medium leading-5 text-foreground">{label}</div>
         {description && (
-          <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
+          <div className="mt-0.5 text-xs leading-[18px] text-muted-foreground">
             {description}
           </div>
         )}

@@ -15,9 +15,17 @@ export default function PageSectionHeader({
   if (!title && !description) return null;
 
   return (
-    <div className={cn("space-y-2", className)}>
-      {title ? <h3 className="text-xl font-semibold text-foreground">{title}</h3> : null}
-      {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+    <div className={cn("space-y-1.5", className)}>
+      {title ? (
+        <h3 className="text-[17px] font-semibold leading-6 tracking-[-0.01em] text-foreground">
+          {title}
+        </h3>
+      ) : null}
+      {description ? (
+        <p className="text-[13px] leading-5 text-muted-foreground">
+          {description}
+        </p>
+      ) : null}
     </div>
   );
 }

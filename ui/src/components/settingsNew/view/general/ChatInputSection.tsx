@@ -15,7 +15,7 @@ export default function ChatInputSection() {
   return (
     <section className="space-y-2.5">
       <PageSectionHeader title={t("settingsHome.chatInput.title")} />
-      <div className="space-y-8">
+      <div className="space-y-6">
         <SettingsSection title={t("quickSettings.sections.toolDisplay")}>
           <SettingsCard divided>
             <SettingsRow label={t("quickSettings.autoExpandTools")}>

@@ -18,12 +18,12 @@ export default function SettingsSection({
     <div className={cn("space-y-2.5", className)}>
       <div>
         {title ? (
-          <h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <h3 className="text-[13px] font-medium leading-5 text-muted-foreground">
             {title}
           </h3>
         ) : null}
         {description && (
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+          <p className="mt-1 text-xs leading-[18px] text-muted-foreground">
             {description}
           </p>
         )}

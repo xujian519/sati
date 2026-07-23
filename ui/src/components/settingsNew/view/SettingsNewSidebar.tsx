@@ -78,24 +78,28 @@ export default function SettingsNewSidebar({
         </div>
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-5">
-          <ul className="space-y-4">
+          <ul className="space-y-3">
             {MENU_ITEMS.map((item) => {
               const active = isItemActive(item, selectedKey);
               const hasChildren = Boolean(item.children?.length);
               return (
-                <li key={item.key} className="space-y-2">
+                <li key={item.key} className="space-y-1">
                   <button
                     type="button"
                     onClick={hasChildren ? undefined : () => onSelect(item.key)}
                     disabled={hasChildren}
                     className={cn(
-                      "flex w-full items-center rounded-md px-3 py-1.5 text-left text-[16px] leading-7 tracking-[0.01em]",
+                      "flex min-h-8 w-full items-center rounded-md px-3 py-1 text-left text-sm leading-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
                       hasChildren
                         ? "cursor-default"
-                        : "cursor-pointer transition-colors hover:bg-muted hover:font-semibold",
+                        : "cursor-pointer transition-colors hover:bg-muted hover:text-foreground",
                       active
-                        ? "font-semibold text-foreground"
-                        : "font-medium text-foreground/90",
+                        ? hasChildren
+                          ? "font-semibold text-foreground"
+                          : "bg-muted/80 font-medium text-foreground"
+                        : hasChildren
+                          ? "font-semibold text-foreground/90"
+                          : "font-normal text-foreground/80",
                     )}
                   >
                     <span>{t(item.labelKey)}</span>
@@ -105,17 +109,17 @@ export default function SettingsNewSidebar({
                   </button>
 
                   {item.children && item.children.length > 0 ? (
-                    <ul className="space-y-2">
+                    <ul className="space-y-1">
                       {item.children.map((child) => (
                         <li key={child.key}>
                           <button
                             type="button"
                             onClick={() => onSelect(child.key)}
                             className={cn(
-                              "flex w-full cursor-pointer items-center rounded-md py-1.5 pl-12 pr-3 text-left text-[16px] leading-7 tracking-[0.01em] transition-colors hover:bg-muted hover:font-semibold",
+                              "flex min-h-8 w-full cursor-pointer items-center rounded-md py-1 pl-9 pr-3 text-left text-sm leading-5 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
                               selectedKey === child.key
-                                ? "font-semibold text-foreground"
-                                : "font-medium text-foreground/90",
+                                ? "bg-muted/80 font-medium text-foreground"
+                                : "font-normal text-muted-foreground",
                             )}
                           >
                             {t(child.labelKey)}
