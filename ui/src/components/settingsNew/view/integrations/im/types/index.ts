@@ -10,6 +10,20 @@ export type GatewayStatus = {
     enabled: boolean;
     hasCredentials: boolean;
     accountId: string | null;
+    runtime?: {
+      state:
+        | "starting"
+        | "connected"
+        | "waiting_for_login"
+        | "expired"
+        | "failed"
+        | "stopped";
+      message?: string;
+      accountId?: string;
+      error?: string;
+      qrUrl?: string;
+      updatedAt?: string;
+    } | null;
   };
   wecom: {
     enabled: boolean;

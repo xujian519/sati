@@ -3,18 +3,20 @@ import { useTranslation } from "react-i18next";
 import { AlertCircle, CheckCircle2, Loader2, MessageSquare, QrCode } from "lucide-react";
 import { Button } from "../../../../../../shared/view/ui";
 import { authenticatedFetch } from "../../../../../../utils/api";
+import { cn } from "../../../../../../lib/utils";
 import { SettingsCard, SettingsSection } from "../../../../shared/view";
+import type { RefreshGatewayStatus } from "../hooks/useGatewayStatus";
 import type { GatewayStatus } from "../types";
 
 type WeixinChannelSectionProps = {
   status: GatewayStatus["weixin"];
-  onSaved: () => void;
+  onSaved: RefreshGatewayStatus;
 };
 
 const WEIXIN_QR_PREPARE_TIMEOUT_MS = 30_000;
 
 function isRuntimeCurrent(
-  runtime: { updatedAt?: unknown } | null | undefined,
+  runtime: GatewayStatus["weixin"]["runtime"],
   requestedAt: string | null,
 ): boolean {
   if (!requestedAt) return true;
@@ -24,6 +26,17 @@ function isRuntimeCurrent(
   return Number.isFinite(runtimeUpdatedAt)
     && Number.isFinite(requestStartedAt)
     && runtimeUpdatedAt >= requestStartedAt;
+}
+
+function readRuntimeQr(
+  status: GatewayStatus["weixin"] | null | undefined,
+  requestedAt: string | null = null,
+): string | null {
+  if (!status?.enabled || status.runtime?.state !== "waiting_for_login") {
+    return null;
+  }
+  if (!isRuntimeCurrent(status.runtime, requestedAt)) return null;
+  return status.runtime.qrUrl ?? null;
 }
 
 export default function WeixinChannelSection({
@@ -39,6 +52,31 @@ export default function WeixinChannelSection({
   const pollRef = useRef<number | null>(null);
   const prepareTimeoutRef = useRef<number | null>(null);
   const requestedAtRef = useRef<string | null>(null);
+  const dismissedRuntimeRef = useRef<string | null>(null);
+  const runtimeState = status.enabled ? status.runtime?.state : undefined;
+  const runtimeLabel =
+    runtimeState === "waiting_for_login"
+      ? t("gateway.weixin.waitingForLogin")
+      : runtimeState === "starting"
+        ? t("gateway.weixin.starting")
+        : runtimeState === "expired"
+          ? t("gateway.weixin.expired")
+          : runtimeState === "failed"
+            ? t("gateway.weixin.failed")
+            : null;
+  const statusText =
+    runtimeLabel
+    ?? (status.enabled && status.hasCredentials
+      ? `${t("gateway.connected")}${status.accountId ? ` · ${status.accountId}` : ""}`
+      : t("gateway.notConfigured"));
+  const badgeTone =
+    runtimeState === "waiting_for_login" || runtimeState === "starting"
+      ? "amber"
+      : runtimeState === "expired" || runtimeState === "failed"
+        ? "red"
+        : status.enabled
+          ? "green"
+          : "muted";
 
   const clearPoll = useCallback(() => {
     if (pollRef.current) {
@@ -59,17 +97,129 @@ export default function WeixinChannelSection({
     clearPrepareTimeout();
   }, [clearPoll, clearPrepareTimeout]);
 
+  const beginResultPoll = useCallback(() => {
+    clearPoll();
+    pollRef.current = window.setInterval(async () => {
+      try {
+        const pollRes = await authenticatedFetch("/api/gateway/weixin/qr-poll");
+        const pollData = await pollRes.json();
+        if (pollData.pending) {
+          if (
+            pollData.qrUrl
+            && isRuntimeCurrent(pollData.runtime, requestedAtRef.current)
+          ) {
+            clearPrepareTimeout();
+            setQrUrl(pollData.qrUrl);
+            setPhase("scanning");
+          }
+          return;
+        }
+        if (pollData.ok) {
+          clearLoginTimers();
+          setPhase("success");
+          void onSaved();
+          return;
+        }
+        if (!isRuntimeCurrent(pollData.runtime, requestedAtRef.current)) {
+          return;
+        }
+        clearLoginTimers();
+        setPhase("error");
+        setError(pollData.error || "Login failed");
+      } catch {
+        // Ignore transient network errors while polling.
+      }
+    }, 2000);
+  }, [
+    clearLoginTimers,
+    clearPoll,
+    clearPrepareTimeout,
+    onSaved,
+  ]);
+
   useEffect(() => {
     return clearLoginTimers;
   }, [clearLoginTimers]);
+
+  useEffect(() => {
+    if (phase !== "idle") return;
+    const existingQrUrl = readRuntimeQr(status);
+    if (!existingQrUrl) return;
+    if (dismissedRuntimeRef.current === existingQrUrl) return;
+    requestedAtRef.current = null;
+    setQrUrl(existingQrUrl);
+    setPhase("scanning");
+    beginResultPoll();
+  }, [beginResultPoll, phase, status]);
+
+  useEffect(() => {
+    if (phase !== "loading-qr" && phase !== "scanning") return;
+
+    const requestStartedAt = requestedAtRef.current;
+    const nextQrUrl = readRuntimeQr(status, requestStartedAt);
+    if (nextQrUrl && nextQrUrl !== qrUrl) {
+      clearPrepareTimeout();
+      setQrUrl(nextQrUrl);
+      setPhase("scanning");
+    }
+
+    if (status.hasCredentials || runtimeState === "connected") {
+      clearLoginTimers();
+      setPhase("success");
+      return;
+    }
+
+    if (
+      (
+        runtimeState === "failed"
+        || runtimeState === "expired"
+        || runtimeState === "stopped"
+      )
+      && isRuntimeCurrent(status.runtime, requestStartedAt)
+    ) {
+      clearLoginTimers();
+      setError(
+        status.runtime?.error
+        || status.runtime?.message
+        || t("gateway.weixin.noRuntimeQr"),
+      );
+      setPhase("error");
+    }
+  }, [
+    clearLoginTimers,
+    clearPrepareTimeout,
+    phase,
+    qrUrl,
+    runtimeState,
+    status,
+    t,
+  ]);
 
   const startQRLogin = async () => {
     setPhase("loading-qr");
     setError("");
     setQrUrl(null);
     requestedAtRef.current = null;
+    dismissedRuntimeRef.current = null;
     clearLoginTimers();
     try {
+      const currentQrUrl = readRuntimeQr(status);
+      if (currentQrUrl) {
+        setQrUrl(currentQrUrl);
+        setPhase("scanning");
+        beginResultPoll();
+        return;
+      }
+
+      const refreshed = await onSaved();
+      const refreshedQrUrl = readRuntimeQr(refreshed?.weixin);
+      if (refreshedQrUrl) {
+        setQrUrl(refreshedQrUrl);
+        setPhase("scanning");
+        beginResultPoll();
+        return;
+      }
+
       const res = await authenticatedFetch("/api/gateway/weixin/qr-begin", {
         method: "POST",
       });
@@ -80,38 +230,7 @@ export default function WeixinChannelSection({
         return;
       }
       requestedAtRef.current = data.requestedAt || new Date().toISOString();
-
-      pollRef.current = window.setInterval(async () => {
-        try {
-          const pollRes = await authenticatedFetch("/api/gateway/weixin/qr-poll");
-          const pollData = await pollRes.json();
-          if (pollData.pending) {
-            if (
-              pollData.qrUrl
-              && isRuntimeCurrent(pollData.runtime, requestedAtRef.current)
-            ) {
-              clearPrepareTimeout();
-              setQrUrl(pollData.qrUrl);
-              setPhase("scanning");
-            }
-            return;
-          }
-          if (pollData.ok) {
-            clearLoginTimers();
-            setPhase("success");
-            onSaved();
-          } else {
-            if (!isRuntimeCurrent(pollData.runtime, requestedAtRef.current)) {
-              return;
-            }
-            clearLoginTimers();
-            setPhase("error");
-            setError(pollData.error || "Login failed");
-          }
-        } catch {
-          // ignore network errors while polling
-        }
-      }, 2000);
+      beginResultPoll();
 
       prepareTimeoutRef.current = window.setTimeout(() => {
         clearPoll();
@@ -147,17 +266,34 @@ export default function WeixinChannelSection({
                   {t("gateway.weixin.label")}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {status.enabled && status.hasCredentials
-                    ? `${t("gateway.connected")}${status.accountId ? ` · ${status.accountId}` : ""}`
-                    : t("gateway.notConfigured")}
+                  {statusText}
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
               {status.enabled && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-600 dark:text-green-400">
-                  <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                  {t("gateway.enabled")}
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                    badgeTone === "amber"
+                      && "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+                    badgeTone === "red"
+                      && "bg-red-500/10 text-red-700 dark:text-red-400",
+                    badgeTone === "green"
+                      && "bg-green-500/10 text-green-600 dark:text-green-400",
+                    badgeTone === "muted" && "bg-muted text-muted-foreground",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "h-1.5 w-1.5 rounded-full",
+                      badgeTone === "amber" && "bg-amber-500",
+                      badgeTone === "red" && "bg-red-500",
+                      badgeTone === "green" && "bg-green-500",
+                      badgeTone === "muted" && "bg-muted-foreground",
+                    )}
+                  />
+                  {runtimeLabel ?? t("gateway.enabled")}
                 </span>
               )}
             </div>
@@ -207,6 +343,9 @@ export default function WeixinChannelSection({
                   variant="ghost"
                   size="sm"
                   onClick={() => {
+                    dismissedRuntimeRef.current =
+                      status.runtime?.qrUrl
+                      ?? qrUrl;
                     clearLoginTimers();
                     setPhase("idle");
                   }}

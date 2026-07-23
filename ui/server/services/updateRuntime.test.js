@@ -51,6 +51,49 @@ describe('update runtime resolution', () => {
     })).resolves.toBe(expected);
   });
 
+  it('prefers Git Bash over the Windows WSL bash launcher', async () => {
+    const systemBash = path.win32.join('C:\\', 'Windows', 'System32', 'bash.exe');
+    const gitExecutable = path.win32.join('C:\\', 'Program Files', 'Git', 'cmd', 'git.exe');
+    const gitBash = path.win32.join('C:\\', 'Program Files', 'Git', 'bin', 'bash.exe');
+    const existing = new Set([systemBash, gitBash]);
+    const execFileAsync = vi.fn(async (_command, args) => {
+      if (args[0] === 'git') return { stdout: `${gitExecutable}\r\n` };
+      if (args[0] === 'bash') return { stdout: `${systemBash}\r\n` };
+      throw new Error('not found');
+    });
+
+    await expect(resolveBashExecutable({
+      platform: 'win32',
+      env: {
+        PATH: [
+          path.win32.dirname(systemBash),
+          path.win32.dirname(gitExecutable),
+        ].join(path.win32.delimiter),
+        SystemRoot: 'C:\\Windows',
+      },
+      pathExists: (candidate) => existing.has(candidate),
+      execFileAsync,
+    })).resolves.toBe(gitBash);
+  });
+
+  it('rejects the WSL bash launcher when no compatible Windows bash exists', async () => {
+    const systemBash = path.win32.join('C:\\', 'Windows', 'System32', 'bash.exe');
+    const execFileAsync = vi.fn(async (_command, args) => {
+      if (args[0] === 'bash') return { stdout: `${systemBash}\r\n` };
+      throw new Error('not found');
+    });
+
+    await expect(resolveBashExecutable({
+      platform: 'win32',
+      env: {
+        PATH: path.win32.dirname(systemBash),
+        SystemRoot: 'C:\\Windows',
+      },
+      pathExists: (candidate) => candidate === systemBash,
+      execFileAsync,
+    })).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('uses cmd.exe for Windows restarts', async () => {
     const command = await resolveRestartCommand({
       platform: 'win32',

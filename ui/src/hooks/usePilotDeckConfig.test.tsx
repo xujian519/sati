@@ -146,6 +146,65 @@ describe("usePilotDeckConfig saves", () => {
     expect(result.current.saving).toBe(false);
   });
 
+  it("tracks the saved disk snapshot without replacing a newer raw draft", async () => {
+    const write = deferred<TestResponse>();
+    let writeStarted = false;
+
+    mocks.authenticatedFetch.mockImplementation(
+      (url: string, options?: RequestInit) => {
+        if (url === "/api/config" && !options?.method) {
+          return Promise.resolve(response(configResponse("initial")));
+        }
+        if (url === "/api/config/validate") {
+          return Promise.resolve(
+            response({ valid: true, errors: [], warnings: [] }),
+          );
+        }
+        if (url === "/api/config" && options?.method === "PUT") {
+          writeStarted = true;
+          return write.promise;
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      },
+    );
+
+    const { result } = renderHook(() => usePilotDeckConfig(), {
+      wrapper: ConfigWrapper,
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let saveResult!: ReturnType<typeof result.current.save>;
+    act(() => {
+      result.current.setRaw("saved while request is pending");
+      saveResult = result.current.save();
+      result.current.setRaw("initial");
+    });
+    await waitFor(() => expect(writeStarted).toBe(true));
+
+    act(() => {
+      write.resolve(
+        response(configResponse("saved while request is pending")),
+      );
+    });
+    await act(async () => {
+      await saveResult;
+    });
+
+    expect(result.current.raw).toBe("initial");
+    expect(result.current.isDirty).toBe(true);
+    expect(result.current.saving).toBe(false);
+
+    act(() => {
+      mocks.listener?.({
+        type: "config:reloaded",
+        source: "ui-save",
+        ...configResponse("saved while request is pending"),
+      });
+    });
+    expect(result.current.raw).toBe("initial");
+    expect(result.current.isDirty).toBe(true);
+  });
+
   it("returns an explicit failure and exposes the server error", async () => {
     mocks.authenticatedFetch.mockImplementation(
       (url: string, options?: RequestInit) => {

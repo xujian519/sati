@@ -11,6 +11,22 @@ function appendExistingCandidate(candidates, value, pathExists) {
   candidates.push(candidate);
 }
 
+function isWindowsSystemBash(candidate, env) {
+  const pathApi = path.win32;
+  const normalized = pathApi.normalize(String(candidate || '')).toLowerCase();
+  const windowsRoots = [
+    env.SystemRoot,
+    env.SYSTEMROOT,
+    env.WINDIR,
+    'C:\\Windows',
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return windowsRoots.some((root) => (
+    normalized === pathApi.join(root, 'System32', 'bash.exe').toLowerCase()
+  ));
+}
+
 async function whereExecutables(name, execFileAsync) {
   try {
     const { stdout } = await execFileAsync('where', [name]);
@@ -32,16 +48,10 @@ export async function resolveBashExecutable({
 
   const pathApi = path.win32;
   const candidates = [];
-  for (const entry of String(env.PATH || '').split(pathApi.delimiter)) {
-    const directory = String(entry || '').trim();
-    if (!directory) continue;
-    appendExistingCandidate(candidates, pathApi.join(directory, 'bash.exe'), pathExists);
-  }
 
-  for (const candidate of await whereExecutables('bash', execFileAsync)) {
-    appendExistingCandidate(candidates, candidate, pathExists);
-  }
-
+  // Prefer Git Bash explicitly. A generic PATH lookup can otherwise select
+  // C:\Windows\System32\bash.exe, which is the WSL launcher and cannot execute
+  // the Windows script path passed by the updater.
   const gitPath = (await whereExecutables('git', execFileAsync))[0];
   if (gitPath) {
     const gitRoot = pathApi.resolve(pathApi.dirname(gitPath), '..');
@@ -56,7 +66,23 @@ export async function resolveBashExecutable({
     'C:\\Program Files (x86)\\Git\\usr\\bin\\bash.exe',
   ].forEach((candidate) => appendExistingCandidate(candidates, candidate, pathExists));
 
-  return candidates[0] || 'bash';
+  for (const entry of String(env.PATH || '').split(pathApi.delimiter)) {
+    const directory = String(entry || '').trim().replace(/^"(.*)"$/, '$1');
+    if (!directory) continue;
+    const candidate = pathApi.join(directory, 'bash.exe');
+    if (isWindowsSystemBash(candidate, env)) continue;
+    appendExistingCandidate(candidates, candidate, pathExists);
+  }
+
+  for (const candidate of await whereExecutables('bash', execFileAsync)) {
+    if (isWindowsSystemBash(candidate, env)) continue;
+    appendExistingCandidate(candidates, candidate, pathExists);
+  }
+
+  if (candidates[0]) return candidates[0];
+  const error = new Error('No compatible Windows bash executable was found.');
+  error.code = 'ENOENT';
+  throw error;
 }
 
 export async function resolveRestartCommand({

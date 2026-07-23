@@ -219,8 +219,11 @@ function usePilotDeckConfigState() {
         && source === 'watcher'
       ) || (
         source === 'ui-save'
-        && pendingSaveCountRef.current > 0
         && payload.raw !== rawRef.current
+        && (
+          pendingSaveCountRef.current > 0
+          || isDirtyRef.current
+        )
       );
 
       if (keepLocalDraft) {
@@ -291,8 +294,14 @@ function usePilotDeckConfigState() {
           );
         }
 
-        // Every successful queued write advances the disk revision, even when
+        // Every successful queued write advances the disk snapshot, even when
         // a newer local draft means this response must not replace the editor.
+        // Keeping this snapshot current ensures `isDirty` still compares the
+        // draft with what is actually on disk after an in-flight edit.
+        if (typeof data.raw === 'string') {
+          savedRawRef.current = data.raw;
+          isDirtyRef.current = rawRef.current !== data.raw;
+        }
         if (typeof data.revision === 'string') {
           revisionRef.current = data.revision;
           setRevision(data.revision);
