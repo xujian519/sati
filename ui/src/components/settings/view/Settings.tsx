@@ -26,7 +26,10 @@ import { Button } from '../../../shared/view/ui';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { languages } from '../../../i18n/languages';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
-import { usePilotDeckConfig } from '../../../hooks/usePilotDeckConfig';
+import {
+  PilotDeckConfigProvider,
+  usePilotDeckConfig,
+} from '../../../hooks/usePilotDeckConfig';
 import { useSettingsController } from '../hooks/useSettingsController';
 import { useGitVersion } from '../../../hooks/useGitVersion';
 import { useDesktopVersion } from '../../../hooks/useDesktopVersion';
@@ -869,4 +872,12 @@ function DesktopVersionUpdateSection() {
   );
 }
 
-export default Settings;
+function SettingsWithConfigProvider(props: SettingsProps) {
+  return (
+    <PilotDeckConfigProvider>
+      <Settings {...props} />
+    </PilotDeckConfigProvider>
+  );
+}
+
+export default SettingsWithConfigProvider;

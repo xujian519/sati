@@ -17,7 +17,14 @@ type ModelPoolSectionsProps = {
 
 export default function ModelPoolSections({ title }: ModelPoolSectionsProps) {
   const { t } = useTranslation("settings");
-  const { raw, setRaw, save, loading, error } = usePilotDeckConfig();
+  const {
+    raw,
+    setRaw,
+    restoreRawIfCurrent,
+    save,
+    loading,
+    error,
+  } = usePilotDeckConfig();
   const parsedConfig = useMemo(() => safeParseYaml(raw), [raw]);
 
   const onFormChange = async (
@@ -25,8 +32,14 @@ export default function ModelPoolSections({ title }: ModelPoolSectionsProps) {
     options?: ConfigSaveOptions,
   ): Promise<ConfigSaveResult> => {
     try {
-      setRaw(configToYamlString(next));
-      return await save(options);
+      const previousRaw = raw;
+      const nextRaw = configToYamlString(next);
+      setRaw(nextRaw);
+      const result = await save(options);
+      if (!result.ok && options?.providerRenames?.length) {
+        restoreRawIfCurrent(nextRaw, previousRaw);
+      }
+      return result;
     } catch (caught) {
       const message = caught instanceof Error
         ? caught.message

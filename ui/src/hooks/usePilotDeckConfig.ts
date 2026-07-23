@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { authenticatedFetch } from '../utils/api';
 import { useWebSocket } from '../contexts/WebSocketContext';
 
@@ -29,6 +38,7 @@ type ConfigResponse = {
   exists: boolean;
   path: string;
   raw: string;
+  revision?: string;
   configDisabled?: boolean;
   parseError?: string | null;
   validation: ConfigValidation;
@@ -55,9 +65,10 @@ type ReloadInfo = {
   at: number;
 };
 
-export function usePilotDeckConfig() {
+function usePilotDeckConfigState() {
   const [path, setPath] = useState('');
   const [raw, setRaw] = useState('');
+  const [revision, setRevision] = useState('');
   const [exists, setExists] = useState(false);
   const [validation, setValidation] = useState<ConfigValidation | null>(null);
   const [reload, setReload] = useState<ConfigReload | null>(null);
@@ -76,6 +87,8 @@ export function usePilotDeckConfig() {
   const savedRawRef = useRef<string>('');
   const rawRef = useRef(raw);
   rawRef.current = raw;
+  const revisionRef = useRef(revision);
+  revisionRef.current = revision;
 
   // Derive dirty from the draft vs last-saved snapshot so the Save button
   // can't desync from the textarea (especially in Raw YAML mode).
@@ -98,6 +111,10 @@ export function usePilotDeckConfig() {
     setPath(data.path);
     setRaw(data.raw);
     savedRawRef.current = data.raw;
+    if (typeof data.revision === 'string') {
+      revisionRef.current = data.revision;
+      setRevision(data.revision);
+    }
     setExists(data.exists);
     setConfigDisabled(data.configDisabled === true);
     setParseError(data.parseError ?? null);
@@ -136,6 +153,15 @@ export function usePilotDeckConfig() {
     setRaw(value);
     scheduleValidation(value);
   }, [scheduleValidation]);
+
+  const restoreRawIfCurrent = useCallback((
+    expected: string,
+    previous: string,
+  ): boolean => {
+    if (rawRef.current !== expected) return false;
+    updateRaw(previous);
+    return true;
+  }, [updateRaw]);
 
   const refreshRef = useRef<() => Promise<void>>();
 
@@ -218,6 +244,7 @@ export function usePilotDeckConfig() {
           exists: true,
           path: payload.path,
           raw: payload.raw ?? '',
+          revision: payload.revision,
           configDisabled: payload.configDisabled,
           parseError: payload.parseError,
           validation: payload.validation,
@@ -244,10 +271,12 @@ export function usePilotDeckConfig() {
 
     const run = async (): Promise<ConfigSaveResult> => {
       try {
+        const baseRevision = revisionRef.current;
         const response = await authenticatedFetch('/api/config', {
           method: 'PUT',
           body: JSON.stringify({
             raw: draft,
+            ...(baseRevision ? { baseRevision } : {}),
             ...(options.providerRenames?.length
               ? { providerRenames: options.providerRenames }
               : {}),
@@ -260,6 +289,13 @@ export function usePilotDeckConfig() {
               || data.validation?.errors?.join(', ')
               || 'Failed to save config',
           );
+        }
+
+        // Every successful queued write advances the disk revision, even when
+        // a newer local draft means this response must not replace the editor.
+        if (typeof data.revision === 'string') {
+          revisionRef.current = data.revision;
+          setRevision(data.revision);
         }
 
         // Immediate-mode fields can enqueue another draft before this request
@@ -280,6 +316,14 @@ export function usePilotDeckConfig() {
           : 'Failed to save config';
         if (sequence === saveSequenceRef.current) {
           setError(message);
+          if (
+            caught instanceof Error
+            && caught.message.toLowerCase().includes('config changed')
+          ) {
+            setExternalChangeNotice(
+              'Config changed while this draft was being saved. Your draft was not written — refresh before saving again.',
+            );
+          }
         }
         return { ok: false, error: message };
       } finally {
@@ -338,7 +382,9 @@ export function usePilotDeckConfig() {
   return {
     path,
     raw,
+    revision,
     setRaw: updateRaw,
+    restoreRawIfCurrent,
     exists,
     validation,
     reload,
@@ -358,4 +404,25 @@ export function usePilotDeckConfig() {
     reloadConfig,
     openFile,
   };
+}
+
+type PilotDeckConfigController = ReturnType<typeof usePilotDeckConfigState>;
+
+const PilotDeckConfigContext = createContext<PilotDeckConfigController | null>(null);
+
+export function PilotDeckConfigProvider({ children }: { children: ReactNode }) {
+  const controller = usePilotDeckConfigState();
+  return createElement(
+    PilotDeckConfigContext.Provider,
+    { value: controller },
+    children,
+  );
+}
+
+export function usePilotDeckConfig(): PilotDeckConfigController {
+  const controller = useContext(PilotDeckConfigContext);
+  if (!controller) {
+    throw new Error('usePilotDeckConfig must be used within PilotDeckConfigProvider');
+  }
+  return controller;
 }

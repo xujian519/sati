@@ -1,6 +1,10 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { usePilotDeckConfig } from "./usePilotDeckConfig";
+import {
+  PilotDeckConfigProvider,
+  usePilotDeckConfig,
+} from "./usePilotDeckConfig";
 
 const mocks = vi.hoisted(() => ({
   authenticatedFetch: vi.fn(),
@@ -28,17 +32,22 @@ function response(body: unknown, ok = true): TestResponse {
   };
 }
 
-function configResponse(raw: string) {
+function configResponse(raw: string, revision = `revision-${raw}`) {
   return {
     exists: true,
     path: "/tmp/pilotdeck.yaml",
     raw,
+    revision,
     validation: {
       valid: true,
       errors: [],
       warnings: [],
     },
   };
+}
+
+function ConfigWrapper({ children }: { children: ReactNode }) {
+  return <PilotDeckConfigProvider>{children}</PilotDeckConfigProvider>;
 }
 
 function deferred<T>() {
@@ -85,7 +94,9 @@ describe("usePilotDeckConfig saves", () => {
       },
     );
 
-    const { result } = renderHook(() => usePilotDeckConfig());
+    const { result } = renderHook(() => usePilotDeckConfig(), {
+      wrapper: ConfigWrapper,
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     let firstSave!: ReturnType<typeof result.current.save>;
@@ -98,7 +109,10 @@ describe("usePilotDeckConfig saves", () => {
     });
 
     await waitFor(() => expect(writeBodies).toHaveLength(1));
-    expect(JSON.parse(writeBodies[0])).toEqual({ raw: "first" });
+    expect(JSON.parse(writeBodies[0])).toEqual({
+      raw: "first",
+      baseRevision: "revision-initial",
+    });
 
     act(() => {
       firstWrite.resolve(response(configResponse("first")));
@@ -113,7 +127,10 @@ describe("usePilotDeckConfig saves", () => {
       });
     });
     expect(result.current.raw).toBe("second");
-    expect(JSON.parse(writeBodies[1])).toEqual({ raw: "second" });
+    expect(JSON.parse(writeBodies[1])).toEqual({
+      raw: "second",
+      baseRevision: "revision-first",
+    });
 
     act(() => {
       secondWrite.resolve(response(configResponse("second")));
@@ -149,7 +166,9 @@ describe("usePilotDeckConfig saves", () => {
       },
     );
 
-    const { result } = renderHook(() => usePilotDeckConfig());
+    const { result } = renderHook(() => usePilotDeckConfig(), {
+      wrapper: ConfigWrapper,
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     let saveResult;
@@ -164,5 +183,80 @@ describe("usePilotDeckConfig saves", () => {
     });
     expect(result.current.error).toBe("Config write rejected");
     expect(result.current.saving).toBe(false);
+  });
+
+  it("shares one draft and save queue between settings consumers", async () => {
+    mocks.authenticatedFetch.mockImplementation(
+      (url: string, options?: RequestInit) => {
+        if (url === "/api/config" && !options?.method) {
+          return Promise.resolve(response(configResponse("initial")));
+        }
+        if (url === "/api/config/validate") {
+          return Promise.resolve(
+            response({ valid: true, errors: [], warnings: [] }),
+          );
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      },
+    );
+
+    const { result } = renderHook(
+      () => ({
+        first: usePilotDeckConfig(),
+        second: usePilotDeckConfig(),
+      }),
+      { wrapper: ConfigWrapper },
+    );
+    await waitFor(() => expect(result.current.first.loading).toBe(false));
+
+    expect(result.current.first).toBe(result.current.second);
+    act(() => {
+      result.current.first.setRaw("shared draft");
+    });
+    expect(result.current.second.raw).toBe("shared draft");
+  });
+
+  it("only restores a failed optimistic draft when it is still current", async () => {
+    mocks.authenticatedFetch.mockImplementation(
+      (url: string, options?: RequestInit) => {
+        if (url === "/api/config" && !options?.method) {
+          return Promise.resolve(response(configResponse("initial")));
+        }
+        if (url === "/api/config/validate") {
+          return Promise.resolve(
+            response({ valid: true, errors: [], warnings: [] }),
+          );
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      },
+    );
+
+    const { result } = renderHook(() => usePilotDeckConfig(), {
+      wrapper: ConfigWrapper,
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => {
+      result.current.setRaw("failed rename");
+    });
+    let restored = false;
+    act(() => {
+      restored = result.current.restoreRawIfCurrent(
+        "failed rename",
+        "initial",
+      );
+    });
+    expect(restored).toBe(true);
+    expect(result.current.raw).toBe("initial");
+
+    act(() => {
+      result.current.setRaw("newer draft");
+      restored = result.current.restoreRawIfCurrent(
+        "failed rename",
+        "initial",
+      );
+    });
+    expect(restored).toBe(false);
+    expect(result.current.raw).toBe("newer draft");
   });
 });

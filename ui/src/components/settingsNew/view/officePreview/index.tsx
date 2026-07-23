@@ -10,7 +10,6 @@ import {
   type OfficePreviewStatus,
 } from "../../../../utils/officePreviewStatus";
 import {
-  FieldSaveModeProvider,
   FormRow,
   Select,
   TextInput,
@@ -435,12 +434,10 @@ export default function OfficePreviewSections({
     <div className="space-y-6">
       <h2 className="text-2xl font-semibold text-foreground">{title}</h2>
       <ConfigSaveError error={error} />
-      <FieldSaveModeProvider mode="immediate">
-        <OfficePreviewSection
-          config={parsedConfig}
-          onChange={onFormChange}
-        />
-      </FieldSaveModeProvider>
+      <OfficePreviewSection
+        config={parsedConfig}
+        onChange={onFormChange}
+      />
     </div>
   );
 }

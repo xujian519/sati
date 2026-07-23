@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PilotDeckConfigProvider } from "../../hooks/usePilotDeckConfig";
 import { authenticatedFetch } from "../../utils/api";
 import type { SettingsProps } from "./shared/types";
 import type { SettingsNewMenuKey } from "./types";
@@ -40,7 +41,7 @@ function normalizeWebVersionResult(payload: any): DesktopVersionCheckResult {
   };
 }
 
-export default function SettingsNew({
+function SettingsNewInner({
   isOpen,
   onClose,
   projects = [],
@@ -137,5 +138,13 @@ export default function SettingsNew({
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SettingsNew(props: SettingsProps) {
+  return (
+    <PilotDeckConfigProvider>
+      <SettingsNewInner {...props} />
+    </PilotDeckConfigProvider>
   );
 }

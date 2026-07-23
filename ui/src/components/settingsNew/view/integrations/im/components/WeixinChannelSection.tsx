@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, CheckCircle2, Loader2, MessageSquare, QrCode } from "lucide-react";
 import { Button } from "../../../../../../shared/view/ui";
@@ -11,6 +11,21 @@ type WeixinChannelSectionProps = {
   onSaved: () => void;
 };
 
+const WEIXIN_QR_PREPARE_TIMEOUT_MS = 30_000;
+
+function isRuntimeCurrent(
+  runtime: { updatedAt?: unknown } | null | undefined,
+  requestedAt: string | null,
+): boolean {
+  if (!requestedAt) return true;
+  if (typeof runtime?.updatedAt !== "string") return false;
+  const runtimeUpdatedAt = Date.parse(runtime.updatedAt);
+  const requestStartedAt = Date.parse(requestedAt);
+  return Number.isFinite(runtimeUpdatedAt)
+    && Number.isFinite(requestStartedAt)
+    && runtimeUpdatedAt >= requestStartedAt;
+}
+
 export default function WeixinChannelSection({
   status,
   onSaved,
@@ -22,39 +37,74 @@ export default function WeixinChannelSection({
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
   const pollRef = useRef<number | null>(null);
+  const prepareTimeoutRef = useRef<number | null>(null);
+  const requestedAtRef = useRef<string | null>(null);
+
+  const clearPoll = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const clearPrepareTimeout = useCallback(() => {
+    if (prepareTimeoutRef.current) {
+      clearTimeout(prepareTimeoutRef.current);
+      prepareTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearLoginTimers = useCallback(() => {
+    clearPoll();
+    clearPrepareTimeout();
+  }, [clearPoll, clearPrepareTimeout]);
 
   useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, []);
+    return clearLoginTimers;
+  }, [clearLoginTimers]);
 
   const startQRLogin = async () => {
     setPhase("loading-qr");
     setError("");
     setQrUrl(null);
+    requestedAtRef.current = null;
+    clearLoginTimers();
     try {
-      const res = await authenticatedFetch("/api/gateway/weixin/qr");
+      const res = await authenticatedFetch("/api/gateway/weixin/qr-begin", {
+        method: "POST",
+      });
       const data = await res.json();
       if (!data.ok) {
         setPhase("error");
-        setError(data.error || "Failed to get QR code");
+        setError(data.error || t("gateway.weixin.qrPreparing"));
         return;
       }
-      setQrUrl(data.qrUrl);
-      setPhase("scanning");
+      requestedAtRef.current = data.requestedAt || new Date().toISOString();
 
       pollRef.current = window.setInterval(async () => {
         try {
           const pollRes = await authenticatedFetch("/api/gateway/weixin/qr-poll");
           const pollData = await pollRes.json();
-          if (pollData.pending) return;
-          if (pollRef.current) clearInterval(pollRef.current);
-          pollRef.current = null;
+          if (pollData.pending) {
+            if (
+              pollData.qrUrl
+              && isRuntimeCurrent(pollData.runtime, requestedAtRef.current)
+            ) {
+              clearPrepareTimeout();
+              setQrUrl(pollData.qrUrl);
+              setPhase("scanning");
+            }
+            return;
+          }
           if (pollData.ok) {
+            clearLoginTimers();
             setPhase("success");
             onSaved();
           } else {
+            if (!isRuntimeCurrent(pollData.runtime, requestedAtRef.current)) {
+              return;
+            }
+            clearLoginTimers();
             setPhase("error");
             setError(pollData.error || "Login failed");
           }
@@ -62,7 +112,14 @@ export default function WeixinChannelSection({
           // ignore network errors while polling
         }
       }, 2000);
+
+      prepareTimeoutRef.current = window.setTimeout(() => {
+        clearPoll();
+        setError(t("gateway.weixin.qrPreparing"));
+        setPhase("error");
+      }, WEIXIN_QR_PREPARE_TIMEOUT_MS);
     } catch (err: any) {
+      clearLoginTimers();
       setPhase("error");
       setError(err.message);
     }
@@ -70,6 +127,7 @@ export default function WeixinChannelSection({
 
   const handleDisable = async () => {
     try {
+      clearLoginTimers();
       await authenticatedFetch("/api/gateway/weixin/disable", { method: "POST" });
       onSaved();
     } catch {
@@ -149,10 +207,7 @@ export default function WeixinChannelSection({
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    if (pollRef.current) {
-                      clearInterval(pollRef.current);
-                      pollRef.current = null;
-                    }
+                    clearLoginTimers();
                     setPhase("idle");
                   }}
                 >

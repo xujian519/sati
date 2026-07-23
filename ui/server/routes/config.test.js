@@ -497,6 +497,64 @@ describe('config provider rename secret preservation', () => {
     expect(
       parseYaml(readFileSync(configPath, 'utf8')).model.providers['old-provider'].apiKey,
     ).toBe('sk-saved-secret');
+
+    const retryWithoutRenameMetadata = await request('/api/config', {
+      method: 'PUT',
+      body: JSON.stringify({ raw: renamed }),
+    });
+
+    expect(retryWithoutRenameMetadata.status).toBe(400);
+    expect(retryWithoutRenameMetadata.body.error).toContain(
+      'masked secrets could not be restored',
+    );
+    expect(
+      parseYaml(readFileSync(configPath, 'utf8')).model.providers['old-provider'].apiKey,
+    ).toBe('sk-saved-secret');
+  });
+});
+
+describe('config write revisions', () => {
+  it('rejects a stale full-config save instead of overwriting a newer write', async () => {
+    const initial = stringifyYaml({
+      schemaVersion: 1,
+      customEnv: { SAVE_VERSION: 'initial' },
+    });
+    const { request, configPath } = await createDiskConfigApp(initial);
+    const loaded = await request('/api/config');
+
+    expect(loaded.status).toBe(200);
+    expect(loaded.body.revision).toEqual(expect.any(String));
+
+    const firstWrite = await request('/api/config', {
+      method: 'PUT',
+      body: JSON.stringify({
+        raw: stringifyYaml({
+          schemaVersion: 1,
+          customEnv: { SAVE_VERSION: 'first' },
+        }),
+        baseRevision: loaded.body.revision,
+      }),
+    });
+
+    expect(firstWrite.status).toBe(200);
+    expect(firstWrite.body.revision).not.toBe(loaded.body.revision);
+
+    const staleWrite = await request('/api/config', {
+      method: 'PUT',
+      body: JSON.stringify({
+        raw: stringifyYaml({
+          schemaVersion: 1,
+          customEnv: { SAVE_VERSION: 'stale' },
+        }),
+        baseRevision: loaded.body.revision,
+      }),
+    });
+
+    expect(staleWrite.status).toBe(409);
+    expect(staleWrite.body.code).toBe('CONFIG_CONFLICT');
+    expect(
+      parseYaml(readFileSync(configPath, 'utf8')).customEnv.SAVE_VERSION,
+    ).toBe('first');
   });
 });
 

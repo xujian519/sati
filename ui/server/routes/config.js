@@ -2,12 +2,14 @@ import express from 'express';
 import fsPromises from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
+import { createHash } from 'crypto';
 import { prepareBackgroundSpawnOptions } from '../utils/processSpawn.js';
 import { parse as parseYaml } from 'yaml';
 import {
   buildDefaultPilotDeckConfig,
   configToYaml,
   getPilotDeckConfigPath,
+  hasUnresolvedMaskedSecrets,
   maskSecrets,
   parseConfigYaml,
   preserveMaskedSecrets,
@@ -184,12 +186,17 @@ function restoreRenamedProviderSecrets(nextConfig, previousConfig, rawRenames) {
   return { config: nextConfig };
 }
 
+function configRevision(raw) {
+  return createHash('sha256').update(String(raw ?? '')).digest('hex');
+}
+
 function serializeConfigResponse(record, reloadResult = null) {
   if (record.parseError) {
     return {
       exists: record.exists,
       path: record.configPath,
       raw: record.raw,
+      revision: configRevision(record.raw),
       config: maskSecrets(record.config),
       configDisabled: true,
       parseError: record.parseError,
@@ -215,6 +222,7 @@ function serializeConfigResponse(record, reloadResult = null) {
     exists: record.exists,
     path: record.configPath,
     raw,
+    revision: configRevision(raw),
     config: maskedConfig,
     validation: {
       valid: validation.valid,
@@ -439,6 +447,19 @@ router.put('/', async (req, res) => {
     // never collapse the two paths into one — they have different
     // semantics and different callers.
     const diskRecord = readPilotDeckConfigFile();
+    const baseRevision = typeof req.body?.baseRevision === 'string'
+      ? req.body.baseRevision.trim()
+      : '';
+    if (baseRevision) {
+      const currentRevision = serializeConfigResponse(diskRecord).revision;
+      if (baseRevision !== currentRevision) {
+        return res.status(409).json({
+          error: 'Config changed since this settings draft was loaded. Refresh and apply the change again.',
+          code: 'CONFIG_CONFLICT',
+          currentRevision,
+        });
+      }
+    }
     const rawString = typeof req.body?.raw === 'string' ? req.body.raw : null;
 
     let saved;
@@ -473,6 +494,11 @@ router.put('/', async (req, res) => {
       const restored = diskRecord.parseError
         ? renamedConfig
         : preserveMaskedSecrets(renamedConfig, diskRecord.rawYaml ?? {});
+      if (hasUnresolvedMaskedSecrets(restored)) {
+        return res.status(400).json({
+          error: 'One or more masked secrets could not be restored. Enter those credentials again before saving.',
+        });
+      }
       suppressNextWatchEvent();
       saved = await writeRawPilotDeckYaml(restored);
     } else if (req.body?.config && typeof req.body.config === 'object') {
@@ -502,6 +528,11 @@ router.put('/', async (req, res) => {
         return res.status(400).json({ error: maskedKeyError });
       }
       const restored = preserveMaskedSecrets(renamedConfig, diskRecord.config);
+      if (hasUnresolvedMaskedSecrets(restored)) {
+        return res.status(400).json({
+          error: 'One or more masked secrets could not be restored. Enter those credentials again before saving.',
+        });
+      }
       suppressNextWatchEvent();
       saved = await writePilotDeckConfig(restored);
     } else {
