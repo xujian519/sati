@@ -4,7 +4,24 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import CodeEditorBinaryFile from './CodeEditorBinaryFile';
 
 vi.mock('./PdfDocumentPreview', () => ({
-  default: () => <div>PDF preview</div>,
+  default: ({
+    navigationMode,
+    showPageControls,
+    onToggleFullscreen,
+  }: {
+    navigationMode?: string;
+    showPageControls?: boolean;
+    onToggleFullscreen?: (() => void) | null;
+  }) => (
+    <button
+      type="button"
+      data-navigation-mode={navigationMode}
+      data-page-controls={String(showPageControls !== false)}
+      onClick={() => onToggleFullscreen?.()}
+    >
+      PDF preview
+    </button>
+  ),
 }));
 
 const baseProps = {
@@ -32,10 +49,31 @@ describe('CodeEditorBinaryFile', () => {
     expect(screen.getByText('archive.bin')).not.toBeNull();
   });
 
-  it('uses a toolbar-only overlay in workspace mode', () => {
+  it('does not add an empty overlay above the workspace file tabs', () => {
     const { container } = render(<CodeEditorBinaryFile {...baseProps} compactHeader />);
 
     expect(screen.queryByText('archive.bin')).toBeNull();
-    expect(container.querySelector('.absolute.right-2.top-1')).not.toBeNull();
+    expect(container.querySelector('.absolute.right-2.top-1')).toBeNull();
+  });
+
+  it('enables page navigation and workspace expansion for PDF files', () => {
+    const onToggleExpand = vi.fn();
+    render(
+      <CodeEditorBinaryFile
+        {...baseProps}
+        file={{
+          name: 'report.pdf',
+          path: '/workspace/hundouluo/report.pdf',
+          diffInfo: null,
+        }}
+        onToggleExpand={onToggleExpand}
+      />,
+    );
+
+    const preview = screen.getByRole('button', { name: 'PDF preview' });
+    expect(preview.getAttribute('data-navigation-mode')).toBe('pages');
+    expect(preview.getAttribute('data-page-controls')).toBe('true');
+    preview.click();
+    expect(onToggleExpand).toHaveBeenCalledOnce();
   });
 });
