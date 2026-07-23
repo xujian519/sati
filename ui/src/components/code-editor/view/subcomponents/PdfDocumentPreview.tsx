@@ -30,6 +30,11 @@ import {
 } from '../../../../types/documentSelection';
 import type { PdfNavigationMode } from '../../utils/documentPreview';
 import { resolvePdfOutline, type PdfOutlineItem } from '../../utils/pdfOutline';
+import {
+  findPdfSearchMatches,
+  renderPdfSearchHighlights,
+  type PdfSearchMatch,
+} from '../../utils/pdfSearch';
 
 type PdfDocumentPreviewProps = {
   blob?: Blob;
@@ -92,7 +97,9 @@ type PdfPageProps = {
   basePageSize: PageSize;
   viewerRootRef: RefObject<HTMLDivElement | null>;
   forceRender: boolean;
-  onPageText: (pageNumber: number, text: string) => void;
+  searchMatches: PdfSearchMatch[];
+  selectedSearchMatchId: string | null;
+  onPageText: (pageNumber: number, text: string, textItems: string[]) => void;
   onPageVisibilityChange: (pageNumber: number, visible: boolean) => void;
 };
 
@@ -178,22 +185,6 @@ function parsePageInput(value: string, totalPages: number): number | null {
   const parsed = Number.parseInt(value.trim(), 10);
   if (!Number.isFinite(parsed)) return null;
   return Math.round(clamp(parsed, 1, Math.max(1, totalPages)));
-}
-
-function countTextOccurrences(text: string, query: string): number {
-  const normalizedText = normalizeText(text).toLocaleLowerCase();
-  const normalizedQuery = normalizeText(query).toLocaleLowerCase();
-  if (!normalizedText || !normalizedQuery) return 0;
-
-  let count = 0;
-  let offset = 0;
-  while (offset < normalizedText.length) {
-    const index = normalizedText.indexOf(normalizedQuery, offset);
-    if (index < 0) break;
-    count += 1;
-    offset = index + Math.max(normalizedQuery.length, 1);
-  }
-  return count;
 }
 
 function buildSurroundingText(documentText: string, selectedText: string): string {
@@ -528,12 +519,18 @@ function PdfPage({
   basePageSize,
   viewerRootRef,
   forceRender,
+  searchMatches,
+  selectedSearchMatchId,
   onPageText,
   onPageVisibilityChange,
 }: PdfPageProps) {
   const pageRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerRef = useRef<HTMLDivElement | null>(null);
+  const textLayerMappingRef = useRef<{
+    textDivs: HTMLElement[];
+    textItems: string[];
+  } | null>(null);
   const [isIntersectionVisible, setIsIntersectionVisible] = useState(false);
   const estimatedPageSize = useMemo(() => {
     const rotated = getRotatedPageSize(basePageSize, rotation);
@@ -547,6 +544,7 @@ function PdfPage({
   const [renderError, setRenderError] = useState<string | null>(null);
   const [isRendering, setIsRendering] = useState(false);
   const [hasRendered, setHasRendered] = useState(false);
+  const [textLayerRenderVersion, setTextLayerRenderVersion] = useState(0);
   const shouldRender = isIntersectionVisible || forceRender;
 
   useEffect(() => {
@@ -584,6 +582,7 @@ function PdfPage({
         canvas.style.height = '';
       }
       textLayerRef.current?.replaceChildren();
+      textLayerMappingRef.current = null;
       setRenderError(null);
       setIsRendering(false);
       setHasRendered(false);
@@ -624,14 +623,6 @@ function PdfPage({
         const textContent = await page.getTextContent();
         if (cancelled) return;
 
-        onPageText(
-          pageNumber,
-          textContent.items
-            .map((item) => ('str' in item ? item.str : ''))
-            .filter(Boolean)
-            .join(' '),
-        );
-
         textLayerContainer.replaceChildren();
         textLayer = new pdfjs.TextLayer({
           textContentSource: textContent,
@@ -640,6 +631,13 @@ function PdfPage({
         });
         await textLayer.render();
         if (!cancelled) {
+          const textItems = textLayer.textContentItemsStr;
+          textLayerMappingRef.current = {
+            textDivs: textLayer.textDivs,
+            textItems,
+          };
+          onPageText(pageNumber, textItems.join(' '), textItems);
+          setTextLayerRenderVersion((version) => version + 1);
           setHasRendered(true);
           setIsRendering(false);
         }
@@ -663,6 +661,27 @@ function PdfPage({
       ignorePdfCleanupError(() => textLayer?.cancel?.());
     };
   }, [shouldRender, onPageText, pageNumber, pdfDocument, rotation, scale]);
+
+  useEffect(() => {
+    const mapping = textLayerMappingRef.current;
+    if (!mapping || textLayerRenderVersion === 0) return undefined;
+
+    const selectedElement = renderPdfSearchHighlights(
+      mapping.textDivs,
+      mapping.textItems,
+      searchMatches,
+      selectedSearchMatchId,
+    );
+    if (!selectedElement) return undefined;
+
+    const frame = window.requestAnimationFrame(() => {
+      selectedElement.scrollIntoView({
+        block: 'center',
+        inline: 'center',
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [searchMatches, selectedSearchMatchId, textLayerRenderVersion]);
 
   const pageStyle = {
     width: pageSize.width,
@@ -717,6 +736,7 @@ export default function PdfDocumentPreview({
   const inputId = useId();
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const pageTextRef = useRef(new Map<number, string>());
+  const pageTextItemsRef = useRef(new Map<number, string[]>());
   const visiblePageNumbersRef = useRef(new Set<number>());
   const forcedRenderPageNumbersRef = useRef(new Set<number>());
   const scrollRafRef = useRef<number | null>(null);
@@ -745,7 +765,7 @@ export default function PdfDocumentPreview({
   const [outlineItems, setOutlineItems] = useState<PdfOutlineItem[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<number[]>([]);
+  const [searchResults, setSearchResults] = useState<PdfSearchMatch[]>([]);
   const [searchResultIndex, setSearchResultIndex] = useState(-1);
   const [searching, setSearching] = useState(false);
   const [searchCompleted, setSearchCompleted] = useState(false);
@@ -799,6 +819,7 @@ export default function PdfDocumentPreview({
     pendingRestoreRef.current = nextViewState;
     viewStateRef.current = nextViewState;
     pageTextRef.current = new Map();
+    pageTextItemsRef.current = new Map();
     visiblePageNumbersRef.current = new Set();
     forcedRenderPageNumbersRef.current = new Set();
     setForcedRenderPageNumbers(new Set());
@@ -1035,8 +1056,9 @@ export default function PdfDocumentPreview({
     scheduleCurrentPageUpdate();
   }, [scheduleCurrentPageUpdate, scheduleForcedRenderUpdate]);
 
-  const handlePageText = useCallback((pageNumber: number, text: string) => {
+  const handlePageText = useCallback((pageNumber: number, text: string, textItems: string[]) => {
     pageTextRef.current.set(pageNumber, text);
+    pageTextItemsRef.current.set(pageNumber, textItems);
   }, []);
 
   const jumpToPage = useCallback((pageNumber: number) => {
@@ -1059,7 +1081,7 @@ export default function PdfDocumentPreview({
       return;
     }
     const nextIndex = (index + results.length) % results.length;
-    const pageNumber = results[nextIndex];
+    const pageNumber = results[nextIndex].pageNumber;
     forcedRenderPageNumbersRef.current.add(pageNumber);
     setForcedRenderPageNumbers(new Set(forcedRenderPageNumbersRef.current));
     setSearchResultIndex(nextIndex);
@@ -1081,24 +1103,22 @@ export default function PdfDocumentPreview({
     }
 
     setSearching(true);
-    const nextResults: number[] = [];
+    const nextResults: PdfSearchMatch[] = [];
 
     try {
       for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
         if (searchRequestIdRef.current !== requestId) return;
-        let pageText = pageTextRef.current.get(pageNumber);
-        if (pageText === undefined) {
+        let textItems = pageTextItemsRef.current.get(pageNumber);
+        if (textItems === undefined) {
           const page = await document.getPage(pageNumber);
           const textContent = await page.getTextContent();
-          pageText = textContent.items
+          textItems = textContent.items
             .map((item) => ('str' in item ? item.str : ''))
-            .filter(Boolean)
-            .join(' ');
-          pageTextRef.current.set(pageNumber, pageText);
+            .filter(Boolean);
+          pageTextItemsRef.current.set(pageNumber, textItems);
+          pageTextRef.current.set(pageNumber, textItems.join(' '));
         }
-        if (countTextOccurrences(pageText, query) > 0) {
-          nextResults.push(pageNumber);
-        }
+        nextResults.push(...findPdfSearchMatches(textItems, query, pageNumber));
       }
     } catch {
       nextResults.length = 0;
@@ -1303,6 +1323,19 @@ export default function PdfDocumentPreview({
     setSelectionAction(null);
   };
 
+  const searchMatchesByPage = useMemo(() => {
+    const matchesByPage = new Map<number, PdfSearchMatch[]>();
+    searchResults.forEach((match) => {
+      const pageMatches = matchesByPage.get(match.pageNumber) || [];
+      pageMatches.push(match);
+      matchesByPage.set(match.pageNumber, pageMatches);
+    });
+    return matchesByPage;
+  }, [searchResults]);
+  const selectedSearchMatchId = searchResultIndex >= 0
+    ? searchResults[searchResultIndex]?.id || null
+    : null;
+
   if (errorMessage) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-white p-6 text-center text-[13px] text-red-500 dark:bg-neutral-950">
@@ -1344,7 +1377,6 @@ export default function PdfDocumentPreview({
         })
         : t('pdfToolbar.noResults')
       : '';
-
   return (
     <div className="flex h-full w-full flex-col bg-neutral-100 dark:bg-neutral-900">
       <div className="scrollbar-hide flex min-h-11 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-neutral-200 bg-white px-3 py-1.5 dark:border-neutral-800 dark:bg-neutral-950">
@@ -1674,6 +1706,8 @@ export default function PdfDocumentPreview({
                   basePageSize={readyDocument.firstPageSize}
                   viewerRootRef={viewerRef}
                   forceRender={forcedRenderPageNumbers.has(index + 1)}
+                  searchMatches={searchMatchesByPage.get(index + 1) || []}
+                  selectedSearchMatchId={selectedSearchMatchId}
                   onPageText={handlePageText}
                   onPageVisibilityChange={handlePageVisibilityChange}
                 />
