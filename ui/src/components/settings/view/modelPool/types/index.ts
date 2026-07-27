@@ -103,9 +103,8 @@ export type PilotDeckConfig = {
       workspacesRoot?: string;
     };
     officePreview?: {
-      service?: "none" | "libreoffice" | string;
+      service?: "builtin" | "libreoffice" | string;
       binaryPath?: string;
-      spreadsheetMode?: "auto" | "interactive" | "print" | string;
     };
   };
   customEnv?: Record<string, string>;

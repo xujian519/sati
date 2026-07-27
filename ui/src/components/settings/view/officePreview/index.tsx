@@ -5,11 +5,9 @@ import { usePilotDeckConfig } from "../../../../hooks/usePilotDeckConfig";
 import { cn } from "../../../../lib/utils";
 import {
   normalizeOfficePreviewService,
-  normalizeSpreadsheetPreviewMode,
   readOfficePreviewStatus,
   type OfficePreviewService,
   type OfficePreviewStatus,
-  type SpreadsheetPreviewMode,
 } from "../../../../utils/officePreviewStatus";
 import {
   FormRow,
@@ -44,9 +42,6 @@ function OfficePreviewSection({
   const [scanListOpen, setScanListOpen] = useState(false);
   const service = normalizeOfficePreviewService(
     config.webui?.officePreview?.service,
-  );
-  const spreadsheetMode = normalizeSpreadsheetPreviewMode(
-    config.webui?.officePreview?.spreadsheetMode,
   );
 
   useEffect(() => {
@@ -95,10 +90,6 @@ function OfficePreviewSection({
     onChange(
       patch(config, ["webui", "officePreview", "service"], next),
     );
-  const setSpreadsheetMode = (next: SpreadsheetPreviewMode) =>
-    onChange(
-      patch(config, ["webui", "officePreview", "spreadsheetMode"], next),
-    );
   const setBinaryPath = (next: string) =>
     onChange(
       patch(config, ["webui", "officePreview", "binaryPath"], next),
@@ -121,44 +112,6 @@ function OfficePreviewSection({
         <div className="divide-y divide-border">
           <FormRow
             label={t(
-              "pilotDeckConfig.panels.officePreview.fields.spreadsheetMode.label",
-            )}
-            description={t(
-              "pilotDeckConfig.panels.officePreview.fields.spreadsheetMode.description",
-            )}
-          >
-            <div className="max-w-xs">
-              <Select
-                value={spreadsheetMode}
-                onChange={(value) =>
-                  setSpreadsheetMode(value as SpreadsheetPreviewMode)
-                }
-                options={[
-                  {
-                    value: "auto",
-                    label: t(
-                      "pilotDeckConfig.panels.officePreview.options.spreadsheetAuto",
-                    ),
-                  },
-                  {
-                    value: "interactive",
-                    label: t(
-                      "pilotDeckConfig.panels.officePreview.options.spreadsheetInteractive",
-                    ),
-                  },
-                  {
-                    value: "print",
-                    label: t(
-                      "pilotDeckConfig.panels.officePreview.options.spreadsheetPrint",
-                    ),
-                  },
-                ]}
-              />
-            </div>
-          </FormRow>
-
-          <FormRow
-            label={t(
               "pilotDeckConfig.panels.officePreview.fields.service.label",
             )}
             description={t(
@@ -173,9 +126,9 @@ function OfficePreviewSection({
                 }
                 options={[
                   {
-                    value: "none",
+                    value: "builtin",
                     label: t(
-                      "pilotDeckConfig.panels.officePreview.options.none",
+                      "pilotDeckConfig.panels.officePreview.options.builtin",
                     ),
                   },
                   {
@@ -405,10 +358,10 @@ function OfficePreviewSection({
               </div>
             )}
 
-            {service === "none" && (
+            {service === "builtin" && (
               <div className="rounded-md bg-muted/30 px-3 py-2 text-[11px] leading-4 text-muted-foreground">
                 {t(
-                  "pilotDeckConfig.panels.officePreview.disabledNote",
+                  "pilotDeckConfig.panels.officePreview.builtinNote",
                 )}
               </div>
             )}

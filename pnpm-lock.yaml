@@ -99,6 +99,9 @@ importers:
 
   ui:
     dependencies:
+      '@aiden0z/pptx-renderer':
+        specifier: 1.2.4
+        version: 1.2.4(pdfjs-dist@6.1.200)
       '@codemirror/lang-css':
         specifier: ^6.3.1
         version: 6.3.1
@@ -237,6 +240,9 @@ importers:
       cross-spawn:
         specifier: ^7.0.3
         version: 7.0.6
+      docx-preview:
+        specifier: 0.4.0
+        version: 0.4.0
       exceljs:
         specifier: 4.4.0
         version: 4.4.0
@@ -417,6 +423,14 @@ importers:
         version: 4.1.7(@types/node@22.19.19)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@7.3.3(@types/node@22.19.19)(jiti@1.21.7)(tsx@4.22.3)(yaml@2.9.0))
 
 packages:
+
+  '@aiden0z/pptx-renderer@1.2.4':
+    resolution: {integrity: sha512-/4X/BApiknc/JM4nAWQRp5zrnA2GKSMv5r1u3XLsMvySw9DTQjyXIKRtltRsmIYfoN32tHGFnrSlGok7nFS60w==}
+    peerDependencies:
+      pdfjs-dist: '>=5 <7'
+    peerDependenciesMeta:
+      pdfjs-dist:
+        optional: true
 
   '@alcalzone/ansi-tokenize@0.3.0':
     resolution: {integrity: sha512-p+CMKJ93HFmLkjXKlXiVGlMQEuRb6H0MokBSwUsX+S6BRX8eV5naFZpQJFfJHjRZY0Hmnqy1/r6UWl3x+19zYA==}
@@ -3454,6 +3468,9 @@ packages:
     resolution: {integrity: sha512-35mSku4ZXK0vfCuHEDAwt55dg2jNajHZ1odvF+8SSr82EsZY4QmXfuWso8oEd8zRhVObSN18aM0CjSdoBX7zIw==}
     engines: {node: '>=0.10.0'}
 
+  docx-preview@0.4.0:
+    resolution: {integrity: sha512-OdKtE/uj3M4RfGarLkGjahUzRg8/kBp0Sraj1r1NAY1tp/sTpHOBqDrzVf9onMBt9vxP6SdQ6bpLCUCsFwjgcA==}
+
   dom-accessibility-api@0.5.16:
     resolution: {integrity: sha512-X7BJ2yElsnOJ30pZF4uIIDfBEVgF4XEBxL9Bxhy6dnrm5hkzqmsWHGTiHqRiITNhMyFLyAiWndIJP7Z1NTteDg==}
 
@@ -3472,6 +3489,9 @@ packages:
 
   ecdsa-sig-formatter@1.0.11:
     resolution: {integrity: sha512-nagl3RYrbNv6kQkeJIpt6NJZy8twLB/2vtz6yN9Z4vRKHN4/QZJIEbqohALSgwKdnksuY3k5Addp5lg8sVoVcQ==}
+
+  echarts@6.1.0:
+    resolution: {integrity: sha512-q0yaFPggC9FUdsWH4blavRWFmxdrIodbkoKNAjJudAI6CA9gNPxHtV2RcZNEepZVlk4yvBYkOkbk6HIVpIyHZA==}
 
   edgeclaw-memory-core@file:src/context/memory/edgeclaw-memory-core:
     resolution: {directory: src/context/memory/edgeclaw-memory-core, type: directory}
@@ -5992,6 +6012,9 @@ packages:
   ts-interface-checker@0.1.13:
     resolution: {integrity: sha512-Y/arvbn+rrz3JCKl9C4kVNfTfSm2/mEp5FSz5EsZSANGPSlQrpRI5M4PKF+mJnE52jOO90PnPSc3Ur3bTQw0gA==}
 
+  tslib@2.3.0:
+    resolution: {integrity: sha512-N82ooyxVNm6h1riLCoyS9e3fuJ3AMG2zIZs2Gd1ATcSFjSA23Q0fzjjZeh0jbJvWVDZ0cJT8yaNNaaXHzueNjg==}
+
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
@@ -6433,10 +6456,20 @@ packages:
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
+  zrender@6.1.0:
+    resolution: {integrity: sha512-oEGMDB6pOP2S6OwRR4PdVv610zrjnA3Bh+JnSG12fYJlBKjtNAoEb5fSUoCOOINlH96I2fU38/A2UpRKs67xYQ==}
+
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
 snapshots:
+
+  '@aiden0z/pptx-renderer@1.2.4(pdfjs-dist@6.1.200)':
+    dependencies:
+      echarts: 6.1.0
+      jszip: 3.10.1
+    optionalDependencies:
+      pdfjs-dist: 6.1.200
 
   '@alcalzone/ansi-tokenize@0.3.0':
     dependencies:
@@ -9527,6 +9560,10 @@ snapshots:
     dependencies:
       esutils: 2.0.3
 
+  docx-preview@0.4.0:
+    dependencies:
+      jszip: 3.10.1
+
   dom-accessibility-api@0.5.16: {}
 
   dom-helpers@5.2.1:
@@ -9551,6 +9588,11 @@ snapshots:
   ecdsa-sig-formatter@1.0.11:
     dependencies:
       safe-buffer: 5.2.1
+
+  echarts@6.1.0:
+    dependencies:
+      tslib: 2.3.0
+      zrender: 6.1.0
 
   edgeclaw-memory-core@file:src/context/memory/edgeclaw-memory-core: {}
 
@@ -12800,6 +12842,8 @@ snapshots:
 
   ts-interface-checker@0.1.13: {}
 
+  tslib@2.3.0: {}
+
   tslib@2.8.1: {}
 
   tsx@4.22.3:
@@ -13254,5 +13298,9 @@ snapshots:
       zod: 4.4.3
 
   zod@4.4.3: {}
+
+  zrender@6.1.0:
+    dependencies:
+      tslib: 2.3.0
 
   zwitch@2.0.4: {}

@@ -5,8 +5,7 @@ import { api } from '../../../../utils/api';
 import CodeEditorBinaryFile from './CodeEditorBinaryFile';
 
 const readOfficePreviewStatusMock = vi.hoisted(() => vi.fn(async () => ({
-  service: 'none',
-  spreadsheetMode: 'auto',
+  service: 'builtin',
   libreOffice: {
     available: false,
   },
@@ -51,6 +50,14 @@ vi.mock('./SpreadsheetInteractivePreview', () => ({
       Active worksheet {activeSheetIndex}
     </div>
   ),
+}));
+
+vi.mock('./DocxBuiltinPreview', () => ({
+  default: () => <div>Built-in DOCX preview</div>,
+}));
+
+vi.mock('./PptxBuiltinPreview', () => ({
+  default: () => <div>Built-in PPTX preview</div>,
 }));
 
 const baseProps = {
@@ -186,7 +193,6 @@ describe('CodeEditorBinaryFile', () => {
   it('uses only the configured print renderer without showing a per-file view switch', async () => {
     readOfficePreviewStatusMock.mockResolvedValueOnce({
       service: 'libreoffice',
-      spreadsheetMode: 'print',
       libreOffice: {
         available: true,
       },
@@ -225,5 +231,40 @@ describe('CodeEditorBinaryFile', () => {
     expect(screen.queryByText('spreadsheetPreview.interactiveView')).toBeNull();
     expect(screen.queryByText('spreadsheetPreview.printView')).toBeNull();
     expect(screen.queryByTitle('pdfToolbar.zoomOut')).toBeNull();
+  });
+
+  it('uses the bundled DOCX renderer in built-in mode', async () => {
+    vi.spyOn(api, 'readFileBlob').mockResolvedValue(
+      new Response(new Blob(['docx-data']), { status: 200 }),
+    );
+
+    render(
+      <CodeEditorBinaryFile
+        {...baseProps}
+        file={{
+          name: 'report.docx',
+          path: '/workspace/hundouluo/report.docx',
+          diffInfo: null,
+        }}
+      />,
+    );
+
+    expect(await screen.findByText('Built-in DOCX preview')).not.toBeNull();
+  });
+
+  it('guides legacy Office formats to LibreOffice while built-in preview is selected', async () => {
+    render(
+      <CodeEditorBinaryFile
+        {...baseProps}
+        file={{
+          name: 'legacy-report.doc',
+          path: '/workspace/hundouluo/legacy-report.doc',
+          diffInfo: null,
+        }}
+      />,
+    );
+
+    expect(await screen.findByText('officePreview.unsupportedBuiltinTitle')).not.toBeNull();
+    expect(screen.getByText('officePreview.configureService')).not.toBeNull();
   });
 });

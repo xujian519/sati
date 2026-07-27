@@ -30,11 +30,10 @@ function useTempConfig(contents, filename = 'pilotdeck.yaml') {
 }
 
 describe('readPilotDeckConfigFile fallback behavior', () => {
-    it('disables Office preview by default', () => {
+    it('uses built-in Office preview by default', () => {
         expect(buildDefaultPilotDeckConfig().webui.officePreview).toEqual({
-            service: 'none',
+            service: 'builtin',
             binaryPath: '',
-            spreadsheetMode: 'auto',
         });
     });
 
@@ -49,7 +48,7 @@ describe('readPilotDeckConfigFile fallback behavior', () => {
         expect(record.rawYaml).toEqual({});
         expect(record.parseError).toBeNull();
         expect(record.config.schemaVersion).toBe(1);
-        expect(record.config.webui.officePreview.service).toBe('none');
+        expect(record.config.webui.officePreview.service).toBe('builtin');
     });
 
     it('reads and normalizes valid YAML', () => {
@@ -80,18 +79,65 @@ describe('readPilotDeckConfigFile fallback behavior', () => {
 });
 
 describe('validatePilotDeckConfig gateway validation', () => {
-    it('rejects unsupported spreadsheet preview modes', () => {
+    it('migrates the legacy interactive spreadsheet mode to built-in preview', () => {
         const validation = validatePilotDeckConfig({
             webui: {
                 officePreview: {
-                    spreadsheetMode: 'canvas',
+                    service: 'libreoffice',
+                    spreadsheetMode: 'auto',
+                },
+            },
+        });
+
+        expect(validation.valid).toBe(true);
+        expect(validation.config.webui.officePreview).toEqual({
+            service: 'builtin',
+            binaryPath: '',
+        });
+    });
+
+    it('migrates the legacy print spreadsheet mode to LibreOffice preview', () => {
+        const validation = validatePilotDeckConfig({
+            webui: {
+                officePreview: {
+                    service: 'libreoffice',
+                    spreadsheetMode: 'print',
+                },
+            },
+        });
+
+        expect(validation.valid).toBe(true);
+        expect(validation.config.webui.officePreview).toEqual({
+            service: 'libreoffice',
+            binaryPath: '',
+        });
+    });
+
+    it('migrates the legacy disabled Office service to built-in preview', () => {
+        const validation = validatePilotDeckConfig({
+            webui: {
+                officePreview: {
+                    service: 'none',
+                },
+            },
+        });
+
+        expect(validation.valid).toBe(true);
+        expect(validation.config.webui.officePreview.service).toBe('builtin');
+    });
+
+    it('rejects unsupported Office preview services', () => {
+        const validation = validatePilotDeckConfig({
+            webui: {
+                officePreview: {
+                    service: 'unexpected',
                 },
             },
         });
 
         expect(validation.valid).toBe(false);
         expect(validation.errors).toContain(
-            'webui.officePreview.spreadsheetMode must be "auto", "interactive", or "print"',
+            'webui.officePreview.service must be "builtin" or "libreoffice"',
         );
     });
 

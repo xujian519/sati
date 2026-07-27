@@ -86,11 +86,10 @@ import settingsRoutes from './routes/settings.js';
 import configRoutes from './routes/config.js';
 import gatewayRoutes from './routes/gateway.js';
 import {
+    OFFICE_PREVIEW_SERVICE_BUILTIN,
     OFFICE_PREVIEW_SERVICE_LIBREOFFICE,
-    OFFICE_PREVIEW_SERVICE_NONE,
     convertOfficeDocumentToPdf,
     getConfiguredOfficePreviewService,
-    getConfiguredSpreadsheetPreviewMode,
     getLibreOfficeCandidateStatuses,
     getLibreOfficeStatus,
 } from './services/officePreview.js';
@@ -1421,21 +1420,19 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
 app.get('/api/office-preview/status', authenticateToken, officePreviewStatusRateLimiter, async (req, res) => {
     try {
         const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
-        const [libreOffice, candidates, service, spreadsheetMode] = await Promise.all([
+        const [libreOffice, candidates, service] = await Promise.all([
             getLibreOfficeStatus({ forceRefresh }),
             getLibreOfficeCandidateStatuses({ forceRefresh }),
             Promise.resolve(getConfiguredOfficePreviewService()),
-            Promise.resolve(getConfiguredSpreadsheetPreviewMode()),
         ]);
         res.json({
             service,
-            spreadsheetMode,
             libreOffice: {
                 ...libreOffice,
                 candidates,
             },
             supportedServices: [
-                OFFICE_PREVIEW_SERVICE_NONE,
+                OFFICE_PREVIEW_SERVICE_BUILTIN,
                 OFFICE_PREVIEW_SERVICE_LIBREOFFICE,
             ],
         });
@@ -1483,10 +1480,10 @@ app.get('/api/projects/:projectName/files/preview/pdf', authenticateToken, offic
         }
 
         const officePreviewService = getConfiguredOfficePreviewService();
-        if (officePreviewService === OFFICE_PREVIEW_SERVICE_NONE) {
+        if (officePreviewService !== OFFICE_PREVIEW_SERVICE_LIBREOFFICE) {
             return res.status(409).json({
-                error: 'Office preview service is disabled',
-                code: 'OFFICE_PREVIEW_DISABLED',
+                error: 'LibreOffice preview service is not selected',
+                code: 'LIBREOFFICE_PREVIEW_NOT_SELECTED',
             });
         }
 
@@ -1538,11 +1535,11 @@ app.get('/api/projects/:projectName/files/preview/spreadsheet/manifest', authent
         }
         if (
             extension !== 'xlsx'
-            && getConfiguredOfficePreviewService() === OFFICE_PREVIEW_SERVICE_NONE
+            && getConfiguredOfficePreviewService() !== OFFICE_PREVIEW_SERVICE_LIBREOFFICE
         ) {
             return res.status(409).json({
                 error: 'Legacy spreadsheet preview requires LibreOffice',
-                code: 'OFFICE_PREVIEW_DISABLED',
+                code: 'LIBREOFFICE_PREVIEW_NOT_SELECTED',
             });
         }
         const manifest = await getSpreadsheetPreviewManifest(resolvedResult.resolved, { force });
@@ -1581,11 +1578,11 @@ app.get('/api/projects/:projectName/files/preview/spreadsheet/data', authenticat
         }
         if (
             extension !== 'xlsx'
-            && getConfiguredOfficePreviewService() === OFFICE_PREVIEW_SERVICE_NONE
+            && getConfiguredOfficePreviewService() !== OFFICE_PREVIEW_SERVICE_LIBREOFFICE
         ) {
             return res.status(409).json({
                 error: 'Legacy spreadsheet preview requires LibreOffice',
-                code: 'OFFICE_PREVIEW_DISABLED',
+                code: 'LIBREOFFICE_PREVIEW_NOT_SELECTED',
             });
         }
 
@@ -1627,10 +1624,10 @@ app.get('/api/projects/:projectName/files/preview/spreadsheet/sheet', authentica
             return res.status(400).json({ error: 'Unsupported spreadsheet preview format' });
         }
         const officePreviewService = getConfiguredOfficePreviewService();
-        if (officePreviewService === OFFICE_PREVIEW_SERVICE_NONE) {
+        if (officePreviewService !== OFFICE_PREVIEW_SERVICE_LIBREOFFICE) {
             return res.status(409).json({
-                error: 'Office preview service is disabled',
-                code: 'OFFICE_PREVIEW_DISABLED',
+                error: 'LibreOffice preview service is not selected',
+                code: 'LIBREOFFICE_PREVIEW_NOT_SELECTED',
             });
         }
 

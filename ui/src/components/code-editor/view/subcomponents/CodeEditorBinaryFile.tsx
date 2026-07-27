@@ -10,15 +10,32 @@ import {
 import type { IWorkbookData } from '@univerjs/core';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../../utils/api';
-import { readOfficePreviewStatus, type OfficePreviewStatus } from '../../../../utils/officePreviewStatus';
+import {
+  readOfficePreviewStatus,
+  type OfficePreviewService,
+  type OfficePreviewStatus,
+} from '../../../../utils/officePreviewStatus';
 import type { CodeEditorFile } from '../../types/types';
-import { isImageFile, isOfficeFile, isPdfFile, isSpreadsheetFile } from '../../utils/binaryFile';
+import {
+  isBuiltinOfficeFile,
+  isImageFile,
+  isOfficeFile,
+  isPdfFile,
+  isSpreadsheetFile,
+  isWordFile,
+} from '../../utils/binaryFile';
 import { getPdfNavigationMode } from '../../utils/documentPreview';
 import PdfDocumentPreview from './PdfDocumentPreview';
 import SpreadsheetTabs, { type SpreadsheetSheetTab } from './SpreadsheetTabs';
 
 const SpreadsheetInteractivePreview = lazy(
   () => import('./SpreadsheetInteractivePreview'),
+);
+const DocxBuiltinPreview = lazy(
+  () => import('./DocxBuiltinPreview'),
+);
+const PptxBuiltinPreview = lazy(
+  () => import('./PptxBuiltinPreview'),
 );
 
 type CodeEditorBinaryFileProps = {
@@ -55,8 +72,6 @@ type SpreadsheetInteractivePreviewData = SpreadsheetPreviewManifest & {
   warnings: SpreadsheetPreviewWarning[];
   workbook: IWorkbookData;
 };
-
-type SpreadsheetPreviewView = 'interactive' | 'print';
 
 function getExtension(filename: string): string {
   return filename.split('.').pop()?.toLowerCase() ?? '';
@@ -864,6 +879,7 @@ function SpreadsheetPreviewToolbar({
 }
 
 function SpreadsheetPreview({
+  service,
   projectName,
   file,
   title,
@@ -871,6 +887,7 @@ function SpreadsheetPreview({
   isFullscreen,
   onToggleFullscreen,
 }: {
+  service: OfficePreviewService;
   projectName?: string;
   file: CodeEditorFile;
   title: string;
@@ -879,15 +896,10 @@ function SpreadsheetPreview({
   onToggleFullscreen?: (() => void) | null;
 }) {
   const { t } = useTranslation('codeEditor');
-  const {
-    status: previewServiceStatus,
-    loading: previewServiceLoading,
-  } = useOfficePreviewService();
   const [zoom, setZoom] = useState(1);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
-  const configuredMode = previewServiceStatus?.spreadsheetMode || 'auto';
-  const requestedView: SpreadsheetPreviewView = configuredMode === 'print' ? 'print' : 'interactive';
-  const interactiveEnabled = !previewServiceLoading && requestedView === 'interactive';
+  const usePrintPreview = service === 'libreoffice';
+  const interactiveEnabled = !usePrintPreview;
   const {
     data: interactiveData,
     errorMessage: interactiveError,
@@ -895,16 +907,7 @@ function SpreadsheetPreview({
     reload: reloadInteractive,
   } = useSpreadsheetInteractivePreview(projectName, file.path, interactiveEnabled);
   const interactiveFailure = interactiveError || runtimeError;
-  const shouldAutoFallback = configuredMode === 'auto'
-    && Boolean(interactiveFailure)
-    && previewServiceStatus?.service === 'libreoffice';
-  const activeView: SpreadsheetPreviewView = requestedView === 'print' || shouldAutoFallback
-    ? 'print'
-    : 'interactive';
-  const printViewAvailable = previewServiceStatus?.service === 'libreoffice';
-  const printPreviewEnabled = !previewServiceLoading
-    && activeView === 'print'
-    && printViewAvailable;
+  const printPreviewEnabled = usePrintPreview;
   const {
     manifest,
     errorMessage: manifestError,
@@ -917,9 +920,9 @@ function SpreadsheetPreview({
 
   const reload = useCallback((options: ReloadOptions = {}) => {
     setRuntimeError(null);
-    if (activeView === 'interactive') reloadInteractive(options);
+    if (!usePrintPreview) reloadInteractive(options);
     else reloadPrint(options);
-  }, [activeView, reloadInteractive, reloadPrint]);
+  }, [reloadInteractive, reloadPrint, usePrintPreview]);
 
   useOfficeAutoRefresh(projectName, file.path, reload);
 
@@ -929,7 +932,7 @@ function SpreadsheetPreview({
     setSelectedSheetIndex(null);
   }, [file.path]);
 
-  const activeManifest = activeView === 'interactive' ? interactiveData : manifest;
+  const activeManifest = usePrintPreview ? manifest : interactiveData;
 
   useEffect(() => {
     if (!activeManifest) return;
@@ -954,26 +957,8 @@ function SpreadsheetPreview({
     enabled: printPreviewEnabled && Boolean(manifest) && selectedSheetIndex !== null,
   });
 
-  if (previewServiceLoading) {
-    return <PreviewSpinner label={t('officePreview.checkingService')} />;
-  }
-
   let sheetContent: ReactNode;
-  if (activeView === 'print' && !printViewAvailable) {
-    sheetContent = (
-      <FallbackContent
-        title={t('officePreview.disabledTitle')}
-        message={t('spreadsheetPreview.printViewUnavailable')}
-        onClose={onClose}
-        actions={(
-          <>
-            <DownloadButton projectName={projectName} file={file} />
-            <OfficePreviewSettingsButton />
-          </>
-        )}
-      />
-    );
-  } else if (activeView === 'interactive') {
+  if (!usePrintPreview) {
     if (interactiveLoading && !interactiveData) {
       sheetContent = <PreviewSpinner label={t('spreadsheetPreview.readingWorkbook')} />;
     } else if (interactiveFailure || !interactiveData || selectedSheetIndex === null) {
@@ -983,7 +968,10 @@ function SpreadsheetPreview({
           message={interactiveFailure || t('spreadsheetPreview.interactiveFailedMessage')}
           onClose={onClose}
           actions={(
-            <DownloadButton projectName={projectName} file={file} />
+            <>
+              <DownloadButton projectName={projectName} file={file} />
+              <OfficePreviewSettingsButton />
+            </>
           )}
         />
       );
@@ -1063,15 +1051,13 @@ function SpreadsheetPreview({
     }
   }
 
-  const warning = activeView === 'interactive'
+  const warning = !usePrintPreview
     ? interactiveData?.warnings?.[0]?.message
-    : shouldAutoFallback
-      ? t('spreadsheetPreview.fellBackToPrint')
-      : null;
+    : null;
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-neutral-100 dark:bg-neutral-900">
-      {activeView === 'interactive' && (
+      {!usePrintPreview && (
         <SpreadsheetPreviewToolbar
           zoom={zoom}
           projectName={projectName}
@@ -1093,7 +1079,7 @@ function SpreadsheetPreview({
         <SpreadsheetTabs
           sheets={activeManifest.sheets}
           activeSheetIndex={selectedSheetIndex ?? activeManifest.activeSheetIndex}
-          disabled={activeView === 'interactive' ? interactiveLoading : manifestLoading}
+          disabled={usePrintPreview ? manifestLoading : interactiveLoading}
           onSelect={setSelectedSheetIndex}
         />
       )}
@@ -1117,51 +1103,21 @@ function OfficePreview({
   onToggleFullscreen?: (() => void) | null;
 }) {
   const { t } = useTranslation('codeEditor');
-  const {
-    status: previewServiceStatus,
-    loading: previewServiceLoading,
-  } = useOfficePreviewService();
-  const previewDisabledByConfig = previewServiceStatus?.service === 'none';
-  const shouldLoadOfficePdf = !previewServiceLoading && !previewDisabledByConfig;
-  const { previewUrl, errorMessage, errorCode, loading, reload } = useOfficePdfPreviewUrl(projectName, file.path, shouldLoadOfficePdf);
+  const { previewUrl, errorMessage, errorCode, loading, reload } = useOfficePdfPreviewUrl(projectName, file.path, true);
 
   useOfficeAutoRefresh(projectName, file.path, reload);
 
-  if (previewServiceLoading && !previewUrl) {
-    return <PreviewSpinner label={t('officePreview.checkingService')} />;
-  }
-  if (previewDisabledByConfig) {
-    return (
-      <FallbackContent
-        title={t('officePreview.disabledTitle')}
-        message={t('officePreview.disabledMessage')}
-        onClose={onClose}
-        actions={(
-          <>
-            <DownloadButton projectName={projectName} file={file} />
-            <OfficePreviewSettingsButton />
-          </>
-        )}
-      />
-    );
-  }
-
   if (loading && !previewUrl) return <PreviewSpinner label={t('officePreview.converting')} />;
   if (errorMessage || !previewUrl) {
-    const previewDisabled = errorCode === 'OFFICE_PREVIEW_DISABLED';
     const needsLibreOffice = errorCode === 'LIBREOFFICE_NOT_FOUND'
       || errorMessage?.includes('LibreOffice')
       || errorMessage === 'LIBREOFFICE_NOT_FOUND';
-    const fallbackTitle = previewDisabled
-      ? t('officePreview.disabledTitle')
-      : needsLibreOffice
-        ? t('officePreview.libreOfficeUnavailableTitle')
-        : title;
-    const fallbackMessage = previewDisabled
-      ? t('officePreview.disabledMessage')
-      : needsLibreOffice
-        ? t('officePreview.libreOfficeUnavailableMessage')
-        : errorMessage || t('officePreview.failedMessage');
+    const fallbackTitle = needsLibreOffice
+      ? t('officePreview.libreOfficeUnavailableTitle')
+      : title;
+    const fallbackMessage = needsLibreOffice
+      ? t('officePreview.libreOfficeUnavailableMessage')
+      : errorMessage || t('officePreview.failedMessage');
 
     return (
       <FallbackContent
@@ -1171,7 +1127,7 @@ function OfficePreview({
         actions={(
           <>
             <DownloadButton projectName={projectName} file={file} />
-            {(previewDisabled || needsLibreOffice) && <OfficePreviewSettingsButton />}
+            <OfficePreviewSettingsButton />
           </>
         )}
       />
@@ -1191,6 +1147,168 @@ function OfficePreview({
       refreshDisabled={loading}
       downloadUrl={projectName ? api.fileDownloadUrl(projectName, file.path) : null}
       downloadName={file.name}
+      isFullscreen={isFullscreen}
+      onToggleFullscreen={onToggleFullscreen}
+    />
+  );
+}
+
+function BuiltinModernOfficePreview({
+  projectName,
+  file,
+  title,
+  onClose,
+  isFullscreen,
+  onToggleFullscreen,
+}: {
+  projectName?: string;
+  file: CodeEditorFile;
+  title: string;
+  onClose: () => void;
+  isFullscreen: boolean;
+  onToggleFullscreen?: (() => void) | null;
+}) {
+  const { t } = useTranslation('codeEditor');
+  const { blob, errorMessage, loading, reload } = useFileBlob(
+    projectName,
+    file.path,
+    true,
+  );
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const handleReload = useCallback(() => {
+    setRuntimeError(null);
+    reload({ force: true });
+  }, [reload]);
+
+  useOfficeAutoRefresh(projectName, file.path, handleReload);
+  useEffect(() => {
+    setRuntimeError(null);
+  }, [file.path]);
+
+  if (loading && !blob) {
+    return <PreviewSpinner label={t('officePreview.loadingBuiltin')} />;
+  }
+  if (errorMessage || runtimeError || !blob) {
+    return (
+      <FallbackContent
+        title={title}
+        message={runtimeError || errorMessage || t('officePreview.failedMessage')}
+        onClose={onClose}
+        actions={(
+          <>
+            <DownloadButton projectName={projectName} file={file} />
+            <OfficePreviewSettingsButton />
+          </>
+        )}
+      />
+    );
+  }
+
+  const commonProps = {
+    blob,
+    downloadUrl: projectName ? api.fileDownloadUrl(projectName, file.path) : null,
+    downloadName: file.name,
+    isFullscreen,
+    onToggleFullscreen,
+    refreshing: loading,
+    onRefresh: handleReload,
+    onError: (error: Error) => setRuntimeError(error.message),
+  };
+
+  return (
+    <Suspense fallback={<PreviewSpinner label={t('officePreview.loadingBuiltin')} />}>
+      {isWordFile(file.name)
+        ? <DocxBuiltinPreview {...commonProps} />
+        : <PptxBuiltinPreview {...commonProps} />}
+    </Suspense>
+  );
+}
+
+function OfficeFilePreviewRouter({
+  projectName,
+  file,
+  title,
+  onClose,
+  isFullscreen,
+  onToggleFullscreen,
+}: {
+  projectName?: string;
+  file: CodeEditorFile;
+  title: string;
+  onClose: () => void;
+  isFullscreen: boolean;
+  onToggleFullscreen?: (() => void) | null;
+}) {
+  const { t } = useTranslation('codeEditor');
+  const { status, loading } = useOfficePreviewService();
+  const service = status?.service || 'builtin';
+
+  if (loading) {
+    return <PreviewSpinner label={t('officePreview.checkingService')} />;
+  }
+  if (service === 'libreoffice') {
+    return isSpreadsheetFile(file.name)
+      ? (
+        <SpreadsheetPreview
+          service={service}
+          projectName={projectName}
+          file={file}
+          title={title}
+          onClose={onClose}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={onToggleFullscreen}
+        />
+      )
+      : (
+        <OfficePreview
+          projectName={projectName}
+          file={file}
+          title={title}
+          onClose={onClose}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={onToggleFullscreen}
+        />
+      );
+  }
+
+  if (!isBuiltinOfficeFile(file.name)) {
+    return (
+      <FallbackContent
+        title={t('officePreview.unsupportedBuiltinTitle')}
+        message={t('officePreview.unsupportedBuiltinMessage', {
+          extension: `.${getExtension(file.name)}`,
+        })}
+        onClose={onClose}
+        actions={(
+          <>
+            <DownloadButton projectName={projectName} file={file} />
+            <OfficePreviewSettingsButton />
+          </>
+        )}
+      />
+    );
+  }
+
+  if (isSpreadsheetFile(file.name)) {
+    return (
+      <SpreadsheetPreview
+        service={service}
+        projectName={projectName}
+        file={file}
+        title={title}
+        onClose={onClose}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={onToggleFullscreen}
+      />
+    );
+  }
+
+  return (
+    <BuiltinModernOfficePreview
+      projectName={projectName}
+      file={file}
+      title={title}
+      onClose={onClose}
       isFullscreen={isFullscreen}
       onToggleFullscreen={onToggleFullscreen}
     />
@@ -1217,7 +1335,6 @@ export default function CodeEditorBinaryFile({
 
   const isImage = isImageFile(file.name);
   const isPdf = isPdfFile(file.name);
-  const isSpreadsheet = isSpreadsheetFile(file.name);
   const isOffice = isOfficeFile(file.name);
   const canPreview = isImage || isPdf || isOffice;
   const hasEmbeddedDocumentToolbar = isPdf || isOffice;
@@ -1238,20 +1355,9 @@ export default function CodeEditorBinaryFile({
           onToggleFullscreen={onToggleDocumentFullscreen}
         />
       )
-      : isSpreadsheet
-        ? (
-          <SpreadsheetPreview
-            projectName={projectName}
-            file={file}
-            title={title}
-            onClose={onClose}
-            isFullscreen={documentIsFullscreen}
-            onToggleFullscreen={onToggleDocumentFullscreen}
-          />
-        )
       : isOffice
         ? (
-          <OfficePreview
+          <OfficeFilePreviewRouter
             projectName={projectName}
             file={file}
             title={title}

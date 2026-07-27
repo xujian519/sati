@@ -61,11 +61,23 @@
     "refreshing": "File updated. Refreshing preview...",
     "refresh": "Refresh preview",
     "configureService": "Configure Office preview",
+    "loadingBuiltin": "Loading built-in preview...",
+    "unsupportedBuiltinTitle": "This format is not supported by built-in preview",
+    "unsupportedBuiltinMessage": "Built-in preview does not support {{extension}} files. Enable LibreOffice compatibility preview in Settings, or download the file and open it with a system application.",
     "disabledTitle": "Cannot preview binary file",
     "disabledMessage": "No Office file preview service is configured. Configure the Office file preview service in Settings, or download the file and open it locally.",
     "libreOfficeUnavailableTitle": "LibreOffice is unavailable",
-    "libreOfficeUnavailableMessage": "This format requires LibreOffice for preview. Install LibreOffice, or switch the Office file preview service to None in Settings.",
+    "libreOfficeUnavailableMessage": "LibreOffice compatibility preview is selected, but no usable LibreOffice installation was found. Install and configure LibreOffice, or switch to Built-in preview.",
     "failedMessage": "Failed to generate Office file preview."
+  },
+  "builtinOfficePreview": {
+    "search": "Search in file",
+    "searchPlaceholder": "Search in file...",
+    "noMatches": "No matches",
+    "closeSearch": "Close search",
+    "previousItem": "Previous page",
+    "nextItem": "Next page",
+    "loadingPresentation": "Parsing presentation..."
   },
   "spreadsheetPreview": {
     "readingWorkbook": "Reading workbook...",
