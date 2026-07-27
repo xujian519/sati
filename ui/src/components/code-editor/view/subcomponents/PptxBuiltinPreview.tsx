@@ -7,10 +7,19 @@ import {
   type TextSearchResult,
 } from '@aiden0z/pptx-renderer';
 import { useTranslation } from 'react-i18next';
+import {
+  createImageRegionContentReference,
+  type ContentReferenceSelectionMode,
+  type ReferenceCapabilities,
+} from '../../../../types/contentReference';
 import BuiltinOfficeToolbar from './BuiltinOfficeToolbar';
+import RegionSelectionOverlay, { type CapturedRegion } from './RegionSelectionOverlay';
 
 type PptxBuiltinPreviewProps = {
   blob: Blob;
+  projectName?: string;
+  fileName: string;
+  filePath: string;
   downloadUrl?: string | null;
   downloadName?: string;
   isFullscreen?: boolean;
@@ -73,6 +82,9 @@ function PptxThumbnail({
 
 export default function PptxBuiltinPreview({
   blob,
+  projectName,
+  fileName,
+  filePath,
   downloadUrl,
   downloadName,
   isFullscreen = false,
@@ -94,6 +106,7 @@ export default function PptxBuiltinPreview({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchMatches, setSearchMatches] = useState<TextSearchResult[]>([]);
   const [searchMatchIndex, setSearchMatchIndex] = useState(0);
+  const [referenceMode, setReferenceMode] = useState<ContentReferenceSelectionMode | null>(null);
 
   const clearHighlights = useCallback(() => {
     highlightHandlesRef.current.forEach((handle) => handle.dispose());
@@ -237,6 +250,40 @@ export default function PptxBuiltinPreview({
     ));
   }, [searchMatches.length]);
 
+  const capabilities: ReferenceCapabilities = {
+    text: { state: 'unavailable', reason: 'NO_TEXT_LAYER' },
+    cells: { state: 'unavailable', reason: 'NO_CELL_MODEL' },
+    region: viewer
+      ? { state: 'available' }
+      : { state: 'loading', reason: 'SURFACE_NOT_READY' },
+    recommendedMode: 'region',
+  };
+
+  const handleRegionCommit = (capture: CapturedRegion) => {
+    const slideNumber = capture.slideNumber || currentSlide + 1;
+    const reference = createImageRegionContentReference({
+      selectionMode: 'region',
+      source: {
+        projectName,
+        relativePath: filePath,
+        fileName,
+        revision: { size: blob.size },
+      },
+      renderer: { id: 'pptx', backend: 'builtin', locatorQuality: 'visual' },
+      locator: { surface: 'slide', slideNumber, rect: capture.rect },
+      image: {
+        name: `reference-${fileName}-slide-${slideNumber}-${Date.now()}.png`,
+        mimeType: 'image/png',
+        width: capture.width,
+        height: capture.height,
+        dataUrl: capture.dataUrl,
+      },
+      nearbyText: capture.nearbyText,
+    });
+    window.dispatchEvent(new CustomEvent('pilotdeck:add-chat-reference', { detail: reference }));
+    setReferenceMode(null);
+  };
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-neutral-100 dark:bg-neutral-900">
       <BuiltinOfficeToolbar
@@ -263,6 +310,10 @@ export default function PptxBuiltinPreview({
         onToggleFullscreen={onToggleFullscreen}
         downloadUrl={downloadUrl}
         downloadName={downloadName}
+        referenceCapabilities={capabilities}
+        referenceMode={referenceMode}
+        onSelectReferenceMode={(mode) => setReferenceMode(mode === 'region' ? mode : null)}
+        onCancelReferenceMode={() => setReferenceMode(null)}
       />
       <div className="flex min-h-0 flex-1">
         {navigationVisible && viewer && slideCount > 0 ? (
@@ -291,6 +342,25 @@ export default function PptxBuiltinPreview({
               {t('builtinOfficePreview.loadingPresentation')}
             </div>
           ) : null}
+          <RegionSelectionOverlay
+            active={referenceMode === 'region'}
+            hostRef={containerRef}
+            resolveTarget={() => {
+              const element = containerRef.current;
+              if (!element) return null;
+              return {
+                element,
+                surface: 'slide',
+                slideNumber: currentSlide + 1,
+                nearbyText: searchMatches
+                  .filter((match) => match.slideIndex === currentSlide)
+                  .map((match) => match.text)
+                  .join(' '),
+              };
+            }}
+            onCommit={handleRegionCommit}
+            onCancel={() => setReferenceMode(null)}
+          />
         </div>
       </div>
     </div>

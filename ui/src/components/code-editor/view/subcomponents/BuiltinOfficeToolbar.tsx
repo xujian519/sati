@@ -13,6 +13,11 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import type {
+  ContentReferenceSelectionMode,
+  ReferenceCapabilities,
+} from '../../../../types/contentReference';
+import ContentReferenceMenu from './ContentReferenceMenu';
 
 type BuiltinOfficeToolbarProps = {
   navigationVisible?: boolean;
@@ -38,6 +43,10 @@ type BuiltinOfficeToolbarProps = {
   onToggleFullscreen?: (() => void) | null;
   downloadUrl?: string | null;
   downloadName?: string;
+  referenceCapabilities?: ReferenceCapabilities;
+  referenceMode?: ContentReferenceSelectionMode | null;
+  onSelectReferenceMode?: (mode: ContentReferenceSelectionMode) => void;
+  onCancelReferenceMode?: () => void;
 };
 
 const buttonClass = [
@@ -74,6 +83,10 @@ export default function BuiltinOfficeToolbar({
   onToggleFullscreen,
   downloadUrl,
   downloadName,
+  referenceCapabilities,
+  referenceMode = null,
+  onSelectReferenceMode,
+  onCancelReferenceMode,
 }: BuiltinOfficeToolbarProps) {
   const { t } = useTranslation('codeEditor');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -212,6 +225,15 @@ export default function BuiltinOfficeToolbar({
       ) : null}
 
       <span className="flex-1" />
+      {referenceCapabilities && onSelectReferenceMode ? (
+        <ContentReferenceMenu
+          capabilities={referenceCapabilities}
+          activeMode={referenceMode}
+          onSelectMode={onSelectReferenceMode}
+          onCancelMode={onCancelReferenceMode}
+          compact
+        />
+      ) : null}
       {onRefresh ? (
         <button
           type="button"

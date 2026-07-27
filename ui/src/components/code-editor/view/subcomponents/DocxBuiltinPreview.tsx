@@ -1,10 +1,21 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { renderAsync } from 'docx-preview';
 import { useTranslation } from 'react-i18next';
+import {
+  createImageRegionContentReference,
+  createTextContentReference,
+  type ContentReference,
+  type ContentReferenceSelectionMode,
+  type ReferenceCapabilities,
+} from '../../../../types/contentReference';
 import BuiltinOfficeToolbar from './BuiltinOfficeToolbar';
+import RegionSelectionOverlay, { type CapturedRegion } from './RegionSelectionOverlay';
 
 type DocxBuiltinPreviewProps = {
   blob: Blob;
+  projectName?: string;
+  fileName: string;
+  filePath: string;
   downloadUrl?: string | null;
   downloadName?: string;
   isFullscreen?: boolean;
@@ -25,6 +36,18 @@ type SearchMatch = {
   range: Range;
   element: HTMLElement;
 };
+
+type TextSelectionAction = {
+  top: number;
+  left: number;
+  reference: ContentReference;
+};
+
+function surroundingText(text: string, selectedText: string, radius = 300) {
+  const index = text.indexOf(selectedText);
+  if (index < 0) return text.slice(0, radius * 2);
+  return text.slice(Math.max(0, index - radius), Math.min(text.length, index + selectedText.length + radius));
+}
 
 function getHeadingLevel(element: HTMLElement): number | null {
   const tagMatch = /^H([1-6])$/.exec(element.tagName);
@@ -86,6 +109,9 @@ function findTextMatches(root: HTMLElement, query: string): SearchMatch[] {
 
 export default function DocxBuiltinPreview({
   blob,
+  projectName,
+  fileName,
+  filePath,
   downloadUrl,
   downloadName,
   isFullscreen = false,
@@ -105,6 +131,9 @@ export default function DocxBuiltinPreview({
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchMatchIndex, setSearchMatchIndex] = useState(0);
+  const [selectionAction, setSelectionAction] = useState<TextSelectionAction | null>(null);
+  const [referenceMode, setReferenceMode] = useState<ContentReferenceSelectionMode | null>(null);
+  const selectionTimerRef = useRef<number | null>(null);
   const searchMatchesRef = useRef<SearchMatch[]>([]);
   const highlightId = useId().replace(/[^a-z0-9_-]/gi, '');
   const allHighlightName = `pilotdeck-docx-search-${highlightId}`;
@@ -243,6 +272,129 @@ export default function DocxBuiltinPreview({
     setSearchMatchIndex((current) => (current + direction + count) % count);
   }, []);
 
+  const updateSelectionAction = useCallback(() => {
+    if (referenceMode === 'region') return;
+    const root = viewerRef.current;
+    const scroll = scrollRef.current;
+    const selection = window.getSelection();
+    if (!root || !scroll || !selection || selection.isCollapsed || selection.rangeCount === 0) {
+      setSelectionAction(null);
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    if (!root.contains(range.commonAncestorContainer)) {
+      setSelectionAction(null);
+      return;
+    }
+    const selectedText = selection.toString().trim();
+    if (!selectedText) {
+      setSelectionAction(null);
+      return;
+    }
+    const rangeRect = range.getBoundingClientRect();
+    const scrollRect = scroll.getBoundingClientRect();
+    const page = (range.startContainer.parentElement || range.startContainer)
+      && (range.startContainer.parentElement?.closest<HTMLElement>('section.pilotdeck-docx') || null);
+    const pageIndex = page ? pages.indexOf(page) : -1;
+    const pageRect = page?.getBoundingClientRect();
+    const heading = [...outline]
+      .reverse()
+      .find((item) => (
+        item.element === range.startContainer
+        || Boolean(item.element.compareDocumentPosition(range.startContainer) & Node.DOCUMENT_POSITION_FOLLOWING)
+      ));
+    const documentText = root.textContent?.replace(/\s+/g, ' ').trim() || selectedText;
+    const prefixIndex = documentText.indexOf(selectedText);
+    const reference = createTextContentReference({
+      selectionMode: 'text',
+      source: {
+        projectName,
+        relativePath: filePath,
+        fileName,
+        revision: { size: blob.size },
+      },
+      renderer: { id: 'docx', backend: 'builtin', locatorQuality: 'semantic' },
+      locator: {
+        surface: 'document',
+        ...(pageIndex >= 0 ? { pageNumbers: [pageIndex + 1] } : {}),
+        ...(heading ? { headingPath: [heading.title] } : {}),
+        quote: {
+          exact: selectedText,
+          ...(prefixIndex >= 0 ? {
+            prefix: documentText.slice(Math.max(0, prefixIndex - 80), prefixIndex),
+            suffix: documentText.slice(prefixIndex + selectedText.length, prefixIndex + selectedText.length + 80),
+          } : {}),
+        },
+        ...(pageRect ? {
+          rects: [{
+            x: (rangeRect.left - pageRect.left) / Math.max(1, pageRect.width),
+            y: (rangeRect.top - pageRect.top) / Math.max(1, pageRect.height),
+            width: rangeRect.width / Math.max(1, pageRect.width),
+            height: rangeRect.height / Math.max(1, pageRect.height),
+          }],
+        } : {}),
+      },
+      selectedText,
+      surroundingText: surroundingText(documentText, selectedText),
+    });
+    setSelectionAction({
+      left: Math.max(12, Math.min(scroll.clientWidth - 180, rangeRect.left - scrollRect.left + scroll.scrollLeft + rangeRect.width / 2 - 70)),
+      top: Math.max(12, rangeRect.top - scrollRect.top + scroll.scrollTop - 42),
+      reference,
+    });
+  }, [blob.size, fileName, filePath, outline, pages, projectName, referenceMode]);
+
+  useEffect(() => {
+    const schedule = () => {
+      if (selectionTimerRef.current !== null) window.clearTimeout(selectionTimerRef.current);
+      selectionTimerRef.current = window.setTimeout(updateSelectionAction, 40);
+    };
+    const clear = () => setSelectionAction(null);
+    document.addEventListener('selectionchange', clear);
+    document.addEventListener('mouseup', schedule);
+    document.addEventListener('touchend', schedule);
+    document.addEventListener('keyup', schedule);
+    return () => {
+      if (selectionTimerRef.current !== null) window.clearTimeout(selectionTimerRef.current);
+      document.removeEventListener('selectionchange', clear);
+      document.removeEventListener('mouseup', schedule);
+      document.removeEventListener('touchend', schedule);
+      document.removeEventListener('keyup', schedule);
+    };
+  }, [updateSelectionAction]);
+
+  const capabilities: ReferenceCapabilities = {
+    text: rendered ? { state: 'available' } : { state: 'loading', reason: 'SURFACE_NOT_READY' },
+    cells: { state: 'unavailable', reason: 'NO_CELL_MODEL' },
+    region: rendered ? { state: 'available' } : { state: 'loading', reason: 'SURFACE_NOT_READY' },
+    recommendedMode: 'text',
+  };
+
+  const handleRegionCommit = (capture: CapturedRegion) => {
+    const pageNumber = capture.pageNumber || currentPage;
+    const reference = createImageRegionContentReference({
+      selectionMode: 'region',
+      source: {
+        projectName,
+        relativePath: filePath,
+        fileName,
+        revision: { size: blob.size },
+      },
+      renderer: { id: 'docx', backend: 'builtin', locatorQuality: 'visual' },
+      locator: { surface: 'page', pageNumber, rect: capture.rect },
+      image: {
+        name: `reference-${fileName}-page-${pageNumber}-${Date.now()}.png`,
+        mimeType: 'image/png',
+        width: capture.width,
+        height: capture.height,
+        dataUrl: capture.dataUrl,
+      },
+      nearbyText: capture.nearbyText,
+    });
+    window.dispatchEvent(new CustomEvent('pilotdeck:add-chat-reference', { detail: reference }));
+    setReferenceMode(null);
+  };
+
   const outlinePanel = useMemo(() => (
     <aside className="w-64 shrink-0 overflow-auto border-r border-neutral-200 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-950">
       <div className="px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-neutral-400">
@@ -310,11 +462,57 @@ export default function DocxBuiltinPreview({
         onToggleFullscreen={onToggleFullscreen}
         downloadUrl={downloadUrl}
         downloadName={downloadName}
+        referenceCapabilities={capabilities}
+        referenceMode={referenceMode}
+        onSelectReferenceMode={(mode) => {
+          if (mode === 'region') {
+            window.getSelection()?.removeAllRanges();
+            setSelectionAction(null);
+            setReferenceMode('region');
+          } else {
+            setReferenceMode(null);
+          }
+        }}
+        onCancelReferenceMode={() => setReferenceMode(null)}
       />
       <div className="flex min-h-0 flex-1">
         {navigationVisible && outline.length > 0 ? outlinePanel : null}
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+        <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-auto">
           <div ref={viewerRef} data-testid="docx-builtin-preview" className="min-h-full" />
+          {selectionAction ? (
+            <button
+              type="button"
+              className="absolute z-20 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[12px] font-medium text-neutral-900 shadow-lg hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+              style={{ top: selectionAction.top, left: selectionAction.left }}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('pilotdeck:add-chat-reference', {
+                  detail: selectionAction.reference,
+                }));
+                window.getSelection()?.removeAllRanges();
+                setSelectionAction(null);
+              }}
+            >
+              {t('selection.chatInPilotDeck')}
+            </button>
+          ) : null}
+          <RegionSelectionOverlay
+            active={referenceMode === 'region'}
+            hostRef={scrollRef}
+            resolveTarget={(element) => {
+              const page = element?.closest<HTMLElement>('section.pilotdeck-docx');
+              if (!page || !viewerRef.current?.contains(page)) return null;
+              const pageIndex = pages.indexOf(page);
+              return {
+                element: page,
+                surface: 'page',
+                pageNumber: pageIndex >= 0 ? pageIndex + 1 : currentPage,
+                nearbyText: page.textContent?.replace(/\s+/g, ' ').trim(),
+              };
+            }}
+            onCommit={handleRegionCommit}
+            onCancel={() => setReferenceMode(null)}
+          />
         </div>
       </div>
     </div>
