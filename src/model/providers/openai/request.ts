@@ -100,7 +100,7 @@ export function buildOpenAIRequest(
         description: request.outputSchema.description,
         schema: googleOpenAICompatible
           ? normalizeGoogleOpenAIResponseSchema(request.outputSchema.schema)
-          : request.outputSchema.schema,
+          : normalizeOpenAISchema(request.outputSchema.schema),
         strict: request.outputSchema.strict ?? true,
       },
     };

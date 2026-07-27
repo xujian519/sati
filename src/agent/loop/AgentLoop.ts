@@ -2450,7 +2450,10 @@ function isMissingReasoningContentError(error: CanonicalModelError): boolean {
 }
 
 function addEmptyReasoningContentMarkers(messages: CanonicalMessage[]): CanonicalMessage[] {
-  return messages.map((message) => {
+  return messages.map((message, index) => {
+    if (index === messages.length - 1 && message.role === "assistant" && messageContent(message).length === 0) {
+      return message;
+    }
     if (message.role !== "assistant" || hasReplayableReasoningContent(message)) {
       return message;
     }
