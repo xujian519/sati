@@ -763,11 +763,15 @@
       },
       "officePreview": {
         "title": "Office File Preview Service",
-        "description": "Configure how PilotDeck previews Word, Excel, and PowerPoint files. Selecting None disables Office conversion.",
+        "description": "Configure interactive Excel viewing and the local conversion service used for print-layout and other Office previews.",
         "fields": {
+          "spreadsheetMode": {
+            "label": "Excel preview",
+            "description": "Auto uses the interactive cell viewer first and falls back to print layout. You can temporarily switch views for each open workbook."
+          },
           "service": {
-            "label": "Preview service",
-            "description": "Local service used when opening Office files for preview."
+            "label": "Office conversion service",
+            "description": "Local service used for Word, PowerPoint, legacy spreadsheet conversion, and Excel print-layout preview."
           },
           "binaryPath": {
             "label": "LibreOffice executable path",
@@ -783,6 +787,9 @@
           "none": "None",
           "libreOffice": "LibreOffice",
           "libreOfficeUnavailable": "LibreOffice (unavailable)",
+          "spreadsheetAuto": "Auto (interactive first)",
+          "spreadsheetInteractive": "Interactive cells",
+          "spreadsheetPrint": "Print layout (LibreOffice)",
           "autoDetect": "Auto-detect (no fixed path)",
           "candidateAvailable": "{{path}} (available)",
           "candidateUnavailable": "{{path}} (unavailable)",

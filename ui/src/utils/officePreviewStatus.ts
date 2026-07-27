@@ -1,9 +1,11 @@
 import { api } from './api';
 
 export type OfficePreviewService = 'none' | 'libreoffice';
+export type SpreadsheetPreviewMode = 'auto' | 'interactive' | 'print';
 
 export type OfficePreviewStatus = {
   service: OfficePreviewService;
+  spreadsheetMode: SpreadsheetPreviewMode;
   libreOffice?: {
     available?: boolean;
     binaryPath?: string | null;
@@ -21,6 +23,11 @@ export type OfficePreviewStatus = {
 
 export function normalizeOfficePreviewService(value: unknown): OfficePreviewService {
   return String(value || '').trim().toLowerCase() === 'libreoffice' ? 'libreoffice' : 'none';
+}
+
+export function normalizeSpreadsheetPreviewMode(value: unknown): SpreadsheetPreviewMode {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'interactive' || normalized === 'print' ? normalized : 'auto';
 }
 
 async function readJsonBody(response: Response): Promise<any> {
@@ -45,6 +52,9 @@ async function readServiceFromConfig(): Promise<OfficePreviewStatus> {
   }
   return {
     service: normalizeOfficePreviewService(body?.config?.webui?.officePreview?.service),
+    spreadsheetMode: normalizeSpreadsheetPreviewMode(
+      body?.config?.webui?.officePreview?.spreadsheetMode,
+    ),
   };
 }
 
@@ -57,6 +67,7 @@ export async function readOfficePreviewStatus(options: { refresh?: boolean } = {
     }
     return {
       service: normalizeOfficePreviewService(body?.service),
+      spreadsheetMode: normalizeSpreadsheetPreviewMode(body?.spreadsheetMode),
       libreOffice: body?.libreOffice,
     };
   } catch {

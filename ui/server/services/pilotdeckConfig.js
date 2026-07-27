@@ -93,6 +93,7 @@ export function buildDefaultPilotDeckConfig() {
       officePreview: {
         service: 'none',
         binaryPath: '',
+        spreadsheetMode: 'auto',
       },
     },
     telemetry: {
@@ -293,6 +294,17 @@ export function validatePilotDeckConfig(config) {
   const libreOfficeBinaryPath = normalized.webui?.officePreview?.binaryPath;
   if (libreOfficeBinaryPath !== undefined && typeof libreOfficeBinaryPath !== 'string') {
     errors.push('webui.officePreview.binaryPath must be a string');
+  }
+  const spreadsheetPreviewMode = normalized.webui?.officePreview?.spreadsheetMode;
+  if (
+    spreadsheetPreviewMode !== undefined
+    && !['auto', 'interactive', 'print'].includes(
+      normalizeString(spreadsheetPreviewMode).toLowerCase(),
+    )
+  ) {
+    errors.push(
+      'webui.officePreview.spreadsheetMode must be "auto", "interactive", or "print"',
+    );
   }
 
   return { valid: errors.length === 0, errors, warnings, config: normalized };

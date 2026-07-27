@@ -71,6 +71,13 @@
     "readingWorkbook": "正在读取工作簿...",
     "renderingSheet": "正在生成工作表预览...",
     "failedMessage": "未能生成工作表预览。",
+    "interactiveView": "电子表格",
+    "printView": "打印布局",
+    "printViewUnavailable": "打印布局需要启用 LibreOffice。",
+    "interactiveFailedMessage": "未能加载交互式表格预览。",
+    "usePrintView": "使用打印布局",
+    "loadingInteractive": "正在加载交互式表格...",
+    "fellBackToPrint": "交互式预览不可用，PilotDeck 已切换到打印布局。",
     "worksheets": "工作表",
     "previousWorksheets": "向前浏览工作表",
     "nextWorksheets": "向后浏览工作表"

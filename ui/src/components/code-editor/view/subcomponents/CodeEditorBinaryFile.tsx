@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import type { IWorkbookData } from '@univerjs/core';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../../utils/api';
 import { readOfficePreviewStatus, type OfficePreviewStatus } from '../../../../utils/officePreviewStatus';
@@ -7,6 +16,10 @@ import { isImageFile, isOfficeFile, isPdfFile, isSpreadsheetFile } from '../../u
 import { getPdfNavigationMode } from '../../utils/documentPreview';
 import PdfDocumentPreview from './PdfDocumentPreview';
 import SpreadsheetTabs, { type SpreadsheetSheetTab } from './SpreadsheetTabs';
+
+const SpreadsheetInteractivePreview = lazy(
+  () => import('./SpreadsheetInteractivePreview'),
+);
 
 type CodeEditorBinaryFileProps = {
   file: CodeEditorFile;
@@ -32,6 +45,18 @@ type SpreadsheetPreviewManifest = {
   activeSheetIndex: number;
   sheets: SpreadsheetSheetTab[];
 };
+
+type SpreadsheetPreviewWarning = {
+  code: string;
+  message: string;
+};
+
+type SpreadsheetInteractivePreviewData = SpreadsheetPreviewManifest & {
+  warnings: SpreadsheetPreviewWarning[];
+  workbook: IWorkbookData;
+};
+
+type SpreadsheetPreviewView = 'interactive' | 'print';
 
 function getExtension(filename: string): string {
   return filename.split('.').pop()?.toLowerCase() ?? '';
@@ -348,6 +373,82 @@ function useSpreadsheetPreviewManifest(
   };
 }
 
+function useSpreadsheetInteractivePreview(
+  projectName: string | undefined,
+  filePath: string,
+  enabled: boolean,
+) {
+  const [data, setData] = useState<SpreadsheetInteractivePreviewData | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [loading, setLoading] = useState(enabled);
+  const [reloadRequest, setReloadRequest] = useState({ key: 0, force: false });
+  const lastRequestKeyRef = useRef('');
+
+  const reload = useCallback((options: ReloadOptions = {}) => {
+    setReloadRequest((value) => ({
+      key: value.key + 1,
+      force: Boolean(options.force),
+    }));
+  }, []);
+
+  useEffect(() => {
+    if (!enabled || !projectName) {
+      setData(null);
+      setLoading(false);
+      setErrorMessage(enabled ? 'Project is not available.' : null);
+      setErrorCode(null);
+      return undefined;
+    }
+
+    const requestKey = `spreadsheet-interactive:${projectName}:${filePath}`;
+    const isNewFile = lastRequestKeyRef.current !== requestKey;
+    lastRequestKeyRef.current = requestKey;
+    const controller = new AbortController();
+
+    if (isNewFile) setData(null);
+    setLoading(true);
+    setErrorMessage(null);
+    setErrorCode(null);
+
+    api.spreadsheetInteractivePreview(projectName, filePath, {
+      force: reloadRequest.force,
+      cacheKey: reloadRequest.key,
+      signal: controller.signal,
+    })
+      .then(async (res: Response) => {
+        if (!res.ok) throw await readPreviewErrorResponse(res);
+        return res.json();
+      })
+      .then((nextData: SpreadsheetInteractivePreviewData) => {
+        if (controller.signal.aborted) return;
+        if (!nextData?.workbook || !Array.isArray(nextData.sheets)) {
+          throw new Error('Interactive workbook data is incomplete.');
+        }
+        setData(nextData);
+      })
+      .catch((error: Error & { code?: string; name?: string }) => {
+        if (controller.signal.aborted || error.name === 'AbortError') return;
+        if (isNewFile) setData(null);
+        setErrorMessage(error.message || 'Failed to load interactive workbook preview.');
+        setErrorCode(error.code || null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [enabled, filePath, projectName, reloadRequest.force, reloadRequest.key]);
+
+  return {
+    data,
+    errorMessage,
+    errorCode,
+    loading,
+    reload,
+  };
+}
+
 function useSpreadsheetSheetPreviewUrl({
   projectName,
   filePath,
@@ -658,6 +759,149 @@ function PdfPreview({
   );
 }
 
+function SpreadsheetPreviewToolbar({
+  view,
+  zoom,
+  printViewAvailable,
+  projectName,
+  file,
+  isFullscreen,
+  refreshing,
+  onViewChange,
+  onZoomChange,
+  onRefresh,
+  onToggleFullscreen,
+}: {
+  view: SpreadsheetPreviewView;
+  zoom: number;
+  printViewAvailable: boolean;
+  projectName?: string;
+  file: CodeEditorFile;
+  isFullscreen: boolean;
+  refreshing: boolean;
+  onViewChange: (view: SpreadsheetPreviewView) => void;
+  onZoomChange: (zoom: number) => void;
+  onRefresh: () => void;
+  onToggleFullscreen?: (() => void) | null;
+}) {
+  const { t } = useTranslation('codeEditor');
+  const iconButtonClass = 'flex h-8 w-8 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-800';
+
+  return (
+    <div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-neutral-200 bg-white px-3 dark:border-neutral-800 dark:bg-neutral-950">
+      <div className="flex items-center rounded-md bg-neutral-100 p-0.5 dark:bg-neutral-900">
+        <button
+          type="button"
+          onClick={() => onViewChange('interactive')}
+          className={[
+            'rounded px-3 py-1 text-[12px] font-medium transition-colors',
+            view === 'interactive'
+              ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-neutral-100'
+              : 'text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200',
+          ].join(' ')}
+        >
+          {t('spreadsheetPreview.interactiveView')}
+        </button>
+        <button
+          type="button"
+          onClick={() => onViewChange('print')}
+          disabled={!printViewAvailable}
+          title={!printViewAvailable ? t('spreadsheetPreview.printViewUnavailable') : undefined}
+          className={[
+            'rounded px-3 py-1 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+            view === 'print'
+              ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-neutral-100'
+              : 'text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200',
+          ].join(' ')}
+        >
+          {t('spreadsheetPreview.printView')}
+        </button>
+      </div>
+
+      <div className="flex items-center gap-1">
+        {view === 'interactive' && (
+          <>
+            <button
+              type="button"
+              onClick={() => onZoomChange(Math.max(0.25, zoom - 0.1))}
+              className={iconButtonClass}
+              title={t('pdfToolbar.zoomOut')}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="7" strokeWidth="1.75" />
+                <path d="M8 11h6m2.5 5.5L21 21" strokeLinecap="round" strokeWidth="1.75" />
+              </svg>
+            </button>
+            <span className="min-w-[52px] text-center text-[12px] tabular-nums text-neutral-600 dark:text-neutral-300">
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={() => onZoomChange(Math.min(2, zoom + 0.1))}
+              className={iconButtonClass}
+              title={t('pdfToolbar.zoomIn')}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="7" strokeWidth="1.75" />
+                <path d="M8 11h6m-3-3v6m5.5 2.5L21 21" strokeLinecap="round" strokeWidth="1.75" />
+              </svg>
+            </button>
+            <span className="mx-1 h-5 w-px bg-neutral-200 dark:bg-neutral-800" />
+          </>
+        )}
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={refreshing}
+          className={iconButtonClass}
+          title={t('pdfToolbar.refresh')}
+        >
+          <svg
+            className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path d="M20 7v5h-5M4 17v-5h5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" />
+            <path d="M6.1 8.5A7 7 0 0118.5 7M17.9 15.5A7 7 0 015.5 17" strokeLinecap="round" strokeWidth="1.75" />
+          </svg>
+        </button>
+        {onToggleFullscreen && (
+          <button
+            type="button"
+            onClick={onToggleFullscreen}
+            className={iconButtonClass}
+            title={isFullscreen ? t('actions.exitFullscreen') : t('actions.fullscreen')}
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                d={isFullscreen
+                  ? 'M9 9H4V4m5 5L3.5 3.5M15 9h5V4m-5 5l5.5-5.5M9 15H4v5m5-5l-5.5 5.5M15 15h5v5m-5-5l5.5 5.5'
+                  : 'M4 9V4h5M4 4l5.5 5.5M20 9V4h-5m5 0l-5.5 5.5M4 15v5h5m-5 0l5.5-5.5M20 15v5h-5m5 0l-5.5-5.5'}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.75"
+              />
+            </svg>
+          </button>
+        )}
+        {projectName && (
+          <a
+            href={api.fileDownloadUrl(projectName, file.path)}
+            download={file.name}
+            className={iconButtonClass}
+            title={t('actions.download')}
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 20h14" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" />
+            </svg>
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SpreadsheetPreview({
   projectName,
   file,
@@ -678,31 +922,65 @@ function SpreadsheetPreview({
     status: previewServiceStatus,
     loading: previewServiceLoading,
   } = useOfficePreviewService();
-  const previewDisabledByConfig = previewServiceStatus?.service === 'none';
-  const previewEnabled = !previewServiceLoading && !previewDisabledByConfig;
+  const [viewOverride, setViewOverride] = useState<SpreadsheetPreviewView | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const configuredMode = previewServiceStatus?.spreadsheetMode || 'auto';
+  const requestedView = viewOverride || (configuredMode === 'print' ? 'print' : 'interactive');
+  const interactiveEnabled = !previewServiceLoading && requestedView === 'interactive';
+  const {
+    data: interactiveData,
+    errorMessage: interactiveError,
+    loading: interactiveLoading,
+    reload: reloadInteractive,
+  } = useSpreadsheetInteractivePreview(projectName, file.path, interactiveEnabled);
+  const interactiveFailure = interactiveError || runtimeError;
+  const shouldAutoFallback = !viewOverride
+    && configuredMode === 'auto'
+    && Boolean(interactiveFailure)
+    && previewServiceStatus?.service === 'libreoffice';
+  const activeView: SpreadsheetPreviewView = requestedView === 'print' || shouldAutoFallback
+    ? 'print'
+    : 'interactive';
+  const printViewAvailable = previewServiceStatus?.service === 'libreoffice';
+  const printPreviewEnabled = !previewServiceLoading
+    && activeView === 'print'
+    && printViewAvailable;
   const {
     manifest,
     errorMessage: manifestError,
     errorCode: manifestErrorCode,
     loading: manifestLoading,
-    reload,
+    reload: reloadPrint,
     refreshKey,
-  } = useSpreadsheetPreviewManifest(projectName, file.path, previewEnabled);
+  } = useSpreadsheetPreviewManifest(projectName, file.path, printPreviewEnabled);
   const [selectedSheetIndex, setSelectedSheetIndex] = useState<number | null>(null);
+
+  const reload = useCallback((options: ReloadOptions = {}) => {
+    setRuntimeError(null);
+    if (activeView === 'interactive') reloadInteractive(options);
+    else reloadPrint(options);
+  }, [activeView, reloadInteractive, reloadPrint]);
 
   useOfficeAutoRefresh(projectName, file.path, reload);
 
   useEffect(() => {
-    if (!manifest) {
-      setSelectedSheetIndex(null);
-      return;
-    }
+    setViewOverride(null);
+    setZoom(1);
+    setRuntimeError(null);
+    setSelectedSheetIndex(null);
+  }, [file.path]);
+
+  const activeManifest = activeView === 'interactive' ? interactiveData : manifest;
+
+  useEffect(() => {
+    if (!activeManifest) return;
     setSelectedSheetIndex((current) => (
-      current !== null && manifest.sheets.some((sheet) => sheet.index === current)
+      current !== null && activeManifest.sheets.some((sheet) => sheet.index === current)
         ? current
-        : manifest.activeSheetIndex
+        : activeManifest.activeSheetIndex
     ));
-  }, [manifest]);
+  }, [activeManifest]);
 
   const {
     previewUrl,
@@ -715,17 +993,19 @@ function SpreadsheetPreview({
     sheetIndex: selectedSheetIndex,
     revision: manifest?.revision || '',
     refreshKey,
-    enabled: previewEnabled && Boolean(manifest) && selectedSheetIndex !== null,
+    enabled: printPreviewEnabled && Boolean(manifest) && selectedSheetIndex !== null,
   });
 
   if (previewServiceLoading) {
     return <PreviewSpinner label={t('officePreview.checkingService')} />;
   }
-  if (previewDisabledByConfig) {
-    return (
+
+  let sheetContent: ReactNode;
+  if (activeView === 'print' && !printViewAvailable) {
+    sheetContent = (
       <FallbackContent
         title={t('officePreview.disabledTitle')}
-        message={t('officePreview.disabledMessage')}
+        message={t('spreadsheetPreview.printViewUnavailable')}
         onClose={onClose}
         actions={(
           <>
@@ -735,13 +1015,51 @@ function SpreadsheetPreview({
         )}
       />
     );
-  }
-  if (manifestLoading && !manifest) {
-    return <PreviewSpinner label={t('spreadsheetPreview.readingWorkbook')} />;
-  }
-  if (manifestError || !manifest) {
+  } else if (activeView === 'interactive') {
+    if (interactiveLoading && !interactiveData) {
+      sheetContent = <PreviewSpinner label={t('spreadsheetPreview.readingWorkbook')} />;
+    } else if (interactiveFailure || !interactiveData || selectedSheetIndex === null) {
+      const canUsePrintFallback = previewServiceStatus?.service === 'libreoffice';
+      sheetContent = (
+        <FallbackContent
+          title={title}
+          message={interactiveFailure || t('spreadsheetPreview.interactiveFailedMessage')}
+          onClose={onClose}
+          actions={(
+            <>
+              <DownloadButton projectName={projectName} file={file} />
+              {canUsePrintFallback && (
+                <button
+                  type="button"
+                  onClick={() => setViewOverride('print')}
+                  className="rounded-md border border-neutral-200 px-3 py-1.5 text-[13px] text-neutral-700 transition-colors hover:bg-neutral-50 dark:border-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                >
+                  {t('spreadsheetPreview.usePrintView')}
+                </button>
+              )}
+            </>
+          )}
+        />
+      );
+    } else {
+      sheetContent = (
+        <Suspense fallback={<PreviewSpinner label={t('spreadsheetPreview.loadingInteractive')} />}>
+          <SpreadsheetInteractivePreview
+            key={interactiveData.revision}
+            workbook={interactiveData.workbook}
+            activeSheetIndex={selectedSheetIndex}
+            zoom={zoom}
+            onActiveSheetChange={setSelectedSheetIndex}
+            onError={(error) => setRuntimeError(error.message)}
+          />
+        </Suspense>
+      );
+    }
+  } else if (manifestLoading && !manifest) {
+    sheetContent = <PreviewSpinner label={t('spreadsheetPreview.readingWorkbook')} />;
+  } else if (manifestError || !manifest) {
     const needsLibreOffice = manifestErrorCode === 'LIBREOFFICE_NOT_FOUND';
-    return (
+    sheetContent = (
       <FallbackContent
         title={needsLibreOffice ? t('officePreview.libreOfficeUnavailableTitle') : title}
         message={needsLibreOffice
@@ -756,59 +1074,87 @@ function SpreadsheetPreview({
         )}
       />
     );
+  } else {
+    const needsLibreOffice = sheetErrorCode === 'LIBREOFFICE_NOT_FOUND';
+    if (sheetLoading || selectedSheetIndex === null) {
+      sheetContent = <PreviewSpinner label={t('spreadsheetPreview.renderingSheet')} />;
+    } else if (sheetError || !previewUrl) {
+      sheetContent = (
+        <FallbackContent
+          title={needsLibreOffice ? t('officePreview.libreOfficeUnavailableTitle') : title}
+          message={needsLibreOffice
+            ? t('officePreview.libreOfficeUnavailableMessage')
+            : sheetError || t('spreadsheetPreview.failedMessage')}
+          onClose={onClose}
+          actions={(
+            <>
+              <DownloadButton projectName={projectName} file={file} />
+              {needsLibreOffice && <OfficePreviewSettingsButton />}
+            </>
+          )}
+        />
+      );
+    } else {
+      sheetContent = (
+        <PdfDocumentPreview
+          url={previewUrl}
+          projectName={projectName}
+          fileName={file.name}
+          filePath={file.path}
+          source="office-pdf"
+          viewKey={`worksheet:${selectedSheetIndex}`}
+          loadingOverlay={manifestLoading ? t('officePreview.refreshing') : null}
+          navigationMode="none"
+          showPageControls={false}
+          onRefresh={() => reloadPrint({ force: true })}
+          refreshDisabled={manifestLoading || sheetLoading}
+          downloadUrl={projectName ? api.fileDownloadUrl(projectName, file.path) : null}
+          downloadName={file.name}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={onToggleFullscreen}
+        />
+      );
+    }
   }
 
-  const needsLibreOffice = sheetErrorCode === 'LIBREOFFICE_NOT_FOUND';
-  let sheetContent: ReactNode;
-  if (sheetLoading || selectedSheetIndex === null) {
-    sheetContent = <PreviewSpinner label={t('spreadsheetPreview.renderingSheet')} />;
-  } else if (sheetError || !previewUrl) {
-    sheetContent = (
-      <FallbackContent
-        title={needsLibreOffice ? t('officePreview.libreOfficeUnavailableTitle') : title}
-        message={needsLibreOffice
-          ? t('officePreview.libreOfficeUnavailableMessage')
-          : sheetError || t('spreadsheetPreview.failedMessage')}
-        onClose={onClose}
-        actions={(
-          <>
-            <DownloadButton projectName={projectName} file={file} />
-            {needsLibreOffice && <OfficePreviewSettingsButton />}
-          </>
-        )}
-      />
-    );
-  } else {
-    sheetContent = (
-      <PdfDocumentPreview
-        url={previewUrl}
-        projectName={projectName}
-        fileName={file.name}
-        filePath={file.path}
-        source="office-pdf"
-        viewKey={`worksheet:${selectedSheetIndex}`}
-        loadingOverlay={manifestLoading ? t('officePreview.refreshing') : null}
-        navigationMode="none"
-        showPageControls={false}
-        onRefresh={() => reload({ force: true })}
-        refreshDisabled={manifestLoading || sheetLoading}
-        downloadUrl={projectName ? api.fileDownloadUrl(projectName, file.path) : null}
-        downloadName={file.name}
-        isFullscreen={isFullscreen}
-        onToggleFullscreen={onToggleFullscreen}
-      />
-    );
-  }
+  const warning = activeView === 'interactive'
+    ? interactiveData?.warnings?.[0]?.message
+    : shouldAutoFallback
+      ? t('spreadsheetPreview.fellBackToPrint')
+      : null;
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-neutral-100 dark:bg-neutral-900">
-      <div className="min-h-0 flex-1">{sheetContent}</div>
-      <SpreadsheetTabs
-        sheets={manifest.sheets}
-        activeSheetIndex={selectedSheetIndex ?? manifest.activeSheetIndex}
-        disabled={manifestLoading}
-        onSelect={setSelectedSheetIndex}
+      <SpreadsheetPreviewToolbar
+        view={activeView}
+        zoom={zoom}
+        printViewAvailable={printViewAvailable}
+        projectName={projectName}
+        file={file}
+        isFullscreen={isFullscreen}
+        refreshing={activeView === 'interactive' ? interactiveLoading : manifestLoading || sheetLoading}
+        onViewChange={(nextView) => {
+          setViewOverride(nextView);
+          setRuntimeError(null);
+        }}
+        onZoomChange={setZoom}
+        onRefresh={() => reload({ force: true })}
+        onToggleFullscreen={onToggleFullscreen}
       />
+      {warning && (
+        <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+          {warning}
+        </div>
+      )}
+      <div className="min-h-0 flex-1">{sheetContent}</div>
+      {activeManifest && (
+        <SpreadsheetTabs
+          sheets={activeManifest.sheets}
+          activeSheetIndex={selectedSheetIndex ?? activeManifest.activeSheetIndex}
+          disabled={activeView === 'interactive' ? interactiveLoading : manifestLoading}
+          onSelect={setSelectedSheetIndex}
+        />
+      )}
     </div>
   );
 }

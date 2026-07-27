@@ -105,6 +105,7 @@ export type PilotDeckConfig = {
     officePreview?: {
       service?: "none" | "libreoffice" | string;
       binaryPath?: string;
+      spreadsheetMode?: "auto" | "interactive" | "print" | string;
     };
   };
   customEnv?: Record<string, string>;

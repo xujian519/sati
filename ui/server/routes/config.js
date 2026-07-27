@@ -34,6 +34,7 @@ import {
   OFFICE_PREVIEW_SERVICE_NONE,
   getLibreOfficeCandidateStatuses,
   getConfiguredOfficePreviewService,
+  getConfiguredSpreadsheetPreviewMode,
   getLibreOfficeStatus,
 } from '../services/officePreview.js';
 
@@ -396,13 +397,15 @@ router.post('/validate', (req, res) => {
 router.get('/office-preview/status', async (req, res) => {
   try {
     const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
-    const [libreOffice, candidates, service] = await Promise.all([
+    const [libreOffice, candidates, service, spreadsheetMode] = await Promise.all([
       getLibreOfficeStatus({ forceRefresh }),
       getLibreOfficeCandidateStatuses({ forceRefresh }),
       Promise.resolve(getConfiguredOfficePreviewService()),
+      Promise.resolve(getConfiguredSpreadsheetPreviewMode()),
     ]);
     res.json({
       service,
+      spreadsheetMode,
       libreOffice: {
         ...libreOffice,
         candidates,

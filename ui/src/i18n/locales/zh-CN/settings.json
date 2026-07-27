@@ -763,11 +763,15 @@
       },
       "officePreview": {
         "title": "Office 文件预览服务",
-        "description": "配置 PilotDeck 如何预览 Word、Excel 和 PowerPoint 文件。选择“无”后不会执行 Office 转换。",
+        "description": "配置 Excel 交互式浏览，以及打印版式和其他 Office 文件使用的本机转换服务。",
         "fields": {
+          "spreadsheetMode": {
+            "label": "Excel 预览",
+            "description": "自动模式优先使用可点击单元格的交互视图，失败时回退到打印版式。每个打开的工作簿也可以临时切换。"
+          },
           "service": {
-            "label": "预览服务",
-            "description": "Office 文件点击预览时使用的本机服务。"
+            "label": "Office 转换服务",
+            "description": "用于 Word、PowerPoint、旧版表格转换和 Excel 打印版式预览的本机服务。"
           },
           "binaryPath": {
             "label": "LibreOffice 可执行文件路径",
@@ -783,6 +787,9 @@
           "none": "无",
           "libreOffice": "LibreOffice",
           "libreOfficeUnavailable": "LibreOffice（不可用）",
+          "spreadsheetAuto": "自动（优先交互视图）",
+          "spreadsheetInteractive": "交互式单元格",
+          "spreadsheetPrint": "打印版式（LibreOffice）",
           "autoDetect": "自动探测（不指定路径）",
           "candidateAvailable": "{{path}}（可用）",
           "candidateUnavailable": "{{path}}（不可用）",

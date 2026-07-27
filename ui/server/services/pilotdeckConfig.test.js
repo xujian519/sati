@@ -34,6 +34,7 @@ describe('readPilotDeckConfigFile fallback behavior', () => {
         expect(buildDefaultPilotDeckConfig().webui.officePreview).toEqual({
             service: 'none',
             binaryPath: '',
+            spreadsheetMode: 'auto',
         });
     });
 
@@ -79,6 +80,21 @@ describe('readPilotDeckConfigFile fallback behavior', () => {
 });
 
 describe('validatePilotDeckConfig gateway validation', () => {
+    it('rejects unsupported spreadsheet preview modes', () => {
+        const validation = validatePilotDeckConfig({
+            webui: {
+                officePreview: {
+                    spreadsheetMode: 'canvas',
+                },
+            },
+        });
+
+        expect(validation.valid).toBe(false);
+        expect(validation.errors).toContain(
+            'webui.officePreview.spreadsheetMode must be "auto", "interactive", or "print"',
+        );
+    });
+
     it('rejects non-object gateway config', () => {
         const validation = validatePilotDeckConfig({ gateway: true });
 

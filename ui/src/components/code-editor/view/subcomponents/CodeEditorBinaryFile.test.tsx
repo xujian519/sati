@@ -1,7 +1,24 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../../../../utils/api';
 import CodeEditorBinaryFile from './CodeEditorBinaryFile';
+
+const readOfficePreviewStatusMock = vi.hoisted(() => vi.fn(async () => ({
+  service: 'none',
+  spreadsheetMode: 'auto',
+  libreOffice: {
+    available: false,
+  },
+})));
+
+vi.mock('../../../../utils/officePreviewStatus', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../../../utils/officePreviewStatus')>();
+  return {
+    ...original,
+    readOfficePreviewStatus: readOfficePreviewStatusMock,
+  };
+});
 
 vi.mock('./PdfDocumentPreview', () => ({
   default: ({
@@ -21,6 +38,18 @@ vi.mock('./PdfDocumentPreview', () => ({
     >
       PDF preview
     </button>
+  ),
+}));
+
+vi.mock('./SpreadsheetInteractivePreview', () => ({
+  default: ({
+    activeSheetIndex,
+  }: {
+    activeSheetIndex: number;
+  }) => (
+    <div data-testid="spreadsheet-interactive-preview">
+      Active worksheet {activeSheetIndex}
+    </div>
   ),
 }));
 
@@ -95,5 +124,62 @@ describe('CodeEditorBinaryFile', () => {
 
     fireEvent.click(screen.getByTitle('actions.fullscreen'));
     expect(onToggleFullscreen).toHaveBeenCalledOnce();
+  });
+
+  it('loads selectable XLSX data without requiring LibreOffice', async () => {
+    vi.spyOn(api, 'spreadsheetInteractivePreview').mockResolvedValue(new Response(
+      JSON.stringify({
+        version: 1,
+        revision: 'test-revision',
+        activeSheetIndex: 0,
+        sheets: [
+          { index: 0, name: '管理摘要' },
+          { index: 1, name: '行动项' },
+        ],
+        warnings: [],
+        workbook: {
+          id: 'workbook-test',
+          name: 'report.xlsx',
+          appVersion: '0.25.1',
+          locale: 'zhCN',
+          styles: {},
+          sheetOrder: ['sheet-0', 'sheet-1'],
+          sheets: {
+            'sheet-0': {
+              id: 'sheet-0',
+              name: '管理摘要',
+            },
+            'sheet-1': {
+              id: 'sheet-1',
+              name: '行动项',
+            },
+          },
+        },
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    ));
+
+    render(
+      <CodeEditorBinaryFile
+        {...baseProps}
+        file={{
+          name: 'report.xlsx',
+          path: '/workspace/hundouluo/report.xlsx',
+          diffInfo: null,
+        }}
+      />,
+    );
+
+    expect(await screen.findByText('Active worksheet 0')).not.toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'spreadsheetPreview.printView' }).hasAttribute('disabled'),
+    ).toBe(true);
+
+    fireEvent.click(screen.getByRole('tab', { name: '行动项' }));
+
+    expect(await screen.findByText('Active worksheet 1')).not.toBeNull();
   });
 });
