@@ -123,6 +123,7 @@ export default function DocxBuiltinPreview({
   const { t } = useTranslation('codeEditor');
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const onErrorRef = useRef(onError);
   const [rendered, setRendered] = useState(false);
   const [outline, setOutline] = useState<OutlineItem[]>([]);
   const [navigationVisible, setNavigationVisible] = useState(true);
@@ -138,6 +139,10 @@ export default function DocxBuiltinPreview({
   const highlightId = useId().replace(/[^a-z0-9_-]/gi, '');
   const allHighlightName = `pilotdeck-docx-search-${highlightId}`;
   const activeHighlightName = `${allHighlightName}-active`;
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   useEffect(() => {
     const container = viewerRef.current;
@@ -173,7 +178,7 @@ export default function DocxBuiltinPreview({
       })
       .catch((error) => {
         if (!cancelled) {
-          onError(error instanceof Error ? error : new Error(String(error)));
+          onErrorRef.current(error instanceof Error ? error : new Error(String(error)));
         }
       });
 
@@ -181,7 +186,7 @@ export default function DocxBuiltinPreview({
       cancelled = true;
       container.replaceChildren();
     };
-  }, [blob, onError]);
+  }, [blob]);
 
   useEffect(() => {
     const wrapper = viewerRef.current?.querySelector<HTMLElement>('.pilotdeck-docx-wrapper');

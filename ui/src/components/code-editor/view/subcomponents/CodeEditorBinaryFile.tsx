@@ -558,6 +558,18 @@ function useObjectUrl(blob: Blob | null) {
   return blobUrl;
 }
 
+function pathsReferToSameFile(left: string, right: string) {
+  const normalize = (value: string) => value
+    .replace(/\\/g, '/')
+    .replace(/^\.?\//, '')
+    .replace(/\/+/g, '/');
+  const normalizedLeft = normalize(left);
+  const normalizedRight = normalize(right);
+  return normalizedLeft === normalizedRight
+    || normalizedLeft.endsWith(`/${normalizedRight}`)
+    || normalizedRight.endsWith(`/${normalizedLeft}`);
+}
+
 function useOfficeAutoRefresh(
   projectName: string | undefined,
   filePath: string,
@@ -565,11 +577,12 @@ function useOfficeAutoRefresh(
 ) {
   useEffect(() => {
     const matchesFile = (detail: unknown) => {
-      if (!detail || typeof detail !== 'object') return true;
+      if (!detail || typeof detail !== 'object') return false;
       const payload = detail as { projectName?: string; filePath?: string; path?: string };
       const changedPath = payload.filePath || payload.path;
+      if (!changedPath) return false;
       return (!payload.projectName || payload.projectName === projectName)
-        && (!changedPath || changedPath === filePath);
+        && pathsReferToSameFile(changedPath, filePath);
     };
 
     const handleRefreshEvent = (event: Event) => {
@@ -581,11 +594,9 @@ function useOfficeAutoRefresh(
 
     window.addEventListener('pilotdeck:file-updated', handleRefreshEvent);
     window.addEventListener('pilotdeck:files-changed', handleRefreshEvent);
-    window.addEventListener('pilotdeck:agent-turn-complete', handleRefreshEvent);
     return () => {
       window.removeEventListener('pilotdeck:file-updated', handleRefreshEvent);
       window.removeEventListener('pilotdeck:files-changed', handleRefreshEvent);
-      window.removeEventListener('pilotdeck:agent-turn-complete', handleRefreshEvent);
     };
   }, [filePath, projectName, reload]);
 }
@@ -1244,6 +1255,9 @@ function BuiltinModernOfficePreview({
     setRuntimeError(null);
     reload({ force: true });
   }, [reload]);
+  const handleRuntimeError = useCallback((error: Error) => {
+    setRuntimeError(error.message);
+  }, []);
 
   useOfficeAutoRefresh(projectName, file.path, handleReload);
   useEffect(() => {
@@ -1280,7 +1294,7 @@ function BuiltinModernOfficePreview({
     onToggleFullscreen,
     refreshing: loading,
     onRefresh: handleReload,
-    onError: (error: Error) => setRuntimeError(error.message),
+    onError: handleRuntimeError,
   };
 
   return (

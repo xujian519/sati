@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../../../utils/api';
 import CodeEditorBinaryFile from './CodeEditorBinaryFile';
@@ -234,7 +234,7 @@ describe('CodeEditorBinaryFile', () => {
   });
 
   it('uses the bundled DOCX renderer in built-in mode', async () => {
-    vi.spyOn(api, 'readFileBlob').mockResolvedValue(
+    const readFileBlob = vi.spyOn(api, 'readFileBlob').mockResolvedValue(
       new Response(new Blob(['docx-data']), { status: 200 }),
     );
 
@@ -250,6 +250,31 @@ describe('CodeEditorBinaryFile', () => {
     );
 
     expect(await screen.findByText('Built-in DOCX preview')).not.toBeNull();
+    expect(readFileBlob).toHaveBeenCalledTimes(1);
+
+    window.dispatchEvent(new CustomEvent('pilotdeck:agent-turn-complete', {
+      detail: { projectName: 'hundouluo' },
+    }));
+    window.dispatchEvent(new CustomEvent('pilotdeck:file-updated', {
+      detail: {
+        projectName: 'hundouluo',
+        filePath: 'other.docx',
+      },
+    }));
+
+    await Promise.resolve();
+    expect(readFileBlob).toHaveBeenCalledTimes(1);
+
+    window.dispatchEvent(new CustomEvent('pilotdeck:file-updated', {
+      detail: {
+        projectName: 'hundouluo',
+        filePath: 'report.docx',
+      },
+    }));
+
+    await waitFor(() => {
+      expect(readFileBlob).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('guides legacy Office formats to LibreOffice while built-in preview is selected', async () => {
