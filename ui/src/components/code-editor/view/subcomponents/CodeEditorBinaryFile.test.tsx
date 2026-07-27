@@ -174,12 +174,56 @@ describe('CodeEditorBinaryFile', () => {
     );
 
     expect(await screen.findByText('Active worksheet 0')).not.toBeNull();
-    expect(
-      screen.getByRole('button', { name: 'spreadsheetPreview.printView' }).hasAttribute('disabled'),
-    ).toBe(true);
+    expect(screen.queryByText('spreadsheetPreview.interactiveView')).toBeNull();
+    expect(screen.queryByText('spreadsheetPreview.printView')).toBeNull();
+    expect(screen.getByTitle('pdfToolbar.zoomOut')).not.toBeNull();
 
     fireEvent.click(screen.getByRole('tab', { name: '行动项' }));
 
     expect(await screen.findByText('Active worksheet 1')).not.toBeNull();
+  });
+
+  it('uses only the configured print renderer without showing a per-file view switch', async () => {
+    readOfficePreviewStatusMock.mockResolvedValueOnce({
+      service: 'libreoffice',
+      spreadsheetMode: 'print',
+      libreOffice: {
+        available: true,
+      },
+    });
+    vi.spyOn(api, 'spreadsheetPreviewManifest').mockResolvedValue(new Response(
+      JSON.stringify({
+        version: 1,
+        revision: 'print-revision',
+        activeSheetIndex: 0,
+        sheets: [{ index: 0, name: 'Sheet1' }],
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    ));
+    vi.spyOn(api, 'preflightSpreadsheetSheetPreview').mockResolvedValue(
+      new Response(new Uint8Array([37, 80, 68, 70]), {
+        status: 206,
+        headers: { 'Content-Type': 'application/pdf' },
+      }),
+    );
+
+    render(
+      <CodeEditorBinaryFile
+        {...baseProps}
+        file={{
+          name: 'report.xlsx',
+          path: '/workspace/hundouluo/report.xlsx',
+          diffInfo: null,
+        }}
+      />,
+    );
+
+    expect(await screen.findByRole('button', { name: 'PDF preview' })).not.toBeNull();
+    expect(screen.queryByText('spreadsheetPreview.interactiveView')).toBeNull();
+    expect(screen.queryByText('spreadsheetPreview.printView')).toBeNull();
+    expect(screen.queryByTitle('pdfToolbar.zoomOut')).toBeNull();
   });
 });

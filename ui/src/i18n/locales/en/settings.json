@@ -767,7 +767,7 @@
         "fields": {
           "spreadsheetMode": {
             "label": "Excel preview",
-            "description": "Auto uses the interactive cell viewer first and falls back to print layout. You can temporarily switch views for each open workbook."
+            "description": "Auto uses the interactive cell viewer first and falls back to print layout."
           },
           "service": {
             "label": "Office conversion service",

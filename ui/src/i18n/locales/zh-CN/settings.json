@@ -767,7 +767,7 @@
         "fields": {
           "spreadsheetMode": {
             "label": "Excel 预览",
-            "description": "自动模式优先使用可点击单元格的交互视图，失败时回退到打印版式。每个打开的工作簿也可以临时切换。"
+            "description": "自动模式优先使用可点击单元格的交互视图，失败时回退到打印版式。"
           },
           "service": {
             "label": "Office 转换服务",

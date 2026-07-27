@@ -760,26 +760,20 @@ function PdfPreview({
 }
 
 function SpreadsheetPreviewToolbar({
-  view,
   zoom,
-  printViewAvailable,
   projectName,
   file,
   isFullscreen,
   refreshing,
-  onViewChange,
   onZoomChange,
   onRefresh,
   onToggleFullscreen,
 }: {
-  view: SpreadsheetPreviewView;
   zoom: number;
-  printViewAvailable: boolean;
   projectName?: string;
   file: CodeEditorFile;
   isFullscreen: boolean;
   refreshing: boolean;
-  onViewChange: (view: SpreadsheetPreviewView) => void;
   onZoomChange: (zoom: number) => void;
   onRefresh: () => void;
   onToggleFullscreen?: (() => void) | null;
@@ -788,67 +782,34 @@ function SpreadsheetPreviewToolbar({
   const iconButtonClass = 'flex h-8 w-8 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-800';
 
   return (
-    <div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-neutral-200 bg-white px-3 dark:border-neutral-800 dark:bg-neutral-950">
-      <div className="flex items-center rounded-md bg-neutral-100 p-0.5 dark:bg-neutral-900">
-        <button
-          type="button"
-          onClick={() => onViewChange('interactive')}
-          className={[
-            'rounded px-3 py-1 text-[12px] font-medium transition-colors',
-            view === 'interactive'
-              ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-neutral-100'
-              : 'text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200',
-          ].join(' ')}
-        >
-          {t('spreadsheetPreview.interactiveView')}
-        </button>
-        <button
-          type="button"
-          onClick={() => onViewChange('print')}
-          disabled={!printViewAvailable}
-          title={!printViewAvailable ? t('spreadsheetPreview.printViewUnavailable') : undefined}
-          className={[
-            'rounded px-3 py-1 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-            view === 'print'
-              ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-neutral-100'
-              : 'text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200',
-          ].join(' ')}
-        >
-          {t('spreadsheetPreview.printView')}
-        </button>
-      </div>
-
+    <div className="flex h-11 shrink-0 items-center justify-end gap-3 border-b border-neutral-200 bg-white px-3 dark:border-neutral-800 dark:bg-neutral-950">
       <div className="flex items-center gap-1">
-        {view === 'interactive' && (
-          <>
-            <button
-              type="button"
-              onClick={() => onZoomChange(Math.max(0.25, zoom - 0.1))}
-              className={iconButtonClass}
-              title={t('pdfToolbar.zoomOut')}
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <circle cx="11" cy="11" r="7" strokeWidth="1.75" />
-                <path d="M8 11h6m2.5 5.5L21 21" strokeLinecap="round" strokeWidth="1.75" />
-              </svg>
-            </button>
-            <span className="min-w-[52px] text-center text-[12px] tabular-nums text-neutral-600 dark:text-neutral-300">
-              {Math.round(zoom * 100)}%
-            </span>
-            <button
-              type="button"
-              onClick={() => onZoomChange(Math.min(2, zoom + 0.1))}
-              className={iconButtonClass}
-              title={t('pdfToolbar.zoomIn')}
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <circle cx="11" cy="11" r="7" strokeWidth="1.75" />
-                <path d="M8 11h6m-3-3v6m5.5 2.5L21 21" strokeLinecap="round" strokeWidth="1.75" />
-              </svg>
-            </button>
-            <span className="mx-1 h-5 w-px bg-neutral-200 dark:bg-neutral-800" />
-          </>
-        )}
+        <button
+          type="button"
+          onClick={() => onZoomChange(Math.max(0.25, zoom - 0.1))}
+          className={iconButtonClass}
+          title={t('pdfToolbar.zoomOut')}
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="7" strokeWidth="1.75" />
+            <path d="M8 11h6m2.5 5.5L21 21" strokeLinecap="round" strokeWidth="1.75" />
+          </svg>
+        </button>
+        <span className="min-w-[52px] text-center text-[12px] tabular-nums text-neutral-600 dark:text-neutral-300">
+          {Math.round(zoom * 100)}%
+        </span>
+        <button
+          type="button"
+          onClick={() => onZoomChange(Math.min(2, zoom + 0.1))}
+          className={iconButtonClass}
+          title={t('pdfToolbar.zoomIn')}
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="7" strokeWidth="1.75" />
+            <path d="M8 11h6m-3-3v6m5.5 2.5L21 21" strokeLinecap="round" strokeWidth="1.75" />
+          </svg>
+        </button>
+        <span className="mx-1 h-5 w-px bg-neutral-200 dark:bg-neutral-800" />
         <button
           type="button"
           onClick={onRefresh}
@@ -922,11 +883,10 @@ function SpreadsheetPreview({
     status: previewServiceStatus,
     loading: previewServiceLoading,
   } = useOfficePreviewService();
-  const [viewOverride, setViewOverride] = useState<SpreadsheetPreviewView | null>(null);
   const [zoom, setZoom] = useState(1);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const configuredMode = previewServiceStatus?.spreadsheetMode || 'auto';
-  const requestedView = viewOverride || (configuredMode === 'print' ? 'print' : 'interactive');
+  const requestedView: SpreadsheetPreviewView = configuredMode === 'print' ? 'print' : 'interactive';
   const interactiveEnabled = !previewServiceLoading && requestedView === 'interactive';
   const {
     data: interactiveData,
@@ -935,8 +895,7 @@ function SpreadsheetPreview({
     reload: reloadInteractive,
   } = useSpreadsheetInteractivePreview(projectName, file.path, interactiveEnabled);
   const interactiveFailure = interactiveError || runtimeError;
-  const shouldAutoFallback = !viewOverride
-    && configuredMode === 'auto'
+  const shouldAutoFallback = configuredMode === 'auto'
     && Boolean(interactiveFailure)
     && previewServiceStatus?.service === 'libreoffice';
   const activeView: SpreadsheetPreviewView = requestedView === 'print' || shouldAutoFallback
@@ -965,7 +924,6 @@ function SpreadsheetPreview({
   useOfficeAutoRefresh(projectName, file.path, reload);
 
   useEffect(() => {
-    setViewOverride(null);
     setZoom(1);
     setRuntimeError(null);
     setSelectedSheetIndex(null);
@@ -1019,25 +977,13 @@ function SpreadsheetPreview({
     if (interactiveLoading && !interactiveData) {
       sheetContent = <PreviewSpinner label={t('spreadsheetPreview.readingWorkbook')} />;
     } else if (interactiveFailure || !interactiveData || selectedSheetIndex === null) {
-      const canUsePrintFallback = previewServiceStatus?.service === 'libreoffice';
       sheetContent = (
         <FallbackContent
           title={title}
           message={interactiveFailure || t('spreadsheetPreview.interactiveFailedMessage')}
           onClose={onClose}
           actions={(
-            <>
-              <DownloadButton projectName={projectName} file={file} />
-              {canUsePrintFallback && (
-                <button
-                  type="button"
-                  onClick={() => setViewOverride('print')}
-                  className="rounded-md border border-neutral-200 px-3 py-1.5 text-[13px] text-neutral-700 transition-colors hover:bg-neutral-50 dark:border-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-900"
-                >
-                  {t('spreadsheetPreview.usePrintView')}
-                </button>
-              )}
-            </>
+            <DownloadButton projectName={projectName} file={file} />
           )}
         />
       );
@@ -1125,22 +1071,18 @@ function SpreadsheetPreview({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-neutral-100 dark:bg-neutral-900">
-      <SpreadsheetPreviewToolbar
-        view={activeView}
-        zoom={zoom}
-        printViewAvailable={printViewAvailable}
-        projectName={projectName}
-        file={file}
-        isFullscreen={isFullscreen}
-        refreshing={activeView === 'interactive' ? interactiveLoading : manifestLoading || sheetLoading}
-        onViewChange={(nextView) => {
-          setViewOverride(nextView);
-          setRuntimeError(null);
-        }}
-        onZoomChange={setZoom}
-        onRefresh={() => reload({ force: true })}
-        onToggleFullscreen={onToggleFullscreen}
-      />
+      {activeView === 'interactive' && (
+        <SpreadsheetPreviewToolbar
+          zoom={zoom}
+          projectName={projectName}
+          file={file}
+          isFullscreen={isFullscreen}
+          refreshing={interactiveLoading}
+          onZoomChange={setZoom}
+          onRefresh={() => reload({ force: true })}
+          onToggleFullscreen={onToggleFullscreen}
+        />
+      )}
       {warning && (
         <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
           {warning}
