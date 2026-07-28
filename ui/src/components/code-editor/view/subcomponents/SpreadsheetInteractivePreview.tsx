@@ -30,6 +30,7 @@ import SheetsZhCN from '@univerjs/sheets/locale/zh-CN';
 import { UniverUIPlugin } from '@univerjs/ui';
 import '@univerjs/ui/facade';
 import UIZhCN from '@univerjs/ui/locale/zh-CN';
+import { useTranslation } from 'react-i18next';
 import {
   createCellRangeContentReference,
   createImageRegionContentReference,
@@ -39,6 +40,9 @@ import {
 } from '../../../../types/contentReference';
 import ContentReferenceMenu from './ContentReferenceMenu';
 import RegionSelectionOverlay, { type CapturedRegion } from './RegionSelectionOverlay';
+import {
+  floatingSelectionSingleActionClassName,
+} from './floatingSelectionAction';
 
 import '@univerjs/design/lib/index.css';
 import '@univerjs/ui/lib/index.css';
@@ -64,6 +68,11 @@ type UniverRuntime = {
   api: ReturnType<typeof FUniver.newAPI>;
   disposeActiveSheetListener?: () => void;
   disposeSelectionListener?: () => void;
+  disposeSelectionMoveStartListener?: () => void;
+  disposeSelectionMoveEndListener?: () => void;
+  disposeCellClickListener?: () => void;
+  disposePopupComponent?: () => void;
+  disposeSelectionPopup?: () => void;
 };
 
 type SelectedCell = {
@@ -113,6 +122,7 @@ export default function SpreadsheetInteractivePreview({
   onActiveSheetChange,
   onError,
 }: SpreadsheetInteractivePreviewProps) {
+  const { t } = useTranslation('codeEditor');
   const containerRef = useRef<HTMLDivElement | null>(null);
   const runtimeRef = useRef<UniverRuntime | null>(null);
   const [selectedCell, setSelectedCell] = useState<SelectedCell>({
@@ -121,6 +131,10 @@ export default function SpreadsheetInteractivePreview({
   });
   const [selectionDraft, setSelectionDraft] = useState<SpreadsheetSelectionDraft | null>(null);
   const [referenceMode, setReferenceMode] = useState<ContentReferenceSelectionMode | null>(null);
+  const selectionDraftRef = useRef<SpreadsheetSelectionDraft | null>(null);
+  const addCellReferenceRef = useRef<() => void>(() => undefined);
+  const referenceModeRef = useRef<ContentReferenceSelectionMode | null>(referenceMode);
+  const selectionMovingRef = useRef(false);
   const userInteractedRef = useRef(false);
   const onActiveSheetChangeRef = useRef(onActiveSheetChange);
   const onErrorRef = useRef(onError);
@@ -130,10 +144,12 @@ export default function SpreadsheetInteractivePreview({
   onErrorRef.current = onError;
   activeSheetIndexRef.current = activeSheetIndex;
   zoomRef.current = zoom;
+  referenceModeRef.current = referenceMode;
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return undefined;
+    let disposed = false;
 
     try {
       const univer = new Univer({
@@ -181,6 +197,26 @@ export default function SpreadsheetInteractivePreview({
       const api = FUniver.newAPI(univer);
       api.createWorkbook(workbook);
       const fWorkbook = api.getActiveWorkbook();
+      let selectionPopup: { dispose: () => void } | null = null;
+      const disposeSelectionPopup = () => {
+        selectionPopup?.dispose();
+        selectionPopup = null;
+      };
+      const popupComponentKey = `pilotdeck-cell-reference-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const popupComponent = api.registerComponent(
+        popupComponentKey,
+        () => (
+          <button
+            type="button"
+            className={floatingSelectionSingleActionClassName}
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerUp={(event) => event.stopPropagation()}
+            onClick={() => addCellReferenceRef.current()}
+          >
+            {t('selection.chatInPilotDeck')}
+          </button>
+        ),
+      );
       const updateSelectedCell = (
         worksheet: ReturnType<NonNullable<typeof fWorkbook>['getActiveSheet']>,
         row = 0,
@@ -192,6 +228,107 @@ export default function SpreadsheetInteractivePreview({
           address: `${getColumnName(column)}${row + 1}`,
           value: formula || cell.getDisplayValue(),
         });
+      };
+      const syncSelection = (
+        worksheet: ReturnType<NonNullable<typeof fWorkbook>['getActiveSheet']>,
+        selections: Array<{
+          startRow: number;
+          endRow: number;
+          startColumn: number;
+          endColumn: number;
+        }>,
+        showPopup: boolean,
+      ) => {
+        const selection = selections[0];
+        if (!selection) {
+          selectionDraftRef.current = null;
+          setSelectionDraft(null);
+          disposeSelectionPopup();
+          return;
+        }
+        updateSelectedCell(
+          worksheet,
+          selection.startRow,
+          selection.startColumn,
+        );
+        const cells = selections.map((selectedRange) => {
+          const range = worksheet.getRange(selectedRange);
+          const rowCount = selectedRange.endRow - selectedRange.startRow + 1;
+          const columnCount = selectedRange.endColumn - selectedRange.startColumn + 1;
+          const snapshotRowCount = Math.min(rowCount, MAX_REFERENCE_SNAPSHOT_ROWS);
+          const snapshotColumnCount = Math.min(columnCount, MAX_REFERENCE_SNAPSHOT_COLUMNS);
+          const snapshotRange = worksheet.getRange(
+            selectedRange.startRow,
+            selectedRange.startColumn,
+            snapshotRowCount,
+            snapshotColumnCount,
+          );
+          return {
+            range: range.getA1Notation(),
+            displayValues: snapshotRange.getDisplayValues(),
+            rawValues: snapshotRange.getValues(),
+            formulas: snapshotRange.getFormulas(),
+            rowCount,
+            columnCount,
+            truncated: rowCount > snapshotRowCount || columnCount > snapshotColumnCount,
+          };
+        });
+        const headerRowCount = Math.min(2, selection.startRow);
+        const headerColumnCount = Math.min(
+          selection.endColumn - selection.startColumn + 1,
+          MAX_REFERENCE_CONTEXT_COLUMNS,
+        );
+        const headers = headerRowCount > 0
+          ? worksheet.getRange(
+            selection.startRow - headerRowCount,
+            selection.startColumn,
+            headerRowCount,
+            headerColumnCount,
+          ).getDisplayValues()
+          : undefined;
+        const contextStartRow = Math.max(0, selection.startRow - 1);
+        const contextStartColumn = Math.max(0, selection.startColumn - 1);
+        const surroundingValues = worksheet.getRange(
+          contextStartRow,
+          contextStartColumn,
+          Math.min(
+            selection.endRow - contextStartRow + 2,
+            MAX_REFERENCE_CONTEXT_ROWS,
+          ),
+          Math.min(
+            selection.endColumn - contextStartColumn + 2,
+            MAX_REFERENCE_CONTEXT_COLUMNS,
+          ),
+        ).getDisplayValues();
+        const nextDraft = {
+          sheetId: worksheet.getSheetId(),
+          sheetName: worksheet.getSheetName(),
+          ranges: cells.map((cell) => cell.range),
+          activeRange: cells[0]?.range || `${getColumnName(selection.startColumn)}${selection.startRow + 1}`,
+          cells,
+          headers,
+          surroundingValues,
+        };
+        selectionDraftRef.current = nextDraft;
+        setSelectionDraft(nextDraft);
+
+        if (!showPopup || referenceModeRef.current === 'region') return;
+        disposeSelectionPopup();
+        selectionPopup = worksheet.getRange(selection).attachRangePopup({
+          componentKey: popupComponentKey,
+          direction: 'top-center',
+          offset: [0, -8],
+        }) || null;
+      };
+      const syncCurrentSelection = (
+        worksheet: ReturnType<NonNullable<typeof fWorkbook>['getActiveSheet']>,
+        showPopup: boolean,
+      ) => {
+        const selections = worksheet
+          .getSelection()
+          ?.getActiveRangeList()
+          .map((range) => range.getRange()) || [];
+        syncSelection(worksheet, selections, showPopup);
       };
       if (fWorkbook) {
         fWorkbook.setActiveSheet(`sheet-${activeSheetIndexRef.current}`);
@@ -205,76 +342,44 @@ export default function SpreadsheetInteractivePreview({
           const nextIndex = getSheetIndex(activeSheet.getSheetId());
           if (nextIndex !== null) onActiveSheetChangeRef.current(nextIndex);
           updateSelectedCell(activeSheet);
+          selectionDraftRef.current = null;
+          setSelectionDraft(null);
+          disposeSelectionPopup();
         },
       );
       const selectionListener = api.addEvent(
         api.Event.SelectionChanged,
         ({ worksheet, selections }) => {
-          const selection = selections[0];
-          if (!selection) return;
-          updateSelectedCell(
+          syncSelection(
             worksheet,
-            selection.startRow,
-            selection.startColumn,
+            selections,
+            userInteractedRef.current && !selectionMovingRef.current,
           );
-          if (!userInteractedRef.current) return;
-          const cells = selections.map((selectedRange) => {
-            const range = worksheet.getRange(selectedRange);
-            const rowCount = selectedRange.endRow - selectedRange.startRow + 1;
-            const columnCount = selectedRange.endColumn - selectedRange.startColumn + 1;
-            const snapshotRowCount = Math.min(rowCount, MAX_REFERENCE_SNAPSHOT_ROWS);
-            const snapshotColumnCount = Math.min(columnCount, MAX_REFERENCE_SNAPSHOT_COLUMNS);
-            const snapshotRange = worksheet.getRange(
-              selectedRange.startRow,
-              selectedRange.startColumn,
-              snapshotRowCount,
-              snapshotColumnCount,
-            );
-            return {
-              range: range.getA1Notation(),
-              displayValues: snapshotRange.getDisplayValues(),
-              rawValues: snapshotRange.getValues(),
-              formulas: snapshotRange.getFormulas(),
-              rowCount,
-              columnCount,
-              truncated: rowCount > snapshotRowCount || columnCount > snapshotColumnCount,
-            };
-          });
-          const headerRowCount = Math.min(2, selection.startRow);
-          const headerColumnCount = Math.min(
-            selection.endColumn - selection.startColumn + 1,
-            MAX_REFERENCE_CONTEXT_COLUMNS,
-          );
-          const headers = headerRowCount > 0
-            ? worksheet.getRange(
-              selection.startRow - headerRowCount,
-              selection.startColumn,
-              headerRowCount,
-              headerColumnCount,
-            ).getDisplayValues()
-            : undefined;
-          const contextStartRow = Math.max(0, selection.startRow - 1);
-          const contextStartColumn = Math.max(0, selection.startColumn - 1);
-          const surroundingValues = worksheet.getRange(
-            contextStartRow,
-            contextStartColumn,
-            Math.min(
-              selection.endRow - contextStartRow + 2,
-              MAX_REFERENCE_CONTEXT_ROWS,
-            ),
-            Math.min(
-              selection.endColumn - contextStartColumn + 2,
-              MAX_REFERENCE_CONTEXT_COLUMNS,
-            ),
-          ).getDisplayValues();
-          setSelectionDraft({
-            sheetId: worksheet.getSheetId(),
-            sheetName: worksheet.getSheetName(),
-            ranges: cells.map((cell) => cell.range),
-            activeRange: cells[0]?.range || `${getColumnName(selection.startColumn)}${selection.startRow + 1}`,
-            cells,
-            headers,
-            surroundingValues,
+        },
+      );
+      const selectionMoveStartListener = api.addEvent(
+        api.Event.SelectionMoveStart,
+        () => {
+          userInteractedRef.current = true;
+          selectionMovingRef.current = true;
+          disposeSelectionPopup();
+        },
+      );
+      const selectionMoveEndListener = api.addEvent(
+        api.Event.SelectionMoveEnd,
+        ({ worksheet, selections }) => {
+          userInteractedRef.current = true;
+          selectionMovingRef.current = false;
+          syncSelection(worksheet, selections, true);
+        },
+      );
+      const cellClickListener = api.addEvent(
+        api.Event.CellClicked,
+        ({ worksheet }) => {
+          userInteractedRef.current = true;
+          window.requestAnimationFrame(() => {
+            if (disposed) return;
+            syncCurrentSelection(worksheet, true);
           });
         },
       );
@@ -283,19 +388,30 @@ export default function SpreadsheetInteractivePreview({
         api,
         disposeActiveSheetListener: () => activeSheetListener.dispose(),
         disposeSelectionListener: () => selectionListener.dispose(),
+        disposeSelectionMoveStartListener: () => selectionMoveStartListener.dispose(),
+        disposeSelectionMoveEndListener: () => selectionMoveEndListener.dispose(),
+        disposeCellClickListener: () => cellClickListener.dispose(),
+        disposePopupComponent: () => popupComponent.dispose(),
+        disposeSelectionPopup,
       };
     } catch (error) {
       onErrorRef.current(error instanceof Error ? error : new Error(String(error)));
     }
 
     return () => {
+      disposed = true;
       const runtime = runtimeRef.current;
       runtimeRef.current = null;
+      runtime?.disposeSelectionPopup?.();
       runtime?.disposeActiveSheetListener?.();
       runtime?.disposeSelectionListener?.();
+      runtime?.disposeSelectionMoveStartListener?.();
+      runtime?.disposeSelectionMoveEndListener?.();
+      runtime?.disposeCellClickListener?.();
+      runtime?.disposePopupComponent?.();
       runtime?.univer.dispose();
     };
-  }, [workbook]);
+  }, [t, workbook]);
 
   useEffect(() => {
     const fWorkbook = runtimeRef.current?.api.getActiveWorkbook();
@@ -319,7 +435,8 @@ export default function SpreadsheetInteractivePreview({
   };
 
   const addCellReference = () => {
-    if (!selectionDraft) return;
+    const draft = selectionDraftRef.current;
+    if (!draft) return;
     const reference = createCellRangeContentReference({
       selectionMode: 'cells',
       source: {
@@ -331,17 +448,27 @@ export default function SpreadsheetInteractivePreview({
       renderer: { id: 'xlsx', backend: 'builtin', locatorQuality: 'semantic' },
       locator: {
         surface: 'sheet',
-        sheetId: selectionDraft.sheetId,
-        sheetName: selectionDraft.sheetName,
-        ranges: selectionDraft.ranges,
-        activeRange: selectionDraft.activeRange,
+        sheetId: draft.sheetId,
+        sheetName: draft.sheetName,
+        ranges: draft.ranges,
+        activeRange: draft.activeRange,
       },
-      cells: selectionDraft.cells,
-      headers: selectionDraft.headers,
-      surroundingValues: selectionDraft.surroundingValues,
+      cells: draft.cells,
+      headers: draft.headers,
+      surroundingValues: draft.surroundingValues,
     });
     window.dispatchEvent(new CustomEvent('pilotdeck:add-chat-reference', { detail: reference }));
+    selectionDraftRef.current = null;
+    setSelectionDraft(null);
+    runtimeRef.current?.disposeSelectionPopup?.();
   };
+  addCellReferenceRef.current = addCellReference;
+
+  useEffect(() => {
+    if (referenceMode === 'region') {
+      runtimeRef.current?.disposeSelectionPopup?.();
+    }
+  }, [referenceMode]);
 
   const handleRegionCommit = (capture: CapturedRegion) => {
     const activeSheet = runtimeRef.current?.api.getActiveWorkbook()?.getActiveSheet();
@@ -403,25 +530,14 @@ export default function SpreadsheetInteractivePreview({
           onCancelMode={() => setReferenceMode(null)}
           compact
         />
-        {selectionDraft ? (
-          <button
-            type="button"
-            className="mx-1 shrink-0 rounded-md bg-blue-600 px-2.5 py-1 text-[12px] font-medium text-white hover:bg-blue-700"
-            title={`${selectionDraft.sheetName}!${selectionDraft.ranges.join(', ')}`}
-            onClick={addCellReference}
-          >
-            添加到对话
-          </button>
-        ) : null}
       </div>
-      <div
-        ref={containerRef}
-        data-testid="spreadsheet-interactive-preview"
-        className="min-h-0 w-full flex-1 overflow-hidden bg-white"
-        onPointerDown={() => {
-          userInteractedRef.current = true;
-        }}
-      />
+      <div className="relative min-h-0 w-full flex-1 overflow-hidden bg-white">
+        <div
+          ref={containerRef}
+          data-testid="spreadsheet-interactive-preview"
+          className="h-full min-h-0 w-full overflow-hidden bg-white"
+        />
+      </div>
       <RegionSelectionOverlay
         active={referenceMode === 'region'}
         hostRef={containerRef}

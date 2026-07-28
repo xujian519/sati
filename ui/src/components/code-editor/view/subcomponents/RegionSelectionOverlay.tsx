@@ -4,6 +4,10 @@ import type {
   ContentReferenceSurface,
   NormalizedRect,
 } from '../../../../types/contentReference';
+import {
+  floatingSelectionGroupClassName,
+  getFloatingActionPosition,
+} from './floatingSelectionAction';
 
 export type RegionCaptureTarget = {
   element: HTMLElement;
@@ -156,6 +160,19 @@ export default function RegionSelectionOverlay({
     };
   }, [hostRect, rect]);
 
+  const actionPosition = useMemo(() => {
+    if (!hostRect || !localRect) return null;
+    return getFloatingActionPosition({
+      anchorX: localRect.left + localRect.width / 2,
+      anchorY: localRect.top + localRect.height,
+      hostWidth: hostRect.width,
+      hostHeight: hostRect.height,
+      actionWidth: 288,
+      actionHeight: 44,
+      preferredPlacement: 'below',
+    });
+  }, [hostRect, localRect]);
+
   if (!active || !hostRect) return null;
 
   return createPortal(
@@ -218,19 +235,16 @@ export default function RegionSelectionOverlay({
           style={localRect}
         />
       ) : null}
-      {localRect && target && rect ? (
+      {localRect && target && rect && actionPosition ? (
         <div
-          className="absolute z-10 flex items-center gap-1 rounded-lg border border-neutral-200 bg-white p-1 shadow-xl dark:border-neutral-700 dark:bg-neutral-950"
-          style={{
-            left: Math.max(8, localRect.left),
-            top: Math.max(8, localRect.top + localRect.height + 8),
-          }}
+          className={`absolute z-10 ${floatingSelectionGroupClassName}`}
+          style={actionPosition}
           onPointerDown={(event) => event.stopPropagation()}
         >
           <button
             type="button"
             disabled={capturing}
-            className="rounded-md bg-blue-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-xl bg-blue-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             onClick={async () => {
               setCapturing(true);
               setError(null);
@@ -247,7 +261,7 @@ export default function RegionSelectionOverlay({
           <button
             type="button"
             disabled={capturing}
-            className="rounded-md px-2.5 py-1.5 text-[12px] text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            className="rounded-xl px-2.5 py-1.5 text-[12px] text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
             onClick={() => {
               setRect(null);
               setTarget(null);
@@ -259,7 +273,7 @@ export default function RegionSelectionOverlay({
           <button
             type="button"
             disabled={capturing}
-            className="rounded-md px-2.5 py-1.5 text-[12px] text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            className="rounded-xl px-2.5 py-1.5 text-[12px] text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
             onClick={onCancel}
           >
             取消

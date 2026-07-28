@@ -40,6 +40,7 @@ import {
 } from '../../utils/pdfSearch';
 import ContentReferenceMenu from './ContentReferenceMenu';
 import RegionSelectionOverlay, { type CapturedRegion } from './RegionSelectionOverlay';
+import { floatingSelectionSingleActionClassName } from './floatingSelectionAction';
 
 type PdfDocumentPreviewProps = {
   blob?: Blob;
@@ -1836,7 +1837,7 @@ export default function PdfDocumentPreview({
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={handleAddReference}
-              className="absolute z-20 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[12px] font-medium text-neutral-900 shadow-lg transition hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:hover:bg-neutral-900"
+              className={`absolute z-20 ${floatingSelectionSingleActionClassName}`}
               style={{ top: selectionAction.top, left: selectionAction.left }}
             >
               {t('selection.chatInPilotDeck')}

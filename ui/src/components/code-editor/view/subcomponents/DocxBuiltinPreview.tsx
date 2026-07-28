@@ -10,6 +10,7 @@ import {
 } from '../../../../types/contentReference';
 import BuiltinOfficeToolbar from './BuiltinOfficeToolbar';
 import RegionSelectionOverlay, { type CapturedRegion } from './RegionSelectionOverlay';
+import { floatingSelectionSingleActionClassName } from './floatingSelectionAction';
 
 type DocxBuiltinPreviewProps = {
   blob: Blob;
@@ -487,7 +488,7 @@ export default function DocxBuiltinPreview({
           {selectionAction ? (
             <button
               type="button"
-              className="absolute z-20 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[12px] font-medium text-neutral-900 shadow-lg hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+              className={`absolute z-20 ${floatingSelectionSingleActionClassName}`}
               style={{ top: selectionAction.top, left: selectionAction.left }}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
