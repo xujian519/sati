@@ -7,9 +7,11 @@ import {
   type IWorkbookData,
 } from '@univerjs/core';
 import { FUniver } from '@univerjs/core/facade';
+import DesignEnUS from '@univerjs/design/locale/en-US';
 import DesignZhCN from '@univerjs/design/locale/zh-CN';
 import { UniverDocsPlugin } from '@univerjs/docs';
 import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
+import DocsUIEnUS from '@univerjs/docs-ui/locale/en-US';
 import DocsUIZhCN from '@univerjs/docs-ui/locale/zh-CN';
 import { UniverFormulaEnginePlugin } from '@univerjs/engine-formula';
 import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
@@ -18,17 +20,22 @@ import '@univerjs/sheets/facade';
 import { UniverSheetsFormulaPlugin } from '@univerjs/sheets-formula';
 import '@univerjs/sheets-formula/facade';
 import { UniverSheetsFormulaUIPlugin } from '@univerjs/sheets-formula-ui';
+import SheetsFormulaUIEnUS from '@univerjs/sheets-formula-ui/locale/en-US';
 import SheetsFormulaUIZhCN from '@univerjs/sheets-formula-ui/locale/zh-CN';
 import { UniverSheetsNumfmtPlugin } from '@univerjs/sheets-numfmt';
 import '@univerjs/sheets-numfmt/facade';
 import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
+import SheetsNumfmtUIEnUS from '@univerjs/sheets-numfmt-ui/locale/en-US';
 import SheetsNumfmtUIZhCN from '@univerjs/sheets-numfmt-ui/locale/zh-CN';
 import { UniverSheetsUIPlugin } from '@univerjs/sheets-ui';
 import '@univerjs/sheets-ui/facade';
+import SheetsUIEnUS from '@univerjs/sheets-ui/locale/en-US';
 import SheetsUIZhCN from '@univerjs/sheets-ui/locale/zh-CN';
+import SheetsEnUS from '@univerjs/sheets/locale/en-US';
 import SheetsZhCN from '@univerjs/sheets/locale/zh-CN';
 import { UniverUIPlugin } from '@univerjs/ui';
 import '@univerjs/ui/facade';
+import UIEnUS from '@univerjs/ui/locale/en-US';
 import UIZhCN from '@univerjs/ui/locale/zh-CN';
 import { useTranslation } from 'react-i18next';
 import {
@@ -95,6 +102,27 @@ const MAX_REFERENCE_SNAPSHOT_COLUMNS = 50;
 const MAX_REFERENCE_CONTEXT_ROWS = 20;
 const MAX_REFERENCE_CONTEXT_COLUMNS = 30;
 
+const UNIVER_LOCALES = {
+  [LocaleType.EN_US]: mergeLocales(
+    DesignEnUS,
+    UIEnUS,
+    DocsUIEnUS,
+    SheetsEnUS,
+    SheetsUIEnUS,
+    SheetsFormulaUIEnUS,
+    SheetsNumfmtUIEnUS,
+  ),
+  [LocaleType.ZH_CN]: mergeLocales(
+    DesignZhCN,
+    UIZhCN,
+    DocsUIZhCN,
+    SheetsZhCN,
+    SheetsUIZhCN,
+    SheetsFormulaUIZhCN,
+    SheetsNumfmtUIZhCN,
+  ),
+};
+
 function getSheetIndex(sheetId: string) {
   const match = /^sheet-(\d+)$/.exec(sheetId);
   return match ? Number(match[1]) : null;
@@ -122,7 +150,10 @@ export default function SpreadsheetInteractivePreview({
   onActiveSheetChange,
   onError,
 }: SpreadsheetInteractivePreviewProps) {
-  const { t } = useTranslation('codeEditor');
+  const { t, i18n } = useTranslation('codeEditor');
+  const univerLocale = i18n.resolvedLanguage?.toLowerCase().startsWith('zh')
+    ? LocaleType.ZH_CN
+    : LocaleType.EN_US;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const runtimeRef = useRef<UniverRuntime | null>(null);
   const [selectedCell, setSelectedCell] = useState<SelectedCell>({
@@ -153,17 +184,9 @@ export default function SpreadsheetInteractivePreview({
 
     try {
       const univer = new Univer({
-        locale: LocaleType.ZH_CN,
+        locale: univerLocale,
         locales: {
-          [LocaleType.ZH_CN]: mergeLocales(
-            DesignZhCN,
-            UIZhCN,
-            DocsUIZhCN,
-            SheetsZhCN,
-            SheetsUIZhCN,
-            SheetsFormulaUIZhCN,
-            SheetsNumfmtUIZhCN,
-          ),
+          [univerLocale]: UNIVER_LOCALES[univerLocale],
         },
         logLevel: LogLevel.ERROR,
       });
@@ -195,7 +218,7 @@ export default function SpreadsheetInteractivePreview({
       univer.registerPlugin(UniverSheetsNumfmtUIPlugin);
 
       const api = FUniver.newAPI(univer);
-      api.createWorkbook(workbook);
+      api.createWorkbook({ ...workbook, locale: univerLocale });
       const fWorkbook = api.getActiveWorkbook();
       let selectionPopup: { dispose: () => void } | null = null;
       const disposeSelectionPopup = () => {
@@ -411,7 +434,7 @@ export default function SpreadsheetInteractivePreview({
       runtime?.disposePopupComponent?.();
       runtime?.univer.dispose();
     };
-  }, [t, workbook]);
+  }, [t, univerLocale, workbook]);
 
   useEffect(() => {
     const fWorkbook = runtimeRef.current?.api.getActiveWorkbook();
@@ -506,7 +529,7 @@ export default function SpreadsheetInteractivePreview({
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-white">
       <div className="flex h-9 shrink-0 items-center border-b border-border bg-background text-sm">
         <div
-          aria-label="当前单元格"
+          aria-label={t('contentReference.spreadsheet.currentCell')}
           className="w-20 shrink-0 border-r border-border px-3 font-medium text-foreground"
         >
           {selectedCell.address}
@@ -518,7 +541,7 @@ export default function SpreadsheetInteractivePreview({
           fx
         </div>
         <input
-          aria-label="单元格值或公式"
+          aria-label={t('contentReference.spreadsheet.cellValue')}
           className="min-w-0 flex-1 bg-transparent px-3 text-foreground outline-none"
           readOnly
           value={selectedCell.value}

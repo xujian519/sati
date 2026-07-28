@@ -89,7 +89,11 @@
     "fellBackToPrint": "Interactive preview was unavailable, so PilotDeck switched to print layout.",
     "worksheets": "Worksheets",
     "previousWorksheets": "Previous worksheets",
-    "nextWorksheets": "Next worksheets"
+    "nextWorksheets": "Next worksheets",
+    "warnings": {
+      "SPREADSHEET_IMAGES_NOT_RENDERED": "Embedded images are not shown in the interactive preview.",
+      "SPREADSHEET_MACROS_NOT_RENDERED": "Workbook macros are not run in the interactive preview."
+    }
   },
   "pdfToolbar": {
     "zoomOut": "Zoom out",
@@ -135,5 +139,53 @@
   "selection": {
     "chatInPilotDeck": "Chat in PilotDeck",
     "noSelectableText": "This preview does not contain selectable text."
+  },
+  "contentReference": {
+    "addToChat": "Add to chat",
+    "reference": "Reference",
+    "activeModeTitle": "{{label}} (click again to cancel)",
+    "loading": "Preparing preview capabilities",
+    "recommended": "Recommended",
+    "closeMenu": "Close menu",
+    "regionSummary": "Selected region",
+    "locations": {
+      "page": "Page {{numbers}}",
+      "slide": "Slide {{numbers}}"
+    },
+    "modes": {
+      "text": {
+        "label": "Select text",
+        "description": "Drag to select copyable text"
+      },
+      "cells": {
+        "label": "Select cells",
+        "description": "Select one or more contiguous ranges"
+      },
+      "region": {
+        "label": "Select region",
+        "description": "Capture an area as an image reference"
+      }
+    },
+    "reasons": {
+      "NO_TEXT_LAYER": "This view does not have selectable text",
+      "NO_CELL_MODEL": "This view does not have a cell model",
+      "SURFACE_NOT_READY": "The preview is still loading",
+      "CAPTURE_UNAVAILABLE": "This view cannot be captured",
+      "UNSUPPORTED_RENDERER": "The current preview does not support this action"
+    },
+    "regionSelection": {
+      "ariaLabel": "Select a region to add to the conversation",
+      "invalidStart": "Start the selection inside the file content",
+      "tooSmall": "The selected area is too small. Please try again.",
+      "captureFailed": "Could not capture the selected region",
+      "hint": "Drag to select a region · Esc to cancel",
+      "capturing": "Capturing…",
+      "selectAgain": "Select again",
+      "cancel": "Cancel"
+    },
+    "spreadsheet": {
+      "currentCell": "Current cell",
+      "cellValue": "Cell value or formula"
+    }
   }
 }

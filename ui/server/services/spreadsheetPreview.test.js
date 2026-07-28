@@ -197,4 +197,27 @@ describe('spreadsheet workbook manifest parsing', () => {
       await rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it('falls back to the first visible sheet when the saved active sheet is hidden', async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), 'pilotdeck-spreadsheet-hidden-active-'));
+    const workbookPath = path.join(tempDir, 'workbook.xlsx');
+    try {
+      await createInteractiveFixture(workbookPath);
+      const zip = await JSZip.loadAsync(await readFile(workbookPath));
+      const workbookEntry = zip.file('xl/workbook.xml');
+      const workbookXml = await workbookEntry.async('string');
+      zip.file(
+        'xl/workbook.xml',
+        workbookXml.replace(/activeTab="\d+"/, 'activeTab="1"'),
+      );
+      await writeFile(workbookPath, await zip.generateAsync({ type: 'nodebuffer' }));
+
+      const preview = await getSpreadsheetInteractivePreview(workbookPath);
+
+      expect(preview.sheets.map((sheet) => sheet.index)).toEqual([0, 2]);
+      expect(preview.activeSheetIndex).toBe(0);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });

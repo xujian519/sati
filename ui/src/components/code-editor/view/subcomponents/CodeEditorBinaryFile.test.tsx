@@ -138,7 +138,7 @@ describe('CodeEditorBinaryFile', () => {
       JSON.stringify({
         version: 1,
         revision: 'test-revision',
-        activeSheetIndex: 0,
+        activeSheetIndex: 99,
         sheets: [
           { index: 0, name: '管理摘要' },
           { index: 1, name: '行动项' },

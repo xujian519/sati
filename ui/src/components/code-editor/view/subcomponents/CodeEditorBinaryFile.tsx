@@ -1011,7 +1011,9 @@ function SpreadsheetPreview({
     setSelectedSheetIndex((current) => (
       current !== null && activeManifest.sheets.some((sheet) => sheet.index === current)
         ? current
-        : activeManifest.activeSheetIndex
+        : activeManifest.sheets.some((sheet) => sheet.index === activeManifest.activeSheetIndex)
+          ? activeManifest.activeSheetIndex
+          : activeManifest.sheets[0]?.index ?? null
     ));
   }, [activeManifest]);
 
@@ -1127,8 +1129,13 @@ function SpreadsheetPreview({
     }
   }
 
-  const warning = !usePrintPreview
-    ? interactiveData?.warnings?.[0]?.message
+  const previewWarning = !usePrintPreview
+    ? interactiveData?.warnings?.[0]
+    : null;
+  const warning = previewWarning
+    ? t(`spreadsheetPreview.warnings.${previewWarning.code}`, {
+      defaultValue: previewWarning.message,
+    })
     : null;
 
   return (

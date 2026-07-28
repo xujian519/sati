@@ -248,15 +248,179 @@ export function createImageRegionContentReference(
   });
 }
 
-export function isContentReference(value: unknown): value is ContentReference {
-  if (!value || typeof value !== 'object') return false;
-  const candidate = value as Partial<ContentReference>;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isNumberArray(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every(isFiniteNumber);
+}
+
+function isMatrix(
+  value: unknown,
+  isCell: (cell: unknown) => boolean = () => true,
+): value is unknown[][] {
+  return Array.isArray(value)
+    && value.every((row) => Array.isArray(row) && row.every(isCell));
+}
+
+function isOptionalString(value: unknown) {
+  return value === undefined || typeof value === 'string';
+}
+
+function isOptionalFiniteNumber(value: unknown) {
+  return value === undefined || isFiniteNumber(value);
+}
+
+function isNormalizedRect(value: unknown): value is NormalizedRect {
+  if (!isRecord(value)) return false;
+  return isFiniteNumber(value.x)
+    && isFiniteNumber(value.y)
+    && isFiniteNumber(value.width)
+    && isFiniteNumber(value.height);
+}
+
+function hasValidCommonFields(candidate: Record<string, unknown>) {
+  const source = candidate.source;
+  const renderer = candidate.renderer;
+  if (!isRecord(source) || !isRecord(renderer)) return false;
+
+  const revision = source.revision;
+  if (
+    revision !== undefined
+    && (
+      !isRecord(revision)
+      || !isOptionalString(revision.id)
+      || !isOptionalString(revision.sha256)
+      || !isOptionalFiniteNumber(revision.size)
+      || !isOptionalFiniteNumber(revision.mtimeMs)
+    )
+  ) {
+    return false;
+  }
+
   return candidate.kind === CONTENT_REFERENCE_ATTACHMENT_KIND
     && candidate.schemaVersion === 1
-    && typeof candidate.id === 'string'
-    && typeof candidate.selectionMode === 'string'
-    && Boolean(candidate.source?.relativePath)
-    && Boolean(candidate.source?.fileName);
+    && isNonEmptyString(candidate.id)
+    && isNonEmptyString(candidate.createdAt)
+    && isNonEmptyString(source.relativePath)
+    && isNonEmptyString(source.fileName)
+    && isOptionalString(source.projectName)
+    && isOptionalString(source.mimeType)
+    && [
+      'pdf',
+      'office-pdf',
+      'docx',
+      'xlsx',
+      'pptx',
+      'text',
+      'html',
+      'image',
+    ].includes(String(renderer.id))
+    && ['builtin', 'libreoffice'].includes(String(renderer.backend))
+    && ['semantic', 'approximate', 'visual'].includes(String(renderer.locatorQuality));
+}
+
+function isTextContentReference(candidate: Record<string, unknown>) {
+  if (!isRecord(candidate.locator) || typeof candidate.selectedText !== 'string') return false;
+  const locator = candidate.locator;
+  const quote = locator.quote;
+  return ['document', 'page', 'slide', 'editor'].includes(String(locator.surface))
+    && isRecord(quote)
+    && typeof quote.exact === 'string'
+    && isOptionalString(quote.prefix)
+    && isOptionalString(quote.suffix)
+    && (locator.pageNumbers === undefined || isNumberArray(locator.pageNumbers))
+    && (locator.slideNumbers === undefined || isNumberArray(locator.slideNumbers))
+    && (locator.headingPath === undefined || isStringArray(locator.headingPath))
+    && (
+      locator.occurrenceIndex === undefined
+      || locator.occurrenceIndex === null
+      || isFiniteNumber(locator.occurrenceIndex)
+    )
+    && (
+      locator.rects === undefined
+      || (Array.isArray(locator.rects) && locator.rects.every(isNormalizedRect))
+    )
+    && isOptionalString(candidate.surroundingText)
+    && (candidate.truncated === undefined || typeof candidate.truncated === 'boolean');
+}
+
+function isCellRangeContentReference(candidate: Record<string, unknown>) {
+  if (!isRecord(candidate.locator) || !Array.isArray(candidate.cells)) return false;
+  const locator = candidate.locator;
+  const cellsValid = candidate.cells.every((snapshot) => {
+    if (!isRecord(snapshot)) return false;
+    return isNonEmptyString(snapshot.range)
+      && isMatrix(snapshot.displayValues, (cell) => typeof cell === 'string')
+      && (snapshot.rawValues === undefined || isMatrix(snapshot.rawValues))
+      && (
+        snapshot.formulas === undefined
+        || isMatrix(snapshot.formulas, (cell) => typeof cell === 'string')
+      )
+      && isOptionalFiniteNumber(snapshot.rowCount)
+      && isOptionalFiniteNumber(snapshot.columnCount)
+      && (snapshot.truncated === undefined || typeof snapshot.truncated === 'boolean');
+  });
+
+  return locator.surface === 'sheet'
+    && isNonEmptyString(locator.sheetId)
+    && isNonEmptyString(locator.sheetName)
+    && isStringArray(locator.ranges)
+    && locator.ranges.length > 0
+    && isNonEmptyString(locator.activeRange)
+    && candidate.cells.length > 0
+    && cellsValid
+    && (
+      candidate.headers === undefined
+      || isMatrix(candidate.headers, (cell) => typeof cell === 'string')
+    )
+    && (
+      candidate.surroundingValues === undefined
+      || isMatrix(candidate.surroundingValues, (cell) => typeof cell === 'string')
+    );
+}
+
+function isImageRegionContentReference(candidate: Record<string, unknown>) {
+  if (!isRecord(candidate.locator) || !isRecord(candidate.image)) return false;
+  const locator = candidate.locator;
+  const image = candidate.image;
+  return ['document', 'page', 'slide', 'sheet', 'editor'].includes(String(locator.surface))
+    && isNormalizedRect(locator.rect)
+    && isOptionalFiniteNumber(locator.pageNumber)
+    && isOptionalFiniteNumber(locator.slideNumber)
+    && isOptionalString(locator.sheetId)
+    && isOptionalString(locator.sheetName)
+    && isOptionalString(locator.anchorRange)
+    && isNonEmptyString(image.name)
+    && image.mimeType === 'image/png'
+    && isFiniteNumber(image.width)
+    && image.width > 0
+    && isFiniteNumber(image.height)
+    && image.height > 0
+    && isOptionalString(image.sha256)
+    && isOptionalString(image.dataUrl)
+    && isOptionalString(candidate.nearbyText);
+}
+
+export function isContentReference(value: unknown): value is ContentReference {
+  if (!isRecord(value) || !hasValidCommonFields(value)) return false;
+  if (value.selectionMode === 'text') return isTextContentReference(value);
+  if (value.selectionMode === 'cells') return isCellRangeContentReference(value);
+  if (value.selectionMode === 'region') return isImageRegionContentReference(value);
+  return false;
 }
 
 export function documentSelectionToContentReference(
@@ -404,18 +568,18 @@ export function parseContentReferencePromptBlock(content: unknown): {
   return { content: visibleContent, references };
 }
 
-export function getContentReferenceSummary(reference: ContentReference, maxLength = 160): string {
+export function getContentReferenceSummary(
+  reference: ContentReference,
+  maxLength = 160,
+  regionLabel = 'Region',
+): string {
   let summary = '';
   if (reference.selectionMode === 'text') {
     summary = reference.selectedText;
   } else if (reference.selectionMode === 'cells') {
     summary = `${reference.locator.sheetName}!${reference.locator.ranges.join(', ')}`;
   } else {
-    const surfaceNumber = reference.locator.pageNumber
-      || reference.locator.slideNumber;
-    summary = surfaceNumber
-      ? `框选区域 · ${reference.locator.surface} ${surfaceNumber}`
-      : '框选区域';
+    summary = regionLabel;
   }
   const normalized = summary.replace(/\s+/g, ' ').trim();
   return normalized.length <= maxLength

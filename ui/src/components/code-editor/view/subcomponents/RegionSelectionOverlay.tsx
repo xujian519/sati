@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import type {
   ContentReferenceSurface,
   NormalizedRect,
@@ -115,8 +116,10 @@ export default function RegionSelectionOverlay({
   onCommit,
   onCancel,
 }: RegionSelectionOverlayProps) {
+  const { t } = useTranslation('codeEditor');
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const startRef = useRef<{ x: number; y: number; target: RegionCaptureTarget } | null>(null);
+  const captureRequestRef = useRef(0);
   const [rect, setRect] = useState<ScreenRect | null>(null);
   const [target, setTarget] = useState<RegionCaptureTarget | null>(null);
   const [capturing, setCapturing] = useState(false);
@@ -125,6 +128,7 @@ export default function RegionSelectionOverlay({
 
   useEffect(() => {
     if (!active) {
+      captureRequestRef.current += 1;
       startRef.current = null;
       setRect(null);
       setTarget(null);
@@ -149,6 +153,10 @@ export default function RegionSelectionOverlay({
       window.removeEventListener('scroll', updateHostRect, true);
     };
   }, [active, hostRef, onCancel]);
+
+  useEffect(() => () => {
+    captureRequestRef.current += 1;
+  }, []);
 
   const localRect = useMemo(() => {
     if (!hostRect || !rect) return null;
@@ -185,7 +193,7 @@ export default function RegionSelectionOverlay({
         width: hostRect.width,
         height: hostRect.height,
       }}
-      aria-label="框选要添加到对话的区域"
+      aria-label={t('contentReference.regionSelection.ariaLabel')}
       onPointerDown={(event) => {
         if (capturing || event.button !== 0) return;
         const overlay = overlayRef.current;
@@ -195,7 +203,7 @@ export default function RegionSelectionOverlay({
         overlay.style.pointerEvents = '';
         const nextTarget = resolveTarget(underlyingElement);
         if (!nextTarget) {
-          setError('请在文件内容区域内开始框选');
+          setError(t('contentReference.regionSelection.invalidStart'));
           return;
         }
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -220,14 +228,14 @@ export default function RegionSelectionOverlay({
         if (nextRect.right - nextRect.left < 8 || nextRect.bottom - nextRect.top < 8) {
           setRect(null);
           setTarget(null);
-          setError('框选范围太小，请重新选择');
+          setError(t('contentReference.regionSelection.tooSmall'));
           return;
         }
         setRect(nextRect);
       }}
     >
       <div className="pointer-events-none absolute left-3 top-3 rounded-md border border-blue-200 bg-white/95 px-3 py-1.5 text-[12px] text-blue-700 shadow-sm backdrop-blur dark:border-blue-800 dark:bg-neutral-950/95 dark:text-blue-300">
-        拖动框选区域 · Esc 取消
+        {t('contentReference.regionSelection.hint')}
       </div>
       {localRect ? (
         <div
@@ -246,17 +254,24 @@ export default function RegionSelectionOverlay({
             disabled={capturing}
             className="rounded-xl bg-blue-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             onClick={async () => {
+              const requestId = captureRequestRef.current + 1;
+              captureRequestRef.current = requestId;
               setCapturing(true);
               setError(null);
               try {
-                onCommit(await captureTargetRegion(target, rect));
-              } catch (captureError) {
-                setError(captureError instanceof Error ? captureError.message : '区域截图失败');
+                const capture = await captureTargetRegion(target, rect);
+                if (captureRequestRef.current !== requestId) return;
+                onCommit(capture);
+              } catch {
+                if (captureRequestRef.current !== requestId) return;
+                setError(t('contentReference.regionSelection.captureFailed'));
                 setCapturing(false);
               }
             }}
           >
-            {capturing ? '正在截取…' : '添加到对话'}
+            {capturing
+              ? t('contentReference.regionSelection.capturing')
+              : t('contentReference.addToChat')}
           </button>
           <button
             type="button"
@@ -268,7 +283,7 @@ export default function RegionSelectionOverlay({
               setError(null);
             }}
           >
-            重新框选
+            {t('contentReference.regionSelection.selectAgain')}
           </button>
           <button
             type="button"
@@ -276,7 +291,7 @@ export default function RegionSelectionOverlay({
             className="rounded-xl px-2.5 py-1.5 text-[12px] text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
             onClick={onCancel}
           >
-            取消
+            {t('contentReference.regionSelection.cancel')}
           </button>
         </div>
       ) : null}

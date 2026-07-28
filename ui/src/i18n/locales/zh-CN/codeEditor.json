@@ -89,7 +89,11 @@
     "fellBackToPrint": "交互式预览不可用，PilotDeck 已切换到打印布局。",
     "worksheets": "工作表",
     "previousWorksheets": "向前浏览工作表",
-    "nextWorksheets": "向后浏览工作表"
+    "nextWorksheets": "向后浏览工作表",
+    "warnings": {
+      "SPREADSHEET_IMAGES_NOT_RENDERED": "交互式预览暂不显示工作簿中的嵌入图片。",
+      "SPREADSHEET_MACROS_NOT_RENDERED": "交互式预览不会运行工作簿宏。"
+    }
   },
   "pdfToolbar": {
     "zoomOut": "缩小",
@@ -135,5 +139,53 @@
   "selection": {
     "chatInPilotDeck": "在 PilotDeck 中对话",
     "noSelectableText": "当前预览不包含可选择文本。"
+  },
+  "contentReference": {
+    "addToChat": "添加到对话",
+    "reference": "引用",
+    "activeModeTitle": "{{label}}（再次点击取消）",
+    "loading": "正在准备预览能力",
+    "recommended": "推荐",
+    "closeMenu": "关闭菜单",
+    "regionSummary": "框选区域",
+    "locations": {
+      "page": "第 {{numbers}} 页",
+      "slide": "第 {{numbers}} 张幻灯片"
+    },
+    "modes": {
+      "text": {
+        "label": "选择文字",
+        "description": "拖动选择可复制的文字"
+      },
+      "cells": {
+        "label": "选择单元格",
+        "description": "选择一个或多个连续区域"
+      },
+      "region": {
+        "label": "框选区域",
+        "description": "一次性框选并作为图片引用"
+      }
+    },
+    "reasons": {
+      "NO_TEXT_LAYER": "当前视图没有可选择的文字层",
+      "NO_CELL_MODEL": "当前视图没有单元格模型",
+      "SURFACE_NOT_READY": "预览仍在加载",
+      "CAPTURE_UNAVAILABLE": "当前视图无法截图",
+      "UNSUPPORTED_RENDERER": "当前预览器暂不支持"
+    },
+    "regionSelection": {
+      "ariaLabel": "框选要添加到对话的区域",
+      "invalidStart": "请在文件内容区域内开始框选",
+      "tooSmall": "框选范围太小，请重新选择",
+      "captureFailed": "区域截图失败",
+      "hint": "拖动框选区域 · Esc 取消",
+      "capturing": "正在截取…",
+      "selectAgain": "重新框选",
+      "cancel": "取消"
+    },
+    "spreadsheet": {
+      "currentCell": "当前单元格",
+      "cellValue": "单元格值或公式"
+    }
   }
 }

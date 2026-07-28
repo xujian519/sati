@@ -5,6 +5,7 @@ import {
   createImageRegionContentReference,
   createTextContentReference,
   formatContentReferencePromptBlock,
+  isContentReference,
   normalizeContentReference,
   parseContentReferencePromptBlock,
 } from './contentReference';
@@ -113,5 +114,49 @@ describe('contentReference', () => {
     expect(reference.locator.rects?.[0]?.y).toBeCloseTo(0.1);
     expect(reference.locator.rects?.[0]?.width).toBeCloseTo(0.2);
     expect(reference.locator.rects?.[0]?.height).toBeCloseTo(0.1);
+  });
+
+  it.each([
+    ['unknown selection mode', { selectionMode: 'unknown' }],
+    ['text reference without a locator', { selectionMode: 'text', selectedText: 'hello' }],
+    ['cell reference without snapshots', {
+      selectionMode: 'cells',
+      locator: {
+        surface: 'sheet',
+        sheetId: 'sheet-0',
+        sheetName: 'Sheet1',
+        ranges: ['A1'],
+        activeRange: 'A1',
+      },
+    }],
+    ['region reference without an image', {
+      selectionMode: 'region',
+      locator: {
+        surface: 'sheet',
+        rect: { x: 0, y: 0, width: 1, height: 1 },
+      },
+    }],
+  ])('rejects malformed %s payloads', (_label, fields) => {
+    const malformed = {
+      schemaVersion: 1,
+      kind: 'content-reference',
+      id: 'malformed-reference',
+      createdAt: new Date().toISOString(),
+      source,
+      renderer: { id: 'xlsx', backend: 'builtin', locatorQuality: 'semantic' },
+      ...fields,
+    };
+
+    expect(isContentReference(malformed)).toBe(false);
+    expect(normalizeContentReference(malformed)).toBeNull();
+    const prompt = [
+      'Question',
+      '[Content references selected by user:]',
+      `   Reference JSON: ${JSON.stringify(malformed)}`,
+    ].join('\n');
+    expect(parseContentReferencePromptBlock(prompt)).toEqual({
+      content: 'Question',
+      references: [],
+    });
   });
 });

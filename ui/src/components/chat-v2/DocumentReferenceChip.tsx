@@ -1,4 +1,5 @@
 import { File, FileSpreadsheet, FileText, Scan, X, type LucideIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils.js';
 import {
   getContentReferenceSummary,
@@ -75,23 +76,36 @@ export default function DocumentReferenceChip({
   onOpen,
   onRemove,
 }: DocumentReferenceChipProps) {
+  const { t } = useTranslation('codeEditor');
   const normalized = normalizeContentReference(reference);
   if (!normalized) return null;
   const meta = getDocumentReferenceFileMeta(normalized.source.fileName);
   const ReferenceIcon = meta.Icon;
-  const summary = getContentReferenceSummary(normalized, summaryLength);
+  const summary = getContentReferenceSummary(
+    normalized,
+    summaryLength,
+    t('contentReference.regionSummary'),
+  );
   const location = normalized.selectionMode === 'text'
     ? normalized.locator.pageNumbers?.length
-      ? `p. ${normalized.locator.pageNumbers.join(', ')}`
+      ? t('contentReference.locations.page', {
+        numbers: normalized.locator.pageNumbers.join(', '),
+      })
       : normalized.locator.slideNumbers?.length
-        ? `slide ${normalized.locator.slideNumbers.join(', ')}`
+        ? t('contentReference.locations.slide', {
+          numbers: normalized.locator.slideNumbers.join(', '),
+        })
         : null
     : normalized.selectionMode === 'cells'
       ? normalized.locator.sheetName
       : normalized.locator.pageNumber
-        ? `p. ${normalized.locator.pageNumber}`
+        ? t('contentReference.locations.page', {
+          numbers: normalized.locator.pageNumber,
+        })
         : normalized.locator.slideNumber
-          ? `slide ${normalized.locator.slideNumber}`
+          ? t('contentReference.locations.slide', {
+            numbers: normalized.locator.slideNumber,
+          })
           : normalized.locator.sheetName || null;
   const title = [
     normalized.source.fileName,

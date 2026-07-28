@@ -83,6 +83,12 @@ function readXmlAttribute(attributes, name) {
   return match ? decodeXmlEntities(match[2]) : '';
 }
 
+function getActiveVisibleSheetIndex(workbook) {
+  return workbook.visibleSheets.some((sheet) => sheet.index === workbook.activeSheetIndex)
+    ? workbook.activeSheetIndex
+    : workbook.visibleSheets[0]?.index ?? 0;
+}
+
 function removeXmlAttribute(attributes, name) {
   return attributes.replace(new RegExp(`\\s+${name}\\s*=\\s*(["']).*?\\1`, 'ig'), '');
 }
@@ -686,7 +692,7 @@ export async function getSpreadsheetInteractivePreview(sourcePath, options = {})
   return {
     version: 1,
     revision: prepared.cacheKey,
-    activeSheetIndex: prepared.workbook.activeSheetIndex,
+    activeSheetIndex: getActiveVisibleSheetIndex(prepared.workbook),
     sheets: visibleWorksheets.map(({ index, worksheet }) => ({
       index,
       name: worksheet.name,
@@ -709,7 +715,7 @@ export async function getSpreadsheetPreviewManifest(sourcePath, options = {}) {
   return {
     version: 1,
     revision: prepared.cacheKey,
-    activeSheetIndex: prepared.workbook.activeSheetIndex,
+    activeSheetIndex: getActiveVisibleSheetIndex(prepared.workbook),
     sheets: prepared.workbook.visibleSheets.map(({ index, name }) => ({ index, name })),
   };
 }
