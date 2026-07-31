@@ -66,21 +66,23 @@ function matchTextPattern(pattern: string, input: unknown): boolean {
 /** 递归收集对象/数组中的全部字符串值（不含 key），拼接为空格分隔文本。 */
 function serializeInput(input: unknown): string {
   const values: string[] = [];
-  collectStringValues(input, values);
+  collectStringValues(input, values, new Set<object>());
   return values.join(" ");
 }
 
-function collectStringValues(value: unknown, out: string[]): void {
+function collectStringValues(value: unknown, out: string[], seen: Set<object>): void {
   if (typeof value === "string") {
     out.push(value);
     return;
   }
   if (Array.isArray(value)) {
-    for (const item of value) collectStringValues(item, out);
+    for (const item of value) collectStringValues(item, out, seen);
     return;
   }
   if (typeof value === "object" && value !== null) {
-    for (const item of Object.values(value)) collectStringValues(item, out);
+    if (seen.has(value)) return; // 循环引用防护
+    seen.add(value);
+    for (const item of Object.values(value)) collectStringValues(item, out, seen);
   }
 }
 

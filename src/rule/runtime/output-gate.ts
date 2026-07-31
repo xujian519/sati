@@ -66,11 +66,11 @@ export class RuleOutputGate {
 
     if (warnHits.length > 0) {
       const lines = grouped.warn.map(formatViolation);
-      append(`⚠️ ${this.warnTitle}：\n${lines.join("\n")}`);
+      append(`⚠️ ${escapeXml(this.warnTitle)}：\n${lines.join("\n")}`);
     }
     if (blockHits.length > 0) {
       const lines = grouped.block.map(formatViolation);
-      append(`🚫 ${this.blockMessage}\n${lines.join("\n")}`);
+      append(`🚫 ${escapeXml(this.blockMessage)}\n${lines.join("\n")}`);
     }
 
     return {
@@ -88,7 +88,7 @@ export class RuleOutputGate {
 function formatViolation(v: RuleViolation): string {
   const basis = v.legalBasis ? `（依据：${escapeXml(v.legalBasis)}）` : "";
   const evidence = v.evidence.length > 0 ? ` — 命中「${v.evidence.map(escapeXml).join("」「")}」` : "";
-  return `- [${v.ruleId}] ${v.ruleName}：${escapeXml(v.message)}${evidence}${basis}`;
+  return `- [${escapeXml(v.ruleId)}] ${escapeXml(v.ruleName)}：${escapeXml(v.message)}${evidence}${basis}`;
 }
 
 /** 转义规则/证据文本中的 XML 特殊字符，防提示注入/格式混淆。 */

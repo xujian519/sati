@@ -81,6 +81,52 @@ test("RuleOutputGate keeps log violations out of text but records them", () => {
   assert.equal(result.violations[0]?.action, "log");
 });
 
+test("RuleOutputGate escapes XML-special characters in violations", () => {
+  const gate = new RuleOutputGate(
+    ruleSet([
+      {
+        id: "CON-X",
+        name: "转义测试",
+        severity: "major",
+        action: "warn",
+        legalBasis: "依据<审查指南>&细则",
+        check: { type: "keyword_blocklist", keywords: ["<script>"] },
+      },
+    ]),
+  );
+  const result = gate.process("包含 <script>alert(1)</script> 的文本。");
+  // 追加的合规提示块中：证据与依据被转义（原文保留）
+  const hint = result.text.slice(result.text.indexOf("合规提示"));
+  assert.match(hint, /&lt;script&gt;/);
+  assert.match(hint, /依据&lt;审查指南&gt;&amp;细则/);
+});
+
+test("RuleOutputGate escapes warnTitle and blockMessage", () => {
+  const ruleSetWarn = ruleSet([
+    {
+      id: "W1",
+      name: "x",
+      severity: "minor",
+      action: "warn",
+      check: { type: "keyword_blocklist", keywords: ["注意"] },
+    },
+  ]);
+  const warnResult = new RuleOutputGate(ruleSetWarn, { warnTitle: "提示<注入>" }).process("含注意内容。");
+  assert.match(warnResult.text, /提示&lt;注入&gt;/);
+
+  const ruleSetBlock = ruleSet([
+    {
+      id: "R1",
+      name: "x",
+      severity: "critical",
+      action: "block",
+      check: { type: "keyword_blocklist", keywords: ["禁止"] },
+    },
+  ]);
+  const blockResult = new RuleOutputGate(ruleSetBlock, { blockMessage: "拦截 & 审批" }).process("含禁止内容。");
+  assert.match(blockResult.text, /拦截 &amp; 审批/);
+});
+
 test("RuleOutputGate returns text unchanged when no violations", () => {
   const gate = new RuleOutputGate(
     ruleSet([

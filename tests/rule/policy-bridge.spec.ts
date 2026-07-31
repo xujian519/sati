@@ -201,6 +201,20 @@ test("PermissionRuntime: policy deny passes when input is clean", async () => {
   assert.equal(decision.type, "ask");
 });
 
+test("matchPermissionRule text: pattern tolerates cyclic input", () => {
+  const rule: PermissionRule = {
+    source: "policy",
+    behavior: "deny",
+    toolName: "*",
+    pattern: "text:赌博",
+  };
+  const ctx = createDefaultPermissionContext({ cwd: "/tmp" });
+  const cyclic: Record<string, unknown> = { content: "赌博内容" };
+  cyclic.self = cyclic; // 循环引用
+  // 不抛 RangeError；值仍被匹配
+  assert.equal(matchPermissionRule(rule, "write_file", cyclic, ctx), true);
+});
+
 test("rulesToPolicyDenyRules on bundled patent compliance asset yields policy rules", () => {
   const { ruleSet } = loadPatentComplianceRuleSet();
   const { rules, skipped } = rulesToPolicyDenyRules(ruleSet);

@@ -119,6 +119,24 @@ rules:
   assert.ok(issues.some(i => i.message.includes("灾难性回溯")));
 });
 
+test("parseRuleSetFromYaml applies ReDoS guard to structural_analysis patterns too", () => {
+  const { issues } = parseRuleSetFromYaml(
+    `
+rules:
+  - id: CON-REDOS-S
+    name: redos structural
+    severity: major
+    action: warn
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: tech
+          patterns: ["(x*)*"]
+`,
+  );
+  assert.ok(issues.some(i => i.message.includes("灾难性回溯")));
+});
+
 test("parseRuleSetFromYaml reports duplicate ids", () => {
   const { issues } = parseRuleSetFromYaml(
     `

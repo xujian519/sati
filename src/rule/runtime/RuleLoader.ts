@@ -54,8 +54,36 @@ function isRecordOfStrings(value: unknown): value is Record<string, string[]> {
 }
 
 /**
+ * 校验正则列表（语法 + 灾难性回溯启发式），非法时收集问题并返回 false。
+ * 供 pattern_analysis / structural_analysis 共用，保证 ReDoS 防护一致。
+ */
+function validateRegexPatterns(
+  patterns: string[],
+  ruleId: string,
+  issues: RuleSetValidationIssue[],
+): boolean {
+  for (const pattern of patterns) {
+    try {
+      new RegExp(pattern, "i");
+    } catch {
+      issues.push({ ruleId, message: `rule ${ruleId}: 非法正则 "${pattern}"` });
+      return false;
+    }
+    if (hasNestedQuantifier(pattern)) {
+      issues.push({
+        ruleId,
+        message: `rule ${ruleId}: 正则疑似灾难性回溯（嵌套量词） "${pattern}"`,
+      });
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * 简易灾难性回溯检测：捕获组/字符组闭括号后直接跟量词（`(a+)+` / `(a*)*` /
  * `(ab){2,}+` 等嵌套量词），规则 YAML 来自不可信来源时可致 ReDoS。
+ * 安全优先：宁可误拒固定重复（如 `(a){2}`），不接受嵌套量词。
  */
 function hasNestedQuantifier(pattern: string): boolean {
   return /\)[+*{]/.test(pattern) || /\}[+*]/.test(pattern);
@@ -96,21 +124,7 @@ function parseCheck(raw: unknown, issues: RuleSetValidationIssue[], ruleId: stri
         issues.push({ ruleId, message: `rule ${ruleId}: pattern_analysis 需要非空 patterns` });
         return null;
       }
-      for (const pattern of patterns) {
-        try {
-          new RegExp(pattern, "i");
-        } catch {
-          issues.push({ ruleId, message: `rule ${ruleId}: 非法正则 "${pattern}"` });
-          return null;
-        }
-        if (hasNestedQuantifier(pattern)) {
-          issues.push({
-            ruleId,
-            message: `rule ${ruleId}: 正则疑似灾难性回溯（嵌套量词） "${pattern}"`,
-          });
-          return null;
-        }
-      }
+      if (!validateRegexPatterns(patterns, ruleId, issues)) return null;
       const minMatches = typeof record.minMatches === "number" ? record.minMatches : 1;
       return { type, patterns, minMatches };
     }
@@ -127,6 +141,7 @@ function parseCheck(raw: unknown, issues: RuleSetValidationIssue[], ruleId: stri
           issues.push({ ruleId, message: `rule ${ruleId}: requiresAll 元素需要 element + 非空 patterns` });
           return null;
         }
+        if (!validateRegexPatterns(patterns, ruleId, issues)) return null;
         requiresAll.push({
           element: el.element,
           description: typeof el.description === "string" ? el.description : undefined,
