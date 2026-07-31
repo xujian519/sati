@@ -23,8 +23,19 @@ import {
 import { createWebFetchTool, type CreateWebFetchToolOptions } from "../builtin/webFetch.js";
 import { createWebSearchTool, type CreateWebSearchToolOptions } from "../builtin/webSearch.js";
 import { createReadSkillTool, type ReadSkillDeps } from "../builtin/readSkill.js";
+import { createRuleCheckTool, type RuleCheckDeps } from "../builtin/ruleCheck.js";
+import { createPatentEvalTool } from "../builtin/patentEval.js";
+import { createDraftClaimsTool } from "../builtin/draftClaims.js";
+import { createDraftSpecificationTool } from "../builtin/draftSpecification.js";
+import { createValidateSpecificationTool } from "../builtin/validateSpecification.js";
 import { createWriteFileTool } from "../builtin/writeFile.js";
+import type { SatiToolDefinition, ToolDomain } from "../protocol/types.js";
 import { ToolRegistry } from "./ToolRegistry.js";
+
+/** 标注工具业务域（工具定义处未标注时使用注册表集中标注）。 */
+function annotate(tool: SatiToolDefinition, domain: ToolDomain): SatiToolDefinition {
+  return tool.domain === undefined ? { ...tool, domain } : tool;
+}
 
 export type CreateBuiltinRegistryOptions = {
   bash?: CreateBashToolOptions;
@@ -37,7 +48,7 @@ export type CreateBuiltinRegistryOptions = {
   /**
    * `agent` subagent tool. **Opt-in** because it requires a model client at
    * execution time — the AgentLoop forwards the loop's model client through
-   * `PilotDeckToolRuntimeContext.model`, but stand-alone tool runtimes (e.g.
+   * `SatiToolRuntimeContext.model`, but stand-alone tool runtimes (e.g.
    * tests) may not have one. Pass `true` (default) to register; pass `false`
    * to skip; pass an options object to customize the subagent presets or
    * lock the provider/model.
@@ -68,7 +79,7 @@ export type CreateBuiltinRegistryOptions = {
   structuredOutput?: false;
   /**
    * `ask_user_question` builtin (B1). Registered by default; an absent
-   * `PilotDeckElicitationChannel` at execution time causes the tool to
+   * `SatiElicitationChannel` at execution time causes the tool to
    * return a runtime error rather than crash the loop. Pass `false` to
    * skip registration in headless contexts.
    */
@@ -86,53 +97,81 @@ export type CreateBuiltinRegistryOptions = {
    * switch to plan (read-only) and back. Pass `false` to skip.
    */
   planMode?: false;
+  /**
+   * `rule_check` builtin (constitutional rule engine). Registered by default —
+   * read-only deterministic check over the bundled rule assets. Pass `false`
+   * to skip, or pass `{ loader }` to supply a custom scope→RuleSet loader.
+   */
+  ruleCheck?: RuleCheckDeps | false;
+  /**
+   * Patent-domain tools (`patent_eval` / `draft_claims` / `draft_specification` /
+   * `validate_specification`). Registered by default — pure read-only
+   * deterministic tools. Pass `false` to keep them out of the registry.
+   */
+  patent?: false;
 };
 
 export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): ToolRegistry {
   const registry = new ToolRegistry();
-  registry.register(createGetCurrentTimeTool());
-  registry.register(createReadFileTool());
-  registry.register(createSendAttachmentTool());
-  registry.register(createGlobTool());
-  registry.register(createGrepTool());
-  registry.register(createEditFileTool());
-  registry.register(createEditNotebookTool());
-  registry.register(createWriteFileTool());
-  registry.register(createBashTool(options?.bash));
-  registry.register(createExecuteCodeTool({
-    webSearch: options?.webSearch !== false,
-  }));
+  registry.register(annotate(createGetCurrentTimeTool(), "session"));
+  registry.register(annotate(createReadFileTool(), "filesystem"));
+  registry.register(annotate(createSendAttachmentTool(), "session"));
+  registry.register(annotate(createGlobTool(), "filesystem"));
+  registry.register(annotate(createGrepTool(), "filesystem"));
+  registry.register(annotate(createEditFileTool(), "filesystem"));
+  registry.register(annotate(createEditNotebookTool(), "filesystem"));
+  registry.register(annotate(createWriteFileTool(), "filesystem"));
+  registry.register(annotate(createBashTool(options?.bash), "shell"));
+  registry.register(
+    annotate(
+      createExecuteCodeTool({
+        webSearch: options?.webSearch !== false,
+      }),
+      "shell",
+    ),
+  );
   if (options?.webSearch !== false) {
-    registry.register(createWebSearchTool(options?.webSearch));
+    registry.register(annotate(createWebSearchTool(options?.webSearch), "search"));
   }
   if (options?.webFetch !== false) {
-    registry.register(createWebFetchTool(options?.webFetch));
+    registry.register(annotate(createWebFetchTool(options?.webFetch), "network"));
   }
   if (options?.agent !== false) {
     const agentOpts = options?.agent === true || options?.agent === undefined ? undefined : options.agent;
-    registry.register(createAgentTool(agentOpts));
+    registry.register(annotate(createAgentTool(agentOpts), "agent"));
   }
   if (options?.backgroundTasks) {
     const runtime = options.backgroundTasks.runtime;
-    registry.register(createTaskCreateTool(runtime));
-    registry.register(createTaskListTool(runtime));
-    registry.register(createTaskOutputTool(runtime));
-    registry.register(createTaskWaitTool(runtime));
-    registry.register(createTaskStopTool(runtime));
+    registry.register(annotate(createTaskCreateTool(runtime), "session"));
+    registry.register(annotate(createTaskListTool(runtime), "session"));
+    registry.register(annotate(createTaskOutputTool(runtime), "session"));
+    registry.register(annotate(createTaskWaitTool(runtime), "session"));
+    registry.register(annotate(createTaskStopTool(runtime), "session"));
   }
   if (options?.structuredOutput !== false) {
-    registry.register(createStructuredOutputTool());
+    registry.register(annotate(createStructuredOutputTool(), "custom"));
   }
   if (options?.askUserQuestion !== false) {
-    registry.register(createAskUserQuestionTool());
+    registry.register(annotate(createAskUserQuestionTool(), "session"));
   }
   if (options?.planMode !== false) {
-    registry.register(createEnterPlanModeTool());
-    registry.register(createExitPlanModeTool());
+    registry.register(annotate(createEnterPlanModeTool(), "session"));
+    registry.register(annotate(createExitPlanModeTool(), "session"));
   }
-  registry.register(createTodoWriteTool());
+  registry.register(annotate(createTodoWriteTool(), "session"));
+  if (options?.patent !== false) {
+    registry.register(annotate(createPatentEvalTool(), "patent"));
+    registry.register(annotate(createDraftClaimsTool(), "patent"));
+    registry.register(annotate(createDraftSpecificationTool(), "patent"));
+    registry.register(annotate(createValidateSpecificationTool(), "patent"));
+  }
+  if (options?.ruleCheck !== false) {
+    registry.register(
+      annotate(createRuleCheckTool(options?.ruleCheck === undefined ? undefined : options.ruleCheck), "quality"),
+    );
+  }
   if (options?.readSkill) {
-    registry.register(createReadSkillTool(options.readSkill));
+    registry.register(annotate(createReadSkillTool(options.readSkill), "session"));
   }
   return registry;
 }
