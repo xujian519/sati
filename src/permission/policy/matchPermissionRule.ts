@@ -75,13 +75,13 @@ function collectStringValues(value: unknown, out: string[], seen: Set<object>): 
     out.push(value);
     return;
   }
-  if (Array.isArray(value)) {
-    for (const item of value) collectStringValues(item, out, seen);
-    return;
-  }
   if (typeof value === "object" && value !== null) {
-    if (seen.has(value)) return; // 循环引用防护
+    if (seen.has(value)) return; // 循环引用防护（含数组自引用）
     seen.add(value);
+    if (Array.isArray(value)) {
+      for (const item of value) collectStringValues(item, out, seen);
+      return;
+    }
     for (const item of Object.values(value)) collectStringValues(item, out, seen);
   }
 }
