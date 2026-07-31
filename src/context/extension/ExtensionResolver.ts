@@ -6,6 +6,8 @@
  * it via dependency injection. Until Phase 6 lands, callers pass
  * `NullExtensionResolver`, which returns empty arrays.
  */
+import type { SkillRoleConfig } from "../../extension/skills/types.js";
+
 export type ContributedCommand = {
   name: string;
   description?: string;
@@ -20,6 +22,8 @@ export type ContributedSkill = {
   /** Absolute path to the resolved SKILL.md selected by the runtime. */
   path: string;
   namespace?: string;
+  /** `type: "role"` skill 的角色配置（用于 available-roles 注入）。 */
+  role?: SkillRoleConfig;
 };
 
 export type McpServerInstruction = {

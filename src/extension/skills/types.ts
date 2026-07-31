@@ -3,14 +3,14 @@
  * between the gateway, its remote clients (UI server bridge), and any
  * future SDK consumer. They intentionally avoid leaking absolute paths
  * to outside callers — every operation is addressed by `(scope, slug)`
- * and the manager itself owns the path layout under `~/.pilotdeck/skills/`
- * and `<projectRoot>/.pilotdeck/skills/`.
+ * and the manager itself owns the path layout under `~/.sati/skills/`
+ * and `<projectRoot>/.sati/skills/`.
  */
 
 /**
- * "builtin" is shipped with PilotDeck and is read-only. "user" lives in
- * `~/.pilotdeck/skills/`, available to every project. "project" lives in
- * `<projectRoot>/.pilotdeck/skills/`, scoped to the active project.
+ * "builtin" is shipped with Sati and is read-only. "user" lives in
+ * `~/.sati/skills/`, available to every project. "project" lives in
+ * `<projectRoot>/.sati/skills/`, scoped to the active project.
  */
 export type SkillScope = "builtin" | "user" | "project";
 
@@ -21,6 +21,20 @@ export type SkillScope = "builtin" | "user" | "project";
  * absolute path is included so the UI can show it in the detail
  * header — it's the same field SkillsV2.tsx already binds to.
  */
+/** 角色配置（SKILL.md frontmatter `type: "role"` 时的可选角色字段）。 */
+export type SkillRoleConfig = {
+  /** 角色工具白名单（缺省 ["*"]，对应子代理 allowedTools）。 */
+  tools?: string[];
+  /** 业务域白名单（visibleDomains，仅暴露这些 domain 的工具）。 */
+  domains?: string[];
+  /** 额外排除的工具名（在子代理硬性剔除之外）。 */
+  omitTools?: string[];
+  /** 只读角色（拒绝破坏性工具调用）。 */
+  readOnly?: boolean;
+  /** 角色专属系统提示段（追加到子代理共享前缀之后）。 */
+  systemPrompt?: string;
+};
+
 export type SkillSummary = {
   slug: string;
   name: string;
@@ -39,6 +53,8 @@ export type SkillSummary = {
   overridesBuiltin?: boolean;
   /** Last-modified time of SKILL.md in epoch ms, or null if unreadable. */
   mtime: number | null;
+  /** `type: "role"` 时的角色配置；普通 skill 为 null。 */
+  role?: SkillRoleConfig | null;
 };
 
 export type SkillsListInput = {

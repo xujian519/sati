@@ -2,8 +2,8 @@ import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, posix, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
-
 import { getPilotExtensionPaths } from "../../pilot/paths.js";
+import { isRoleFrontmatter, parseRoleConfig } from "./roleConfig.js";
 import type {
   SkillAddressInput,
   SkillCreateInput,
@@ -38,27 +38,16 @@ const SLUG_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_FILE_COUNT = 500;
-const RISKY_EXTS = new Set([
-  ".sh",
-  ".bash",
-  ".zsh",
-  ".fish",
-  ".exe",
-  ".bat",
-  ".cmd",
-  ".dll",
-  ".so",
-  ".dylib",
-]);
+const RISKY_EXTS = new Set([".sh", ".bash", ".zsh", ".fish", ".exe", ".bat", ".cmd", ".dll", ".so", ".dylib"]);
 
 export type SkillManagerOptions = {
-  /** Resolved `~/.pilotdeck` root. Required. */
+  /** Resolved `~/.sati` root. Required. */
   pilotHome: string;
-  /** Read-only skills shipped with the active PilotDeck build. */
+  /** Read-only skills shipped with the active Sati build. */
   builtinSkillsRoot?: string;
   /**
    * "General chat" cwds we treat as not-a-real-project. Defaults to
-   * `pilotHome` (~/.pilotdeck). When the caller passes a `projectKey`
+   * `pilotHome` (~/.sati). When the caller passes a `projectKey`
    * matching one of these, the manager behaves as if no project was set —
    * built-in and user-scope skills are visible, but project skills are not.
    */
@@ -68,10 +57,10 @@ export type SkillManagerOptions = {
 /**
  * Authoritative skill-CRUD layer used by every host (gateway clients,
  * UI server, future SDK callers). Reads the release's bundled skill root and
- * owns the editable layouts under `~/.pilotdeck/skills/` (user scope) and
- * `<projectRoot>/.pilotdeck/skills/` (project scope). Legacy third-party skill
+ * owns the editable layouts under `~/.sati/skills/` (user scope) and
+ * `<projectRoot>/.sati/skills/` (project scope). Legacy third-party skill
  * directories are intentionally not consulted — conflating them with
- * PilotDeck's layout caused the UI/agent skill drift the migration fixes.
+ * Sati's layout caused the UI/agent skill drift the migration fixes.
  */
 export class SkillManager {
   private readonly pilotHome: string;
@@ -80,11 +69,9 @@ export class SkillManager {
 
   constructor(options: SkillManagerOptions) {
     this.pilotHome = resolve(options.pilotHome);
-    this.builtinSkillsRootPath = options.builtinSkillsRoot
-      ? resolve(options.builtinSkillsRoot)
-      : null;
+    this.builtinSkillsRootPath = options.builtinSkillsRoot ? resolve(options.builtinSkillsRoot) : null;
     const defaults = [this.pilotHome];
-    this.generalCwdPaths = (options.generalCwdPaths ?? defaults).map((p) => resolve(p));
+    this.generalCwdPaths = (options.generalCwdPaths ?? defaults).map(p => resolve(p));
   }
 
   // -------------------------------------------------------------------
@@ -156,20 +143,18 @@ export class SkillManager {
     const projectKey = input.projectKey ?? null;
     const effectiveProject = this.isGeneralCwd(projectKey) ? null : projectKey;
 
-    const builtinSkills = this.builtinSkillsRootPath
-      ? await listSkillsIn(this.builtinSkillsRootPath, "builtin")
-      : [];
+    const builtinSkills = this.builtinSkillsRootPath ? await listSkillsIn(this.builtinSkillsRootPath, "builtin") : [];
     const userSkills = await listSkillsIn(this.userSkillsRoot(), "user");
     const projectSkills = effectiveProject
       ? await listSkillsIn(this.projectSkillsRoot(effectiveProject), "project")
       : [];
 
-    const builtinSlugs = new Set(builtinSkills.map((skill) => skill.slug));
-    const userSlugs = new Set(userSkills.map((skill) => skill.slug));
-    const projectSlugs = new Set(projectSkills.map((skill) => skill.slug));
+    const builtinSlugs = new Set(builtinSkills.map(skill => skill.slug));
+    const userSlugs = new Set(userSkills.map(skill => skill.slug));
+    const projectSlugs = new Set(projectSkills.map(skill => skill.slug));
 
     return {
-      builtin: builtinSkills.map((skill) => ({
+      builtin: builtinSkills.map(skill => ({
         ...skill,
         ...(projectSlugs.has(skill.slug)
           ? { overriddenBy: "project" as const }
@@ -177,12 +162,12 @@ export class SkillManager {
             ? { overriddenBy: "user" as const }
             : {}),
       })),
-      user: userSkills.map((skill) => ({
+      user: userSkills.map(skill => ({
         ...skill,
         ...(builtinSlugs.has(skill.slug) ? { overridesBuiltin: true } : {}),
         ...(projectSlugs.has(skill.slug) ? { overriddenBy: "project" as const } : {}),
       })),
-      project: projectSkills.map((skill) => ({
+      project: projectSkills.map(skill => ({
         ...skill,
         ...(builtinSlugs.has(skill.slug) ? { overridesBuiltin: true } : {}),
       })),
@@ -276,10 +261,7 @@ export class SkillManager {
     if ("files" in input && Array.isArray(input.files)) {
       return validateFromManifest(input.skillMdContent ?? "", input.files);
     }
-    throw new SkillManagerError(
-      "invalid_input",
-      "Provide either { sourcePath } or { skillMdContent, files: [...] }.",
-    );
+    throw new SkillManagerError("invalid_input", "Provide either { sourcePath } or { skillMdContent, files: [...] }.");
   }
 
   async import(input: SkillImportInput): Promise<SkillImportResult> {
@@ -295,18 +277,12 @@ export class SkillManager {
       stat = await fs.stat(resolvedSource);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-        throw new SkillManagerError(
-          "source_missing",
-          `Source path does not exist: ${resolvedSource}`,
-        );
+        throw new SkillManagerError("source_missing", `Source path does not exist: ${resolvedSource}`);
       }
       throw e;
     }
     if (!stat.isDirectory()) {
-      throw new SkillManagerError(
-        "source_not_directory",
-        `Source path is not a directory: ${resolvedSource}`,
-      );
+      throw new SkillManagerError("source_not_directory", `Source path is not a directory: ${resolvedSource}`);
     }
     try {
       await fs.access(join(resolvedSource, "SKILL.md"));
@@ -427,9 +403,7 @@ export class SkillManager {
       return a.folderName.localeCompare(b.folderName);
     });
 
-    const folders = currentFolder.hasSkillMd
-      ? [currentFolder, ...childFolders]
-      : childFolders;
+    const folders = currentFolder.hasSkillMd ? [currentFolder, ...childFolders] : childFolders;
 
     return { parentPath: resolvedRoot, folders };
   }
@@ -444,7 +418,10 @@ export class SkillManager {
  * this into 4xx HTTP responses or gateway error frames.
  */
 export class SkillManagerError extends Error {
-  constructor(public readonly code: string, message: string) {
+  constructor(
+    public readonly code: string,
+    message: string,
+  ) {
     super(message);
     this.name = "SkillManagerError";
   }
@@ -482,12 +459,7 @@ function expandHome(p: string): string {
  * body, matching what `ui/server/routes/skills.js` used to write so
  * exporters/diffs don't churn.
  */
-function buildInitialSkillContent(input: {
-  slug: string;
-  name?: string;
-  description?: string;
-  body?: string;
-}): string {
+function buildInitialSkillContent(input: { slug: string; name?: string; description?: string; body?: string }): string {
   const fmName = (input.name ?? input.slug).replace(/\n/g, " ").trim();
   const fmDesc = (input.description ?? "").replace(/\n/g, " ").trim();
   const lines: string[] = ["---", `name: ${fmName}`];
@@ -496,10 +468,7 @@ function buildInitialSkillContent(input: {
   if (input.body && input.body.trim()) {
     lines.push(input.body.trim(), "");
   } else {
-    lines.push(
-      "Describe what this skill does, when to invoke it, and any prerequisites.",
-      "",
-    );
+    lines.push("Describe what this skill does, when to invoke it, and any prerequisites.", "");
   }
   return lines.join("\n");
 }
@@ -535,9 +504,7 @@ function parseSkillFrontmatterWithMeta(content: string): FrontmatterParseResult 
     const parsed = parseYaml(fmRaw);
     return {
       frontmatter:
-        parsed && typeof parsed === "object" && !Array.isArray(parsed)
-          ? (parsed as Record<string, unknown>)
-          : {},
+        parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {},
       usedCompatibilityFallback: false,
     };
   } catch {
@@ -583,6 +550,7 @@ function parseCompatFrontmatter(fmRaw: string): Record<string, unknown> {
   return result;
 }
 
+/** 解析 SKILL.md frontmatter 中的角色配置（type: "role"）；非法字段容错忽略。 */
 async function readSkillMeta(skillDir: string, scope: SkillScope): Promise<SkillSummary | null> {
   const skillFile = join(skillDir, "SKILL.md");
   let content: string;
@@ -599,21 +567,18 @@ async function readSkillMeta(skillDir: string, scope: SkillScope): Promise<Skill
   } catch {
     /* ignore */
   }
+  const isRole = isRoleFrontmatter(fm);
   return {
     slug: basename(skillDir),
     name: typeof fm.name === "string" ? fm.name : basename(skillDir),
     description: typeof fm.description === "string" ? fm.description : "",
-    version:
-      typeof fm.version === "string"
-        ? fm.version
-        : typeof fm.version === "number"
-          ? String(fm.version)
-          : null,
+    version: typeof fm.version === "string" ? fm.version : typeof fm.version === "number" ? String(fm.version) : null,
     skillFile,
     skillDir,
     scope,
     readonly: scope === "builtin",
     mtime,
+    role: isRole ? parseRoleConfig(fm) : null,
   };
 }
 
@@ -823,17 +788,9 @@ async function walkDir(
       const fileStat = await fs.stat(abs);
       stats.totalBytes += fileStat.size;
       if (fileStat.size > MAX_FILE_BYTES) {
-        pushIssue(
-          hardFails,
-          "file_too_large",
-          `File exceeds ${MAX_FILE_BYTES} bytes: ${rel} (${fileStat.size} bytes)`,
-        );
+        pushIssue(hardFails, "file_too_large", `File exceeds ${MAX_FILE_BYTES} bytes: ${rel} (${fileStat.size} bytes)`);
       } else if (fileStat.size > 1024 * 1024) {
-        pushIssue(
-          warnings,
-          "file_large",
-          `Large file: ${rel} (${(fileStat.size / 1024 / 1024).toFixed(1)} MB)`,
-        );
+        pushIssue(warnings, "file_large", `Large file: ${rel} (${(fileStat.size / 1024 / 1024).toFixed(1)} MB)`);
       }
     } catch {
       /* unreadable, skip */
@@ -872,11 +829,7 @@ function validateFromManifest(
     stats.fileCount += 1;
     stats.totalBytes += size;
     if (size > MAX_FILE_BYTES) {
-      pushIssue(
-        hardFails,
-        "file_too_large",
-        `File exceeds ${MAX_FILE_BYTES} bytes: ${rel} (${size} bytes)`,
-      );
+      pushIssue(hardFails, "file_too_large", `File exceeds ${MAX_FILE_BYTES} bytes: ${rel} (${size} bytes)`);
     } else if (size > 1024 * 1024) {
       pushIssue(warnings, "file_large", `Large file: ${rel} (${(size / 1024 / 1024).toFixed(1)} MB)`);
     }

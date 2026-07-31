@@ -3,11 +3,13 @@ import { discoverPluginPaths, discoverSkillPaths } from "../discovery/discoverLo
 import { loadPluginFromPath, loadSkillFromPath } from "../loading/PluginLoader.js";
 import { loadPluginHooks } from "../loading/PluginHookLoader.js";
 import type { LoadedPluginCommand } from "../loading/PluginCommandLoader.js";
-import type { PilotDeckLoadedPlugin } from "../protocol/plugin.js";
+import type { SatiLoadedPlugin } from "../protocol/plugin.js";
+import type { SatiHooksSettings } from "../../hooks/protocol/settings.js";
+import type { SatiCustomRouter } from "../../../router/customRouter/customRouter.js";
+import { isRoleFrontmatter, parseRoleConfig } from "../../skills/roleConfig.js";
+import type { SkillRoleConfig } from "../../skills/types.js";
 import { PluginRegistry } from "./PluginRegistry.js";
 import { truncateMcpInstructionString } from "./truncateMcpString.js";
-import type { PilotDeckHooksSettings } from "../../hooks/protocol/settings.js";
-import type { PilotDeckCustomRouter } from "../../../router/customRouter/customRouter.js";
 
 /**
  * Static MCP server contribution shape callers can rely on. Manifests load
@@ -15,7 +17,7 @@ import type { PilotDeckCustomRouter } from "../../../router/customRouter/customR
  * this type is *advisory* — the runtime only reads `instructions` and falls
  * back gracefully when missing.
  */
-export type PilotDeckMcpServerStaticSpec = {
+export type SatiMcpServerStaticSpec = {
   instructions?: string;
   [key: string]: unknown;
 };
@@ -25,7 +27,7 @@ export type PilotDeckMcpServerStaticSpec = {
  * as a stricter alias of {@link PluginMcpInstruction} so callers that only
  * care about *populated* entries keep a non-optional `instructions` field.
  */
-export type PilotDeckMcpInstructionEntry = {
+export type SatiMcpInstructionEntry = {
   serverName: string;
   instructions: string;
 };
@@ -33,17 +35,17 @@ export type PilotDeckMcpInstructionEntry = {
 export type PluginRuntimeOptions = {
   projectRoot: string;
   pilotHome: string;
-  /** Read-only skills shipped with the active PilotDeck build. */
+  /** Read-only skills shipped with the active Sati build. */
   builtinSkillsRoot?: string;
-  builtinPlugins?: PilotDeckLoadedPlugin[];
+  builtinPlugins?: SatiLoadedPlugin[];
   builtinPluginsEnabled?: Record<string, boolean>;
 };
 
 export type PluginRefreshResult = {
-  previous: PilotDeckLoadedPlugin[];
-  next: PilotDeckLoadedPlugin[];
-  added: PilotDeckLoadedPlugin[];
-  removed: PilotDeckLoadedPlugin[];
+  previous: SatiLoadedPlugin[];
+  next: SatiLoadedPlugin[];
+  added: SatiLoadedPlugin[];
+  removed: SatiLoadedPlugin[];
 };
 
 export type PluginCommandContribution = {
@@ -59,6 +61,8 @@ export type PluginSkillContribution = {
   /** Absolute path to the resolved SKILL.md. */
   path: string;
   namespace?: string;
+  /** `type: "role"` skill 的角色配置。 */
+  role?: SkillRoleConfig;
 };
 
 export type PluginMcpInstruction = {
@@ -67,11 +71,11 @@ export type PluginMcpInstruction = {
 };
 
 export type PluginContributionSnapshot = {
-  plugins: PilotDeckLoadedPlugin[];
+  plugins: SatiLoadedPlugin[];
   commands: PluginCommandContribution[];
   skills: PluginSkillContribution[];
   outputStyles: LoadedPluginCommand[];
-  hooks: PilotDeckHooksSettings;
+  hooks: SatiHooksSettings;
   mcpServers: Record<string, unknown>;
   lspServers: Record<string, unknown>;
   mcpInstructions: PluginMcpInstruction[];
@@ -82,12 +86,12 @@ export class PluginRuntime {
 
   constructor(private readonly options: PluginRuntimeOptions) {}
 
-  snapshot(): PilotDeckLoadedPlugin[] {
+  snapshot(): SatiLoadedPlugin[] {
     return this.registry.list();
   }
 
   mcpServers(): Record<string, unknown> {
-    return Object.assign({}, ...this.registry.list().map((plugin) => plugin.mcpServers ?? {})) as Record<string, unknown>;
+    return Object.assign({}, ...this.registry.list().map(plugin => plugin.mcpServers ?? {})) as Record<string, unknown>;
   }
 
   /**
@@ -101,8 +105,8 @@ export class PluginRuntime {
    * instructions on top via the same `getAllMcpInstructions` aggregator
    * surface used by `PluginRuntimeExtensionResolver`.
    */
-  getAllMcpInstructions(): PilotDeckMcpInstructionEntry[] {
-    const entries: PilotDeckMcpInstructionEntry[] = [];
+  getAllMcpInstructions(): SatiMcpInstructionEntry[] {
+    const entries: SatiMcpInstructionEntry[] = [];
     const seen = new Set<string>();
     for (const plugin of this.registry.list()) {
       const servers = plugin.mcpServers;
@@ -110,7 +114,7 @@ export class PluginRuntime {
       for (const [serverName, raw] of Object.entries(servers)) {
         if (seen.has(serverName)) continue;
         if (!raw || typeof raw !== "object") continue;
-        const candidate = (raw as PilotDeckMcpServerStaticSpec).instructions;
+        const candidate = (raw as SatiMcpServerStaticSpec).instructions;
         if (typeof candidate !== "string") continue;
         const trimmed = candidate.trim();
         if (trimmed.length === 0) continue;
@@ -126,16 +130,18 @@ export class PluginRuntime {
   }
 
   lspServers(): Record<string, unknown> {
-    return Object.assign({}, ...this.registry.list().map((plugin) => plugin.lspServers ?? {})) as Record<string, unknown>;
+    return Object.assign({}, ...this.registry.list().map(plugin => plugin.lspServers ?? {})) as Record<string, unknown>;
   }
 
   snapshotContributions(): PluginContributionSnapshot {
     const plugins = this.registry.list();
     return {
       plugins,
-      commands: plugins.flatMap((plugin) => (plugin.commands ?? []).map((command) => toCommandContribution(plugin, command))),
+      commands: plugins.flatMap(plugin =>
+        (plugin.commands ?? []).map(command => toCommandContribution(plugin, command)),
+      ),
       skills: collectSkillContributions(plugins),
-      outputStyles: plugins.flatMap((plugin) => plugin.outputStyles ?? []),
+      outputStyles: plugins.flatMap(plugin => plugin.outputStyles ?? []),
       hooks: loadPluginHooks(plugins),
       mcpServers: this.mcpServers(),
       lspServers: this.lspServers(),
@@ -151,7 +157,7 @@ export class PluginRuntime {
     return this.snapshotContributions().skills;
   }
 
-  lookupRouter(extensionId: string): PilotDeckCustomRouter | undefined {
+  lookupRouter(extensionId: string): SatiCustomRouter | undefined {
     for (const plugin of this.registry.list()) {
       for (const contribution of plugin.routerContributions ?? []) {
         if (contribution.id !== extensionId) {
@@ -167,14 +173,14 @@ export class PluginRuntime {
     const plugins = sortByResolutionPriority(this.registry.list());
 
     for (const plugin of plugins) {
-      const prompt = plugin.promptContributions?.find((contribution) => contribution.name === extensionId);
+      const prompt = plugin.promptContributions?.find(contribution => contribution.name === extensionId);
       if (prompt) {
         return prompt.content;
       }
     }
 
     for (const plugin of plugins) {
-      const skill = plugin.skills?.find((entry) => entry.name === extensionId);
+      const skill = plugin.skills?.find(entry => entry.name === extensionId);
       if (skill) {
         return skill.content;
       }
@@ -183,14 +189,16 @@ export class PluginRuntime {
     // Resolve namespaced plugin skills by their short name only after exact
     // standalone names have had a chance to resolve.
     for (const plugin of plugins) {
-      const skill = plugin.skills?.find((entry) => entry.name.endsWith(`:${extensionId}`));
+      const skill = plugin.skills?.find(entry => entry.name.endsWith(`:${extensionId}`));
       if (skill) {
         return skill.content;
       }
     }
 
     for (const plugin of plugins) {
-      const command = plugin.commands?.find((entry) => entry.name === extensionId || entry.name.endsWith(`:${extensionId}`));
+      const command = plugin.commands?.find(
+        entry => entry.name === extensionId || entry.name.endsWith(`:${extensionId}`),
+      );
       if (command) {
         return command.content;
       }
@@ -198,7 +206,7 @@ export class PluginRuntime {
     return undefined;
   }
 
-  async refresh(): Promise<PilotDeckLoadedPlugin[]> {
+  async refresh(): Promise<SatiLoadedPlugin[]> {
     return (await this.refreshWithReport()).next;
   }
 
@@ -222,12 +230,8 @@ export class PluginRuntime {
       ]),
     ]);
     const [loaded, loadedSkills] = await Promise.all([
-      Promise.all(
-        discovered.map((plugin) => loadPluginFromPath(plugin.path, plugin.source).catch(() => undefined)),
-      ),
-      Promise.all(
-        discoveredSkills.map((s) => loadSkillFromPath(s.path, s.source).catch(() => undefined)),
-      ),
+      Promise.all(discovered.map(plugin => loadPluginFromPath(plugin.path, plugin.source).catch(() => undefined))),
+      Promise.all(discoveredSkills.map(s => loadSkillFromPath(s.path, s.source).catch(() => undefined))),
     ]);
     const plugins = [
       ...enabledBuiltinPlugins(this.options.builtinPlugins ?? [], this.options.builtinPluginsEnabled ?? {}),
@@ -238,55 +242,46 @@ export class PluginRuntime {
     return {
       previous,
       next: plugins,
-      added: plugins.filter((plugin) => !hasPlugin(previous, plugin)),
-      removed: previous.filter((plugin) => !hasPlugin(plugins, plugin)),
+      added: plugins.filter(plugin => !hasPlugin(previous, plugin)),
+      removed: previous.filter(plugin => !hasPlugin(plugins, plugin)),
     };
   }
 }
 
-function isLoadedPlugin(value: PilotDeckLoadedPlugin | undefined): value is PilotDeckLoadedPlugin {
+function isLoadedPlugin(value: SatiLoadedPlugin | undefined): value is SatiLoadedPlugin {
   return value !== undefined;
 }
 
-function enabledBuiltinPlugins(
-  plugins: PilotDeckLoadedPlugin[],
-  enabled: Record<string, boolean>,
-): PilotDeckLoadedPlugin[] {
-  return plugins.filter((plugin) => plugin.source !== "builtin" || enabled[plugin.name] !== false);
+function enabledBuiltinPlugins(plugins: SatiLoadedPlugin[], enabled: Record<string, boolean>): SatiLoadedPlugin[] {
+  return plugins.filter(plugin => plugin.source !== "builtin" || enabled[plugin.name] !== false);
 }
 
-function hasPlugin(plugins: PilotDeckLoadedPlugin[], plugin: PilotDeckLoadedPlugin): boolean {
-  return plugins.some((candidate) => candidate.name === plugin.name && candidate.source === plugin.source);
+function hasPlugin(plugins: SatiLoadedPlugin[], plugin: SatiLoadedPlugin): boolean {
+  return plugins.some(candidate => candidate.name === plugin.name && candidate.source === plugin.source);
 }
 
-function toCommandContribution(
-  plugin: PilotDeckLoadedPlugin,
-  command: LoadedPluginCommand,
-): PluginCommandContribution {
+function toCommandContribution(plugin: SatiLoadedPlugin, command: LoadedPluginCommand): PluginCommandContribution {
   return {
     name: command.name,
     description: typeof command.frontmatter.description === "string" ? command.frontmatter.description : undefined,
     argumentHint:
-      typeof command.frontmatter["argument-hint"] === "string"
-        ? command.frontmatter["argument-hint"]
-        : undefined,
+      typeof command.frontmatter["argument-hint"] === "string" ? command.frontmatter["argument-hint"] : undefined,
     namespace: plugin.name,
   };
 }
 
-function toSkillContribution(
-  plugin: PilotDeckLoadedPlugin,
-  skill: LoadedPluginCommand,
-): PluginSkillContribution {
+function toSkillContribution(plugin: SatiLoadedPlugin, skill: LoadedPluginCommand): PluginSkillContribution {
+  const fm = skill.frontmatter ?? {};
   return {
     name: skill.name,
-    description: typeof skill.frontmatter.description === "string" ? skill.frontmatter.description : undefined,
+    description: typeof fm.description === "string" ? fm.description : undefined,
     path: skill.path,
     namespace: plugin.name,
+    role: isRoleFrontmatter(fm) ? parseRoleConfig(fm) : undefined,
   };
 }
 
-function sourcePriority(source: PilotDeckLoadedPlugin["source"]): number {
+function sourcePriority(source: SatiLoadedPlugin["source"]): number {
   switch (source) {
     case "project":
       return 2;
@@ -298,11 +293,11 @@ function sourcePriority(source: PilotDeckLoadedPlugin["source"]): number {
   }
 }
 
-function sortByResolutionPriority(plugins: PilotDeckLoadedPlugin[]): PilotDeckLoadedPlugin[] {
+function sortByResolutionPriority(plugins: SatiLoadedPlugin[]): SatiLoadedPlugin[] {
   return [...plugins].sort((a, b) => sourcePriority(b.source) - sourcePriority(a.source));
 }
 
-function collectSkillContributions(plugins: PilotDeckLoadedPlugin[]): PluginSkillContribution[] {
+function collectSkillContributions(plugins: SatiLoadedPlugin[]): PluginSkillContribution[] {
   const selected = new Map<string, { contribution: PluginSkillContribution; priority: number }>();
   for (const plugin of plugins) {
     const priority = sourcePriority(plugin.source);
@@ -314,5 +309,5 @@ function collectSkillContributions(plugins: PilotDeckLoadedPlugin[]): PluginSkil
       }
     }
   }
-  return [...selected.values()].map((entry) => entry.contribution);
+  return [...selected.values()].map(entry => entry.contribution);
 }

@@ -1,4 +1,5 @@
-import type { PilotDeckLoadedPlugin } from "../../extension/index.js";
+import type { SatiLoadedPlugin } from "../../extension/index.js";
+import { isRoleFrontmatter, parseRoleConfig } from "../../extension/skills/roleConfig.js";
 import type {
   ContributedCommand,
   ContributedSkill,
@@ -16,7 +17,7 @@ import type {
  * this resolver will be migrated to read it once the extension owner ships it.
  */
 export type PluginRuntimeLike = {
-  snapshot(): PilotDeckLoadedPlugin[];
+  snapshot(): SatiLoadedPlugin[];
   /** Optional aggregator preferred when available. */
   getAllCommands?(): ContributedCommand[];
   getAllSkills?(): ContributedSkill[];
@@ -26,7 +27,7 @@ export type PluginRuntimeLike = {
 
 /**
  * Wraps a `PluginRuntime` (or compatible) so context can read plugin-derived
- * info without reaching into `PilotDeckLoadedPlugin` directly.
+ * info without reaching into `SatiLoadedPlugin` directly.
  *
  * Decision §3.2 — read-only resolver, no separate registry. When extension
  * owner ships the `ExtensionSnapshot` API this implementation should switch
@@ -39,11 +40,12 @@ export class PluginRuntimeExtensionResolver implements ExtensionResolver {
     if (this.runtime.getAllCommands) {
       return this.runtime.getAllCommands();
     }
-    return this.runtime.snapshot().flatMap((plugin) =>
+    return this.runtime.snapshot().flatMap(plugin =>
       (plugin.commands ?? []).map(
         (command): ContributedCommand => ({
           name: command.name,
-          description: typeof command.frontmatter?.description === "string" ? command.frontmatter.description : undefined,
+          description:
+            typeof command.frontmatter?.description === "string" ? command.frontmatter.description : undefined,
           argumentHint:
             typeof command.frontmatter?.["argument-hint"] === "string"
               ? (command.frontmatter["argument-hint"] as string)
@@ -58,15 +60,17 @@ export class PluginRuntimeExtensionResolver implements ExtensionResolver {
     if (this.runtime.getAllSkills) {
       return this.runtime.getAllSkills();
     }
-    return this.runtime.snapshot().flatMap((plugin) =>
-      (plugin.skills ?? []).map(
-        (skill): ContributedSkill => ({
+    return this.runtime.snapshot().flatMap(plugin =>
+      (plugin.skills ?? []).map((skill): ContributedSkill => {
+        const fm = skill.frontmatter ?? {};
+        return {
           name: skill.name,
-          description: typeof skill.frontmatter?.description === "string" ? skill.frontmatter.description : undefined,
+          description: typeof fm.description === "string" ? fm.description : undefined,
           path: skill.path,
           namespace: plugin.name,
-        }),
-      ),
+          role: isRoleFrontmatter(fm) ? parseRoleConfig(fm) : undefined,
+        };
+      }),
     );
   }
 

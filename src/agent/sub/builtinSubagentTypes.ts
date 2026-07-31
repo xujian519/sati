@@ -17,7 +17,7 @@
  * sync legacy parity tests when changing.
  */
 
-export type SubagentDefinitionId = "general-purpose" | "explore" | "plan" | "verify";
+export type SubagentDefinitionId = "general-purpose" | "explore" | "plan" | "verify" | (string & {});
 
 export type SubagentDefinition = {
   /** Stable identifier exposed via `agent` tool's `subagent_type` input. */
@@ -25,10 +25,24 @@ export type SubagentDefinition = {
   /** Short, single-line summary used in tool descriptions. */
   description: string;
   /**
-   * Allowed tool names (canonical PilotDeck tool names). Use `["*"]` for
+   * Allowed tool names (canonical Sati tool names). Use `["*"]` for
    * full access. Empty array means *no* tools (degenerate).
    */
   allowedTools: readonly string[];
+  /**
+   * 业务域白名单（可选，角色感知裁剪）：只暴露 domain 属于此列表的工具；
+   * 未标注 domain 的工具始终可见。空/缺省 = 不过滤。
+   */
+  visibleDomains?: readonly string[];
+  /**
+   * 业务域黑名单（可选）：排除 domain 属于此列表的工具。hidden 优先于 visible。
+   */
+  hiddenDomains?: readonly string[];
+  /**
+   * 额外排除的工具名（可选，角色 omitTools）：在 allowedTools 白名单与
+   * 域裁剪之外再按工具名剔除（区别于硬性剔除，仅作用于本角色）。
+   */
+  omitTools?: readonly string[];
   /** S7 — drop `<project-instructions>` from the assembled system prompt. */
   omitProjectInstructions: boolean;
   /** S8 — drop `<git-status>` from the assembled system prompt. */
@@ -44,7 +58,7 @@ export type SubagentDefinition = {
   effort?: "low" | "medium" | "high";
 };
 
-const SHARED_PREFIX = `You are a subagent of PilotDeck — a focused agent dispatched by the parent agent to handle a bounded research, planning, or verification task.
+const SHARED_PREFIX = `You are a subagent of Sati — a focused agent dispatched by the parent agent to handle a bounded research, planning, or verification task.
 
 Strengths:
 - You always have the full context of the parent task and can inspect the parent's tool history.
@@ -98,8 +112,7 @@ export const SUBAGENT_DEFINITIONS: Record<SubagentDefinitionId, SubagentDefiniti
   },
   plan: {
     id: "plan",
-    description:
-      "Read-only planning subagent. Inspects code via read/grep/glob and produces a step-by-step plan.",
+    description: "Read-only planning subagent. Inspects code via read/grep/glob and produces a step-by-step plan.",
     allowedTools: ["read_file", "grep", "glob"],
     omitProjectInstructions: true,
     omitGitStatus: true,
@@ -133,8 +146,38 @@ Be rigorous. A silent pass when issues exist is worse than a false alarm.`,
   },
 };
 
+/**
+ * 角色定义注册表（SKILL.md `type: "role"` 动态注册，优先级高于同名内置预设）。
+ * 由宿主在加载 skills 后调用 registerRoleDefinition 装配。
+ */
+const ROLE_DEFINITIONS = new Map<string, SubagentDefinition>();
+
+export function registerRoleDefinition(definition: SubagentDefinition): void {
+  ROLE_DEFINITIONS.set(definition.id, definition);
+}
+
+export function unregisterRoleDefinition(id: string): void {
+  ROLE_DEFINITIONS.delete(id);
+}
+
+/** 列出当前已注册的角色 id（供宿主清理）。 */
+export function listRegisteredRoleIds(): string[] {
+  return [...ROLE_DEFINITIONS.keys()];
+}
+
 export function getSubagentDefinition(id: string): SubagentDefinition | undefined {
-  return (SUBAGENT_DEFINITIONS as Record<string, SubagentDefinition>)[id];
+  return ROLE_DEFINITIONS.get(id) ?? (SUBAGENT_DEFINITIONS as Record<string, SubagentDefinition>)[id];
+}
+
+export function listAllSubagentDefinitions(): SubagentDefinition[] {
+  const builtin = Object.values(SUBAGENT_DEFINITIONS);
+  const roleIds = [...ROLE_DEFINITIONS.keys()];
+  const builtinIds = new Set(builtin.map(d => d.id));
+  const extraRoles = roleIds
+    .filter(id => !builtinIds.has(id))
+    .map(id => ROLE_DEFINITIONS.get(id))
+    .filter((d): d is SubagentDefinition => d !== undefined);
+  return [...builtin, ...extraRoles];
 }
 
 export function buildSubagentSystemPrompt(definition: SubagentDefinition): string {
@@ -142,5 +185,5 @@ export function buildSubagentSystemPrompt(definition: SubagentDefinition): strin
 }
 
 export function listSubagentDefinitionIds(): SubagentDefinitionId[] {
-  return Object.keys(SUBAGENT_DEFINITIONS) as SubagentDefinitionId[];
+  return listAllSubagentDefinitions().map(d => d.id as SubagentDefinitionId);
 }

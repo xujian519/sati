@@ -37,7 +37,7 @@ export type PromptAssemblerResult = {
 /**
  * Build the system prompt for a turn. Mirrors legacy `fetchSystemPromptParts`
  * information slots (tool catalog / cwd / git / env / mcp instructions /
- * commands / skills) but uses PilotDeck-authored copy.
+ * commands / skills) but uses Sati-authored copy.
  *
  * Sections (review decision 2026-05):
  *   1 default_system_prompt   — product identity + tool catalog + permission mode
@@ -86,15 +86,15 @@ export class PromptAssembler {
   }
 
   private buildDefaultSystemPrompt(input: PromptAssemblerInput): string[] {
-    const hasWebSearch = input.tools.some((tool) => tool.name === "web_search");
-    const hasWebFetch = input.tools.some((tool) => tool.name === "web_fetch");
+    const hasWebSearch = input.tools.some(tool => tool.name === "web_search");
+    const hasWebFetch = input.tools.some(tool => tool.name === "web_fetch");
     const documentationLookupPolicy = hasWebSearch
       ? "When implementing code against an API, SDK, framework, CLI, config schema, or file format whose usage is not clear from local source, installed types, examples, or project docs, search for official documentation before writing or changing code. Prefer versioned official docs and existing in-repo call sites. Use web_search for discovery and web_fetch for the relevant docs page. Do not guess unfamiliar signatures, options, or output shapes when a quick lookup can resolve them. If network tools are unavailable or denied, state the uncertainty and proceed conservatively."
       : hasWebFetch
         ? "When implementing code against an API, SDK, framework, CLI, config schema, or file format whose usage is not clear, prefer installed types, local source, examples, and project docs. If a relevant official documentation URL is already known, use web_fetch to inspect it. Otherwise state the uncertainty and proceed conservatively."
         : "When implementing code against an API, SDK, framework, CLI, config schema, or file format whose usage is not clear, prefer installed types, local source, examples, and project docs. State any remaining uncertainty and proceed conservatively.";
     const lines: string[] = [
-      "You are PilotDeck, an AI agent runtime. You execute tasks across CLI, TUI, web, and chat channels by calling structured tools and reasoning over their results.",
+      "You are Sati, an AI agent runtime. You execute tasks across CLI, TUI, web, and chat channels by calling structured tools and reasoning over their results.",
       "Operate decisively: prefer using available tools to gather facts before answering, prefer concise replies, and surface uncertainty when present.",
       "",
       "Documentation lookup policy:",
@@ -140,7 +140,9 @@ export class PromptAssembler {
     const lines: string[] = [];
     lines.push("<user-context>");
     lines.push(`cwd: ${input.cwd}`);
-    lines.push("IMPORTANT: When the user does not specify an explicit file path, all file paths in tool calls MUST be relative to the cwd above — use \"foo.html\", not an absolute path like \"/home/user/foo.html\". If the user explicitly provides a path, respect their choice.");
+    lines.push(
+      'IMPORTANT: When the user does not specify an explicit file path, all file paths in tool calls MUST be relative to the cwd above — use "foo.html", not an absolute path like "/home/user/foo.html". If the user explicitly provides a path, respect their choice.',
+    );
     lines.push(`model: ${input.provider}/${input.model}`);
     lines.push(`permission_mode: ${input.permissionMode}`);
     if (input.runMode) {
@@ -167,12 +169,20 @@ export class PromptAssembler {
 
     const skills = this.extension.listSkills();
     if (skills.length > 0) {
-      sections.push(formatSkills(skills));
+      const plainSkills = skills.filter(s => !s.role);
+      const roles = skills.filter(
+        (s): s is ContributedSkill & { role: NonNullable<ContributedSkill["role"]> } => s.role !== undefined,
+      );
+      if (plainSkills.length > 0) {
+        sections.push(formatSkills(plainSkills));
+      }
+      if (roles.length > 0) {
+        sections.push(formatRoles(roles));
+      }
     }
 
     return sections;
   }
-
 }
 
 function formatPermissionMode(mode: string): string {
@@ -207,8 +217,8 @@ function formatRunMode(mode: string | undefined): string | undefined {
  */
 function formatMcpInstructions(instructions: McpServerInstruction[]): string {
   const populated = instructions
-    .filter((entry) => typeof entry.instructions === "string" && entry.instructions.trim().length > 0)
-    .map((entry) => ({ serverName: entry.serverName, instructions: entry.instructions!.trim() }))
+    .filter(entry => typeof entry.instructions === "string" && entry.instructions.trim().length > 0)
+    .map(entry => ({ serverName: entry.serverName, instructions: entry.instructions!.trim() }))
     .sort((a, b) => a.serverName.localeCompare(b.serverName));
   if (populated.length === 0) return "";
   const lines: string[] = ["<mcp-instructions>"];
@@ -248,5 +258,21 @@ function formatSkills(skills: ContributedSkill[]): string {
     lines.push(`- ${skill.name}${description} (file: ${skill.path})`);
   }
   lines.push("</available-skills>");
+  return lines.join("\n");
+}
+
+function formatRoles(roles: ContributedSkill[]): string {
+  const lines = [
+    "<available-roles>",
+    "The following agent roles are available. Dispatch them via the agent tool with `subagent_type` set to the role name.",
+  ];
+  for (const role of roles) {
+    const roleConfig = role.role;
+    const description = role.description ? ` — ${role.description}` : "";
+    const domains = roleConfig?.domains?.length ? ` domains: ${roleConfig.domains.join(", ")}` : "";
+    const readOnly = roleConfig?.readOnly ? " read-only" : "";
+    lines.push(`- ${role.name}${description}${domains}${readOnly}`);
+  }
+  lines.push("</available-roles>");
   return lines.join("\n");
 }
