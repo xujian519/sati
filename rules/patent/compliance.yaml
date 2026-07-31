@@ -1,0 +1,92 @@
+# 专利域合规规则（宪法规则资产）
+# 由宪法规则引擎加载（src/rule/），规则驱动输出门禁与工具拦截。
+# 规则格式: id/name/domain/phase/severity/action/legalBasis/check
+
+version: "1.0"
+
+rules:
+  # ---------------------------------------------------------------------------
+  # 风险结论免责声明：命中即追加"不构成正式法律意见"提示（warn）
+  # 对齐 quality-gate.ts 的 PATENT_RISK_KEYWORDS
+  # ---------------------------------------------------------------------------
+  patent_risk_disclaimer:
+    id: PAT-RISK-001
+    name: 专利风险结论免责声明
+    domain: patent
+    phase: 输出
+    severity: major
+    action: warn
+    legalBasis: 执业规范：AI 输出不构成正式法律意见，应由专利代理人/律师确认
+    check:
+      type: keyword_blocklist
+      keywords:
+        - "侵权"
+        - "无效"
+        - "驳回"
+        - "不授权"
+        - "专利性"
+        - "自由实施"
+        - "新颖性结论"
+        - "创造性结论"
+
+  # ---------------------------------------------------------------------------
+  # 结论性表述人工审批：命中即挂起，需人工审批后入库（review）
+  # 对齐 quality-gate.ts 的 PATENT_APPROVAL_KEYWORDS
+  # ---------------------------------------------------------------------------
+  patent_approval_review:
+    id: PAT-APPROVAL-001
+    name: 专利结论人工审批
+    domain: patent
+    phase: 输出
+    severity: critical
+    action: review
+    legalBasis: 质量门禁：结论性/侵权性/有效性判断需人工确认
+    check:
+      type: keyword_blocklist
+      keywords:
+        - "专利结论"
+        - "侵权判断"
+        - "有效性结论"
+        - "最终建议"
+
+  # ---------------------------------------------------------------------------
+  # 回避绝对化表述（warn）
+  # 对齐 quality-gate.ts 的 ABSOLUTE_PHRASES（P-A07 条款）
+  # ---------------------------------------------------------------------------
+  patent_absolute_phrases:
+    id: PAT-ABS-001
+    name: 回避绝对化表述
+    domain: patent
+    phase: 输出
+    severity: minor
+    action: warn
+    legalBasis: 审查规范：回避"绝对/一定/必然"等绝对化表述，改用限定性表述
+    check:
+      type: keyword_blocklist
+      keywords:
+        - "绝对"
+        - "一定"
+        - "百分百"
+        - "毫无疑问"
+        - "必然"
+
+  # ---------------------------------------------------------------------------
+  # 法条引用范围核验 R1：条号不得超出《专利法》/《实施细则》有效范围（warn）
+  # 对齐 quality-gate.ts 的 PATENT_LAW_TOPICS max（专利法 78 条、实施细则 126 条）
+  # R2 主题相关性（用途子句匹配）由专利域 quality-gate 扩展实现
+  # ---------------------------------------------------------------------------
+  patent_citation_range:
+    id: PAT-CITE-001
+    name: 法条引用范围核验
+    domain: patent
+    phase: 输出
+    severity: major
+    action: warn
+    legalBasis: 引用核验 R1：条号不得超出《专利法》（78 条）与《专利法实施细则》（126 条）
+    check:
+      type: citation_analysis
+      statutes:
+        专利法:
+          max: 78
+        专利法实施细则:
+          max: 126
