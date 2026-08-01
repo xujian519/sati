@@ -1,4 +1,5 @@
 import type { SatiToolDefinition } from "../protocol/types.js";
+import { ABSOLUTE_PHRASES } from "../../patent/index.js";
 
 /**
  * patent_eval — 专利产出质量评估（移植自 Mady tools/patent_eval.go）。
@@ -47,20 +48,17 @@ const REPORT_SECTIONS: Array<{ name: string; pattern: RegExp }> = [
   { name: "权利要求", pattern: /^#{1,3}\s*权利要求/m },
 ];
 
-/** AI 套话/绝对化表述检测词表（Mady slop 引擎的轻量替代）。 */
+/** AI 套话检测词表（Mady slop 引擎的轻量替代）；绝对化部分复用 quality-gate 的 ABSOLUTE_PHRASES（单一事实源，勿再复制）。 */
 const SLOP_PHRASES = [
+  ...ABSOLUTE_PHRASES,
   "综上所述",
   "值得注意的是",
   "不难发现",
   "总而言之",
   "众所周知",
-  "毫无疑问",
   "众所周知的是",
   "我们相信",
   "我们认为",
-  "绝对",
-  "一定",
-  "百分百",
   "显著提高",
   "极大改善",
 ];
@@ -159,7 +157,8 @@ function evaluateReport(text: string): Record<string, PatentEvalDimension> {
   dims["表达质量"] = {
     score: round2(slopScore),
     passed: slopScore >= 0.6,
-    details: `${Math.round((1 - slopScore) * 100)} 处 AI 套话/绝对化表述`,
+    // score = max(0, 1 - hits/5)，故 hits = round((1-score)*5)，避免放大 20 倍
+    details: `${Math.round((1 - slopScore) * 5)} 处 AI 套话/绝对化表述`,
   };
 
   const sufficient = scoreContentSufficiency(text);

@@ -120,14 +120,15 @@ export async function runWorkflow(
       lastError !== undefined &&
       !(lastError instanceof Error && lastError.message === "阶段执行未产生输出")
     ) {
-      // 保留错误信息到输出，便于诊断；仍标记 degraded
-      output = `[阶段 ${stage.id} 执行失败] ${lastError instanceof Error ? lastError.message : String(lastError)}`;
+      // 保留错误信息到输出，便于诊断；仍标记 degraded。
+      // 用结构化标记前缀（而非中文字面量），避免与 executor 正常输出冲突。
+      output = `[WORKFLOW_DEGRADED] ${stage.id}: ${lastError instanceof Error ? lastError.message : String(lastError)}`;
     }
     results.push({
       stageId: stage.id,
       strategy: stage.strategy,
       output,
-      degraded: output.trim().length === 0 || output.startsWith("[阶段"),
+      degraded: output.trim().length === 0 || output.startsWith("[WORKFLOW_DEGRADED]"),
       retries,
     });
   }
