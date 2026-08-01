@@ -34,7 +34,7 @@ test("plain assistant text without patent keywords passes through unchanged", ()
 
 test("risk keywords inject disclaimer and message is persisted", () => {
   const gate = new PatentOutputGate();
-  const msg = assistantMessage("经分析，该方案不构成侵权。");
+  const msg = assistantMessage("经分析，该方案存在侵权风险。");
   const result = gate.processMessage(msg);
   assert.equal(result.needsApproval, false);
   assert.equal(result.info.riskKeywordsHit.includes("侵权"), true);
@@ -42,10 +42,18 @@ test("risk keywords inject disclaimer and message is persisted", () => {
   const text = extractMessageText(result.message);
   assert.match(text, /不构成正式法律意见/);
   // 原文只出现一次（防全文重复追加）
-  assert.equal((text.match(/不构成侵权/g) ?? []).length, 1);
+  assert.equal((text.match(/侵权风险/g) ?? []).length, 1);
 });
 
-test("approval keywords with onPending hold the message out of persistence", () => {
+test("negated risk keywords do not inject disclaimer", () => {
+  const gate = new PatentOutputGate();
+  const msg = assistantMessage("经分析，本方案不构成侵权。");
+  const result = gate.processMessage(msg);
+  assert.equal(result.info.riskKeywordsHit.includes("侵权"), false);
+  assert.equal(result.info.disclaimerInjected, false);
+});
+
+test("approval keywords with onPending hold the message in the pending queue", () => {
   const pendings: unknown[] = [];
   const gate = new PatentOutputGate({
     onPending: pending => {
@@ -132,7 +140,7 @@ test("messages with thinking + text blocks are processed on the text part only",
     role: "assistant" as const,
     content: [
       { type: "thinking" as const, text: "内部思考" },
-      { type: "text" as const, text: "该方案不构成侵权。" },
+      { type: "text" as const, text: "该方案存在侵权风险。" },
     ],
   };
   const result = gate.processMessage(msg);
@@ -140,7 +148,7 @@ test("messages with thinking + text blocks are processed on the text part only",
   const texts = result.message.content.filter(b => b.type === "text").map(b => (b as { text: string }).text);
   assert.equal(texts.length, 1, "text block should be replaced, not appended");
   assert.match(texts[0]!, /不构成正式法律意见/);
-  assert.equal((texts[0]!.match(/不构成侵权/g) ?? []).length, 1, "original text must appear exactly once");
+  assert.equal((texts[0]!.match(/侵权风险/g) ?? []).length, 1, "original text must appear exactly once");
 });
 
 test("pendingItems lists held messages for approval UI", () => {

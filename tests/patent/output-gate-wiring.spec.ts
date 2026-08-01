@@ -41,11 +41,11 @@ function durableMessages(transcript: InMemoryTranscriptWriter) {
   return transcript.entries.filter(entry => entry.type === "durable_message");
 }
 
-test("output gate holds approval-keyword messages out of persistence until approved", async () => {
+test("approval-keyword messages are persisted immediately and held in pending for approval", async () => {
   const transcript = new InMemoryTranscriptWriter();
   const gate = new PatentOutputGate({ onPending: () => {} });
   const runner = new TurnRunner(
-    makeLoop(["该方案不构成侵权。", "专利结论：本方案具备新颖性。"]),
+    makeLoop(["该方案存在侵权风险。", "专利结论：本方案具备新颖性。"]),
     transcript,
     undefined,
     () => new Date("2026-07-21T10:00:01.000Z"),
@@ -64,26 +64,27 @@ test("output gate holds approval-keyword messages out of persistence until appro
     /* consume */
   }
 
-  // 风险词消息：入库且注入免责声明
+  // 两条消息都入库（风险词带免责声明，审批词也照常入库），顺序与产生顺序一致
   const persisted = durableMessages(transcript);
-  assert.equal(persisted.length, 1);
-  const riskEntry = persisted[0]!;
-  if (riskEntry.type !== "durable_message") assert.fail("expected durable_message");
-  assert.match(extractMessageText(riskEntry.message), /不构成正式法律意见/);
+  assert.equal(persisted.length, 2);
+  const firstEntry = persisted[0]!;
+  if (firstEntry.type !== "durable_message") assert.fail("expected durable_message");
+  assert.match(extractMessageText(firstEntry.message), /不构成正式法律意见/);
+  assert.match(extractMessageText(persisted[1]!.message), /专利结论/);
 
-  // 审批词消息：挂起不入库
+  // 审批词消息同时挂起在审批队列
   assert.equal(gate.pendingCount(), 1);
+  assert.equal(gate.pendingItems()[0]!.sessionId, "session-1");
+  assert.equal(gate.pendingItems()[0]!.turnId, "turn-1");
 
-  // 审批通过 → 补写入库
+  // 审批通过：仅完成流程控制，不再补写（消息已在库中）
   const pendingIndex = gate.pendingItems()[0]!.index;
-  const approved = await runner.approvePendingOutput("session-1", "turn-1", pendingIndex);
-  assert.equal(approved, true);
+  assert.equal(runner.approvePendingOutput(pendingIndex), true);
   assert.equal(gate.pendingCount(), 0);
-  const afterApprove = durableMessages(transcript);
-  assert.equal(afterApprove.length, 2);
+  assert.equal(durableMessages(transcript).length, 2);
 });
 
-test("output gate reject discards the held message permanently", async () => {
+test("reject removes the pending entry but keeps the persisted message", async () => {
   const transcript = new InMemoryTranscriptWriter();
   const gate = new PatentOutputGate({ onPending: () => {} });
   const runner = new TurnRunner(
@@ -110,7 +111,8 @@ test("output gate reject discards the held message permanently", async () => {
   const pendingIndex = gate.pendingItems()[0]!.index;
   assert.equal(runner.rejectPendingOutput(pendingIndex), true);
   assert.equal(gate.pendingCount(), 0);
-  assert.equal(durableMessages(transcript).length, 0);
+  // 消息本体已在挂起时入库，转录不丢失
+  assert.equal(durableMessages(transcript).length, 1);
 });
 
 test("without output gate all messages persist unchanged", async () => {

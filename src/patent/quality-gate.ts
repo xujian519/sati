@@ -34,6 +34,48 @@ export const PATENT_APPROVAL_KEYWORDS = ["专利结论", "侵权判断", "有效
 /** 绝对化表述（P-A07 条款：回避绝对化表述）。 */
 export const ABSOLUTE_PHRASES = ["绝对", "一定", "百分百", "毫无疑问", "必然"];
 
+/**
+ * 否定语境词与窗口（与 src/rule/runtime/RuleEngine.ts 的 NEGATION_WORDS 保持同步）：
+ * 命中位置前窗口内出现这些词且无句号/分号分隔时视为否定性描述，不报告。
+ */
+const NEGATION_WORDS = [
+  "防止",
+  "避免",
+  "不用于",
+  "排除",
+  "禁止",
+  "不为",
+  "非用于",
+  "不构成",
+  "区别于",
+  "不属于",
+  "不",
+  "未",
+  "无",
+];
+const NEGATION_WINDOW = 24;
+
+/** 在命中位置前查找否定语境：窗口内出现否定词且无句号/分号分隔。 */
+function hasNegationContext(text: string, matchStart: number): boolean {
+  const start = Math.max(0, matchStart - NEGATION_WINDOW);
+  const window = text.slice(start, matchStart);
+  if (window.includes("。") || window.includes("；") || window.includes(";")) return false;
+  return NEGATION_WORDS.some(word => window.includes(word));
+}
+
+/** 过滤否定语境中的命中：关键词至少一处非否定命中才报告（"不构成侵权"不误报，"不构成侵权但仍存在侵权风险"照报）。 */
+function filterNegatedHits(keywords: string[], text: string): string[] {
+  return keywords.filter(k => {
+    let searchFrom = 0;
+    while (true) {
+      const index = text.indexOf(k, searchFrom);
+      if (index < 0) return false;
+      if (!hasNegationContext(text, index)) return true;
+      searchFrom = index + k.length;
+    }
+  });
+}
+
 export type QualityGateResult = {
   /** 处理后的文本（可能已追加免责声明 / 存疑提示） */
   text: string;
@@ -418,9 +460,9 @@ export function processPatentOutput(text: string, options?: PatentQualityGateOpt
   const absolutePhrases = options?.absolutePhrases ?? ABSOLUTE_PHRASES;
   const disclaimer = options?.disclaimer ?? PATENT_DISCLAIMER;
 
-  const riskHit = riskKeywords.filter(k => text.includes(k));
-  const approvalHit = approvalKeywords.filter(k => text.includes(k));
-  const absoluteHit = absolutePhrases.filter(k => text.includes(k));
+  const riskHit = filterNegatedHits(riskKeywords, text);
+  const approvalHit = filterNegatedHits(approvalKeywords, text);
+  const absoluteHit = filterNegatedHits(absolutePhrases, text);
 
   let output = text;
   let disclaimerInjected = false;

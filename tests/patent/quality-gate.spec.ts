@@ -8,7 +8,7 @@ import {
 } from "../../src/patent/quality-gate.js";
 
 test("processPatentOutput injects disclaimer on risk keywords", () => {
-  const result = processPatentOutput("经分析，本方案不构成侵权。");
+  const result = processPatentOutput("经分析，本方案存在侵权风险。");
   assert.ok(result.riskKeywordsHit.includes("侵权"));
   assert.equal(result.disclaimerInjected, true);
   assert.match(result.text, /不构成正式法律意见/);

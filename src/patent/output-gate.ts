@@ -6,25 +6,30 @@ import { processPatentOutput, type QualityGateResult } from "./quality-gate.js";
  *
  * 在 AgentLoop 的 onDurableMessage（入库前）调用 processMessage：
  *   - 风险词命中 → 输出追加免责声明（照常入库）
- *   - 审批词命中且配置了 onPending → 消息挂起（不入库），等待人工审批：
- *     approve() 后由调用方补写（Commit），reject() 丢弃
+ *   - 审批词命中且配置了 onPending → 消息挂起等待人工审批，但**仍照常入库**
+ *     （processed 版本，含免责声明/存疑提示）：消息不丢失、转录顺序正确、
+ *     会话重启后审批历史可恢复；approve()/reject() 仅为流程控制标记
+ *     （触发宿主 onApproved/onRejected，从挂起队列移除）
  *   - 未配置 onPending 时审批词命中仅注入提示、不挂起（跑批安全，不丢消息）
  *   - 非 assistant 文本消息 / 含 tool_call 的消息直接放行
  *
  * 接入状态：TurnRunner.persistDurableMessage 已接线（createAgentSession options.outputGate
  * 注入）；挂起消息存于内存，宿主应提供 onPending 审批入口（approve/reject 后调用
- * TurnRunner.approvePendingOutput/rejectPendingOutput 完成 Commit/Discard），并注意
- * 会话重启后未决挂起会丢失（限制已文档化）。
+ * TurnRunner.approvePendingOutput/rejectPendingOutput 完成流程控制）。会话重启后
+ * 未决挂起队列会重建为空（挂起记录丢失），但消息本体已在转录中，不影响会话完整性。
  */
 
 export type PendingPatentMessage = {
   index: number;
   /** 原始消息（审批 UI 展示用） */
   message: CanonicalMessage;
-  /** 处理后的消息（含免责声明/存疑提示；审批通过后写库） */
+  /** 处理后的消息（含免责声明/存疑提示；已入库的版本） */
   processed: CanonicalMessage;
   /** 门禁判定结果 */
   info: QualityGateResult;
+  /** 产生消息的会话/轮次（processMessage 传入，供审批 UI 定位与审计） */
+  sessionId?: string;
+  turnId?: string;
   createdAt: number;
 };
 
@@ -65,8 +70,8 @@ export class PatentOutputGate {
     this.options = options ?? {};
   }
 
-  /** 处理一条待持久化的消息；返回写库用消息与是否挂起。 */
-  processMessage(message: CanonicalMessage): ProcessedMessageResult {
+  /** 处理一条待持久化的消息；返回写库用消息与是否挂起。context 为消息所属会话/轮次（记录进挂起条目供审批 UI 定位）。 */
+  processMessage(message: CanonicalMessage, context?: { sessionId?: string; turnId?: string }): ProcessedMessageResult {
     if (!this.shouldProcess(message)) {
       return { message, needsApproval: false, info: emptyGateInfo() };
     }
@@ -99,6 +104,8 @@ export class PatentOutputGate {
         message,
         processed,
         info,
+        sessionId: context?.sessionId,
+        turnId: context?.turnId,
         createdAt: Date.now(),
       };
       this.pending.set(index, pending);
