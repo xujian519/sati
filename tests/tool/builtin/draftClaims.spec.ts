@@ -66,6 +66,21 @@ test("draft_claims flags illustration references in claims", () => {
   assert.ok(noIll.length > 0, "should flag 如图…所示");
 });
 
+test("draft_claims places prior_art in the preamble before 其特征在于", () => {
+  const result = draftClaims({
+    invention_name: "一种改进型阀门",
+    tech_domain: "mechanical",
+    technical_features: ["密封结构", "自清洁组件"],
+    prior_art: "阀体、阀杆",
+  });
+  const independent = result.claims[0].text;
+  // prior_art（共有特征）在前序部分，"其特征在于"之前
+  assert.match(independent, /一种改进型阀门，包括：阀体、阀杆；其特征在于，还包括：密封结构；自清洁组件。/);
+  const charIndex = independent.indexOf("其特征在于");
+  const priorIndex = independent.indexOf("阀体");
+  assert.ok(priorIndex >= 0 && priorIndex < charIndex, "prior_art must precede 其特征在于");
+});
+
 test("draft_claims tool definition is read-only", async () => {
   const tool = createDraftClaimsTool();
   assert.equal(tool.name, "draft_claims");

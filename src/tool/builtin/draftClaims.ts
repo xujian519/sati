@@ -172,8 +172,12 @@ function buildIndependentClaim(name: string, domain: TechDomain, features: strin
     const steps = features.map((f, i) => `${f}${i < features.length - 1 ? "；" : ""}`).join("");
     return `一种${name}的实现方法，其特征在于，包括以下步骤：${steps}。`;
   }
-  const priorPart = priorArt && priorArt.length > 0 ? `${priorArt}；` : "";
-  return `${preamble}${priorPart}${featurePart}。`;
+  // prior_art（最接近现有技术的共有特征）置于前序部分（"其特征在于"之前），
+  // 特征部分承载区别特征 —— 符合专利撰写规范
+  if (priorArt && priorArt.length > 0) {
+    return `一种${name}，包括：${priorArt}；其特征在于，还包括：${featurePart}。`;
+  }
+  return `${preamble}${featurePart}。`;
 }
 
 function resolveDomain(hint: TechDomain | undefined, name: string, features: string[]): TechDomain {
