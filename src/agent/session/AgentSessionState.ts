@@ -1,4 +1,4 @@
-import { cloneMessages, type CanonicalMessage, type CanonicalUsage } from "../../model/index.js";
+import { cloneMessages, type CanonicalUsage } from "../../model/index.js";
 import type { AgentPermissionDenial } from "../protocol/result.js";
 import type { AgentSessionState as AgentSessionStateShape } from "../protocol/state.js";
 
@@ -18,7 +18,7 @@ export function snapshotAgentSessionState(state: AgentSessionStateShape): AgentS
     ...state,
     messages: cloneMessages(state.messages),
     usage: { ...state.usage },
-    permissionDenials: state.permissionDenials.map((denial) => ({ ...denial })),
+    permissionDenials: state.permissionDenials.map(denial => ({ ...denial })),
   };
 }
 
@@ -45,7 +45,7 @@ export function appendPermissionDenials(
   first: AgentPermissionDenial[],
   second: AgentPermissionDenial[],
 ): AgentPermissionDenial[] {
-  return [...first, ...second.map((denial) => ({ ...denial }))];
+  return [...first, ...second.map(denial => ({ ...denial }))];
 }
 
 function add(first: number | undefined, second: number | undefined): number | undefined {

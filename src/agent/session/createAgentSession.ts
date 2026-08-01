@@ -1,5 +1,5 @@
 import { PermissionRuntime } from "../../permission/index.js";
-import { ConcurrentToolScheduler, SequentialToolScheduler, ToolRuntime } from "../../tool/index.js";
+import { ConcurrentToolScheduler, ToolRuntime } from "../../tool/index.js";
 import { AgentLoop, type AgentLoopSeedState } from "../loop/AgentLoop.js";
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
@@ -9,7 +9,7 @@ import { SessionMetadataStore } from "../../session/metadata/SessionMetadataStor
 import type { SessionTitleGenerator } from "../../session/title/SessionTitleGenerator.js";
 import type { SessionMetadataValue } from "../../session/transcript/TranscriptEntry.js";
 import { TurnRunner } from "../turn/TurnRunner.js";
-import { AgentSession } from "./AgentSession.js";
+import type { PatentOutputGate } from "../../patent/index.js";
 import { createAgentEventBuffer, type AgentEvent } from "../protocol/events.js";
 import type { AgentSessionState as AgentSessionStateShape } from "../protocol/state.js";
 import {
@@ -17,6 +17,7 @@ import {
   type AgentProjectSessionStorage,
   type AgentProjectSessionStorageOptions,
 } from "../../session/storage/ProjectSessionStorage.js";
+import { AgentSession } from "./AgentSession.js";
 
 export type CreateAgentSessionOptions = {
   sessionId: string;
@@ -32,6 +33,8 @@ export type CreateAgentSessionOptions = {
   replayEvents?: AgentEvent[];
   sessionTitleGenerator?: SessionTitleGenerator;
   initialMetadata?: SessionMetadataValue;
+  /** 专利输出门禁（可选）：在消息入库前拦截，命中审批词时挂起等待人工审批。 */
+  outputGate?: PatentOutputGate;
   /** Whether Agent-created or modified workspace files should become message artifacts. */
   collectFileArtifacts?: boolean;
 };
@@ -46,9 +49,15 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
 } {
   const eventBuf = options.dependencies.drainEvents ? undefined : createAgentEventBuffer();
   const emitter = options.dependencies.eventEmitter ?? eventBuf?.emitter;
-  const toolRuntime = new ToolRuntime(options.dependencies.tools.registry, new PermissionRuntime(), options.dependencies.lifecycle, emitter);
-  const scheduler = options.dependencies.tools.scheduler
-    ?? new ConcurrentToolScheduler(toolRuntime, options.dependencies.tools.registry);
+  const toolRuntime = new ToolRuntime(
+    options.dependencies.tools.registry,
+    new PermissionRuntime(),
+    options.dependencies.lifecycle,
+    emitter,
+  );
+  const scheduler =
+    options.dependencies.tools.scheduler ??
+    new ConcurrentToolScheduler(toolRuntime, options.dependencies.tools.registry);
   const dependencies: AgentRuntimeDependencies = {
     ...options.dependencies,
     tools: {
@@ -59,15 +68,15 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
     drainEvents: options.dependencies.drainEvents ?? eventBuf?.drain,
   };
   const loop = new AgentLoop(options.config, dependencies, options.seedState);
-  const storage = options.storage ?? (
-    options.projectStorage
+  const storage =
+    options.storage ??
+    (options.projectStorage
       ? createAgentProjectSessionStorage({
           ...options.projectStorage,
           sessionId: options.sessionId,
           now: dependencies.now,
         })
-      : undefined
-  );
+      : undefined);
   const transcript = options.transcript ?? storage?.transcript ?? new InMemoryTranscriptWriter();
   const metadataStore = new SessionMetadataStore({
     transcript,
@@ -94,6 +103,7 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
       sessionTitleGenerator: options.sessionTitleGenerator,
       autoGenerateSessionTitle: options.config.isSubagent !== true,
     },
+    options.outputGate,
   );
   return {
     session: new AgentSession({

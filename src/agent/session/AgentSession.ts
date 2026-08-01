@@ -5,6 +5,8 @@ import type { AgentInput, AgentSubmitOptions } from "../protocol/input.js";
 import type { AgentSessionState as AgentSessionStateShape } from "../protocol/state.js";
 import type { AgentTranscriptReplayResult } from "../../session/transcript/TranscriptReplay.js";
 import type { TurnRunner } from "../turn/TurnRunner.js";
+import type { AgentTranscriptWriterState } from "../../session/transcript/TranscriptWriter.js";
+import type { AgentLoopSeedState } from "../loop/AgentLoop.js";
 import {
   appendPermissionDenials,
   cloneSessionStateForRuntimeReload,
@@ -12,8 +14,6 @@ import {
   mergeSessionUsage,
   snapshotAgentSessionState,
 } from "./AgentSessionState.js";
-import type { AgentTranscriptWriterState } from "../../session/transcript/TranscriptWriter.js";
-import type { AgentLoopSeedState } from "../loop/AgentLoop.js";
 
 export type AgentSessionOptions = {
   sessionId: string;
@@ -39,6 +39,16 @@ export class AgentSession {
 
   constructor(private readonly options: AgentSessionOptions) {
     this.state = options.initialState ?? createInitialAgentSessionState(options.sessionId);
+  }
+
+  /** 审批通过挂起的门禁消息（输出级 HITL）：消息已在挂起时入库，此处仅完成审批流程控制。 */
+  approvePendingOutput(index: number): boolean {
+    return this.options.turnRunner.approvePendingOutput(index);
+  }
+
+  /** 拒绝挂起的门禁消息：从挂起队列移除（消息本体已在转录中，不删除）。 */
+  rejectPendingOutput(index: number): boolean {
+    return this.options.turnRunner.rejectPendingOutput(index);
   }
 
   async *submit(input: AgentInput, submitOptions: AgentSubmitOptions = {}): AsyncGenerator<AgentEvent, void, unknown> {
@@ -94,7 +104,8 @@ export class AgentSession {
       this.state.permissionDenials,
       runResult.result.permissionDenials,
     );
-    this.state.status = runResult.result.type === "aborted" ? "aborted" : runResult.result.type === "error" ? "failed" : "idle";
+    this.state.status =
+      runResult.result.type === "aborted" ? "aborted" : runResult.result.type === "error" ? "failed" : "idle";
     this.state.currentTurnId = undefined;
     const sessionEndReason = this.state.status === "aborted" ? "other" : "prompt_input_exit";
     await this.options.lifecycle?.dispatch({
