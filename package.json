@@ -1,5 +1,5 @@
 {
-  "name": "pilotdeck",
+  "name": "sati",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,27 +10,51 @@
     "ui"
   ],
   "bin": {
-    "pilotdeck": "./dist/src/cli/pilotdeck.js"
+    "sati": "./dist/src/cli/sati.js"
   },
   "scripts": {
     "check:runtime": "node scripts/check-node-runtime.mjs",
     "install:browser": "npx @playwright/mcp install-browser chrome-for-testing",
-    "prebuild": "npm run check:runtime && node scripts/bootstrap-pilotdeck-config.mjs && cd src/context/memory/edgeclaw-memory-core && npm run build",
-    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json && node -e \"require('fs').cpSync('src/extension/plugins/builtin','dist/src/extension/plugins/builtin',{recursive:true})\"",
-    "server": "npm run check:runtime && tsx src/cli/pilotdeck.ts server",
-    "server:built": "npm run check:runtime && node dist/src/cli/pilotdeck.js server",
-    "skills:migrate": "tsx src/cli/pilotdeck.ts skills migrate",
-    "predev": "npm run check:runtime && node scripts/bootstrap-pilotdeck-config.mjs",
+    "prebuild": "npm run check:runtime && node scripts/bootstrap-sati-config.mjs && cd src/context/memory/edgeclaw-memory-core && npm run build",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json && node -e \"require('fs').cpSync('src/extension/plugins/builtin','dist/src/extension/plugins/builtin',{recursive:true})\" && node -e \"require('fs').cpSync('src/knowledge/patent/ipc-standards.yaml','dist/src/knowledge/patent/ipc-standards.yaml')\" && node -e \"require('fs').cpSync('src/knowledge/patent/wiki','dist/src/knowledge/patent/wiki',{recursive:true})\"",
+    "server": "npm run check:runtime && tsx src/cli/sati.ts server",
+    "server:built": "npm run check:runtime && node dist/src/cli/sati.js server",
+    "skills:migrate": "tsx src/cli/sati.ts skills migrate",
+    "predev": "npm run check:runtime && node scripts/bootstrap-sati-config.mjs",
     "dev": "node scripts/dev-launcher.mjs",
     "test": "npm run build && node --test --test-force-exit --test-timeout 60000 \"dist/tests/**/*.test.js\" \"dist/tests/**/*.spec.js\"",
-    "e2e:real-agent-lifecycle-hooks": "npm run build && PILOTDECK_RUN_REAL_AGENT_LIFECYCLE_E2E=1 node dist/tests/agent/e2e/run-real-agent-lifecycle-hooks.js"
+    "e2e:real-agent-lifecycle-hooks": "npm run build && SATI_RUN_REAL_AGENT_LIFECYCLE_E2E=1 node dist/tests/agent/e2e/run-real-agent-lifecycle-hooks.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests scripts",
+    "lint:fix": "eslint src tests scripts --fix",
+    "format": "biome format --write .",
+    "format:check": "biome check .",
+    "prepare": "simple-git-hooks"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.6",
+    "@eslint/js": "^9.39.3",
     "@types/node": "^25.0.0",
     "@types/ws": "^8.18.1",
+    "eslint": "^9.39.3",
+    "eslint-plugin-import-x": "^4.16.1",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "globals": "^17.4.0",
     "ink-testing-library": "^4.0.0",
+    "lint-staged": "^17.3.0",
+    "simple-git-hooks": "^2.13.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "npx lint-staged",
+    "commit-msg": "node scripts/check-commit-msg.mjs \"$1\""
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mjs,cjs,json,md,yaml,yml}": "node scripts/lint-staged.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.10.0",
