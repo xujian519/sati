@@ -8,6 +8,7 @@
       "!**/coverage/**",
       "!src/context/memory/edgeclaw-memory-core/lib/**",
       "!.reasonix/**",
+      "!.qoder/**",
       "!apps/desktop/dist-electron/**",
       "!**/test-results/**",
       "!.codegraph/**",
