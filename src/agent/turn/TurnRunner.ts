@@ -103,19 +103,19 @@ export class TurnRunner {
     await this.transcript.recordDurableMessage(sessionId, turnId, msg);
   }
 
-  /** 审批通过挂起的门禁消息：从挂起队列取出并触发 onApproved（消息在挂起时已入库，无需补写）。 */
-  approvePendingOutput(index: number): boolean {
+  /** 审批通过挂起的门禁消息：从挂起队列取出并触发 onApproved（消息在挂起时已入库，无需补写）。sessionId 匹配校验防越权。 */
+  approvePendingOutput(index: number, sessionId?: string): boolean {
     if (!this.outputGate) return false;
-    const pending = this.outputGate.approve(index);
+    const pending = this.outputGate.approve(index, sessionId);
     if (!pending) return false;
     this.outputGate.notifyCommitted(pending);
     return true;
   }
 
-  /** 拒绝挂起的门禁消息：从挂起队列移除并触发 onRejected（消息已入库，不删除转录）。 */
-  rejectPendingOutput(index: number): boolean {
+  /** 拒绝挂起的门禁消息：从挂起队列移除并触发 onRejected（消息已入库，不删除转录）。sessionId 匹配校验防越权。 */
+  rejectPendingOutput(index: number, sessionId?: string): boolean {
     if (!this.outputGate) return false;
-    return this.outputGate.reject(index);
+    return this.outputGate.reject(index, sessionId);
   }
 
   async *run(options: TurnRunnerOptions): AsyncGenerator<AgentEvent, TurnRunnerResult, unknown> {

@@ -43,21 +43,7 @@ export const ABSOLUTE_PHRASES = ["绝对", "一定", "百分百", "毫无疑问"
  * 否定语境词与窗口（与 src/rule/runtime/RuleEngine.ts 的 NEGATION_WORDS 保持同步）：
  * 命中位置前窗口内出现这些词且无句号/分号分隔时视为否定性描述，不报告。
  */
-const NEGATION_WORDS = [
-  "防止",
-  "避免",
-  "不用于",
-  "排除",
-  "禁止",
-  "不为",
-  "非用于",
-  "不构成",
-  "区别于",
-  "不属于",
-  "不",
-  "未",
-  "无",
-];
+const NEGATION_WORDS = ["防止", "避免", "不用于", "排除", "禁止", "不为", "非用于", "不构成", "区别于", "不属于"];
 const NEGATION_WINDOW = 24;
 
 /** 在命中位置前查找否定语境：窗口内出现否定词且无句号/分号分隔。 */
@@ -466,7 +452,9 @@ export function processPatentOutput(text: string, options?: PatentQualityGateOpt
   const disclaimer = options?.disclaimer ?? PATENT_DISCLAIMER;
 
   const riskHit = filterNegatedHits(riskKeywords, text);
-  const approvalHit = filterNegatedHits(approvalKeywords, text);
+  // 审批词不适用否定豁免：合规敏感结论（如"专利结论"）即使出现否定语境也必须人工审批，
+  // 避免"不，专利结论…"式构造绕过 HITL 门禁。
+  const approvalHit = approvalKeywords.filter(k => text.includes(k));
   const absoluteHit = filterNegatedHits(absolutePhrases, text);
 
   let output = text;

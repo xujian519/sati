@@ -134,6 +134,31 @@ test("pendingTtlMs prunes stale held messages", () => {
   });
 });
 
+test("approval keywords are not bypassed by negation context (security)", () => {
+  const gate = new PatentOutputGate({ onPending: () => {} });
+  // 单字否定词（"不"）在审批词前不得豁免：合规敏感结论必须人工审批
+  const msg = assistantMessage("不，专利结论：本方案具备新颖性。");
+  const result = gate.processMessage(msg);
+  assert.equal(result.needsApproval, true, "approval keyword must not be negated by a single 不");
+  assert.ok(result.info.approvalKeywordsHit.includes("专利结论"));
+});
+
+test("approve/reject reject cross-session indices (security)", () => {
+  const gate = new PatentOutputGate({ onPending: () => {} });
+  const msg = assistantMessage("专利结论：A。");
+  const held = gate.processMessage(msg, { sessionId: "session-a" });
+  assert.ok(held.pendingIndex !== undefined);
+
+  // 其他会话越权审批：被拒
+  assert.equal(gate.approve(held.pendingIndex, "session-b"), undefined, "cross-session approve must be rejected");
+  assert.equal(gate.reject(held.pendingIndex, "session-b"), false, "cross-session reject must be rejected");
+  assert.equal(gate.pendingCount(), 1, "pending must survive cross-session attempts");
+
+  // 本会话审批：成功
+  assert.ok(gate.approve(held.pendingIndex, "session-a"), "same-session approve must succeed");
+  assert.equal(gate.pendingCount(), 0);
+});
+
 test("messages with thinking + text blocks are processed on the text part only", () => {
   const gate = new PatentOutputGate();
   const msg = {

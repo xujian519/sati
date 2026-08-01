@@ -51,9 +51,9 @@ export type PatentOutputGateOptions = {
 };
 
 export type ProcessedMessageResult = {
-  /** 写库用的消息（可能已追加免责声明/存疑提示） */
+  /** 写库用的消息（可能已追加免责声明/存疑提示；挂起时也已入库，不丢消息） */
   message: CanonicalMessage;
-  /** 是否需人工审批（已挂起，调用方不得写库，等待 approve/reject） */
+  /** 是否需人工审批（已挂起等待 approve/reject，approve/reject 仅为流程控制，消息本体已入库） */
   needsApproval: boolean;
   /** 挂起索引（needsApproval=true 时有效，供 approve/reject 使用） */
   pendingIndex?: number;
@@ -116,10 +116,16 @@ export class PatentOutputGate {
     return { message: processed, needsApproval: false, info };
   }
 
-  /** 审批通过：取出并移除挂起消息（消息已在挂起时入库，此处仅完成流程控制；触发 onApproved）。 */
-  approve(index: number): PendingPatentMessage | undefined {
+  /**
+   * 审批通过：取出并移除挂起消息（消息已在挂起时入库，此处仅完成流程控制；触发 onApproved）。
+   * sessionId 提供时校验匹配（防止跨会话越权批准）；不匹配返回 undefined。
+   */
+  approve(index: number, sessionId?: string): PendingPatentMessage | undefined {
     const pending = this.pending.get(index);
     if (!pending) return undefined;
+    if (sessionId !== undefined && pending.sessionId !== undefined && pending.sessionId !== sessionId) {
+      return undefined;
+    }
     this.pending.delete(index);
     return pending;
   }
@@ -129,10 +135,13 @@ export class PatentOutputGate {
     this.safeInvoke(this.options.onApproved, pending);
   }
 
-  /** 审批拒绝：丢弃挂起消息。 */
-  reject(index: number): boolean {
+  /** 审批拒绝：丢弃挂起消息。sessionId 提供时校验匹配（防止跨会话越权拒绝）。 */
+  reject(index: number, sessionId?: string): boolean {
     const pending = this.pending.get(index);
     if (!pending) return false;
+    if (sessionId !== undefined && pending.sessionId !== undefined && pending.sessionId !== sessionId) {
+      return false;
+    }
     this.pending.delete(index);
     this.safeInvoke(this.options.onRejected, pending);
     return true;

@@ -41,14 +41,14 @@ export class AgentSession {
     this.state = options.initialState ?? createInitialAgentSessionState(options.sessionId);
   }
 
-  /** 审批通过挂起的门禁消息（输出级 HITL）：消息已在挂起时入库，此处仅完成审批流程控制。 */
+  /** 审批通过挂起的门禁消息（输出级 HITL）：消息已在挂起时入库，此处仅完成审批流程控制。sessionId 自动绑定本会话，防跨会话越权。 */
   approvePendingOutput(index: number): boolean {
-    return this.options.turnRunner.approvePendingOutput(index);
+    return this.options.turnRunner.approvePendingOutput(index, this.state.sessionId);
   }
 
-  /** 拒绝挂起的门禁消息：从挂起队列移除（消息本体已在转录中，不删除）。 */
+  /** 拒绝挂起的门禁消息：从挂起队列移除（消息本体已在转录中，不删除）。sessionId 自动绑定本会话，防跨会话越权。 */
   rejectPendingOutput(index: number): boolean {
-    return this.options.turnRunner.rejectPendingOutput(index);
+    return this.options.turnRunner.rejectPendingOutput(index, this.state.sessionId);
   }
 
   async *submit(input: AgentInput, submitOptions: AgentSubmitOptions = {}): AsyncGenerator<AgentEvent, void, unknown> {
