@@ -17,7 +17,21 @@ import type {
 } from "../protocol/types.js";
 
 /** 否定语境词：命中位置前出现这些词时，视为否定性描述（"防止赌博"不排除）。 */
-const NEGATION_WORDS = ["防止", "避免", "不用于", "排除", "禁止", "不为", "非用于", "不构成", "区别于", "不属于"];
+const NEGATION_WORDS = [
+  "防止",
+  "避免",
+  "不用于",
+  "排除",
+  "禁止",
+  "不为",
+  "非用于",
+  "不构成",
+  "区别于",
+  "不属于",
+  "不",
+  "未",
+  "无",
+];
 
 /** 否定语境检查窗口（命中词前多少个字符）。 */
 const NEGATION_WINDOW = 24;
@@ -33,7 +47,7 @@ function truncate(text: string): string {
 function hasNegationContext(text: string, matchStart: number): boolean {
   const start = Math.max(0, matchStart - NEGATION_WINDOW);
   const window = text.slice(start, matchStart);
-  if (window.includes("。") || window.includes("；") || window.includes("；")) return false;
+  if (window.includes("。") || window.includes("；") || window.includes(";")) return false;
   return NEGATION_WORDS.some(word => window.includes(word));
 }
 
@@ -120,8 +134,42 @@ function checkStructuralAnalysis(
   return { confidence: total === 0 ? 1 : hit / total, missing };
 }
 
-/** 提取法条引用（R1 存在性检查用）："专利法第N条" / "专利法实施细则第N条"。 */
-const CITATION_RE = /(专利法实施细则|专利法)第\s*(\d+)\s*条/g;
+/** 提取法条引用（R1 存在性检查用）："专利法第N条" / "专利法实施细则第N条"（N 支持中文数字）。 */
+const CITATION_RE = /(专利法实施细则|专利法)第\s*([0-9零一二三四五六七八九十百]+)\s*条/g;
+
+/** 中文数字 → 阿拉伯数字（支持十/百位组合，如 "第七十八条" → 78；非数字字符返回 null）。 */
+function parseCnNumber(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (/^\d+$/.test(trimmed)) return Number.parseInt(trimmed, 10);
+  const CN_DIGITS: Record<string, number> = {
+    零: 0,
+    一: 1,
+    二: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+  };
+  let total = 0;
+  let digit = 0;
+  for (const ch of trimmed) {
+    if (ch === "十") {
+      total += (digit || 1) * 10;
+      digit = 0;
+    } else if (ch === "百") {
+      total += (digit || 1) * 100;
+      digit = 0;
+    } else if (ch in CN_DIGITS) {
+      digit = CN_DIGITS[ch]!;
+    } else {
+      return null;
+    }
+  }
+  return total + digit;
+}
 
 function checkCitationAnalysis(
   check: { type: "citation_analysis"; statutes: Record<string, { max: number; topics?: Record<number, string[]> }> },
@@ -131,7 +179,8 @@ function checkCitationAnalysis(
   let match: RegExpExecArray | null;
   while ((match = CITATION_RE.exec(text)) !== null) {
     const statuteName = match[1] === "专利法实施细则" ? "专利法实施细则" : "专利法";
-    const article = Number(match[2]);
+    const article = parseCnNumber(match[2]);
+    if (article === null) continue;
     const statute = check.statutes[statuteName];
     if (statute !== undefined && article > statute.max) {
       evidence.push(match[0]);
