@@ -1,10 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  PilotDeckConfigProvider,
-  usePilotDeckConfig,
-} from "./usePilotDeckConfig";
+import { PilotDeckConfigProvider, usePilotDeckConfig } from "./usePilotDeckConfig";
 
 const mocks = vi.hoisted(() => ({
   authenticatedFetch: vi.fn(),
@@ -52,7 +49,7 @@ function ConfigWrapper({ children }: { children: ReactNode }) {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((next) => {
+  const promise = new Promise<T>(next => {
     resolve = next;
   });
   return { promise, resolve };
@@ -63,7 +60,7 @@ describe("usePilotDeckConfig saves", () => {
     mocks.authenticatedFetch.mockReset();
     mocks.listener = null;
     mocks.subscribe.mockReset();
-    mocks.subscribe.mockImplementation((listener) => {
+    mocks.subscribe.mockImplementation(listener => {
       mocks.listener = listener;
       return vi.fn();
     });
@@ -74,25 +71,19 @@ describe("usePilotDeckConfig saves", () => {
     const secondWrite = deferred<TestResponse>();
     const writeBodies: string[] = [];
 
-    mocks.authenticatedFetch.mockImplementation(
-      (url: string, options?: RequestInit) => {
-        if (url === "/api/config" && !options?.method) {
-          return Promise.resolve(response(configResponse("initial")));
-        }
-        if (url === "/api/config/validate") {
-          return Promise.resolve(
-            response({ valid: true, errors: [], warnings: [] }),
-          );
-        }
-        if (url === "/api/config" && options?.method === "PUT") {
-          writeBodies.push(String(options.body));
-          return writeBodies.length === 1
-            ? firstWrite.promise
-            : secondWrite.promise;
-        }
-        throw new Error(`Unexpected request: ${url}`);
-      },
-    );
+    mocks.authenticatedFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (url === "/api/config" && !options?.method) {
+        return Promise.resolve(response(configResponse("initial")));
+      }
+      if (url === "/api/config/validate") {
+        return Promise.resolve(response({ valid: true, errors: [], warnings: [] }));
+      }
+      if (url === "/api/config" && options?.method === "PUT") {
+        writeBodies.push(String(options.body));
+        return writeBodies.length === 1 ? firstWrite.promise : secondWrite.promise;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
 
     const { result } = renderHook(() => usePilotDeckConfig(), {
       wrapper: ConfigWrapper,
@@ -150,23 +141,19 @@ describe("usePilotDeckConfig saves", () => {
     const write = deferred<TestResponse>();
     let writeStarted = false;
 
-    mocks.authenticatedFetch.mockImplementation(
-      (url: string, options?: RequestInit) => {
-        if (url === "/api/config" && !options?.method) {
-          return Promise.resolve(response(configResponse("initial")));
-        }
-        if (url === "/api/config/validate") {
-          return Promise.resolve(
-            response({ valid: true, errors: [], warnings: [] }),
-          );
-        }
-        if (url === "/api/config" && options?.method === "PUT") {
-          writeStarted = true;
-          return write.promise;
-        }
-        throw new Error(`Unexpected request: ${url}`);
-      },
-    );
+    mocks.authenticatedFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (url === "/api/config" && !options?.method) {
+        return Promise.resolve(response(configResponse("initial")));
+      }
+      if (url === "/api/config/validate") {
+        return Promise.resolve(response({ valid: true, errors: [], warnings: [] }));
+      }
+      if (url === "/api/config" && options?.method === "PUT") {
+        writeStarted = true;
+        return write.promise;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
 
     const { result } = renderHook(() => usePilotDeckConfig(), {
       wrapper: ConfigWrapper,
@@ -182,9 +169,7 @@ describe("usePilotDeckConfig saves", () => {
     await waitFor(() => expect(writeStarted).toBe(true));
 
     act(() => {
-      write.resolve(
-        response(configResponse("saved while request is pending")),
-      );
+      write.resolve(response(configResponse("saved while request is pending")));
     });
     await act(async () => {
       await saveResult;
@@ -206,24 +191,18 @@ describe("usePilotDeckConfig saves", () => {
   });
 
   it("returns an explicit failure and exposes the server error", async () => {
-    mocks.authenticatedFetch.mockImplementation(
-      (url: string, options?: RequestInit) => {
-        if (url === "/api/config" && !options?.method) {
-          return Promise.resolve(response(configResponse("initial")));
-        }
-        if (url === "/api/config/validate") {
-          return Promise.resolve(
-            response({ valid: true, errors: [], warnings: [] }),
-          );
-        }
-        if (url === "/api/config" && options?.method === "PUT") {
-          return Promise.resolve(
-            response({ error: "Config write rejected" }, false),
-          );
-        }
-        throw new Error(`Unexpected request: ${url}`);
-      },
-    );
+    mocks.authenticatedFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (url === "/api/config" && !options?.method) {
+        return Promise.resolve(response(configResponse("initial")));
+      }
+      if (url === "/api/config/validate") {
+        return Promise.resolve(response({ valid: true, errors: [], warnings: [] }));
+      }
+      if (url === "/api/config" && options?.method === "PUT") {
+        return Promise.resolve(response({ error: "Config write rejected" }, false));
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
 
     const { result } = renderHook(() => usePilotDeckConfig(), {
       wrapper: ConfigWrapper,
@@ -245,19 +224,15 @@ describe("usePilotDeckConfig saves", () => {
   });
 
   it("shares one draft and save queue between settings consumers", async () => {
-    mocks.authenticatedFetch.mockImplementation(
-      (url: string, options?: RequestInit) => {
-        if (url === "/api/config" && !options?.method) {
-          return Promise.resolve(response(configResponse("initial")));
-        }
-        if (url === "/api/config/validate") {
-          return Promise.resolve(
-            response({ valid: true, errors: [], warnings: [] }),
-          );
-        }
-        throw new Error(`Unexpected request: ${url}`);
-      },
-    );
+    mocks.authenticatedFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (url === "/api/config" && !options?.method) {
+        return Promise.resolve(response(configResponse("initial")));
+      }
+      if (url === "/api/config/validate") {
+        return Promise.resolve(response({ valid: true, errors: [], warnings: [] }));
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
 
     const { result } = renderHook(
       () => ({
@@ -276,19 +251,15 @@ describe("usePilotDeckConfig saves", () => {
   });
 
   it("only restores a failed optimistic draft when it is still current", async () => {
-    mocks.authenticatedFetch.mockImplementation(
-      (url: string, options?: RequestInit) => {
-        if (url === "/api/config" && !options?.method) {
-          return Promise.resolve(response(configResponse("initial")));
-        }
-        if (url === "/api/config/validate") {
-          return Promise.resolve(
-            response({ valid: true, errors: [], warnings: [] }),
-          );
-        }
-        throw new Error(`Unexpected request: ${url}`);
-      },
-    );
+    mocks.authenticatedFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (url === "/api/config" && !options?.method) {
+        return Promise.resolve(response(configResponse("initial")));
+      }
+      if (url === "/api/config/validate") {
+        return Promise.resolve(response({ valid: true, errors: [], warnings: [] }));
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
 
     const { result } = renderHook(() => usePilotDeckConfig(), {
       wrapper: ConfigWrapper,
@@ -300,20 +271,14 @@ describe("usePilotDeckConfig saves", () => {
     });
     let restored = false;
     act(() => {
-      restored = result.current.restoreRawIfCurrent(
-        "failed rename",
-        "initial",
-      );
+      restored = result.current.restoreRawIfCurrent("failed rename", "initial");
     });
     expect(restored).toBe(true);
     expect(result.current.raw).toBe("initial");
 
     act(() => {
       result.current.setRaw("newer draft");
-      restored = result.current.restoreRawIfCurrent(
-        "failed rename",
-        "initial",
-      );
+      restored = result.current.restoreRawIfCurrent("failed rename", "initial");
     });
     expect(restored).toBe(false);
     expect(result.current.raw).toBe("newer draft");
