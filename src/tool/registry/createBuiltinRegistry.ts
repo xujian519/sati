@@ -28,7 +28,11 @@ import { createPatentEvalTool } from "../builtin/patentEval.js";
 import { createDraftClaimsTool } from "../builtin/draftClaims.js";
 import { createDraftSpecificationTool } from "../builtin/draftSpecification.js";
 import { createValidateSpecificationTool } from "../builtin/validateSpecification.js";
+import { createPatentWorkflowTool } from "../builtin/patentWorkflowTool.js";
+import { createPatentPlanTaskTool } from "../builtin/patentPlanTaskTool.js";
+import { createPatentWorkerValidateTool } from "../builtin/patentWorkerValidateTool.js";
 import { createWriteFileTool } from "../builtin/writeFile.js";
+import { createLawSearchTool } from "../../knowledge/legal/law-search-tool.js";
 import type { SatiToolDefinition, ToolDomain } from "../protocol/types.js";
 import { ToolRegistry } from "./ToolRegistry.js";
 
@@ -109,6 +113,12 @@ export type CreateBuiltinRegistryOptions = {
    * deterministic tools. Pass `false` to keep them out of the registry.
    */
   patent?: false;
+  /**
+   * Legal-domain tools (`law_search` — 中国法律法规全文检索，宝宸知识库）。
+   * Registered by default. 数据库缺失时工具返回 setup_required 状态。
+   * Pass `false` to keep them out of the registry.
+   */
+  legal?: false;
 };
 
 export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): ToolRegistry {
@@ -164,6 +174,12 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createDraftClaimsTool(), "patent"));
     registry.register(annotate(createDraftSpecificationTool(), "patent"));
     registry.register(annotate(createValidateSpecificationTool(), "patent"));
+    registry.register(annotate(createPatentWorkflowTool(), "patent"));
+    registry.register(annotate(createPatentPlanTaskTool(), "patent"));
+    registry.register(annotate(createPatentWorkerValidateTool(), "patent"));
+  }
+  if (options?.legal !== false) {
+    registry.register(annotate(createLawSearchTool(), "legal"));
   }
   if (options?.ruleCheck !== false) {
     registry.register(
