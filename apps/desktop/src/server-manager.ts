@@ -736,7 +736,6 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
 
   private listenerPidForPort(port: number): number | null {
     try {
-      const out: string;
       if (process.platform === "win32") {
         // netstat -ano gives lines like:  TCP  0.0.0.0:18790  0.0.0.0:0  LISTENING  1234
         const raw = execSync(`netstat -ano -p TCP`, {
@@ -750,7 +749,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
         const pid = Number.parseInt(parts[parts.length - 1] ?? "", 10);
         return Number.isFinite(pid) && pid > 0 ? pid : null;
       }
-      out = execSync(`/usr/sbin/lsof -nP -t -i :${port} -sTCP:LISTEN`, {
+      const out = execSync(`/usr/sbin/lsof -nP -t -i :${port} -sTCP:LISTEN`, {
         stdio: ["ignore", "pipe", "ignore"],
         timeout: 3000,
       })
