@@ -48,14 +48,14 @@ function findBoundary(content: string, minLength: number, desiredLength: number,
   const safeDesired = clamp(desiredLength, minLength, safeMax);
   const backwardLimit = Math.max(minLength, safeDesired - 12);
   for (let index = safeDesired; index >= backwardLimit; index -= 1) {
-    if (isPreferredBoundary(content[index - 1] || '')) {
+    if (isPreferredBoundary(content[index - 1] || "")) {
       return index;
     }
   }
 
   const forwardLimit = Math.min(safeMax, safeDesired + 12);
   for (let index = safeDesired + 1; index <= forwardLimit; index += 1) {
-    if (isPreferredBoundary(content[index - 1] || '')) {
+    if (isPreferredBoundary(content[index - 1] || "")) {
       return index;
     }
   }
@@ -64,10 +64,11 @@ function findBoundary(content: string, minLength: number, desiredLength: number,
 }
 
 export class SmoothTextStream {
-  private targetContent = '';
-  private renderedContent = '';
+  private targetContent = "";
+  private renderedContent = "";
   private frame: FrameHandle | null = null;
-  private fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+  // window.setTimeout returns a DOM `number`; keep the timer id typed accordingly.
+  private fallbackTimer: number | null = null;
   private lastChunkAtMs: number | null = null;
   private lastFrameAtMs: number | null = null;
   private averageCharsPerSecond = DEFAULT_AVERAGE_CHARS_PER_SECOND;
@@ -141,8 +142,8 @@ export class SmoothTextStream {
     this.options.finalize?.();
     this.onDrainComplete?.();
     this.onDrainComplete = null;
-    this.targetContent = '';
-    this.renderedContent = '';
+    this.targetContent = "";
+    this.renderedContent = "";
     this.lastChunkAtMs = null;
     this.lastFrameAtMs = null;
   }
@@ -207,7 +208,7 @@ export class SmoothTextStream {
     // Browser rAF can be delayed or paused by WebView/tab throttling. The first
     // chunk is emitted synchronously; this timeout keeps the rest moving without
     // giving up smooth per-frame rendering when rAF is healthy.
-    if (this.options.scheduleFrame || this.fallbackTimer != null || typeof window === 'undefined') {
+    if (this.options.scheduleFrame || this.fallbackTimer != null || typeof window === "undefined") {
       return;
     }
     this.fallbackTimer = window.setTimeout(() => {
@@ -246,10 +247,7 @@ export class SmoothTextStream {
     // Draining mode: 15 chars/pump for a smooth-but-quick finish.
     // 15 chars × 60fps = ~900 chars/sec, so 150 chars finishes in ~170ms.
     const chars = this.draining ? Math.min(15, remaining) : Math.min(2, remaining);
-    const nextLength = Math.min(
-      this.targetContent.length,
-      this.renderedContent.length + chars,
-    );
+    const nextLength = Math.min(this.targetContent.length, this.renderedContent.length + chars);
 
     this.renderedContent = this.targetContent.slice(0, nextLength);
     this.options.emit(this.renderedContent);
