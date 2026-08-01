@@ -1,9 +1,9 @@
-import fs from 'fs';
-import fsPromises from 'fs/promises';
-import os from 'os';
-import path from 'path';
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { parseGatewayConfig } from '../../../src/pilot/config/parseGatewayConfig.js';
+import fs from "fs";
+import fsPromises from "fs/promises";
+import os from "os";
+import path from "path";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import { parseGatewayConfig } from "../../../src/pilot/config/parseGatewayConfig.js";
 
 // Source of truth: ~/.pilotdeck/pilotdeck.yaml. The disk format and the
 // "internal" config object are the same V2 schema — no more adapter layer.
@@ -24,23 +24,24 @@ import { parseGatewayConfig } from '../../../src/pilot/config/parseGatewayConfig
 // schemas. UI server just round-trips them.
 
 const CONFIG_VERSION = 1;
-const PILOT_HOME_DIR = process.env.PILOT_HOME || path.join(os.homedir(), '.pilotdeck');
-const DEFAULT_CONFIG_PATH = path.join(PILOT_HOME_DIR, 'pilotdeck.yaml');
-const MASK = '********';
+const PILOT_HOME_DIR = process.env.PILOT_HOME || path.join(os.homedir(), ".pilotdeck");
+const DEFAULT_CONFIG_PATH = path.join(PILOT_HOME_DIR, "pilotdeck.yaml");
+const MASK = "********";
 
-const SECRET_KEY_RE = /(api[_-]?key|token|secret|password|auth[_-]?token|access[_-]?token|bot[_-]?token|app[_-]?token|encoding[_-]?aes[_-]?key)$/i;
-const SECRET_EXACT_KEYS = new Set(['key', 'apiKey', 'api_key', 'authToken', 'accessToken']);
+const SECRET_KEY_RE =
+  /(api[_-]?key|token|secret|password|auth[_-]?token|access[_-]?token|bot[_-]?token|app[_-]?token|encoding[_-]?aes[_-]?key)$/i;
+const SECRET_EXACT_KEYS = new Set(["key", "apiKey", "api_key", "authToken", "accessToken"]);
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
 function isRecord(value) {
-  return value && typeof value === 'object' && !Array.isArray(value);
+  return value && typeof value === "object" && !Array.isArray(value);
 }
 
 function normalizeString(value) {
-  return typeof value === 'string' ? value.trim() : '';
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function deepMerge(base, override) {
@@ -64,35 +65,35 @@ export function buildDefaultPilotDeckConfig() {
   return {
     schemaVersion: CONFIG_VERSION,
     agent: {
-      model: '',
+      model: "",
       params: {},
-      subagents: { default: 'inherit', params: {} },
+      subagents: { default: "inherit", params: {} },
     },
     model: {
       providers: {},
     },
     memory: {
       enabled: true,
-      reasoningMode: 'answer_first',
+      reasoningMode: "answer_first",
       autoIndexIntervalMinutes: 30,
       autoDreamIntervalMinutes: 60,
-      captureStrategy: 'last_turn',
+      captureStrategy: "last_turn",
       includeAssistant: true,
       maxMessageChars: 6000,
       heartbeatBatchSize: 30,
     },
     webui: {
       runtime: {
-        host: '0.0.0.0',
+        host: "0.0.0.0",
         serverPort: 3001,
         vitePort: 5173,
         apiTimeoutMs: 120000,
-        databasePath: path.join(PILOT_HOME_DIR, 'auth.db'),
+        databasePath: path.join(PILOT_HOME_DIR, "auth.db"),
         workspacesRoot: os.homedir(),
       },
       officePreview: {
-        service: 'builtin',
-        binaryPath: '',
+        service: "builtin",
+        binaryPath: "",
       },
     },
     telemetry: {
@@ -106,12 +107,8 @@ export function buildDefaultPilotDeckConfig() {
 export function normalizePilotDeckConfig(input) {
   const source = isRecord(input) ? input : {};
   const normalized = deepMerge(buildDefaultPilotDeckConfig(), source);
-  const sourceOfficePreview = isRecord(source.webui?.officePreview)
-    ? source.webui.officePreview
-    : {};
-  const legacySpreadsheetMode = normalizeString(
-    sourceOfficePreview.spreadsheetMode,
-  ).toLowerCase();
+  const sourceOfficePreview = isRecord(source.webui?.officePreview) ? source.webui.officePreview : {};
+  const legacySpreadsheetMode = normalizeString(sourceOfficePreview.spreadsheetMode).toLowerCase();
   const configuredService = normalizeString(sourceOfficePreview.service).toLowerCase();
 
   // Before the built-in OOXML viewers existed, `service` only controlled
@@ -120,11 +117,9 @@ export function normalizePilotDeckConfig(input) {
   // interactive/auto -> built-in, print -> LibreOffice.
   if (legacySpreadsheetMode) {
     normalized.webui.officePreview.service =
-      legacySpreadsheetMode === 'print' && configuredService === 'libreoffice'
-        ? 'libreoffice'
-        : 'builtin';
-  } else if (!configuredService || configuredService === 'none') {
-    normalized.webui.officePreview.service = 'builtin';
+      legacySpreadsheetMode === "print" && configuredService === "libreoffice" ? "libreoffice" : "builtin";
+  } else if (!configuredService || configuredService === "none") {
+    normalized.webui.officePreview.service = "builtin";
   } else {
     // Keep unknown values intact so validation can reject typos instead of
     // silently changing a user's explicit choice.
@@ -148,13 +143,13 @@ export function sanitizeProviderCredentials(config) {
   if (!isRecord(providers)) return config;
   for (const [providerId, provider] of Object.entries(providers)) {
     if (!isRecord(provider)) continue;
-    if (typeof provider.apiKey === 'string') {
+    if (typeof provider.apiKey === "string") {
       provider.apiKey = provider.apiKey.trim();
       if (allowsMissingApiKey(providerId) && provider.apiKey.length === 0) {
         delete provider.apiKey;
       }
     }
-    if (typeof provider.url === 'string') {
+    if (typeof provider.url === "string") {
       provider.url = provider.url.trim();
     }
   }
@@ -166,7 +161,7 @@ export function sanitizeProviderCredentials(config) {
 function splitModelRef(ref) {
   const text = normalizeString(ref);
   if (!text) return null;
-  const slash = text.indexOf('/');
+  const slash = text.indexOf("/");
   if (slash <= 0 || slash === text.length - 1) return null;
   return { providerId: text.slice(0, slash), modelId: text.slice(slash + 1) };
 }
@@ -177,13 +172,11 @@ function splitModelRef(ref) {
 export function resolveModel(config, ref, options = {}) {
   const inheritFallback = normalizeString(config?.agent?.model);
   const refText = normalizeString(ref);
-  const effective = (!refText || refText === 'inherit')
-    ? inheritFallback
-    : refText;
+  const effective = !refText || refText === "inherit" ? inheritFallback : refText;
   const parts = splitModelRef(effective);
   if (!parts) {
     if (options.allowMissing) return null;
-    throw new Error(`Invalid model reference: ${ref ?? ''}`);
+    throw new Error(`Invalid model reference: ${ref ?? ""}`);
   }
   const provider = config?.model?.providers?.[parts.providerId];
   if (!isRecord(provider)) {
@@ -203,7 +196,7 @@ export function resolveModel(config, ref, options = {}) {
 // ─── Validation ──────────────────────────────────────────────────────────────
 
 function allowsMissingApiKey(providerId) {
-  return providerId === 'ollama';
+  return providerId === "ollama";
 }
 
 function validateProvider(id, provider, errors) {
@@ -213,7 +206,12 @@ function validateProvider(id, provider, errors) {
   }
   const protocol = normalizeString(provider.protocol).toLowerCase();
   if (!protocol) errors.push(`model.providers.${id}.protocol is required`);
-  else if (protocol !== 'openai' && protocol !== 'openai-responses' && protocol !== 'anthropic' && protocol !== 'google') {
+  else if (
+    protocol !== "openai" &&
+    protocol !== "openai-responses" &&
+    protocol !== "anthropic" &&
+    protocol !== "google"
+  ) {
     errors.push(`model.providers.${id}.protocol must be "openai", "openai-responses", "anthropic", or "google"`);
   }
   if (!normalizeString(provider.url)) errors.push(`model.providers.${id}.url is required`);
@@ -251,7 +249,7 @@ function validateRouterModelRefs(config, errors) {
   const tokenSaver = router.tokenSaver;
   if (!isRecord(tokenSaver)) return;
 
-  validateModelRef(config, tokenSaver.judge, 'router.tokenSaver.judge', errors);
+  validateModelRef(config, tokenSaver.judge, "router.tokenSaver.judge", errors);
 
   if (isRecord(tokenSaver.tiers)) {
     for (const [key, tier] of Object.entries(tokenSaver.tiers)) {
@@ -266,7 +264,7 @@ function validateGatewayConfig(config, errors, warnings) {
   parseGatewayConfig(config.gateway, diagnostics);
   for (const diagnostic of diagnostics) {
     const message = diagnostic.path ? `${diagnostic.path}: ${diagnostic.message}` : diagnostic.message;
-    if (diagnostic.severity === 'warning') {
+    if (diagnostic.severity === "warning") {
       warnings.push(message);
     } else {
       errors.push(message);
@@ -281,7 +279,7 @@ export function validatePilotDeckConfig(config) {
 
   const mainRef = normalizeString(normalized.agent.model);
   if (!mainRef) {
-    warnings.push('agent.model is empty; pick a model from model.providers.');
+    warnings.push("agent.model is empty; pick a model from model.providers.");
   } else {
     const main = resolveModel(normalized, mainRef, { allowMissing: true });
     if (!main) {
@@ -293,7 +291,7 @@ export function validatePilotDeckConfig(config) {
 
   if (normalized.memory?.enabled && normalizeString(normalized.memory.model)) {
     const ref = normalizeString(normalized.memory.model);
-    if (ref !== 'inherit') {
+    if (ref !== "inherit") {
       const memory = resolveModel(normalized, ref, { allowMissing: true });
       if (!memory) {
         errors.push(`memory.model="${ref}" doesn't resolve to a configured provider/model`);
@@ -306,21 +304,21 @@ export function validatePilotDeckConfig(config) {
 
   if (normalized.webui?.runtime?.contextWindow !== undefined) {
     warnings.push(
-      'webui.runtime.contextWindow is deprecated and ignored. ' +
-      'Use agent.maxContextTokens to override the model\'s context window for auto-compaction.',
+      "webui.runtime.contextWindow is deprecated and ignored. " +
+        "Use agent.maxContextTokens to override the model's context window for auto-compaction.",
     );
   }
 
   const officePreviewService = normalized.webui?.officePreview?.service;
   if (
-    officePreviewService !== undefined
-    && !['builtin', 'libreoffice'].includes(normalizeString(officePreviewService).toLowerCase())
+    officePreviewService !== undefined &&
+    !["builtin", "libreoffice"].includes(normalizeString(officePreviewService).toLowerCase())
   ) {
     errors.push('webui.officePreview.service must be "builtin" or "libreoffice"');
   }
   const libreOfficeBinaryPath = normalized.webui?.officePreview?.binaryPath;
-  if (libreOfficeBinaryPath !== undefined && typeof libreOfficeBinaryPath !== 'string') {
-    errors.push('webui.officePreview.binaryPath must be a string');
+  if (libreOfficeBinaryPath !== undefined && typeof libreOfficeBinaryPath !== "string") {
+    errors.push("webui.officePreview.binaryPath must be a string");
   }
   return { valid: errors.length === 0, errors, warnings, config: normalized };
 }
@@ -336,7 +334,7 @@ export function maskSecrets(value) {
   if (!isRecord(value)) return value;
   const output = {};
   for (const [key, child] of Object.entries(value)) {
-    if (isSecretKey(key) && typeof child === 'string' && child.trim()) {
+    if (isSecretKey(key) && typeof child === "string" && child.trim()) {
       output[key] = MASK;
     } else {
       output[key] = maskSecrets(child);
@@ -346,7 +344,7 @@ export function maskSecrets(value) {
 }
 
 export function preserveMaskedSecrets(nextValue, previousValue) {
-  if (nextValue === MASK && typeof previousValue === 'string') return previousValue;
+  if (nextValue === MASK && typeof previousValue === "string") return previousValue;
   if (Array.isArray(nextValue)) {
     return nextValue.map((item, index) =>
       preserveMaskedSecrets(item, Array.isArray(previousValue) ? previousValue[index] : undefined),
@@ -375,9 +373,9 @@ export function hasUnresolvedMaskedSecrets(value) {
 // ─── Runtime env derivation ──────────────────────────────────────────────────
 
 function providerProtocolToMemoryApi(protocol) {
-  if (protocol === 'anthropic' || protocol === 'google') return protocol;
-  if (protocol === 'openai-responses') return 'openai-responses';
-  return 'openai-completions';
+  if (protocol === "anthropic" || protocol === "google") return protocol;
+  if (protocol === "openai-responses") return "openai-responses";
+  return "openai-completions";
 }
 
 export function buildRuntimeEnv(config) {
@@ -388,33 +386,32 @@ export function buildRuntimeEnv(config) {
   const env = {
     SERVER_PORT: process.env.SERVER_PORT || String(runtime.serverPort ?? 3001),
     VITE_PORT: process.env.VITE_PORT || String(runtime.vitePort ?? 5173),
-    HOST: process.env.HOST || String(runtime.host ?? '0.0.0.0'),
+    HOST: process.env.HOST || String(runtime.host ?? "0.0.0.0"),
     API_TIMEOUT_MS: String(runtime.apiTimeoutMs ?? 120000),
-    PILOTDECK_MEMORY_ENABLED: normalized.memory?.enabled ? '1' : '0',
+    PILOTDECK_MEMORY_ENABLED: normalized.memory?.enabled ? "1" : "0",
   };
 
   if (runtime.databasePath) env.DATABASE_PATH = expandTilde(runtime.databasePath);
   if (runtime.workspacesRoot) env.WORKSPACES_ROOT = expandTilde(runtime.workspacesRoot);
-  const proxyUrl = normalized.proxy?.url
-    || (typeof normalized.proxy === 'string' ? normalized.proxy : '')
-    || runtime.httpsProxy || '';
+  const proxyUrl =
+    normalized.proxy?.url || (typeof normalized.proxy === "string" ? normalized.proxy : "") || runtime.httpsProxy || "";
   if (proxyUrl) {
     env.HTTPS_PROXY = proxyUrl;
     env.https_proxy = proxyUrl;
   }
 
   if (main) {
-    env.PILOTDECK_API_BASE_URL = main.provider.url || '';
-    env.PILOTDECK_API_KEY = main.provider.apiKey || '';
+    env.PILOTDECK_API_BASE_URL = main.provider.url || "";
+    env.PILOTDECK_API_KEY = main.provider.apiKey || "";
     env.PILOTDECK_MODEL = main.model;
-    env.OPENAI_BASE_URL = main.provider.url || '';
-    env.OPENAI_API_KEY = main.provider.apiKey || '';
+    env.OPENAI_BASE_URL = main.provider.url || "";
+    env.OPENAI_API_KEY = main.provider.apiKey || "";
     env.OPENAI_MODEL = main.model;
-    env.ANTHROPIC_API_KEY = main.provider.apiKey || '';
+    env.ANTHROPIC_API_KEY = main.provider.apiKey || "";
     env.ANTHROPIC_MODEL = main.model;
-    env.GEMINI_API_KEY = main.provider.apiKey || '';
-    env.GOOGLE_API_KEY = main.provider.apiKey || '';
-    env.GOOGLE_GENERATIVE_AI_API_KEY = main.provider.apiKey || '';
+    env.GEMINI_API_KEY = main.provider.apiKey || "";
+    env.GOOGLE_API_KEY = main.provider.apiKey || "";
+    env.GOOGLE_GENERATIVE_AI_API_KEY = main.provider.apiKey || "";
     env.GEMINI_MODEL = main.model;
   }
 
@@ -422,12 +419,7 @@ export function buildRuntimeEnv(config) {
   // output token cap; honor agent.params.maxOutputTokens / max_tokens.
   const mainParams = normalized.agent?.params ?? {};
   const requestedMaxOutput = Number.parseInt(
-    String(
-      mainParams.maxOutputTokens ??
-        mainParams.max_output_tokens ??
-        mainParams.max_tokens ??
-        ''
-    ).trim(),
+    String(mainParams.maxOutputTokens ?? mainParams.max_output_tokens ?? mainParams.max_tokens ?? "").trim(),
     10,
   );
   if (Number.isFinite(requestedMaxOutput) && requestedMaxOutput > 0) {
@@ -445,16 +437,16 @@ export function buildRuntimeEnv(config) {
   if (memory) {
     env.PILOTDECK_MEMORY_MODEL = memory.model;
     env.PILOTDECK_MEMORY_PROVIDER = memory.providerId;
-    env.PILOTDECK_MEMORY_BASE_URL = memory.provider.url || '';
-    env.PILOTDECK_MEMORY_API_KEY = memory.provider.apiKey || '';
-    env.PILOTDECK_MEMORY_API_TYPE = normalizeString(normalized.memory?.apiType)
-      || providerProtocolToMemoryApi(memory.provider.protocol);
+    env.PILOTDECK_MEMORY_BASE_URL = memory.provider.url || "";
+    env.PILOTDECK_MEMORY_API_KEY = memory.provider.apiKey || "";
+    env.PILOTDECK_MEMORY_API_TYPE =
+      normalizeString(normalized.memory?.apiType) || providerProtocolToMemoryApi(memory.provider.protocol);
   }
 
   // Pass through customEnv (UI-managed escape hatch).
   if (isRecord(normalized.customEnv)) {
     for (const [key, value] of Object.entries(normalized.customEnv)) {
-      if (typeof value === 'string' && value.trim()) env[key] = value;
+      if (typeof value === "string" && value.trim()) env[key] = value;
     }
   }
 
@@ -475,10 +467,9 @@ export function buildMemoryLlmOptions(config) {
   return {
     provider: memory.providerId,
     model: memory.model,
-    apiType: normalizeString(normalized.memory?.apiType)
-      || providerProtocolToMemoryApi(memory.provider.protocol),
-    baseUrl: memory.provider.url || '',
-    apiKey: memory.provider.apiKey || '',
+    apiType: normalizeString(normalized.memory?.apiType) || providerProtocolToMemoryApi(memory.provider.protocol),
+    baseUrl: memory.provider.url || "",
+    apiKey: memory.provider.apiKey || "",
     headers: isRecord(memory.provider.headers) ? memory.provider.headers : {},
   };
 }
@@ -514,13 +505,13 @@ export function readPilotDeckConfigFile() {
     return {
       exists: false,
       configPath,
-      raw: '',
+      raw: "",
       config: buildDefaultPilotDeckConfig(),
       rawYaml: {},
       parseError: null,
     };
   }
-  const raw = fs.readFileSync(configPath, 'utf8');
+  const raw = fs.readFileSync(configPath, "utf8");
   let parsed;
   try {
     parsed = parseYaml(raw) || {};
@@ -554,7 +545,7 @@ export function syncAgentModelWithRouter(config) {
   if (!isRecord(config)) return config;
   const agentRef = normalizeString(config.agent?.model);
   if (!agentRef) return config;
-  const slash = agentRef.indexOf('/');
+  const slash = agentRef.indexOf("/");
   if (slash <= 0 || slash >= agentRef.length - 1) return config;
   const providerId = agentRef.slice(0, slash);
   const modelId = agentRef.slice(slash + 1);
@@ -564,17 +555,19 @@ export function syncAgentModelWithRouter(config) {
   if (!isRecord(config.router.scenarios)) return config;
   const currentDefault = config.router.scenarios.default;
   // Accept both string ("provider/model") and object ref shapes.
-  const currentId = typeof currentDefault === 'string'
-    ? currentDefault.trim()
-    : (isRecord(currentDefault) ? normalizeString(currentDefault.id) : '');
+  const currentId =
+    typeof currentDefault === "string"
+      ? currentDefault.trim()
+      : isRecord(currentDefault)
+        ? normalizeString(currentDefault.id)
+        : "";
   if (currentId === agentRef) return config;
-  config.router.scenarios.default = typeof currentDefault === 'string'
-    ? agentRef
-    : { id: agentRef, provider: providerId, model: modelId };
+  config.router.scenarios.default =
+    typeof currentDefault === "string" ? agentRef : { id: agentRef, provider: providerId, model: modelId };
   return config;
 }
 
-const BOOTSTRAP_PLACEHOLDER_KEY = 'PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE';
+const BOOTSTRAP_PLACEHOLDER_KEY = "PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE";
 
 // Remove bootstrap placeholder providers — both the new `_placeholder` name
 // and any legacy provider whose apiKey is still the onboarding sentinel.
@@ -585,14 +578,14 @@ function purgeBootstrapPlaceholder(config) {
   const providers = config?.model?.providers;
   if (isRecord(providers)) {
     for (const [pid, prov] of Object.entries(providers)) {
-      if (pid === '_placeholder' || normalizeString(prov?.apiKey) === BOOTSTRAP_PLACEHOLDER_KEY) {
+      if (pid === "_placeholder" || normalizeString(prov?.apiKey) === BOOTSTRAP_PLACEHOLDER_KEY) {
         delete providers[pid];
       }
     }
   }
 
   const agentModel = normalizeString(config?.agent?.model);
-  if (agentModel === '_placeholder/_placeholder') {
+  if (agentModel === "_placeholder/_placeholder") {
     const realProviders = isRecord(providers) ? Object.keys(providers) : [];
     if (realProviders.length > 0) {
       const firstProvider = realProviders[0];
@@ -612,7 +605,7 @@ function purgeBootstrapPlaceholder(config) {
   function isOrphanRef(ref) {
     const s = normalizeString(ref);
     if (!s) return false;
-    const slash = s.indexOf('/');
+    const slash = s.indexOf("/");
     if (slash <= 0) return false;
     return !survivingProviders.has(s.slice(0, slash));
   }
@@ -623,9 +616,7 @@ function purgeBootstrapPlaceholder(config) {
     }
   }
   if (Array.isArray(router.fallback?.default)) {
-    router.fallback.default = router.fallback.default.map(
-      v => isOrphanRef(v) ? (agentRef || v) : v
-    );
+    router.fallback.default = router.fallback.default.map(v => (isOrphanRef(v) ? agentRef || v : v));
   }
   if (isRecord(router.tokenSaver)) {
     if (isOrphanRef(router.tokenSaver.judge)) {
@@ -649,21 +640,17 @@ function purgeBootstrapPlaceholder(config) {
 // layer existed only to bridge an older internal schema).
 export async function writePilotDeckConfig(config) {
   const sanitized = purgeBootstrapPlaceholder(
-    syncAgentModelWithRouter(
-      sanitizeProviderCredentials(
-        isRecord(config) ? deepMerge({}, config) : config,
-      ),
-    ),
+    syncAgentModelWithRouter(sanitizeProviderCredentials(isRecord(config) ? deepMerge({}, config) : config)),
   );
   if (isRecord(sanitized.memory)) {
     const memModel = sanitized.memory.model;
-    if (typeof memModel === 'string' && !memModel.trim()) {
+    if (typeof memModel === "string" && !memModel.trim()) {
       delete sanitized.memory.model;
     }
   }
   const validation = validatePilotDeckConfig(sanitized);
   if (!validation.valid) {
-    const error = new Error('Invalid PilotDeck config');
+    const error = new Error("Invalid PilotDeck config");
     error.validation = validation;
     throw error;
   }
@@ -672,12 +659,12 @@ export async function writePilotDeckConfig(config) {
   const yamlObj = validation.config;
   if (isRecord(yamlObj.memory)) {
     const memModel = yamlObj.memory.model;
-    if (typeof memModel === 'string' && !memModel.trim()) {
+    if (typeof memModel === "string" && !memModel.trim()) {
       delete yamlObj.memory.model;
     }
   }
   const raw = stringifyYaml(yamlObj, { lineWidth: 0 });
-  await fsPromises.writeFile(configPath, raw, 'utf8');
+  await fsPromises.writeFile(configPath, raw, "utf8");
   return { configPath, raw, validation, config: yamlObj };
 }
 
@@ -690,8 +677,8 @@ export async function writeRawPilotDeckYaml(yamlObj) {
 
 export function expandTilde(value) {
   const text = normalizeString(value);
-  if (text === '~') return os.homedir();
-  if (text.startsWith('~/')) return path.join(os.homedir(), text.slice(2));
+  if (text === "~") return os.homedir();
+  if (text.startsWith("~/")) return path.join(os.homedir(), text.slice(2));
   return text;
 }
 
