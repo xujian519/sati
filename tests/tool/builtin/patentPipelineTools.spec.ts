@@ -150,6 +150,12 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
     assert.ok(text.includes("incomplete"));
   });
 
+  it("patent_workflow 工具：未知 manifestId fail-closed", async () => {
+    const tool = createPatentWorkflowTool();
+    const res = await tool.execute({ manifestId: "no_such_manifest", outputs: [] }, {} as never);
+    assert.ok(textOf(res).includes("未知 manifest"), `应返回未知 manifest 提示: ${textOf(res)}`);
+  });
+
   it("patent_plan_task 工具：非法迁移返回错误而非抛错", async () => {
     const tool = createPatentPlanTaskTool();
     const res = await tool.execute({ action: "transition", currentState: "finished", to: "planning" }, {} as never);
@@ -177,5 +183,11 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
     assert.ok(textOf(ok).includes("通过"));
     const bad = await tool.execute({ workerName: "patent-novelty-analyzer", outputText: "缺字段" }, {} as never);
     assert.ok(textOf(bad).includes("降级"));
+  });
+
+  it("patent_worker_validate 工具：未知 workerName fail-closed", async () => {
+    const tool = createPatentWorkerValidateTool();
+    const res = await tool.execute({ workerName: "no_such_worker", outputText: "x" }, {} as never);
+    assert.ok(textOf(res).includes("未知 worker"), `应返回未知 worker 提示: ${textOf(res)}`);
   });
 });
