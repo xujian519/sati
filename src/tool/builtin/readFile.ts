@@ -517,25 +517,25 @@ export function createReadFileTool(): SatiToolDefinition<ReadFileInput> {
       let autoPaged = input.limit === undefined && effectiveLimit !== undefined;
       let toolResultRefAutoPaged = false;
       if (autoPaged) {
-        while (isOverTextBudget(text) && ranged.lineCount > 1) {
+        while (isOverTextBudgetMemo(text) && ranged.lineCount > 1) {
           const nextLimit = Math.max(1, Math.floor(ranged.lineCount / 2));
           ranged = await readFileInRange(resolved.absolutePath, offset, nextLimit, context.abortSignal);
           text = renderReadableRange(ranged.content, ranged.startLine, ranged.totalLines);
         }
       }
       if (!autoPaged && isManagedToolResultRefPath(resolved.relativePath)) {
-        while (isOverTextBudget(text) && ranged.lineCount > 1) {
+        while (isOverTextBudgetMemo(text) && ranged.lineCount > 1) {
           const nextLimit = Math.max(1, Math.floor(ranged.lineCount / 2));
           ranged = await readFileInRange(resolved.absolutePath, offset, nextLimit, context.abortSignal);
           text = renderReadableRange(ranged.content, ranged.startLine, ranged.totalLines);
           toolResultRefAutoPaged = true;
         }
       }
-      if (isOverTextBudget(text) && input.limit === undefined) {
+      if (isOverTextBudgetMemo(text) && input.limit === undefined) {
         autoPaged = true;
         text = renderOversizedLinePreview(text, resolved.relativePath, ranged.startLine);
       }
-      if (isOverTextBudget(text) && toolResultRefAutoPaged) {
+      if (isOverTextBudgetMemo(text) && toolResultRefAutoPaged) {
         text = renderOversizedLinePreview(text, resolved.relativePath, ranged.startLine);
       }
       ensureTokenBudget(text, resolved.relativePath, ranged.startLine);
@@ -655,6 +655,22 @@ function isOverTextBudget(text: string): boolean {
   return countTokens(text) > MAX_TEXT_TOKENS;
 }
 
+// countTokens (o200k BPE) is expensive for large strings (~8s per 100KB).
+// read_file calls the budget check several times on the same text while
+// auto-shrinking; memoize per exact text to avoid re-tokenizing.
+const textBudgetMemo = new Map<string, boolean>();
+
+function isOverTextBudgetMemo(text: string): boolean {
+  const cached = textBudgetMemo.get(text);
+  if (cached !== undefined) return cached;
+  const result = isOverTextBudget(text);
+  if (textBudgetMemo.size >= 64) {
+    textBudgetMemo.clear();
+  }
+  textBudgetMemo.set(text, result);
+  return result;
+}
+
 async function renderPdfPagesAsImages(
   pdfBuffer: Buffer,
   relativePath: string,
@@ -748,7 +764,7 @@ function sliceRenderedText(
 }
 
 function ensureTokenBudget(text: string, filePath: string, suggestedOffset?: number): void {
-  if (isOverTextBudget(text)) {
+  if (isOverTextBudgetMemo(text)) {
     const action =
       suggestedOffset === undefined
         ? "Use offset and limit to read a smaller portion."
