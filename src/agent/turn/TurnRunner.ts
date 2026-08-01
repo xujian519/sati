@@ -1,19 +1,22 @@
 import { agentError, normalizeAgentError } from "../protocol/errors.js";
 import type { AgentEvent } from "../protocol/events.js";
-import type { AgentInput } from "../protocol/input.js";
-import type { AgentRunMode } from "../protocol/input.js";
+import type { AgentInput, AgentRunMode } from "../protocol/input.js";
 import type { AgentTurnResult } from "../protocol/result.js";
 import type { AgentLoop, AgentLoopSeedState } from "../loop/AgentLoop.js";
-import type { AgentTranscriptWriter } from "../../session/transcript/TranscriptWriter.js";
-import { TurnInputProcessor } from "./TurnInputProcessor.js";
+import type {
+  AgentTranscriptWriter,
+  AgentStatusMessageInput,
+  AgentTranscriptWriterState,
+} from "../../session/transcript/TranscriptWriter.js";
 import type { CanonicalMessage, CanonicalUsage } from "../../model/index.js";
+import type { PatentOutputGate } from "../../patent/index.js";
 import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { PermissionMode, PermissionRuleSet } from "../../permission/index.js";
-import type { AgentStatusMessageInput, AgentTranscriptWriterState } from "../../session/transcript/TranscriptWriter.js";
 import type { SessionMetadataStore } from "../../session/metadata/SessionMetadataStore.js";
 import type { SessionTitleGenerator } from "../../session/title/SessionTitleGenerator.js";
 import { createVisibleErrorStatusDetail } from "../../status/agentStatus.js";
 import { FileArtifactCollector, type FileArtifact } from "../../session/artifacts/index.js";
+import { TurnInputProcessor } from "./TurnInputProcessor.js";
 
 export type TurnRunnerOptions = {
   sessionId: string;
@@ -81,31 +84,60 @@ export class TurnRunner {
       transcriptPath: "",
     },
     private readonly turnDependencies: TurnRunnerDependencies = {},
+    /** 专利输出门禁（可选）：在消息入库前拦截，命中审批词时挂起等待人工审批。 */
+    private readonly outputGate?: PatentOutputGate,
   ) {}
+
+  /**
+   * 门禁感知的持久化：有门禁时先处理（注入免责声明/存疑提示）。
+   * 命中审批词需人工审批的消息**也照常入库**（processed 版本）：不丢消息、
+   * 转录顺序正确；挂起队列仅用于审批流程控制（approve/reject 不再补写或丢弃）。
+   */
+  private async persistDurableMessage(sessionId: string, turnId: string, msg: CanonicalMessage): Promise<void> {
+    if (this.outputGate) {
+      const { message, needsApproval } = this.outputGate.processMessage(msg, { sessionId, turnId });
+      await this.transcript.recordDurableMessage(sessionId, turnId, message);
+      if (needsApproval) return; // 已挂起等待人工审批（消息已入库，无丢失）
+      return;
+    }
+    await this.transcript.recordDurableMessage(sessionId, turnId, msg);
+  }
+
+  /** 审批通过挂起的门禁消息：从挂起队列取出并触发 onApproved（消息在挂起时已入库，无需补写）。 */
+  approvePendingOutput(index: number): boolean {
+    if (!this.outputGate) return false;
+    const pending = this.outputGate.approve(index);
+    if (!pending) return false;
+    this.outputGate.notifyCommitted(pending);
+    return true;
+  }
+
+  /** 拒绝挂起的门禁消息：从挂起队列移除并触发 onRejected（消息已入库，不删除转录）。 */
+  rejectPendingOutput(index: number): boolean {
+    if (!this.outputGate) return false;
+    return this.outputGate.reject(index);
+  }
 
   async *run(options: TurnRunnerOptions): AsyncGenerator<AgentEvent, TurnRunnerResult, unknown> {
     yield { type: "turn_started", sessionId: options.sessionId, turnId: options.turnId };
-    const artifactCollector = this.runtimeContext.collectFileArtifacts === false
-      ? undefined
-      : await FileArtifactCollector.start({
-          cwd: this.runtimeContext.cwd,
-          allowedInputPaths: options.allowedReadFiles,
-          now: this.now,
-        }).catch(() => undefined);
+    const artifactCollector =
+      this.runtimeContext.collectFileArtifacts === false
+        ? undefined
+        : await FileArtifactCollector.start({
+            cwd: this.runtimeContext.cwd,
+            allowedInputPaths: options.allowedReadFiles,
+            now: this.now,
+          }).catch(() => undefined);
     let artifactsFinished = false;
     const finishArtifacts = async (result: AgentTurnResult): Promise<FileArtifact[]> => {
       if (!artifactCollector || artifactsFinished) return [];
       artifactsFinished = true;
-      const artifacts = await artifactCollector.finish(
-        result.type === "success" ? "complete" : "incomplete",
-      ).catch(() => []);
+      const artifacts = await artifactCollector
+        .finish(result.type === "success" ? "complete" : "incomplete")
+        .catch(() => []);
       if (artifacts.length > 0) {
         await Promise.resolve(
-          this.transcript.recordFileArtifacts?.(
-            options.sessionId,
-            options.turnId,
-            artifacts,
-          ),
+          this.transcript.recordFileArtifacts?.(options.sessionId, options.turnId, artifacts),
         ).catch(() => {});
       }
       return artifacts;
@@ -146,12 +178,9 @@ export class TurnRunner {
       signal: options.abortSignal,
     });
     yield { type: "user_prompt_submitted", sessionId: options.sessionId, turnId: options.turnId, prompt };
-    if (userPromptHooks?.effects.some((effect) => effect.type === "block")) {
+    if (userPromptHooks?.effects.some(effect => effect.type === "block")) {
       const error = agentError("agent_unsupported_feature", "UserPromptSubmit hook blocked model execution.");
-      const result = this.createErrorResult(
-        options,
-        error,
-      );
+      const result = this.createErrorResult(options, error);
       await this.recordErrorResult(options, result);
       const artifacts = await finishArtifacts(result);
       if (artifacts.length > 0) {
@@ -168,11 +197,11 @@ export class TurnRunner {
     const sessionTitle = this.maybeGenerateSessionTitle(options, accepted.messages);
 
     if (!accepted.shouldCallModel) {
-      const error = agentError("agent_unsupported_feature", "Input was accepted but model execution was not requested.");
-      const result = this.createErrorResult(
-        options,
-        error,
+      const error = agentError(
+        "agent_unsupported_feature",
+        "Input was accepted but model execution was not requested.",
       );
+      const result = this.createErrorResult(options, error);
       await this.recordErrorResult(options, result);
       const artifacts = await finishArtifacts(result);
       if (artifacts.length > 0) {
@@ -201,8 +230,8 @@ export class TurnRunner {
         canPrompt: options.canPrompt,
         permissionRules: options.permissionRules,
         abortSignal: options.abortSignal,
-        onDurableMessage: (msg) => this.transcript.recordDurableMessage(options.sessionId, options.turnId, msg),
-        onAgentStatusMessage: async (status) => {
+        onDurableMessage: msg => this.persistDurableMessage(options.sessionId, options.turnId, msg),
+        onAgentStatusMessage: async status => {
           if (isVisibleFailureStatus(status)) {
             hasRecordedVisibleFailureStatus = true;
           }
@@ -253,7 +282,9 @@ export class TurnRunner {
       if (artifacts.length > 0) {
         yield { type: "file_artifacts", sessionId: options.sessionId, turnId: options.turnId, artifacts };
       }
-      await Promise.resolve(this.transcript.recordTurnResult(options.sessionId, options.turnId, result)).catch(() => {});
+      await Promise.resolve(this.transcript.recordTurnResult(options.sessionId, options.turnId, result)).catch(
+        () => {},
+      );
       const status = await this.recordTurnFailureStatus(options, normalized);
       yield this.toAgentStatusEvent(options, status);
       await this.flushReadySessionTitle(options, sessionTitle);
@@ -299,7 +330,9 @@ export class TurnRunner {
     error: ReturnType<typeof agentError>,
   ): Promise<AgentStatusMessageInput> {
     const status = this.createTurnFailureStatus(error);
-    await Promise.resolve(this.transcript.recordAgentStatusMessage?.(options.sessionId, options.turnId, status)).catch(() => {});
+    await Promise.resolve(this.transcript.recordAgentStatusMessage?.(options.sessionId, options.turnId, status)).catch(
+      () => {},
+    );
     return status;
   }
 
@@ -365,7 +398,7 @@ export class TurnRunner {
         turnId: options.turnId,
         signal: controller.signal,
       })
-        .then(async (title) => {
+        .then(async title => {
           pending.title = title;
           if (title) {
             const snap = metadataStore.getSnapshot();
@@ -441,8 +474,8 @@ function inputToPromptText(input: AgentInput): string {
     return input.text;
   }
   return input.content
-    .filter((block) => block.type === "text")
-    .map((block) => block.text)
+    .filter(block => block.type === "text")
+    .map(block => block.text)
     .join("\n");
 }
 
@@ -453,8 +486,8 @@ function allHumanText(messages: CanonicalMessage[]): string | null {
       continue;
     }
     const text = message.content
-      .filter((block) => block.type === "text")
-      .map((block) => (block.type === "text" ? block.text : ""))
+      .filter(block => block.type === "text")
+      .map(block => (block.type === "text" ? block.text : ""))
       .join("\n")
       .trim();
     if (text) {
@@ -464,10 +497,7 @@ function allHumanText(messages: CanonicalMessage[]): string | null {
   return parts.length > 0 ? parts.join("\n") : null;
 }
 
-function linkAbortSignal(
-  source: AbortSignal | undefined,
-  controller: AbortController,
-): () => void {
+function linkAbortSignal(source: AbortSignal | undefined, controller: AbortController): () => void {
   if (!source) {
     return () => {};
   }
