@@ -215,14 +215,15 @@ test("bundled example role asset is parseable", async () => {
   const { readFileSync } = await import("node:fs");
   const { parse } = await import("yaml");
   const { resolve } = await import("node:path");
-  const path = resolve(process.cwd(), "skills", "roles", "writer", "SKILL.md");
+  // 正式角色资产：skills/patent-writer（原 skills/roles/writer 示例已被取代）
+  const path = resolve(process.cwd(), "skills", "patent-writer", "SKILL.md");
   const raw = readFileSync(path, "utf8");
   assert.ok(raw.startsWith("---"));
   const end = raw.slice(3).search(/\r?\n---/);
   assert.ok(end > 0);
   const fm = parse(raw.slice(3, 3 + end).replace(/^\r?\n/, "")) as Record<string, unknown>;
   assert.equal(fm.type, "role");
-  assert.equal(fm.name, "writer");
+  assert.equal(fm.name, "patent-writer");
   assert.ok(Array.isArray(fm.domains));
   assert.ok(Array.isArray(fm.omitTools));
   assert.equal(typeof fm.systemPrompt, "string");
